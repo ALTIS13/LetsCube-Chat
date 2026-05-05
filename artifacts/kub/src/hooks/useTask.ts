@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
+import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import type {
   Profile,
   TaskEventWithActor,
@@ -26,6 +27,7 @@ export function useTask(taskId: string | null) {
       setLoading(false);
       return;
     }
+    bumpFetch("useTask");
     setLoading(true);
     const [taskRes, eventsRes] = await Promise.all([
       supabase
@@ -75,8 +77,9 @@ export function useTask(taskId: string | null) {
         void fetchTask();
       }, 250);
     };
+    const channelName = `tasks:detail:${taskId}`;
     const channel = rt
-      .channel(`tasks:detail:${taskId}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "tasks", filter: `id=eq.${taskId}` },
@@ -90,9 +93,11 @@ export function useTask(taskId: string | null) {
       .subscribe((status: string) => {
         if (import.meta.env.DEV) console.debug("[tasks:detail]", taskId, status);
       });
+    registerChannel(channelName);
     return () => {
       if (timer) clearTimeout(timer);
       rt.removeChannel(channel);
+      unregisterChannel(channelName);
     };
   }, [taskId, rt, fetchTask]);
 

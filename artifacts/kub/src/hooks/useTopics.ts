@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
+import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import type { Topic } from "@/types/database";
 
 /**
@@ -16,14 +17,15 @@ import type { Topic } from "@/types/database";
  * selectedTopicId stays null, so the rest of the UI behaves like before.
  */
 export function useTopics(chatId: string | null, isForum: boolean) {
-  const supabase = createClient();
-  const rt = getRealtimeClient();
+  const supabase = useMemo(() => createClient(), []);
+  const rt = useMemo(() => getRealtimeClient(), []);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(false);
   const { selectedTopicId, setSelectedTopicId } = useAppStore();
 
   const fetchTopics = useCallback(async () => {
     if (!chatId || !isForum) { setTopics([]); return; }
+    bumpFetch("useTopics");
     setLoading(true);
     const { data } = await supabase
       .from("topics")
@@ -65,14 +67,18 @@ export function useTopics(chatId: string | null, isForum: boolean) {
       const changed = payload.new ?? payload.old;
       if (changed && changed.chat_id === chatId) debouncedFetch();
     };
-    const ch = rt.channel(`topics:${chatId}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "topics" }, refetchIfRelevant)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "topics" }, refetchIfRelevant)
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "topics" }, refetchIfRelevant)
+    const channelName = `topics:${chatId}`;
+    const filter = `chat_id=eq.${chatId}`;
+    const ch = rt.channel(channelName)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "topics", filter }, refetchIfRelevant)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "topics", filter }, refetchIfRelevant)
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "topics", filter }, refetchIfRelevant)
       .subscribe();
+    registerChannel(channelName);
     return () => {
       if (timer) clearTimeout(timer);
       rt.removeChannel(ch);
+      unregisterChannel(channelName);
     };
   }, [chatId, isForum, rt, fetchTopics]);
 

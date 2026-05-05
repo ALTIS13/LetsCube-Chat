@@ -7,6 +7,7 @@ import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
 import { KubIcon } from "@/components/kub";
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
+import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
 import type { ChatWithLastMessage, Profile, Message } from "@/types/database";
 
 interface ChatInfoPanelProps {
@@ -31,6 +32,7 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
   const [name, setName] = useState(chat.name ?? "");
   const [description, setDescription] = useState(chat.description ?? "");
   const [saving, setSaving] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
   type MemberRow = Profile & { chat_role: "owner" | "admin" | "member" };
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [media, setMedia] = useState<Message[]>([]);
@@ -82,11 +84,30 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
 
   const handleAvatarChange = async (file: File) => {
     if (!currentUser) return;
+    const validationError = validateAvatarImage(file);
+    if (validationError) {
+      setAvatarError(validationError);
+      alert(validationError);
+      return;
+    }
+    setAvatarError(null);
+    const path = avatarUploadPath("chat", chat.id, file);
     const { data, error } = await supabase.storage.from("media")
-      .upload(`chat-avatars/${chat.id}`, file, { upsert: true });
-    if (error) return;
+      .upload(path, file, { contentType: file.type, upsert: false });
+    if (error) {
+      const message = prefixError("Не удалось загрузить аватар чата", error);
+      setAvatarError(message);
+      alert(message);
+      return;
+    }
     const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(data.path);
-    await supabase.from("chats").update({ avatar_url: publicUrl }).eq("id", chat.id);
+    const { error: updateErr } = await supabase.from("chats").update({ avatar_url: publicUrl }).eq("id", chat.id);
+    if (updateErr) {
+      const message = prefixError("Не удалось сохранить аватар чата", updateErr);
+      setAvatarError(message);
+      alert(message);
+      return;
+    }
     setChats(chats.map((c) => c.id === chat.id ? { ...c, avatar_url: publicUrl } : c));
   };
 
@@ -189,6 +210,11 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAvatarChange(f); }}
               />
             </label>
+          )}
+          {avatarError && (
+            <div className="text-xs text-center text-[color:var(--kub-danger)]">
+              {avatarError}
+            </div>
           )}
         </div>
 

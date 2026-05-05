@@ -13,6 +13,7 @@ import { KubButton, KubIcon, KubModal, type KubIconName } from "@/components/kub
 import { PhoneSection } from "./PhoneSection";
 import { cn } from "@/lib/utils";
 import { mapPgError } from "@/lib/errors";
+import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
 
 const THEME_OPTIONS: ReadonlyArray<{ value: Theme; label: string; icon: KubIconName }> = [
   { value: "system", label: "Системная", icon: "themeSystem" },
@@ -64,13 +65,21 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
   const handleAvatarChange = async (file: File) => {
     if (!currentUser) return;
+    const validationError = validateAvatarImage(file);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
     setUploadingAvatar(true);
+    setError(null);
+    const path = avatarUploadPath("user", currentUser.id, file);
     const { data, error: upErr } = await supabase.storage
       .from("media")
-      .upload(`avatars/${currentUser.id}`, file, { upsert: true });
+      .upload(path, file, { contentType: file.type, upsert: false });
     if (upErr) { setError(mapPgError(upErr)); setUploadingAvatar(false); return; }
     const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(data.path);
-    await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", currentUser.id);
+    const { error: profileErr } = await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", currentUser.id);
+    if (profileErr) { setError(mapPgError(profileErr)); setUploadingAvatar(false); return; }
     setCurrentUser({ ...currentUser, avatar_url: publicUrl });
     setUploadingAvatar(false);
   };
