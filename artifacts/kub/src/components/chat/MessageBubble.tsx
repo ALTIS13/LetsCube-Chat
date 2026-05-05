@@ -287,7 +287,7 @@ export function MessageBubble({
               </div>
             )}
 
-            {message.type === "audio" ? (
+            {isVoiceMessage(message) ? (
               <AudioMessage url={message.media_url} duration={parseAudioDuration(message.content)} isMe={isMe} />
             ) : message.type === "image" && message.media_url ? (
               <img
@@ -367,4 +367,12 @@ function parseAudioDuration(content: string | null | undefined): number {
   const seconds = Number(match[2]);
   if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) return 0;
   return minutes * 60 + seconds;
+}
+
+function isVoiceMessage(message: MessageWithSender): boolean {
+  if (message.type === "audio") return true;
+  const mediaUrl = message.media_url?.toLowerCase() ?? "";
+  if (/\.(webm|ogg|oga|mp3|wav|m4a|aac)(\?|#|$)/.test(mediaUrl)) return true;
+  const content = message.content?.toLowerCase() ?? "";
+  return content.includes("голосовое") || content.includes("voice");
 }

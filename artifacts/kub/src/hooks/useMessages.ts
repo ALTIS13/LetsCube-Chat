@@ -122,10 +122,14 @@ export function useMessages(chatId: string | null, topicId: string | null = null
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` },
-        async (payload: { new: { id: string; chat_id: string; topic_id: string | null; user_id: string; type: string; content: string | null } }) => {
+        async (payload: { new: MessageWithSender }) => {
           if (payload.new.chat_id !== chatIdRef.current) return;
           // Filter by topic — ignore messages from other topics in the same chat.
           if ((payload.new.topic_id ?? null) !== (topicIdRef.current ?? null)) return;
+          const provisional = buildRealtimeMessage(payload.new);
+          if (provisional.type === "audio") {
+            addMessage(payload.new.chat_id, provisional);
+          }
           const { data } = await supabase
             .from("messages")
             .select(`*, sender:profiles!user_id(*), reply_to:messages!reply_to_id(id, content, type, user_id, sender:profiles(id, full_name)), reactions(*)`)
@@ -317,5 +321,18 @@ export function useMessages(chatId: string | null, topicId: string | null = null
     sendMessage, sendTyping, toggleReaction,
     editMessage, deleteMessage, togglePin, forwardMessage,
     refetch: fetchMessages,
+  };
+}
+
+function buildRealtimeMessage(row: MessageWithSender): MessageWithSender {
+  // Receiver path: render voice bubbles from the realtime INSERT row
+  // immediately. The richer REST refetch below upserts the same id with
+  // sender/reactions, so this temporary row only covers the first paint.
+  return {
+    ...row,
+    media_url: row.media_url ?? null,
+    content: row.content ?? null,
+    reactions: row.reactions ?? [],
+    pending: false,
   };
 }
