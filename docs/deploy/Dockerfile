@@ -18,7 +18,7 @@
 # Do not pass private server secrets here. Vite build args are embedded into
 # the browser bundle. The web image is meant to be 100% public.
 
-ARG NODE_VERSION=24-alpine
+ARG NODE_VERSION=24-bookworm-slim
 
 # ---------- Shared Node base ----------
 FROM node:${NODE_VERSION} AS base
