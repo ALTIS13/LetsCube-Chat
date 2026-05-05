@@ -48,6 +48,12 @@ pnpm --filter @workspace/kub run build
 
 The frontend build output is created under `artifacts/kub/dist/public`.
 
+## Production-like QA
+
+Current temporary test URL: `https://kub.apollot.ru`.
+
+Do not hardcode this domain in source code. Use `docs/QA_CHECKLIST.md` for browser QA before and after deployment. Deploys run through Coolify auto deploy from `main`. Secrets are configured only in Coolify and Supabase, never in the repository.
+
 ## Server Deployment
 
 Clone your private repository and create a local production env file:
