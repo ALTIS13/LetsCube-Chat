@@ -5,7 +5,7 @@ import { KubIcon } from "@/components/kub";
 import { clampAudioElementVolume, useAudioSettings } from "@/hooks/useAudioSettings";
 
 interface AudioMessageProps {
-  url: string;
+  url?: string | null;
   duration?: number;
   isMe: boolean;
 }
@@ -67,7 +67,7 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
 
   const toggle = () => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !url) return;
     if (playing) {
       audio.pause();
       setPlaying(false);
@@ -127,26 +127,29 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
 
   return (
     <div className="flex items-center gap-2.5 min-w-[180px]">
-      <audio
-        ref={audioRef}
-        src={url}
-        preload="metadata"
-        onLoadedMetadata={handleLoadedMetadata}
-        onCanPlay={handleLoadedMetadata}
-        onTimeUpdate={updateProgress}
-        onPlay={handlePlay}
-        onPause={handlePause}
-        onEnded={handleEnded}
-        onError={() => {
-          stopProgressLoop();
-          setPlaying(false);
-        }}
-      />
+      {url && (
+        <audio
+          ref={audioRef}
+          src={url}
+          preload="metadata"
+          onLoadedMetadata={handleLoadedMetadata}
+          onCanPlay={handleLoadedMetadata}
+          onTimeUpdate={updateProgress}
+          onPlay={handlePlay}
+          onPause={handlePause}
+          onEnded={handleEnded}
+          onError={() => {
+            stopProgressLoop();
+            setPlaying(false);
+          }}
+        />
+      )}
 
       <button
         onClick={toggle}
+        disabled={!url}
         aria-label={playing ? "Пауза" : "Воспроизвести"}
-        className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all hover:brightness-110 bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan"
+        className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all hover:brightness-110 bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:brightness-100"
       >
         {playing ? <KubIcon name="pause" size={16} /> : <KubIcon name="play" size={16} className="ml-0.5" />}
       </button>
@@ -164,7 +167,7 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
           />
         </div>
         <span className="text-[10px] text-[color:var(--kub-muted)]">
-          {playing ? fmt(currentTime) : fmt(durationSeconds)}
+          {!url ? "загрузка..." : playing ? fmt(currentTime) : fmt(durationSeconds)}
         </span>
       </div>
     </div>

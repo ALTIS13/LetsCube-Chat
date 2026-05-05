@@ -287,8 +287,8 @@ export function MessageBubble({
               </div>
             )}
 
-            {message.type === "audio" && message.media_url ? (
-              <AudioMessage url={message.media_url} isMe={isMe} />
+            {message.type === "audio" ? (
+              <AudioMessage url={message.media_url} duration={parseAudioDuration(message.content)} isMe={isMe} />
             ) : message.type === "image" && message.media_url ? (
               <img
                 src={message.media_url}
@@ -358,4 +358,13 @@ export function MessageBubble({
       </div>
     </>
   );
+}
+
+function parseAudioDuration(content: string | null | undefined): number {
+  const match = content?.match(/(\d{1,2}):(\d{2})/);
+  if (!match) return 0;
+  const minutes = Number(match[1]);
+  const seconds = Number(match[2]);
+  if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) return 0;
+  return minutes * 60 + seconds;
 }

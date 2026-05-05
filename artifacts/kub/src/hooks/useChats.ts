@@ -44,6 +44,8 @@ export function useChats() {
 
       if (!memberships?.length) {
         setChats([]);
+        const selectedChatId = useAppStore.getState().selectedChatId;
+        if (selectedChatId) useAppStore.getState().setSelectedChatId(null);
         return;
       }
 
@@ -123,6 +125,13 @@ export function useChats() {
         return new Date(bTime).getTime() - new Date(aTime).getTime();
       });
 
+      // Reconcile stale active chat after delete/member removal. Only clear
+      // after a successful fresh list proves the selected chat is no longer visible.
+      const selectedChatId = useAppStore.getState().selectedChatId;
+      if (selectedChatId && !enriched.some((chat) => chat.id === selectedChatId)) {
+        useAppStore.getState().setSelectedChatId(null);
+      }
+
       setChats(enriched);
     } finally {
       setLoading(false);
@@ -155,6 +164,7 @@ export function useChats() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, debouncedRefetch)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, debouncedRefetch)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chats" }, debouncedRefetch)
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "chats" }, debouncedRefetch)
       .subscribe((status: string) => {
         if (import.meta.env.DEV) console.debug("[chats:user]", userId, status);
       });
