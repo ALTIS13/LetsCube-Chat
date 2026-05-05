@@ -1,15 +1,18 @@
 # syntax=docker/dockerfile:1.7
 #
 # Multi-stage build for the KUB web artifact.
-# Stage 1: build the Vite SPA with pnpm.
-# Stage 2: serve the static bundle via nginx:alpine with SPA fallback.
+# Stage 1: install the pnpm workspace dependencies.
+# Stage 2: build the Vite SPA.
+# Stage 3: serve the static bundle via nginx:alpine with SPA fallback.
 #
 # Build context = repo root:
 #   docker build -f docs/deploy/Dockerfile \
 #     --build-arg VITE_SUPABASE_URL=https://your-project.supabase.co \
 #     --build-arg VITE_SUPABASE_PUBLISHABLE_KEY=<YOUR_SUPABASE_PUBLISHABLE_KEY> \
+#     --build-arg VITE_SUPABASE_ANON_KEY=<YOUR_SUPABASE_ANON_KEY> \
 #     --build-arg VITE_VAPID_PUBLIC_KEY= \
 #     --build-arg BASE_PATH=/ \
+#     --build-arg PORT=5173 \
 #     -t kub-web:latest .
 #
 # Do not pass private server secrets here. Vite build args are embedded into
@@ -17,20 +20,23 @@
 
 ARG NODE_VERSION=24-alpine
 
-# ---------- Stage 1: builder ----------
-FROM node:${NODE_VERSION} AS builder
+# ---------- Shared Node base ----------
+FROM node:${NODE_VERSION} AS base
 
-ENV PNPM_HOME=/root/.local/share/pnpm
-ENV PATH=$PNPM_HOME:$PATH
+ENV PNPM_HOME=/root/.local/share/pnpm \
+    PATH=/root/.local/share/pnpm:$PATH \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+WORKDIR /app
 
-WORKDIR /repo
+RUN corepack enable
 
-# Copy workspace manifests first so the install layer can be cached
-# independently of source changes. The pnpm filter resolves transitive
-# workspace deps, so every package.json known to the workspace must be present.
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+# ---------- Stage 1: deps ----------
+FROM base AS deps
+
+# Copy workspace manifests first so the install layer can be cached independently
+# of source changes. Corepack reads the root packageManager field when pnpm runs.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY artifacts/kub/package.json            artifacts/kub/package.json
 COPY artifacts/api-server/package.json     artifacts/api-server/package.json
 COPY artifacts/mockup-sandbox/package.json artifacts/mockup-sandbox/package.json
@@ -40,12 +46,18 @@ COPY lib/api-zod/package.json              lib/api-zod/package.json
 COPY lib/db/package.json                   lib/db/package.json
 COPY scripts/package.json                  scripts/package.json
 
-# Reproducible install - refuse to start if the lockfile is out of date.
+# Reproducible full workspace install. The web app has workspace dependencies,
+# and Coolify builds from a clean root context, so avoid a brittle filtered
+# install here.
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
-    pnpm install --filter @workspace/kub... --frozen-lockfile
+    pnpm install --frozen-lockfile
 
-# Now bring in the actual source. Real .env* files are excluded by the
-# repo-root .dockerignore.
+# ---------- Stage 2: build ----------
+FROM base AS build
+
+# Bring in installed dependencies and then the source. Real .env* files are
+# excluded by the repo-root .dockerignore.
+COPY --from=deps /app/ ./
 COPY . .
 
 # Vite needs these at build time.
@@ -54,21 +66,22 @@ ARG VITE_SUPABASE_PUBLISHABLE_KEY
 ARG VITE_SUPABASE_ANON_KEY
 ARG VITE_VAPID_PUBLIC_KEY
 ARG BASE_PATH=/
+ARG PORT=5173
 
-ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-ENV VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY}
-ENV VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
-ENV VITE_VAPID_PUBLIC_KEY=${VITE_VAPID_PUBLIC_KEY}
-ENV PORT=5173
-ENV BASE_PATH=${BASE_PATH}
+ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL} \
+    VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY} \
+    VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY} \
+    VITE_VAPID_PUBLIC_KEY=${VITE_VAPID_PUBLIC_KEY} \
+    BASE_PATH=${BASE_PATH} \
+    PORT=${PORT}
 
 RUN pnpm --filter @workspace/kub run build
 
-# ---------- Stage 2: runtime ----------
+# ---------- Stage 3: runtime ----------
 FROM nginx:alpine AS runtime
 
 COPY docs/deploy/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=builder /repo/artifacts/kub/dist/public /usr/share/nginx/html
+COPY --from=build /app/artifacts/kub/dist/public /usr/share/nginx/html
 
 EXPOSE 80
 
