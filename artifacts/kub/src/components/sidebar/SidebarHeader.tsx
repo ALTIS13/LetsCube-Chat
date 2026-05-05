@@ -47,6 +47,17 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
     setMobileSection("chats");
   }, [mobileSection, setMobileSection]);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setMenuOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [menuOpen]);
+
   const openSavedMessages = async () => {
     setMenuOpen(false);
     if (!userId) return;

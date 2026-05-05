@@ -30,8 +30,17 @@ export function NotificationBell() {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      setOpen(false);
+    };
     window.addEventListener("mousedown", handler);
-    return () => window.removeEventListener("mousedown", handler);
+    window.addEventListener("keydown", keyHandler);
+    return () => {
+      window.removeEventListener("mousedown", handler);
+      window.removeEventListener("keydown", keyHandler);
+    };
   }, [open]);
 
   const handleClick = async (n: Notification) => {

@@ -20,7 +20,9 @@ import { cn } from "@/lib/utils";
  */
 export function MainLayout() {
   const selectedChatId = useAppStore((s) => s.selectedChatId);
+  const setSelectedChatId = useAppStore((s) => s.setSelectedChatId);
   const setShowSidebar = useAppStore((s) => s.setShowSidebar);
+  const setMobileSection = useAppStore((s) => s.setMobileSection);
   const isMobileChatOpen = !!selectedChatId;
 
   useEffect(() => {
@@ -30,6 +32,32 @@ export function MainLayout() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [setShowSidebar]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName;
+      const isEditable =
+        tagName === "INPUT" ||
+        tagName === "TEXTAREA" ||
+        target?.isContentEditable;
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        if (window.innerWidth < 768) setSelectedChatId(null);
+        setMobileSection("search");
+        return;
+      }
+
+      if (event.key === "Escape" && !isEditable && window.innerWidth < 768 && selectedChatId) {
+        event.preventDefault();
+        setSelectedChatId(null);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedChatId, setMobileSection, setSelectedChatId]);
 
   return (
     <div className="flex flex-col h-[100dvh] w-screen overflow-hidden bg-[var(--kub-bg)]">

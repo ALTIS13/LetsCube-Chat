@@ -147,3 +147,14 @@ Next safe task UI alignment:
 - Task actions are visually grouped into a bordered action area; assignment/edit remain secondary, and cancel is styled as a destructive action instead of competing with the primary CTA.
 - The comment send icon-only button now has an explicit `aria-label`.
 - Task cards wrap assignee/update/due metadata safely on mobile instead of forcing a single crowded row.
+
+## Messenger Keyboard And Search UX
+
+2026-05-05 frontend-only messenger UX pass:
+
+- SQL/RLS/RPC were not changed.
+- `Ctrl+K` / `Cmd+K` focuses the existing chat search; on mobile it first returns from the open chat to the chat list.
+- `Escape` closes the profile menu and notification popover; on mobile it returns from an open chat to the chat list when focus is not inside an input/textarea.
+- Message input keeps Enter-to-send and Shift+Enter newline behavior, but now avoids sending while IME composition is active and does not send while upload is in progress.
+- Message input `Escape` closes emoji/attachment popovers without clearing typed text.
+- Chat notifications already navigate to the target chat when payload contains `chat_id`; task notifications continue to use `/tasks?task=<id>`.

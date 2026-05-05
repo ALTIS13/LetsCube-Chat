@@ -34,6 +34,7 @@ export function MessageInput({ chatId, replyTo, onCancelReply, onSend, onEdit, o
   const [showAttach, setShowAttach] = useState(false);
   const [showVoice, setShowVoice] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [isComposing, setIsComposing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -138,7 +139,19 @@ export function MessageInput({ chatId, replyTo, onCancelReply, onSend, onEdit, o
   }, [text, onSend, isEditing, editingMessage, onEdit, setEditingMessage, chatId]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); return; }
+    if (e.key === "Escape") {
+      if (showEmoji || showAttach) {
+        e.preventDefault();
+        setShowEmoji(false);
+        setShowAttach(false);
+      }
+      return;
+    }
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !isComposing) {
+      e.preventDefault();
+      if (!uploading && hasText) void handleSend();
+      return;
+    }
     onTyping?.();
   };
 
@@ -315,6 +328,8 @@ export function MessageInput({ chatId, replyTo, onCancelReply, onSend, onEdit, o
             onChange={(e) => setText(e.target.value)}
             onInput={handleInput}
             onKeyDown={handleKeyDown}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={() => setIsComposing(false)}
             placeholder="Сообщение…"
             rows={1}
             className="flex-1 bg-transparent resize-none outline-none text-base sm:text-sm leading-6 py-2 max-h-[140px] overflow-y-auto text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]"
