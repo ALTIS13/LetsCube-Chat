@@ -15,6 +15,13 @@ import { AudioSettingsSection } from "./AudioSettingsSection";
 import { cn } from "@/lib/utils";
 import { mapPgError } from "@/lib/errors";
 import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
+import {
+  PROFILE_LIMITS,
+  normalizeFullName,
+  normalizeUsername,
+  validateFullName,
+  validateUsername,
+} from "@/lib/profileValidation";
 
 const THEME_OPTIONS: ReadonlyArray<{ value: Theme; label: string; icon: KubIconName }> = [
   { value: "system", label: "Системная", icon: "themeSystem" },
@@ -40,7 +47,15 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSave = async () => {
-    if (!currentUser || !fullName.trim()) { setError("Имя обязательно"); return; }
+    if (!currentUser) return;
+    const fullNameError = validateFullName(fullName);
+    const usernameError = validateUsername(username);
+    if (fullNameError || usernameError) {
+      setError(fullNameError ?? usernameError);
+      return;
+    }
+    const cleanFullName = normalizeFullName(fullName);
+    const cleanUsername = normalizeUsername(username);
     setSaving(true);
     setError(null);
     // Phone is intentionally NOT updated here — it lives in the
@@ -49,9 +64,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     const { data, error: err } = await supabase
       .from("profiles")
       .update({
-        full_name: fullName.trim(),
-        username: username.trim() || null,
-        bio: bio.trim() || null,
+        full_name: cleanFullName,
+        username: cleanUsername || null,
+        bio: bio.trim().slice(0, PROFILE_LIMITS.bioMax) || null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", currentUser.id)
@@ -176,14 +191,17 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           onChange={setFullName}
           placeholder="Ваше имя"
           required
+          hint={`${fullName.length}/${PROFILE_LIMITS.fullNameMax}`}
+          maxLength={PROFILE_LIMITS.fullNameMax}
         />
         <Field
           icon={<KubIcon name="atSign" size={16} />}
           label="Имя пользователя"
           value={username}
-          onChange={(v) => setUsername(v.replace(/[^a-zA-Z0-9_]/g, ""))}
-          placeholder="username (буквы, цифры, _)"
-          hint="Люди смогут найти вас по @username"
+          onChange={(v) => setUsername(normalizeUsername(v))}
+          placeholder="username (буквы, цифры, ., _)"
+          hint={`${username.length}/${PROFILE_LIMITS.usernameMax}`}
+          maxLength={PROFILE_LIMITS.usernameMax}
         />
         <Field
           icon={<KubIcon name="info" size={16} />}
@@ -192,8 +210,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           onChange={setBio}
           placeholder="Несколько слов о себе"
           multiline
-          hint={`${bio.length}/70`}
-          maxLength={70}
+          hint={`${bio.length}/${PROFILE_LIMITS.bioMax}`}
+          maxLength={PROFILE_LIMITS.bioMax}
         />
       </div>
 

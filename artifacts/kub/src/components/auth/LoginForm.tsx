@@ -3,7 +3,7 @@ import { useLocation, Link } from "wouter";
 import { createClient } from "@/lib/supabase/client";
 import { KubButton, KubIcon, KubInput, KubLogo, KubPanel } from "@/components/kub";
 import { mapPgError } from "@/lib/errors";
-import { CONFIRMATION_LINK_INVALID_MESSAGE } from "@/lib/authRedirect";
+import { CONFIRMATION_LINK_INVALID_MESSAGE, getAuthCallbackUrl } from "@/lib/authRedirect";
 
 interface BanInfo {
   reason: string;
@@ -19,6 +19,9 @@ function getInitialAuthNotice(): string {
   if (params.get("auth_error") === "confirmation_link") {
     return CONFIRMATION_LINK_INVALID_MESSAGE;
   }
+  if (params.get("password_reset") === "1") {
+    return "Пароль обновлён. Теперь войдите с новым паролем.";
+  }
   return "";
 }
 
@@ -28,8 +31,10 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [error, setError] = useState("");
-  const [notice] = useState(getInitialAuthNotice);
+  const [notice, setNotice] = useState(getInitialAuthNotice);
+  const [resetMode, setResetMode] = useState(false);
   const [banInfo, setBanInfo] = useState<BanInfo | null>(null);
 
   const supabase = createClient();
@@ -69,6 +74,29 @@ export function LoginForm() {
       setError(mapPgError(err));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
+      setError("Введите email, чтобы получить ссылку для сброса пароля.");
+      return;
+    }
+    setError("");
+    setResetLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: getAuthCallbackUrl(),
+      });
+      if (error) throw error;
+      setNotice("Если такой email зарегистрирован, мы отправили ссылку для сброса пароля.");
+      setResetMode(false);
+    } catch (err: unknown) {
+      setError(mapPgError(err));
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -132,7 +160,7 @@ export function LoginForm() {
               <p className="text-xs text-[color:var(--kub-cyan)] px-1">{notice}</p>
             )}
 
-            <form onSubmit={handleLogin} className="flex flex-col gap-3">
+            <form onSubmit={resetMode ? handlePasswordReset : handleLogin} className="flex flex-col gap-3">
               <KubInput
                 type="email"
                 placeholder="Эл. почта"
@@ -143,33 +171,51 @@ export function LoginForm() {
                 autoComplete="email"
               />
 
-              <KubInput
-                type={showPass ? "text" : "password"}
-                placeholder="Пароль"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                leftIcon={<KubIcon name="lock" size={16} />}
-                autoComplete="current-password"
-                rightSlot={
-                  <button
-                    type="button"
-                    onClick={() => setShowPass(!showPass)}
-                    className="text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)] transition-colors"
-                    aria-label={showPass ? "Скрыть пароль" : "Показать пароль"}
-                  >
-                    <KubIcon name={showPass ? "eyeOff" : "eye"} size={16} />
-                  </button>
-                }
-              />
+              {!resetMode && (
+                <KubInput
+                  type={showPass ? "text" : "password"}
+                  placeholder="Пароль"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  leftIcon={<KubIcon name="lock" size={16} />}
+                  autoComplete="current-password"
+                  rightSlot={
+                    <button
+                      type="button"
+                      onClick={() => setShowPass(!showPass)}
+                      className="text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)] transition-colors"
+                      aria-label={showPass ? "Скрыть пароль" : "Показать пароль"}
+                    >
+                      <KubIcon name={showPass ? "eyeOff" : "eye"} size={16} />
+                    </button>
+                  }
+                />
+              )}
 
               {error && (
                 <p className="text-xs text-[color:var(--kub-danger)] px-1">{error}</p>
               )}
 
-              <KubButton type="submit" loading={loading} fullWidth size="lg" className="mt-1">
-                Войти
+              <KubButton
+                type="submit"
+                loading={resetMode ? resetLoading : loading}
+                fullWidth
+                size="lg"
+                className="mt-1"
+              >
+                {resetMode ? "Отправить ссылку" : "Войти"}
               </KubButton>
+              <button
+                type="button"
+                onClick={() => {
+                  setResetMode((v) => !v);
+                  setError("");
+                }}
+                className="text-xs font-semibold text-[color:var(--kub-cyan)] hover:text-[color:var(--kub-cyan-hover)] transition-colors"
+              >
+                {resetMode ? "Вернуться ко входу" : "Забыли пароль?"}
+              </button>
             </form>
           </div>
         </KubPanel>

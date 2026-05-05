@@ -16,7 +16,11 @@ import { TasksPage } from "@/pages/tasks/TasksPage";
 import NotFound from "@/pages/not-found";
 import { ThemeSync } from "@/hooks/useTheme";
 import { KubLogo } from "@/components/kub";
-import { getAuthCallbackErrorMessage, getAuthCallbackExceptionMessage } from "@/lib/authRedirect";
+import {
+  CONFIRMATION_LINK_INVALID_MESSAGE,
+  getAuthCallbackErrorMessage,
+  getAuthCallbackExceptionMessage,
+} from "@/lib/authRedirect";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,11 +34,17 @@ const queryClient = new QueryClient({
 function AuthCallback() {
   const [, setLocation] = useLocation();
   const [error, setError] = useState<string | null>(null);
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [repeatPassword, setRepeatPassword] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
     const url = new URL(window.location.href);
     const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
+    const callbackType = url.searchParams.get("type") || hashParams.get("type");
+    const isRecovery = callbackType === "recovery";
     const callbackError =
       getAuthCallbackErrorMessage(url.searchParams) ||
       getAuthCallbackErrorMessage(hashParams);
@@ -51,12 +61,26 @@ function AuthCallback() {
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
+          if (isRecovery) {
+            setRecoveryMode(true);
+            cleanAuthCallbackUrl();
+            return;
+          }
           setLocation("/");
           return;
         }
 
         const { data, error } = await supabase.auth.getSession();
         if (error) throw error;
+        if (isRecovery) {
+          if (data.session) {
+            setRecoveryMode(true);
+            cleanAuthCallbackUrl();
+          } else {
+            setError(CONFIRMATION_LINK_INVALID_MESSAGE);
+          }
+          return;
+        }
         if (data.session) {
           setLocation("/");
           return;
@@ -70,17 +94,79 @@ function AuthCallback() {
     finish();
   }, [setLocation]);
 
+  const handlePasswordUpdate = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (newPassword.length < 6) {
+      setError("Пароль должен быть не короче 6 символов.");
+      return;
+    }
+    if (newPassword !== repeatPassword) {
+      setError("Пароли не совпадают.");
+      return;
+    }
+    setSavingPassword(true);
+    setError(null);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      await supabase.auth.signOut();
+      setLocation("/login?password_reset=1");
+    } catch (err: unknown) {
+      setError(getAuthCallbackExceptionMessage(err));
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center kub-grid-bg">
-      <div className="flex flex-col items-center gap-4 text-center">
+      <div className="flex w-full max-w-sm flex-col items-center gap-4 px-4 text-center">
         <KubLogo size={64} withGlow />
-        <div className="flex items-center gap-2 text-sm text-[color:var(--kub-text)]">
-          {!error && (
-            <span className="inline-flex h-2 w-2 rounded-full bg-[var(--kub-cyan)] kub-pulse" />
-          )}
-          {error ?? "Входим…"}
-        </div>
-        {error && (
+        {recoveryMode ? (
+          <form onSubmit={handlePasswordUpdate} className="w-full rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-5 text-left shadow-2xl">
+            <h1 className="mb-2 text-lg font-bold text-[color:var(--kub-text)]">Новый пароль</h1>
+            <p className="mb-4 text-sm text-[color:var(--kub-muted)]">
+              Введите новый пароль для аккаунта.
+            </p>
+            <div className="space-y-3">
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                minLength={6}
+                autoComplete="new-password"
+                placeholder="Новый пароль"
+                className="h-11 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+              />
+              <input
+                type="password"
+                value={repeatPassword}
+                onChange={(e) => setRepeatPassword(e.target.value)}
+                minLength={6}
+                autoComplete="new-password"
+                placeholder="Повторите пароль"
+                className="h-11 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+              />
+              {error && <p className="text-xs text-[color:var(--kub-danger)]">{error}</p>}
+              <button
+                type="submit"
+                disabled={savingPassword}
+                className="h-10 w-full rounded-lg bg-[var(--kub-cyan)] px-4 text-sm font-semibold text-[color:var(--kub-bg)] transition-colors hover:bg-[var(--kub-cyan-hover)] disabled:opacity-60"
+              >
+                {savingPassword ? "Сохраняем..." : "Сменить пароль"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-[color:var(--kub-text)]">
+            {!error && (
+              <span className="inline-flex h-2 w-2 rounded-full bg-[var(--kub-cyan)] kub-pulse" />
+            )}
+            {error ?? "Входим..."}
+          </div>
+        )}
+        {error && !recoveryMode && (
           <button
             type="button"
             onClick={() => setLocation("/login?auth_error=confirmation_link")}
@@ -92,6 +178,12 @@ function AuthCallback() {
       </div>
     </div>
   );
+}
+
+function cleanAuthCallbackUrl() {
+  const baseUrl = import.meta.env.BASE_URL || "/";
+  const basePath = baseUrl === "/" ? "" : `/${baseUrl.replace(/^\/+|\/+$/g, "")}`;
+  window.history.replaceState(null, "", `${basePath}/auth/callback`);
 }
 
 function LoadingScreen() {

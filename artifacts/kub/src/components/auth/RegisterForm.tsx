@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { KubButton, KubIcon, KubInput, KubLogo, KubPanel } from "@/components/kub";
 import { mapPgError } from "@/lib/errors";
 import { getAuthCallbackUrl } from "@/lib/authRedirect";
+import { PROFILE_LIMITS, normalizeFullName, validateFullName } from "@/lib/profileValidation";
 
 export function RegisterForm() {
   const [fullName, setFullName] = useState("");
@@ -21,11 +22,13 @@ export function RegisterForm() {
     setError("");
     setLoading(true);
     try {
+      const fullNameError = validateFullName(fullName);
+      if (fullNameError) throw new Error(fullNameError);
       const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          data: { full_name: fullName },
+          data: { full_name: normalizeFullName(fullName) },
           emailRedirectTo: getAuthCallbackUrl(),
         },
       });
@@ -94,6 +97,8 @@ export function RegisterForm() {
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               required
+              maxLength={PROFILE_LIMITS.fullNameMax}
+              hint={`${fullName.length}/${PROFILE_LIMITS.fullNameMax}`}
               leftIcon={<KubIcon name="user" size={16} />}
               autoComplete="name"
             />
