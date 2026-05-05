@@ -67,3 +67,36 @@
 - `/tasks` открывается, текущий task UI еще не выровнен под `visibility`/`assignment_scope`/`task_claim`.
 - Network на admin dashboard показал лишние повторные metric count-запросы от realtime `profiles` updates; frontend fix убрал `profiles` realtime trigger для dashboard и добавил overlapping-load guard.
 - Скриншоты не коммитить; локальные browser artifacts остаются untracked.
+
+## Phase 2 Task V2 Inspection
+
+2026-05-05 Supabase MCP read-only подтвердил, что production Supabase уже готов для task v2:
+
+- `tasks.visibility task_visibility not null default 'staff'`.
+- `tasks.assignment_scope task_assignment_scope not null default 'user'`.
+- enums `task_visibility = staff/private/chat` и `task_assignment_scope = user/manager_pool/staff_pool`.
+- RPC `task_create_v2`, `task_update_v2`, `task_claim`.
+- RLS `tasks select with visibility` и `task_events select with visibility`.
+- Direct writes to `tasks` / `task_events` blocked; mutations go through RPC.
+- Realtime publication includes `tasks` and `task_events`.
+
+Repo state:
+
+- `artifacts/kub/src/types/database.ts` already contains task v2 columns, enums and RPC types.
+- `docs/SUPABASE_SCHEMA_MAP.md` and `docs/SUPABASE_CURRENT_STATE.md` already describe task v2 as applied.
+- `docs/SUPABASE_MIGRATION_RULES.md` was updated so the 20260505 task/storage/folders SQL files are no longer marked as pending.
+
+Frontend gap:
+
+- `TaskFormModal` still calls compatible old RPC `task_create` / `task_update`.
+- `TaskAssignModal` still calls `task_assign`.
+- `task_claim` is not used in UI yet.
+- Task cards/details do not yet show `visibility` / `assignment_scope` badges.
+- Task filters do not yet expose pool/private/staff/chat views.
+
+Next safe task UI alignment:
+
+1. Read-only UI badges for task `visibility` and `assignment_scope`.
+2. Add `task_claim` button for eligible staff pool tasks.
+3. Add staff-friendly task filters for my/available/waiting/all/private/chat.
+4. Move create/edit to `task_create_v2` / `task_update_v2` with client-side guards while keeping RLS/RPC as source of truth.

@@ -50,18 +50,29 @@
 4. Обновить docs с рисками, verify SQL и ручными QA шагами.
 5. Frontend, зависящий от новых columns/RPC, пушить только после ручного применения SQL и проверки пользователем.
 
-## Current Pending SQL
+## Current SQL State
 
-На 2026-05-05 подготовлены, но не применены автоматически:
+На 2026-05-05 read-only MCP inspection подтвердил, что production Supabase уже содержит изменения из:
 
 - `.migration-backup/supabase/migrations/20260505_tasks_visibility_and_assignment.sql`
 - `.migration-backup/supabase/migrations/20260505_media_storage_path_policies.sql`
 - `.migration-backup/supabase/migrations/20260505_folders_policy_cleanup.sql`
 
-Рекомендуемый порядок ручного применения:
+Production Supabase уже содержит task v2:
 
-1. `20260505_media_storage_path_policies.sql`
-2. `20260505_folders_policy_cleanup.sql`
-3. `20260505_tasks_visibility_and_assignment.sql`
+- `tasks.visibility`
+- `tasks.assignment_scope`
+- enum `task_visibility`
+- enum `task_assignment_scope`
+- RPC `task_create_v2`
+- RPC `task_update_v2`
+- RPC `task_claim`
+- RLS policies `tasks select with visibility` и `task_events select with visibility`
 
-Task frontend с новыми `task_create_v2` / `task_update_v2` / `task_claim` не должен выкатываться до применения task migration.
+Storage bucket `media` уже использует scoped read/insert/update/delete policies, а legacy broad upload/list policies отсутствуют.
+
+Legacy `folders` / `folder_chats` `*_own` policies уже удалены; активны scope-aware policies и restrictive banned-user guards.
+
+Pending manual SQL сейчас отсутствует. Если Supabase MCP позже покажет drift, создать новый idempotent migration file в `.migration-backup/supabase/migrations/`, но не применять его через MCP.
+
+Task frontend можно выравнивать под `task_create_v2` / `task_update_v2` / `task_claim` небольшими совместимыми этапами; источник прав остается RLS/RPC.
