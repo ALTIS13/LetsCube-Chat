@@ -73,9 +73,17 @@ ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL} \
     VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY} \
     VITE_VAPID_PUBLIC_KEY=${VITE_VAPID_PUBLIC_KEY} \
     BASE_PATH=${BASE_PATH} \
-    PORT=${PORT}
+    PORT=${PORT} \
+    NODE_ENV=production
 
-RUN pnpm --filter @workspace/kub run build
+RUN set -eu; \
+    export PORT="${PORT:-5173}"; \
+    export BASE_PATH="${BASE_PATH:-/}"; \
+    export VITE_SUPABASE_URL="${VITE_SUPABASE_URL:-}"; \
+    export VITE_SUPABASE_PUBLISHABLE_KEY="${VITE_SUPABASE_PUBLISHABLE_KEY:-}"; \
+    export VITE_SUPABASE_ANON_KEY="${VITE_SUPABASE_ANON_KEY:-}"; \
+    export VITE_VAPID_PUBLIC_KEY="${VITE_VAPID_PUBLIC_KEY:-}"; \
+    pnpm --filter @workspace/kub run build
 
 # ---------- Stage 3: runtime ----------
 FROM nginx:alpine AS runtime
