@@ -161,17 +161,41 @@ Site URL: https://your-domain.example
 Add Redirect URLs for every environment you use:
 
 ```text
+https://your-domain.example/
 https://your-domain.example/**
+https://your-domain.example/auth/callback
 http://localhost:5173/**
+http://localhost:5173/auth/callback
 ```
 
 If your production domain is `<YOUR_DOMAIN>`, use:
 
 ```text
+https://<YOUR_DOMAIN>/
 https://<YOUR_DOMAIN>/**
+https://<YOUR_DOMAIN>/auth/callback
 ```
 
 The configured Supabase URLs must match the domain users open in the browser. Otherwise login redirects and magic links can fail.
+
+Current temporary test deployment example:
+
+```text
+Site URL:
+https://kub.apollot.ru
+
+Redirect URLs:
+https://kub.apollot.ru/
+https://kub.apollot.ru/**
+https://kub.apollot.ru/auth/callback
+http://localhost:5173/**
+http://localhost:5173/auth/callback
+```
+
+Do not hardcode the test domain in source code. The frontend builds email
+confirmation redirects from the current browser origin and `BASE_PATH`. When
+the domain changes later, update Supabase Auth URL Configuration, DNS/proxy
+settings, and deployment environment values only.
 
 ## 7. Apply Supabase Migrations
 

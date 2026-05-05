@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { createClient } from "@/lib/supabase/client";
 import { KubButton, KubIcon, KubInput, KubLogo, KubPanel } from "@/components/kub";
 import { mapPgError } from "@/lib/errors";
+import { getAuthCallbackUrl } from "@/lib/authRedirect";
 
 export function RegisterForm() {
   const [fullName, setFullName] = useState("");
@@ -25,7 +26,7 @@ export function RegisterForm() {
         password,
         options: {
           data: { full_name: fullName },
-          emailRedirectTo: `${location.origin}/auth/callback`,
+          emailRedirectTo: getAuthCallbackUrl(),
         },
       });
       if (error) throw error;

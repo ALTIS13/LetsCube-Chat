@@ -3,10 +3,23 @@ import { useLocation, Link } from "wouter";
 import { createClient } from "@/lib/supabase/client";
 import { KubButton, KubIcon, KubInput, KubLogo, KubPanel } from "@/components/kub";
 import { mapPgError } from "@/lib/errors";
+import { CONFIRMATION_LINK_INVALID_MESSAGE } from "@/lib/authRedirect";
 
 interface BanInfo {
   reason: string;
   expires_at: string | null;
+}
+
+function getInitialAuthNotice(): string {
+  if (typeof window === "undefined") return "";
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("confirmed") === "1") {
+    return "Почта подтверждена. Теперь войдите в аккаунт.";
+  }
+  if (params.get("auth_error") === "confirmation_link") {
+    return CONFIRMATION_LINK_INVALID_MESSAGE;
+  }
+  return "";
 }
 
 export function LoginForm() {
@@ -16,6 +29,7 @@ export function LoginForm() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [notice] = useState(getInitialAuthNotice);
   const [banInfo, setBanInfo] = useState<BanInfo | null>(null);
 
   const supabase = createClient();
@@ -112,6 +126,10 @@ export function LoginForm() {
                   {banInfo.expires_at ? fmt(banInfo.expires_at) : "бессрочно"}
                 </div>
               </div>
+            )}
+
+            {notice && !error && (
+              <p className="text-xs text-[color:var(--kub-cyan)] px-1">{notice}</p>
             )}
 
             <form onSubmit={handleLogin} className="flex flex-col gap-3">

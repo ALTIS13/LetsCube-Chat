@@ -23,6 +23,9 @@ This file records the current frontend/Supabase safety assumptions for KUB. It i
 - No `SUPABASE_SERVICE_ROLE_KEY` is used by the frontend.
 - Notification reads are scoped by `user_id`; mark-read flows use notification RPCs.
 - Audit log reads are in admin UI and rely on RLS/server policies for access control.
+- Email confirmation redirect URLs are generated in the browser from
+  `window.location.origin` and Vite `BASE_PATH`; deployment domains must not be
+  hardcoded in source code.
 
 ## Migration Apply Order
 
@@ -51,6 +54,8 @@ Apply migrations in filename order:
 - `audit_logs` should be append-only and admin-only.
 - Phone/contact data must not be readable by users outside the intended privacy policy.
 - Realtime must be enabled only for the tables the app needs.
+- Authentication -> URL Configuration must include the exact deployed origin
+  and `/auth/callback` redirect URL for each environment.
 
 ## SQL Change Policy
 

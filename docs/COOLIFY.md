@@ -91,7 +91,27 @@ https://your-domain.example/auth/callback
 
 ```text
 http://localhost:5173/**
+http://localhost:5173/auth/callback
 ```
+
+Current temporary test deployment example:
+
+```text
+Site URL:
+https://kub.apollot.ru
+
+Redirect URLs:
+https://kub.apollot.ru/
+https://kub.apollot.ru/**
+https://kub.apollot.ru/auth/callback
+http://localhost:5173/**
+http://localhost:5173/auth/callback
+```
+
+`kub.apollot.ru` is only the current test domain. Do not hardcode it in source
+code. When the domain changes, update Coolify/domain proxy settings and
+Supabase Auth URL Configuration; the frontend redirect code uses the current
+browser origin.
 
 Если это новый Supabase проект, примените все миграции из:
 

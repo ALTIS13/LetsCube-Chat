@@ -16,7 +16,7 @@ import { TasksPage } from "@/pages/tasks/TasksPage";
 import NotFound from "@/pages/not-found";
 import { ThemeSync } from "@/hooks/useTheme";
 import { KubLogo } from "@/components/kub";
-import { mapPgError } from "@/lib/errors";
+import { getAuthCallbackErrorMessage, getAuthCallbackExceptionMessage } from "@/lib/authRedirect";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,19 +33,38 @@ function AuthCallback() {
 
   useEffect(() => {
     const supabase = createClient();
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
+    const url = new URL(window.location.href);
+    const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
+    const callbackError =
+      getAuthCallbackErrorMessage(url.searchParams) ||
+      getAuthCallbackErrorMessage(hashParams);
+
+    if (callbackError) {
+      setError(callbackError);
+      return;
+    }
+
+    const code = url.searchParams.get("code");
 
     const finish = async () => {
       try {
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
+          setLocation("/");
+          return;
         }
-        setLocation("/");
+
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        if (data.session) {
+          setLocation("/");
+          return;
+        }
+
+        setLocation("/login?confirmed=1");
       } catch (err: unknown) {
-        setError(mapPgError(err));
-        setTimeout(() => setLocation("/login?error=auth_failed"), 1500);
+        setError(getAuthCallbackExceptionMessage(err));
       }
     };
     finish();
@@ -61,6 +80,15 @@ function AuthCallback() {
           )}
           {error ?? "Входим…"}
         </div>
+        {error && (
+          <button
+            type="button"
+            onClick={() => setLocation("/login?auth_error=confirmation_link")}
+            className="h-10 px-4 rounded-lg text-sm font-semibold transition-colors bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] hover:bg-[var(--kub-cyan-hover)]"
+          >
+            Перейти ко входу
+          </button>
+        )}
       </div>
     </div>
   );

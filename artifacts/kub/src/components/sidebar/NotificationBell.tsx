@@ -48,12 +48,13 @@ export function NotificationBell() {
   };
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative shrink-0" ref={ref}>
       <KubTooltip label="Уведомления" side="bottom">
         <button
           onClick={() => setOpen((v) => !v)}
           className={cn(
-            "relative p-2 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)]",
+            "relative h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)]",
+            "inline-flex items-center justify-center",
             unreadCount > 0 ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)]",
           )}
           aria-label="Уведомления"

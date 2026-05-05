@@ -36,6 +36,8 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showNewGroup, setShowNewGroup] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const iconButtonClass =
+    "h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)] inline-flex items-center justify-center";
 
   // BottomNav's "Поиск" tab is a one-shot: when mobileSection becomes 'search',
   // focus the search input and immediately reset the section back to 'chats'.
@@ -114,20 +116,20 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 px-3 pb-2.5">
+      <div className="flex min-w-0 items-center gap-1.5 overflow-hidden px-3 pb-2.5">
         {isSearchFocused || searchQuery ? (
           <button
             onClick={() => { setSearchQuery(""); setIsSearchFocused(false); }}
-            className="p-2 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]"
+            className={cn(iconButtonClass, "text-[color:var(--kub-cyan)]")}
             aria-label="Очистить поиск"
           >
             <KubIcon name="close" size={18} />
           </button>
         ) : (
-          <div className="relative">
+          <div className="relative shrink-0">
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              className="rounded-lg transition-colors hover:bg-[var(--kub-surface-2)] flex items-center justify-center p-1"
+              className="h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)] flex items-center justify-center p-1"
               aria-label="Меню"
             >
               {currentUser ? (
@@ -194,8 +196,8 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
           </div>
         )}
 
-        <div className="flex-1 flex items-center gap-2 rounded-lg px-3 h-9 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
-          <KubIcon name="search" size={14} className="text-[color:var(--kub-muted)]" />
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 h-9 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
+          <KubIcon name="search" size={14} className="shrink-0 text-[color:var(--kub-muted)]" />
           <input
             ref={searchInputRef}
             type="text"
@@ -204,10 +206,10 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setIsSearchFocused(true)}
             onBlur={() => !searchQuery && setIsSearchFocused(false)}
-            className="flex-1 bg-transparent text-sm outline-none text-[color:var(--kub-text)]"
+            className="min-w-0 flex-1 truncate bg-transparent text-sm outline-none text-[color:var(--kub-text)]"
           />
           {searchQuery && (
-            <button onClick={() => setSearchQuery("")} aria-label="Очистить">
+            <button className="shrink-0" onClick={() => setSearchQuery("")} aria-label="Очистить">
               <KubIcon name="close" size={12} className="text-[color:var(--kub-muted)]" />
             </button>
           )}
@@ -216,30 +218,10 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
         {!isSearchFocused && !searchQuery && (
           <>
             <NotificationBell />
-            <KubTooltip label="Задачи" side="bottom">
-              <button
-                onClick={() => setLocation("/tasks")}
-                className="p-2 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]"
-                aria-label="Задачи"
-              >
-                <KubIcon name="tasks" size={17} />
-              </button>
-            </KubTooltip>
-            {isStaff && (
-              <KubTooltip label="Админ-панель" side="bottom">
-                <button
-                  onClick={() => setLocation("/admin")}
-                  className="p-2 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-pink)]"
-                  aria-label="Админ-панель"
-                >
-                  <KubIcon name="shield" size={17} />
-                </button>
-              </KubTooltip>
-            )}
             <KubTooltip label="Новый чат" side="bottom">
               <button
                 onClick={onNewChat}
-                className="p-2 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]"
+                className={cn(iconButtonClass, "text-[color:var(--kub-cyan)]")}
                 aria-label="Новый чат"
               >
                 <KubIcon name="edit" size={17} />
