@@ -118,3 +118,10 @@ Next safe task UI alignment:
 - If RLS hides the task or the task was deleted, the modal shows: `Задача недоступна или была удалена.`
 - Non-staff users no longer see the task cancel action in `TaskDetailModal`; RPC/RLS remain the source of truth.
 - Staff task tabs now include `Доступные` for unassigned `manager_pool` / `staff_pool` tasks with `status = new`.
+
+## Roles And Permissions Foundation
+
+- Supabase read-only audit confirmed current authorization is still based on `profiles.role`, `app_role`, `is_admin()` and `is_manager_or_admin()`.
+- Dynamic roles should be introduced as a staged compatibility layer, not by replacing existing RLS/RPC at once.
+- Added planning docs and SQL proposal only; production DB was not changed.
+- Manual SQL proposal: `.migration-backup/supabase/migrations/20260505_roles_permissions_foundation.sql`.
