@@ -11,6 +11,7 @@ import { usePush } from "@/hooks/usePush";
 import { useIsManagerOrAdmin } from "@/hooks/useRole";
 import { KubButton, KubIcon, KubModal, type KubIconName } from "@/components/kub";
 import { PhoneSection } from "./PhoneSection";
+import { AudioSettingsSection } from "./AudioSettingsSection";
 import { cn } from "@/lib/utils";
 import { mapPgError } from "@/lib/errors";
 import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
@@ -199,6 +200,11 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       <div className="px-4 py-4 border-t border-[color:var(--kub-border-color)]">
         <SectionLabel>Телефон</SectionLabel>
         <PhoneSection />
+      </div>
+
+      <div className="px-4 py-4 border-t border-[color:var(--kub-border-color)]">
+        <SectionLabel>Звук</SectionLabel>
+        <AudioSettingsSection />
       </div>
 
       {error && (

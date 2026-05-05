@@ -29,6 +29,7 @@ const BAR_STYLES = Array.from({ length: BAR_COUNT }).map((_, i) => {
 export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
   const { state, durationMs, error, start, stop, cancel } = useVoiceRecorder();
   const [sending, setSending] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
   const startedRef = useRef(false);
   const mountedRef = useRef(true);
 
@@ -44,9 +45,9 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
     setSending(true);
     try {
       const result = await stop();
-      if (!result || result.blob.size === 0) {
+      if (!result || result.blob.size === 0 || result.durationMs < 1000) {
         if (mountedRef.current) setSending(false);
-        onCancel();
+        setLocalError("Запись слишком короткая или пустая.");
         return;
       }
       await onSend(result.blob, result.durationMs, result.mimeType);
@@ -65,11 +66,11 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
   const isRecording = state === "recording";
   const formatted = useMemo(() => formatVoiceDuration(durationMs), [durationMs]);
 
-  if (error) {
+  if (error || localError) {
     return (
       <div className="flex items-center gap-3 rounded-2xl px-4 py-2.5 bg-[var(--kub-surface-2)] border border-[color:var(--kub-danger)]/30">
         <div className="flex-1 text-sm text-[color:var(--kub-danger)]">
-          {ERROR_TEXT[error]}
+          {localError ?? (error ? ERROR_TEXT[error] : "Не удалось отправить голосовое сообщение.")}
         </div>
         <button
           onClick={onCancel}

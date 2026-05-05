@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { KubIcon } from "@/components/kub";
+import { useAudioSettings } from "@/hooks/useAudioSettings";
 
 interface AudioMessageProps {
   url: string;
@@ -14,12 +15,23 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const { settings } = useAudioSettings();
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = settings.voicePlaybackVolume;
+  }, [settings.voicePlaybackVolume]);
 
   const toggle = () => {
     const audio = audioRef.current;
     if (!audio) return;
     if (playing) { audio.pause(); setPlaying(false); }
-    else { audio.play(); setPlaying(true); }
+    else {
+      audio.volume = settings.voicePlaybackVolume;
+      void audio.play().then(() => setPlaying(true)).catch((err) => {
+        console.error("[voice] playback failed:", err);
+        setPlaying(false);
+      });
+    }
   };
 
   const handleTimeUpdate = () => {

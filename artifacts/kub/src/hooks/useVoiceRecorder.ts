@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { getAudioSettings } from "@/hooks/useAudioSettings";
 
 export type RecordingState = "idle" | "recording" | "stopping";
 
@@ -58,6 +59,8 @@ export function useVoiceRecorder() {
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const recorderStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const mimeRef = useRef<string>("audio/webm");
   const startedAtRef = useRef<number>(0);
@@ -84,6 +87,20 @@ export function useVoiceRecorder() {
         });
       } catch { /* ignore */ }
       streamRef.current = null;
+    }
+    const recorderStream = recorderStreamRef.current;
+    if (recorderStream && recorderStream !== stream) {
+      try {
+        recorderStream.getTracks().forEach((t) => {
+          try { t.stop(); } catch { /* ignore */ }
+        });
+      } catch { /* ignore */ }
+    }
+    recorderStreamRef.current = null;
+    const audioContext = audioContextRef.current;
+    audioContextRef.current = null;
+    if (audioContext && audioContext.state !== "closed") {
+      void audioContext.close().catch(() => undefined);
     }
     recorderRef.current = null;
   }, []);
@@ -135,13 +152,15 @@ export function useVoiceRecorder() {
       try { s.getTracks().forEach((t) => { try { t.stop(); } catch { /* ignore */ } }); } catch { /* ignore */ }
     };
 
+    const settings = getAudioSettings();
+
     let stream: MediaStream | null = null;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: false,
+          echoCancellation: settings.echoCancellation,
+          noiseSuppression: settings.noiseSuppression,
+          autoGainControl: settings.autoGainControl,
           channelCount: 1,
         },
       });
@@ -179,14 +198,33 @@ export function useVoiceRecorder() {
     }
 
     streamRef.current = stream;
+    let recorderStream = stream;
+    if (settings.micInputGain !== 1 && typeof AudioContext !== "undefined") {
+      try {
+        const audioContext = new AudioContext();
+        const source = audioContext.createMediaStreamSource(stream);
+        const gain = audioContext.createGain();
+        const destination = audioContext.createMediaStreamDestination();
+        gain.gain.value = settings.micInputGain;
+        source.connect(gain);
+        gain.connect(destination);
+        audioContextRef.current = audioContext;
+        recorderStream = destination.stream;
+        recorderStreamRef.current = recorderStream;
+      } catch (err) {
+        console.warn("[voice] mic gain pipeline unavailable, using raw stream:", err);
+        recorderStream = stream;
+        recorderStreamRef.current = null;
+      }
+    }
     chunksRef.current = [];
 
     const mime = pickMime();
     let recorder: MediaRecorder;
     try {
       recorder = mime
-        ? new MediaRecorder(stream, { mimeType: mime })
-        : new MediaRecorder(stream);
+        ? new MediaRecorder(recorderStream, { mimeType: mime })
+        : new MediaRecorder(recorderStream);
       mimeRef.current = recorder.mimeType || mime || "audio/webm";
     } catch (err) {
       console.error("[voice] MediaRecorder ctor failed:", err);
