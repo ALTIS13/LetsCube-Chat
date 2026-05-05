@@ -109,6 +109,8 @@ Important behavior:
 - `status task_status`.
 - `created_by`, `assignee_id`, `chat_id`.
 - `due_at`, timestamps.
+- `visibility task_visibility`, default `staff`; values: `staff`, `private`, `chat`.
+- `assignment_scope task_assignment_scope`, default `user`; values: `user`, `manager_pool`, `staff_pool`.
 
 `task_events`:
 
@@ -118,7 +120,9 @@ Important behavior:
 Task RPC:
 
 - `task_create`.
+- `task_create_v2`.
 - `task_assign`.
+- `task_claim`.
 - `task_accept`.
 - `task_start`.
 - `task_send_for_confirmation`.
@@ -128,11 +132,15 @@ Task RPC:
 - `task_comment`.
 - `task_return_to_work`.
 - `task_update`.
+- `task_update_v2`.
 
 Important behavior:
 
 - Frontend reads `tasks`/`task_events`, but mutations go through RPC.
+- `task_create_v2` / `task_update_v2` are the privacy-aware create/edit RPCs.
+- `task_claim` lets eligible staff claim `manager_pool` / `staff_pool` tasks.
 - Direct insert/update/delete policies are blocked for authenticated clients.
+- `tasks` and `task_events` select policies use `_task_visible_to_current_user(...)`.
 - `tasks` and `task_events` use replica identity FULL for realtime updates.
 
 ### Admin / Sanctions / Audit
@@ -196,10 +204,12 @@ Important behavior:
 Bucket `media`:
 
 - Public bucket.
-- Broad SELECT policy permits public reads/listing.
-- Authenticated users can upload.
+- Public object URLs continue to render existing media.
+- Authenticated storage policies are path-scoped:
+  `media authenticated scoped read`, `insert`, `update`, `delete`.
+- Upload/update/delete are constrained by `_kub_media_path_allowed(name)`.
 
-Production hardening candidate: decide whether broad listing is acceptable for KUB media.
+Broad `Anyone can view media` and `Authenticated users can upload media` policies are no longer present in production Supabase.
 
 ## Realtime
 
@@ -242,8 +252,8 @@ Manual/idempotent migrations are stored in `.migration-backup/supabase/migration
 - `20260504_tasks_system.sql`.
 - `20260504_tasks_update_and_chat_lockdown.sql`.
 - `20260505_audit_logs.sql`.
-- `20260505_tasks_visibility_and_assignment.sql` - pending/manual proposal; adds task privacy and pool assignment.
-- `20260505_media_storage_path_policies.sql` - pending/manual proposal; hardens `media` storage paths.
+- `20260505_tasks_visibility_and_assignment.sql` - applied in production Supabase as of 2026-05-05; adds task privacy and pool assignment.
+- `20260505_media_storage_path_policies.sql` - applied in production Supabase as of 2026-05-05; hardens `media` storage paths.
 - `20260505_folders_policy_cleanup.sql` - pending/manual proposal; removes legacy folder policies after scope-aware migration.
 
 Supabase MCP migration ledger is empty; do not rely on Supabase CLI migration history for this project.

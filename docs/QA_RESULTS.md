@@ -14,11 +14,14 @@
 
 ## Failed
 
-- Task privacy в БД недостаточна: текущая RLS показывает linked-chat задачи всем участникам linked chat. Для staff/private задач это слишком широко.
-- Storage `media` имеет broad public SELECT/listing policy и authenticated upload без path ownership.
 - В `folders` и `folder_chats` одновременно есть старые `*_own` policies и новые scope-aware policies. Это не ломает функционал напрямую, но дает multiple permissive policies и усложняет reasoning.
 - Auth logs за последние 24 часа все еще показывают `referer=tg.letscube.ru`. Это не доказывает hardcode в source code, но означает, что Supabase Auth URL/settings нужно держать под контролем при смене домена.
 - Supabase Auth logs показывают ошибки `missing Twilio account SID` на `/user` при phone update. Это отдельный Supabase Auth/SMS configuration вопрос, не frontend service_role проблема.
+
+## Applied In Production Supabase
+
+- Task privacy/assignment уже применены: `tasks.visibility`, `tasks.assignment_scope`, `task_create_v2`, `task_update_v2`, `task_claim`, RLS `tasks select with visibility`.
+- Storage `media` уже переведен на scoped policies: `media authenticated scoped read`, `insert`, `update`, `delete`.
 
 ## Needs Manual Verification
 
@@ -43,13 +46,6 @@
 
 ## Needs DB Migration
 
-- Task privacy/assignment:
-  - `.migration-backup/supabase/migrations/20260505_tasks_visibility_and_assignment.sql`
-  - добавляет `task_visibility`, `task_assignment_scope`, columns, RLS и новые RPC `task_create_v2`, `task_update_v2`, `task_claim`;
-  - существующие задачи backfill в `visibility='staff'`.
-- Storage hardening:
-  - `.migration-backup/supabase/migrations/20260505_media_storage_path_policies.sql`
-  - убирает broad listing и ограничивает upload/update/delete по path ownership.
 - Folders policy cleanup:
   - `.migration-backup/supabase/migrations/20260505_folders_policy_cleanup.sql`
   - удаляет старые `*_own` policies после scope-aware migration.
@@ -59,7 +55,7 @@
 - Chat list search сейчас ищет по названию чата и last message text, но не по всем сообщениям.
 - In-chat search работает только по загруженным сообщениям текущего чата, не по всей истории.
 - Нет глобальной search/command palette.
-- Task filters пока не знают о pool/unassigned/visibility, потому frontend не переключается на новые task RPC до применения SQL.
+- Task filters пока не знают о pool/unassigned/visibility; SQL уже применен, следующий этап - frontend alignment на `task_create_v2`, `task_update_v2`, `task_claim`.
 - Chat overview в `useChats` все еще делает per-chat last-message/unread enrichment; при росте количества чатов стоит вынести это в RLS-safe RPC/view отдельной миграцией.
 
 ## Browser QA Notes

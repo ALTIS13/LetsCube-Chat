@@ -19,6 +19,8 @@ export type TaskStatus =
   | 'rejected'
   | 'cancelled'
 export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent'
+export type TaskVisibility = 'staff' | 'private' | 'chat'
+export type TaskAssignmentScope = 'user' | 'manager_pool' | 'staff_pool'
 export type TaskEventKind =
   | 'create'
   | 'assign'
@@ -531,6 +533,8 @@ export interface Database {
           due_at: string | null
           created_at: string
           updated_at: string
+          visibility: TaskVisibility
+          assignment_scope: TaskAssignmentScope
         }
         Insert: never
         Update: never
@@ -618,8 +622,25 @@ export interface Database {
         }
         Returns: string
       }
+      task_create_v2: {
+        Args: {
+          p_title: string
+          p_description?: string | null
+          p_assignee_id?: string | null
+          p_priority?: TaskPriority
+          p_due_at?: string | null
+          p_chat_id?: string | null
+          p_visibility?: TaskVisibility
+          p_assignment_scope?: TaskAssignmentScope
+        }
+        Returns: string
+      }
       task_assign: {
         Args: { p_task_id: string; p_assignee_id: string }
+        Returns: void
+      }
+      task_claim: {
+        Args: { p_task_id: string }
         Returns: void
       }
       task_accept: { Args: { p_task_id: string }; Returns: void }
@@ -666,6 +687,20 @@ export interface Database {
         }
         Returns: void
       }
+      task_update_v2: {
+        Args: {
+          p_task_id: string
+          p_title: string
+          p_description: string | null
+          p_priority: TaskPriority
+          p_due_at: string | null
+          p_assignee_id: string | null
+          p_chat_id: string | null
+          p_visibility: TaskVisibility
+          p_assignment_scope: TaskAssignmentScope
+        }
+        Returns: void
+      }
       // Mirrors `auth.users.phone_confirmed_at` into
       // `profile_contacts.phone_verified` for the calling user. Server
       // re-checks auth.users so the client cannot fake verification.
@@ -693,6 +728,8 @@ export interface Database {
       folder_scope: FolderScope
       task_status: TaskStatus
       task_priority: TaskPriority
+      task_visibility: TaskVisibility
+      task_assignment_scope: TaskAssignmentScope
     }
     CompositeTypes: Record<string, never>
   }

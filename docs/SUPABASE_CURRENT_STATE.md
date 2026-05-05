@@ -37,6 +37,8 @@ Public views не найдены.
 - `folder_scope`: `personal`, `shared`, `system`.
 - `task_priority`: `low`, `normal`, `high`, `urgent`.
 - `task_status`: `new`, `assigned`, `accepted`, `in_progress`, `waiting_confirmation`, `confirmed`, `rejected`, `cancelled`.
+- `task_visibility`: `staff`, `private`, `chat`.
+- `task_assignment_scope`: `user`, `manager_pool`, `staff_pool`.
 
 ## RLS
 
@@ -68,7 +70,7 @@ RLS включен на всех user-facing таблицах. Policy counts:
 - Chat: `open_or_create_private_chat`.
 - Notifications: `notifications_mark_read`, `notifications_mark_all_read`.
 - Phone/contact: `profile_phone_mark_verified`.
-- Tasks: `task_create`, `task_assign`, `task_accept`, `task_start`, `task_send_for_confirmation`, `task_confirm`, `task_reject`, `task_cancel`, `task_comment`, `task_return_to_work`, `task_update`.
+- Tasks: `task_create`, `task_create_v2`, `task_assign`, `task_claim`, `task_accept`, `task_start`, `task_send_for_confirmation`, `task_confirm`, `task_reject`, `task_cancel`, `task_comment`, `task_return_to_work`, `task_update`, `task_update_v2`.
 - Admin/support: `admin_user_emails`.
 
 Основные helper functions:
@@ -76,7 +78,7 @@ RLS включен на всех user-facing таблицах. Policy counts:
 - Roles/access: `is_admin`, `is_manager_or_admin`, `is_banned`, `is_muted`.
 - Chat membership: `get_my_chat_ids`, `is_chat_member`, `is_chat_admin`, `is_chat_owner`, `chat_role_of`.
 - Shared folders: `can_see_shared_folder`.
-- Task internals: `_task_transition`, `_task_assert_can_assign_to`, `task_append_event`.
+- Task internals: `_task_transition`, `_task_assert_can_assign_to`, `_task_assert_visibility_assignment`, `_task_visible_to_current_user`, `task_append_event`.
 - Notifications internals: `_notify`, `_notification_push_payload`, `_enqueue_push_after_notification_insert`, `_notify_*`.
 - Audit internals: `_audit`, `_audit_*`.
 - Contact internals: `_normalize_phone_e164`, `_guard_profile_contacts`, `_ensure_profile_contacts`.
@@ -117,10 +119,12 @@ Storage bucket:
 
 Storage policies:
 
-- `Anyone can view media` on `storage.objects` for `bucket_id = 'media'`.
-- `Authenticated users can upload media` for authenticated inserts into `media`.
+- `media authenticated scoped read` on `storage.objects`.
+- `media authenticated scoped insert` on `storage.objects`.
+- `media authenticated scoped update` on `storage.objects`.
+- `media authenticated scoped delete` on `storage.objects`.
 
-Security Advisor предупреждает, что broad SELECT policy на public bucket позволяет listing файлов. Это не аварийная ошибка, но production hardening candidate.
+Bucket остается public, чтобы существующие public object URLs продолжали рендериться, но authenticated list/upload/update/delete теперь ограничены helper-функцией `_kub_media_path_allowed(name)`. Broad policies `Anyone can view media` и `Authenticated users can upload media` в production Supabase отсутствуют.
 
 ## Edge Functions
 
@@ -139,7 +143,7 @@ Security Advisor:
 - `notifications_push_outbox`: RLS enabled, no policy.
 - Несколько functions без fixed `search_path`, включая `prevent_demoting_last_admin`, `_notification_push_payload`, `_normalize_phone_e164`, `handle_new_user`, `get_my_chat_ids`.
 - Много `SECURITY DEFINER` functions callable by `anon`/`authenticated`, включая internal trigger helpers и intended RPC.
-- Public storage bucket `media` allows broad listing.
+- Public storage bucket `media` больше не имеет broad authenticated listing/upload policy; read/write policies path-scoped.
 - Auth leaked password protection disabled.
 
 Performance Advisor:
@@ -164,25 +168,26 @@ Auth logs показывают успешные login/token/verify events и с�
 Совпадает:
 
 - Основные таблицы, enums, task RPC, notifications, audit, phone privacy, folders/shared folders, roles/admin, bans/mutes и topics покрыты migration backup files.
-- Frontend database types содержат все user-facing tables кроме server-only `notifications_push_outbox`.
+- Production Supabase уже содержит `tasks.visibility`, `tasks.assignment_scope`, `task_create_v2`, `task_update_v2`, `task_claim` и scoped storage policies.
+- Frontend database types содержат все user-facing tables кроме server-only `notifications_push_outbox`; task privacy types синхронизированы с production schema.
 - `SUPABASE_SERVICE_ROLE_KEY` не нужен frontend; push outbox обслуживается optional server-side worker.
 
 Отличается / было не задокументировано:
 
-- `docs/SUPABASE_CURRENT_STATE.md` и `docs/SUPABASE_SCHEMA_MAP.md` отсутствовали.
 - Supabase migration ledger пустой, хотя в repo есть manual migrations.
 - `notifications_push_outbox` отсутствует в frontend `database.ts`; это приемлемо как server-side-only table, но должно быть известно агентам.
-- Advisor findings не были зафиксированы в docs.
+- Frontend task UI пока использует совместимые старые RPC `task_create`, `task_update`, `task_assign`; UI alignment на `task_create_v2`, `task_update_v2`, `task_claim` остается отдельным этапом.
 
 ## Нужно ли Сейчас Мигрировать
 
-Да, для production hardening нужны ручные SQL-миграции. SQL не применялся через MCP; подготовленные файлы ниже нужно применять вручную в Supabase SQL Editor после проверки.
-# Pending Stabilization SQL
+Нет для task privacy/storage hardening: production Supabase уже содержит task visibility/assignment schema и scoped storage policies. SQL через MCP не применялся.
 
-2026-05-05 MCP-аудит подтвердил три production hardening зоны, для которых подготовлены migration-файлы, но SQL не применялся автоматически:
+# Stabilization SQL State
 
-- `.migration-backup/supabase/migrations/20260505_tasks_visibility_and_assignment.sql` - explicit task visibility/assignment scope, RLS и новые RPC `task_create_v2`, `task_update_v2`, `task_claim`.
-- `.migration-backup/supabase/migrations/20260505_media_storage_path_policies.sql` - path ownership policies для bucket `media`.
-- `.migration-backup/supabase/migrations/20260505_folders_policy_cleanup.sql` - удаление старых permissive `*_own` policies после scope-aware folders migration.
+2026-05-05 read-only MCP sync подтвердил состояние migration-файлов:
 
-Frontend для новых task columns/RPC не должен выкатываться до ручного применения task migration в Supabase SQL Editor.
+- `.migration-backup/supabase/migrations/20260505_tasks_visibility_and_assignment.sql` - уже применена в production Supabase; explicit task visibility/assignment scope, RLS и новые RPC `task_create_v2`, `task_update_v2`, `task_claim`.
+- `.migration-backup/supabase/migrations/20260505_media_storage_path_policies.sql` - уже применена в production Supabase; path ownership policies для bucket `media`.
+- `.migration-backup/supabase/migrations/20260505_folders_policy_cleanup.sql` - все еще pending/manual proposal; удаление старых permissive `*_own` policies после scope-aware folders migration.
+
+Frontend task UI можно выравнивать под новые task columns/RPC отдельным подтвержденным этапом; источник прав остается RLS/RPC.
