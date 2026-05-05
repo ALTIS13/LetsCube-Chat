@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { KubIcon, KubPanel, type KubIconName } from "@/components/kub";
 
@@ -32,36 +32,44 @@ export function DashboardTab() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const loadInFlightRef = useRef(false);
 
   const load = useCallback(async () => {
+    if (loadInFlightRef.current) return;
+    loadInFlightRef.current = true;
+
     const nowIso = new Date().toISOString();
     const todayIso = startOfDayIso();
     const weekIso = startOfWeekIso();
     const onlineCutoffIso = new Date(Date.now() - 60_000).toISOString();
 
-    const [users, online, newToday, newWeek, chats, msgsToday, bans, mutes] = await Promise.all([
-      supabase.from("profiles").select("id", { count: "exact", head: true }),
-      supabase.from("profiles").select("id", { count: "exact", head: true }).gte("online_at", onlineCutoffIso),
-      supabase.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", todayIso),
-      supabase.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", weekIso),
-      supabase.from("chats").select("id", { count: "exact", head: true }),
-      supabase.from("messages").select("id", { count: "exact", head: true }).gte("created_at", todayIso),
-      supabase.from("bans").select("id", { count: "exact", head: true }).or(`expires_at.is.null,expires_at.gt.${nowIso}`),
-      supabase.from("mutes").select("id", { count: "exact", head: true }).or(`expires_at.is.null,expires_at.gt.${nowIso}`),
-    ]);
+    try {
+      const [users, online, newToday, newWeek, chats, msgsToday, bans, mutes] = await Promise.all([
+        supabase.from("profiles").select("id", { count: "exact", head: true }),
+        supabase.from("profiles").select("id", { count: "exact", head: true }).gte("online_at", onlineCutoffIso),
+        supabase.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", todayIso),
+        supabase.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", weekIso),
+        supabase.from("chats").select("id", { count: "exact", head: true }),
+        supabase.from("messages").select("id", { count: "exact", head: true }).gte("created_at", todayIso),
+        supabase.from("bans").select("id", { count: "exact", head: true }).or(`expires_at.is.null,expires_at.gt.${nowIso}`),
+        supabase.from("mutes").select("id", { count: "exact", head: true }).or(`expires_at.is.null,expires_at.gt.${nowIso}`),
+      ]);
 
-    setMetrics({
-      totalUsers: users.count ?? 0,
-      online: online.count ?? 0,
-      newToday: newToday.count ?? 0,
-      newThisWeek: newWeek.count ?? 0,
-      totalChats: chats.count ?? 0,
-      messagesToday: msgsToday.count ?? 0,
-      activeBans: bans.count ?? 0,
-      activeMutes: mutes.count ?? 0,
-    });
-    setUpdatedAt(new Date());
-    setLoading(false);
+      setMetrics({
+        totalUsers: users.count ?? 0,
+        online: online.count ?? 0,
+        newToday: newToday.count ?? 0,
+        newThisWeek: newWeek.count ?? 0,
+        totalChats: chats.count ?? 0,
+        messagesToday: msgsToday.count ?? 0,
+        activeBans: bans.count ?? 0,
+        activeMutes: mutes.count ?? 0,
+      });
+      setUpdatedAt(new Date());
+    } finally {
+      loadInFlightRef.current = false;
+      setLoading(false);
+    }
   }, [supabase]);
 
   useEffect(() => {
@@ -80,7 +88,6 @@ export function DashboardTab() {
     };
     const channel = supabase
       .channel("admin-dashboard")
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, debouncedLoad)
       .on("postgres_changes", { event: "*", schema: "public", table: "bans" }, debouncedLoad)
       .on("postgres_changes", { event: "*", schema: "public", table: "mutes" }, debouncedLoad)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, debouncedLoad)
