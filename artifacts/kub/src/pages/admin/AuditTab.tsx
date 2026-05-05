@@ -451,7 +451,7 @@ export function AuditTab() {
                     />
                   </button>
                   {isOpen && (
-                    <div className="mt-3 ml-12 rounded-xl p-3 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] space-y-1.5 text-xs">
+                    <div className="mt-3 sm:ml-12 rounded-xl p-3 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] space-y-1.5 text-xs">
                       <KvRow label="ID записи" value={r.id} mono />
                       <KvRow label="Тип объекта" value={r.target_kind} />
                       <KvRow label="ID объекта" value={r.target_id ?? "—"} mono />
@@ -502,8 +502,8 @@ export function AuditTab() {
 
 function KvRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex items-start gap-2">
-      <div className="w-32 flex-shrink-0 text-[10px] uppercase tracking-wider pt-0.5 text-[color:var(--kub-muted)]">
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-2">
+      <div className="sm:w-32 flex-shrink-0 text-[10px] uppercase tracking-wider pt-0.5 text-[color:var(--kub-muted)]">
         {label}
       </div>
       <div

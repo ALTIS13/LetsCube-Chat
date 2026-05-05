@@ -72,3 +72,6 @@ libpeerconnection.log
 typings/
 
 .qa-screenshots/
+.playwright-mcp/
+output/playwright/
+/kub-*.png

@@ -125,3 +125,15 @@ Next safe task UI alignment:
 - Dynamic roles should be introduced as a staged compatibility layer, not by replacing existing RLS/RPC at once.
 - Added planning docs and SQL proposal only; production DB was not changed.
 - Manual SQL proposal: `.migration-backup/supabase/migrations/20260505_roles_permissions_foundation.sql`.
+
+## Production UI Consistency Audit
+
+2026-05-05 Browser QA checked the live UI on `https://kub.apollot.ru` without hardcoding the domain in source code.
+
+- Viewports checked: 390x844, 768x1024, 1280x720, 1920x1080, 3840x2160.
+- Routes checked: `/`, `/tasks`, `/admin`, `/admin/users`, `/admin/bans`, `/admin/audit`; logged-in `/login` and `/register` redirect back to the app as expected.
+- Areas checked: sidebar, chat list/search, notification bell, profile/settings modal, chat window/message input, task cards/detail modal/actions, admin dashboard, users, bans/mutes, audit expanded details.
+- Automated viewport audit found no document-level horizontal overflow on the checked routes.
+- Notification popover, profile menu, task detail modal and admin user action menu stay inside the mobile viewport.
+- Mobile audit expanded details were visually too narrow because the desktop left offset and label/value row layout were reused on 390px. The audit detail panel is now full-width on mobile, while desktop keeps the indented layout.
+- Screenshots are stored under `output/playwright/` and are not intended for commit.
