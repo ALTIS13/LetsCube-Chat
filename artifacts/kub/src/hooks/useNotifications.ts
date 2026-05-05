@@ -5,9 +5,16 @@ import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { mapPgError } from "@/lib/errors";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
+import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import type { Notification } from "@/types/database";
 
 const PAGE_SIZE = 30;
+
+function payloadString(p: unknown, key: string): string | undefined {
+  if (!p || typeof p !== "object") return undefined;
+  const v = (p as Record<string, unknown>)[key];
+  return typeof v === "string" ? v : undefined;
+}
 
 /**
  * In-app notifications for the current user (Task #32).
@@ -75,6 +82,12 @@ export function useNotifications() {
         { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
         (payload) => {
           const row = payload.new as Notification;
+          if (row.kind === "chat_added") {
+            dispatchChatsRefresh({
+              reason: "chat-notification",
+              chatId: payloadString(row.payload, "chat_id"),
+            });
+          }
           setItems((prev) => mergeRows(prev, [row]));
         },
       )

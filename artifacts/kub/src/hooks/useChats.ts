@@ -5,6 +5,7 @@ import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import type { ChatWithLastMessage, Profile } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
+import { KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 
 const VISIBILITY_REFRESH_THROTTLE_MS = 10_000;
 const CHAT_REFETCH_DEBOUNCE_MS = 350;
@@ -164,6 +165,62 @@ export function useChats() {
       unregisterChannel(channelName);
     };
   }, [userId, rt, fetchChats]);
+
+  useEffect(() => {
+    if (!userId) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRefresh = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void fetchChats();
+      }, CHAT_REFETCH_DEBOUNCE_MS);
+    };
+    const channelName = `chat-members:user:${userId}`;
+    const channel = rt
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "chat_members", filter: `user_id=eq.${userId}` },
+        scheduleRefresh,
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "chat_members", filter: `user_id=eq.${userId}` },
+        scheduleRefresh,
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "chat_members", filter: `user_id=eq.${userId}` },
+        scheduleRefresh,
+      )
+      .subscribe((status: string) => {
+        if (import.meta.env.DEV) console.debug("[chat-members:user]", userId, status);
+      });
+    registerChannel(channelName);
+    return () => {
+      if (timer) clearTimeout(timer);
+      rt.removeChannel(channel);
+      unregisterChannel(channelName);
+    };
+  }, [userId, rt, fetchChats]);
+
+  useEffect(() => {
+    if (!userId) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const handleRefresh = (event: Event) => {
+      const detail = (event as CustomEvent<ChatsRefreshDetail>).detail;
+      if (detail?.reason !== "chat-notification") return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void fetchChats();
+      }, CHAT_REFETCH_DEBOUNCE_MS);
+    };
+    window.addEventListener(KUB_CHATS_REFRESH_EVENT, handleRefresh);
+    return () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener(KUB_CHATS_REFRESH_EVENT, handleRefresh);
+    };
+  }, [userId, fetchChats]);
 
   useEffect(() => {
     const total = chats.reduce((sum, chat) => sum + (chat.unread_count ?? 0), 0);
