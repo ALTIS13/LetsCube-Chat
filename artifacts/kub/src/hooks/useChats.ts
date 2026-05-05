@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
-import type { ChatWithLastMessage } from "@/types/database";
+import type { ChatWithLastMessage, Profile } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 
@@ -92,13 +92,15 @@ export function useChats() {
           }
 
           let displayName = chat.name;
-          let otherUser = null;
+          let displayAvatarUrl = chat.avatar_url ?? null;
+          let otherUser: Profile | null = null;
           if (chat.type === "private") {
             const other = (
-              chat.members as { user_id: string; profile: { full_name: string | null } }[]
+              chat.members as { user_id: string; profile: Profile | null }[]
             )?.find((m) => m.user_id !== userId);
             if (other?.profile) {
-              displayName = other.profile.full_name;
+              displayName = other.profile.full_name ?? other.profile.username ?? chat.name;
+              displayAvatarUrl = other.profile.avatar_url ?? null;
               otherUser = other.profile;
             }
           }
@@ -106,6 +108,7 @@ export function useChats() {
           return {
             ...chat,
             name: displayName,
+            avatar_url: displayAvatarUrl,
             other_user: otherUser,
             last_message: lastMsgData ?? undefined,
             unread_count: unreadCount,

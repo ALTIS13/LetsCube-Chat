@@ -35,12 +35,19 @@ export function MainLayout() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+
       const target = event.target as HTMLElement | null;
       const tagName = target?.tagName;
       const isEditable =
         tagName === "INPUT" ||
         tagName === "TEXTAREA" ||
         target?.isContentEditable;
+      const hasBlockingOverlay = Boolean(
+        document.querySelector(
+          '[role="dialog"], [role="menu"], [data-kub-popover="true"], [data-kub-menu="true"]',
+        ),
+      );
 
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -49,7 +56,7 @@ export function MainLayout() {
         return;
       }
 
-      if (event.key === "Escape" && !isEditable && window.innerWidth < 768 && selectedChatId) {
+      if (event.key === "Escape" && !isEditable && !hasBlockingOverlay && selectedChatId) {
         event.preventDefault();
         setSelectedChatId(null);
       }

@@ -155,7 +155,11 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-                <div className="absolute left-0 top-12 w-64 rounded-xl shadow-2xl z-50 py-1 overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] kub-glow-soft">
+                <div
+                  role="menu"
+                  data-kub-menu="true"
+                  className="absolute left-0 top-12 w-64 rounded-xl shadow-2xl z-50 py-1 overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] kub-glow-soft"
+                >
                   {currentUser && (
                     <div className="flex items-center gap-3 px-4 py-3 mb-1 border-b border-[color:var(--kub-border-color)]">
                       <UserAvatar user={currentUser} size="sm" />

@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar } from "@/components/ui/ChatAvatar";
 import { KubTooltip, KubIcon, type KubIconName } from "@/components/kub";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
+import { prefixError } from "@/lib/errors";
 import type { ChatWithLastMessage } from "@/types/database";
 
 interface ChatHeaderProps {
@@ -15,12 +17,62 @@ interface ChatHeaderProps {
 }
 
 export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen }: ChatHeaderProps) {
-  const { setSelectedChatId, mutedChatIds, toggleMutedChat } = useAppStore();
+  const { chats, setChats, setSelectedChatId, mutedChatIds, toggleMutedChat, currentUser } = useAppStore();
+  const supabase = createClient();
   const [showMenu, setShowMenu] = useState(false);
+  const [deletingChat, setDeletingChat] = useState(false);
   const isMuted = mutedChatIds.includes(chatId);
 
   const name = chat?.name ?? "Чат";
   const type = chat?.type ?? "private";
+  const isGroup = type === "group" || type === "channel";
+  const myRole =
+    (chat?.members?.find((member) => member.user_id === currentUser?.id)?.role as
+      | "owner"
+      | "admin"
+      | "member"
+      | undefined) ?? null;
+  const canDeleteGroup = isGroup && myRole === "owner";
+
+  useEffect(() => {
+    if (!showMenu) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setShowMenu(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showMenu]);
+
+  const handleDeleteGroup = async () => {
+    if (!canDeleteGroup || deletingChat) return;
+    if (!confirm("Удалить групповой чат?\n\nЭто действие нельзя отменить.")) return;
+
+    setDeletingChat(true);
+    const { data, error } = await supabase
+      .from("chats")
+      .delete()
+      .eq("id", chatId)
+      .select("id")
+      .maybeSingle();
+    setDeletingChat(false);
+
+    if (error) {
+      console.error("delete group chat failed:", error);
+      alert(prefixError("Недостаточно прав для удаления этого чата", error));
+      return;
+    }
+
+    if (!data) {
+      alert("Недостаточно прав для удаления этого чата.");
+      return;
+    }
+
+    setChats(chats.filter((item) => item.id !== chatId));
+    setSelectedChatId(null);
+    setShowMenu(false);
+  };
 
   const getSubtitle = () => {
     if (!chat) return "";
@@ -42,11 +94,13 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen }: ChatHeade
   const subtitle = getSubtitle();
   const isOnline = subtitle === "в сети";
 
-  const menuItems: Array<{ icon: KubIconName; label: string; danger?: boolean; action: () => void }> = [
+  const menuItems: Array<{ icon: KubIconName; label: string; danger?: boolean; disabled?: boolean; action: () => void }> = [
     { icon: "search", label: "Поиск в чате", action: () => { setShowMenu(false); onSearchOpen?.(); } },
     { icon: "notifications", label: isMuted ? "Включить уведомления" : "Отключить уведомления", action: () => { toggleMutedChat(chatId); setShowMenu(false); } },
     { icon: "delete", label: "Очистить историю", danger: true, action: () => setShowMenu(false) },
-    { icon: "userRemove", label: "Удалить чат", danger: true, action: () => setShowMenu(false) },
+    ...(canDeleteGroup
+      ? [{ icon: "userRemove" as KubIconName, label: "Удалить групповой чат", danger: true, disabled: deletingChat, action: handleDeleteGroup }]
+      : []),
   ];
 
   return (
@@ -115,13 +169,18 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen }: ChatHeade
           {showMenu && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-              <div className="absolute right-0 top-10 w-56 rounded-xl shadow-2xl z-50 py-1 overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] kub-glow-soft">
-                {menuItems.map(({ icon, label, danger, action }) => (
+              <div
+                role="menu"
+                data-kub-menu="true"
+                className="absolute right-0 top-10 w-60 rounded-xl shadow-2xl z-50 py-1 overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] kub-glow-soft"
+              >
+                {menuItems.map(({ icon, label, danger, disabled, action }) => (
                   <button
                     key={label}
                     onClick={action}
+                    disabled={disabled}
                     className={cn(
-                      "flex items-center gap-3 w-full px-4 py-2.5 text-sm transition-colors hover:bg-[var(--kub-surface-3)]",
+                      "flex min-w-0 items-center gap-3 w-full px-4 py-2.5 text-sm transition-colors hover:bg-[var(--kub-surface-3)] disabled:cursor-not-allowed disabled:opacity-60",
                       danger ? "text-[color:var(--kub-danger)]" : "text-[color:var(--kub-text)]"
                     )}
                   >
@@ -129,8 +188,11 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen }: ChatHeade
                       name={icon}
                       size={16}
                       tone={danger ? "danger" : "muted"}
+                      className="shrink-0"
                     />
-                    {label}
+                    <span className="min-w-0 flex-1 truncate text-left">
+                      {disabled && label === "Удалить групповой чат" ? "Удаление..." : label}
+                    </span>
                   </button>
                 ))}
               </div>

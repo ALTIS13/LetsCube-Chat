@@ -88,7 +88,9 @@ export function NotificationBell() {
           "absolute right-0 top-12 z-50 w-[340px] max-w-[calc(100vw-1rem)]",
           "rounded-xl shadow-2xl overflow-hidden",
           "bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] kub-glow-soft",
-        )}>
+        )}
+          data-kub-popover="true"
+        >
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-[color:var(--kub-border-color)]">
             <div className="text-sm font-semibold text-[color:var(--kub-text)]">Уведомления</div>
             {unreadCount > 0 && (

@@ -32,6 +32,7 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
   const [name, setName] = useState(chat.name ?? "");
   const [description, setDescription] = useState(chat.description ?? "");
   const [saving, setSaving] = useState(false);
+  const [deletingChat, setDeletingChat] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   type MemberRow = Profile & { chat_role: "owner" | "admin" | "member" };
   const [members, setMembers] = useState<MemberRow[]>([]);
@@ -128,6 +129,35 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
     onClose();
   };
 
+  const handleDeleteGroup = async () => {
+    if (!isGroup || !isOwner || deletingChat) return;
+    if (!confirm("Удалить групповой чат?\n\nЭто действие нельзя отменить.")) return;
+
+    setDeletingChat(true);
+    const { data, error } = await supabase
+      .from("chats")
+      .delete()
+      .eq("id", chat.id)
+      .select("id")
+      .maybeSingle();
+    setDeletingChat(false);
+
+    if (error) {
+      console.error("delete group chat failed:", error);
+      alert(prefixError("Недостаточно прав для удаления этого чата", error));
+      return;
+    }
+
+    if (!data) {
+      alert("Недостаточно прав для удаления этого чата.");
+      return;
+    }
+
+    setChats(chats.filter((c) => c.id !== chat.id));
+    setSelectedChatId(null);
+    onClose();
+  };
+
   const handleRemoveMember = async (userId: string) => {
     const { error } = await supabase.from("chat_members")
       .delete().eq("chat_id", chat.id).eq("user_id", userId);
@@ -159,6 +189,10 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
   const otherUser = !isGroup ? (chat.other_user as Profile | null) : null;
 
   const tabLabels: Record<Tab, string> = { info: "Сведения", members: "Участники", media: "Медиа" };
+  const actionRowClass =
+    "inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 transition-colors text-left hover:bg-[var(--kub-surface-2)]";
+  const dangerActionRowClass =
+    "inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 transition-colors text-left text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:cursor-not-allowed disabled:opacity-60";
 
   return (
     <div className="flex flex-col h-full w-full md:w-80 flex-shrink-0 border-l bg-[var(--kub-surface)] border-[color:var(--kub-border-color)]">
@@ -293,14 +327,14 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
             <div className="px-4 py-3 space-y-1">
               <button
                 onClick={() => setTab("media")}
-                className="flex items-center gap-3 w-full py-2 text-sm hover:bg-[var(--kub-surface-2)] rounded-xl px-2 transition-colors text-[color:var(--kub-text)]"
+                className={cn(actionRowClass, "text-[color:var(--kub-text)]")}
               >
-                <KubIcon name="image" size={17} tone="muted" />
-                Общие медиа
+                <KubIcon name="image" size={17} tone="muted" className="shrink-0" />
+                <span className="min-w-0 flex-1 truncate">Общие медиа</span>
               </button>
-              <button className="flex items-center gap-3 w-full py-2 text-sm hover:bg-[var(--kub-surface-2)] rounded-xl px-2 transition-colors text-[color:var(--kub-text)]">
-                <KubIcon name="notifications" size={17} tone="muted" />
-                Отключить уведомления
+              <button className={cn(actionRowClass, "text-[color:var(--kub-text)]")}>
+                <KubIcon name="notifications" size={17} tone="muted" className="shrink-0" />
+                <span className="min-w-0 flex-1 truncate">Отключить уведомления</span>
               </button>
               {isGroup && chat.type === "group" && isOwner && (
                 <button
@@ -327,12 +361,13 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
                       }
                     }
                   }}
-                  className="flex items-center gap-3 w-full py-2 text-sm hover:bg-[var(--kub-surface-2)] rounded-xl px-2 transition-colors text-[color:var(--kub-text)]"
+                  className={cn(actionRowClass, "text-[color:var(--kub-text)]")}
                 >
                   <KubIcon
                     name="hash"
                     size={17}
                     tone={chat.is_forum ? "accent" : "muted"}
+                    className="shrink-0"
                   />
                   <span className="flex-1 text-left">Топики</span>
                   <span className={cn(
@@ -348,10 +383,22 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
               {isGroup && (
                 <button
                   onClick={handleLeave}
-                  className="flex items-center gap-3 w-full py-2 text-sm hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] rounded-xl px-2 transition-colors text-[color:var(--kub-danger)]"
+                  className={dangerActionRowClass}
                 >
-                  <KubIcon name="logout" size={17} />
-                  Покинуть группу
+                  <KubIcon name="logout" size={17} className="shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">Покинуть группу</span>
+                </button>
+              )}
+              {isGroup && isOwner && (
+                <button
+                  onClick={handleDeleteGroup}
+                  disabled={deletingChat}
+                  className={dangerActionRowClass}
+                >
+                  <KubIcon name="userRemove" size={17} className="shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">
+                    {deletingChat ? "Удаление..." : "Удалить групповой чат"}
+                  </span>
                 </button>
               )}
               <button
@@ -359,10 +406,10 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
                   if (!confirm("Удалить все сообщения?")) return;
                   await supabase.from("messages").update({ deleted_at: new Date().toISOString() }).eq("chat_id", chat.id);
                 }}
-                className="flex items-center gap-3 w-full py-2 text-sm hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] rounded-xl px-2 transition-colors text-[color:var(--kub-danger)]"
+                className={dangerActionRowClass}
               >
-                <KubIcon name="delete" size={17} />
-                Очистить историю
+                <KubIcon name="delete" size={17} className="shrink-0" />
+                <span className="min-w-0 flex-1 truncate">Очистить историю</span>
               </button>
             </div>
           </div>
