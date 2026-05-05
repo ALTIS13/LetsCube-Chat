@@ -1,0 +1,16 @@
+{
+  "name": "kub-push-worker",
+  "version": "1.0.0",
+  "description": "Listens for new messages via Supabase realtime and delivers Web Push notifications to subscribed devices.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.103.0",
+    "dotenv": "^17.4.1",
+    "web-push": "^3.6.7"
+  }
+}

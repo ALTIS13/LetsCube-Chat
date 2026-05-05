@@ -1,0 +1,631 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-border: hsl(var(--card-border));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-popover-border: hsl(var(--popover-border));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary-border: var(--primary-border);
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-secondary-border: var(--secondary-border);
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-muted-border: var(--muted-border);
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-accent-border: var(--accent-border);
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-destructive-border: var(--destructive-border);
+
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-primary-border: var(--sidebar-primary-border);
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-accent-border: var(--sidebar-accent-border);
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  --font-sans: var(--app-font-sans);
+  --font-serif: var(--app-font-serif);
+  --font-mono: var(--app-font-mono);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * Theme-agnostic root: typography, radius, shadow scale, spacing.
+ * Per-theme color tokens live in `.dark` and `.light` blocks below.
+ * The HTML element ALWAYS has either a `.dark` or `.light` class — the inline
+ * script in `index.html` (mirrored by `THEME_INIT_SCRIPT` in `useTheme.ts`)
+ * resolves "system" preference before React hydrates so there's no flash.
+ * ─────────────────────────────────────────────────────────────────────────── */
+:root {
+  --app-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --app-font-serif: Georgia, serif;
+  --app-font-mono: Menlo, monospace;
+
+  --radius: .5rem; /* 8px */
+
+  --tracking-normal: 0em;
+  --spacing: 0.25rem;
+}
+
+.dark {
+  --kub-bg: #050B18;
+  --kub-surface: #081629;
+  --kub-surface-2: #0B213A;
+  --kub-surface-3: #112B47;
+  --kub-text: #F5F7FB;
+  --kub-muted: #8FA9C4;
+  --kub-border-color: rgba(0, 174, 239, 0.25);
+  --kub-cyan: #00AEEF;
+  --kub-cyan-hover: #33C2F4;
+  --kub-blue: #008CFF;
+  --kub-pink: #FF007A;
+  --kub-online: #4DCD5E;
+  --kub-danger: #EF4444;
+  --kub-warn: #F5B50A;
+  --kub-chat-bg: var(--kub-bg);
+  --kub-message-out: #0E2C44;
+  --kub-message-meta: rgba(245, 247, 251, 0.55);
+
+  --background: 221 65.52% 5.69%;        /* #050B18 */
+  --foreground: 220 42.86% 97.25%;       /* #F5F7FB */
+
+  --card: 215 67.35% 9.61%;              /* #081629 */
+  --card-foreground: 220 42.86% 97.25%;
+  --card-border: 211 61.36% 17.25%;
+
+  --popover: 212 68.12% 13.53%;          /* #0B213A */
+  --popover-foreground: 220 42.86% 97.25%;
+  --popover-border: 211 61.36% 17.25%;
+
+  --primary: 196 100% 46.86%;            /* cyan #00AEEF */
+  --primary-foreground: 221 65.52% 5.69%;
+
+  --secondary: 212 68.12% 13.53%;
+  --secondary-foreground: 220 42.86% 97.25%;
+
+  --muted: 215 67.35% 9.61%;
+  --muted-foreground: 211 30.99% 66.47%; /* #8FA9C4 */
+
+  --accent: 331 100% 50%;                /* pink #FF007A */
+  --accent-foreground: 220 42.86% 97.25%;
+
+  --destructive: 0 84.24% 60.2%;
+  --destructive-foreground: 220 42.86% 97.25%;
+
+  --border: 211 61.36% 17.25%;
+  --input: 211 61.36% 17.25%;
+  --ring: 196 100% 46.86%;
+
+  --chart-1: 196 100% 46.86%;            /* cyan */
+  --chart-2: 207 100% 50%;               /* blue */
+  --chart-3: 331 100% 50%;               /* pink */
+  --chart-4: 142 64% 45%;                /* online green */
+  --chart-5: 38 92% 50%;                 /* warning */
+
+  --sidebar: 215 67.35% 9.61%;
+  --sidebar-foreground: 220 42.86% 97.25%;
+  --sidebar-primary: 196 100% 46.86%;
+  --sidebar-primary-foreground: 221 65.52% 5.69%;
+  --sidebar-accent: 212 68.12% 13.53%;
+  --sidebar-accent-foreground: 220 42.86% 97.25%;
+  --sidebar-border: 211 61.36% 17.25%;
+  --sidebar-ring: 196 100% 46.86%;
+
+  --button-outline: rgba(255, 255, 255, .10);
+  --badge-outline: rgba(255, 255, 255, .05);
+  --opaque-button-border-intensity: 9;
+  --elevate-1: rgba(255, 255, 255, .04);
+  --elevate-2: rgba(255, 255, 255, .09);
+
+  --shadow-2xs: 0 2px 0 0 rgba(0, 0, 0, 0.00);
+  --shadow-xs: 0 2px 0 0 rgba(0, 0, 0, 0.00);
+  --shadow-sm: 0 2px 0 0 rgba(0, 0, 0, 0.18), 0 1px 2px -1px rgba(0, 0, 0, 0.30);
+  --shadow: 0 2px 0 0 rgba(0, 0, 0, 0.18), 0 1px 2px -1px rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 2px 0 0 rgba(0, 0, 0, 0.20), 0 2px 4px -1px rgba(0, 0, 0, 0.30);
+  --shadow-lg: 0 2px 0 0 rgba(0, 0, 0, 0.22), 0 4px 6px -1px rgba(0, 0, 0, 0.30);
+  --shadow-xl: 0 2px 0 0 rgba(0, 0, 0, 0.25), 0 8px 10px -1px rgba(0, 0, 0, 0.35);
+  --shadow-2xl: 0 8px 32px rgba(0, 0, 0, 0.45);
+
+  --tg-bg: var(--kub-bg);
+  --tg-sidebar: var(--kub-surface);
+  --tg-chat-bg: var(--kub-bg);
+  --tg-header: var(--kub-surface);
+  --tg-input: var(--kub-surface-2);
+  --tg-message-out: var(--kub-message-out);
+  --tg-message-in: var(--kub-surface);
+  --tg-message-meta: var(--kub-message-meta);
+  --tg-accent: var(--kub-cyan);
+  --tg-accent-hover: var(--kub-cyan-hover);
+  --tg-text: var(--kub-text);
+  --tg-text-secondary: var(--kub-muted);
+  --tg-border: var(--kub-border-color);
+  --tg-hover: var(--kub-surface-3);
+  --tg-active: rgba(0, 174, 239, 0.18);
+  --tg-online: var(--kub-online);
+  --tg-unread: var(--kub-cyan);
+  --tg-muted: rgba(143, 169, 196, 0.5);
+  --tg-pinned: var(--kub-surface-2);
+  --tg-context-bg: var(--kub-surface-2);
+  --tg-shadow: rgba(0, 0, 0, 0.45);
+  --tg-pattern: rgba(0, 174, 239, 0.025);
+
+  /* Auto-computed border tones (shadcn pattern) */
+  --sidebar-primary-border: hsl(var(--sidebar-primary));
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --sidebar-accent-border: hsl(var(--sidebar-accent));
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --primary-border: hsl(var(--primary));
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --secondary-border: hsl(var(--secondary));
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --muted-border: hsl(var(--muted));
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --accent-border: hsl(var(--accent));
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --destructive-border: hsl(var(--destructive));
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+.light {
+  --kub-bg: #F4F8FC;
+  --kub-surface: #FFFFFF;
+  --kub-surface-2: #EAF3FA;
+  --kub-surface-3: #DCEBF7;
+  --kub-text: #07111F;
+  --kub-muted: #52677D;
+  --kub-border-color: rgba(0, 92, 160, 0.18);
+  --kub-cyan: #008FCC;
+  --kub-cyan-hover: #006FA6;
+  --kub-blue: #006FE6;
+  --kub-pink: #D6006E;
+  --kub-online: #4FAE4E;
+  --kub-danger: #DC2626;
+  --kub-warn: #C2870A;
+  --kub-chat-bg: var(--kub-bg);
+  --kub-message-out: #DCEBF7;
+  --kub-message-meta: rgba(7, 17, 31, 0.55);
+
+  --background: 210 57.14% 97.25%;       /* #F4F8FC */
+  --foreground: 215 63.16% 7.45%;        /* #07111F */
+
+  --card: 0 0% 100%;
+  --card-foreground: 215 63.16% 7.45%;
+  --card-border: 207 62.79% 91.57%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 215 63.16% 7.45%;
+  --popover-border: 207 62.79% 91.57%;
+
+  --primary: 198 100% 40%;               /* cyan #008FCC */
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 206 61.54% 94.9%;         /* #EAF3FA */
+  --secondary-foreground: 215 63.16% 7.45%;
+
+  --muted: 206 61.54% 94.9%;
+  --muted-foreground: 211 20.77% 40.59%; /* #52677D */
+
+  --accent: 329 100% 41.96%;             /* pink #D6006E */
+  --accent-foreground: 0 0% 100%;
+
+  --destructive: 0 72.22% 50.59%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 207 62.79% 91.57%;
+  --input: 207 62.79% 91.57%;
+  --ring: 198 100% 40%;
+
+  --chart-1: 198 100% 40%;
+  --chart-2: 211 100% 45.1%;
+  --chart-3: 329 100% 41.96%;
+  --chart-4: 142 64% 38%;
+  --chart-5: 38 92% 45%;
+
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 215 63.16% 7.45%;
+  --sidebar-primary: 198 100% 40%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 206 61.54% 94.9%;
+  --sidebar-accent-foreground: 215 63.16% 7.45%;
+  --sidebar-border: 207 62.79% 91.57%;
+  --sidebar-ring: 198 100% 40%;
+
+  --button-outline: rgba(0, 0, 0, .10);
+  --badge-outline: rgba(0, 0, 0, .05);
+  --opaque-button-border-intensity: -8;
+  --elevate-1: rgba(0, 0, 0, .03);
+  --elevate-2: rgba(0, 0, 0, .08);
+
+  --shadow-2xs: 0 2px 0 0 rgba(7, 17, 31, 0.00);
+  --shadow-xs: 0 2px 0 0 rgba(7, 17, 31, 0.00);
+  --shadow-sm: 0 2px 0 0 rgba(7, 17, 31, 0.04), 0 1px 2px -1px rgba(7, 17, 31, 0.06);
+  --shadow: 0 2px 0 0 rgba(7, 17, 31, 0.04), 0 1px 2px -1px rgba(7, 17, 31, 0.06);
+  --shadow-md: 0 2px 0 0 rgba(7, 17, 31, 0.05), 0 2px 4px -1px rgba(7, 17, 31, 0.08);
+  --shadow-lg: 0 2px 0 0 rgba(7, 17, 31, 0.06), 0 4px 6px -1px rgba(7, 17, 31, 0.10);
+  --shadow-xl: 0 2px 0 0 rgba(7, 17, 31, 0.07), 0 8px 10px -1px rgba(7, 17, 31, 0.12);
+  --shadow-2xl: 0 8px 32px rgba(7, 17, 31, 0.16);
+
+  --tg-bg: var(--kub-bg);
+  --tg-sidebar: var(--kub-surface);
+  --tg-chat-bg: var(--kub-bg);
+  --tg-header: var(--kub-surface);
+  --tg-input: var(--kub-surface-2);
+  --tg-message-out: var(--kub-message-out);
+  --tg-message-in: var(--kub-surface);
+  --tg-message-meta: var(--kub-message-meta);
+  --tg-accent: var(--kub-cyan);
+  --tg-accent-hover: var(--kub-cyan-hover);
+  --tg-text: var(--kub-text);
+  --tg-text-secondary: var(--kub-muted);
+  --tg-border: var(--kub-border-color);
+  --tg-hover: var(--kub-surface-2);
+  --tg-active: rgba(0, 143, 204, 0.14);
+  --tg-online: var(--kub-online);
+  --tg-unread: var(--kub-cyan);
+  --tg-muted: rgba(82, 103, 125, 0.35);
+  --tg-pinned: var(--kub-surface-2);
+  --tg-context-bg: var(--kub-surface);
+  --tg-shadow: rgba(7, 17, 31, 0.12);
+  --tg-pattern: rgba(0, 92, 160, 0.025);
+
+  /* Auto-computed border tones */
+  --sidebar-primary-border: hsl(var(--sidebar-primary));
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --sidebar-accent-border: hsl(var(--sidebar-accent));
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --primary-border: hsl(var(--primary));
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --secondary-border: hsl(var(--secondary));
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --muted-border: hsl(var(--muted));
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --accent-border: hsl(var(--accent));
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --destructive-border: hsl(var(--destructive));
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--tg-bg);
+  color: var(--tg-text);
+  font-family: var(--app-font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--tg-muted); border-radius: 2px; opacity: 0.5; }
+::-webkit-scrollbar-thumb:hover { background: var(--tg-text-secondary); }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Telegram-style chat wallpaper pattern (dot grid) */
+.chat-bg {
+  background-color: var(--tg-chat-bg);
+  background-image:
+    radial-gradient(var(--tg-pattern) 1px, transparent 1px),
+    radial-gradient(var(--tg-pattern) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: 0 0, 20px 20px;
+}
+
+/* Message bubble tails */
+.bubble-out::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: -8px;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 0 10px 9px;
+  border-color: transparent transparent var(--tg-message-out) transparent;
+}
+
+.bubble-in::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: -8px;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 9px 10px 0;
+  border-color: transparent var(--tg-message-in) transparent transparent;
+}
+
+.context-menu {
+  background: var(--tg-context-bg);
+  border: 1px solid var(--tg-border);
+  box-shadow: 0 8px 32px var(--tg-shadow), 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+@keyframes typing-dot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+
+.typing-dot:nth-child(1) { animation: typing-dot 1.2s infinite 0ms; }
+.typing-dot:nth-child(2) { animation: typing-dot 1.2s infinite 150ms; }
+.typing-dot:nth-child(3) { animation: typing-dot 1.2s infinite 300ms; }
+
+@keyframes msg-appear {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.msg-appear { animation: msg-appear 0.15s ease-out forwards; }
+
+@keyframes ripple { to { transform: scale(2.5); opacity: 0; } }
+
+@keyframes vrec-bar {
+  0%, 100% { transform: scaleY(0.35); opacity: 0.55; }
+  50%      { transform: scaleY(1);    opacity: 1; }
+}
+.vrec-bar {
+  transform-origin: center;
+  animation: vrec-bar 1.05s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.unread-separator {
+  background: linear-gradient(90deg, transparent, var(--tg-active), transparent);
+}
+
+.msg-selected { background: var(--tg-active) !important; }
+
+.pinned-bar {
+  background: linear-gradient(90deg, var(--tg-accent) 0%, transparent 3px, var(--tg-header) 3px);
+}
+
+textarea::placeholder, input::placeholder {
+  color: var(--tg-text-secondary);
+}
+
+.transition-bg { transition: background 0.15s ease; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+ * КУБ brand utilities
+ * cyan #00AEEF / pink #FF007A on deep navy. Used for hero backdrops, panel
+ * surfaces, neon focus rings, and the geometric cube/К logomark.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/* Layered cyber grid + radial glow; sized for full-bleed auth/welcome screens. */
+.kub-grid-bg {
+  background-color: var(--kub-bg);
+  background-image:
+    radial-gradient(ellipse 70% 55% at 18% 12%, color-mix(in srgb, var(--kub-cyan) 16%, transparent) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 85% 92%, color-mix(in srgb, var(--kub-pink) 14%, transparent) 0%, transparent 60%),
+    linear-gradient(color-mix(in srgb, var(--kub-cyan) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--kub-cyan) 6%, transparent) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 56px 56px, 56px 56px;
+  background-position: 0 0, 0 0, 0 0, 0 0;
+}
+
+/* Subtle cyan grid for in-app surfaces (sidebar, chat empty bg). */
+.kub-grid-subtle {
+  background-color: var(--kub-bg);
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--kub-cyan) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--kub-cyan) 4%, transparent) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+/* Cyan / pink glow halos used behind hero elements and primary buttons. */
+.kub-glow-cyan { box-shadow: 0 0 0 1px color-mix(in srgb, var(--kub-cyan) 40%, transparent), 0 8px 32px -8px color-mix(in srgb, var(--kub-cyan) 55%, transparent); }
+.kub-glow-pink { box-shadow: 0 0 0 1px color-mix(in srgb, var(--kub-pink) 40%, transparent), 0 8px 32px -8px color-mix(in srgb, var(--kub-pink) 55%, transparent); }
+.kub-glow-soft { box-shadow: 0 4px 24px -8px color-mix(in srgb, var(--kub-cyan) 35%, transparent); }
+
+/* Neon focus ring for inputs and triggers. */
+.kub-neon-ring {
+  outline: none;
+  box-shadow:
+    0 0 0 1px var(--kub-cyan),
+    0 0 0 4px color-mix(in srgb, var(--kub-cyan) 20%, transparent);
+}
+
+/* Surface panel with cyber border + inner gradient sheen. */
+.kub-panel {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--kub-cyan) 5%, var(--kub-surface)) 0%, var(--kub-surface) 60%);
+  border: 1px solid var(--kub-border-color);
+  border-radius: 14px;
+  position: relative;
+}
+
+/* Hex-style cut corners (decorative, used on primary CTAs and hero card). */
+.kub-cut {
+  clip-path: polygon(
+    10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px),
+    calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px
+  );
+}
+
+/* Animated cube logomark — cyan front face, pink top face, navy side. */
+.kub-cube-logo {
+  display: inline-grid;
+  place-items: center;
+  position: relative;
+  isolation: isolate;
+}
+.kub-cube-logo::before,
+.kub-cube-logo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 14%;
+  pointer-events: none;
+}
+.kub-cube-logo::before {
+  background: linear-gradient(135deg, var(--kub-cyan) 0%, var(--kub-blue) 55%, color-mix(in srgb, var(--kub-pink) 70%, var(--kub-blue)) 100%);
+  z-index: -2;
+}
+.kub-cube-logo::after {
+  background:
+    linear-gradient(135deg, transparent 48%, color-mix(in srgb, #fff 22%, transparent) 50%, transparent 52%),
+    linear-gradient(45deg, transparent 48%, color-mix(in srgb, #fff 14%, transparent) 50%, transparent 52%);
+  z-index: -1;
+  mix-blend-mode: screen;
+}
+.kub-cube-logo > span {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+  font-family: var(--app-font-sans);
+}
+
+/* Brand gradient text for headings on auth/welcome. */
+.kub-text-gradient {
+  background: linear-gradient(90deg, var(--kub-cyan), var(--kub-pink));
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+}
+
+/* Gentle pulsing glow used on online dots / live indicators. */
+@keyframes kub-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--kub-online) 65%, transparent); }
+  50%      { box-shadow: 0 0 0 6px transparent; }
+}
+.kub-pulse { animation: kub-pulse 2s ease-in-out infinite; }
+
+/* Make the chat-bg use the cyber grid in dark mode without losing dot pattern. */
+.dark .chat-bg {
+  background-image:
+    radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--kub-cyan) 5%, transparent) 0%, transparent 45%),
+    radial-gradient(circle at 80% 85%, color-mix(in srgb, var(--kub-pink) 4%, transparent) 0%, transparent 45%),
+    radial-gradient(var(--tg-pattern) 1px, transparent 1px),
+    radial-gradient(var(--tg-pattern) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+  background-position: 0 0, 0 0, 0 0, 20px 20px;
+}
+
+/* ─────────────────────────── Elevate utilities ─────────────────────────── */
+@layer utilities {
+  /* Hide ugly search cancel button in Chrome until we can style it properly */
+  input[type="search"]::-webkit-search-cancel-button {
+    @apply hidden;
+  }
+
+  /* Placeholder styling for contentEditable div */
+  [contenteditable][data-placeholder]:empty::before {
+    content: attr(data-placeholder);
+    color: hsl(var(--muted-foreground));
+    pointer-events: none;
+  }
+
+  .no-default-hover-elevate {}
+  .no-default-active-elevate {}
+
+  .toggle-elevate::before,
+  .toggle-elevate-2::before {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0px;
+    border-radius: inherit;
+    z-index: -1;
+  }
+
+  .toggle-elevate.toggle-elevated::before {
+    background-color: var(--elevate-2);
+  }
+
+  .border.toggle-elevate::before {
+    inset: -1px;
+  }
+
+  .hover-elevate:not(.no-default-hover-elevate),
+  .active-elevate:not(.no-default-active-elevate),
+  .hover-elevate-2:not(.no-default-hover-elevate),
+  .active-elevate-2:not(.no-default-active-elevate) {
+    position: relative;
+    z-index: 0;
+  }
+
+  .hover-elevate:not(.no-default-hover-elevate)::after,
+  .active-elevate:not(.no-default-active-elevate)::after,
+  .hover-elevate-2:not(.no-default-hover-elevate)::after,
+  .active-elevate-2:not(.no-default-active-elevate)::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0px;
+    border-radius: inherit;
+    z-index: 999;
+  }
+
+  .hover-elevate:hover:not(.no-default-hover-elevate)::after,
+  .active-elevate:active:not(.no-default-active-elevate)::after {
+    background-color: var(--elevate-1);
+  }
+
+  .hover-elevate-2:hover:not(.no-default-hover-elevate)::after,
+  .active-elevate-2:active:not(.no-default-active-elevate)::after {
+    background-color: var(--elevate-2);
+  }
+
+  .border.hover-elevate:not(.no-hover-interaction-elevate)::after,
+  .border.active-elevate:not(.no-active-interaction-elevate)::after,
+  .border.hover-elevate-2:not(.no-hover-interaction-elevate)::after,
+  .border.active-elevate-2:not(.no-active-interaction-elevate)::after,
+  .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
+    inset: -1px;
+  }
+}

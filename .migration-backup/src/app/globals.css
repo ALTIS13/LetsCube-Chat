@@ -1,0 +1,202 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 199 89% 48%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 199 89% 48%;
+    --radius: 0.5rem;
+
+    /* КУБ — dark palette (Telegram-style, default) */
+    --tg-bg: #17212b;
+    --tg-sidebar: #0e1621;
+    --tg-chat-bg: #17212b;
+    --tg-header: #17212b;
+    --tg-input: #242f3d;
+    --tg-message-out: #2b5278;
+    --tg-message-in: #182533;
+    --tg-accent: #5288c1;
+    --tg-accent-hover: #4a7db5;
+    --tg-text: #e8eaed;
+    --tg-text-secondary: #708499;
+    --tg-border: #0e1621;
+    --tg-hover: #202b36;
+    --tg-active: #2b5278;
+    --tg-online: #4dcd5e;
+    --tg-unread: #5288c1;
+    --tg-muted: #4b565f;
+    --tg-pinned: #242f3d;
+    --tg-context-bg: #212d3b;
+    --tg-shadow: rgba(0,0,0,0.35);
+    /* Subtle wallpaper dots pattern colour for the chat surface. */
+    --tg-pattern: rgba(255,255,255,0.018);
+  }
+
+  /* Light palette: applied when <html> has the `light` class. */
+  :root.light {
+    --tg-bg: #ffffff;
+    --tg-sidebar: #ffffff;
+    --tg-chat-bg: #ffffff;
+    --tg-header: #ffffff;
+    --tg-input: #f0f3f7;
+    --tg-message-out: #effdde;
+    --tg-message-in: #ffffff;
+    --tg-accent: #3390ec;
+    --tg-accent-hover: #2a7fd6;
+    --tg-text: #0f172a;
+    --tg-text-secondary: #64748b;
+    --tg-border: #e5e7eb;
+    --tg-hover: #f3f4f6;
+    --tg-active: #d6e4f7;
+    --tg-online: #4fae4e;
+    --tg-unread: #3390ec;
+    --tg-muted: #b0b0b0;
+    --tg-pinned: #f0f3f7;
+    --tg-context-bg: #ffffff;
+    --tg-shadow: rgba(15,23,42,0.12);
+    --tg-pattern: rgba(0,0,0,0.025);
+  }
+}
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--tg-bg);
+  color: var(--tg-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar — adapt to current theme via opacity hack on text colour */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--tg-muted); border-radius: 2px; opacity: 0.5; }
+::-webkit-scrollbar-thumb:hover { background: var(--tg-text-secondary); }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Telegram chat wallpaper pattern.
+   Dots are very faint; brightness is supplied via --tg-pattern so the same
+   pattern reads correctly on dark and light surfaces. */
+.chat-bg {
+  background-color: var(--tg-chat-bg);
+  background-image:
+    radial-gradient(var(--tg-pattern) 1px, transparent 1px),
+    radial-gradient(var(--tg-pattern) 1px, transparent 1px);
+  background-size: 40px 40px;
+  background-position: 0 0, 20px 20px;
+}
+
+/* Message bubble tails */
+.bubble-out::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: -8px;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 0 10px 9px;
+  border-color: transparent transparent var(--tg-message-out) transparent;
+}
+
+.bubble-in::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: -8px;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 9px 10px 0;
+  border-color: transparent var(--tg-message-in) transparent transparent;
+}
+
+/* Context menu */
+.context-menu {
+  background: var(--tg-context-bg);
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 8px 32px var(--tg-shadow), 0 2px 8px rgba(0,0,0,0.2);
+}
+
+/* Typing dots animation */
+@keyframes typing-dot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+
+.typing-dot:nth-child(1) { animation: typing-dot 1.2s infinite 0ms; }
+.typing-dot:nth-child(2) { animation: typing-dot 1.2s infinite 150ms; }
+.typing-dot:nth-child(3) { animation: typing-dot 1.2s infinite 300ms; }
+
+/* Message appear animation */
+@keyframes msg-appear {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.msg-appear {
+  animation: msg-appear 0.15s ease-out forwards;
+}
+
+/* Ripple on chat item click */
+@keyframes ripple {
+  to { transform: scale(2.5); opacity: 0; }
+}
+
+/* Unread separator fade */
+.unread-separator {
+  background: linear-gradient(90deg, transparent, rgba(82,136,193,0.25), transparent);
+}
+
+/* Selection highlight */
+.msg-selected {
+  background: rgba(82, 136, 193, 0.15) !important;
+}
+
+/* Pinned message gradient */
+.pinned-bar {
+  background: linear-gradient(90deg, var(--tg-accent) 0%, transparent 3px, var(--tg-header) 3px);
+}
+
+/* Input placeholder color */
+textarea::placeholder, input::placeholder {
+  color: var(--tg-text-secondary);
+}
+
+/* Smooth transitions */
+.transition-bg { transition: background 0.15s ease; }

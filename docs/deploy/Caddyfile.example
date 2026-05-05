@@ -1,0 +1,19 @@
+# Replace your-domain.example with your own domain.
+# Replace 8080 with KUB_WEB_PORT if you changed it in docker-compose env.
+
+your-domain.example {
+    encode zstd gzip
+
+    reverse_proxy 127.0.0.1:8080 {
+        header_up Host {host}
+        header_up X-Forwarded-Proto https
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Real-IP {remote_host}
+    }
+
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+}

@@ -1,0 +1,31 @@
+[Unit]
+Description=Neogram GitHub webhook listener
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+Group=deploy
+WorkingDirectory=/var/www/neogram
+ExecStart=/usr/bin/node /var/www/neogram/deploy/webhook.js
+Restart=always
+RestartSec=3
+
+# === EDIT THIS ===
+# Replace the value below with a long random string and add the SAME string
+# to the GitHub webhook "Secret" field.  Generate one with:
+#   openssl rand -hex 32
+Environment=GITHUB_WEBHOOK_SECRET=CHANGE_ME_TO_A_LONG_RANDOM_STRING
+Environment=PORT=9000
+Environment=BRANCH=main
+Environment=DEPLOY_SCRIPT=/var/www/neogram/deploy/deploy.sh
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/var/www/neogram /var/log/neogram
+
+[Install]
+WantedBy=multi-user.target

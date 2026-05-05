@@ -1,0 +1,16 @@
+{
+  "name": "neogram-claude-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot to control Claude Code",
+  "main": "bot.js",
+  "type": "module",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "node --watch bot.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.87.0",
+    "dotenv": "^17.4.1",
+    "node-telegram-bot-api": "^0.67.0"
+  }
+}

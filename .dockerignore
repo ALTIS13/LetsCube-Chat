@@ -1,0 +1,52 @@
+# Applies to Docker builds whose context is the repo root.
+# Main deployment build:
+#   docker build -f docs/deploy/Dockerfile .
+
+**/node_modules
+**/dist
+**/build
+**/.next
+**/.turbo
+**/.cache
+*.tsbuildinfo
+
+.git
+.gitignore
+.github
+
+# Replit and local state.
+.local
+.agents
+.replit
+.replitignore
+replit.md
+**/.replit
+**/.replit-artifact
+.config
+.cache
+.upm
+.breakpoints
+attached_assets
+
+# SQL migration source backup is not needed in the web image.
+.migration-backup
+
+# Editor and OS noise.
+.vscode
+.idea
+*.log
+*.tmp
+*.temp
+*.bak
+*.backup
+.DS_Store
+Thumbs.db
+
+# Real env files must never end up in any Docker layer.
+# Templates with *.example suffix are kept on purpose.
+.env
+.env.*
+!.env.example
+!.env.production.example
+!**/.env.example
+!**/.env.production.example

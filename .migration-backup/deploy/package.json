@@ -1,0 +1,5 @@
+{
+  "type": "module",
+  "private": true,
+  "description": "marker so node treats webhook.js as ESM without warning"
+}
