@@ -116,7 +116,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
         </div>
       </div>
 
-      <div className="flex min-w-0 items-center gap-1.5 overflow-hidden px-3 pb-2.5">
+      <div className="flex min-w-0 items-center gap-1.5 px-3 pb-2.5">
         {isSearchFocused || searchQuery ? (
           <button
             onClick={() => { setSearchQuery(""); setIsSearchFocused(false); }}
