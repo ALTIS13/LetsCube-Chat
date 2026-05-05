@@ -2,6 +2,15 @@
 
 This file records the current frontend/Supabase safety assumptions for KUB. It is not a replacement for reviewing RLS policies in the Supabase dashboard before production.
 
+## MCP Schema Memory
+
+Read-only Supabase MCP sync was performed on 2026-05-05 for project `nhogbeojfnbjcfipitrh`.
+
+- Current state snapshot: `docs/SUPABASE_CURRENT_STATE.md`.
+- Schema/object map: `docs/SUPABASE_SCHEMA_MAP.md`.
+- SQL remains manual/idempotent in `.migration-backup/supabase/migrations/`.
+- Do not apply migrations through MCP; create migration files and let the user apply SQL manually.
+
 ## Current Frontend Findings
 
 - Private chat creation uses the `open_or_create_private_chat` RPC in `artifacts/kub/src/hooks/useCreateChat.ts`.
