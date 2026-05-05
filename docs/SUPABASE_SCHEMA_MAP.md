@@ -242,6 +242,9 @@ Manual/idempotent migrations are stored in `.migration-backup/supabase/migration
 - `20260504_tasks_system.sql`.
 - `20260504_tasks_update_and_chat_lockdown.sql`.
 - `20260505_audit_logs.sql`.
+- `20260505_tasks_visibility_and_assignment.sql` - pending/manual proposal; adds task privacy and pool assignment.
+- `20260505_media_storage_path_policies.sql` - pending/manual proposal; hardens `media` storage paths.
+- `20260505_folders_policy_cleanup.sql` - pending/manual proposal; removes legacy folder policies after scope-aware migration.
 
 Supabase MCP migration ledger is empty; do not rely on Supabase CLI migration history for this project.
 

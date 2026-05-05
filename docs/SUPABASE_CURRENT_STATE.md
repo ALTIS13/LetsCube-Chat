@@ -176,4 +176,13 @@ Auth logs показывают успешные login/token/verify events и с�
 
 ## Нужно ли Сейчас Мигрировать
 
-Нет. Текущая задача только синхронизирует документацию. SQL changes возможны отдельной задачей после выбора приоритета: `EXECUTE` grants для internal SECURITY DEFINER functions, fixed `search_path`, storage listing policy, FK indexes и RLS performance cleanup.
+Да, для production hardening нужны ручные SQL-миграции. SQL не применялся через MCP; подготовленные файлы ниже нужно применять вручную в Supabase SQL Editor после проверки.
+# Pending Stabilization SQL
+
+2026-05-05 MCP-аудит подтвердил три production hardening зоны, для которых подготовлены migration-файлы, но SQL не применялся автоматически:
+
+- `.migration-backup/supabase/migrations/20260505_tasks_visibility_and_assignment.sql` - explicit task visibility/assignment scope, RLS и новые RPC `task_create_v2`, `task_update_v2`, `task_claim`.
+- `.migration-backup/supabase/migrations/20260505_media_storage_path_policies.sql` - path ownership policies для bucket `media`.
+- `.migration-backup/supabase/migrations/20260505_folders_policy_cleanup.sql` - удаление старых permissive `*_own` policies после scope-aware folders migration.
+
+Frontend для новых task columns/RPC не должен выкатываться до ручного применения task migration в Supabase SQL Editor.
