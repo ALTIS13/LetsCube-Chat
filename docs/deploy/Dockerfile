@@ -50,7 +50,7 @@ COPY scripts/package.json                  scripts/package.json
 # and Coolify builds from a clean root context, so avoid a brittle filtered
 # install here.
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile
+    pnpm --version && pnpm install --frozen-lockfile
 
 # ---------- Stage 2: build ----------
 FROM base AS build
