@@ -110,7 +110,7 @@ export function AudioSettingsSection() {
           label="Громкость голосовых"
           value={settings.voicePlaybackVolume}
           min={0}
-          max={2}
+          max={1}
           step={0.05}
           onChange={(voicePlaybackVolume) => updateSettings({ voicePlaybackVolume })}
         />

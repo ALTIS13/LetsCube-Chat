@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { KubIcon } from "@/components/kub";
-import { useAudioSettings } from "@/hooks/useAudioSettings";
+import { clampAudioElementVolume, useAudioSettings } from "@/hooks/useAudioSettings";
 
 interface AudioMessageProps {
   url: string;
@@ -18,7 +18,9 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
   const { settings } = useAudioSettings();
 
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = settings.voicePlaybackVolume;
+    if (audioRef.current) {
+      audioRef.current.volume = clampAudioElementVolume(settings.voicePlaybackVolume);
+    }
   }, [settings.voicePlaybackVolume]);
 
   const toggle = () => {
@@ -26,7 +28,7 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
     if (!audio) return;
     if (playing) { audio.pause(); setPlaying(false); }
     else {
-      audio.volume = settings.voicePlaybackVolume;
+      audio.volume = clampAudioElementVolume(settings.voicePlaybackVolume);
       void audio.play().then(() => setPlaying(true)).catch((err) => {
         console.error("[voice] playback failed:", err);
         setPlaying(false);

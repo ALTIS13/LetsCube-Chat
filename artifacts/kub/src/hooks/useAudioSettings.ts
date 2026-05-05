@@ -21,18 +21,56 @@ export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   autoGainControl: false,
 };
 
-function clamp(value: number, min: number, max: number) {
-  if (!Number.isFinite(value)) return min;
-  return Math.min(max, Math.max(min, value));
+function toFiniteNumber(value: unknown, fallback: number) {
+  const numberValue = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
 }
 
-export function normalizeAudioSettings(value: Partial<AudioSettings> | null | undefined): AudioSettings {
+function clamp(value: unknown, min: number, max: number, fallback: number) {
+  const numberValue = toFiniteNumber(value, fallback);
+  if (!Number.isFinite(numberValue)) return fallback;
+  if (numberValue < min) return min;
+  if (numberValue > max) return max;
+  return numberValue;
+}
+
+function readBoolean(value: unknown, fallback: boolean) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+export function clampAudioElementVolume(value: unknown): number {
+  // HTMLMediaElement.volume accepts only 0..1. Mic input gain is separate and may be above 1.
+  return clamp(value, 0, 1, DEFAULT_AUDIO_SETTINGS.voicePlaybackVolume);
+}
+
+function parseAudioSettings(value: unknown): Partial<AudioSettings> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Partial<AudioSettings>;
+}
+
+function clampPercentGain(value: unknown) {
+  // Web Audio microphone gain is app-level amplification and intentionally supports 0..200%.
+  return clamp(value, 0, 2, DEFAULT_AUDIO_SETTINGS.micInputGain);
+}
+
+function clampPlaybackVolume(value: unknown) {
+  // Playback uses an <audio> element for now, so values above 100% are clamped to avoid crashes.
+  return clampAudioElementVolume(value);
+}
+
+function formatClampedPercent(value: number, max: number) {
+  if (!Number.isFinite(value)) return `${Math.round(DEFAULT_AUDIO_SETTINGS.voicePlaybackVolume * 100)}%`;
+  return `${Math.round(Math.min(max, Math.max(0, value)) * 100)}%`;
+}
+
+export function normalizeAudioSettings(value: unknown): AudioSettings {
+  const settings = parseAudioSettings(value);
   return {
-    micInputGain: clamp(value?.micInputGain ?? DEFAULT_AUDIO_SETTINGS.micInputGain, 0, 2),
-    voicePlaybackVolume: clamp(value?.voicePlaybackVolume ?? DEFAULT_AUDIO_SETTINGS.voicePlaybackVolume, 0, 2),
-    noiseSuppression: value?.noiseSuppression ?? DEFAULT_AUDIO_SETTINGS.noiseSuppression,
-    echoCancellation: value?.echoCancellation ?? DEFAULT_AUDIO_SETTINGS.echoCancellation,
-    autoGainControl: value?.autoGainControl ?? DEFAULT_AUDIO_SETTINGS.autoGainControl,
+    micInputGain: clampPercentGain(settings?.micInputGain),
+    voicePlaybackVolume: clampPlaybackVolume(settings?.voicePlaybackVolume),
+    noiseSuppression: readBoolean(settings?.noiseSuppression, DEFAULT_AUDIO_SETTINGS.noiseSuppression),
+    echoCancellation: readBoolean(settings?.echoCancellation, DEFAULT_AUDIO_SETTINGS.echoCancellation),
+    autoGainControl: readBoolean(settings?.autoGainControl, DEFAULT_AUDIO_SETTINGS.autoGainControl),
   };
 }
 
@@ -87,5 +125,5 @@ export function useAudioSettings() {
 }
 
 export function formatAudioPercent(value: number) {
-  return `${Math.round(clamp(value, 0, 2) * 100)}%`;
+  return formatClampedPercent(value, 2);
 }
