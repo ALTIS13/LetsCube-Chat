@@ -49,9 +49,24 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
   if (loading || !task) {
     return (
       <KubModal open onClose={onClose} title="Задача" size="lg" contentClassName="px-5 py-10">
-        <div className="flex items-center justify-center">
-          <KubIcon name="spinner" size={24} tone="accent" label="Загрузка" />
-        </div>
+        {loading ? (
+          <div className="flex items-center justify-center">
+            <KubIcon name="spinner" size={24} tone="accent" label="Загрузка" />
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-3 text-center">
+            <KubIcon name="tasks" size={26} tone="muted" />
+            <div className="text-sm font-semibold text-[color:var(--kub-text)]">
+              Задача недоступна или была удалена.
+            </div>
+            <p className="max-w-sm text-xs leading-relaxed text-[color:var(--kub-muted)]">
+              Возможно, у вас нет доступа к этой задаче или она больше не существует.
+            </p>
+            <KubButton variant="secondary" onClick={onClose}>
+              Закрыть
+            </KubButton>
+          </div>
+        )}
       </KubModal>
     );
   }
@@ -65,7 +80,7 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
   const isCreator  = currentUser?.id === task.created_by;
   const canConfirmReject = isStaff && task.status === "waiting_confirmation" && !isAssignee;
   const canCancel =
-    (isCreator || isStaff) &&
+    isStaff &&
     !["confirmed", "rejected", "cancelled"].includes(task.status);
   // Staff can (re)assign while the task hasn't been picked up yet. Server
   // RPC `task_assign` enforces both the role and the source-status check.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useAppStore } from "@/store/app.store";
 import { useIsManagerOrAdmin } from "@/hooks/useRole";
@@ -25,6 +25,13 @@ interface Tab {
 
 const STAFF_TABS: Tab[] = [
   { id: "created", label: "Я создал",      filter: { mine: "created" } },
+  { id: "available", label: "Доступные",
+    filter: {
+      mine: "all",
+      statuses: ["new"],
+      assignmentScopes: ["manager_pool", "staff_pool"],
+      assignee: "unassigned",
+    } },
   { id: "review",  label: "На подтверждении",
     filter: { mine: "all", statuses: ["waiting_confirmation"] } },
   { id: "all",     label: "Все",           filter: { mine: "all" } },
@@ -46,7 +53,7 @@ const ASSIGNEE_TABS: Tab[] = [
  * Employee (user role):  "Мои новые", "В работе", "На подтверждении".
  */
 export function TasksPage() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const currentUser = useAppStore((s) => s.currentUser);
   const isStaff = useIsManagerOrAdmin();
 
@@ -58,6 +65,21 @@ export function TasksPage() {
 
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const taskIdFromUrl = useMemo(() => {
+    const query = location.includes("?")
+      ? location.slice(location.indexOf("?") + 1)
+      : window.location.search.replace(/^\?/, "");
+    return new URLSearchParams(query).get("task");
+  }, [location]);
+
+  useEffect(() => {
+    if (taskIdFromUrl) setOpenTaskId(taskIdFromUrl);
+  }, [taskIdFromUrl]);
+
+  const closeTaskModal = () => {
+    setOpenTaskId(null);
+    if (taskIdFromUrl) setLocation("/tasks", { replace: true });
+  };
 
   // The "Все" tab on staff is intentionally unbounded — show a small hint
   // when the visible list is large.
@@ -133,12 +155,8 @@ export function TasksPage() {
         ) : tasks.length === 0 ? (
           <KubEmptyState
             icon={<KubIcon name="tasks" size={26} />}
-            title="Здесь пока пусто"
-            description={
-              isStaff
-                ? "Создайте первую задачу — она появится у выбранного исполнителя."
-                : "Когда вам назначат задачу, она появится здесь."
-            }
+            title={getEmptyTitle(activeTab.id)}
+            description={getEmptyDescription(activeTab.id, isStaff)}
             action={
               isStaff && (
                 <KubButton
@@ -166,7 +184,7 @@ export function TasksPage() {
       </div>
 
       {openTaskId && (
-        <TaskDetailModal taskId={openTaskId} onClose={() => setOpenTaskId(null)} />
+        <TaskDetailModal taskId={openTaskId} onClose={closeTaskModal} />
       )}
       {showCreate && (
         <TaskFormModal
@@ -184,4 +202,40 @@ function pluralizeTasks(n: number): string {
   if (mod10 === 1 && mod100 !== 11) return "задача";
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "задачи";
   return "задач";
+}
+
+function getEmptyTitle(tabId: string): string {
+  switch (tabId) {
+    case "new":
+      return "Нет назначенных задач";
+    case "active":
+      return "Нет задач в работе";
+    case "review":
+      return "Нет задач на подтверждении";
+    case "available":
+      return "Нет доступных задач";
+    case "created":
+      return "Вы пока не создали задач";
+    default:
+      return "Здесь пока пусто";
+  }
+}
+
+function getEmptyDescription(tabId: string, isStaff: boolean): string {
+  switch (tabId) {
+    case "new":
+      return "Новые назначенные задачи появятся здесь сразу после назначения.";
+    case "active":
+      return "Принятые задачи и задачи в работе будут собраны в этом разделе.";
+    case "review":
+      return "Здесь появятся задачи, которые ждут подтверждения выполнения.";
+    case "available":
+      return "Здесь появятся задачи из общего пула, которые можно взять в работу.";
+    case "created":
+      return "Создайте первую задачу — она появится у выбранного исполнителя.";
+    default:
+      return isStaff
+        ? "Пока нет задач, доступных по текущему фильтру."
+        : "Когда вам назначат задачу, она появится здесь.";
+  }
 }

@@ -40,8 +40,9 @@ export function NotificationBell() {
     const target = navigateTarget(n);
     if (target?.kind === "chat" && target.chatId) {
       setSelectedChatId(target.chatId);
+      setLocation("/");
     } else if (target?.kind === "tasks") {
-      setLocation("/tasks");
+      setLocation(target.taskId ? `/tasks?task=${encodeURIComponent(target.taskId)}` : "/tasks");
     } else if (target?.kind === "admin") {
       setLocation("/admin");
     }
@@ -171,13 +172,17 @@ function formatNotification(n: Notification): string {
   }
 }
 
-function navigateTarget(n: Notification): { kind: "chat" | "tasks" | "admin"; chatId?: string } | null {
+function navigateTarget(
+  n: Notification,
+): { kind: "chat" | "tasks" | "admin"; chatId?: string; taskId?: string } | null {
   switch (n.kind) {
     case "task_assigned":
     case "task_waiting_confirmation":
     case "task_confirmed":
-    case "task_rejected":
-      return { kind: "tasks" };
+    case "task_rejected": {
+      const taskId = payloadString(n.payload, "task_id");
+      return { kind: "tasks", taskId };
+    }
     case "chat_added": {
       const chatId = payloadString(n.payload, "chat_id");
       return chatId ? { kind: "chat", chatId } : null;

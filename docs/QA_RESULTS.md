@@ -109,3 +109,12 @@ Next safe task UI alignment:
 - Existing create/edit/assign workflow remains on compatible `task_create`, `task_update`, `task_assign` in this phase.
 - Browser QA on current data needs a real pool task to click the claim path. Existing visible tasks may not include pool tasks.
 - Replit overlay/banners checked in source: production build should not include Replit runtime overlay, and iframe auth banner should only show in Replit iframe context.
+
+## Phase 4 Task Notification UX
+
+- Supabase read-only inspection confirmed task notification payload already contains `task_id`; no migration is required for task deep links.
+- Current issue reproduced in browser: clicking a task notification opened `/tasks` only, leaving the user on the default tab instead of opening the task.
+- Frontend now uses `/tasks?task=<task_id>` for task notifications, and `/tasks?task=<id>` opens `TaskDetailModal` directly after refresh.
+- If RLS hides the task or the task was deleted, the modal shows: `Задача недоступна или была удалена.`
+- Non-staff users no longer see the task cancel action in `TaskDetailModal`; RPC/RLS remain the source of truth.
+- Staff task tabs now include `Доступные` for unassigned `manager_pool` / `staff_pool` tasks with `status = new`.

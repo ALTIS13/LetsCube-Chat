@@ -5,6 +5,7 @@ import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import type {
+  TaskAssignmentScope,
   Profile,
   TaskStatus,
   TaskWithPeople,
@@ -25,6 +26,8 @@ import type {
 export interface TasksFilter {
   mine: "assigned" | "created" | "all";
   statuses?: TaskStatus[];
+  assignmentScopes?: TaskAssignmentScope[];
+  assignee?: "unassigned";
 }
 
 export function useTasks(filter: TasksFilter) {
@@ -37,6 +40,7 @@ export function useTasks(filter: TasksFilter) {
   // Стабильный строковый ключ для filter.statuses, чтобы массив не плодил
   // новые callback identity при тех же значениях.
   const statusKey = (filter.statuses ?? []).slice().sort().join(",");
+  const assignmentScopeKey = (filter.assignmentScopes ?? []).slice().sort().join(",");
 
   const fetchTasks = useCallback(async () => {
     if (!userId) return;
@@ -61,6 +65,12 @@ export function useTasks(filter: TasksFilter) {
     if (filter.statuses && filter.statuses.length > 0) {
       q = q.in("status", filter.statuses);
     }
+    if (filter.assignmentScopes && filter.assignmentScopes.length > 0) {
+      q = q.in("assignment_scope", filter.assignmentScopes);
+    }
+    if (filter.assignee === "unassigned") {
+      q = q.is("assignee_id", null);
+    }
 
     const { data, error } = await q;
     if (error) {
@@ -76,7 +86,7 @@ export function useTasks(filter: TasksFilter) {
       );
     }
     setLoading(false);
-  }, [userId, supabase, filter.mine, statusKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userId, supabase, filter.mine, statusKey, assignmentScopeKey, filter.assignee]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
 
