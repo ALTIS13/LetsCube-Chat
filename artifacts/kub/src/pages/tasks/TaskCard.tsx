@@ -3,7 +3,13 @@
 import type { TaskWithPeople } from "@/types/database";
 import { KubBadge, KubIcon, KubPanel } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
-import { TASK_PRIORITY_META, TASK_STATUS_META, formatRelative } from "./taskMeta";
+import {
+  TASK_ASSIGNMENT_SCOPE_META,
+  TASK_PRIORITY_META,
+  TASK_STATUS_META,
+  TASK_VISIBILITY_META,
+  formatRelative,
+} from "./taskMeta";
 import { cn } from "@/lib/utils";
 
 interface TaskCardProps {
@@ -14,6 +20,9 @@ interface TaskCardProps {
 export function TaskCard({ task, onClick }: TaskCardProps) {
   const status = TASK_STATUS_META[task.status];
   const priority = TASK_PRIORITY_META[task.priority];
+  const visibility = TASK_VISIBILITY_META[task.visibility];
+  const assignmentScope = TASK_ASSIGNMENT_SCOPE_META[task.assignment_scope];
+  const isPoolAvailable = task.assignment_scope !== "user" && !task.assignee_id;
   const overdue =
     task.due_at &&
     new Date(task.due_at).getTime() < Date.now() &&
@@ -46,6 +55,20 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
               {priority.label}
             </KubBadge>
           </div>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5 min-w-0">
+          <KubBadge tone={visibility.tone} pill>{visibility.label}</KubBadge>
+          {task.assignment_scope !== "user" && (
+            <KubBadge tone={assignmentScope.tone} pill>
+              {assignmentScope.label}
+            </KubBadge>
+          )}
+          {isPoolAvailable && (
+            <KubBadge tone="online" pill>
+              Доступна для взятия
+            </KubBadge>
+          )}
         </div>
 
         <div className="flex items-center gap-3 text-[11px] text-[color:var(--kub-muted)]">

@@ -1,4 +1,10 @@
-import type { TaskEventKind, TaskPriority, TaskStatus } from "@/types/database";
+import type {
+  TaskAssignmentScope,
+  TaskEventKind,
+  TaskPriority,
+  TaskStatus,
+  TaskVisibility,
+} from "@/types/database";
 
 type Tone = "cyan" | "pink" | "muted" | "online" | "danger" | "warn";
 
@@ -7,6 +13,14 @@ interface StatusMeta {
   tone: Tone;
 }
 interface PriorityMeta {
+  label: string;
+  tone: Tone;
+}
+interface VisibilityMeta {
+  label: string;
+  tone: Tone;
+}
+interface AssignmentScopeMeta {
   label: string;
   tone: Tone;
 }
@@ -27,6 +41,18 @@ export const TASK_PRIORITY_META: Record<TaskPriority, PriorityMeta> = {
   normal: { label: "Обычный",  tone: "cyan"   },
   high:   { label: "Высокий",  tone: "warn"   },
   urgent: { label: "Срочный",  tone: "danger" },
+};
+
+export const TASK_VISIBILITY_META: Record<TaskVisibility, VisibilityMeta> = {
+  staff:   { label: "Для сотрудников", tone: "cyan"  },
+  private: { label: "Приватная",       tone: "pink"  },
+  chat:    { label: "Чат",             tone: "muted" },
+};
+
+export const TASK_ASSIGNMENT_SCOPE_META: Record<TaskAssignmentScope, AssignmentScopeMeta> = {
+  user:         { label: "Назначена пользователю", tone: "muted" },
+  manager_pool: { label: "Пул менеджеров",         tone: "warn"  },
+  staff_pool:   { label: "Пул сотрудников",        tone: "cyan"  },
 };
 
 export const TASK_EVENT_LABEL: Record<TaskEventKind, string> = {

@@ -9,8 +9,10 @@ import { useIsManagerOrAdmin } from "@/hooks/useRole";
 import { useTask } from "@/hooks/useTask";
 import {
   TASK_EVENT_LABEL,
+  TASK_ASSIGNMENT_SCOPE_META,
   TASK_PRIORITY_META,
   TASK_STATUS_META,
+  TASK_VISIBILITY_META,
   formatRelative,
 } from "./taskMeta";
 import { TaskAssignModal } from "./TaskAssignModal";
@@ -55,6 +57,9 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
 
   const status = TASK_STATUS_META[task.status];
   const priority = TASK_PRIORITY_META[task.priority];
+  const visibility = TASK_VISIBILITY_META[task.visibility];
+  const assignmentScope = TASK_ASSIGNMENT_SCOPE_META[task.assignment_scope];
+  const isPoolAvailable = task.assignment_scope !== "user" && !task.assignee_id;
   const isAssignee = currentUser?.id === task.assignee_id;
   const isCreator  = currentUser?.id === task.created_by;
   const canConfirmReject = isStaff && task.status === "waiting_confirmation" && !isAssignee;
@@ -128,6 +133,15 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
         <div className="flex flex-wrap gap-2 items-center">
           <KubBadge tone={status.tone} pill>{status.label}</KubBadge>
           <KubBadge tone={priority.tone} pill dot>{priority.label}</KubBadge>
+          <KubBadge tone={visibility.tone} pill>{visibility.label}</KubBadge>
+          <KubBadge tone={assignmentScope.tone} pill>
+            {assignmentScope.label}
+          </KubBadge>
+          {isPoolAvailable && (
+            <KubBadge tone="online" pill>
+              Доступна для взятия
+            </KubBadge>
+          )}
           {task.due_at && (
             <KubBadge tone="muted" pill>
               <KubIcon name="clock" size={11} className="mr-1" />
@@ -174,6 +188,29 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
             ) : (
               <span className="text-xs text-[color:var(--kub-muted)]">—</span>
             )}
+          </div>
+          <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
+              Видимость
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <KubBadge tone={visibility.tone} pill>{visibility.label}</KubBadge>
+            </div>
+          </div>
+          <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
+              Тип назначения
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <KubBadge tone={assignmentScope.tone} pill>
+                {assignmentScope.label}
+              </KubBadge>
+              {isPoolAvailable && (
+                <KubBadge tone="online" pill>
+                  Доступна для взятия
+                </KubBadge>
+              )}
+            </div>
           </div>
         </div>
 
