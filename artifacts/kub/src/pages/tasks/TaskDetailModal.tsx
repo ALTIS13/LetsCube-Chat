@@ -42,6 +42,7 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
   const [comment, setComment] = useState("");
   const [posting, setPosting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [sub, setSub] = useState<Subdialog>(null);
 
@@ -69,6 +70,11 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
   // Staff can (re)assign while the task hasn't been picked up yet. Server
   // RPC `task_assign` enforces both the role and the source-status check.
   const canAssign = isStaff && (task.status === "new" || task.status === "assigned");
+  const canClaim =
+    isStaff &&
+    task.status === "new" &&
+    task.assignment_scope !== "user" &&
+    !task.assignee_id;
   // Creator OR staff can edit a task that hasn't been finalised. Server
   // RPC `task_update` re-checks this and the manager-can't-touch-admin
   // guard if the assignee changes.
@@ -81,14 +87,28 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
   const runRpc = async (
     key: string,
     fn: () => PromiseLike<{ error: { message: string } | null }>,
+    successMessage?: string,
   ) => {
-    setActionError(null); setActionLoading(key);
-    const { error } = await fn();
-    setActionLoading(null);
-    if (error) { setActionError(mapPgError(error)); return; }
-    refetch();
+    setActionError(null);
+    setActionNotice(null);
+    setActionLoading(key);
+    try {
+      const { error } = await fn();
+      if (error) {
+        setActionError(mapPgError(error));
+        return;
+      }
+      if (successMessage) setActionNotice(successMessage);
+      refetch();
+    } catch (err: unknown) {
+      setActionError(mapPgError(err));
+    } finally {
+      setActionLoading(null);
+    }
   };
 
+  const onClaim  = () => runRpc("claim",  () =>
+    supabase.rpc("task_claim", { p_task_id: task.id }), "Задача назначена вам.");
   const onAccept = () => runRpc("accept", () => supabase.rpc("task_accept", { p_task_id: task.id }));
   const onStart  = () => runRpc("start",  () => supabase.rpc("task_start",  { p_task_id: task.id }));
   const onSend   = () => runRpc("send",   () =>
@@ -216,9 +236,25 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
 
         {/* Action buttons */}
         <div className="flex flex-wrap gap-2">
+          {canClaim && (
+            <div className="flex min-w-[180px] flex-col gap-1">
+              <KubButton
+                variant="primary"
+                loading={actionLoading === "claim"}
+                disabled={actionLoading !== null}
+                leftIcon={<KubIcon name="check" size={14} />}
+                onClick={onClaim}
+              >
+                Взять задачу
+              </KubButton>
+              <span className="text-[11px] leading-snug text-[color:var(--kub-muted)]">
+                Задача из общего пула будет назначена вам
+              </span>
+            </div>
+          )}
           {canAssign && (
             <KubButton
-              variant={task.assignee_id ? "secondary" : "primary"}
+              variant={task.assignee_id || canClaim ? "secondary" : "primary"}
               leftIcon={<KubIcon name="userPlus" size={14} />}
               onClick={() => setSub("assign")}
             >
@@ -311,6 +347,11 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
         {actionError && (
           <div className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger)] border border-[color:var(--kub-danger)]/30">
             {actionError}
+          </div>
+        )}
+        {actionNotice && (
+          <div className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-online)_12%,transparent)] text-[color:var(--kub-online)] border border-[color:var(--kub-online)]/30">
+            {actionNotice}
           </div>
         )}
 

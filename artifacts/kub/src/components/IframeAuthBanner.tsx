@@ -2,6 +2,16 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { KubIcon } from "@/components/kub";
 
+function isReplitHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return (
+    host.includes("replit.dev") ||
+    host.includes("replit.app") ||
+    host.includes("replit.com") ||
+    host.endsWith(".repl.co")
+  );
+}
+
 /**
  * When the app runs inside a third-party iframe (e.g. the Replit preview
  * pane), browsers may block the storage that Supabase uses to persist the
@@ -20,6 +30,16 @@ export function IframeAuthBanner() {
       inIframe = true;
     }
     if (!inIframe) return;
+
+    let referrerHost = "";
+    try {
+      referrerHost = document.referrer ? new URL(document.referrer).hostname : "";
+    } catch {
+      referrerHost = "";
+    }
+    if (!isReplitHost(window.location.hostname) && !isReplitHost(referrerHost)) {
+      return;
+    }
 
     let cancelled = false;
     const supabase = createClient();

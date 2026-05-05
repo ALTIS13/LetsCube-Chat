@@ -67,6 +67,7 @@
 - `/tasks` открывается, текущий task UI еще не выровнен под `visibility`/`assignment_scope`/`task_claim`.
 - Network на admin dashboard показал лишние повторные metric count-запросы от realtime `profiles` updates; frontend fix убрал `profiles` realtime trigger для dashboard и добавил overlapping-load guard.
 - Скриншоты не коммитить; локальные browser artifacts остаются untracked.
+- Replit overlay/banners checked: production `kub.apollot.ru` не должен показывать Replit preview UI; `IframeAuthBanner` ограничен Replit iframe-контекстом, а Replit runtime overlay отключен для production build.
 
 ## Phase 2 Task V2 Inspection
 
@@ -100,3 +101,11 @@ Next safe task UI alignment:
 2. Add `task_claim` button for eligible staff pool tasks.
 3. Add staff-friendly task filters for my/available/waiting/all/private/chat.
 4. Move create/edit to `task_create_v2` / `task_update_v2` with client-side guards while keeping RLS/RPC as source of truth.
+
+## Phase 3 Task Claim And Replit Overlay
+
+- `task_claim` frontend action added for eligible pool tasks: staff/admin/manager role, `status = new`, `assignment_scope != user`, no `assignee_id`.
+- Backend RPC/RLS remain the source of truth; SQL was not changed or applied.
+- Existing create/edit/assign workflow remains on compatible `task_create`, `task_update`, `task_assign` in this phase.
+- Browser QA on current data needs a real pool task to click the claim path. Existing visible tasks may not include pool tasks.
+- Replit overlay/banners checked in source: production build should not include Replit runtime overlay, and iframe auth banner should only show in Replit iframe context.

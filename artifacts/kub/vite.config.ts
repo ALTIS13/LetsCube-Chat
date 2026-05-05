@@ -26,13 +26,15 @@ if (!basePath) {
   );
 }
 
+const isProduction = process.env.NODE_ENV === "production";
+
 export default defineConfig({
   base: basePath,
   plugins: [
     react(),
     tailwindcss(),
-    runtimeErrorOverlay(),
-    ...(process.env.NODE_ENV !== "production" &&
+    ...(!isProduction ? [runtimeErrorOverlay()] : []),
+    ...(!isProduction &&
     process.env.REPL_ID !== undefined
       ? [
           await import("@replit/vite-plugin-cartographer").then((m) =>
