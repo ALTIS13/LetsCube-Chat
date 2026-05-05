@@ -48,8 +48,8 @@ RLS включен на всех user-facing таблицах. Policy counts:
 - `bans`: 4.
 - `chat_members`: 8, из них 4 restrictive.
 - `chats`: 8, из них 4 restrictive.
-- `folder_chats`: 10, из них 4 restrictive.
-- `folders`: 12, из них 4 restrictive.
+- `folder_chats`: 7, из них 4 restrictive.
+- `folders`: 8, из них 4 restrictive.
 - `messages`: 8, из них 5 restrictive.
 - `mutes`: 4.
 - `notifications`: 1.
@@ -150,7 +150,7 @@ Performance Advisor:
 
 - Несколько unindexed foreign keys.
 - RLS policies с `auth.uid()` / helper calls без initplan optimization.
-- Multiple permissive policies на некоторых таблицах/ролях, особенно `profiles`, `folders`, `folder_chats`, `bans`, `mutes`, `topics`.
+- Multiple permissive policies на некоторых таблицах/ролях, особенно `profiles`, `bans`, `mutes`, `topics`. По `folders`/`folder_chats` read-only MCP подтвердил cleanup: legacy `*_own` policies отсутствуют.
 
 Это кандидаты для отдельной SQL hardening/performance migration, но текущая задача SQL не меняет.
 
@@ -188,6 +188,6 @@ Auth logs показывают успешные login/token/verify events и с�
 
 - `.migration-backup/supabase/migrations/20260505_tasks_visibility_and_assignment.sql` - уже применена в production Supabase; explicit task visibility/assignment scope, RLS и новые RPC `task_create_v2`, `task_update_v2`, `task_claim`.
 - `.migration-backup/supabase/migrations/20260505_media_storage_path_policies.sql` - уже применена в production Supabase; path ownership policies для bucket `media`.
-- `.migration-backup/supabase/migrations/20260505_folders_policy_cleanup.sql` - все еще pending/manual proposal; удаление старых permissive `*_own` policies после scope-aware folders migration.
+- `.migration-backup/supabase/migrations/20260505_folders_policy_cleanup.sql` - уже применена в production Supabase; legacy permissive `*_own` policies для `folders`/`folder_chats` отсутствуют.
 
 Frontend task UI можно выравнивать под новые task columns/RPC отдельным подтвержденным этапом; источник прав остается RLS/RPC.

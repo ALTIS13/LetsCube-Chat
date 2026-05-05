@@ -14,7 +14,6 @@
 
 ## Failed
 
-- В `folders` и `folder_chats` одновременно есть старые `*_own` policies и новые scope-aware policies. Это не ломает функционал напрямую, но дает multiple permissive policies и усложняет reasoning.
 - Auth logs за последние 24 часа все еще показывают `referer=tg.letscube.ru`. Это не доказывает hardcode в source code, но означает, что Supabase Auth URL/settings нужно держать под контролем при смене домена.
 - Supabase Auth logs показывают ошибки `missing Twilio account SID` на `/user` при phone update. Это отдельный Supabase Auth/SMS configuration вопрос, не frontend service_role проблема.
 
@@ -22,6 +21,7 @@
 
 - Task privacy/assignment уже применены: `tasks.visibility`, `tasks.assignment_scope`, `task_create_v2`, `task_update_v2`, `task_claim`, RLS `tasks select with visibility`.
 - Storage `media` уже переведен на scoped policies: `media authenticated scoped read`, `insert`, `update`, `delete`.
+- Folders policy cleanup уже применен: legacy `folders`/`folder_chats` `*_own` policies отсутствуют, остались scope-aware policies и restrictive banned-user guards.
 
 ## Needs Manual Verification
 
@@ -46,9 +46,7 @@
 
 ## Needs DB Migration
 
-- Folders policy cleanup:
-  - `.migration-backup/supabase/migrations/20260505_folders_policy_cleanup.sql`
-  - удаляет старые `*_own` policies после scope-aware migration.
+- На текущем read-only MCP snapshot новых обязательных SQL-миграций не найдено. Следующие DB изменения нужны только после отдельного подтвержденного этапа.
 
 ## Needs UX Polish
 
@@ -60,4 +58,12 @@
 
 ## Browser QA Notes
 
-В этой сессии код подготовлен для локальной сборки и последующего deploy. Скриншоты не коммитить; локальная `.qa-screenshots/` остается untracked.
+2026-05-05 logged-in Browser QA на `https://kub.apollot.ru`:
+
+- Sidebar/profile menu на desktop работает; пункт `Админ-панель` доступен из меню профиля.
+- Sidebar search/notification/new chat icons проверены на 390px, 768px и 1280px; document horizontal overflow не обнаружен.
+- Notification bell открывается и не выталкивает layout за пределы sidebar.
+- Direct refresh `/admin` проходит, dashboard и audit tab открываются без console errors.
+- `/tasks` открывается, текущий task UI еще не выровнен под `visibility`/`assignment_scope`/`task_claim`.
+- Network на admin dashboard показал лишние повторные metric count-запросы от realtime `profiles` updates; frontend fix убрал `profiles` realtime trigger для dashboard и добавил overlapping-load guard.
+- Скриншоты не коммитить; локальные browser artifacts остаются untracked.

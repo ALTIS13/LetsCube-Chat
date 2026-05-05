@@ -254,7 +254,7 @@ Manual/idempotent migrations are stored in `.migration-backup/supabase/migration
 - `20260505_audit_logs.sql`.
 - `20260505_tasks_visibility_and_assignment.sql` - applied in production Supabase as of 2026-05-05; adds task privacy and pool assignment.
 - `20260505_media_storage_path_policies.sql` - applied in production Supabase as of 2026-05-05; hardens `media` storage paths.
-- `20260505_folders_policy_cleanup.sql` - pending/manual proposal; removes legacy folder policies after scope-aware migration.
+- `20260505_folders_policy_cleanup.sql` - applied in production Supabase as of 2026-05-05; legacy `folders`/`folder_chats` `*_own` policies are absent.
 
 Supabase MCP migration ledger is empty; do not rely on Supabase CLI migration history for this project.
 
