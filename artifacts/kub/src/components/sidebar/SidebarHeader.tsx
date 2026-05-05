@@ -83,11 +83,9 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
       .insert({ type: "group", name: "Избранное", created_by: userId })
       .select("id").single();
     if (chatErr || !chat) return;
-    // The `add_chat_creator_as_owner` trigger inserts the owner row,
-    // so this is a no-op safety net.
-    await supabase
-      .from("chat_members")
-      .upsert({ chat_id: chat.id, user_id: userId, role: "owner" }, { onConflict: "chat_id,user_id" });
+    // The `add_chat_creator_as_owner` trigger inserts the owner row. Do not
+    // repeat it from the client: RLS correctly blocks direct membership upsert
+    // in production and that shows up as noisy 403 logs.
     setSelectedChatId(chat.id);
     onRefetch?.();
   };

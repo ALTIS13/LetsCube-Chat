@@ -127,7 +127,7 @@ export function useMessages(chatId: string | null, topicId: string | null = null
           // Filter by topic — ignore messages from other topics in the same chat.
           if ((payload.new.topic_id ?? null) !== (topicIdRef.current ?? null)) return;
           const provisional = buildRealtimeMessage(payload.new);
-          if (provisional.type === "audio") {
+          if (isRealtimeVoiceMessage(provisional)) {
             addMessage(payload.new.chat_id, provisional);
           }
           const { data } = await supabase
@@ -299,8 +299,12 @@ export function useMessages(chatId: string | null, topicId: string | null = null
   const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
     const user = currentUserRef.current;
     if (!user) return;
-    const { data: existing } = await supabase.from("reactions").select("id")
-      .eq("message_id", messageId).eq("user_id", user.id).eq("emoji", emoji).single();
+    const { data: existing, error: lookupError } = await supabase.from("reactions").select("id")
+      .eq("message_id", messageId).eq("user_id", user.id).eq("emoji", emoji).maybeSingle();
+    if (lookupError) {
+      console.error("Reaction lookup error:", lookupError);
+      return;
+    }
     if (existing) {
       await supabase.from("reactions").delete().eq("id", existing.id);
     } else {
@@ -335,4 +339,21 @@ function buildRealtimeMessage(row: MessageWithSender): MessageWithSender {
     reactions: row.reactions ?? [],
     pending: false,
   };
+}
+
+function isRealtimeVoiceMessage(message: MessageWithSender): boolean {
+  if (message.type === "audio") return true;
+
+  const mediaUrl = (message.media_url ?? "").toLowerCase();
+  const content = (message.content ?? "").toLowerCase();
+
+  // Receiver realtime INSERT rows can arrive before the joined REST refetch.
+  // Detect audio from stable row fields so the voice bubble/progress skeleton
+  // renders on first paint, even if the richer message copy follows later.
+  return (
+    /\b(audio|voice)\b/.test(content) ||
+    /\.(webm|ogg|oga|mp3|wav|m4a|aac)(?:[?#].*)?$/.test(mediaUrl) ||
+    mediaUrl.includes("/voice") ||
+    mediaUrl.includes("/audio")
+  );
 }
