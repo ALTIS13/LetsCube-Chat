@@ -71,9 +71,9 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
           )}
         </div>
 
-        <div className="flex items-center gap-3 text-[11px] text-[color:var(--kub-muted)]">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px] text-[color:var(--kub-muted)]">
           {task.assignee ? (
-            <span className="flex items-center gap-1.5 min-w-0">
+            <span className="flex max-w-full items-center gap-1.5 min-w-0">
               <UserAvatar user={task.assignee} size="sm" />
               <span className="truncate text-[color:var(--kub-text)]">
                 {task.assignee.full_name ?? "Исполнитель"}
@@ -86,7 +86,7 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
             </span>
           )}
 
-          <span className="ml-auto flex items-center gap-1">
+          <span className="sm:ml-auto flex items-center gap-1">
             <KubIcon name="clock" size={12} />
             {formatRelative(task.updated_at)}
           </span>

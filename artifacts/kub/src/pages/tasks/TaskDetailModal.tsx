@@ -96,6 +96,14 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
   const canEdit =
     (isCreator || isStaff) &&
     !["confirmed", "cancelled"].includes(task.status);
+  const hasTaskActions =
+    canClaim ||
+    canAssign ||
+    canEdit ||
+    canCancel ||
+    canConfirmReject ||
+    (isAssignee && ["assigned", "accepted", "in_progress", "rejected"].includes(task.status)) ||
+    (isStaff && task.status === "waiting_confirmation" && isAssignee);
 
   // supabase.rpc(...) returns a thenable PostgrestBuilder, not a real Promise,
   // so we type the callback as `PromiseLike` and await it.
@@ -154,6 +162,18 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
     return null;
   };
 
+  const latestRejectReason =
+    task.status === "rejected"
+      ? [...events]
+          .reverse()
+          .map((ev) => {
+            if (ev.kind !== "reject") return null;
+            const reason = (ev.payload as Record<string, unknown>).reason;
+            return typeof reason === "string" && reason.trim() ? reason.trim() : null;
+          })
+          .find(Boolean) ?? null
+      : null;
+
   return (
     <>
       <KubModal
@@ -191,6 +211,48 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
           <p className="text-sm text-[color:var(--kub-text)] whitespace-pre-wrap leading-relaxed">
             {task.description}
           </p>
+        )}
+
+        {task.status === "waiting_confirmation" && (
+          <div className="flex items-start gap-2 rounded-xl border border-[color:var(--kub-warn)]/30 bg-[color-mix(in_srgb,var(--kub-warn)_12%,transparent)] px-3 py-2">
+            <KubIcon name="warning" size={16} tone="warn" className="mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-[color:var(--kub-text)]">
+                Задача ждёт подтверждения
+              </div>
+              <p className="mt-0.5 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                Менеджер или администратор должен подтвердить результат либо вернуть задачу на доработку.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {latestRejectReason && (
+          <div className="flex items-start gap-2 rounded-xl border border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] px-3 py-2">
+            <KubIcon name="reject" size={16} tone="danger" className="mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-[color:var(--kub-text)]">
+                Причина отклонения
+              </div>
+              <p className="mt-0.5 whitespace-pre-wrap text-xs leading-relaxed text-[color:var(--kub-text)]">
+                {latestRejectReason}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {isPoolAvailable && (
+          <div className="flex items-start gap-2 rounded-xl border border-[color:var(--kub-online)]/30 bg-[color-mix(in_srgb,var(--kub-online)_12%,transparent)] px-3 py-2">
+            <KubIcon name="userPlus" size={16} tone="online" className="mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-[color:var(--kub-text)]">
+                Задача доступна из общего пула
+              </div>
+              <p className="mt-0.5 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                Сотрудник с правами может взять её в работу, после чего задача будет назначена ему.
+              </p>
+            </div>
+          </div>
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -250,7 +312,11 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
         </div>
 
         {/* Action buttons */}
-        <div className="flex flex-wrap gap-2">
+        {hasTaskActions && (
+          <div className="rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="w-full text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-cyan)]">
+            Действия
+          </div>
           {canClaim && (
             <div className="flex min-w-[180px] flex-col gap-1">
               <KubButton
@@ -269,7 +335,7 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
           )}
           {canAssign && (
             <KubButton
-              variant={task.assignee_id || canClaim ? "secondary" : "primary"}
+              variant="secondary"
               leftIcon={<KubIcon name="userPlus" size={14} />}
               onClick={() => setSub("assign")}
             >
@@ -353,11 +419,13 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
               variant="ghost"
               leftIcon={<KubIcon name="ban" size={14} />}
               onClick={() => setSub("cancel")}
+              className="text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)]"
             >
               Отменить задачу
             </KubButton>
           )}
-        </div>
+          </div>
+        )}
 
         {actionError && (
           <div className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger)] border border-[color:var(--kub-danger)]/30">
@@ -411,6 +479,7 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
             <KubButton
               variant="primary"
               size="md"
+              aria-label="Отправить комментарий"
               loading={posting}
               disabled={!comment.trim()}
               onClick={submitComment}

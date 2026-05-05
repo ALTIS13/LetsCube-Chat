@@ -137,3 +137,13 @@ Next safe task UI alignment:
 - Notification popover, profile menu, task detail modal and admin user action menu stay inside the mobile viewport.
 - Mobile audit expanded details were visually too narrow because the desktop left offset and label/value row layout were reused on 390px. The audit detail panel is now full-width on mobile, while desktop keeps the indented layout.
 - Screenshots are stored under `output/playwright/` and are not intended for commit.
+
+## Task UX Hardening
+
+2026-05-05 frontend-only task UX pass:
+
+- SQL/RLS/RPC were not changed.
+- Task detail now shows contextual callouts for `waiting_confirmation`, rejected reason from `task_events.payload.reason`, and available pool tasks.
+- Task actions are visually grouped into a bordered action area; assignment/edit remain secondary, and cancel is styled as a destructive action instead of competing with the primary CTA.
+- The comment send icon-only button now has an explicit `aria-label`.
+- Task cards wrap assignee/update/due metadata safely on mobile instead of forcing a single crowded row.
