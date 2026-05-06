@@ -100,6 +100,7 @@ Applied manually on 2026-05-06:
 
 - `20260506_chat_history_private_hide_permissions.sql`: added per-user chat hide/clear columns and RPC `clear_chat_for_me`, `hide_private_chat`, `unhide_private_chat`; tightened `messages` UPDATE banned guard to restrictive.
 - `20260506_chat_pins.sql`: added per-user chat pin columns and RPC `pin_chat`, `unpin_chat`.
+- `20260506_admin_avatar_management.sql`: extended `_kub_media_path_allowed` so admins can upload profile avatars under `avatars/{target_user_id}/...` for non-admin users; users remain scoped to their own avatar path.
 - `folders`: audit folder delete.
 - `profile_contacts`: guard insert/update.
 - `notifications`: enqueue push outbox rows after notification insert.

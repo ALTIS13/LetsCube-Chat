@@ -189,7 +189,12 @@ Next safe task UI alignment:
 - User manually applied `.migration-backup/supabase/migrations/20260506_chat_pins.sql`.
 - Supabase read-only check confirmed `chat_members.hidden_at`, `chat_members.cleared_at`, `chat_members.pinned`, `chat_members.pinned_at` and RPC `clear_chat_for_me`, `hide_private_chat`, `unhide_private_chat`, `pin_chat`, `unpin_chat`.
 - Frontend alignment is enabled for local chat clear, private chat hide, and per-user chat pin/unpin.
-- Admin avatar management still needs a Storage policy adjustment before upload UI can safely replace another user's avatar; proposal only, not applied: `.migration-backup/supabase/migrations/20260506_admin_avatar_management.sql`.
+- User manually applied `.migration-backup/supabase/migrations/20260506_admin_avatar_management.sql`.
+- Supabase read-only check confirmed `_kub_media_path_allowed` now permits admin-managed uploads to `avatars/{target_user_id}/...` for non-admin profile rows, while users keep only their own avatar path.
+- Frontend admin profile preview now exposes upload/reset avatar controls for ordinary users only. Manager/admin-to-admin avatar management remains hidden and backend-controlled.
+- `Очистить историю у себя` is documented and worded as a local hide: messages and attachments disappear only for the current user; Storage files are not deleted.
+- Destructive "delete my media from chat" remains planned only. It needs a separate RPC design because one participant must not delete media still visible to another participant.
+- Chat media panel now renders gallery media lazily in small batches with lazy images and non-preloaded video previews.
 
 Recurring tasks roadmap note:
 

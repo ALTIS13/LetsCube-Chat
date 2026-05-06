@@ -98,6 +98,16 @@ function sameChatList(a: ChatWithLastMessage[], b: ChatWithLastMessage[]): boole
   });
 }
 
+function compareMessages(a: MessageWithSender, b: MessageWithSender): number {
+  const byCreatedAt = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  if (byCreatedAt !== 0) return byCreatedAt;
+  return a.id.localeCompare(b.id);
+}
+
+function sortMessages(messages: MessageWithSender[]): MessageWithSender[] {
+  return [...messages].sort(compareMessages);
+}
+
 export const useAppStore = create<AppState>((set) => ({
   currentUser: null,
   /**
@@ -149,7 +159,7 @@ export const useAppStore = create<AppState>((set) => ({
 
   messages: {},
   setMessages: (chatId, msgs) =>
-    set((state) => ({ messages: { ...state.messages, [chatId]: msgs } })),
+    set((state) => ({ messages: { ...state.messages, [chatId]: sortMessages(msgs) } })),
   addMessage: (chatId, message) =>
     set((state) => {
       const existing = state.messages[chatId] || []
@@ -158,7 +168,14 @@ export const useAppStore = create<AppState>((set) => ({
       // already replaced with real data, then realtime echo arrives), replace it in place
       // rather than appending a duplicate.
       const next = idx === -1 ? [...existing, message] : existing.map((m, i) => (i === idx ? message : m))
-      return { messages: { ...state.messages, [chatId]: next } }
+      const sorted = sortMessages(next)
+      if (
+        sorted.length === existing.length &&
+        sorted.every((m, i) => m === existing[i])
+      ) {
+        return state
+      }
+      return { messages: { ...state.messages, [chatId]: sorted } }
     }),
   updateMessage: (chatId, message) =>
     set((state) => ({
@@ -170,14 +187,15 @@ export const useAppStore = create<AppState>((set) => ({
       },
     })),
   replaceMessage: (chatId, oldId, message) =>
-    set((state) => ({
-      messages: {
-        ...state.messages,
-        [chatId]: (state.messages[chatId] || []).map((m) =>
-          m.id === oldId ? message : m
-        ),
-      },
-    })),
+    set((state) => {
+      const existing = state.messages[chatId] || []
+      const withoutOld = existing.filter((m) => m.id !== oldId)
+      const idx = withoutOld.findIndex((m) => m.id === message.id)
+      const next = idx === -1
+        ? [...withoutOld, message]
+        : withoutOld.map((m, i) => (i === idx ? message : m))
+      return { messages: { ...state.messages, [chatId]: sortMessages(next) } }
+    }),
   removeMessage: (chatId, id) =>
     set((state) => ({
       messages: {

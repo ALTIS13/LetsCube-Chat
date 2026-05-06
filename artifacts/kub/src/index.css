@@ -66,6 +66,12 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+.kub-selection-suppressed,
+.kub-selection-suppressed * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+
 /* ───────────────────────────────────────────────────────────────────────────
  * Theme-agnostic root: typography, radius, shadow scale, spacing.
  * Per-theme color tokens live in `.dark` and `.light` blocks below.

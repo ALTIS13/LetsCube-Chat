@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
@@ -19,6 +19,7 @@ interface ChatInfoPanelProps {
 }
 
 type Tab = "info" | "members" | "media";
+const MEDIA_PAGE_SIZE = 18;
 
 export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProps) {
   const { currentUser, setSelectedChatId, chats, setChats } = useAppStore();
@@ -46,6 +47,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [media, setMedia] = useState<Message[]>([]);
   const [loadingMedia, setLoadingMedia] = useState(false);
+  const [visibleMediaCount, setVisibleMediaCount] = useState(MEDIA_PAGE_SIZE);
 
   useEffect(() => {
     if (!isGroup) return;
@@ -69,12 +71,17 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       .in("type", ["image", "video", "file"])
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
-      .limit(50);
+      .limit(60);
     if (data) setMedia(data as Message[]);
     setLoadingMedia(false);
   }, [chat.id, supabase]);
 
-  useEffect(() => { if (tab === "media") loadMedia(); }, [tab, loadMedia]);
+  useEffect(() => {
+    if (tab === "media") {
+      setVisibleMediaCount(MEDIA_PAGE_SIZE);
+      loadMedia();
+    }
+  }, [tab, loadMedia]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -184,7 +191,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const handleClearForMe = async () => {
     if (!onClearForMe) return;
     const title = isSaved ? "Очистить избранное у себя?" : "Очистить историю у себя?";
-    const body = "Сообщения будут скрыты только для вас. У других участников они останутся.";
+    const body = "Сообщения и вложения будут скрыты только у вас. У других участников они останутся. Файлы из хранилища не удаляются.";
     if (!confirm(`${title}\n\n${body}`)) return;
     const result = await onClearForMe();
     if (!result.ok) {
@@ -237,6 +244,16 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     role === "owner" ? "Владелец" : role === "admin" ? "Администратор" : "";
 
   const otherUser = !isGroup ? (chat.other_user as Profile | null) : null;
+  const mediaGridItems = useMemo(
+    () => media.filter((m) => m.type === "image" || m.type === "video"),
+    [media],
+  );
+  const fileItems = useMemo(
+    () => media.filter((m) => m.type === "file"),
+    [media],
+  );
+  const visibleMediaGridItems = mediaGridItems.slice(0, visibleMediaCount);
+  const hasMoreMedia = visibleMediaCount < mediaGridItems.length;
 
   const tabLabels: Record<Tab, string> = { info: "Сведения", members: "Участники", media: "Медиа" };
   const actionRowClass =
@@ -570,21 +587,30 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
             ) : (
               <>
                 <div className="grid grid-cols-3 gap-1 mb-3">
-                  {media.filter((m) => m.type === "image" || m.type === "video").map((m) => (
+                  {visibleMediaGridItems.map((m) => (
                     <div
                       key={m.id}
                       className="aspect-square rounded-lg overflow-hidden cursor-pointer border border-[color:var(--kub-border-color)]"
                       onClick={() => window.open(m.media_url!, "_blank")}
                     >
                       {m.type === "image" ? (
-                        <img src={m.media_url!} alt="" className="w-full h-full object-cover" />
+                        <img src={m.media_url!} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                       ) : (
-                        <video src={m.media_url!} className="w-full h-full object-cover" />
+                        <video src={m.media_url!} preload="none" muted playsInline className="w-full h-full object-cover" />
                       )}
                     </div>
                   ))}
                 </div>
-                {media.filter((m) => m.type === "file").map((m) => (
+                {hasMoreMedia && (
+                  <button
+                    type="button"
+                    onClick={() => setVisibleMediaCount((count) => count + MEDIA_PAGE_SIZE)}
+                    className="mb-3 w-full rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-sm text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-2)]"
+                  >
+                    Показать ещё
+                  </button>
+                )}
+                {fileItems.map((m) => (
                   <a
                     key={m.id}
                     href={m.media_url!}

@@ -278,7 +278,7 @@ export function MessageBubble({
 
           <div
             className={cn(
-              "relative px-3 py-2 rounded-2xl transition-opacity",
+              "relative px-3 py-2 rounded-2xl transition-opacity select-none sm:select-text",
               bubbleClass,
               isMe
                 ? cn("rounded-br-sm", message.reply_to_id && "rounded-tr-none")
@@ -372,6 +372,9 @@ export function MessageBubble({
             )}
 
             <div className="flex items-center justify-end gap-1 mt-1 -mb-0.5">
+              {message.pinned && (
+                <KubIcon name="pin" size={12} tone="muted" label="Закреплено" />
+              )}
               {message.edited_at && (
                 <span className="text-[10px] text-[color:var(--kub-muted)]">изменено</span>
               )}
@@ -433,6 +436,8 @@ function setBodySelectionSuppressed(suppressed: boolean) {
   if (typeof document === "undefined") return;
   document.body.style.userSelect = suppressed ? "none" : "";
   document.body.style.webkitUserSelect = suppressed ? "none" : "";
+  document.documentElement.classList.toggle("kub-selection-suppressed", suppressed);
+  if (suppressed) window.getSelection()?.removeAllRanges();
 }
 
 function MediaImage({ url, title, onOpen }: { url: string; title: string; onOpen: () => void }) {

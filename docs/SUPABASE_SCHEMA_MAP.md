@@ -258,6 +258,7 @@ Manual/idempotent migrations are stored in `.migration-backup/supabase/migration
 - `20260505_folders_policy_cleanup.sql` - applied in production Supabase as of 2026-05-05; legacy `folders`/`folder_chats` `*_own` policies are absent.
 - `20260506_chat_history_private_hide_permissions.sql` - applied in production Supabase as of 2026-05-06; adds per-user chat hide/clear RPC and columns.
 - `20260506_chat_pins.sql` - applied in production Supabase as of 2026-05-06; adds per-user pinned chats and RPC.
+- `20260506_admin_avatar_management.sql` - applied in production Supabase as of 2026-05-06; allows admins to upload avatars for non-admin users through the scoped media path helper.
 
 Supabase MCP migration ledger is empty; do not rely on Supabase CLI migration history for this project.
 

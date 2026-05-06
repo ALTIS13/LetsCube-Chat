@@ -173,14 +173,15 @@ export function useMessages(chatId: string | null, topicId: string | null = null
           // Filter by topic — ignore messages from other topics in the same chat.
           if ((payload.new.topic_id ?? null) !== (topicIdRef.current ?? null)) return;
           const provisional = buildRealtimeMessage(payload.new);
-          if (isRealtimeVoiceMessage(provisional)) {
-            addMessage(payload.new.chat_id, provisional);
-          }
+          // Render every realtime row immediately. The joined REST fetch below
+          // can lag under rapid sends; keeping this provisional row prevents an
+          // active chat from missing a message that the sidebar already saw.
+          addMessage(payload.new.chat_id, provisional);
           const { data } = await supabase
             .from("messages")
             .select(`*, sender:profiles!user_id(*), reply_to:messages!reply_to_id(id, content, type, user_id, sender:profiles(id, full_name)), reactions(*)`)
             .eq("id", payload.new.id)
-            .single();
+            .maybeSingle();
           if (!data) return;
           addMessage(payload.new.chat_id, data as unknown as MessageWithSender);
           const user = currentUserRef.current;
@@ -437,7 +438,11 @@ function mergeMessagesById(
     if (!byId.has(message.id)) byId.set(message.id, message);
   }
   return Array.from(byId.values()).sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    (a, b) => {
+      const byCreatedAt = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      if (byCreatedAt !== 0) return byCreatedAt;
+      return a.id.localeCompare(b.id);
+    },
   );
 }
 
@@ -455,21 +460,4 @@ function upsertPinnedMessage(
     nextMessage,
     ...messages.filter((message) => message.id !== nextMessage.id),
   ]);
-}
-
-function isRealtimeVoiceMessage(message: MessageWithSender): boolean {
-  if (message.type === "audio") return true;
-
-  const mediaUrl = (message.media_url ?? "").toLowerCase();
-  const content = (message.content ?? "").toLowerCase();
-
-  // Receiver realtime INSERT rows can arrive before the joined REST refetch.
-  // Detect audio from stable row fields so the voice bubble/progress skeleton
-  // renders on first paint, even if the richer message copy follows later.
-  return (
-    /\b(audio|voice)\b/.test(content) ||
-    /\.(webm|ogg|oga|mp3|wav|m4a|aac)(?:[?#].*)?$/.test(mediaUrl) ||
-    mediaUrl.includes("/voice") ||
-    mediaUrl.includes("/audio")
-  );
 }

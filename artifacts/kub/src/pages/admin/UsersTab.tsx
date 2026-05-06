@@ -20,6 +20,7 @@ import { BanModal } from "./BanModal";
 import { MuteModal } from "./MuteModal";
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
+import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
 
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -401,6 +402,11 @@ export function UsersTab() {
           email={emails[profileTarget.id]}
           contact={contacts[profileTarget.id]}
           state={stateById[profileTarget.id]}
+          canManageAvatar={isAdmin && profileTarget.role === "user"}
+          onAvatarUpdated={(avatarUrl) => {
+            setRows((rs) => rs.map((r) => (r.id === profileTarget.id ? { ...r, avatar_url: avatarUrl } : r)));
+            setProfileTarget((target) => target ? { ...target, avatar_url: avatarUrl } : target);
+          }}
           onClose={() => setProfileTarget(null)}
         />
       )}
@@ -409,18 +415,73 @@ export function UsersTab() {
 }
 
 function ProfilePreviewModal({
-  user, email, contact, state, onClose,
+  user, email, contact, state, canManageAvatar, onAvatarUpdated, onClose,
 }: {
   user: Profile;
   email?: string;
   contact?: ContactRow;
   state?: RowState;
+  canManageAvatar?: boolean;
+  onAvatarUpdated?: (avatarUrl: string | null) => void;
   onClose: () => void;
 }) {
+  const supabase = createClient();
+  const [avatarSaving, setAvatarSaving] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
   const fmt = (s: string | null) =>
     s
       ? new Date(s).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
       : "—";
+
+  const updateAvatarUrl = async (avatarUrl: string | null) => {
+    setAvatarSaving(true);
+    setAvatarError(null);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
+      .eq("id", user.id);
+    setAvatarSaving(false);
+    if (error) {
+      const message = prefixError("Не удалось обновить аватар пользователя", error);
+      setAvatarError(message);
+      alert(message);
+      return false;
+    }
+    onAvatarUpdated?.(avatarUrl);
+    return true;
+  };
+
+  const handleAvatarChange = async (file: File) => {
+    if (!canManageAvatar || avatarSaving) return;
+    const validationError = validateAvatarImage(file);
+    if (validationError) {
+      setAvatarError(validationError);
+      alert(validationError);
+      return;
+    }
+    setAvatarSaving(true);
+    setAvatarError(null);
+    const path = avatarUploadPath("user", user.id, file);
+    const { data, error } = await supabase.storage
+      .from("media")
+      .upload(path, file, { contentType: file.type, upsert: false });
+    if (error) {
+      setAvatarSaving(false);
+      const message = prefixError("Не удалось загрузить аватар пользователя", error);
+      setAvatarError(message);
+      alert(message);
+      return;
+    }
+    const { data: publicData } = supabase.storage.from("media").getPublicUrl(data.path);
+    setAvatarSaving(false);
+    await updateAvatarUrl(publicData.publicUrl);
+  };
+
+  const handleAvatarReset = async () => {
+    if (!canManageAvatar || avatarSaving) return;
+    if (!confirm("Сбросить аватар пользователя?\n\nФайл в хранилище не удаляется автоматически.")) return;
+    await updateAvatarUrl(null);
+  };
 
   return (
     <KubModal
@@ -431,7 +492,31 @@ function ProfilePreviewModal({
       contentClassName="px-5 py-5 space-y-4"
     >
       <div className="flex items-center gap-3">
-        <UserAvatar user={user} size="lg" />
+        <div className="relative flex-shrink-0">
+          <UserAvatar user={user} size="lg" />
+          {canManageAvatar && (
+            <label
+              className={cn(
+                "absolute -bottom-1 -right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full",
+                "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] shadow-lg",
+                avatarSaving && "pointer-events-none opacity-70",
+              )}
+            >
+              <KubIcon name={avatarSaving ? "spinner" : "camera"} size={13} label="Сменить аватар пользователя" />
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={avatarSaving}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.currentTarget.value = "";
+                  if (file) void handleAvatarChange(file);
+                }}
+              />
+            </label>
+          )}
+        </div>
         <div className="min-w-0">
           <div className="text-base font-semibold truncate text-[color:var(--kub-text)]">
             {user.full_name ?? "Без имени"}
@@ -439,6 +524,39 @@ function ProfilePreviewModal({
           <div className="text-xs truncate text-[color:var(--kub-muted)]">
             {user.username ? `@${user.username}` : user.id}
           </div>
+          {canManageAvatar && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[color:var(--kub-border-color)] px-2 py-1 text-xs text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-2)]">
+                <KubIcon name={avatarSaving ? "spinner" : "camera"} size={12} />
+                <span>{avatarSaving ? "Сохранение..." : "Сменить аватар"}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={avatarSaving}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.currentTarget.value = "";
+                    if (file) void handleAvatarChange(file);
+                  }}
+                />
+              </label>
+              {user.avatar_url && (
+                <button
+                  type="button"
+                  disabled={avatarSaving}
+                  onClick={() => void handleAvatarReset()}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--kub-danger)]/30 px-2 py-1 text-xs text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:opacity-60"
+                >
+                  <KubIcon name="delete" size={12} />
+                  <span>Сбросить</span>
+                </button>
+              )}
+            </div>
+          )}
+          {avatarError && (
+            <div className="mt-1 text-xs text-[color:var(--kub-danger)]">{avatarError}</div>
+          )}
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3 text-sm">
