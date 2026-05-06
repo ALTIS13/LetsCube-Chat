@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import type {
+  Chat,
   Profile,
   TaskEventWithActor,
   TaskWithPeople,
@@ -35,7 +36,8 @@ export function useTask(taskId: string | null) {
         .select(
           `*,
            assignee:profiles!tasks_assignee_id_fkey(*),
-           creator:profiles!tasks_created_by_fkey(*)`,
+           creator:profiles!tasks_created_by_fkey(*),
+           chat:chats(*)`,
         )
         .eq("id", taskId)
         .maybeSingle(),
@@ -54,6 +56,7 @@ export function useTask(taskId: string | null) {
         ...row,
         assignee: (row as { assignee?: Profile | null }).assignee ?? null,
         creator:  (row as { creator?: Profile | null }).creator ?? null,
+        chat: (row as { chat?: Chat | null }).chat ?? null,
       });
     }
     setEvents(

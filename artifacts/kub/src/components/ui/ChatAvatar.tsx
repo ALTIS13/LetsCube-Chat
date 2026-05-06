@@ -1,6 +1,8 @@
 "use client";
 
 import type { ChatWithLastMessage, Profile } from "@/types/database";
+import { KubIcon } from "@/components/kub";
+import { isSavedChatLikeName } from "@/lib/chatDisplay";
 import { cn } from "@/lib/utils";
 
 // Generate consistent color from string
@@ -30,6 +32,7 @@ interface ChatAvatarProps {
   size?: "sm" | "md" | "lg" | "xl";
   className?: string;
   showOnline?: boolean;
+  isSaved?: boolean;
 }
 
 const sizeMap = {
@@ -46,15 +49,25 @@ const pixelMap = {
   xl: 80,
 };
 
-export function ChatAvatar({ chat, size = "md", className, showOnline }: ChatAvatarProps) {
+export function ChatAvatar({ chat, size = "md", className, showOnline, isSaved: savedOverride }: ChatAvatarProps) {
   const name = chat.name ?? "?";
   const bgColor = getAvatarColor(chat.id);
   const initials = getInitials(name);
   const px = pixelMap[size];
+  const isSaved = savedOverride ?? isSavedChatLikeName(chat.name);
 
   return (
     <div className={cn("relative flex-shrink-0", className)}>
-      {chat.avatar_url ? (
+      {isSaved ? (
+        <div
+          className={cn(
+            "rounded-full flex items-center justify-center text-[color:var(--kub-bg)] bg-[var(--kub-cyan)]",
+            sizeMap[size]
+          )}
+        >
+          <KubIcon name="bookmark" size={Math.max(14, Math.round(px * 0.42))} />
+        </div>
+      ) : chat.avatar_url ? (
         <img
           src={chat.avatar_url}
           alt={name}

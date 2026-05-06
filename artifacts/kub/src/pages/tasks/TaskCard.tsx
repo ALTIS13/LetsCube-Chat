@@ -96,8 +96,8 @@ export function TaskCard({ task, nowMs, onClick }: TaskCardProps) {
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--kub-border-color)_65%,transparent)]">
             {deadline.urgencyRatio !== null ? (
               <div
-                className="h-full rounded-full bg-gradient-to-r from-[color:var(--kub-online)] via-[color:var(--kub-warn)] to-[color:var(--kub-danger)] transition-[width] duration-300"
-                style={{ width: `${Math.max(6, Math.round(deadline.urgencyRatio * 100))}%` }}
+                className={cn("h-full rounded-full transition-[width] duration-300", deadlineFillClass(deadline.urgencyLevel))}
+                style={{ width: `${Math.round(deadline.urgencyRatio * 100)}%` }}
               />
             ) : (
               <div className="h-full w-0" />
@@ -129,4 +129,19 @@ export function TaskCard({ task, nowMs, onClick }: TaskCardProps) {
       </KubPanel>
     </button>
   );
+}
+
+function deadlineFillClass(level: ReturnType<typeof getTaskDeadlineState>["urgencyLevel"]): string {
+  switch (level) {
+    case "safe":
+      return "bg-[var(--kub-online)]";
+    case "watch":
+      return "bg-[color-mix(in_srgb,var(--kub-warn)_55%,var(--kub-online))]";
+    case "soon":
+      return "bg-[var(--kub-warn)]";
+    case "danger":
+      return "bg-[var(--kub-danger)]";
+    default:
+      return "bg-[color:var(--kub-border-color)]";
+  }
 }

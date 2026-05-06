@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { KubBadge, KubButton, KubIcon, KubModal } from "@/components/kub";
-import { UserAvatar } from "@/components/ui/ChatAvatar";
+import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
 import { useAppStore } from "@/store/app.store";
 import { useIsManagerOrAdmin } from "@/hooks/useRole";
+import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import { useTask } from "@/hooks/useTask";
 import {
   TASK_EVENT_LABEL,
@@ -22,6 +23,7 @@ import { TaskConfirmModal } from "./TaskConfirmModal";
 import { TaskFormModal } from "./TaskFormModal";
 import { TaskRejectModal } from "./TaskRejectModal";
 import { mapPgError } from "@/lib/errors";
+import { cn } from "@/lib/utils";
 
 interface Props {
   taskId: string;
@@ -79,6 +81,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
   const visibility = TASK_VISIBILITY_META[task.visibility];
   const assignmentScope = TASK_ASSIGNMENT_SCOPE_META[task.assignment_scope];
   const deadline = getTaskDeadlineState(task, nowMs);
+  const linkedChat = task.chat ? getChatDisplayInfo(task.chat, currentUser?.id ?? null) : null;
   const isPoolAvailable = task.assignment_scope !== "user" && !task.assignee_id;
   const isAssignee = currentUser?.id === task.assignee_id;
   const isCreator  = currentUser?.id === task.created_by;
@@ -244,8 +247,8 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--kub-border-color)_65%,transparent)]">
             {deadline.urgencyRatio !== null ? (
               <div
-                className="h-full rounded-full bg-gradient-to-r from-[color:var(--kub-online)] via-[color:var(--kub-warn)] to-[color:var(--kub-danger)] transition-[width] duration-300"
-                style={{ width: `${Math.max(5, Math.round(deadline.urgencyRatio * 100))}%` }}
+                className={cn("h-full rounded-full transition-[width] duration-300", deadlineFillClass(deadline.urgencyLevel))}
+                style={{ width: `${Math.round(deadline.urgencyRatio * 100)}%` }}
               />
             ) : (
               <div className="h-full w-0" />
@@ -348,6 +351,35 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
                 </KubBadge>
               )}
             </div>
+          </div>
+          <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 sm:col-span-2">
+            <div className="text-[10px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
+              Связанный чат
+            </div>
+            {task.chat && linkedChat ? (
+              <div className="flex min-w-0 items-center gap-2">
+                <ChatAvatar
+                  chat={{
+                    id: task.chat.id,
+                    name: linkedChat.title,
+                    avatar_url: task.chat.avatar_url,
+                    type: task.chat.type,
+                  }}
+                  size="sm"
+                  isSaved={linkedChat.isSaved}
+                />
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-[color:var(--kub-text)]">
+                    {linkedChat.title}
+                  </div>
+                  <div className="truncate text-[11px] text-[color:var(--kub-muted)]">
+                    {linkedChat.typeLabel} · {linkedChat.subtitle}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <span className="text-xs text-[color:var(--kub-muted)]">Без привязки к чату</span>
+            )}
           </div>
         </div>
 
@@ -570,4 +602,19 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
       )}
     </>
   );
+}
+
+function deadlineFillClass(level: ReturnType<typeof getTaskDeadlineState>["urgencyLevel"]): string {
+  switch (level) {
+    case "safe":
+      return "bg-[var(--kub-online)]";
+    case "watch":
+      return "bg-[color-mix(in_srgb,var(--kub-warn)_55%,var(--kub-online))]";
+    case "soon":
+      return "bg-[var(--kub-warn)]";
+    case "danger":
+      return "bg-[var(--kub-danger)]";
+    default:
+      return "bg-[color:var(--kub-border-color)]";
+  }
 }

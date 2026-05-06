@@ -78,7 +78,8 @@ export function TasksPage() {
   const [tabId, setTabId] = useState(tabs[0].id);
   const activeTab = tabs.find((t) => t.id === tabId) ?? tabs[0];
 
-  const { tasks, loading } = useTasks(activeTab.filter);
+  const baseFilter: TasksFilter = isStaff ? { mine: "all" } : { mine: "assigned" };
+  const { tasks, loading } = useTasks(baseFilter, { enabled: isStaff });
 
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -108,9 +109,16 @@ export function TasksPage() {
   };
 
   const visibleTasks = useMemo(
-    () => applyClientFilters(tasks, activeTab.id, search, nowMs),
-    [tasks, activeTab.id, search, nowMs],
+    () => applyClientFilters(tasks, activeTab.id, search, nowMs, currentUser?.id ?? null),
+    [tasks, activeTab.id, search, nowMs, currentUser?.id],
   );
+  const tabCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const tab of tabs) {
+      counts[tab.id] = applyClientFilters(tasks, tab.id, "", nowMs, currentUser?.id ?? null).length;
+    }
+    return counts;
+  }, [tabs, tasks, nowMs, currentUser?.id]);
 
   // The "Все" tab on staff is intentionally unbounded — show a small hint
   // when the visible list is large.
@@ -120,6 +128,39 @@ export function TasksPage() {
   }, [visibleTasks.length, loading]);
 
   if (!currentUser) return null;
+
+  if (!isStaff) {
+    return (
+      <div className="flex flex-col h-[100dvh] bg-[var(--kub-bg)]">
+        <KubHeader
+          title="Задачи"
+          subtitle="Раздел для сотрудников клуба"
+          leading={
+            <button
+              type="button"
+              onClick={() => setLocation("/")}
+              className="p-2 rounded-lg hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]"
+              aria-label="Назад"
+            >
+              <KubIcon name="back" size={18} />
+            </button>
+          }
+        />
+        <div className="flex flex-1 items-center justify-center px-4">
+          <KubEmptyState
+            icon={<KubIcon name="shield" size={28} />}
+            title="Раздел задач доступен только сотрудникам клуба"
+            description="Если вам нужен доступ к задачам, обратитесь к администратору или управляющему."
+            action={
+              <KubButton variant="secondary" onClick={() => setLocation("/")}>
+                Вернуться к чатам
+              </KubButton>
+            }
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-[100dvh] bg-[var(--kub-bg)]">
@@ -168,6 +209,22 @@ export function TasksPage() {
                 )}
               >
                 {t.label}
+                {tabCounts[t.id] > 0 && (
+                  <span
+                    className={cn(
+                      "ml-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none",
+                      t.id === "urgent"
+                        ? "bg-[color-mix(in_srgb,var(--kub-danger)_18%,transparent)] text-[color:var(--kub-danger)]"
+                        : t.id === "review"
+                          ? "bg-[color-mix(in_srgb,var(--kub-warn)_18%,transparent)] text-[color:var(--kub-warn)]"
+                          : t.id === "available"
+                            ? "bg-[color-mix(in_srgb,var(--kub-online)_18%,transparent)] text-[color:var(--kub-online)]"
+                            : "bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]",
+                    )}
+                  >
+                    {tabCounts[t.id] > 99 ? "99+" : tabCounts[t.id]}
+                  </span>
+                )}
                 {active && (
                   <span className="absolute left-2 right-2 bottom-0 h-0.5 rounded-full bg-[var(--kub-cyan)] kub-glow-soft" />
                 )}
@@ -314,9 +371,21 @@ function applyClientFilters(
   tabId: string,
   search: string,
   nowMs: number,
+  userId: string | null,
 ): TaskWithPeople[] {
   const query = normalizeSearch(search);
   return tasks.filter((task) => {
+    if (tabId === "mine" && task.assignee_id !== userId) return false;
+    if (tabId === "available") {
+      if (task.status !== "new" || task.assignment_scope === "user" || task.assignee_id !== null) return false;
+    }
+    if (tabId === "review" && task.status !== "waiting_confirmation") return false;
+    if (tabId === "private" && task.visibility !== "private") return false;
+    if (tabId === "chat" && task.visibility !== "chat") return false;
+    if (tabId === "unassigned" && task.assignee_id !== null) return false;
+    if (tabId === "created" && task.created_by !== userId) return false;
+    if (tabId === "new" && (task.assignee_id !== userId || task.status !== "assigned")) return false;
+    if (tabId === "active" && (task.assignee_id !== userId || !["accepted", "in_progress"].includes(task.status))) return false;
     if (tabId === "urgent") {
       const deadline = getTaskDeadlineState(task, nowMs);
       if (!deadline.isOverdue && !deadline.isDueSoon) return false;

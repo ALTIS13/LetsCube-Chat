@@ -102,7 +102,9 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
   const menuItems: MenuItem[] = [
     { icon: "group",    label: "Новая группа", action: () => { setMenuOpen(false); setShowNewGroup(true); } },
     { icon: "bookmark", label: "Избранное",    action: openSavedMessages },
-    { icon: "tasks",    label: "Задачи",       accent: true, action: () => { setMenuOpen(false); setLocation("/tasks"); } },
+    ...(isStaff
+      ? [{ icon: "tasks" as const, label: "Задачи", accent: true, action: () => { setMenuOpen(false); setLocation("/tasks"); } } satisfies MenuItem]
+      : []),
     { icon: "settings", label: "Настройки",    action: () => { setMenuOpen(false); setShowSettings(true); } },
     ...(isStaff
       ? [{ icon: "shield" as const, label: "Админ-панель", accent: true, action: () => { setMenuOpen(false); setLocation("/admin"); } } satisfies MenuItem]

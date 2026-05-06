@@ -786,6 +786,7 @@ export interface AuditLogWithActor extends AuditLog {
 export interface TaskWithPeople extends Task {
   assignee?: Profile | null
   creator?: Profile | null
+  chat?: Chat | null
 }
 
 export interface TaskEventWithActor extends TaskEvent {

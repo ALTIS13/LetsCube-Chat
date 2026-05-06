@@ -4,6 +4,8 @@ import type { ChatWithLastMessage } from "@/types/database";
 import { formatTime } from "@/lib/format";
 import { ChatAvatar } from "@/components/ui/ChatAvatar";
 import { KubIcon } from "@/components/kub";
+import { getChatDisplayInfo } from "@/lib/chatDisplay";
+import { useAppStore } from "@/store/app.store";
 import { cn } from "@/lib/utils";
 
 interface ChatListItemProps {
@@ -17,7 +19,9 @@ interface ChatListItemProps {
 }
 
 export function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
+  const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
   const lastMsg = chat.last_message;
+  const display = getChatDisplayInfo(chat, currentUserId);
   const isOutgoing = lastMsg?.user_id === "me";
   const hasUnread = (chat.unread_count ?? 0) > 0;
   const isMuted = chat.is_muted;
@@ -50,7 +54,7 @@ export function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
       )}
 
       <div className="flex-shrink-0 relative">
-        <ChatAvatar chat={chat} size="md" />
+        <ChatAvatar chat={chat} size="md" isSaved={display.isSaved} />
         {isOtherOnline && (
           <span
             className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 bg-[var(--kub-online)] kub-pulse"
@@ -62,11 +66,17 @@ export function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">
         <div className="flex items-center justify-between gap-1">
           <div className="flex items-center gap-1 min-w-0">
-            {chat.type === "channel" && (
+            {display.isSaved ? (
+              <KubIcon name="bookmark" size={13} className="flex-shrink-0 text-[color:var(--kub-cyan)]" />
+            ) : chat.type === "channel" ? (
               <KubIcon name="channel" size={13} className="flex-shrink-0 text-[color:var(--kub-muted)]" />
+            ) : chat.type === "group" ? (
+              <KubIcon name="group" size={13} className="flex-shrink-0 text-[color:var(--kub-muted)]" />
+            ) : (
+              <KubIcon name="user" size={13} className="flex-shrink-0 text-[color:var(--kub-muted)]" />
             )}
             <span className="text-sm font-semibold truncate text-[color:var(--kub-text)]">
-              {chat.name}
+              {display.title}
             </span>
             {chat.is_verified && (
               <KubIcon name="verified" size={13} className="flex-shrink-0 text-[color:var(--kub-cyan)]" />
@@ -95,7 +105,7 @@ export function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
 
         <div className="flex items-center justify-between gap-1">
           <span className="text-xs truncate flex-1 text-[color:var(--kub-muted)]">
-            {getMessagePreview()}
+            {display.isSaved && !lastMsg ? "Сохранённые сообщения" : getMessagePreview()}
           </span>
 
           <div className="flex items-center gap-1 flex-shrink-0">

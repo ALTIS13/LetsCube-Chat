@@ -92,6 +92,7 @@ export interface TaskDeadlineState {
   detailLabel: string;
   badgeLabel: string | null;
   urgencyRatio: number | null;
+  urgencyLevel: "none" | "safe" | "watch" | "soon" | "danger";
   tone: Tone;
 }
 
@@ -113,6 +114,7 @@ export function getTaskDeadlineState(
       detailLabel: "Для задачи не задан срок выполнения.",
       badgeLabel: null,
       urgencyRatio: null,
+      urgencyLevel: "none",
       tone: "muted",
     };
   }
@@ -135,6 +137,7 @@ export function getTaskDeadlineState(
       detailLabel: `${completedLabel}. Дедлайн больше не требует срочного действия.`,
       badgeLabel: null,
       urgencyRatio: null,
+      urgencyLevel: "none",
       tone: "muted",
     };
   }
@@ -145,10 +148,10 @@ export function getTaskDeadlineState(
     !isOverdue &&
     remainingMs <= DEADLINE_SOON_MS &&
     (task.status === "new" || task.status === "assigned");
-  const urgencyRatio = isOverdue
-    ? 1
-    : clamp01(1 - Math.min(Math.max(remainingMs, 0), DEADLINE_WINDOW_MS) / DEADLINE_WINDOW_MS);
-  const tone: Tone = isOverdue ? "danger" : isDueSoon ? "warn" : urgencyRatio >= 0.5 ? "warn" : "online";
+  const urgencyLevel = getUrgencyLevel(remainingMs, isOverdue);
+  const urgencyRatio = getUrgencyRatio(urgencyLevel);
+  const tone: Tone =
+    urgencyLevel === "danger" ? "danger" : urgencyLevel === "soon" || urgencyLevel === "watch" ? "warn" : "online";
 
   if (isOverdue) {
     const overdue = formatDuration(Math.abs(remainingMs));
@@ -161,6 +164,7 @@ export function getTaskDeadlineState(
       detailLabel: `Задача просрочена на ${overdue}.`,
       badgeLabel: "Просрочена",
       urgencyRatio,
+      urgencyLevel,
       tone,
     };
   }
@@ -175,6 +179,7 @@ export function getTaskDeadlineState(
     detailLabel: `До срока осталось ${left}.`,
     badgeLabel: isDueSoon ? "Почти просрочена" : null,
     urgencyRatio,
+    urgencyLevel,
     tone,
   };
 }
@@ -205,11 +210,6 @@ export function formatRelative(iso: string): string {
   return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function clamp01(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(1, value));
-}
-
 function formatDuration(ms: number): string {
   const totalMinutes = Math.max(0, Math.round(ms / 60000));
   if (totalMinutes < 1) return "меньше минуты";
@@ -219,4 +219,27 @@ function formatDuration(ms: number): string {
   if (days > 0) return `${days}д ${hours}ч`;
   if (hours > 0) return `${hours}ч ${minutes}м`;
   return `${minutes}м`;
+}
+
+function getUrgencyLevel(remainingMs: number, isOverdue: boolean): TaskDeadlineState["urgencyLevel"] {
+  if (isOverdue) return "danger";
+  if (remainingMs <= DEADLINE_SOON_MS) return "danger";
+  if (remainingMs <= 12 * 60 * 60 * 1000) return "soon";
+  if (remainingMs <= DEADLINE_WINDOW_MS) return "watch";
+  return "safe";
+}
+
+function getUrgencyRatio(level: TaskDeadlineState["urgencyLevel"]): number | null {
+  switch (level) {
+    case "safe":
+      return 0.18;
+    case "watch":
+      return 0.5;
+    case "soon":
+      return 0.75;
+    case "danger":
+      return 1;
+    default:
+      return null;
+  }
 }

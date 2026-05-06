@@ -8,6 +8,7 @@ import { KubIcon } from "@/components/kub";
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
+import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import type { ChatWithLastMessage, Profile, Message } from "@/types/database";
 
 interface ChatInfoPanelProps {
@@ -20,12 +21,14 @@ type Tab = "info" | "members" | "media";
 export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
   const { currentUser, setSelectedChatId, chats, setChats } = useAppStore();
   const supabase = createClient();
-  const isGroup = chat.type === "group" || chat.type === "channel";
+  const display = getChatDisplayInfo(chat, currentUser?.id ?? null);
+  const isSaved = display.isSaved;
+  const isGroup = !isSaved && (chat.type === "group" || chat.type === "channel");
   const myRole: "owner" | "admin" | "member" | null =
     (chat.members?.find((m) => m.user_id === currentUser?.id)?.role as
       | "owner" | "admin" | "member" | undefined) ?? null;
   const isOwner = myRole === "owner";
-  const isOwnerOrAdmin = myRole === "owner" || myRole === "admin";
+  const isOwnerOrAdmin = !isSaved && (myRole === "owner" || myRole === "admin");
 
   const [tab, setTab] = useState<Tab>("info");
   const [editing, setEditing] = useState(false);
@@ -205,7 +208,7 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
           <KubIcon name="close" size={18} />
         </button>
         <span className="text-sm font-semibold text-[color:var(--kub-text)]">
-          {isGroup ? "Информация о группе" : "Профиль пользователя"}
+          {isSaved ? "Избранное" : isGroup ? "Информация о группе" : "Профиль пользователя"}
         </span>
         {isOwnerOrAdmin && !editing && (
           <button
@@ -231,8 +234,9 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
       <div className="flex flex-col items-center py-6 px-4 gap-3 flex-shrink-0 border-b border-[color:var(--kub-border-color)] kub-grid-subtle">
         <div className="relative">
           <ChatAvatar
-            chat={{ id: chat.id, name: chat.name, avatar_url: chat.avatar_url ?? null, type: chat.type }}
+            chat={{ id: chat.id, name: display.title, avatar_url: chat.avatar_url ?? null, type: chat.type }}
             size="xl"
+            isSaved={display.isSaved}
           />
           {isOwnerOrAdmin && (
             <label className="absolute bottom-0 right-0 w-9 h-9 rounded-full flex items-center justify-center cursor-pointer bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan">
@@ -270,9 +274,13 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
         ) : (
           <>
             <div className="text-base font-semibold text-center text-[color:var(--kub-text)]">
-              {isGroup ? chat.name : otherUser?.full_name ?? chat.name}
+              {display.title}
             </div>
-            {isGroup ? (
+            {isSaved ? (
+              <div className="text-xs text-[color:var(--kub-muted)]">
+                Личное пространство для сохранённых сообщений
+              </div>
+            ) : isGroup ? (
               <div className="text-xs text-[color:var(--kub-muted)]">
                 {chat.members?.length ?? 0} участников
               </div>

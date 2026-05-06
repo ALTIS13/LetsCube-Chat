@@ -7,6 +7,7 @@ import { KubTooltip, KubIcon, type KubIconName } from "@/components/kub";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { prefixError } from "@/lib/errors";
+import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import type { ChatWithLastMessage } from "@/types/database";
 
 interface ChatHeaderProps {
@@ -23,9 +24,12 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen }: ChatHeade
   const [deletingChat, setDeletingChat] = useState(false);
   const isMuted = mutedChatIds.includes(chatId);
 
-  const name = chat?.name ?? "Чат";
+  const display = chat
+    ? getChatDisplayInfo(chat, currentUser?.id ?? null)
+    : { title: "Чат", subtitle: "", typeLabel: "Чат", isSaved: false };
+  const name = display.title;
   const type = chat?.type ?? "private";
-  const isGroup = type === "group" || type === "channel";
+  const isGroup = !display.isSaved && (type === "group" || type === "channel");
   const myRole =
     (chat?.members?.find((member) => member.user_id === currentUser?.id)?.role as
       | "owner"
@@ -76,6 +80,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen }: ChatHeade
 
   const getSubtitle = () => {
     if (!chat) return "";
+    if (display.isSaved) return display.subtitle;
     if (type === "channel") return `${(chat.members?.length ?? 0) || "?"} подписчиков`;
     if (type === "group") return `${chat.members?.length ?? 0} участников`;
     const other = chat.other_user as { online_at?: string } | undefined;
@@ -121,6 +126,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen }: ChatHeade
           chat={{ id: chatId, name, avatar_url: chat?.avatar_url ?? null, type }}
           size="sm"
           showOnline={isOnline}
+          isSaved={display.isSaved}
         />
         <div className="text-left min-w-0">
           <div className="text-sm font-semibold truncate leading-tight text-[color:var(--kub-text)]">
@@ -138,7 +144,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen }: ChatHeade
       </button>
 
       <div className="flex items-center gap-0.5">
-        {type !== "channel" && (
+        {type !== "channel" && !display.isSaved && (
           <>
             <KubTooltip label="Аудио-вызов" side="bottom">
               <button

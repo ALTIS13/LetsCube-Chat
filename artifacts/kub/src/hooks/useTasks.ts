@@ -32,12 +32,13 @@ export interface TasksFilter {
   assignee?: "unassigned";
 }
 
-export function useTasks(filter: TasksFilter) {
+export function useTasks(filter: TasksFilter, options: { enabled?: boolean } = {}) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
   const [tasks, setTasks] = useState<TaskWithPeople[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = useMemo(() => createClient(), []);
   const rt = useMemo(() => getRealtimeClient(), []);
+  const enabled = options.enabled ?? true;
 
   // Стабильный строковый ключ для filter.statuses, чтобы массив не плодил
   // новые callback identity при тех же значениях.
@@ -47,6 +48,11 @@ export function useTasks(filter: TasksFilter) {
 
   const fetchTasks = useCallback(async () => {
     if (!userId) return;
+    if (!enabled) {
+      setTasks([]);
+      setLoading(false);
+      return;
+    }
     bumpFetch("useTasks");
     let q = supabase
       .from("tasks")
@@ -92,13 +98,13 @@ export function useTasks(filter: TasksFilter) {
       );
     }
     setLoading(false);
-  }, [userId, supabase, filter.mine, statusKey, assignmentScopeKey, visibilityKey, filter.assignee]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userId, enabled, supabase, filter.mine, statusKey, assignmentScopeKey, visibilityKey, filter.assignee]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
 
   // Realtime: any change to tasks I can see → debounced refetch.
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !enabled) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const debounced = () => {
       if (timer) clearTimeout(timer);
@@ -117,7 +123,7 @@ export function useTasks(filter: TasksFilter) {
       rt.removeChannel(channel);
       unregisterChannel(channelName);
     };
-  }, [userId, rt, fetchTasks, filter.mine]);
+  }, [userId, enabled, rt, fetchTasks, filter.mine]);
 
   return { tasks, loading, refetch: fetchTasks };
 }
