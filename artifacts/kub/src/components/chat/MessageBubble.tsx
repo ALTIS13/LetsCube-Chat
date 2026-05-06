@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app.store";
 import { FormattedText } from "@/lib/formatText";
 import { KubIcon, type KubIconName } from "@/components/kub";
+import type { MediaViewerItem } from "./MediaViewer";
 
 const EMOJI_QUICK = ["👍", "❤️", "😂", "😮", "😢", "🔥", "👏", "🎉"];
 
@@ -30,6 +31,7 @@ interface MessageBubbleProps {
   onDelete?: () => void;
   onTogglePin?: () => void;
   onForward?: () => void;
+  onOpenMedia?: (media: MediaViewerItem) => void;
   usersMap?: Record<string, string>;
   messagesMap?: Record<string, MessageWithSender>;
   isRead?: boolean;
@@ -38,7 +40,7 @@ interface MessageBubbleProps {
 
 export function MessageBubble({
   message, isMe, isFirstInGroup, isLastInGroup,
-  onReply, onReaction, onEdit, onDelete, onTogglePin, onForward,
+  onReply, onReaction, onEdit, onDelete, onTogglePin, onForward, onOpenMedia,
   usersMap = {}, messagesMap = {}, isRead, myRole,
 }: MessageBubbleProps) {
   const canModerate = myRole === "owner" || myRole === "admin";
@@ -290,14 +292,17 @@ export function MessageBubble({
             {isVoiceMessage(message) ? (
               <AudioMessage url={message.media_url} duration={parseAudioDuration(message.content)} isMe={isMe} />
             ) : message.type === "image" && message.media_url ? (
-              <img
-                src={message.media_url}
-                alt="photo"
-                className="rounded-xl max-w-full max-h-64 object-cover cursor-pointer"
-                onClick={() => window.open(message.media_url!, "_blank")}
+              <MediaImage
+                url={message.media_url}
+                title={message.content ?? "Фото"}
+                onOpen={() => onOpenMedia?.({ type: "image", url: message.media_url!, title: message.content ?? "Фото" })}
               />
             ) : message.type === "video" && message.media_url ? (
-              <video src={message.media_url} controls className="rounded-xl max-w-full max-h-64" />
+              <MediaVideo
+                url={message.media_url}
+                title={message.content ?? "Видео"}
+                onOpen={() => onOpenMedia?.({ type: "video", url: message.media_url!, title: message.content ?? "Видео" })}
+              />
             ) : message.type === "file" && message.media_url ? (
               <a
                 href={message.media_url}
@@ -357,6 +362,77 @@ export function MessageBubble({
         </div>
       </div>
     </>
+  );
+}
+
+function MediaImage({ url, title, onOpen }: { url: string; title: string; onOpen: () => void }) {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div className="flex max-w-[260px] items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
+        <KubIcon name="warning" size={16} />
+        <span className="min-w-0 flex-1">Не удалось загрузить изображение.</span>
+        <a href={url} target="_blank" rel="noreferrer" className="text-[color:var(--kub-cyan)] hover:underline">
+          Открыть
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group block max-w-full overflow-hidden rounded-xl text-left focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)]"
+      aria-label="Открыть фото"
+    >
+      <img
+        src={url}
+        alt={title || "Фото"}
+        loading="lazy"
+        className="max-h-[320px] w-auto max-w-full object-cover transition-transform duration-200 group-hover:scale-[1.01] sm:max-h-[360px]"
+        onError={() => setFailed(true)}
+      />
+    </button>
+  );
+}
+
+function MediaVideo({ url, title, onOpen }: { url: string; title: string; onOpen: () => void }) {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div className="flex max-w-[280px] items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
+        <KubIcon name="warning" size={16} />
+        <span className="min-w-0 flex-1">Не удалось загрузить видео.</span>
+        <a href={url} target="_blank" rel="noreferrer" className="text-[color:var(--kub-cyan)] hover:underline">
+          Открыть
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative w-[min(360px,72vw)] overflow-hidden rounded-xl bg-black">
+      <video
+        src={url}
+        preload="metadata"
+        controls
+        playsInline
+        className="block aspect-video w-full max-h-[320px] bg-black object-contain"
+        onError={() => setFailed(true)}
+      />
+      <button
+        type="button"
+        onClick={onOpen}
+        className="absolute right-2 top-2 inline-flex items-center gap-1.5 rounded-lg bg-black/65 px-2.5 py-1.5 text-xs text-white backdrop-blur transition-colors hover:bg-black/80"
+        aria-label="Открыть видео в просмотрщике"
+      >
+        <KubIcon name="externalLink" size={14} />
+        <span className="hidden sm:inline">Открыть</span>
+      </button>
+    </div>
   );
 }
 

@@ -3,6 +3,7 @@
 import React, { RefObject, useState, useEffect, useCallback, useRef } from "react";
 import { KubIcon } from "@/components/kub";
 import { MessageBubble } from "./MessageBubble";
+import type { MediaViewerItem } from "./MediaViewer";
 import { TypingIndicator } from "./TypingIndicator";
 import type { ChatMember, MessageWithSender } from "@/types/database";
 import { formatDate } from "@/lib/format";
@@ -17,6 +18,7 @@ interface MessageListProps {
   onDelete?: (msg: MessageWithSender) => void;
   onTogglePin?: (msg: MessageWithSender) => void;
   onForward?: (msg: MessageWithSender) => void;
+  onOpenMedia?: (media: MediaViewerItem) => void;
   bottomRef: RefObject<HTMLDivElement | null>;
   isTyping?: boolean;
   typingUser?: string;
@@ -40,6 +42,7 @@ export function MessageList({
   onDelete,
   onTogglePin,
   onForward,
+  onOpenMedia,
   bottomRef,
   isTyping = false,
   typingUser,
@@ -159,6 +162,7 @@ export function MessageList({
                 onDelete={onDelete ? () => onDelete(msg) : undefined}
                 onTogglePin={onTogglePin ? () => onTogglePin(msg) : undefined}
                 onForward={onForward ? () => onForward(msg) : undefined}
+                onOpenMedia={onOpenMedia}
                 usersMap={usersMap}
                 messagesMap={messagesMap}
                 isRead={isRead}

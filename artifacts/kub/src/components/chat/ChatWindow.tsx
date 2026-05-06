@@ -8,6 +8,7 @@ import { MessageInput } from "./MessageInput";
 import { ChatSearchBar } from "./ChatSearchBar";
 import { ChatInfoPanel } from "./ChatInfoPanel";
 import { ForwardModal } from "./ForwardModal";
+import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
 import { TopicStrip } from "./TopicStrip";
 import { useTopics } from "@/hooks/useTopics";
 import { useMessages } from "@/hooks/useMessages";
@@ -51,6 +52,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const [showInfo, setShowInfo] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [pinError, setPinError] = useState<string | null>(null);
+  const [openMedia, setOpenMedia] = useState<MediaViewerItem | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement>>({});
   const supabase = createClient();
@@ -217,6 +219,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             onDelete={(msg) => deleteMessage(msg.id)}
             onTogglePin={myRole ? handleTogglePin : undefined}
             onForward={(msg) => setForwardingMessage(msg)}
+            onOpenMedia={setOpenMedia}
             bottomRef={bottomRef}
             isTyping={isTyping}
             highlightedId={highlightedId}
@@ -249,6 +252,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           }}
         />
       )}
+      <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
     </div>
   );
 }
