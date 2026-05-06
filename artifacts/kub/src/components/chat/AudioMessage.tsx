@@ -125,8 +125,10 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
   const fmt = (s: number) =>
     `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
+  const srcReady = Boolean(url);
+
   return (
-    <div className="flex items-center gap-2.5 min-w-[180px]">
+    <div className="flex items-center gap-2.5 min-w-[180px]" data-voice-message="true">
       {url && (
         <audio
           ref={audioRef}
@@ -156,7 +158,9 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
 
       <div className="flex-1 flex flex-col gap-1">
         <div
-          className={`h-1 rounded-full cursor-pointer overflow-hidden ${
+          data-voice-progress="track"
+          data-audio-src-ready={srcReady ? "true" : "false"}
+          className={`h-1.5 rounded-full cursor-pointer overflow-hidden ${
             isMe ? "bg-[color:var(--kub-border-color)]" : "bg-[var(--kub-surface-3)]"
           }`}
           onClick={handleSeek}

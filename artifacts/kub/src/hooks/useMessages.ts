@@ -60,7 +60,11 @@ export function useMessages(chatId: string | null, topicId: string | null = null
     const { data } = await query
       .order("created_at", { ascending: true })
       .limit(100);
-    if (data) setMessages(chatId, data as unknown as MessageWithSender[]);
+    if (data) {
+      const fetched = data as unknown as MessageWithSender[];
+      const existing = useAppStore.getState().messages[chatId] ?? [];
+      setMessages(chatId, mergeMessagesById(fetched, existing));
+    }
     setLoading(false);
     const user = currentUserRef.current;
     if (user) {
@@ -339,6 +343,20 @@ function buildRealtimeMessage(row: MessageWithSender): MessageWithSender {
     reactions: row.reactions ?? [],
     pending: false,
   };
+}
+
+function mergeMessagesById(
+  fetched: MessageWithSender[],
+  existing: MessageWithSender[],
+): MessageWithSender[] {
+  if (!existing.length) return fetched;
+  const byId = new Map(fetched.map((message) => [message.id, message]));
+  for (const message of existing) {
+    if (!byId.has(message.id)) byId.set(message.id, message);
+  }
+  return Array.from(byId.values()).sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  );
 }
 
 function isRealtimeVoiceMessage(message: MessageWithSender): boolean {
