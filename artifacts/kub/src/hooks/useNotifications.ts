@@ -42,6 +42,7 @@ export function useNotifications() {
   // Узкий per-field селектор: подписываемся ТОЛЬКО на примитив userId,
   // чтобы heartbeat-эхо не дёргало этот хук (Task #48).
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
+  const mutedChatIds = useAppStore((s) => s.mutedChatIds);
 
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
@@ -70,7 +71,7 @@ export function useNotifications() {
         }
         // Merge — never replace — so any realtime INSERTs that
         // landed before this fetch resolved aren't dropped.
-        setItems((prev) => mergeRows(prev, (data ?? []) as Notification[]));
+        setItems((prev) => mergeRows(prev, filterMutedNotifications((data ?? []) as Notification[], mutedChatIds)));
       });
 
     const channelName = `notifications:${userId}`;
@@ -88,6 +89,7 @@ export function useNotifications() {
               chatId: payloadString(row.payload, "chat_id"),
             });
           }
+          if (isMutedNotification(row, mutedChatIds)) return;
           setItems((prev) => mergeRows(prev, [row]));
         },
       )
@@ -106,7 +108,11 @@ export function useNotifications() {
       supabase.removeChannel(ch);
       unregisterChannel(channelName);
     };
-  }, [userId, supabase]);
+  }, [userId, supabase, mutedChatIds]);
+
+  useEffect(() => {
+    setItems((prev) => filterMutedNotifications(prev, mutedChatIds));
+  }, [mutedChatIds]);
 
   const unreadCount = items.reduce((acc, n) => (n.read_at ? acc : acc + 1), 0);
 
@@ -172,4 +178,14 @@ function mergeRows(a: Notification[], b: Notification[]): Notification[] {
   return Array.from(byId.values())
     .sort((x, y) => (x.created_at < y.created_at ? 1 : x.created_at > y.created_at ? -1 : 0))
     .slice(0, PAGE_SIZE);
+}
+
+function filterMutedNotifications(items: Notification[], mutedChatIds: string[]): Notification[] {
+  if (mutedChatIds.length === 0) return items;
+  return items.filter((item) => !isMutedNotification(item, mutedChatIds));
+}
+
+function isMutedNotification(item: Notification, mutedChatIds: string[]): boolean {
+  const chatId = payloadString(item.payload, "chat_id");
+  return Boolean(chatId && mutedChatIds.includes(chatId));
 }

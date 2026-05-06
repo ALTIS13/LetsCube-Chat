@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { prefixError } from "@/lib/errors";
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
+import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import type { ChatWithLastMessage } from "@/types/database";
 
 interface ChatHeaderProps {
@@ -91,7 +92,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
     const rpcName = isPinned ? "unpin_chat" : "pin_chat";
     const { error } = await supabase.rpc(rpcName, { p_chat_id: chatId });
     if (error) {
-      alert(prefixError(isPinned ? "Не удалось открепить чат" : "Не удалось закрепить чат", error));
+      showAppAlert(prefixError(isPinned ? "Не удалось открепить чат" : "Не удалось закрепить чат", error), "Ошибка");
       return;
     }
     setChats(chats.map((item) =>
@@ -107,10 +108,17 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
     if (!onClearForMe) return;
     const title = display.isSaved ? "Очистить избранное у себя?" : "Очистить историю у себя?";
     const body = "Сообщения будут скрыты только для вас. У других участников они останутся.";
-    if (!confirm(`${title}\n\n${body}`)) return;
+    const confirmed = await requestAppConfirm({
+      title,
+      description: body,
+      confirmLabel: "Очистить",
+      tone: "danger",
+      icon: "delete",
+    });
+    if (!confirmed) return;
     const result = await onClearForMe();
     if (!result.ok) {
-      alert(result.error ?? "Не удалось очистить историю у себя.");
+      showAppAlert(result.error ?? "Не удалось очистить историю у себя.", "Ошибка");
       return;
     }
     const clearedAt = new Date().toISOString();
@@ -126,10 +134,17 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
 
   const handleHidePrivateChat = async () => {
     if (!canHidePrivateChat) return;
-    if (!confirm("Удалить чат у себя?\n\nЧат исчезнет только из вашего списка. У собеседника история останется.")) return;
+    const confirmed = await requestAppConfirm({
+      title: "Удалить чат у себя?",
+      description: "Чат исчезнет только из вашего списка. У собеседника история останется.",
+      confirmLabel: "Удалить у себя",
+      tone: "danger",
+      icon: "logout",
+    });
+    if (!confirmed) return;
     const { error } = await supabase.rpc("hide_private_chat", { p_chat_id: chatId });
     if (error) {
-      alert(prefixError("Не удалось удалить чат у себя", error));
+      showAppAlert(prefixError("Не удалось удалить чат у себя", error), "Ошибка");
       return;
     }
     setMessages(chatId, []);

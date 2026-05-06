@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { KubButton, KubIcon, KubModal, type KubIconName } from "@/components/kub";
 import { cn } from "@/lib/utils";
 import { FOLDER_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
+import { requestAppConfirm } from "@/lib/appDialogs";
 
 const QUICK_EMOJI = ["👤", "💼", "📢", "📌", "🔥", "🏠", "🎓", "💬", "❤️", "📦"];
 
@@ -121,7 +122,14 @@ export function FolderEditModal({
 
   const handleDelete = async () => {
     if (!folder || !canManage) return;
-    if (!confirm(`Удалить папку "${folder.name}"?`)) return;
+    const confirmed = await requestAppConfirm({
+      title: "Удалить папку?",
+      description: `Папка "${folder.name}" будет удалена. Чаты внутри папки не удаляются.`,
+      confirmLabel: "Удалить",
+      tone: "danger",
+      icon: "delete",
+    });
+    if (!confirmed) return;
     setBusy(true);
     setError(null);
     const r = await deleteFolder(folder.id);

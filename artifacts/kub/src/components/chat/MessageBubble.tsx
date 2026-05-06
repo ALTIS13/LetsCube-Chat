@@ -10,6 +10,7 @@ import { useAppStore } from "@/store/app.store";
 import { FormattedText } from "@/lib/formatText";
 import { KubIcon, type KubIconName } from "@/components/kub";
 import type { MediaViewerItem } from "./MediaViewer";
+import { requestAppConfirm } from "@/lib/appDialogs";
 
 const EMOJI_QUICK = ["👍", "❤️", "😂", "😮", "😢", "🔥", "👏", "🎉"];
 
@@ -159,7 +160,15 @@ export function MessageBubble({
     ] : []),
     ...((isMe || canModerate) && onDelete ? [
       { icon: "delete" as KubIconName, label: "Удалить", danger: true, action: () => {
-          if (confirm("Удалить сообщение?")) onDelete();
+          void requestAppConfirm({
+            title: "Удалить сообщение?",
+            description: "Сообщение будет заменено компактной плашкой удаления.",
+            confirmLabel: "Удалить",
+            tone: "danger",
+            icon: "delete",
+          }).then((confirmed) => {
+            if (confirmed) onDelete();
+          });
           setShowContext(false);
         } },
     ] : []),
@@ -261,7 +270,7 @@ export function MessageBubble({
           </div>
         )}
 
-        <div className={cn("flex min-w-0 flex-col max-w-[78%] sm:max-w-[72%] md:max-w-[65%] [overflow-wrap:anywhere]", isMe ? "items-end" : "items-start")}>
+        <div className={cn("flex min-w-0 max-w-[78%] flex-col [overflow-wrap:anywhere] sm:max-w-[72%] md:max-w-[65%]", isMe ? "items-end" : "items-start")}>
 
           {!isMe && isFirstInGroup && message.sender && (
             <span className="text-xs font-semibold ml-3 mb-0.5 text-[color:var(--kub-cyan)]">
@@ -394,7 +403,7 @@ export function MessageBubble({
               </p>
             )}
 
-            <div className="mt-1 -mb-0.5 flex w-full min-w-[5.25rem] items-center justify-end gap-1 whitespace-nowrap text-right">
+            <div className="mt-1 -mb-0.5 flex min-w-[5.25rem] max-w-full items-center justify-end gap-1 whitespace-nowrap text-right">
               {message.pinned && (
                 <KubIcon name="pin" size={12} tone="muted" label="Закреплено" className="shrink-0" />
               )}
@@ -512,7 +521,7 @@ function MediaVideo({ url, title, onOpen }: { url: string; title: string; onOpen
   }
 
   return (
-    <div className="relative w-[min(360px,72vw)] overflow-hidden rounded-xl bg-black">
+    <div className="relative w-[min(360px,calc(100vw-7.5rem))] max-w-full overflow-hidden rounded-xl bg-black">
       <video
         src={url}
         preload="metadata"

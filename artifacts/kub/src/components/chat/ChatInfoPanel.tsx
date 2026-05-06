@@ -10,6 +10,7 @@ import { mapPgError, prefixError } from "@/lib/errors";
 import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
+import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
 import type { ChatWithLastMessage, Profile, Message } from "@/types/database";
 import { CHAT_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
@@ -24,7 +25,7 @@ type Tab = "info" | "members" | "media";
 const MEDIA_PAGE_SIZE = 12;
 
 export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProps) {
-  const { currentUser, setSelectedChatId, chats, setChats, setMessages } = useAppStore();
+  const { currentUser, setSelectedChatId, chats, setChats, setMessages, mutedChatIds, toggleMutedChat } = useAppStore();
   const supabase = createClient();
   const display = getChatDisplayInfo(chat, currentUser?.id ?? null);
   const isSaved = display.isSaved;
@@ -37,6 +38,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const canEditChatProfile = isGroup && isOwnerOrAdmin;
   const canHidePrivateChat = chat.type === "private" && !isSaved;
   const isPinned = Boolean(chat.is_pinned);
+  const isMuted = mutedChatIds.includes(chat.id);
 
   const [tab, setTab] = useState<Tab>("info");
   const [editing, setEditing] = useState(false);
@@ -147,7 +149,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     const validationError = validateAvatarImage(file);
     if (validationError) {
       setAvatarError(validationError);
-      alert(validationError);
+      showAppAlert(validationError, "Аватар не загружен");
       return;
     }
     setAvatarError(null);
@@ -157,7 +159,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     if (error) {
       const message = prefixError("Не удалось загрузить аватар чата", error);
       setAvatarError(message);
-      alert(message);
+      showAppAlert(message, "Ошибка");
       return;
     }
     const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(data.path);
@@ -165,7 +167,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     if (updateErr) {
       const message = prefixError("Не удалось сохранить аватар чата", updateErr);
       setAvatarError(message);
-      alert(message);
+      showAppAlert(message, "Ошибка");
       return;
     }
     setChats(chats.map((c) => c.id === chat.id ? { ...c, avatar_url: publicUrl } : c));
@@ -226,7 +228,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     const rpcName = isPinned ? "unpin_chat" : "pin_chat";
     const { error } = await supabase.rpc(rpcName, { p_chat_id: chat.id });
     if (error) {
-      alert(prefixError(isPinned ? "Не удалось открепить чат" : "Не удалось закрепить чат", error));
+      showAppAlert(prefixError(isPinned ? "Не удалось открепить чат" : "Не удалось закрепить чат", error), "Ошибка");
       return;
     }
     setChats(chats.map((c) =>
@@ -241,10 +243,17 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     if (!onClearForMe) return;
     const title = isSaved ? "Очистить избранное у себя?" : "Очистить историю у себя?";
     const body = "Сообщения и вложения будут скрыты только у вас. У других участников они останутся. Файлы из хранилища не удаляются.";
-    if (!confirm(`${title}\n\n${body}`)) return;
+    const confirmed = await requestAppConfirm({
+      title,
+      description: body,
+      confirmLabel: "Очистить",
+      tone: "danger",
+      icon: "delete",
+    });
+    if (!confirmed) return;
     const result = await onClearForMe();
     if (!result.ok) {
-      alert(result.error ?? "Не удалось очистить историю у себя.");
+      showAppAlert(result.error ?? "Не удалось очистить историю у себя.", "Ошибка");
       return;
     }
     const clearedAt = new Date().toISOString();
@@ -262,10 +271,17 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
 
   const handleHidePrivateChat = async () => {
     if (!canHidePrivateChat) return;
-    if (!confirm("Удалить чат у себя?\n\nЧат исчезнет только из вашего списка. У собеседника история останется.")) return;
+    const confirmed = await requestAppConfirm({
+      title: "Удалить чат у себя?",
+      description: "Чат исчезнет только из вашего списка. У собеседника история останется.",
+      confirmLabel: "Удалить у себя",
+      tone: "danger",
+      icon: "logout",
+    });
+    if (!confirmed) return;
     const { error } = await supabase.rpc("hide_private_chat", { p_chat_id: chat.id });
     if (error) {
-      alert(prefixError("Не удалось удалить чат у себя", error));
+      showAppAlert(prefixError("Не удалось удалить чат у себя", error), "Ошибка");
       return;
     }
     setMessages(chat.id, []);
@@ -283,7 +299,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       .delete().eq("chat_id", chat.id).eq("user_id", userId);
     if (error) {
       console.error("removeMember failed:", error);
-      alert(prefixError("Не удалось удалить участника", error));
+      showAppAlert(prefixError("Не удалось удалить участника", error), "Ошибка");
       return;
     }
     setMembers((m) => m.filter((u) => u.id !== userId));
@@ -297,7 +313,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       // Triggered by the role-change matrix (only owner) or the
       // last-owner protection trigger.
       console.error("setMemberRole:", error);
-      alert(prefixError("Не удалось изменить роль", error));
+      showAppAlert(prefixError("Не удалось изменить роль", error), "Ошибка");
       return;
     }
     setMembers((ms) => ms.map((m) => m.id === userId ? { ...m, chat_role: role } : m));
@@ -471,21 +487,33 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                 <KubIcon name="image" size={17} tone="muted" className="shrink-0" />
                 <span className="min-w-0 flex-1 truncate">Общие медиа</span>
               </button>
-              <button className={cn(actionRowClass, "text-[color:var(--kub-text)]")}>
-                <KubIcon name="notifications" size={17} tone="muted" className="shrink-0" />
-                <span className="min-w-0 flex-1 truncate">Отключить уведомления</span>
+              <button
+                onClick={() => toggleMutedChat(chat.id)}
+                className={cn(actionRowClass, "text-[color:var(--kub-text)]")}
+              >
+                <KubIcon name={isMuted ? "notificationsOff" : "notifications"} size={17} tone={isMuted ? "accent" : "muted"} className="shrink-0" />
+                <span className="min-w-0 flex-1 truncate">
+                  {isMuted ? "Включить уведомления" : "Отключить уведомления"}
+                </span>
               </button>
               {isGroup && chat.type === "group" && isOwner && (
                 <button
                   onClick={async () => {
                     const next = !chat.is_forum;
-                    if (next && !confirm("Включить режим топиков? Все будущие сообщения попадут в топики.")) return;
-                    if (!next && !confirm("Выключить режим топиков? Топики останутся, но сообщения снова будут в общем потоке.")) return;
+                    const confirmed = await requestAppConfirm({
+                      title: next ? "Включить режим топиков?" : "Выключить режим топиков?",
+                      description: next
+                        ? "Все будущие сообщения можно будет отправлять в общий раздел или выбранный топик."
+                        : "Топики останутся в базе, но чат вернётся к обычному отображению.",
+                      confirmLabel: next ? "Включить" : "Выключить",
+                      icon: "hash",
+                    });
+                    if (!confirmed) return;
                     const { error: updErr } = await supabase
                       .from("chats").update({ is_forum: next }).eq("id", chat.id);
                     if (updErr) {
                       console.error("toggle is_forum failed:", updErr);
-                      alert(prefixError("Не удалось переключить режим топиков", updErr));
+                      showAppAlert(prefixError("Не удалось переключить режим топиков", updErr), "Ошибка");
                       return;
                     }
                     setChats(chats.map((c) => c.id === chat.id ? { ...c, is_forum: next } : c));
@@ -633,10 +661,15 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                     )}
                     {canRemove && (
                       <button
-                        onClick={() => {
-                          if (confirm(`Удалить ${member.full_name ?? "участника"} из чата?`)) {
-                            handleRemoveMember(member.id);
-                          }
+                        onClick={async () => {
+                          const confirmed = await requestAppConfirm({
+                            title: "Удалить участника из чата?",
+                            description: `${member.full_name ?? "Участник"} потеряет доступ к этому чату.`,
+                            confirmLabel: "Удалить",
+                            tone: "danger",
+                            icon: "userRemove",
+                          });
+                          if (confirmed) void handleRemoveMember(member.id);
                         }}
                         title="Удалить из чата"
                         aria-label="Удалить из чата"

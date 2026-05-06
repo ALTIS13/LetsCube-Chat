@@ -15,6 +15,7 @@ import { useMessages } from "@/hooks/useMessages";
 import { useAppStore } from "@/store/app.store";
 import { createClient } from "@/lib/supabase/client";
 import { KubEmptyState, KubIcon } from "@/components/kub";
+import { showAppAlert } from "@/lib/appDialogs";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import type { MessageWithSender } from "@/types/database";
 
@@ -76,11 +77,11 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
   const handleSendVoice = useCallback(async (blob: Blob, durationMs: number, mimeType: string) => {
     if (!userId) {
-      alert("Войдите в аккаунт, чтобы отправлять голосовые сообщения.");
+      showAppAlert("Войдите в аккаунт, чтобы отправлять голосовые сообщения.", "Голосовое сообщение");
       return;
     }
     if (!blob || blob.size === 0 || durationMs < 1000) {
-      alert("Запись слишком короткая или пустая.");
+      showAppAlert("Запись слишком короткая или пустая.", "Голосовое сообщение");
       return;
     }
     const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
@@ -94,13 +95,13 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         .upload(path, blob, { contentType: mimeType, upsert: false });
       if (error || !data) {
         console.error("[voice] upload error:", error);
-        alert("Не удалось загрузить голосовое сообщение. Проверьте соединение и попробуйте ещё раз.");
+        showAppAlert("Не удалось загрузить голосовое сообщение. Проверьте соединение и попробуйте ещё раз.", "Ошибка");
         return;
       }
       uploadedPath = data.path;
     } catch (err) {
       console.error("[voice] upload threw:", err);
-      alert("Не удалось загрузить голосовое сообщение. Проверьте соединение и попробуйте ещё раз.");
+      showAppAlert("Не удалось загрузить голосовое сообщение. Проверьте соединение и попробуйте ещё раз.", "Ошибка");
       return;
     }
 
@@ -121,14 +122,14 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         console.error("[voice] insert error:", insertErr);
         try { await supabase.storage.from("media").remove([uploadedPath]); }
         catch (cleanupErr) { console.error("[voice] orphan cleanup failed:", cleanupErr); }
-        alert("Не удалось сохранить сообщение в чате. Попробуйте позже.");
+        showAppAlert("Не удалось сохранить сообщение в чате. Попробуйте позже.", "Ошибка");
         return;
       }
     } catch (err) {
       console.error("[voice] insert threw:", err);
       try { await supabase.storage.from("media").remove([uploadedPath]); }
       catch (cleanupErr) { console.error("[voice] orphan cleanup failed:", cleanupErr); }
-      alert("Не удалось сохранить сообщение в чате. Попробуйте позже.");
+      showAppAlert("Не удалось сохранить сообщение в чате. Попробуйте позже.", "Ошибка");
       return;
     }
 

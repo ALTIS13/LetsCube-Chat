@@ -11,6 +11,7 @@ import { useBanState } from "@/hooks/useBanState";
 import { createClient } from "@/lib/supabase/client";
 import { IframeAuthBanner } from "@/components/IframeAuthBanner";
 import { AppUpdateBanner } from "@/components/AppUpdateBanner";
+import { AppDialogs } from "@/components/AppDialogs";
 import { BannedScreen } from "@/components/BannedScreen";
 import { AdminLayout } from "@/pages/admin/AdminLayout";
 import { TasksPage } from "@/pages/tasks/TasksPage";
@@ -336,6 +337,7 @@ function App() {
         <ThemeSync />
         <IframeAuthBanner />
         <AppUpdateBanner />
+        <AppDialogs />
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <AppRoutes />
         </WouterRouter>

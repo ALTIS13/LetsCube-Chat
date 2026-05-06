@@ -228,7 +228,7 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
   const trackColor = isMe ? "var(--kub-border-color)" : "var(--kub-surface-3)";
 
   return (
-    <div className="flex items-center gap-2.5 min-w-[180px]" data-voice-message="true">
+    <div className="flex w-[min(230px,calc(100vw-7.5rem))] max-w-full min-w-0 items-center gap-2.5" data-voice-message="true">
       {url && (
         <audio
           ref={audioRef}
@@ -261,7 +261,7 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
         {playing ? <KubIcon name="pause" size={16} /> : <KubIcon name="play" size={16} className="ml-0.5" />}
       </button>
 
-      <div className="flex-1 flex flex-col gap-1 min-w-0">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
         <input
           aria-label="Перемотка голосового сообщения"
           type="range"
@@ -272,7 +272,7 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
           disabled={!canSeek}
           data-voice-progress="track"
           data-audio-src-ready={srcReady ? "true" : "false"}
-          className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-transparent disabled:cursor-not-allowed [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-[var(--kub-cyan)] [&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-ms-thumb]:h-3 [&::-ms-thumb]:w-3 [&::-ms-thumb]:rounded-full [&::-ms-thumb]:border-0 [&::-ms-thumb]:bg-[var(--kub-cyan)] [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-thumb]:-mt-[3px] [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--kub-cyan)]"
+          className="h-1.5 w-full min-w-0 max-w-full cursor-pointer appearance-none rounded-full bg-transparent disabled:cursor-not-allowed [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-[var(--kub-cyan)] [&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-ms-thumb]:h-3 [&::-ms-thumb]:w-3 [&::-ms-thumb]:rounded-full [&::-ms-thumb]:border-0 [&::-ms-thumb]:bg-[var(--kub-cyan)] [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-thumb]:-mt-[3px] [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--kub-cyan)]"
           style={{
             background: `linear-gradient(to right, var(--kub-cyan) ${progressRatio * 100}%, ${trackColor} ${progressRatio * 100}%)`,
           }}

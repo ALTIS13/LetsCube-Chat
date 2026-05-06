@@ -21,6 +21,7 @@ import { MuteModal } from "./MuteModal";
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
+import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -153,19 +154,19 @@ export function UsersTab() {
       .from("profiles")
       .update({ role, updated_at: new Date().toISOString() })
       .eq("id", uid);
-    if (error) { alert(prefixError("Не удалось изменить роль", error)); return; }
+    if (error) { showAppAlert(prefixError("Не удалось изменить роль", error), "Ошибка"); return; }
     setRows((rs) => rs.map((r) => (r.id === uid ? { ...r, role } : r)));
   };
 
   const unban = async (uid: string) => {
     const { error } = await supabase.from("bans").delete().eq("user_id", uid);
-    if (error) { alert(prefixError("Не удалось снять блокировку", error)); return; }
+    if (error) { showAppAlert(prefixError("Не удалось снять блокировку", error), "Ошибка"); return; }
     setStateById((s) => ({ ...s, [uid]: { ...s[uid], banned: false } }));
   };
 
   const unmute = async (uid: string) => {
     const { error } = await supabase.from("mutes").delete().eq("user_id", uid);
-    if (error) { alert(prefixError("Не удалось снять мьют", error)); return; }
+    if (error) { showAppAlert(prefixError("Не удалось снять мьют", error), "Ошибка"); return; }
     setStateById((s) => ({ ...s, [uid]: { ...s[uid], muted: false } }));
   };
 
@@ -444,7 +445,7 @@ function ProfilePreviewModal({
     if (error) {
       const message = prefixError("Не удалось обновить аватар пользователя", error);
       setAvatarError(message);
-      alert(message);
+      showAppAlert(message, "Ошибка");
       return false;
     }
     onAvatarUpdated?.(avatarUrl);
@@ -456,7 +457,7 @@ function ProfilePreviewModal({
     const validationError = validateAvatarImage(file);
     if (validationError) {
       setAvatarError(validationError);
-      alert(validationError);
+      showAppAlert(validationError, "Аватар не загружен");
       return;
     }
     setAvatarSaving(true);
@@ -469,7 +470,7 @@ function ProfilePreviewModal({
       setAvatarSaving(false);
       const message = prefixError("Не удалось загрузить аватар пользователя", error);
       setAvatarError(message);
-      alert(message);
+      showAppAlert(message, "Ошибка");
       return;
     }
     const { data: publicData } = supabase.storage.from("media").getPublicUrl(data.path);
@@ -479,7 +480,14 @@ function ProfilePreviewModal({
 
   const handleAvatarReset = async () => {
     if (!canManageAvatar || avatarSaving) return;
-    if (!confirm("Сбросить аватар пользователя?\n\nФайл в хранилище не удаляется автоматически.")) return;
+    const confirmed = await requestAppConfirm({
+      title: "Сбросить аватар пользователя?",
+      description: "Ссылка на аватар будет очищена. Файл в хранилище не удаляется автоматически.",
+      confirmLabel: "Сбросить",
+      tone: "danger",
+      icon: "delete",
+    });
+    if (!confirmed) return;
     await updateAvatarUrl(null);
   };
 

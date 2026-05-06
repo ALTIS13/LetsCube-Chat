@@ -6,6 +6,7 @@ import { KubIcon, KubPanel, type KubIconName } from "@/components/kub";
 import type { Ban, Mute, Profile, Chat } from "@/types/database";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { prefixError } from "@/lib/errors";
+import { showAppAlert } from "@/lib/appDialogs";
 
 type BanRow = Ban & {
   user?: Pick<Profile, "id" | "full_name" | "username" | "avatar_url"> | null;
@@ -88,13 +89,13 @@ export function BansMutesTab() {
 
   const removeBan = async (id: string) => {
     const { error } = await supabase.from("bans").delete().eq("id", id);
-    if (error) { alert(prefixError("Не удалось снять блокировку", error)); return; }
+    if (error) { showAppAlert(prefixError("Не удалось снять блокировку", error), "Ошибка"); return; }
     setBans((b) => b.filter((x) => x.id !== id));
   };
 
   const removeMute = async (id: string) => {
     const { error } = await supabase.from("mutes").delete().eq("id", id);
-    if (error) { alert(prefixError("Не удалось снять мьют", error)); return; }
+    if (error) { showAppAlert(prefixError("Не удалось снять мьют", error), "Ошибка"); return; }
     setMutes((m) => m.filter((x) => x.id !== id));
   };
 

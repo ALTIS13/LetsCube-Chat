@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { useMuteState } from "@/hooks/useMuteState";
 import { KubIcon, type KubIconName } from "@/components/kub";
+import { showAppAlert } from "@/lib/appDialogs";
 
 const DRAFT_PREFIX = "kub:draft:";
 const draftKey = (chatId: string) => `${DRAFT_PREFIX}${chatId}`;
@@ -110,13 +111,13 @@ export function MessageInput({ chatId, topicId = null, replyTo, onCancelReply, o
 
   const handleLocation = useCallback(() => {
     setShowAttach(false);
-    if (!navigator.geolocation) { alert("Геолокация не поддерживается"); return; }
+    if (!navigator.geolocation) { showAppAlert("Геолокация не поддерживается", "Геолокация"); return; }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude } = pos.coords;
         onSend(`📍 Местоположение: https://maps.google.com/?q=${latitude},${longitude}`);
       },
-      () => alert("Не удалось определить местоположение")
+      () => showAppAlert("Не удалось определить местоположение", "Геолокация")
     );
   }, [onSend]);
 
