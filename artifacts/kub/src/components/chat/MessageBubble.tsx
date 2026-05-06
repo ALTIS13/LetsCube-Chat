@@ -56,6 +56,11 @@ export function MessageBubble({
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const { currentUser } = useAppStore();
+  const textContent = message.content ?? "";
+  const shouldUseComfortTextWidth =
+    message.type === "text" &&
+    textContent.trim().length >= 8 &&
+    /\s/.test(textContent);
 
   // Belt-and-suspenders cleanup: if the bubble unmounts mid-touch (e.g. user
   // navigates away during a long-press), clear the pending timer so it
@@ -309,6 +314,7 @@ export function MessageBubble({
           <div
             className={cn(
               "relative min-w-0 max-w-full px-3 py-2 rounded-2xl transition-opacity select-none sm:select-text",
+              shouldUseComfortTextWidth && "min-w-36 sm:min-w-44",
               bubbleClass,
               isMe
                 ? cn("rounded-br-sm", message.reply_to_id && "rounded-tr-none")
