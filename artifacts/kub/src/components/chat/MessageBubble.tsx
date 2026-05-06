@@ -270,7 +270,7 @@ export function MessageBubble({
           </div>
         )}
 
-        <div className={cn("flex min-w-0 max-w-[78%] flex-col [overflow-wrap:anywhere] sm:max-w-[72%] md:max-w-[65%]", isMe ? "items-end" : "items-start")}>
+        <div className={cn("flex min-w-0 max-w-[86vw] flex-col sm:max-w-[min(72%,680px)] md:max-w-[min(65%,680px)]", isMe ? "items-end" : "items-start")}>
 
           {!isMe && isFirstInGroup && message.sender && (
             <span className="text-xs font-semibold ml-3 mb-0.5 text-[color:var(--kub-cyan)]">
@@ -398,7 +398,7 @@ export function MessageBubble({
                 <span className="truncate max-w-[200px]">{message.content ?? "File"}</span>
               </a>
             ) : (
-              <p className="min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word] text-[color:var(--kub-text)]">
+              <p className="min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:break-word] text-[color:var(--kub-text)]">
                 <FormattedText content={message.content ?? ""} />
               </p>
             )}
@@ -491,14 +491,14 @@ function MediaImage({ url, title, onOpen }: { url: string; title: string; onOpen
     <button
       type="button"
       onClick={onOpen}
-      className="group block max-w-full overflow-hidden rounded-xl text-left focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)]"
+      className="group block w-[min(360px,calc(100vw-7.5rem))] max-w-full overflow-hidden rounded-xl text-left focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)] sm:w-[min(420px,70vw)]"
       aria-label="Открыть фото"
     >
       <img
         src={url}
         alt={title || "Фото"}
         loading="lazy"
-        className="max-h-[320px] w-auto max-w-full object-cover transition-transform duration-200 group-hover:scale-[1.01] sm:max-h-[360px]"
+        className="max-h-[340px] w-full object-cover transition-transform duration-200 group-hover:scale-[1.01] sm:max-h-[380px]"
         onError={() => setFailed(true)}
       />
     </button>
@@ -521,7 +521,7 @@ function MediaVideo({ url, title, onOpen }: { url: string; title: string; onOpen
   }
 
   return (
-    <div className="relative w-[min(360px,calc(100vw-7.5rem))] max-w-full overflow-hidden rounded-xl bg-black">
+    <div className="relative w-[min(360px,calc(100vw-7.5rem))] max-w-full overflow-hidden rounded-xl bg-black sm:w-[min(420px,70vw)]">
       <video
         src={url}
         preload="metadata"

@@ -5,7 +5,7 @@ import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import type { ChatWithLastMessage, Profile } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
-import { KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
+import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 import { isSavedChat } from "@/lib/chatDisplay";
 
 const VISIBILITY_REFRESH_THROTTLE_MS = 10_000;
@@ -210,7 +210,11 @@ export function useChats() {
   useEffect(() => {
     if (!userId) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const debouncedRefetch = () => {
+    const debouncedRefetch = (payload?: { new?: { chat_id?: string }; old?: { chat_id?: string } }) => {
+      const eventChatId = payload?.new?.chat_id ?? payload?.old?.chat_id;
+      if (eventChatId) {
+        dispatchChatsRefresh({ reason: "message-realtime", chatId: eventChatId });
+      }
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         void fetchChats();
@@ -277,6 +281,7 @@ export function useChats() {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const handleRefresh = (event: Event) => {
       const detail = (event as CustomEvent<ChatsRefreshDetail>).detail;
+      if (detail?.reason === "message-realtime") return;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         void fetchChats();

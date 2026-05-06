@@ -6,6 +6,7 @@ import type { MessageWithSender } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { mapPgError } from "@/lib/errors";
+import { KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 
 export function useMessages(
   chatId: string | null,
@@ -120,6 +121,24 @@ export function useMessages(
   }, [chatId, topicId, generalTopicIds, supabase, setMessages]);
 
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
+
+  useEffect(() => {
+    if (!chatId) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const handleRefresh = (event: Event) => {
+      const detail = (event as CustomEvent<ChatsRefreshDetail>).detail;
+      if (detail?.reason !== "message-realtime" || detail.chatId !== chatIdRef.current) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void fetchMessages();
+      }, 300);
+    };
+    window.addEventListener(KUB_CHATS_REFRESH_EVENT, handleRefresh);
+    return () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener(KUB_CHATS_REFRESH_EVENT, handleRefresh);
+    };
+  }, [chatId, fetchMessages]);
 
   const fetchPinnedMessages = useCallback(async () => {
     if (!chatId) {

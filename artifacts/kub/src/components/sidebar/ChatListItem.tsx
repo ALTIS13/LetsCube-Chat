@@ -7,6 +7,7 @@ import { KubIcon } from "@/components/kub";
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import { useAppStore } from "@/store/app.store";
 import { cn } from "@/lib/utils";
+import { formatChatMessagePreview } from "@/lib/messagePreview";
 
 interface ChatListItemProps {
   chat: ChatWithLastMessage & {
@@ -32,11 +33,7 @@ export function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
 
   const getMessagePreview = () => {
     if (!lastMsg) return chat.cleared_at ? "История очищена" : "Сообщений пока нет";
-    if (lastMsg.type === "image") return "🖼 Фото";
-    if (lastMsg.type === "audio") return "🎤 Голосовое сообщение";
-    if (lastMsg.type === "video") return "🎬 Видео";
-    if (lastMsg.type === "file") return "📎 Файл";
-    return lastMsg.content ?? "";
+    return formatChatMessagePreview(lastMsg);
   };
 
   return (
@@ -112,8 +109,10 @@ export function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
             {isPinned && !hasUnread && (
               <KubIcon name="pin" size={11} className="text-[color:var(--kub-muted)]" />
             )}
-            {isMuted && !hasUnread && (
-              <KubIcon name="muted" size={11} className="text-[color:var(--kub-muted)]" />
+            {isMuted && (
+              <span title="Уведомления отключены" aria-label="Уведомления отключены" className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[color:var(--kub-muted)]">
+                <KubIcon name="notificationsOff" size={15} />
+              </span>
             )}
             {hasUnread && (
               <span

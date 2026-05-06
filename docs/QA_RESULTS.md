@@ -243,3 +243,10 @@ Recurring tasks roadmap note:
 - Media gallery now shows lazy real previews for static image items on the current page; GIF/video remain lightweight placeholders until opened in the in-app viewer.
 - Root `docker-compose.yml` now has an nginx healthcheck for Coolify/container readiness; docs deploy compose files already had healthchecks.
 - App update banner now also reports temporary server connection instability, which can happen during redeploy, without forcing an automatic reload.
+
+2026-05-06 message layout / realtime follow-up:
+
+- Native browser `confirm` / `alert` / `prompt` scan remains clean in `artifacts/kub/src`.
+- Chat list media previews now use semantic labels (`Фото`, `GIF`, `Видео`, `Голосовое`, `Файл`) instead of raw media URLs.
+- Muted chat state is still local per-device (`ng_muted` in localStorage); the UI now uses a larger bell-off indicator. A DB-backed per-user preference can be added later if cross-device mute sync is required.
+- Active chat message sync has a fallback: sidebar message realtime events dispatch a debounced active-chat refetch/merge event so the open MessageList does not miss rows that already appeared in the chat preview.
