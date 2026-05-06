@@ -20,6 +20,7 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
   const [metadataWarmupElapsed, setMetadataWarmupElapsed] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const rafRef = useRef<number | null>(null);
+  const durationPrimingRef = useRef(false);
   const { settings } = useAudioSettings();
 
   const stopProgressLoop = useCallback(() => {
@@ -29,10 +30,53 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
     }
   }, []);
 
+  const primeInfiniteDuration = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio || durationPrimingRef.current || Number.isFinite(audio.duration)) return;
+
+    durationPrimingRef.current = true;
+    const previousTime = finiteTime(audio.currentTime);
+    let done = false;
+    let fallbackTimer: number | null = null;
+
+    const finish = () => {
+      if (done) return;
+      done = true;
+      if (fallbackTimer !== null) window.clearTimeout(fallbackTimer);
+      audio.removeEventListener("timeupdate", finish);
+      audio.removeEventListener("durationchange", finish);
+
+      const nextDuration = readMediaDuration(audio);
+      try {
+        audio.currentTime = previousTime;
+      } catch {
+        // Ignore browser-specific seek failures; playback can still proceed.
+      }
+
+      durationPrimingRef.current = false;
+      if (nextDuration > 0) {
+        setDurationSeconds(nextDuration);
+        setMetadataReady(true);
+        setCurrentTime(clampTime(previousTime, nextDuration));
+      }
+    };
+
+    audio.addEventListener("timeupdate", finish);
+    audio.addEventListener("durationchange", finish);
+    fallbackTimer = window.setTimeout(finish, 1500);
+
+    try {
+      audio.currentTime = Number.MAX_SAFE_INTEGER;
+    } catch {
+      finish();
+    }
+  }, []);
+
   // Progress must come from the media element. Message metadata can be stale or rounded.
   const syncFromAudio = useCallback((options?: { force?: boolean }) => {
     const audio = audioRef.current;
     if (!audio) return;
+    if (durationPrimingRef.current) return;
     const audioDuration = readMediaDuration(audio);
     const nextTime = finiteTime(audio.currentTime);
 
@@ -83,12 +127,14 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
       if (nextDuration > 0) {
         setDurationSeconds(nextDuration);
         setMetadataReady(true);
+      } else if (audio.duration === Infinity) {
+        primeInfiniteDuration();
       }
       setMetadataWarmupElapsed(true);
     }, 1200);
 
     return () => window.clearTimeout(syncTimer);
-  }, [duration, url, stopProgressLoop]);
+  }, [duration, url, stopProgressLoop, primeInfiniteDuration]);
 
   useEffect(() => stopProgressLoop, [stopProgressLoop]);
 
@@ -131,6 +177,10 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
     const nextDuration = readMediaDuration(audio);
     setDurationSeconds(nextDuration);
     setMetadataReady(nextDuration > 0);
+    if (nextDuration === 0 && audio.duration === Infinity) {
+      primeInfiniteDuration();
+      return;
+    }
     syncFromAudio({ force: true });
   };
 
