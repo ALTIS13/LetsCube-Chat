@@ -108,7 +108,7 @@ function renderToken(t: Token, key: number): React.ReactNode {
           href={t.href}
           target="_blank"
           rel="noopener noreferrer"
-          className="underline"
+          className="break-all underline [overflow-wrap:anywhere]"
           style={{ color: "var(--tg-accent)" }}
         >
           {t.href}

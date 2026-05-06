@@ -197,22 +197,70 @@ function cleanAuthCallbackUrl() {
   window.history.replaceState(null, "", `${basePath}/auth/callback`);
 }
 
-function LoadingScreen() {
+function LoadingScreen({
+  error,
+  onRetry,
+  onSignOut,
+}: {
+  error?: string | null;
+  onRetry?: () => void;
+  onSignOut?: () => void | Promise<void>;
+}) {
+  const [slow, setSlow] = useState(false);
+
+  useEffect(() => {
+    if (error) {
+      setSlow(true);
+      return;
+    }
+    const timer = window.setTimeout(() => setSlow(true), 12000);
+    return () => window.clearTimeout(timer);
+  }, [error]);
   return (
     <div className="min-h-screen flex items-center justify-center kub-grid-bg">
-      <div className="flex flex-col items-center gap-4">
+      <div className="flex max-w-sm flex-col items-center gap-4 px-5 text-center">
         <KubLogo size={56} withGlow />
         <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] font-semibold text-[color:var(--kub-cyan)]">
           <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[var(--kub-cyan)] kub-pulse" />
           Загрузка
         </div>
+        {(error || slow) && (
+          <div className="w-full rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-4 shadow-xl">
+            <p className="text-sm font-semibold text-[color:var(--kub-text)]">
+              {error ? "Не удалось загрузить профиль" : "Загрузка длится дольше обычного"}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+              {error ?? "Проверьте соединение. Можно повторить запрос, не обновляя страницу."}
+            </p>
+            <div className="mt-3 flex items-center justify-center gap-2">
+              {onRetry && (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="h-9 rounded-lg bg-[var(--kub-cyan)] px-3 text-xs font-semibold text-[color:var(--kub-bg)] hover:brightness-110"
+                >
+                  Повторить
+                </button>
+              )}
+              {onSignOut && (
+                <button
+                  type="button"
+                  onClick={() => void onSignOut()}
+                  className="h-9 rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)]"
+                >
+                  Выйти
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 function AppRoutes() {
-  const { user, loading } = useUser();
+  const { user, loading, loadingError, retry, signOut } = useUser();
   const userId = user?.id ?? null;
   const [location] = useLocation();
   const banState = useBanState();
@@ -232,7 +280,9 @@ function AppRoutes() {
     }
   }, [userId]);
 
-  if (loading) return <LoadingScreen />;
+  if (loading || loadingError) {
+    return <LoadingScreen error={loadingError} onRetry={retry} onSignOut={user ? signOut : undefined} />;
+  }
 
   const isAuthRoute =
     location.startsWith("/login") ||

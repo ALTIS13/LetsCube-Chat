@@ -150,7 +150,12 @@ export function MessageBubble({
       { icon: "forward" as KubIconName, label: "Переслать", action: () => { onForward(); setShowContext(false); } },
     ] : []),
     ...(onStartSelection ? [
-      { icon: "check" as KubIconName, label: "Выбрать сообщения", action: () => { onStartSelection(); setShowContext(false); } },
+      { icon: "check" as KubIconName, label: "Выбрать сообщения", action: () => {
+        setShowContext(false);
+        setBodySelectionSuppressed(false);
+        onCloseReactionMenu?.();
+        onStartSelection();
+      } },
     ] : []),
     ...((isMe || canModerate) && onDelete ? [
       { icon: "delete" as KubIconName, label: "Удалить", danger: true, action: () => {
@@ -256,7 +261,7 @@ export function MessageBubble({
           </div>
         )}
 
-        <div className={cn("flex flex-col max-w-[78%] sm:max-w-[72%] md:max-w-[65%] [overflow-wrap:anywhere]", isMe ? "items-end" : "items-start")}>
+        <div className={cn("flex min-w-0 flex-col max-w-[78%] sm:max-w-[72%] md:max-w-[65%] [overflow-wrap:anywhere]", isMe ? "items-end" : "items-start")}>
 
           {!isMe && isFirstInGroup && message.sender && (
             <span className="text-xs font-semibold ml-3 mb-0.5 text-[color:var(--kub-cyan)]">
@@ -294,7 +299,7 @@ export function MessageBubble({
 
           <div
             className={cn(
-              "relative px-3 py-2 rounded-2xl transition-opacity select-none sm:select-text",
+              "relative min-w-0 max-w-full px-3 py-2 rounded-2xl transition-opacity select-none sm:select-text",
               bubbleClass,
               isMe
                 ? cn("rounded-br-sm", message.reply_to_id && "rounded-tr-none")
@@ -384,7 +389,7 @@ export function MessageBubble({
                 <span className="truncate max-w-[200px]">{message.content ?? "File"}</span>
               </a>
             ) : (
-              <p className="text-sm leading-relaxed whitespace-pre-wrap break-words text-[color:var(--kub-text)]">
+              <p className="min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word] text-[color:var(--kub-text)]">
                 <FormattedText content={message.content ?? ""} />
               </p>
             )}

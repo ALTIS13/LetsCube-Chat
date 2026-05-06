@@ -800,9 +800,28 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
 }
 
 function MediaGalleryTile({ message }: { message: Message }) {
+  const [previewFailed, setPreviewFailed] = useState(false);
   const kind = getMediaTileKind(message);
   const icon = kind === "video" ? "video" : kind === "gif" ? "image" : "image";
   const label = kind === "video" ? "Видео" : kind === "gif" ? "GIF" : "Фото";
+
+  if (kind === "image" && message.media_url && !previewFailed) {
+    return (
+      <>
+        <img
+          src={message.media_url}
+          alt={message.content ?? "Фото"}
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover transition-transform duration-200 hover:scale-[1.03]"
+          onError={() => setPreviewFailed(true)}
+        />
+        <span className="pointer-events-none absolute bottom-1 left-1 rounded-full bg-black/45 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white/85">
+          Фото
+        </span>
+      </>
+    );
+  }
 
   return (
     <div className={cn(

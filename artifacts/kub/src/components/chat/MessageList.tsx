@@ -86,6 +86,8 @@ export function MessageList({
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkError, setBulkError] = useState<string | null>(null);
+  const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [openReactionMessageId, setOpenReactionMessageId] = useState<string | null>(null);
   const isAtBottomRef = useRef(true);
 
@@ -112,19 +114,30 @@ export function MessageList({
   const cancelSelection = useCallback(() => {
     setSelectionMode(false);
     setSelectedIds(new Set());
+    setConfirmingBulkDelete(false);
+    setBulkDeleting(false);
   }, []);
 
   const handleBulkDelete = useCallback(async () => {
     if (!onBulkDelete || selectedMessages.length === 0) return;
-    if (!confirm(`Удалить выбранные сообщения (${selectedMessages.length})?`)) return;
+    if (!confirmingBulkDelete) {
+      setConfirmingBulkDelete(true);
+      return;
+    }
+    setBulkDeleting(true);
     setBulkError(null);
     try {
       await onBulkDelete(selectedMessages);
       cancelSelection();
     } catch (error) {
       setBulkError(error instanceof Error ? error.message : "Не удалось удалить выбранные сообщения.");
+      setBulkDeleting(false);
     }
-  }, [cancelSelection, onBulkDelete, selectedMessages]);
+  }, [cancelSelection, confirmingBulkDelete, onBulkDelete, selectedMessages]);
+
+  useEffect(() => {
+    setConfirmingBulkDelete(false);
+  }, [selectedIds]);
 
   const handleScroll = useCallback(() => {
     const el = containerRef.current;
@@ -161,18 +174,21 @@ export function MessageList({
   return (
     <div className="relative flex-1 overflow-hidden">
       {onBulkDelete && selectionMode && (
-        <div className="absolute right-3 top-2 z-20 flex items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]/95 p-1.5 shadow-lg backdrop-blur">
+        <div className="fixed bottom-[4.75rem] left-3 right-3 z-[70] flex items-center justify-between gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]/95 p-2 shadow-lg backdrop-blur sm:absolute sm:bottom-auto sm:left-auto sm:right-3 sm:top-2 sm:w-auto sm:justify-start sm:p-1.5">
           <span className="px-2 text-xs font-semibold text-[color:var(--kub-muted)]">
             Выбрано: {selectedMessages.length}
           </span>
           <button
             type="button"
             onClick={handleBulkDelete}
-            disabled={selectedMessages.length === 0}
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:opacity-40"
+            disabled={selectedMessages.length === 0 || bulkDeleting}
+            className={cn(
+              "inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:opacity-40",
+              confirmingBulkDelete ? "bg-[color-mix(in_srgb,var(--kub-danger)_15%,transparent)] text-[color:var(--kub-danger)]" : "text-[color:var(--kub-danger)]",
+            )}
           >
             <KubIcon name="delete" size={14} />
-            Удалить
+            {bulkDeleting ? "Удаляем..." : confirmingBulkDelete ? "Подтвердить" : "Удалить"}
           </button>
           <button
             type="button"
@@ -250,7 +266,7 @@ export function MessageList({
                 )}
                 <div
                   className={cn(
-                    selectionMode && canSelect ? "min-w-0 flex-1 cursor-pointer rounded-xl" : "min-w-0",
+                    selectionMode && canSelect ? "min-w-0 max-w-full cursor-pointer rounded-xl" : "min-w-0",
                     selectionMode && selectedIds.has(msg.id) && "ring-2 ring-[color:var(--kub-cyan)]/50"
                   )}
                   onClickCapture={(event) => {
@@ -272,6 +288,9 @@ export function MessageList({
                     onEdit={onEdit ? () => onEdit(msg) : undefined}
                     onDelete={onDelete ? () => onDelete(msg) : undefined}
                     onStartSelection={onBulkDelete && canSelect ? () => {
+                      setOpenReactionMessageId(null);
+                      setBulkError(null);
+                      setConfirmingBulkDelete(false);
                       setSelectionMode(true);
                       setSelectedIds(new Set([msg.id]));
                     } : undefined}

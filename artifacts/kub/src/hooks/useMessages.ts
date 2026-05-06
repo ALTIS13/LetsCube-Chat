@@ -56,6 +56,11 @@ export function useMessages(
     setPinnedReady(false);
     setPinnedKey(null);
     setClearedAt(null);
+    setIsTyping(false);
+    if (typingTimer.current) {
+      clearTimeout(typingTimer.current);
+      typingTimer.current = null;
+    }
   }, [chatId, topicId]);
 
   const fetchMessages = useCallback(async () => {
@@ -172,8 +177,11 @@ export function useMessages(
     if (!chatId || !userId) return;
     const channelName = `messages:chat:${chatId}:typing`;
     const ch = rt.channel(channelName, { config: { broadcast: { ack: false } } });
-    ch.on("broadcast", { event: "typing" }, (payload: { payload?: { userId?: string } }) => {
-      if (payload.payload?.userId !== currentUserRef.current?.id) {
+    ch.on("broadcast", { event: "typing" }, (payload: { payload?: { userId?: string; topicId?: string | null } }) => {
+      const activeTopicId = topicIdRef.current;
+      const incomingTopicId = payload.payload?.topicId ?? null;
+      const topicMatches = activeTopicId === undefined || incomingTopicId === activeTopicId;
+      if (topicMatches && payload.payload?.userId !== currentUserRef.current?.id) {
         setIsTyping(true);
         if (typingTimer.current) clearTimeout(typingTimer.current);
         typingTimer.current = setTimeout(() => setIsTyping(false), 3000);
@@ -185,6 +193,7 @@ export function useMessages(
     registerChannel(channelName);
     return () => {
       if (typingTimer.current) clearTimeout(typingTimer.current);
+      setIsTyping(false);
       rt.removeChannel(ch);
       typingChannelRef.current = null;
       unregisterChannel(channelName);
@@ -195,7 +204,11 @@ export function useMessages(
     const ch = typingChannelRef.current;
     const user = currentUserRef.current;
     if (!chatIdRef.current || !user || !ch) return;
-    ch.send({ type: "broadcast", event: "typing", payload: { userId: user.id } });
+    ch.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { userId: user.id, topicId: topicIdRef.current ?? null },
+    });
   }, []);
 
   // postgres_changes for new/updated messages.

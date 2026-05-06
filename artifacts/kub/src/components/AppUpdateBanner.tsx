@@ -5,6 +5,7 @@ const SNOOZE_MS = 15 * 60_000;
 
 export function AppUpdateBanner() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [connectionIssue, setConnectionIssue] = useState(false);
   const [snoozedUntil, setSnoozedUntil] = useState(0);
   const currentBundle = useMemo(() => getCurrentBundlePath(), []);
 
@@ -14,14 +15,18 @@ export function AppUpdateBanner() {
       const base = import.meta.env.BASE_URL || "/";
       const indexUrl = `${base.endsWith("/") ? base : `${base}/`}index.html`;
       const response = await fetch(indexUrl, { cache: "no-store" });
-      if (!response.ok) return;
+      if (!response.ok) {
+        setConnectionIssue(true);
+        return;
+      }
+      setConnectionIssue(false);
       const html = await response.text();
       const nextBundle = getBundlePathFromHtml(html);
       if (nextBundle && normalizeAssetPath(nextBundle) !== normalizeAssetPath(currentBundle)) {
         setUpdateAvailable(true);
       }
     } catch {
-      // Update checks are best-effort. Network errors should not interrupt chat UX.
+      setConnectionIssue(true);
     }
   }, [currentBundle]);
 
@@ -38,7 +43,9 @@ export function AppUpdateBanner() {
     };
   }, [checkForUpdate]);
 
-  if (!updateAvailable || Date.now() < snoozedUntil) return null;
+  const updateSnoozed = Date.now() < snoozedUntil;
+  const showUpdate = updateAvailable && !updateSnoozed;
+  if (!showUpdate && !connectionIssue) return null;
 
   return (
     <div className="fixed bottom-4 left-1/2 z-[80] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-3 shadow-2xl">
@@ -47,23 +54,33 @@ export function AppUpdateBanner() {
           ↻
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-[color:var(--kub-text)]">Доступна новая версия приложения</div>
-          <div className="text-xs text-[color:var(--kub-muted)]">Обновите страницу, чтобы получить последние исправления.</div>
+          <div className="text-sm font-semibold text-[color:var(--kub-text)]">
+            {showUpdate ? "Доступна новая версия приложения" : "Соединение с сервером нестабильно"}
+          </div>
+          <div className="text-xs text-[color:var(--kub-muted)]">
+            {showUpdate
+              ? "Обновите страницу, чтобы получить последние исправления."
+              : "Возможно, идёт обновление. KUB попробует восстановить соединение автоматически."}
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="h-9 rounded-lg bg-[var(--kub-cyan)] px-3 text-xs font-semibold text-[color:var(--kub-bg)] hover:brightness-110"
-        >
-          Обновить
-        </button>
-        <button
-          type="button"
-          onClick={() => setSnoozedUntil(Date.now() + SNOOZE_MS)}
-          className="h-9 rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)]"
-        >
-          Напомнить позже
-        </button>
+        {showUpdate && (
+          <>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="h-9 rounded-lg bg-[var(--kub-cyan)] px-3 text-xs font-semibold text-[color:var(--kub-bg)] hover:brightness-110"
+            >
+              Обновить
+            </button>
+            <button
+              type="button"
+              onClick={() => setSnoozedUntil(Date.now() + SNOOZE_MS)}
+              className="h-9 rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)]"
+            >
+              Напомнить позже
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

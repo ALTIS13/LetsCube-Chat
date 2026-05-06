@@ -233,3 +233,13 @@ Recurring tasks roadmap note:
 - Bulk message selection is entered from the message action menu (`Выбрать сообщения`) instead of a persistent toolbar button.
 - Media gallery uses lightweight placeholder tiles for image/GIF/video batches; full media is loaded only when opened in the in-app viewer. Real thumbnail generation remains a future media pipeline task.
 - App update prompt no longer has a permanent skip action. `Напомнить позже` snoozes briefly; fatal chunk-load errors show a blocking reload prompt.
+
+2026-05-06 production stability follow-up:
+
+- Mobile bulk delete selection was adjusted: selection starts from the message action menu, the action menu closes immediately, and deletion uses an in-app two-step toolbar confirmation instead of a native browser confirm.
+- Long text messages and long URLs now use `overflow-wrap:anywhere` / `break-word` so message bubbles do not stretch the chat horizontally.
+- Typing broadcasts are scoped by active chat/topic and cleared on chat/topic switch to prevent stale typing indicators from leaking into another chat.
+- Profile bootstrap now exposes a retryable loading error state instead of leaving users on an unexplained spinner forever.
+- Media gallery now shows lazy real previews for static image items on the current page; GIF/video remain lightweight placeholders until opened in the in-app viewer.
+- Root `docker-compose.yml` now has an nginx healthcheck for Coolify/container readiness; docs deploy compose files already had healthchecks.
+- App update banner now also reports temporary server connection instability, which can happen during redeploy, without forcing an automatic reload.
