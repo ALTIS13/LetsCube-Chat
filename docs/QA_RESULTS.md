@@ -196,6 +196,14 @@ Next safe task UI alignment:
 - Destructive "delete my media from chat" remains planned only. It needs a separate RPC design because one participant must not delete media still visible to another participant.
 - Chat media panel now renders gallery media lazily in small batches with lazy images and non-preloaded video previews.
 
+2026-05-06 production bugfix follow-up:
+
+- Hidden private chats are reactivated from the frontend via existing `unhide_private_chat` RPC when a new message makes them visible again or when the user starts the same private chat again.
+- Media gallery clicks now use the in-app `MediaViewer`; video previews stay lightweight and do not preload the video file in the grid.
+- Avatar uploads are limited in frontend validation to JPG, PNG, WebP and GIF up to 2 MB. The shared `media` bucket currently has no global `file_size_limit`; do not set a bucket-wide 2 MB limit because the bucket also stores voice/messages/files.
+- Profile bootstrap now keeps the app on the loading screen until the authenticated user's `profiles` row is loaded or created, avoiding a half-broken UI with `currentUser = null`.
+- Message pin/unpin actions are exposed to authenticated chat viewers and backend RPC remains the source of truth; this avoids hiding pin controls while membership role data is still catching up.
+
 Recurring tasks roadmap note:
 
 - Future task-system phase should add recurring tasks: daily, weekly, monthly, yearly, custom interval, `next_run_at`, auto-create next occurrence, stop recurrence, reuse `visibility` / `assignment_scope`, and history of occurrences.

@@ -10,6 +10,7 @@ import { mapPgError, prefixError } from "@/lib/errors";
 import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
+import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
 import type { ChatWithLastMessage, Profile, Message } from "@/types/database";
 
 interface ChatInfoPanelProps {
@@ -48,6 +49,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const [media, setMedia] = useState<Message[]>([]);
   const [loadingMedia, setLoadingMedia] = useState(false);
   const [visibleMediaCount, setVisibleMediaCount] = useState(MEDIA_PAGE_SIZE);
+  const [openMedia, setOpenMedia] = useState<MediaViewerItem | null>(null);
 
   useEffect(() => {
     if (!isGroup) return;
@@ -588,17 +590,24 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               <>
                 <div className="grid grid-cols-3 gap-1 mb-3">
                   {visibleMediaGridItems.map((m) => (
-                    <div
+                    <button
+                      type="button"
                       key={m.id}
-                      className="aspect-square rounded-lg overflow-hidden cursor-pointer border border-[color:var(--kub-border-color)]"
-                      onClick={() => window.open(m.media_url!, "_blank")}
+                      className="relative aspect-square overflow-hidden rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-left focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)]"
+                      onClick={() => setOpenMedia({
+                        type: m.type as "image" | "video",
+                        url: m.media_url!,
+                        title: m.content ?? (m.type === "image" ? "Фото" : "Видео"),
+                      })}
                     >
                       {m.type === "image" ? (
                         <img src={m.media_url!} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                       ) : (
-                        <video src={m.media_url!} preload="none" muted playsInline className="w-full h-full object-cover" />
+                        <div className="flex h-full w-full items-center justify-center bg-black/70">
+                          <KubIcon name="video" size={22} className="text-white/80" />
+                        </div>
                       )}
-                    </div>
+                    </button>
                   ))}
                 </div>
                 {hasMoreMedia && (
@@ -629,6 +638,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
           </div>
         )}
       </div>
+      <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
     </div>
   );
 }

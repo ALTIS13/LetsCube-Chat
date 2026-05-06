@@ -21,6 +21,7 @@ export function useChats() {
   const fetchInFlightRef = useRef(false);
   const fetchQueuedRef = useRef(false);
   const lastVisibilityFetchAt = useRef(0);
+  const unhideInFlightRef = useRef(new Set<string>());
 
   type MyMembershipRow = {
     chat_id: string;
@@ -138,6 +139,20 @@ export function useChats() {
         const lastActivity = chat.last_message?.created_at ?? chat.updated_at;
         return new Date(lastActivity).getTime() > new Date(chat.hidden_at).getTime();
       });
+      for (const chat of visibleChats) {
+        if (!chat.hidden_at || chat.type !== "private") continue;
+        const lastActivity = chat.last_message?.created_at ?? chat.updated_at;
+        if (new Date(lastActivity).getTime() <= new Date(chat.hidden_at).getTime()) continue;
+        if (unhideInFlightRef.current.has(chat.id)) continue;
+        unhideInFlightRef.current.add(chat.id);
+        void (async () => {
+          try {
+            await supabase.rpc("unhide_private_chat", { p_chat_id: chat.id });
+          } finally {
+            unhideInFlightRef.current.delete(chat.id);
+          }
+        })();
+      }
 
       visibleChats.sort((a, b) => {
         const aSaved = isSavedChat(a, userId);

@@ -1,4 +1,4 @@
-const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -15,7 +15,7 @@ export function validateAvatarImage(file: File): string | null {
     return "Поддерживаются JPG, PNG, WEBP и GIF.";
   }
   if (file.size > MAX_AVATAR_BYTES) {
-    return "Изображение слишком большое. Максимум 5 МБ.";
+    return "Файл слишком большой. Максимум 2 МБ.";
   }
   return null;
 }

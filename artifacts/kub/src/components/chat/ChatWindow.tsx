@@ -195,7 +195,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           <PinnedMessage
             messages={pinnedMessages}
             onJump={handleJumpToPinned}
-            onUnpin={myRole ? (msg) => void handleTogglePin(msg) : undefined}
+            onUnpin={userId ? (msg) => void handleTogglePin(msg) : undefined}
           />
         )}
 
@@ -218,7 +218,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             onReaction={toggleReaction}
             onEdit={(msg) => setEditingMessage(msg)}
             onDelete={(msg) => deleteMessage(msg.id)}
-            onTogglePin={myRole ? handleTogglePin : undefined}
+            onTogglePin={userId ? handleTogglePin : undefined}
             onForward={(msg) => setForwardingMessage(msg)}
             onOpenMedia={setOpenMedia}
             bottomRef={bottomRef}

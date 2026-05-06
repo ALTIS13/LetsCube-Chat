@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
+import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import type { Profile } from "@/types/database";
 
 export function useCreateChat() {
@@ -29,6 +30,8 @@ export function useCreateChat() {
         if (rpcErr) throw rpcErr;
         if (!chatId) throw new Error("Не удалось открыть чат");
 
+        await supabase.rpc("unhide_private_chat", { p_chat_id: chatId as string });
+        dispatchChatsRefresh({ reason: "membership-change", chatId: chatId as string });
         setSelectedChatId(chatId as string);
         setLoading(false);
         return chatId as string;

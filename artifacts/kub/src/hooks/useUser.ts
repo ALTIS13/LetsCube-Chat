@@ -83,13 +83,15 @@ export function useUser() {
   const supabase = createClient();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) {
         // Явно передаём JWT в realtime-клиент (тот же экземпляр),
         // чтобы WebSocket-соединение проходило аутентификацию.
         supabase.realtime.setAuth(session.access_token);
-        fetchProfile(session.user.id);
+        await fetchProfile(session.user.id);
+      } else {
+        setCurrentUser(null);
       }
       setLoading(false);
     });
@@ -98,10 +100,12 @@ export function useUser() {
       setUser(session?.user ?? null);
       if (session?.user) {
         supabase.realtime.setAuth(session.access_token);
-        fetchProfile(session.user.id);
+        setLoading(true);
+        void fetchProfile(session.user.id).finally(() => setLoading(false));
       } else {
         supabase.realtime.setAuth(null);
         setCurrentUser(null);
+        setLoading(false);
       }
     });
 
@@ -117,7 +121,19 @@ export function useUser() {
   }, [user?.id]);
 
   const fetchProfile = async (userId: string) => {
-    const { data } = await supabase.from("profiles").select("*").eq("id", userId).single();
+    let data: Profile | null = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const result = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+      if (result.data) {
+        data = result.data as Profile;
+        break;
+      }
+      if (result.error && result.error.code !== "PGRST116") {
+        await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+      } else {
+        break;
+      }
+    }
     if (data) {
       setCurrentUser(data as Profile);
     } else {
