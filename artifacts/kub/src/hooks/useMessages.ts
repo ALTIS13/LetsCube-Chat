@@ -40,7 +40,8 @@ export function useMessages(chatId: string | null, topicId: string | null | unde
   const chatIdRef = useRef(chatId);
   useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
   // topicId is passed into INSERTs and used to filter the realtime stream so
-  // we only show messages from the active topic in forum chats.
+  // we only show messages from the active topic in forum chats. Undefined
+  // means "topics disabled": show the whole chat without topic scoping.
   const topicIdRef = useRef(topicId);
   useEffect(() => { topicIdRef.current = topicId; }, [topicId]);
 
@@ -90,9 +91,11 @@ export function useMessages(chatId: string | null, topicId: string | null | unde
     if (data) {
       const fetched = (data as unknown as MessageWithSender[]).reverse();
       const existing = useAppStore.getState().messages[chatId] ?? [];
-      const visibleExisting = localClearedAt
-        ? existing.filter((message) => new Date(message.created_at).getTime() > new Date(localClearedAt).getTime())
-        : existing;
+      const visibleExisting = existing.filter((message) => {
+        if (!messageBelongsToTopic(message, topicId)) return false;
+        if (!localClearedAt) return true;
+        return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
+      });
       setMessages(chatId, mergeMessagesById(fetched, visibleExisting));
     }
     setLoading(false);
@@ -223,6 +226,7 @@ export function useMessages(chatId: string | null, topicId: string | null | unde
             .eq("id", payload.new.id)
             .maybeSingle();
           if (!data) return;
+          if (!messageBelongsToTopic(data as unknown as MessageWithSender, topicIdRef.current)) return;
           addMessage(payload.new.chat_id, data as unknown as MessageWithSender);
           const user = currentUserRef.current;
           if (user && data.user_id !== user.id && document.hidden &&
@@ -259,6 +263,7 @@ export function useMessages(chatId: string | null, topicId: string | null | unde
           if (data) {
             const current = useAppStore.getState().messages[payload.new.chat_id] ?? [];
             const nextMessage = data as MessageWithSender;
+            if (!messageBelongsToTopic(nextMessage, topicIdRef.current)) return;
             setMessages(payload.new.chat_id, current.map((m) => m.id === nextMessage.id ? nextMessage : m));
             setPinnedMessages((currentPinned) =>
               nextMessage.pinned && !nextMessage.deleted_at
@@ -345,12 +350,16 @@ export function useMessages(chatId: string | null, topicId: string | null | unde
   // ── Delete (soft) ───────────────────────────────────────────────────────
   // Set deleted_at; realtime UPDATE handler removes the bubble from view.
   const deleteMessage = useCallback(async (messageId: string) => {
-    if (!chatId) return;
+    if (!chatId) return { ok: false, error: "Чат не выбран." };
     const { error } = await supabase
       .from("messages")
       .update({ deleted_at: new Date().toISOString() })
       .eq("id", messageId);
-    if (error) console.error("Delete error:", error);
+    if (error) {
+      console.error("Delete error:", error);
+      return { ok: false, error: mapPgError(error) };
+    }
+    return { ok: true, error: null };
   }, [chatId, supabase]);
 
   // ── Pin / unpin ─────────────────────────────────────────────────────────
@@ -446,7 +455,7 @@ export function useMessages(chatId: string | null, topicId: string | null | unde
   }, [chatId, supabase, setMessages]);
 
   return {
-    messages: messages[chatId ?? ""] ?? [],
+    messages: (messages[chatId ?? ""] ?? []).filter((message) => messageBelongsToTopic(message, topicId)),
     pinnedMessages: pinnedKey === getPinnedKey(chatId, topicId) ? pinnedMessages : [],
     pinnedReady: pinnedKey === getPinnedKey(chatId, topicId) && pinnedReady,
     loading, isTyping,
@@ -460,6 +469,14 @@ export function useMessages(chatId: string | null, topicId: string | null | unde
 
 function getPinnedKey(chatId: string | null, topicId: string | null | undefined): string {
   return `${chatId ?? "none"}:${topicId === undefined ? "all" : topicId ?? "root"}`;
+}
+
+function messageBelongsToTopic(
+  message: Pick<MessageWithSender, "topic_id">,
+  topicId: string | null | undefined,
+): boolean {
+  if (topicId === undefined) return true;
+  return (message.topic_id ?? null) === (topicId ?? null);
 }
 
 function buildRealtimeMessage(row: MessageWithSender): MessageWithSender {

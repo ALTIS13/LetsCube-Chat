@@ -371,14 +371,14 @@ export function MessageBubble({
               </p>
             )}
 
-            <div className="flex items-center justify-end gap-1 mt-1 -mb-0.5">
+            <div className="mt-1 -mb-0.5 flex w-full min-w-[5.25rem] items-center justify-end gap-1 whitespace-nowrap text-right">
               {message.pinned && (
-                <KubIcon name="pin" size={12} tone="muted" label="Закреплено" />
+                <KubIcon name="pin" size={12} tone="muted" label="Закреплено" className="shrink-0" />
               )}
               {message.edited_at && (
-                <span className="text-[10px] text-[color:var(--kub-muted)]">изменено</span>
+                <span className="shrink-0 text-[10px] text-[color:var(--kub-muted)]">изменено</span>
               )}
-              <span className="text-[10px] leading-none text-[color:var(--kub-muted)]">
+              <span className="shrink-0 text-[10px] leading-none text-[color:var(--kub-muted)]">
                 {formatFullTime(message.created_at)}
               </span>
               {isMe && (

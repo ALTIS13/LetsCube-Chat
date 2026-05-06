@@ -203,4 +203,4 @@ Frontend task UI можно выравнивать под новые task column
 - `.migration-backup/supabase/migrations/20260506_secure_chat_media_access.sql` was applied manually by the user.
 - Read-only MCP check confirmed private bucket `chat-media`, chat-member Storage policies and `messages.media_bucket` / `messages.media_path`.
 - Legacy bucket `media` remains public for avatars and old media compatibility; frontend migration to signed `chat-media` URLs remains a separate compatibility step.
-- `.migration-backup/supabase/migrations/20260506_entity_name_constraints.sql` is prepared but not applied; it adds DB-level max length checks for chat/folder/topic names.
+- `.migration-backup/supabase/migrations/20260506_entity_name_constraints.sql` was applied manually on 2026-05-06; read-only MCP confirmed DB-level max length checks for `chats.name`, `folders.name` and `topics.name`.

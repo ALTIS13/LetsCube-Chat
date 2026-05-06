@@ -54,7 +54,6 @@ export function MessageList({
   myRole,
 }: MessageListProps) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
-  const canModerate = myRole === "owner" || myRole === "admin";
 
   // Compute: latest timestamp that any non-me member has read up to
   const othersLastReadAt = React.useMemo(() => {
@@ -86,11 +85,14 @@ export function MessageList({
   const [newCount, setNewCount] = useState(0);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkError, setBulkError] = useState<string | null>(null);
   const isAtBottomRef = useRef(true);
 
   const selectableMessages = React.useMemo(
-    () => messages.filter((message) => !message.deleted_at && (message.user_id === userId || canModerate)),
-    [messages, userId, canModerate],
+    // Current backend policy allows soft-delete through message UPDATE only for
+    // the author. Do not let users select rows that the server will reject.
+    () => messages.filter((message) => !message.deleted_at && message.user_id === userId),
+    [messages, userId],
   );
   const selectedMessages = React.useMemo(
     () => selectableMessages.filter((message) => selectedIds.has(message.id)),
@@ -114,8 +116,13 @@ export function MessageList({
   const handleBulkDelete = useCallback(async () => {
     if (!onBulkDelete || selectedMessages.length === 0) return;
     if (!confirm(`Удалить выбранные сообщения (${selectedMessages.length})?`)) return;
-    await onBulkDelete(selectedMessages);
-    cancelSelection();
+    setBulkError(null);
+    try {
+      await onBulkDelete(selectedMessages);
+      cancelSelection();
+    } catch (error) {
+      setBulkError(error instanceof Error ? error.message : "Не удалось удалить выбранные сообщения.");
+    }
   }, [cancelSelection, onBulkDelete, selectedMessages]);
 
   const handleScroll = useCallback(() => {
@@ -188,6 +195,11 @@ export function MessageList({
           )}
         </div>
       )}
+      {bulkError && (
+        <div className="absolute left-3 right-3 top-14 z-20 rounded-xl border border-[color:var(--kub-danger)]/40 bg-[var(--kub-surface)]/95 px-3 py-2 text-xs text-[color:var(--kub-danger)] shadow-lg backdrop-blur">
+          {bulkError}
+        </div>
+      )}
       <div
         ref={containerRef}
         onScroll={handleScroll}
@@ -205,7 +217,7 @@ export function MessageList({
           const isRead = isMe && othersLastReadAt
             ? othersLastReadAt >= msg.created_at
             : false;
-          const canSelect = !msg.deleted_at && (isMe || canModerate);
+          const canSelect = !msg.deleted_at && isMe;
 
           return (
             <div
@@ -227,7 +239,10 @@ export function MessageList({
                 {selectionMode && canSelect && (
                   <button
                     type="button"
-                    onClick={() => toggleSelected(msg.id)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleSelected(msg.id);
+                    }}
                     className={cn(
                       "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors",
                       selectedIds.has(msg.id)
@@ -239,7 +254,20 @@ export function MessageList({
                     {selectedIds.has(msg.id) && <KubIcon name="check" size={14} />}
                   </button>
                 )}
-                <div className={selectionMode && canSelect ? "min-w-0 flex-1" : "min-w-0"}>
+                <div
+                  className={cn(
+                    selectionMode && canSelect ? "min-w-0 flex-1 cursor-pointer rounded-xl" : "min-w-0",
+                    selectionMode && selectedIds.has(msg.id) && "ring-2 ring-[color:var(--kub-cyan)]/50"
+                  )}
+                  onClickCapture={(event) => {
+                    if (!selectionMode || !canSelect) return;
+                    const target = event.target as HTMLElement | null;
+                    if (target?.closest("button,a,input,textarea,select,video,audio,[role='slider']")) return;
+                    event.stopPropagation();
+                    toggleSelected(msg.id);
+                  }}
+                  aria-disabled={selectionMode && !canSelect}
+                >
                   <MessageBubble
                     message={msg}
                     isMe={isMe}

@@ -129,7 +129,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     } catch (err) {
       console.error("[voice] chats.updated_at bump failed:", err);
     }
-  }, [chatId, userId, supabase]);
+  }, [chatId, isForum, selectedTopicId, userId, supabase]);
 
   const jumpToMessage = useCallback((messageId: string) => {
     setHighlightedId(messageId);
@@ -160,8 +160,13 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   }, [togglePin]);
 
   const handleBulkDelete = useCallback(async (items: MessageWithSender[]) => {
+    const failures: string[] = [];
     for (const item of items) {
-      await deleteMessage(item.id);
+      const result = await deleteMessage(item.id);
+      if (!result?.ok) failures.push(result?.error ?? "Не удалось удалить сообщение.");
+    }
+    if (failures.length) {
+      throw new Error(`Не удалось удалить ${failures.length} из ${items.length} сообщений.`);
     }
   }, [deleteMessage]);
 

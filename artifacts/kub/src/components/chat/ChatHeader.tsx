@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar } from "@/components/ui/ChatAvatar";
-import { KubTooltip, KubIcon, type KubIconName } from "@/components/kub";
+import { KubModal, KubTooltip, KubIcon, type KubIconName } from "@/components/kub";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { prefixError } from "@/lib/errors";
@@ -24,6 +24,8 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
   const supabase = createClient();
   const [showMenu, setShowMenu] = useState(false);
   const [deletingChat, setDeletingChat] = useState(false);
+  const [deleteGroupOpen, setDeleteGroupOpen] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const isMuted = mutedChatIds.includes(chatId);
 
   const display = chat
@@ -55,7 +57,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
 
   const handleDeleteGroup = async () => {
     if (!canDeleteGroup || deletingChat) return;
-    if (!confirm("Удалить групповой чат?\n\nЭто действие нельзя отменить.")) return;
+    setDeleteError(null);
 
     setDeletingChat(true);
     const { data, error } = await supabase
@@ -68,18 +70,19 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
 
     if (error) {
       console.error("delete group chat failed:", error);
-      alert(prefixError("Недостаточно прав для удаления этого чата", error));
+      setDeleteError(prefixError("Не удалось удалить групповой чат", error));
       return;
     }
 
     if (!data) {
-      alert("Недостаточно прав для удаления этого чата.");
+      setDeleteError("Недостаточно прав для удаления этого чата.");
       return;
     }
 
     setMessages(chatId, []);
     setChats(chats.filter((item) => item.id !== chatId));
     setSelectedChatId(null);
+    setDeleteGroupOpen(false);
     setShowMenu(false);
   };
 
@@ -168,11 +171,22 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
       ? [{ icon: "logout" as KubIconName, label: "Удалить чат у себя", danger: true, action: handleHidePrivateChat }]
       : []),
     ...(canDeleteGroup
-      ? [{ icon: "userRemove" as KubIconName, label: "Удалить групповой чат", danger: true, disabled: deletingChat, action: handleDeleteGroup }]
+      ? [{
+          icon: "userRemove" as KubIconName,
+          label: "Удалить групповой чат",
+          danger: true,
+          disabled: deletingChat,
+          action: () => {
+            setShowMenu(false);
+            setDeleteError(null);
+            setDeleteGroupOpen(true);
+          },
+        }]
       : []),
   ];
 
   return (
+    <>
     <div className="flex items-center gap-1 px-2 h-14 flex-shrink-0 bg-[var(--kub-surface)] border-b border-[color:var(--kub-border-color)]">
       <button
         onClick={() => setSelectedChatId(null)}
@@ -271,5 +285,47 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
         </div>
       </div>
     </div>
+    <KubModal
+      open={deleteGroupOpen}
+      onClose={() => {
+        if (!deletingChat) setDeleteGroupOpen(false);
+      }}
+      title="Удалить групповой чат?"
+      description="Это действие нельзя отменить. Чат и история исчезнут у всех участников."
+      icon={<KubIcon name="userRemove" size={18} tone="danger" />}
+      size="sm"
+      mobileSheet={false}
+      footer={(
+        <>
+          <button
+            type="button"
+            onClick={() => setDeleteGroupOpen(false)}
+            disabled={deletingChat}
+            className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)] disabled:opacity-50"
+          >
+            Отмена
+          </button>
+          <button
+            type="button"
+            onClick={handleDeleteGroup}
+            disabled={deletingChat}
+            className="inline-flex h-9 items-center justify-center rounded-lg bg-[color:var(--kub-danger)] px-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+          >
+            {deletingChat ? "Удаляем..." : "Удалить"}
+          </button>
+        </>
+      )}
+    >
+      {deleteError ? (
+        <div className="rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-danger)]">
+          {deleteError}
+        </div>
+      ) : (
+        <p className="text-sm text-[color:var(--kub-muted)]">
+          Повторные нажатия не откроют новые браузерные окна: подтверждение выполняется внутри приложения.
+        </p>
+      )}
+    </KubModal>
+    </>
   );
 }

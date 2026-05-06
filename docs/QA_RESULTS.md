@@ -224,4 +224,4 @@ Recurring tasks roadmap note:
 - Chat preview now filters last message/unread counts by current user's `chat_members.cleared_at`.
 - Chat search ignores soft-deleted message placeholders.
 - Topic-aware text/media/voice sends now include `topic_id`; when topics are disabled the message hook no longer filters out topic messages.
-- Frontend name limits were added for group/chat/folder/topic names. DB constraint proposal prepared: `.migration-backup/supabase/migrations/20260506_entity_name_constraints.sql`.
+- Frontend name limits were added for group/chat/folder/topic names. `.migration-backup/supabase/migrations/20260506_entity_name_constraints.sql` was applied manually on 2026-05-06; read-only MCP confirmed active checks on `chats.name`, `folders.name` and `topics.name`.

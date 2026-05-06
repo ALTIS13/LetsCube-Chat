@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
-import { KubIcon } from "@/components/kub";
+import { KubIcon, KubModal } from "@/components/kub";
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
@@ -21,7 +21,7 @@ interface ChatInfoPanelProps {
 }
 
 type Tab = "info" | "members" | "media";
-const MEDIA_PAGE_SIZE = 18;
+const MEDIA_PAGE_SIZE = 12;
 
 export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProps) {
   const { currentUser, setSelectedChatId, chats, setChats, setMessages } = useAppStore();
@@ -45,6 +45,9 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const [saving, setSaving] = useState(false);
   const [deletingChat, setDeletingChat] = useState(false);
   const [leavingChat, setLeavingChat] = useState(false);
+  const [deleteGroupOpen, setDeleteGroupOpen] = useState(false);
+  const [leaveGroupOpen, setLeaveGroupOpen] = useState(false);
+  const [destructiveError, setDestructiveError] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   type MemberRow = Profile & { chat_role: "owner" | "admin" | "member" };
   const [members, setMembers] = useState<MemberRow[]>([]);
@@ -170,7 +173,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
 
   const handleLeave = async () => {
     if (!currentUser || leavingChat) return;
-    if (!confirm("Покинуть этот чат?")) return;
+    setDestructiveError(null);
     setLeavingChat(true);
     const { error } = await supabase.from("chat_members")
       .delete().eq("chat_id", chat.id).eq("user_id", currentUser.id);
@@ -178,11 +181,12 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       // Most likely the last-owner protection (P0001).  Surface the
       // server-side message so the user understands why nothing happened.
       console.error("leave chat failed:", error);
-      alert(mapPgError(error));
+      setDestructiveError(mapPgError(error));
       setLeavingChat(false);
       return;
     }
     setLeavingChat(false);
+    setLeaveGroupOpen(false);
     setChats(chats.filter((c) => c.id !== chat.id));
     setSelectedChatId(null);
     onClose();
@@ -190,7 +194,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
 
   const handleDeleteGroup = async () => {
     if (!isGroup || !isOwner || deletingChat) return;
-    if (!confirm("Удалить групповой чат?\n\nЭто действие нельзя отменить.")) return;
+    setDestructiveError(null);
 
     setDeletingChat(true);
     const { data, error } = await supabase
@@ -203,15 +207,16 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
 
     if (error) {
       console.error("delete group chat failed:", error);
-      alert(prefixError("Недостаточно прав для удаления этого чата", error));
+      setDestructiveError(prefixError("Не удалось удалить групповой чат", error));
       return;
     }
 
     if (!data) {
-      alert("Недостаточно прав для удаления этого чата.");
+      setDestructiveError("Недостаточно прав для удаления этого чата.");
       return;
     }
 
+    setDeleteGroupOpen(false);
     setChats(chats.filter((c) => c.id !== chat.id));
     setSelectedChatId(null);
     onClose();
@@ -396,7 +401,10 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
           </div>
         ) : (
           <>
-            <div className="text-base font-semibold text-center text-[color:var(--kub-text)]">
+            <div
+              className="w-full max-w-full px-2 text-center text-base font-semibold leading-snug text-[color:var(--kub-text)] line-clamp-2 [overflow-wrap:anywhere]"
+              title={display.title}
+            >
               {display.title}
             </div>
             {isSaved ? (
@@ -413,7 +421,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               </div>
             )}
             {chat.description && (
-              <p className="text-xs text-center text-[color:var(--kub-muted)]">
+              <p className="max-w-full text-center text-xs text-[color:var(--kub-muted)] line-clamp-3 [overflow-wrap:anywhere]">
                 {chat.description}
               </p>
             )}
@@ -540,7 +548,10 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               )}
               {isGroup && !isOwner && (
                 <button
-                  onClick={handleLeave}
+                  onClick={() => {
+                    setDestructiveError(null);
+                    setLeaveGroupOpen(true);
+                  }}
                   disabled={leavingChat}
                   className={dangerActionRowClass}
                 >
@@ -550,7 +561,10 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               )}
               {isGroup && isOwner && (
                 <button
-                  onClick={handleDeleteGroup}
+                  onClick={() => {
+                    setDestructiveError(null);
+                    setDeleteGroupOpen(true);
+                  }}
                   disabled={deletingChat}
                   className={dangerActionRowClass}
                 >
@@ -641,7 +655,14 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         {tab === "media" && (
           <div className="p-2">
             {loadingMedia && media.length === 0 ? (
-              <div className="text-center py-8 text-sm text-[color:var(--kub-muted)]">Загрузка…</div>
+              <div className="grid grid-cols-3 gap-1">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="aspect-square animate-pulse rounded-lg bg-[var(--kub-surface-2)]"
+                  />
+                ))}
+              </div>
             ) : media.length === 0 ? (
               <div className="text-center py-8 text-sm text-[color:var(--kub-muted)]">Медиа пока нет</div>
             ) : (
@@ -659,10 +680,19 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                       })}
                     >
                       {m.type === "image" ? (
-                        <img src={m.media_url!} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                        <img
+                          src={m.media_url!}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="h-full w-full object-cover transition-transform duration-200 hover:scale-[1.03]"
+                        />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-black/70">
-                          <KubIcon name="video" size={22} className="text-white/80" />
+                        <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--kub-cyan)_18%,#111827),#0b0f18)] text-white">
+                          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/14 backdrop-blur">
+                            <KubIcon name="video" size={18} className="text-white" />
+                          </span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-white/70">Видео</span>
                         </div>
                       )}
                     </button>
@@ -697,6 +727,88 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
           </div>
         )}
       </div>
+      <KubModal
+        open={leaveGroupOpen}
+        onClose={() => {
+          if (!leavingChat) setLeaveGroupOpen(false);
+        }}
+        title="Покинуть группу?"
+        description="Группа исчезнет из вашего списка. История у других участников останется."
+        icon={<KubIcon name="logout" size={18} tone="danger" />}
+        size="sm"
+        mobileSheet={false}
+        footer={(
+          <>
+            <button
+              type="button"
+              onClick={() => setLeaveGroupOpen(false)}
+              disabled={leavingChat}
+              className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)] disabled:opacity-50"
+            >
+              Отмена
+            </button>
+            <button
+              type="button"
+              onClick={handleLeave}
+              disabled={leavingChat}
+              className="inline-flex h-9 items-center justify-center rounded-lg bg-[color:var(--kub-danger)] px-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+            >
+              {leavingChat ? "Выходим..." : "Покинуть"}
+            </button>
+          </>
+        )}
+      >
+        {destructiveError ? (
+          <div className="rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-danger)]">
+            {destructiveError}
+          </div>
+        ) : (
+          <p className="text-sm text-[color:var(--kub-muted)]">
+            Повторные нажатия будут заблокированы после подтверждения.
+          </p>
+        )}
+      </KubModal>
+      <KubModal
+        open={deleteGroupOpen}
+        onClose={() => {
+          if (!deletingChat) setDeleteGroupOpen(false);
+        }}
+        title="Удалить групповой чат?"
+        description="Это действие нельзя отменить. Чат и история исчезнут у всех участников."
+        icon={<KubIcon name="userRemove" size={18} tone="danger" />}
+        size="sm"
+        mobileSheet={false}
+        footer={(
+          <>
+            <button
+              type="button"
+              onClick={() => setDeleteGroupOpen(false)}
+              disabled={deletingChat}
+              className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)] disabled:opacity-50"
+            >
+              Отмена
+            </button>
+            <button
+              type="button"
+              onClick={handleDeleteGroup}
+              disabled={deletingChat}
+              className="inline-flex h-9 items-center justify-center rounded-lg bg-[color:var(--kub-danger)] px-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+            >
+              {deletingChat ? "Удаляем..." : "Удалить"}
+            </button>
+          </>
+        )}
+      >
+        {destructiveError ? (
+          <div className="rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-danger)]">
+            {destructiveError}
+          </div>
+        ) : (
+          <p className="text-sm text-[color:var(--kub-muted)]">
+            Используется подтверждение внутри приложения, поэтому браузер не будет блокировать повторные системные окна.
+          </p>
+        )}
+      </KubModal>
       <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
     </div>
   );
