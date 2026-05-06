@@ -207,3 +207,12 @@ Next safe task UI alignment:
 Recurring tasks roadmap note:
 
 - Future task-system phase should add recurring tasks: daily, weekly, monthly, yearly, custom interval, `next_run_at`, auto-create next occurrence, stop recurrence, reuse `visibility` / `assignment_scope`, and history of occurrences.
+
+2026-05-06 production data consistency follow-up:
+
+- Supabase read-only audit confirmed the current `media` Storage bucket is public. This is acceptable only for avatars, not for private/group chat media.
+- Added `docs/MEDIA_SECURITY_PLAN.md` and migration proposal `.migration-backup/supabase/migrations/20260506_secure_chat_media_access.sql` for a private `chat-media` bucket and `messages.media_bucket` / `messages.media_path` rollout.
+- Message timeline initial fetch now loads the newest 100 visible messages, then sorts them ascending in the store. This fixes the case where a just-sent message appeared realtime/sidebar but disappeared from the active chat after refresh in long chats.
+- Pinned messages and media gallery now re-check current `chat_members.cleared_at` before rendering local cleared history, so old pinned/media entries should not flash back after local clear/hide.
+- Media gallery now fetches media from DB in pages and filters by `cleared_at`; image/video clicks still use the in-app viewer.
+- Added a non-destructive app update banner that detects a new Vite entry bundle on interval/visibility return and asks the user to refresh instead of forcing a full page reload.

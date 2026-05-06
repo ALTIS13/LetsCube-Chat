@@ -10,6 +10,7 @@ import { useHeartbeat } from "@/hooks/useHeartbeat";
 import { useBanState } from "@/hooks/useBanState";
 import { createClient } from "@/lib/supabase/client";
 import { IframeAuthBanner } from "@/components/IframeAuthBanner";
+import { AppUpdateBanner } from "@/components/AppUpdateBanner";
 import { BannedScreen } from "@/components/BannedScreen";
 import { AdminLayout } from "@/pages/admin/AdminLayout";
 import { TasksPage } from "@/pages/tasks/TasksPage";
@@ -284,6 +285,7 @@ function App() {
       <TooltipProvider>
         <ThemeSync />
         <IframeAuthBanner />
+        <AppUpdateBanner />
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <AppRoutes />
         </WouterRouter>

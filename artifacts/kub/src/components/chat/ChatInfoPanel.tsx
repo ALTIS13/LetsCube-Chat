@@ -23,7 +23,7 @@ type Tab = "info" | "members" | "media";
 const MEDIA_PAGE_SIZE = 18;
 
 export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProps) {
-  const { currentUser, setSelectedChatId, chats, setChats } = useAppStore();
+  const { currentUser, setSelectedChatId, chats, setChats, setMessages } = useAppStore();
   const supabase = createClient();
   const display = getChatDisplayInfo(chat, currentUser?.id ?? null);
   const isSaved = display.isSaved;
@@ -48,7 +48,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [media, setMedia] = useState<Message[]>([]);
   const [loadingMedia, setLoadingMedia] = useState(false);
-  const [visibleMediaCount, setVisibleMediaCount] = useState(MEDIA_PAGE_SIZE);
+  const [mediaHasMore, setMediaHasMore] = useState(false);
   const [openMedia, setOpenMedia] = useState<MediaViewerItem | null>(null);
 
   useEffect(() => {
@@ -64,26 +64,58 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       });
   }, [chat.id, isGroup, supabase]);
 
-  const loadMedia = useCallback(async () => {
+  const loadMedia = useCallback(async (reset = false, offset = 0) => {
+    if (!currentUser) {
+      setMedia([]);
+      setMediaHasMore(false);
+      return;
+    }
     setLoadingMedia(true);
-    const { data } = await supabase
+    const start = reset ? 0 : offset;
+    const { data: membership } = await supabase
+      .from("chat_members")
+      .select("cleared_at")
+      .eq("chat_id", chat.id)
+      .eq("user_id", currentUser.id)
+      .maybeSingle();
+    let query = supabase
       .from("messages")
       .select("*")
       .eq("chat_id", chat.id)
       .in("type", ["image", "video", "file"])
       .is("deleted_at", null)
+      .not("media_url", "is", null);
+    if (membership?.cleared_at) {
+      query = query.gt("created_at", membership.cleared_at);
+    }
+    const { data } = await query
       .order("created_at", { ascending: false })
-      .limit(60);
-    if (data) setMedia(data as Message[]);
+      .range(start, start + MEDIA_PAGE_SIZE);
+    if (data) {
+      const page = (data as Message[]).slice(0, MEDIA_PAGE_SIZE);
+      setMedia((current) => {
+        const next = reset ? page : [...current, ...page];
+        return Array.from(new Map(next.map((item) => [item.id, item])).values());
+      });
+      setMediaHasMore(data.length > MEDIA_PAGE_SIZE);
+    }
     setLoadingMedia(false);
-  }, [chat.id, supabase]);
+  }, [chat.id, currentUser, supabase]);
 
   useEffect(() => {
     if (tab === "media") {
-      setVisibleMediaCount(MEDIA_PAGE_SIZE);
-      loadMedia();
+      setMedia([]);
+      setMediaHasMore(false);
+      setOpenMedia(null);
+      loadMedia(true);
     }
   }, [tab, loadMedia]);
+
+  useEffect(() => {
+    setMedia([]);
+    setMediaHasMore(false);
+    setOpenMedia(null);
+  }, [chat.id]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -200,6 +232,9 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       alert(result.error ?? "Не удалось очистить историю у себя.");
       return;
     }
+    setMedia([]);
+    setMediaHasMore(false);
+    setOpenMedia(null);
     dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
   };
 
@@ -211,6 +246,10 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       alert(prefixError("Не удалось удалить чат у себя", error));
       return;
     }
+    setMessages(chat.id, []);
+    setMedia([]);
+    setMediaHasMore(false);
+    setOpenMedia(null);
     setChats(chats.filter((c) => c.id !== chat.id));
     setSelectedChatId(null);
     dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
@@ -254,8 +293,8 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     () => media.filter((m) => m.type === "file"),
     [media],
   );
-  const visibleMediaGridItems = mediaGridItems.slice(0, visibleMediaCount);
-  const hasMoreMedia = visibleMediaCount < mediaGridItems.length;
+  const visibleMediaGridItems = mediaGridItems;
+  const hasMoreMedia = mediaHasMore;
 
   const tabLabels: Record<Tab, string> = { info: "Сведения", members: "Участники", media: "Медиа" };
   const actionRowClass =
@@ -582,7 +621,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
 
         {tab === "media" && (
           <div className="p-2">
-            {loadingMedia ? (
+            {loadingMedia && media.length === 0 ? (
               <div className="text-center py-8 text-sm text-[color:var(--kub-muted)]">Загрузка…</div>
             ) : media.length === 0 ? (
               <div className="text-center py-8 text-sm text-[color:var(--kub-muted)]">Медиа пока нет</div>
@@ -613,7 +652,8 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                 {hasMoreMedia && (
                   <button
                     type="button"
-                    onClick={() => setVisibleMediaCount((count) => count + MEDIA_PAGE_SIZE)}
+                    onClick={() => loadMedia(false, media.length)}
+                    disabled={loadingMedia}
                     className="mb-3 w-full rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-sm text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-2)]"
                   >
                     Показать ещё

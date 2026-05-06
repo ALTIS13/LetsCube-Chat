@@ -20,7 +20,7 @@ interface ChatHeaderProps {
 }
 
 export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForMe }: ChatHeaderProps) {
-  const { chats, setChats, setSelectedChatId, mutedChatIds, toggleMutedChat, currentUser } = useAppStore();
+  const { chats, setChats, setSelectedChatId, setMessages, mutedChatIds, toggleMutedChat, currentUser } = useAppStore();
   const supabase = createClient();
   const [showMenu, setShowMenu] = useState(false);
   const [deletingChat, setDeletingChat] = useState(false);
@@ -77,6 +77,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
       return;
     }
 
+    setMessages(chatId, []);
     setChats(chats.filter((item) => item.id !== chatId));
     setSelectedChatId(null);
     setShowMenu(false);
@@ -109,6 +110,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
       alert(result.error ?? "Не удалось очистить историю у себя.");
       return;
     }
+    setMessages(chatId, []);
     dispatchChatsRefresh({ reason: "membership-change", chatId });
     setShowMenu(false);
   };
@@ -121,6 +123,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
       alert(prefixError("Не удалось удалить чат у себя", error));
       return;
     }
+    setMessages(chatId, []);
     setChats(chats.filter((item) => item.id !== chatId));
     setSelectedChatId(null);
     dispatchChatsRefresh({ reason: "membership-change", chatId });

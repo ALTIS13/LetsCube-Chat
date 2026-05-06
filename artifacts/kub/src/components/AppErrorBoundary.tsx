@@ -6,13 +6,14 @@ interface AppErrorBoundaryProps {
 
 interface AppErrorBoundaryState {
   hasError: boolean;
+  isChunkLoadError: boolean;
 }
 
 export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorBoundaryState> {
-  state: AppErrorBoundaryState = { hasError: false };
+  state: AppErrorBoundaryState = { hasError: false, isChunkLoadError: false };
 
-  static getDerivedStateFromError(): AppErrorBoundaryState {
-    return { hasError: true };
+  static getDerivedStateFromError(error: unknown): AppErrorBoundaryState {
+    return { hasError: true, isChunkLoadError: isChunkLoadError(error) };
   }
 
   componentDidCatch(error: unknown, errorInfo: ErrorInfo) {
@@ -42,4 +43,9 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
       </main>
     );
   }
+}
+
+function isChunkLoadError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /Loading chunk|Failed to fetch dynamically imported module|Importing a module script failed|dynamically imported module/i.test(message);
 }

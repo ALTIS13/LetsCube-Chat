@@ -42,6 +42,11 @@ export function useMessages(chatId: string | null, topicId: string | null = null
   const topicIdRef = useRef(topicId);
   useEffect(() => { topicIdRef.current = topicId; }, [topicId]);
 
+  useEffect(() => {
+    setPinnedMessages([]);
+    setClearedAt(null);
+  }, [chatId, topicId]);
+
   const fetchMessages = useCallback(async () => {
     if (!chatId) return;
     bumpFetch("useMessages");
@@ -74,12 +79,15 @@ export function useMessages(chatId: string | null, topicId: string | null = null
     query = topicId ? query.eq("topic_id", topicId) : query.is("topic_id", null);
     if (localClearedAt) query = query.gt("created_at", localClearedAt);
     const { data } = await query
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(100);
     if (data) {
-      const fetched = data as unknown as MessageWithSender[];
+      const fetched = (data as unknown as MessageWithSender[]).reverse();
       const existing = useAppStore.getState().messages[chatId] ?? [];
-      setMessages(chatId, mergeMessagesById(fetched, existing));
+      const visibleExisting = localClearedAt
+        ? existing.filter((message) => new Date(message.created_at).getTime() > new Date(localClearedAt).getTime())
+        : existing;
+      setMessages(chatId, mergeMessagesById(fetched, visibleExisting));
     }
     setLoading(false);
     if (user) {
@@ -97,6 +105,18 @@ export function useMessages(chatId: string | null, topicId: string | null = null
       setPinnedMessages([]);
       return;
     }
+    let localClearedAt = clearedAt;
+    const user = currentUserRef.current;
+    if (user) {
+      const { data: membership } = await supabase
+        .from("chat_members")
+        .select("cleared_at")
+        .eq("chat_id", chatId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      localClearedAt = membership?.cleared_at ?? null;
+      setClearedAt(localClearedAt);
+    }
     let query = supabase
       .from("messages")
       .select(`*, sender:profiles!user_id(*), reactions(*)`)
@@ -104,7 +124,7 @@ export function useMessages(chatId: string | null, topicId: string | null = null
       .eq("pinned", true)
       .is("deleted_at", null);
     query = topicId ? query.eq("topic_id", topicId) : query.is("topic_id", null);
-    if (clearedAt) query = query.gt("created_at", clearedAt);
+    if (localClearedAt) query = query.gt("created_at", localClearedAt);
     const { data, error } = await query
       .order("created_at", { ascending: false })
       .limit(50);
