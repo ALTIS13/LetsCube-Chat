@@ -275,7 +275,7 @@ export function MessageBubble({
           </div>
         )}
 
-        <div className={cn("flex min-w-0 max-w-[86vw] flex-col sm:max-w-[min(72%,680px)] md:max-w-[min(65%,680px)]", isMe ? "items-end" : "items-start")}>
+        <div className={cn("flex w-fit min-w-0 max-w-[86vw] flex-col sm:max-w-[min(72%,680px)] md:max-w-[min(65%,680px)]", isMe ? "items-end" : "items-start")}>
 
           {!isMe && isFirstInGroup && message.sender && (
             <span className="text-xs font-semibold ml-3 mb-0.5 text-[color:var(--kub-cyan)]">
@@ -313,7 +313,7 @@ export function MessageBubble({
 
           <div
             className={cn(
-              "relative min-w-24 max-w-full px-3 py-2 rounded-2xl transition-opacity select-none sm:select-text",
+              "relative w-fit min-w-24 max-w-full px-3 py-2 rounded-2xl transition-opacity select-none sm:select-text",
               shouldUseComfortTextWidth && "min-w-36 sm:min-w-44",
               bubbleClass,
               isMe
@@ -404,7 +404,7 @@ export function MessageBubble({
                 <span className="truncate max-w-[200px]">{message.content ?? "File"}</span>
               </a>
             ) : (
-              <p className="min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:break-word] text-[color:var(--kub-text)]">
+              <p className="min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:normal] text-[color:var(--kub-text)]">
                 <FormattedText content={message.content ?? ""} />
               </p>
             )}
@@ -446,7 +446,7 @@ export function MessageBubble({
           </div>
 
           {Object.keys(reactionGroups).length > 0 && (
-            <div className={cn("relative z-10 -mt-1 flex max-w-full flex-wrap gap-0.5 px-1", isMe ? "justify-end self-end pr-2" : "justify-start self-start pl-2")}>
+            <div className={cn("mt-1 flex max-w-[min(100%,28rem)] flex-wrap gap-0.5 px-1", isMe ? "justify-end self-end pr-1" : "justify-start self-start pl-1")}>
               {Object.entries(reactionGroups).map(([emoji, { count, mine }]) => (
                 <button
                   key={emoji}

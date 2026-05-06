@@ -34,7 +34,6 @@ export function AppDialogs() {
       open
       onClose={() => finish(false)}
       title={current.title}
-      description={current.description}
       icon={<KubIcon name={current.icon ?? (isDanger ? "delete" : "alert")} size={18} tone={isDanger ? "danger" : "accent"} />}
       size="sm"
       mobileSheet={false}
@@ -64,7 +63,7 @@ export function AppDialogs() {
       )}
     >
       <p className="text-sm leading-relaxed text-[color:var(--kub-muted)]">
-        {current.kind === "alert" ? current.description : "Подтверждение выполняется внутри приложения без браузерных всплывающих окон."}
+        {current.description}
       </p>
     </KubModal>
   );

@@ -33,7 +33,7 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
           </h1>
           <p className="mt-2 text-sm text-[color:var(--kub-muted)]">
             {this.state.isChunkLoadError
-              ? "Нужно обновить страницу, чтобы загрузить новую версию приложения."
+              ? "Приложение обновилось. Нужно перезагрузить страницу."
               : "Обновите страницу. Если ошибка повторится, сообщите администратору."}
           </p>
           <button

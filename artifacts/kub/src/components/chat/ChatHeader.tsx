@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar } from "@/components/ui/ChatAvatar";
-import { KubModal, KubTooltip, KubIcon, type KubIconName } from "@/components/kub";
+import { KubModal, KubIcon, type KubIconName } from "@/components/kub";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { prefixError } from "@/lib/errors";
@@ -237,26 +237,6 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
       </button>
 
       <div className="flex items-center gap-0.5">
-        {type !== "channel" && !display.isSaved && (
-          <>
-            <KubTooltip label="Аудио-вызов" side="bottom">
-              <button
-                aria-label="Аудио-вызов"
-                className="p-2 rounded-lg hover:bg-[var(--kub-surface-2)] transition-colors text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)]"
-              >
-                <KubIcon name="phone" size={18} />
-              </button>
-            </KubTooltip>
-            <KubTooltip label="Видео-вызов" side="bottom">
-              <button
-                aria-label="Видео-вызов"
-                className="p-2 rounded-lg hover:bg-[var(--kub-surface-2)] transition-colors text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)]"
-              >
-                <KubIcon name="video" size={18} />
-              </button>
-            </KubTooltip>
-          </>
-        )}
         <div className="relative">
           <button
             onClick={() => setShowMenu(!showMenu)}
@@ -337,7 +317,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
         </div>
       ) : (
         <p className="text-sm text-[color:var(--kub-muted)]">
-          Повторные нажатия не откроют новые браузерные окна: подтверждение выполняется внутри приложения.
+          После удаления группа исчезнет у всех участников.
         </p>
       )}
     </KubModal>

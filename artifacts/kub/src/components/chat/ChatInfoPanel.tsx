@@ -823,7 +823,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
           </div>
         ) : (
           <p className="text-sm text-[color:var(--kub-muted)]">
-            Используется подтверждение внутри приложения, поэтому браузер не будет блокировать повторные системные окна.
+            После удаления группа исчезнет у всех участников.
           </p>
         )}
       </KubModal>

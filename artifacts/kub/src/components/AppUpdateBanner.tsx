@@ -44,38 +44,40 @@ export function AppUpdateBanner() {
   if (!showUpdate) return null;
 
   return (
-    <div className="fixed bottom-4 left-1/2 z-[80] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-3 shadow-2xl">
-      <div className="flex items-center gap-3">
+    <div className="fixed bottom-3 left-1/2 z-[80] w-[calc(100vw-24px)] max-w-sm -translate-x-1/2 rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-3 shadow-2xl sm:bottom-4 sm:w-[calc(100%-2rem)] sm:max-w-md">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 items-start gap-3 sm:items-center">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] text-[color:var(--kub-cyan)]">
           ↻
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-[color:var(--kub-text)]">
-            {showUpdate ? "Доступна новая версия приложения" : "Соединение с сервером нестабильно"}
+            {showUpdate ? "Доступно обновление" : "Соединение нестабильно"}
           </div>
           <div className="text-xs text-[color:var(--kub-muted)]">
             {showUpdate
-              ? "Обновите страницу, чтобы получить последние исправления."
-              : "Возможно, идёт обновление. KUB попробует восстановить соединение автоматически."}
+              ? "Обновите приложение, чтобы получить последние исправления."
+              : "KUB попробует восстановить соединение автоматически."}
           </div>
         </div>
+        </div>
         {showUpdate && (
-          <>
+          <div className="flex w-full gap-2 sm:w-auto sm:shrink-0">
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="h-9 rounded-lg bg-[var(--kub-cyan)] px-3 text-xs font-semibold text-[color:var(--kub-bg)] hover:brightness-110"
+              className="h-9 flex-1 rounded-lg bg-[var(--kub-cyan)] px-3 text-xs font-semibold text-[color:var(--kub-bg)] hover:brightness-110 sm:flex-none"
             >
               Обновить
             </button>
             <button
               type="button"
               onClick={() => setSnoozedUntil(Date.now() + SNOOZE_MS)}
-              className="h-9 rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)]"
+              className="h-9 flex-1 rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)] sm:flex-none"
             >
-              Напомнить позже
+              Позже
             </button>
-          </>
+          </div>
         )}
       </div>
     </div>
