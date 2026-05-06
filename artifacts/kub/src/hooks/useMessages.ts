@@ -11,6 +11,7 @@ export function useMessages(chatId: string | null, topicId: string | null = null
   const [loading, setLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState<MessageWithSender[]>([]);
+  const [clearedAt, setClearedAt] = useState<string | null>(null);
   // Per-slice selectors: не подписываемся на весь store (раньше любая
   // мутация — chats, selectedChatId, mutedChatIds — ререндерила хук). Сами
   // setMessages/addMessage/replaceMessage в zustand стабильны по ссылке.
@@ -45,6 +46,18 @@ export function useMessages(chatId: string | null, topicId: string | null = null
     if (!chatId) return;
     bumpFetch("useMessages");
     setLoading(true);
+    let localClearedAt: string | null = null;
+    const user = currentUserRef.current;
+    if (user) {
+      const { data: membership } = await supabase
+        .from("chat_members")
+        .select("cleared_at")
+        .eq("chat_id", chatId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      localClearedAt = membership?.cleared_at ?? null;
+      setClearedAt(localClearedAt);
+    }
     // NB: we do NOT filter out `deleted_at IS NOT NULL` here.  Soft-deleted
     // rows are kept in the timeline so MessageBubble can render a
     // "сообщение удалено" placeholder in the slot they used to occupy —
@@ -59,6 +72,7 @@ export function useMessages(chatId: string | null, topicId: string | null = null
     // Forum chats: scope to the selected topic.  Non-forum: all messages
     // have topic_id = null, so the filter is a no-op when topicId is null.
     query = topicId ? query.eq("topic_id", topicId) : query.is("topic_id", null);
+    if (localClearedAt) query = query.gt("created_at", localClearedAt);
     const { data } = await query
       .order("created_at", { ascending: true })
       .limit(100);
@@ -68,7 +82,6 @@ export function useMessages(chatId: string | null, topicId: string | null = null
       setMessages(chatId, mergeMessagesById(fetched, existing));
     }
     setLoading(false);
-    const user = currentUserRef.current;
     if (user) {
       await supabase.from("chat_members")
         .update({ last_read_at: new Date().toISOString() })
@@ -91,6 +104,7 @@ export function useMessages(chatId: string | null, topicId: string | null = null
       .eq("pinned", true)
       .is("deleted_at", null);
     query = topicId ? query.eq("topic_id", topicId) : query.is("topic_id", null);
+    if (clearedAt) query = query.gt("created_at", clearedAt);
     const { data, error } = await query
       .order("created_at", { ascending: false })
       .limit(50);
@@ -99,7 +113,7 @@ export function useMessages(chatId: string | null, topicId: string | null = null
       return;
     }
     setPinnedMessages(sortPinnedMessages((data ?? []) as unknown as MessageWithSender[]));
-  }, [chatId, topicId, supabase]);
+  }, [chatId, topicId, supabase, clearedAt]);
 
   useEffect(() => { fetchPinnedMessages(); }, [fetchPinnedMessages]);
 
@@ -154,6 +168,8 @@ export function useMessages(chatId: string | null, topicId: string | null = null
         { event: "INSERT", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` },
         async (payload: { new: MessageWithSender }) => {
           if (payload.new.chat_id !== chatIdRef.current) return;
+          const clearedAtMs = clearedAt ? new Date(clearedAt).getTime() : null;
+          if (clearedAtMs && new Date(payload.new.created_at).getTime() <= clearedAtMs) return;
           // Filter by topic — ignore messages from other topics in the same chat.
           if ((payload.new.topic_id ?? null) !== (topicIdRef.current ?? null)) return;
           const provisional = buildRealtimeMessage(payload.new);
@@ -220,7 +236,7 @@ export function useMessages(chatId: string | null, topicId: string | null = null
       rt.removeChannel(channel);
       unregisterChannel(channelName);
     };
-  }, [chatId, userId, rt, addMessage, setMessages]);
+  }, [chatId, userId, rt, addMessage, setMessages, clearedAt]);
 
   const sendMessage = useCallback(async (content: string, replyToId?: string) => {
     const user = currentUserRef.current;
@@ -372,12 +388,27 @@ export function useMessages(chatId: string | null, topicId: string | null = null
     }
   }, [chatId, supabase, setMessages]);
 
+  const clearChatForMe = useCallback(async () => {
+    if (!chatId) return { ok: false, error: "Чат не выбран." };
+    const { error } = await supabase.rpc("clear_chat_for_me", { p_chat_id: chatId });
+    if (error) {
+      console.error("Clear chat for me error:", error);
+      return { ok: false, error: mapPgError(error) };
+    }
+    const nextClearedAt = new Date().toISOString();
+    setClearedAt(nextClearedAt);
+    setMessages(chatId, []);
+    setPinnedMessages([]);
+    return { ok: true, error: null };
+  }, [chatId, supabase, setMessages]);
+
   return {
     messages: messages[chatId ?? ""] ?? [],
     pinnedMessages,
     loading, isTyping,
     sendMessage, sendTyping, toggleReaction,
     editMessage, deleteMessage, togglePin, forwardMessage,
+    clearChatForMe,
     refetch: fetchMessages,
     refetchPinnedMessages: fetchPinnedMessages,
   };

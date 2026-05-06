@@ -183,6 +183,14 @@ Next safe task UI alignment:
 - Until those proposals are applied and frontend-aligned, private chat deletion is intentionally not exposed as a destructive global delete.
 - `Избранное` is sorted above regular chats in frontend as a system-like saved space.
 
+2026-05-06 follow-up:
+
+- User manually applied `.migration-backup/supabase/migrations/20260506_chat_history_private_hide_permissions.sql`.
+- User manually applied `.migration-backup/supabase/migrations/20260506_chat_pins.sql`.
+- Supabase read-only check confirmed `chat_members.hidden_at`, `chat_members.cleared_at`, `chat_members.pinned`, `chat_members.pinned_at` and RPC `clear_chat_for_me`, `hide_private_chat`, `unhide_private_chat`, `pin_chat`, `unpin_chat`.
+- Frontend alignment is enabled for local chat clear, private chat hide, and per-user chat pin/unpin.
+- Admin avatar management still needs a Storage policy adjustment before upload UI can safely replace another user's avatar; proposal only, not applied: `.migration-backup/supabase/migrations/20260506_admin_avatar_management.sql`.
+
 Recurring tasks roadmap note:
 
 - Future task-system phase should add recurring tasks: daily, weekly, monthly, yearly, custom interval, `next_run_at`, auto-create next occurrence, stop recurrence, reuse `visibility` / `assignment_scope`, and history of occurrences.

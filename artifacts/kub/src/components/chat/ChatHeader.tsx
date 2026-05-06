@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { prefixError } from "@/lib/errors";
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
+import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import type { ChatWithLastMessage } from "@/types/database";
 
 interface ChatHeaderProps {
@@ -15,9 +16,10 @@ interface ChatHeaderProps {
   chat?: ChatWithLastMessage;
   onSearchOpen?: () => void;
   onInfoOpen?: () => void;
+  onClearForMe?: () => Promise<{ ok: boolean; error: string | null }>;
 }
 
-export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen }: ChatHeaderProps) {
+export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForMe }: ChatHeaderProps) {
   const { chats, setChats, setSelectedChatId, mutedChatIds, toggleMutedChat, currentUser } = useAppStore();
   const supabase = createClient();
   const [showMenu, setShowMenu] = useState(false);
@@ -37,6 +39,8 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen }: ChatHeade
       | "member"
       | undefined) ?? null;
   const canDeleteGroup = isGroup && myRole === "owner";
+  const canHidePrivateChat = !!chat && chat.type === "private" && !display.isSaved;
+  const isPinned = Boolean(chat?.is_pinned);
 
   useEffect(() => {
     if (!showMenu) return;
@@ -78,6 +82,51 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen }: ChatHeade
     setShowMenu(false);
   };
 
+  const handlePinToggle = async () => {
+    if (!chat) return;
+    const rpcName = isPinned ? "unpin_chat" : "pin_chat";
+    const { error } = await supabase.rpc(rpcName, { p_chat_id: chatId });
+    if (error) {
+      alert(prefixError(isPinned ? "Не удалось открепить чат" : "Не удалось закрепить чат", error));
+      return;
+    }
+    setChats(chats.map((item) =>
+      item.id === chatId
+        ? { ...item, is_pinned: !isPinned, pinned_at: isPinned ? null : new Date().toISOString() }
+        : item
+    ));
+    dispatchChatsRefresh({ reason: "membership-change", chatId });
+    setShowMenu(false);
+  };
+
+  const handleClearForMe = async () => {
+    if (!onClearForMe) return;
+    const title = display.isSaved ? "Очистить избранное у себя?" : "Очистить историю у себя?";
+    const body = "Сообщения будут скрыты только для вас. У других участников они останутся.";
+    if (!confirm(`${title}\n\n${body}`)) return;
+    const result = await onClearForMe();
+    if (!result.ok) {
+      alert(result.error ?? "Не удалось очистить историю у себя.");
+      return;
+    }
+    dispatchChatsRefresh({ reason: "membership-change", chatId });
+    setShowMenu(false);
+  };
+
+  const handleHidePrivateChat = async () => {
+    if (!canHidePrivateChat) return;
+    if (!confirm("Удалить чат у себя?\n\nЧат исчезнет только из вашего списка. У собеседника история останется.")) return;
+    const { error } = await supabase.rpc("hide_private_chat", { p_chat_id: chatId });
+    if (error) {
+      alert(prefixError("Не удалось удалить чат у себя", error));
+      return;
+    }
+    setChats(chats.filter((item) => item.id !== chatId));
+    setSelectedChatId(null);
+    dispatchChatsRefresh({ reason: "membership-change", chatId });
+    setShowMenu(false);
+  };
+
   const getSubtitle = () => {
     if (!chat) return "";
     if (display.isSaved) return display.subtitle;
@@ -101,7 +150,14 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen }: ChatHeade
 
   const menuItems: Array<{ icon: KubIconName; label: string; danger?: boolean; disabled?: boolean; action: () => void }> = [
     { icon: "search", label: "Поиск в чате", action: () => { setShowMenu(false); onSearchOpen?.(); } },
+    { icon: isPinned ? "pinOff" : "pin", label: isPinned ? "Открепить чат" : "Закрепить чат", action: handlePinToggle },
     { icon: "notifications", label: isMuted ? "Включить уведомления" : "Отключить уведомления", action: () => { toggleMutedChat(chatId); setShowMenu(false); } },
+    ...(onClearForMe
+      ? [{ icon: "delete" as KubIconName, label: display.isSaved ? "Очистить избранное у себя" : "Очистить историю у себя", danger: true, action: handleClearForMe }]
+      : []),
+    ...(canHidePrivateChat
+      ? [{ icon: "logout" as KubIconName, label: "Удалить чат у себя", danger: true, action: handleHidePrivateChat }]
+      : []),
     ...(canDeleteGroup
       ? [{ icon: "userRemove" as KubIconName, label: "Удалить групповой чат", danger: true, disabled: deletingChat, action: handleDeleteGroup }]
       : []),

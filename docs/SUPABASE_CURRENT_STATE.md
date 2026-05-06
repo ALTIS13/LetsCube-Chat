@@ -12,7 +12,7 @@ Project ref: `nhogbeojfnbjcfipitrh`.
 
 - `profiles` - 4 rows, пользователи/профили, `role app_role`.
 - `chats` - 12 rows, private/group/channel chats, `is_forum`.
-- `chat_members` - 11 rows, membership/roles, `last_read_at`.
+- `chat_members` - membership/roles, `last_read_at`, per-user `hidden_at`, `cleared_at`, `pinned`, `pinned_at`.
 - `messages` - 163 rows, сообщения, media/reply/forward/topic fields.
 - `reactions` - 5 rows, реакции на сообщения.
 - `folders` - 4 rows, personal/shared/system folders.
@@ -95,6 +95,11 @@ RLS включен на всех user-facing таблицах. Policy counts:
 - `bans` / `mutes`: enforce sanction matrix, audit insert/delete, notify on insert.
 - `tasks`: notify insert/update, audit status changes.
 - `messages`: audit admin delete via soft-delete update.
+
+Applied manually on 2026-05-06:
+
+- `20260506_chat_history_private_hide_permissions.sql`: added per-user chat hide/clear columns and RPC `clear_chat_for_me`, `hide_private_chat`, `unhide_private_chat`; tightened `messages` UPDATE banned guard to restrictive.
+- `20260506_chat_pins.sql`: added per-user chat pin columns and RPC `pin_chat`, `unpin_chat`.
 - `folders`: audit folder delete.
 - `profile_contacts`: guard insert/update.
 - `notifications`: enqueue push outbox rows after notification insert.

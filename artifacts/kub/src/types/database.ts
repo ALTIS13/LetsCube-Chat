@@ -244,6 +244,10 @@ export interface Database {
           role: ChatMemberRole
           joined_at: string
           last_read_at: string | null
+          hidden_at: string | null
+          cleared_at: string | null
+          pinned: boolean
+          pinned_at: string | null
         }
         Insert: {
           chat_id: string
@@ -251,10 +255,18 @@ export interface Database {
           role?: ChatMemberRole
           joined_at?: string
           last_read_at?: string | null
+          hidden_at?: string | null
+          cleared_at?: string | null
+          pinned?: boolean
+          pinned_at?: string | null
         }
         Update: {
           role?: ChatMemberRole
           last_read_at?: string | null
+          hidden_at?: string | null
+          cleared_at?: string | null
+          pinned?: boolean
+          pinned_at?: string | null
         }
         Relationships: [
           {
@@ -729,6 +741,26 @@ export interface Database {
         Args: { p_message_id: string }
         Returns: Message
       }
+      clear_chat_for_me: {
+        Args: { p_chat_id: string }
+        Returns: void
+      }
+      hide_private_chat: {
+        Args: { p_chat_id: string }
+        Returns: void
+      }
+      unhide_private_chat: {
+        Args: { p_chat_id: string }
+        Returns: void
+      }
+      pin_chat: {
+        Args: { p_chat_id: string }
+        Returns: void
+      }
+      unpin_chat: {
+        Args: { p_chat_id: string }
+        Returns: void
+      }
     }
     Enums: {
       app_role: AppRole
@@ -799,6 +831,10 @@ export interface ChatWithLastMessage extends Chat {
   members?: (ChatMember & { profile: Profile })[]
   other_user?: Profile  // for private chats
   is_muted?: boolean
+  is_pinned?: boolean
+  pinned_at?: string | null
+  hidden_at?: string | null
+  cleared_at?: string | null
 }
 
 export interface MessageWithSender extends Message {

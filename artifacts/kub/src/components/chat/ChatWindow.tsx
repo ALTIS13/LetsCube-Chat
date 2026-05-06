@@ -42,7 +42,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const {
     messages, pinnedMessages, loading, isTyping,
     sendMessage, sendTyping, toggleReaction,
-    editMessage, deleteMessage, togglePin, forwardMessage,
+    editMessage, deleteMessage, togglePin, forwardMessage, clearChatForMe,
   } = useMessages(chatId, isForum ? selectedTopicId : null);
 
   useEffect(() => { markChatRead(chatId); }, [chatId, markChatRead]);
@@ -166,6 +166,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           chat={chat}
           onSearchOpen={() => setShowSearch(true)}
           onInfoOpen={() => setShowInfo(true)}
+          onClearForMe={clearChatForMe}
         />
 
         {isForum && (
@@ -240,7 +241,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         />
       </div>
       {showInfo && chat && (
-        <ChatInfoPanel chat={chat} onClose={() => setShowInfo(false)} />
+        <ChatInfoPanel chat={chat} onClose={() => setShowInfo(false)} onClearForMe={clearChatForMe} />
       )}
       {forwardingMessage && (
         <ForwardModal

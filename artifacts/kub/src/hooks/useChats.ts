@@ -22,6 +22,15 @@ export function useChats() {
   const fetchQueuedRef = useRef(false);
   const lastVisibilityFetchAt = useRef(0);
 
+  type MyMembershipRow = {
+    chat_id: string;
+    last_read_at: string | null;
+    hidden_at: string | null;
+    cleared_at: string | null;
+    pinned: boolean;
+    pinned_at: string | null;
+  };
+
   const fetchChats = useCallback(async () => {
     if (!userId) {
       setChats([]);
@@ -40,7 +49,7 @@ export function useChats() {
     try {
       const { data: memberships } = await supabase
         .from("chat_members")
-        .select("chat_id")
+        .select("chat_id, last_read_at, hidden_at, cleared_at, pinned, pinned_at")
         .eq("user_id", userId);
 
       if (!memberships?.length) {
@@ -50,7 +59,9 @@ export function useChats() {
         return;
       }
 
-      const chatIds = memberships.map((m) => m.chat_id);
+      const myMemberships = (memberships ?? []) as MyMembershipRow[];
+      const membershipByChat = new Map(myMemberships.map((membership) => [membership.chat_id, membership]));
+      const chatIds = myMemberships.map((m) => m.chat_id);
 
       const { data: chatsData } = await supabase
         .from("chats")
@@ -71,9 +82,7 @@ export function useChats() {
             .limit(1)
             .maybeSingle();
 
-          const myMembership = (
-            chat.members as { user_id: string; last_read_at: string | null }[]
-          )?.find((m) => m.user_id === userId);
+          const myMembership = membershipByChat.get(chat.id) ?? null;
 
           let unreadCount = 0;
           if (myMembership?.last_read_at) {
@@ -116,14 +125,32 @@ export function useChats() {
             other_user: otherUser,
             last_message: lastMsgData ?? undefined,
             unread_count: unreadCount,
+            is_pinned: Boolean(myMembership?.pinned),
+            pinned_at: myMembership?.pinned_at ?? null,
+            hidden_at: myMembership?.hidden_at ?? null,
+            cleared_at: myMembership?.cleared_at ?? null,
           } as ChatWithLastMessage;
         }),
       );
 
-      enriched.sort((a, b) => {
+      const visibleChats = enriched.filter((chat) => {
+        if (!chat.hidden_at) return true;
+        const lastActivity = chat.last_message?.created_at ?? chat.updated_at;
+        return new Date(lastActivity).getTime() > new Date(chat.hidden_at).getTime();
+      });
+
+      visibleChats.sort((a, b) => {
         const aSaved = isSavedChat(a, userId);
         const bSaved = isSavedChat(b, userId);
         if (aSaved !== bSaved) return aSaved ? -1 : 1;
+        const aPinned = Boolean(a.is_pinned);
+        const bPinned = Boolean(b.is_pinned);
+        if (aPinned !== bPinned) return aPinned ? -1 : 1;
+        if (aPinned && bPinned) {
+          const aPinnedAt = a.pinned_at ? new Date(a.pinned_at).getTime() : 0;
+          const bPinnedAt = b.pinned_at ? new Date(b.pinned_at).getTime() : 0;
+          if (aPinnedAt !== bPinnedAt) return bPinnedAt - aPinnedAt;
+        }
         const aTime = a.last_message?.created_at ?? a.updated_at;
         const bTime = b.last_message?.created_at ?? b.updated_at;
         return new Date(bTime).getTime() - new Date(aTime).getTime();
@@ -132,11 +159,11 @@ export function useChats() {
       // Reconcile stale active chat after delete/member removal. Only clear
       // after a successful fresh list proves the selected chat is no longer visible.
       const selectedChatId = useAppStore.getState().selectedChatId;
-      if (selectedChatId && !enriched.some((chat) => chat.id === selectedChatId)) {
+      if (selectedChatId && !visibleChats.some((chat) => chat.id === selectedChatId)) {
         useAppStore.getState().setSelectedChatId(null);
       }
 
-      setChats(enriched);
+      setChats(visibleChats);
     } finally {
       setLoading(false);
       fetchInFlightRef.current = false;
@@ -223,7 +250,6 @@ export function useChats() {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const handleRefresh = (event: Event) => {
       const detail = (event as CustomEvent<ChatsRefreshDetail>).detail;
-      if (detail?.reason !== "chat-notification") return;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         void fetchChats();

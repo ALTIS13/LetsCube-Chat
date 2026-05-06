@@ -57,7 +57,12 @@ export function MessageBubble({
   // doesn't try to setShowContext on a torn-down component.
   useEffect(() => () => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    setBodySelectionSuppressed(false);
   }, []);
+
+  useEffect(() => {
+    if (!showContext) setBodySelectionSuppressed(false);
+  }, [showContext]);
 
   const reactionGroups = (message.reactions ?? []).reduce<Record<string, { count: number; mine: boolean }>>(
     (acc, r) => {
@@ -95,6 +100,7 @@ export function MessageBubble({
     if (!touch) return;
     touchStartRef.current = { x: touch.clientX, y: touch.clientY };
     clearLongPressTimer();
+    setBodySelectionSuppressed(true);
     longPressTimer.current = setTimeout(() => {
       openContextAt(touch.clientX, touch.clientY);
       longPressTimer.current = null;
@@ -105,12 +111,16 @@ export function MessageBubble({
     const start = touchStartRef.current;
     if (!touch || !start) return;
     const moved = Math.hypot(touch.clientX - start.x, touch.clientY - start.y);
-    if (moved > 10) clearLongPressTimer();
+    if (moved > 10) {
+      clearLongPressTimer();
+      setBodySelectionSuppressed(false);
+    }
   }, [clearLongPressTimer]);
   const handleTouchEnd = useCallback(() => {
     clearLongPressTimer();
     touchStartRef.current = null;
-  }, [clearLongPressTimer]);
+    if (!showContext) setBodySelectionSuppressed(false);
+  }, [clearLongPressTimer, showContext]);
 
   const contextItems: ContextItem[] = [
     { icon: "reply", label: "Ответить", action: () => { onReply(); setShowContext(false); } },
@@ -299,6 +309,17 @@ export function MessageBubble({
               >
                 <KubIcon name="reply" size={14} />
               </button>
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  openContextAt(rect.left, rect.bottom + 4);
+                }}
+                aria-label="Действия сообщения"
+                className="w-7 h-7 rounded-full flex items-center justify-center transition-colors bg-[var(--kub-surface-2)] hover:bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]"
+              >
+                <KubIcon name="more" size={14} />
+              </button>
             </div>
 
             {showEmojiBar && (
@@ -406,6 +427,12 @@ export function MessageBubble({
       </div>
     </>
   );
+}
+
+function setBodySelectionSuppressed(suppressed: boolean) {
+  if (typeof document === "undefined") return;
+  document.body.style.userSelect = suppressed ? "none" : "";
+  document.body.style.webkitUserSelect = suppressed ? "none" : "";
 }
 
 function MediaImage({ url, title, onOpen }: { url: string; title: string; onOpen: () => void }) {

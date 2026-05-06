@@ -86,6 +86,10 @@ function sameChatList(a: ChatWithLastMessage[], b: ChatWithLastMessage[]): boole
       chat.is_forum === next.is_forum &&
       chat.updated_at === next.updated_at &&
       chat.unread_count === next.unread_count &&
+      chat.is_pinned === next.is_pinned &&
+      chat.pinned_at === next.pinned_at &&
+      chat.hidden_at === next.hidden_at &&
+      chat.cleared_at === next.cleared_at &&
       chat.last_message?.id === next.last_message?.id &&
       chat.last_message?.created_at === next.last_message?.created_at &&
       chat.last_message?.edited_at === next.last_message?.edited_at &&

@@ -9,16 +9,18 @@ import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
+import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import type { ChatWithLastMessage, Profile, Message } from "@/types/database";
 
 interface ChatInfoPanelProps {
   chat: ChatWithLastMessage;
   onClose: () => void;
+  onClearForMe?: () => Promise<{ ok: boolean; error: string | null }>;
 }
 
 type Tab = "info" | "members" | "media";
 
-export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
+export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProps) {
   const { currentUser, setSelectedChatId, chats, setChats } = useAppStore();
   const supabase = createClient();
   const display = getChatDisplayInfo(chat, currentUser?.id ?? null);
@@ -30,6 +32,8 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
   const isOwner = myRole === "owner";
   const isOwnerOrAdmin = !isSaved && (myRole === "owner" || myRole === "admin");
   const canEditChatProfile = isGroup && isOwnerOrAdmin;
+  const canHidePrivateChat = chat.type === "private" && !isSaved;
+  const isPinned = Boolean(chat.is_pinned);
 
   const [tab, setTab] = useState<Tab>("info");
   const [editing, setEditing] = useState(false);
@@ -159,6 +163,48 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
 
     setChats(chats.filter((c) => c.id !== chat.id));
     setSelectedChatId(null);
+    onClose();
+  };
+
+  const handlePinToggle = async () => {
+    const rpcName = isPinned ? "unpin_chat" : "pin_chat";
+    const { error } = await supabase.rpc(rpcName, { p_chat_id: chat.id });
+    if (error) {
+      alert(prefixError(isPinned ? "Не удалось открепить чат" : "Не удалось закрепить чат", error));
+      return;
+    }
+    setChats(chats.map((c) =>
+      c.id === chat.id
+        ? { ...c, is_pinned: !isPinned, pinned_at: isPinned ? null : new Date().toISOString() }
+        : c
+    ));
+    dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
+  };
+
+  const handleClearForMe = async () => {
+    if (!onClearForMe) return;
+    const title = isSaved ? "Очистить избранное у себя?" : "Очистить историю у себя?";
+    const body = "Сообщения будут скрыты только для вас. У других участников они останутся.";
+    if (!confirm(`${title}\n\n${body}`)) return;
+    const result = await onClearForMe();
+    if (!result.ok) {
+      alert(result.error ?? "Не удалось очистить историю у себя.");
+      return;
+    }
+    dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
+  };
+
+  const handleHidePrivateChat = async () => {
+    if (!canHidePrivateChat) return;
+    if (!confirm("Удалить чат у себя?\n\nЧат исчезнет только из вашего списка. У собеседника история останется.")) return;
+    const { error } = await supabase.rpc("hide_private_chat", { p_chat_id: chat.id });
+    if (error) {
+      alert(prefixError("Не удалось удалить чат у себя", error));
+      return;
+    }
+    setChats(chats.filter((c) => c.id !== chat.id));
+    setSelectedChatId(null);
+    dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
     onClose();
   };
 
@@ -389,6 +435,33 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
               )}
             </div>
             <div className="px-4 py-3 mt-2 border-t border-[color:var(--kub-border-color)]">
+              <button
+                onClick={handlePinToggle}
+                className={cn(actionRowClass, "text-[color:var(--kub-text)]")}
+              >
+                <KubIcon name={isPinned ? "pinOff" : "pin"} size={17} tone="muted" className="shrink-0" />
+                <span className="min-w-0 flex-1 truncate">{isPinned ? "Открепить чат" : "Закрепить чат"}</span>
+              </button>
+              {onClearForMe && (
+                <button
+                  onClick={handleClearForMe}
+                  className={dangerActionRowClass}
+                >
+                  <KubIcon name="delete" size={17} className="shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">
+                    {isSaved ? "Очистить избранное у себя" : "Очистить историю у себя"}
+                  </span>
+                </button>
+              )}
+              {canHidePrivateChat && (
+                <button
+                  onClick={handleHidePrivateChat}
+                  className={dangerActionRowClass}
+                >
+                  <KubIcon name="logout" size={17} className="shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">Удалить чат у себя</span>
+                </button>
+              )}
               {isGroup && (
                 <button
                   onClick={handleLeave}

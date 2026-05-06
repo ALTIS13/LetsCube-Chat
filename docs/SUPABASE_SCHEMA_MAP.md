@@ -38,6 +38,7 @@ Role helpers:
 
 - Composite PK: `chat_id`, `user_id`.
 - `role chat_member_role`, `joined_at`, `last_read_at`.
+- Per-user local state: `hidden_at`, `cleared_at`, `pinned`, `pinned_at`.
 
 `messages`:
 
@@ -255,6 +256,8 @@ Manual/idempotent migrations are stored in `.migration-backup/supabase/migration
 - `20260505_tasks_visibility_and_assignment.sql` - applied in production Supabase as of 2026-05-05; adds task privacy and pool assignment.
 - `20260505_media_storage_path_policies.sql` - applied in production Supabase as of 2026-05-05; hardens `media` storage paths.
 - `20260505_folders_policy_cleanup.sql` - applied in production Supabase as of 2026-05-05; legacy `folders`/`folder_chats` `*_own` policies are absent.
+- `20260506_chat_history_private_hide_permissions.sql` - applied in production Supabase as of 2026-05-06; adds per-user chat hide/clear RPC and columns.
+- `20260506_chat_pins.sql` - applied in production Supabase as of 2026-05-06; adds per-user pinned chats and RPC.
 
 Supabase MCP migration ledger is empty; do not rely on Supabase CLI migration history for this project.
 
