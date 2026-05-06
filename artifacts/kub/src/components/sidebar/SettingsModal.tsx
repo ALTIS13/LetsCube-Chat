@@ -13,7 +13,7 @@ import { KubButton, KubIcon, KubModal, type KubIconName } from "@/components/kub
 import { PhoneSection } from "./PhoneSection";
 import { AudioSettingsSection } from "./AudioSettingsSection";
 import { cn } from "@/lib/utils";
-import { mapPgError } from "@/lib/errors";
+import { mapPgError, prefixError } from "@/lib/errors";
 import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
 import {
   PROFILE_LIMITS,
@@ -102,7 +102,15 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
   const handleRemoveAvatar = async () => {
     if (!currentUser) return;
-    await supabase.from("profiles").update({ avatar_url: null }).eq("id", currentUser.id);
+    setError(null);
+    const { error: err } = await supabase
+      .from("profiles")
+      .update({ avatar_url: null, updated_at: new Date().toISOString() })
+      .eq("id", currentUser.id);
+    if (err) {
+      setError(prefixError("Не удалось удалить фото", err));
+      return;
+    }
     setCurrentUser({ ...currentUser, avatar_url: null });
   };
 

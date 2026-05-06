@@ -105,12 +105,12 @@ export function UserAvatar({
   className,
   showOnline,
 }: {
-  user: Pick<Profile, "id" | "full_name" | "avatar_url">;
+  user: Pick<Profile, "id" | "full_name" | "username" | "avatar_url">;
   size?: "sm" | "md" | "lg" | "xl";
   className?: string;
   showOnline?: boolean;
 }) {
-  const name = user.full_name ?? "?";
+  const name = user.full_name ?? user.username ?? "?";
   const bgColor = getAvatarColor(user.id);
   const initials = getInitials(name);
   const px = pixelMap[size];
