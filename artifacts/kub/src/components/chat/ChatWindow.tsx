@@ -39,7 +39,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const isForum = !!chat?.is_forum;
   const { topics, createTopic } = useTopics(chatId, isForum);
   const {
-    messages, loading, isTyping,
+    messages, pinnedMessages, loading, isTyping,
     sendMessage, sendTyping, toggleReaction,
     editMessage, deleteMessage, togglePin, forwardMessage,
   } = useMessages(chatId, isForum ? selectedTopicId : null);
@@ -55,7 +55,6 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const messageRefs = useRef<Record<string, HTMLDivElement>>({});
   const supabase = createClient();
 
-  const pinnedMessage = messages.find((m) => m.pinned);
   const myRole = (chat?.members?.find((m) => m.user_id === userId)?.role ?? null) as
     | "owner" | "admin" | "member" | null;
   const canManageTopics = myRole === "owner" || myRole === "admin";
@@ -138,6 +137,16 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     }
   }, []);
 
+  const handleJumpToPinned = useCallback((msg: MessageWithSender) => {
+    const el = messageRefs.current[msg.id];
+    if (!el) {
+      setPinError("Сообщение пока не загружено.");
+      window.setTimeout(() => setPinError(null), 4000);
+      return;
+    }
+    jumpToMessage(msg.id);
+  }, [jumpToMessage]);
+
   const handleTogglePin = useCallback(async (msg: MessageWithSender) => {
     setPinError(null);
     const result = await togglePin(msg.id, msg.pinned);
@@ -179,11 +188,11 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           </div>
         )}
 
-        {pinnedMessage && (
+        {pinnedMessages.length > 0 && (
           <PinnedMessage
-            message={pinnedMessage}
-            onJump={() => jumpToMessage(pinnedMessage.id)}
-            onUnpin={myRole ? () => void handleTogglePin(pinnedMessage) : undefined}
+            messages={pinnedMessages}
+            onJump={handleJumpToPinned}
+            onUnpin={myRole ? (msg) => void handleTogglePin(msg) : undefined}
           />
         )}
 

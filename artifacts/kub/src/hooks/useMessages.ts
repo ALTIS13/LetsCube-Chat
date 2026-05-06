@@ -10,6 +10,7 @@ import { mapPgError } from "@/lib/errors";
 export function useMessages(chatId: string | null, topicId: string | null = null) {
   const [loading, setLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [pinnedMessages, setPinnedMessages] = useState<MessageWithSender[]>([]);
   // Per-slice selectors: не подписываемся на весь store (раньше любая
   // мутация — chats, selectedChatId, mutedChatIds — ререндерила хук). Сами
   // setMessages/addMessage/replaceMessage в zustand стабильны по ссылке.
@@ -77,6 +78,30 @@ export function useMessages(chatId: string | null, topicId: string | null = null
   }, [chatId, topicId, supabase, setMessages]);
 
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
+
+  const fetchPinnedMessages = useCallback(async () => {
+    if (!chatId) {
+      setPinnedMessages([]);
+      return;
+    }
+    let query = supabase
+      .from("messages")
+      .select(`*, sender:profiles!user_id(*), reactions(*)`)
+      .eq("chat_id", chatId)
+      .eq("pinned", true)
+      .is("deleted_at", null);
+    query = topicId ? query.eq("topic_id", topicId) : query.is("topic_id", null);
+    const { data, error } = await query
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (error) {
+      console.error("Pinned messages fetch error:", error);
+      return;
+    }
+    setPinnedMessages(sortPinnedMessages((data ?? []) as unknown as MessageWithSender[]));
+  }, [chatId, topicId, supabase]);
+
+  useEffect(() => { fetchPinnedMessages(); }, [fetchPinnedMessages]);
 
   // Typing broadcast — one channel per chat, stable name, dev-only diag.
   // Зависимости — на примитив `userId`, не на объект `currentUser`, чтобы
@@ -176,7 +201,13 @@ export function useMessages(chatId: string | null, topicId: string | null = null
             .single();
           if (data) {
             const current = useAppStore.getState().messages[payload.new.chat_id] ?? [];
-            setMessages(payload.new.chat_id, current.map((m) => m.id === data.id ? (data as MessageWithSender) : m));
+            const nextMessage = data as MessageWithSender;
+            setMessages(payload.new.chat_id, current.map((m) => m.id === nextMessage.id ? nextMessage : m));
+            setPinnedMessages((currentPinned) =>
+              nextMessage.pinned && !nextMessage.deleted_at
+                ? upsertPinnedMessage(currentPinned, nextMessage)
+                : currentPinned.filter((message) => message.id !== nextMessage.id)
+            );
           }
         }
       )
@@ -276,11 +307,18 @@ export function useMessages(chatId: string | null, topicId: string | null = null
     }
     if (data) {
       const current = useAppStore.getState().messages[chatId] ?? [];
-      setMessages(chatId, current.map((message) =>
-        message.id === messageId
-          ? { ...message, pinned: Boolean(data.pinned) }
-          : message
-      ));
+      let updatedMessage: MessageWithSender | null = null;
+      setMessages(chatId, current.map((message) => {
+        if (message.id !== messageId) return message;
+        updatedMessage = { ...message, pinned: Boolean(data.pinned) };
+        return updatedMessage;
+      }));
+      setPinnedMessages((currentPinned) => {
+        if (Boolean(data.pinned) && updatedMessage) {
+          return upsertPinnedMessage(currentPinned, updatedMessage);
+        }
+        return currentPinned.filter((message) => message.id !== messageId);
+      });
     }
     return { ok: true, error: null };
   }, [chatId, supabase, setMessages]);
@@ -336,10 +374,12 @@ export function useMessages(chatId: string | null, topicId: string | null = null
 
   return {
     messages: messages[chatId ?? ""] ?? [],
+    pinnedMessages,
     loading, isTyping,
     sendMessage, sendTyping, toggleReaction,
     editMessage, deleteMessage, togglePin, forwardMessage,
     refetch: fetchMessages,
+    refetchPinnedMessages: fetchPinnedMessages,
   };
 }
 
@@ -368,6 +408,22 @@ function mergeMessagesById(
   return Array.from(byId.values()).sort(
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
   );
+}
+
+function sortPinnedMessages(messages: MessageWithSender[]): MessageWithSender[] {
+  return [...messages].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+}
+
+function upsertPinnedMessage(
+  messages: MessageWithSender[],
+  nextMessage: MessageWithSender,
+): MessageWithSender[] {
+  return sortPinnedMessages([
+    nextMessage,
+    ...messages.filter((message) => message.id !== nextMessage.id),
+  ]);
 }
 
 function isRealtimeVoiceMessage(message: MessageWithSender): boolean {
