@@ -81,7 +81,7 @@ const ACTIVE_DEADLINE_STATUSES: TaskStatus[] = [
 ];
 
 const DEADLINE_SOON_MS = 3 * 60 * 60 * 1000;
-const DEADLINE_WINDOW_MS = 24 * 60 * 60 * 1000;
+const DEADLINE_ALMOST_MS = 15 * 60 * 1000;
 
 export interface TaskDeadlineState {
   hasDueDate: boolean;
@@ -92,13 +92,14 @@ export interface TaskDeadlineState {
   detailLabel: string;
   badgeLabel: string | null;
   urgencyRatio: number | null;
-  urgencyLevel: "none" | "safe" | "watch" | "soon" | "danger";
+  fillPercent: number | null;
+  urgencyLevel: "none" | "safe" | "lime" | "orange" | "red" | "danger";
   tone: Tone;
 }
 
 /**
- * Deadline urgency is not task completion progress. It is a 24h risk window:
- * tasks outside the window stay calm, then gradually move toward warning/danger.
+ * This bar shows remaining deadline time, not task completion progress.
+ * More time means a longer calm bar; close deadlines become shorter and warmer.
  */
 export function getTaskDeadlineState(
   task: Pick<Task, "due_at" | "status">,
@@ -114,6 +115,7 @@ export function getTaskDeadlineState(
       detailLabel: "Для задачи не задан срок выполнения.",
       badgeLabel: null,
       urgencyRatio: null,
+      fillPercent: null,
       urgencyLevel: "none",
       tone: "muted",
     };
@@ -137,6 +139,7 @@ export function getTaskDeadlineState(
       detailLabel: `${completedLabel}. Дедлайн больше не требует срочного действия.`,
       badgeLabel: null,
       urgencyRatio: null,
+      fillPercent: null,
       urgencyLevel: "none",
       tone: "muted",
     };
@@ -148,10 +151,18 @@ export function getTaskDeadlineState(
     !isOverdue &&
     remainingMs <= DEADLINE_SOON_MS &&
     (task.status === "new" || task.status === "assigned");
-  const urgencyLevel = getUrgencyLevel(remainingMs, isOverdue);
-  const urgencyRatio = getUrgencyRatio(urgencyLevel);
+  const isAlmostDue =
+    !isOverdue &&
+    remainingMs <= DEADLINE_ALMOST_MS &&
+    (task.status === "new" || task.status === "assigned");
+  const { level: urgencyLevel, fillPercent } = getDeadlineVisual(remainingMs, isOverdue);
+  const urgencyRatio = fillPercent === null ? null : fillPercent / 100;
   const tone: Tone =
-    urgencyLevel === "danger" ? "danger" : urgencyLevel === "soon" || urgencyLevel === "watch" ? "warn" : "online";
+    urgencyLevel === "danger" || urgencyLevel === "red"
+      ? "danger"
+      : urgencyLevel === "orange" || urgencyLevel === "lime"
+        ? "warn"
+        : "online";
 
   if (isOverdue) {
     const overdue = formatDuration(Math.abs(remainingMs));
@@ -164,6 +175,7 @@ export function getTaskDeadlineState(
       detailLabel: `Задача просрочена на ${overdue}.`,
       badgeLabel: "Просрочена",
       urgencyRatio,
+      fillPercent,
       urgencyLevel,
       tone,
     };
@@ -177,8 +189,9 @@ export function getTaskDeadlineState(
     isDueSoon,
     timeLabel: `Осталось: ${left}`,
     detailLabel: `До срока осталось ${left}.`,
-    badgeLabel: isDueSoon ? "Почти просрочена" : null,
+    badgeLabel: isAlmostDue ? "Почти просрочена" : null,
     urgencyRatio,
+    fillPercent,
     urgencyLevel,
     tone,
   };
@@ -221,25 +234,17 @@ function formatDuration(ms: number): string {
   return `${minutes}м`;
 }
 
-function getUrgencyLevel(remainingMs: number, isOverdue: boolean): TaskDeadlineState["urgencyLevel"] {
-  if (isOverdue) return "danger";
-  if (remainingMs <= DEADLINE_SOON_MS) return "danger";
-  if (remainingMs <= 12 * 60 * 60 * 1000) return "soon";
-  if (remainingMs <= DEADLINE_WINDOW_MS) return "watch";
-  return "safe";
-}
-
-function getUrgencyRatio(level: TaskDeadlineState["urgencyLevel"]): number | null {
-  switch (level) {
-    case "safe":
-      return 0.18;
-    case "watch":
-      return 0.5;
-    case "soon":
-      return 0.75;
-    case "danger":
-      return 1;
-    default:
-      return null;
-  }
+function getDeadlineVisual(
+  remainingMs: number,
+  isOverdue: boolean,
+): { level: TaskDeadlineState["urgencyLevel"]; fillPercent: number } {
+  const hour = 60 * 60 * 1000;
+  const minute = 60 * 1000;
+  if (isOverdue) return { level: "danger", fillPercent: 100 };
+  if (remainingMs < 15 * minute) return { level: "danger", fillPercent: 8 };
+  if (remainingMs < hour) return { level: "red", fillPercent: 16 };
+  if (remainingMs < 3 * hour) return { level: "red", fillPercent: 30 };
+  if (remainingMs < 12 * hour) return { level: "orange", fillPercent: 55 };
+  if (remainingMs < 24 * hour) return { level: "lime", fillPercent: 75 };
+  return { level: "safe", fillPercent: 100 };
 }

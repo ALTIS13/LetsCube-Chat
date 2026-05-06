@@ -17,6 +17,8 @@
 
 Текущая модель рабочая, но слишком жесткая для клуба: любое расширение превращается в новые ветки `admin/manager/user`.
 
+Актуальное ограничение для задач: frontend уже скрывает `/tasks` от legacy `user`, но production RLS helper `_task_visible_to_current_user(...)` всё еще разрешает доступ creator/assignee независимо от роли. Это означает, что полный запрет task data для обычных клиентов требует отдельного DB/RPC этапа после внедрения `staff`/permission layer. До этого безопасная краткосрочная модель UI — показывать задачи только `admin`/`manager`.
+
 ## Целевая модель
 
 Phase A добавляет новую модель рядом со старой:
@@ -77,6 +79,8 @@ Legacy mapping:
 - `chats.manage_members`
 - `folders.manage_shared`
 - `tasks.view_all`
+- `tasks.access`
+- `tasks.view_assigned`
 - `tasks.create`
 - `tasks.assign`
 - `tasks.confirm`

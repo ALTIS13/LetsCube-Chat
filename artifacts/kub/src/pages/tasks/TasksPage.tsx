@@ -13,6 +13,7 @@ import {
   KubInput,
 } from "@/components/kub";
 import { TaskCard } from "./TaskCard";
+import { TaskListRow } from "./TaskListRow";
 import { TaskDetailModal } from "./TaskDetailModal";
 import { TaskFormModal } from "./TaskFormModal";
 import {
@@ -22,7 +23,7 @@ import {
   TASK_VISIBILITY_META,
   getTaskDeadlineState,
 } from "./taskMeta";
-import type { TaskStatus, TaskWithPeople } from "@/types/database";
+import type { TaskWithPeople } from "@/types/database";
 import { cn } from "@/lib/utils";
 
 interface Tab {
@@ -30,6 +31,9 @@ interface Tab {
   label: string;
   filter: TasksFilter;
 }
+
+type TaskViewMode = "cards" | "list";
+type AssigneeFilter = "all" | "me" | "unassigned" | string;
 
 const STAFF_TABS: Tab[] = [
   { id: "mine", label: "Мои", filter: { mine: "assigned" } },
@@ -50,22 +54,12 @@ const STAFF_TABS: Tab[] = [
   { id: "created", label: "Я создал",      filter: { mine: "created" } },
 ];
 
-const ASSIGNEE_TABS: Tab[] = [
-  { id: "mine",     label: "Мои", filter: { mine: "assigned" } },
-  { id: "new",      label: "Мои новые",
-    filter: { mine: "assigned", statuses: ["assigned" as TaskStatus] } },
-  { id: "active",   label: "В работе",
-    filter: { mine: "assigned", statuses: ["accepted", "in_progress"] as TaskStatus[] } },
-  { id: "review",   label: "На подтверждении",
-    filter: { mine: "assigned", statuses: ["waiting_confirmation" as TaskStatus] } },
-  { id: "urgent",   label: "Срочные", filter: { mine: "assigned" } },
-];
-
 /**
  * /tasks — role-aware tabs page.
  *
- * Staff (admin/manager): "Я создал", "На подтверждении", "Все" + create button.
- * Employee (user role):  "Мои новые", "В работе", "На подтверждении".
+ * Current production roles only distinguish admin/manager/user. Until the
+ * roles/permissions foundation introduces staff permissions, task UI is
+ * intentionally limited to admin/manager users.
  */
 export function TasksPage() {
   const [location, setLocation] = useLocation();
@@ -73,8 +67,14 @@ export function TasksPage() {
   const isStaff = useIsManagerOrAdmin();
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState<TaskViewMode>(() => {
+    if (typeof window === "undefined") return "cards";
+    const saved = window.localStorage.getItem("kub.taskViewMode");
+    return saved === "list" || saved === "cards" ? saved : "cards";
+  });
+  const [assigneeFilter, setAssigneeFilter] = useState<AssigneeFilter>("all");
 
-  const tabs = isStaff ? STAFF_TABS : ASSIGNEE_TABS;
+  const tabs = STAFF_TABS;
   const [tabId, setTabId] = useState(tabs[0].id);
   const activeTab = tabs.find((t) => t.id === tabId) ?? tabs[0];
 
@@ -103,22 +103,40 @@ export function TasksPage() {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    window.localStorage.setItem("kub.taskViewMode", viewMode);
+  }, [viewMode]);
+
   const closeTaskModal = () => {
     setOpenTaskId(null);
     if (taskIdFromUrl) setLocation("/tasks", { replace: true });
   };
 
   const visibleTasks = useMemo(
-    () => applyClientFilters(tasks, activeTab.id, search, nowMs, currentUser?.id ?? null),
-    [tasks, activeTab.id, search, nowMs, currentUser?.id],
+    () => applyClientFilters(tasks, activeTab.id, search, nowMs, currentUser?.id ?? null, assigneeFilter),
+    [tasks, activeTab.id, search, nowMs, currentUser?.id, assigneeFilter],
   );
   const tabCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const tab of tabs) {
-      counts[tab.id] = applyClientFilters(tasks, tab.id, "", nowMs, currentUser?.id ?? null).length;
+      counts[tab.id] = applyClientFilters(tasks, tab.id, "", nowMs, currentUser?.id ?? null, assigneeFilter).length;
     }
     return counts;
-  }, [tabs, tasks, nowMs, currentUser?.id]);
+  }, [tabs, tasks, nowMs, currentUser?.id, assigneeFilter]);
+
+  const assigneeOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const task of tasks) {
+      if (!task.assignee_id || !task.assignee) continue;
+      map.set(
+        task.assignee_id,
+        task.assignee.full_name ?? task.assignee.username ?? "Пользователь",
+      );
+    }
+    return Array.from(map, ([id, label]) => ({ id, label })).sort((a, b) =>
+      a.label.localeCompare(b.label, "ru-RU"),
+    );
+  }, [tasks]);
 
   // The "Все" tab on staff is intentionally unbounded — show a small hint
   // when the visible list is large.
@@ -235,25 +253,75 @@ export function TasksPage() {
       </div>
 
       <div className="flex-shrink-0 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 sm:px-5 py-3">
-        <KubInput
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Поиск по задачам…"
-          leftIcon={<KubIcon name="search" size={15} />}
-          rightSlot={
-            search ? (
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+          <KubInput
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Поиск по задачам…"
+            leftIcon={<KubIcon name="search" size={15} />}
+            rightSlot={
+              search ? (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="shrink-0 rounded-md p-1 text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface)] hover:text-[color:var(--kub-text)]"
+                  aria-label="Очистить поиск задач"
+                >
+                  <KubIcon name="close" size={14} />
+                </button>
+              ) : null
+            }
+            containerClassName="lg:max-w-xl"
+          />
+
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <label className="sr-only" htmlFor="task-assignee-filter">Исполнитель</label>
+            <select
+              id="task-assignee-filter"
+              value={assigneeFilter}
+              onChange={(event) => setAssigneeFilter(event.target.value)}
+              className="h-9 min-w-0 max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+            >
+              <option value="all">Все исполнители</option>
+              <option value="me">Я</option>
+              <option value="unassigned">Без исполнителя</option>
+              {assigneeOptions.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+
+            <div className="inline-flex h-9 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-0.5">
               <button
                 type="button"
-                onClick={() => setSearch("")}
-                className="shrink-0 rounded-md p-1 text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface)] hover:text-[color:var(--kub-text)]"
-                aria-label="Очистить поиск задач"
+                onClick={() => setViewMode("cards")}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md px-2.5 text-xs font-semibold transition-colors",
+                  viewMode === "cards"
+                    ? "bg-[var(--kub-surface)] text-[color:var(--kub-cyan)]"
+                    : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
+                )}
+                aria-pressed={viewMode === "cards"}
               >
-                <KubIcon name="close" size={14} />
+                <KubIcon name="tasks" size={13} />
+                Карточки
               </button>
-            ) : null
-          }
-          containerClassName="max-w-2xl"
-        />
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md px-2.5 text-xs font-semibold transition-colors",
+                  viewMode === "list"
+                    ? "bg-[var(--kub-surface)] text-[color:var(--kub-cyan)]"
+                    : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
+                )}
+                aria-pressed={viewMode === "list"}
+              >
+                <KubIcon name="menu" size={13} />
+                Список
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* List */}
@@ -280,11 +348,19 @@ export function TasksPage() {
             }
           />
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-            {visibleTasks.map((t) => (
-              <TaskCard key={t.id} task={t} nowMs={nowMs} onClick={() => setOpenTaskId(t.id)} />
-            ))}
-          </div>
+          viewMode === "list" ? (
+            <div className="space-y-2">
+              {visibleTasks.map((t) => (
+                <TaskListRow key={t.id} task={t} nowMs={nowMs} onClick={() => setOpenTaskId(t.id)} />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-4 gap-3">
+              {visibleTasks.map((t) => (
+                <TaskCard key={t.id} task={t} nowMs={nowMs} onClick={() => setOpenTaskId(t.id)} />
+              ))}
+            </div>
+          )
         )}
         {!loading && visibleTasks.length > 0 && (
           <div className="mt-4 text-center text-[11px] uppercase tracking-wide text-[color:var(--kub-muted)]">
@@ -372,6 +448,7 @@ function applyClientFilters(
   search: string,
   nowMs: number,
   userId: string | null,
+  assigneeFilter: AssigneeFilter,
 ): TaskWithPeople[] {
   const query = normalizeSearch(search);
   return tasks.filter((task) => {
@@ -386,6 +463,11 @@ function applyClientFilters(
     if (tabId === "created" && task.created_by !== userId) return false;
     if (tabId === "new" && (task.assignee_id !== userId || task.status !== "assigned")) return false;
     if (tabId === "active" && (task.assignee_id !== userId || !["accepted", "in_progress"].includes(task.status))) return false;
+    if (assigneeFilter === "me" && task.assignee_id !== userId) return false;
+    if (assigneeFilter === "unassigned" && task.assignee_id !== null) return false;
+    if (assigneeFilter !== "all" && assigneeFilter !== "me" && assigneeFilter !== "unassigned" && task.assignee_id !== assigneeFilter) {
+      return false;
+    }
     if (tabId === "urgent") {
       const deadline = getTaskDeadlineState(task, nowMs);
       if (!deadline.isOverdue && !deadline.isDueSoon) return false;

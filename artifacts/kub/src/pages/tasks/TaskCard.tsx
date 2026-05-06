@@ -36,7 +36,7 @@ export function TaskCard({ task, nowMs, onClick }: TaskCardProps) {
     >
       <KubPanel
         padded={false}
-        className="p-4 flex flex-col gap-3 hover:border-[color:var(--kub-cyan)]/40 transition-colors cursor-pointer"
+        className="p-3 flex flex-col gap-2.5 hover:border-[color:var(--kub-cyan)]/40 transition-colors cursor-pointer"
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -44,7 +44,7 @@ export function TaskCard({ task, nowMs, onClick }: TaskCardProps) {
               {task.title}
             </h3>
             {task.description && (
-              <p className="mt-1 text-xs text-[color:var(--kub-muted)] line-clamp-2">
+              <p className="mt-1 text-xs text-[color:var(--kub-muted)] line-clamp-1">
                 {task.description}
               </p>
             )}
@@ -76,7 +76,7 @@ export function TaskCard({ task, nowMs, onClick }: TaskCardProps) {
           )}
         </div>
 
-        <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
+        <div className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2.5 py-2">
           <div className="flex min-w-0 items-center justify-between gap-2 text-[11px]">
             <span className={cn(
               "flex min-w-0 items-center gap-1.5 font-medium",
@@ -97,7 +97,7 @@ export function TaskCard({ task, nowMs, onClick }: TaskCardProps) {
             {deadline.urgencyRatio !== null ? (
               <div
                 className={cn("h-full rounded-full transition-[width] duration-300", deadlineFillClass(deadline.urgencyLevel))}
-                style={{ width: `${Math.round(deadline.urgencyRatio * 100)}%` }}
+                style={{ width: `${deadline.fillPercent ?? 0}%` }}
               />
             ) : (
               <div className="h-full w-0" />
@@ -135,10 +135,12 @@ function deadlineFillClass(level: ReturnType<typeof getTaskDeadlineState>["urgen
   switch (level) {
     case "safe":
       return "bg-[var(--kub-online)]";
-    case "watch":
+    case "lime":
       return "bg-[color-mix(in_srgb,var(--kub-warn)_55%,var(--kub-online))]";
-    case "soon":
+    case "orange":
       return "bg-[var(--kub-warn)]";
+    case "red":
+      return "bg-[color-mix(in_srgb,var(--kub-danger)_72%,var(--kub-warn))]";
     case "danger":
       return "bg-[var(--kub-danger)]";
     default:

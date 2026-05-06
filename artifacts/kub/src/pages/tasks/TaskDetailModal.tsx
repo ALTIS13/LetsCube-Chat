@@ -248,7 +248,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
             {deadline.urgencyRatio !== null ? (
               <div
                 className={cn("h-full rounded-full transition-[width] duration-300", deadlineFillClass(deadline.urgencyLevel))}
-                style={{ width: `${Math.round(deadline.urgencyRatio * 100)}%` }}
+                style={{ width: `${deadline.fillPercent ?? 0}%` }}
               />
             ) : (
               <div className="h-full w-0" />
@@ -608,10 +608,12 @@ function deadlineFillClass(level: ReturnType<typeof getTaskDeadlineState>["urgen
   switch (level) {
     case "safe":
       return "bg-[var(--kub-online)]";
-    case "watch":
+    case "lime":
       return "bg-[color-mix(in_srgb,var(--kub-warn)_55%,var(--kub-online))]";
-    case "soon":
+    case "orange":
       return "bg-[var(--kub-warn)]";
+    case "red":
+      return "bg-[color-mix(in_srgb,var(--kub-danger)_72%,var(--kub-warn))]";
     case "danger":
       return "bg-[var(--kub-danger)]";
     default:
