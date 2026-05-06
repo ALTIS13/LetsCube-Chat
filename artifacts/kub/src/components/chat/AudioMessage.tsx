@@ -17,6 +17,7 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
   const [metadataReady, setMetadataReady] = useState(false);
   const [seeking, setSeeking] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [metadataWarmupElapsed, setMetadataWarmupElapsed] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const rafRef = useRef<number | null>(null);
   const { settings } = useAudioSettings();
@@ -32,7 +33,7 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
   const syncFromAudio = useCallback((options?: { force?: boolean }) => {
     const audio = audioRef.current;
     if (!audio) return;
-    const audioDuration = finiteDuration(audio.duration);
+    const audioDuration = readMediaDuration(audio);
     const nextTime = finiteTime(audio.currentTime);
 
     if (audioDuration > 0) {
@@ -68,6 +69,25 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
     setMetadataReady(false);
     setSeeking(false);
     setLoadError(null);
+    setMetadataWarmupElapsed(false);
+
+    const audio = audioRef.current;
+    if (!audio || !url) return;
+
+    audio.preload = "auto";
+    audio.volume = clampAudioElementVolume(settings.voicePlaybackVolume);
+    audio.load();
+
+    const syncTimer = window.setTimeout(() => {
+      const nextDuration = readMediaDuration(audio);
+      if (nextDuration > 0) {
+        setDurationSeconds(nextDuration);
+        setMetadataReady(true);
+      }
+      setMetadataWarmupElapsed(true);
+    }, 1200);
+
+    return () => window.clearTimeout(syncTimer);
   }, [duration, url, stopProgressLoop]);
 
   useEffect(() => stopProgressLoop, [stopProgressLoop]);
@@ -107,7 +127,8 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
 
   const handleLoadedMetadata = () => {
     const audio = audioRef.current;
-    const nextDuration = finiteDuration(audio?.duration);
+    if (!audio) return;
+    const nextDuration = readMediaDuration(audio);
     setDurationSeconds(nextDuration);
     setMetadataReady(nextDuration > 0);
     syncFromAudio({ force: true });
@@ -118,7 +139,7 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
     stopProgressLoop();
     setPlaying(false);
     if (audio) {
-      const audioDuration = finiteDuration(audio.duration);
+      const audioDuration = readMediaDuration(audio);
       setDurationSeconds(audioDuration);
       setCurrentTime(audioDuration > 0 ? audioDuration : finiteTime(audio.currentTime));
     }
@@ -149,6 +170,7 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
 
   const srcReady = Boolean(url);
   const canSeek = srcReady && metadataReady && durationSeconds > 0 && !loadError;
+  const canPlayAudio = srcReady && !loadError && (metadataReady || metadataWarmupElapsed);
   const progressRatio = useMemo(() => {
     if (durationSeconds <= 0) return 0;
     return Math.min(1, Math.max(0, currentTime / durationSeconds));
@@ -161,9 +183,13 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
         <audio
           ref={audioRef}
           src={url}
-          preload="metadata"
+          preload="auto"
           onLoadedMetadata={handleLoadedMetadata}
           onDurationChange={handleLoadedMetadata}
+          onLoadedData={handleLoadedMetadata}
+          onCanPlay={handleLoadedMetadata}
+          onCanPlayThrough={handleLoadedMetadata}
+          onProgress={() => syncFromAudio()}
           onTimeUpdate={() => syncFromAudio()}
           onPlay={handlePlay}
           onPause={handlePause}
@@ -178,7 +204,7 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
 
       <button
         onClick={toggle}
-        disabled={!url || Boolean(loadError)}
+        disabled={!canPlayAudio}
         aria-label={playing ? "Пауза" : "Воспроизвести"}
         className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all hover:brightness-110 bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:brightness-100"
       >
@@ -227,4 +253,20 @@ function clampTime(value: number, duration: number) {
   const safeValue = finiteTime(value);
   const safeDuration = finiteDuration(duration);
   return safeDuration > 0 ? Math.min(safeDuration, Math.max(0, safeValue)) : safeValue;
+}
+
+function readMediaDuration(audio: HTMLAudioElement) {
+  const directDuration = finiteDuration(audio.duration);
+  if (directDuration > 0) return directDuration;
+
+  const seekable = audio.seekable;
+  try {
+    if (seekable.length === 0) return 0;
+    const end = finiteDuration(seekable.end(seekable.length - 1));
+    if (end > 0) return end;
+  } catch {
+    return 0;
+  }
+
+  return 0;
 }
