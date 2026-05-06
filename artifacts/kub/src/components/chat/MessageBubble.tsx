@@ -63,6 +63,11 @@ export function MessageBubble({
     textContent.trim().length >= 8 &&
     /\s/.test(textContent);
   const hasLink = message.type === "text" && /\bhttps?:\/\/\S+/.test(textContent);
+  const bubbleMinWidthClass = hasLink
+    ? "min-w-44 sm:min-w-72"
+    : shouldUseComfortTextWidth
+      ? "min-w-36 sm:min-w-44"
+      : "min-w-24";
 
   // Belt-and-suspenders cleanup: if the bubble unmounts mid-touch (e.g. user
   // navigates away during a long-press), clear the pending timer so it
@@ -277,7 +282,7 @@ export function MessageBubble({
           </div>
         )}
 
-        <div className={cn("flex w-fit min-w-0 max-w-[86vw] flex-col sm:max-w-[min(72%,680px)] md:max-w-[min(65%,680px)]", isMe ? "items-end" : "items-start")}>
+        <div className={cn("flex w-fit max-w-[86vw] flex-col sm:max-w-[min(72%,680px)] md:max-w-[min(65%,680px)]", bubbleMinWidthClass, isMe ? "items-end" : "items-start")}>
 
           {!isMe && isFirstInGroup && message.sender && (
             <span className="text-xs font-semibold ml-3 mb-0.5 text-[color:var(--kub-cyan)]">
@@ -315,8 +320,8 @@ export function MessageBubble({
 
           <div
             className={cn(
-              "relative w-fit min-w-24 max-w-full px-3 py-2 rounded-2xl transition-opacity select-none sm:select-text",
-              hasLink ? "min-w-44 sm:min-w-72" : shouldUseComfortTextWidth && "min-w-36 sm:min-w-44",
+              "relative w-fit max-w-full px-3 py-2 rounded-2xl transition-opacity select-none sm:select-text",
+              bubbleMinWidthClass,
               bubbleClass,
               isMe
                 ? cn("rounded-br-sm", message.reply_to_id && "rounded-tr-none")
@@ -445,7 +450,7 @@ export function MessageBubble({
           </div>
 
           {Object.keys(reactionGroups).length > 0 && (
-            <div className={cn("mt-0.5 mb-0.5 flex max-w-[min(100%,28rem)] flex-wrap gap-0.5 px-2", isMe ? "justify-end self-end" : "justify-start self-start")}>
+            <div className={cn("mt-0.5 mb-0.5 flex w-fit max-w-[min(86vw,28rem)] flex-wrap gap-0.5 px-2", isMe ? "justify-end self-end" : "justify-start self-start")}>
               {Object.entries(reactionGroups).map(([emoji, { count, mine }]) => (
                 <button
                   key={emoji}
