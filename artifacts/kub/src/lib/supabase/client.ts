@@ -3,6 +3,7 @@ import {
   type SupabaseClient,
 } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
+import { clearPasswordRecoveryFlow, markPasswordRecoveryFlow } from '@/lib/authRecovery'
 
 // Read Supabase config from Vite env vars.
 // Accept both the new `VITE_SUPABASE_PUBLISHABLE_KEY` name and the legacy
@@ -51,9 +52,13 @@ export function createClient(): SupabaseClient<Database> {
     // Keep the Realtime WebSocket auth in sync with the current session.
     instance.auth.onAuthStateChange((event, session) => {
       if (!instance) return
+      if (event === "PASSWORD_RECOVERY") {
+        markPasswordRecoveryFlow()
+      }
       if (session?.access_token) {
         instance.realtime.setAuth(session.access_token)
       } else if (event === "SIGNED_OUT") {
+        clearPasswordRecoveryFlow()
         instance.realtime.setAuth(null)
       }
     })

@@ -16,11 +16,14 @@ import { TasksPage } from "@/pages/tasks/TasksPage";
 import NotFound from "@/pages/not-found";
 import { ThemeSync } from "@/hooks/useTheme";
 import { KubLogo } from "@/components/kub";
+import { getAuthCallbackErrorMessage, getAuthCallbackExceptionMessage } from "@/lib/authRedirect";
 import {
-  CONFIRMATION_LINK_INVALID_MESSAGE,
-  getAuthCallbackErrorMessage,
-  getAuthCallbackExceptionMessage,
-} from "@/lib/authRedirect";
+  PASSWORD_RECOVERY_LINK_INVALID_MESSAGE,
+  clearPasswordRecoveryFlow,
+  isPasswordRecoveryFlow,
+  isPasswordRecoveryUrl,
+  markPasswordRecoveryFlow,
+} from "@/lib/authRecovery";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,8 +46,13 @@ function AuthCallback() {
     const supabase = createClient();
     const url = new URL(window.location.href);
     const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
-    const callbackType = url.searchParams.get("type") || hashParams.get("type");
-    const isRecovery = callbackType === "recovery";
+    const isRecovery =
+      isPasswordRecoveryUrl(url.searchParams) ||
+      isPasswordRecoveryUrl(hashParams) ||
+      isPasswordRecoveryFlow();
+    if (isRecovery) {
+      markPasswordRecoveryFlow();
+    }
     const callbackError =
       getAuthCallbackErrorMessage(url.searchParams) ||
       getAuthCallbackErrorMessage(hashParams);
@@ -77,7 +85,8 @@ function AuthCallback() {
             setRecoveryMode(true);
             cleanAuthCallbackUrl();
           } else {
-            setError(CONFIRMATION_LINK_INVALID_MESSAGE);
+            clearPasswordRecoveryFlow();
+            setError(PASSWORD_RECOVERY_LINK_INVALID_MESSAGE);
           }
           return;
         }
@@ -96,8 +105,8 @@ function AuthCallback() {
 
   const handlePasswordUpdate = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (newPassword.length < 6) {
-      setError("Пароль должен быть не короче 6 символов.");
+    if (newPassword.length < 8) {
+      setError("Пароль должен быть не короче 8 символов.");
       return;
     }
     if (newPassword !== repeatPassword) {
@@ -110,6 +119,7 @@ function AuthCallback() {
       const supabase = createClient();
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
+      clearPasswordRecoveryFlow();
       await supabase.auth.signOut();
       setLocation("/login?password_reset=1");
     } catch (err: unknown) {
@@ -134,7 +144,7 @@ function AuthCallback() {
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                minLength={6}
+                minLength={8}
                 autoComplete="new-password"
                 placeholder="Новый пароль"
                 className="h-11 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
@@ -143,7 +153,7 @@ function AuthCallback() {
                 type="password"
                 value={repeatPassword}
                 onChange={(e) => setRepeatPassword(e.target.value)}
-                minLength={6}
+                minLength={8}
                 autoComplete="new-password"
                 placeholder="Повторите пароль"
                 className="h-11 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
@@ -230,6 +240,13 @@ function AppRoutes() {
 
   // Auth callback always renders so it can exchange the code, regardless of session state.
   if (location.startsWith("/auth/callback")) {
+    return <AuthCallback />;
+  }
+
+  // Supabase may consume the recovery hash before React reads the URL. The
+  // PASSWORD_RECOVERY event sets a sessionStorage flag; while it is present,
+  // keep the user in the password update screen instead of entering the app.
+  if (user && isPasswordRecoveryFlow()) {
     return <AuthCallback />;
   }
 

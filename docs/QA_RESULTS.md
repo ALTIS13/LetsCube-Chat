@@ -158,3 +158,15 @@ Next safe task UI alignment:
 - Message input keeps Enter-to-send and Shift+Enter newline behavior, but now avoids sending while IME composition is active and does not send while upload is in progress.
 - Message input `Escape` closes emoji/attachment popovers without clearing typed text.
 - Chat notifications already navigate to the target chat when payload contains `chat_id`; task notifications continue to use `/tasks?task=<id>`.
+
+## Supabase Password Recovery Flow
+
+2026-05-06 frontend-only hotfix:
+
+- Supabase recovery links intentionally create a temporary authenticated session.
+- The app must not treat `PASSWORD_RECOVERY` as a normal login; it must show the password update form first.
+- Recovery is now detected by `/auth/callback?type=recovery`, `#type=recovery`, and the Supabase `PASSWORD_RECOVERY` auth event.
+- While recovery state is active, the user stays on the password update screen even if Supabase has already established a session.
+- After successful `supabase.auth.updateUser({ password })`, the app clears recovery state, signs the user out, and returns to `/login?password_reset=1`.
+- Invalid/expired recovery links show a friendly Russian message instead of raw Supabase output.
+- Confirmation email flow remains separate: non-recovery auth callback can still complete login/confirmation normally.
