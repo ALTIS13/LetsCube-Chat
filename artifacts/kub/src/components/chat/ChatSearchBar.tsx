@@ -14,8 +14,9 @@ export function ChatSearchBar({ messages, onClose, onJumpTo }: ChatSearchBarProp
   const [query, setQuery] = useState("");
   const [idx, setIdx] = useState(0);
 
+  const searchableMessages = messages.filter((m) => !m.deleted_at && m.content?.trim());
   const results = query.trim()
-    ? messages.filter((m) => m.content?.toLowerCase().includes(query.toLowerCase()))
+    ? searchableMessages.filter((m) => m.content?.toLowerCase().includes(query.toLowerCase()))
     : [];
   const total = results.length;
 
@@ -29,7 +30,7 @@ export function ChatSearchBar({ messages, onClose, onJumpTo }: ChatSearchBarProp
     setQuery(v);
     setIdx(0);
     if (v.trim()) {
-      const found = messages.filter((m) => m.content?.toLowerCase().includes(v.toLowerCase()));
+      const found = searchableMessages.filter((m) => m.content?.toLowerCase().includes(v.toLowerCase()));
       if (found.length) onJumpTo(found[0].id);
     }
   };

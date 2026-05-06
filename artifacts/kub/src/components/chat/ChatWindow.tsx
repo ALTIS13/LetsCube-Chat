@@ -40,10 +40,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const isForum = !!chat?.is_forum;
   const { topics, createTopic } = useTopics(chatId, isForum);
   const {
-    messages, pinnedMessages, loading, isTyping,
+    messages, pinnedMessages, pinnedReady, loading, isTyping,
     sendMessage, sendTyping, toggleReaction,
     editMessage, deleteMessage, togglePin, forwardMessage, clearChatForMe,
-  } = useMessages(chatId, isForum ? selectedTopicId : null);
+  } = useMessages(chatId, isForum ? selectedTopicId : undefined);
 
   useEffect(() => { markChatRead(chatId); }, [chatId, markChatRead]);
 
@@ -103,6 +103,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       const ss = (durationSec % 60).toString().padStart(2, "0");
       const { error: insertErr } = await supabase.from("messages").insert({
         chat_id: chatId,
+        topic_id: isForum ? selectedTopicId : null,
         user_id: userId,
         type: "audio",
         media_url: publicUrl,
@@ -158,6 +159,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     }
   }, [togglePin]);
 
+  const handleBulkDelete = useCallback(async (items: MessageWithSender[]) => {
+    for (const item of items) {
+      await deleteMessage(item.id);
+    }
+  }, [deleteMessage]);
+
   return (
     <div className="flex h-full w-full bg-[var(--kub-chat-bg)]">
       <div className="flex flex-col flex-1 min-w-0">
@@ -191,7 +198,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           </div>
         )}
 
-        {pinnedMessages.length > 0 && (
+        {pinnedReady && pinnedMessages.length > 0 && (
           <PinnedMessage
             messages={pinnedMessages}
             onJump={handleJumpToPinned}
@@ -218,6 +225,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             onReaction={toggleReaction}
             onEdit={(msg) => setEditingMessage(msg)}
             onDelete={(msg) => deleteMessage(msg.id)}
+            onBulkDelete={handleBulkDelete}
             onTogglePin={userId ? handleTogglePin : undefined}
             onForward={(msg) => setForwardingMessage(msg)}
             onOpenMedia={setOpenMedia}
@@ -232,6 +240,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
         <MessageInput
           chatId={chatId}
+          topicId={isForum ? selectedTopicId : null}
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
           onSend={handleSend}

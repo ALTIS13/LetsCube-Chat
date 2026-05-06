@@ -110,7 +110,13 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
       alert(result.error ?? "Не удалось очистить историю у себя.");
       return;
     }
+    const clearedAt = new Date().toISOString();
     setMessages(chatId, []);
+    setChats(chats.map((item) =>
+      item.id === chatId
+        ? { ...item, last_message: undefined, unread_count: 0, cleared_at: clearedAt }
+        : item
+    ));
     dispatchChatsRefresh({ reason: "membership-change", chatId });
     setShowMenu(false);
   };

@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { KubIcon } from "./KubIcon";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +44,8 @@ export function KubModal({
   contentClassName,
   mobileSheet = true,
 }: KubModalProps) {
+  const pointerStartedInsideRef = useRef(false);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -63,7 +65,17 @@ export function KubModal({
           ? "items-stretch justify-stretch p-0 sm:items-center sm:justify-center sm:p-4"
           : "items-center justify-center p-4"
       )}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onPointerDown={(e) => {
+        pointerStartedInsideRef.current = e.target !== e.currentTarget;
+      }}
+      onClick={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (pointerStartedInsideRef.current) {
+          pointerStartedInsideRef.current = false;
+          return;
+        }
+        onClose();
+      }}
     >
       <div
         className={cn(

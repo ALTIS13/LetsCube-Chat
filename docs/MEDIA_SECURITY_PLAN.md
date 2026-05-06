@@ -1,15 +1,16 @@
 # Media Security Plan
 
-Status: proposal required. Do not apply SQL from the application.
+Status: base migration applied manually on 2026-05-06.
 
 ## Current Finding
 
-- Supabase Storage bucket `media` is public.
+- Supabase Storage bucket `media` is still public for avatars and legacy public URLs.
+- Supabase Storage bucket `chat-media` is private and intended for new private/group message media.
 - Storage RLS policies exist for authenticated scoped read/write, but public bucket URLs are still directly readable.
 - User avatars and group avatars currently share the same bucket with chat message media.
-- `messages` stores `media_url` as a URL; there is no dedicated `media_bucket` / `media_path` field for private signed URL access.
+- `messages` now has `media_bucket` and `media_path` columns for private signed URL access.
 
-Impact: private and group chat media can be opened by anyone who obtains a direct public Storage URL. This is not acceptable for message attachments.
+Compatibility gap: legacy `messages.media_url` public links still exist until old media is backfilled/moved and frontend upload/read paths are fully switched to `chat-media` signed URLs.
 
 ## Target Model
 

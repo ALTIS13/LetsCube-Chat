@@ -216,3 +216,12 @@ Recurring tasks roadmap note:
 - Pinned messages and media gallery now re-check current `chat_members.cleared_at` before rendering local cleared history, so old pinned/media entries should not flash back after local clear/hide.
 - Media gallery now fetches media from DB in pages and filters by `cleared_at`; image/video clicks still use the in-app viewer.
 - Added a non-destructive app update banner that detects a new Vite entry bundle on interval/visibility return and asks the user to refresh instead of forcing a full page reload.
+
+2026-05-06 chat consistency follow-up:
+
+- User manually applied `.migration-backup/supabase/migrations/20260506_secure_chat_media_access.sql`; Supabase read-only check confirmed private `chat-media`, chat media policies and `messages.media_bucket` / `messages.media_path`.
+- Legacy `media` bucket remains public for avatars/old media compatibility. Full security still requires moving new message uploads and legacy media reads to `chat-media` signed URLs.
+- Chat preview now filters last message/unread counts by current user's `chat_members.cleared_at`.
+- Chat search ignores soft-deleted message placeholders.
+- Topic-aware text/media/voice sends now include `topic_id`; when topics are disabled the message hook no longer filters out topic messages.
+- Frontend name limits were added for group/chat/folder/topic names. DB constraint proposal prepared: `.migration-backup/supabase/migrations/20260506_entity_name_constraints.sql`.

@@ -8,6 +8,7 @@ import { ChatAvatar } from "@/components/ui/ChatAvatar";
 import { createClient } from "@/lib/supabase/client";
 import { KubButton, KubIcon, KubModal, type KubIconName } from "@/components/kub";
 import { cn } from "@/lib/utils";
+import { FOLDER_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
 
 const QUICK_EMOJI = ["👤", "💼", "📢", "📌", "🔥", "🏠", "🎓", "💬", "❤️", "📦"];
 
@@ -90,6 +91,10 @@ export function FolderEditModal({
 
   const handleSave = async () => {
     if (!name.trim() || busy || !canManage) return;
+    if (name.trim().length > FOLDER_NAME_MAX_LENGTH) {
+      setError(`Название папки не должно быть длиннее ${FOLDER_NAME_MAX_LENGTH} символов.`);
+      return;
+    }
     setBusy(true);
     setError(null);
     let folderId = folder?.id;
@@ -204,9 +209,9 @@ export function FolderEditModal({
         <input
           autoFocus={canManage}
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => setName(limitText(e.target.value, FOLDER_NAME_MAX_LENGTH))}
           placeholder="Работа, Семья, Учёба…"
-          maxLength={30}
+          maxLength={FOLDER_NAME_MAX_LENGTH}
           disabled={!canManage}
           className="w-full text-sm outline-none rounded-xl px-3 h-10 disabled:opacity-60 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-text)] focus:border-[color:var(--kub-cyan)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all"
         />

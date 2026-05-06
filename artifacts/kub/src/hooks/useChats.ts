@@ -74,34 +74,46 @@ export function useChats() {
 
       const enriched: ChatWithLastMessage[] = await Promise.all(
         chatsData.map(async (chat) => {
-          const { data: lastMsgData } = await supabase
+          const myMembership = membershipByChat.get(chat.id) ?? null;
+
+          let lastMessageQuery = supabase
             .from("messages")
             .select("*, sender:profiles(*)")
             .eq("chat_id", chat.id)
-            .is("deleted_at", null)
+            .is("deleted_at", null);
+          if (myMembership?.cleared_at) {
+            lastMessageQuery = lastMessageQuery.gt("created_at", myMembership.cleared_at);
+          }
+          const { data: lastMsgData } = await lastMessageQuery
             .order("created_at", { ascending: false })
             .limit(1)
             .maybeSingle();
 
-          const myMembership = membershipByChat.get(chat.id) ?? null;
-
           let unreadCount = 0;
           if (myMembership?.last_read_at) {
-            const { count } = await supabase
+            let unreadQuery = supabase
               .from("messages")
               .select("id", { count: "exact", head: true })
               .eq("chat_id", chat.id)
               .neq("user_id", userId)
               .gt("created_at", myMembership.last_read_at)
               .is("deleted_at", null);
+            if (myMembership.cleared_at) {
+              unreadQuery = unreadQuery.gt("created_at", myMembership.cleared_at);
+            }
+            const { count } = await unreadQuery;
             unreadCount = count ?? 0;
           } else {
-            const { count } = await supabase
+            let unreadQuery = supabase
               .from("messages")
               .select("id", { count: "exact", head: true })
               .eq("chat_id", chat.id)
               .neq("user_id", userId)
               .is("deleted_at", null);
+            if (myMembership?.cleared_at) {
+              unreadQuery = unreadQuery.gt("created_at", myMembership.cleared_at);
+            }
+            const { count } = await unreadQuery;
             unreadCount = count ?? 0;
           }
 

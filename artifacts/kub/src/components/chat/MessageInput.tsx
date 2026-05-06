@@ -20,6 +20,7 @@ const EMOJI_PANEL = [
 
 interface MessageInputProps {
   chatId: string;
+  topicId?: string | null;
   replyTo: MessageWithSender | null;
   onCancelReply: () => void;
   onSend: (content: string) => void;
@@ -28,7 +29,7 @@ interface MessageInputProps {
   onTyping?: () => void;
 }
 
-export function MessageInput({ chatId, replyTo, onCancelReply, onSend, onEdit, onSendVoice, onTyping }: MessageInputProps) {
+export function MessageInput({ chatId, topicId = null, replyTo, onCancelReply, onSend, onEdit, onSendVoice, onTyping }: MessageInputProps) {
   const [text, setText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
@@ -94,6 +95,7 @@ export function MessageInput({ chatId, replyTo, onCancelReply, onSend, onEdit, o
       const type = isImage ? "image" : isVideo ? "video" : "file";
       const { data: newMsg } = await supabase.from("messages").insert({
         chat_id: chatId,
+        topic_id: topicId,
         user_id: userId,
         type,
         media_url: publicUrl,
@@ -104,7 +106,7 @@ export function MessageInput({ chatId, replyTo, onCancelReply, onSend, onEdit, o
     } finally {
       setUploading(false);
     }
-  }, [chatId, userId, supabase, addMessage]);
+  }, [chatId, topicId, userId, supabase, addMessage]);
 
   const handleLocation = useCallback(() => {
     setShowAttach(false);

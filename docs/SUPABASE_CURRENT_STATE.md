@@ -197,3 +197,10 @@ Auth logs показывают успешные login/token/verify events и с�
 - `.migration-backup/supabase/migrations/20260505_folders_policy_cleanup.sql` - уже применена в production Supabase; legacy permissive `*_own` policies для `folders`/`folder_chats` отсутствуют.
 
 Frontend task UI можно выравнивать под новые task columns/RPC отдельным подтвержденным этапом; источник прав остается RLS/RPC.
+
+## 2026-05-06 Media And Name State
+
+- `.migration-backup/supabase/migrations/20260506_secure_chat_media_access.sql` was applied manually by the user.
+- Read-only MCP check confirmed private bucket `chat-media`, chat-member Storage policies and `messages.media_bucket` / `messages.media_path`.
+- Legacy bucket `media` remains public for avatars and old media compatibility; frontend migration to signed `chat-media` URLs remains a separate compatibility step.
+- `.migration-backup/supabase/migrations/20260506_entity_name_constraints.sql` is prepared but not applied; it adds DB-level max length checks for chat/folder/topic names.

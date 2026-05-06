@@ -5,6 +5,7 @@ import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import type { Topic } from "@/types/database";
+import { TOPIC_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
 
 /**
  * Loads and watches the topic list for a forum chat.
@@ -88,7 +89,7 @@ export function useTopics(chatId: string | null, isForum: boolean) {
     emoji: string | null = null,
   ): Promise<Topic | null> => {
     if (!chatId) return null;
-    const trimmed = name.trim();
+    const trimmed = limitText(name.trim(), TOPIC_NAME_MAX_LENGTH);
     if (!trimmed) return null;
     const { data, error } = await supabase
       .from("topics")
@@ -103,7 +104,7 @@ export function useTopics(chatId: string | null, isForum: boolean) {
     const { error } = await supabase
       .from("topics")
       .update({
-        name: name.trim(),
+        name: limitText(name.trim(), TOPIC_NAME_MAX_LENGTH),
         emoji: emoji ?? undefined,
         updated_at: new Date().toISOString(),
       })

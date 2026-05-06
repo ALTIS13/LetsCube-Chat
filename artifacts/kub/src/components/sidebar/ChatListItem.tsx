@@ -22,7 +22,7 @@ export function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
   const lastMsg = chat.last_message;
   const display = getChatDisplayInfo(chat, currentUserId);
-  const isOutgoing = lastMsg?.user_id === "me";
+  const isOutgoing = !!currentUserId && lastMsg?.user_id === currentUserId;
   const hasUnread = (chat.unread_count ?? 0) > 0;
   const isMuted = chat.is_muted;
   const isPinned = chat.is_pinned;
@@ -31,7 +31,7 @@ export function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
     && Date.now() - new Date(chat.other_user.online_at).getTime() < 90_000;
 
   const getMessagePreview = () => {
-    if (!lastMsg) return "Сообщений пока нет";
+    if (!lastMsg) return chat.cleared_at ? "История очищена" : "Сообщений пока нет";
     if (lastMsg.type === "image") return "🖼 Фото";
     if (lastMsg.type === "audio") return "🎤 Голосовое сообщение";
     if (lastMsg.type === "video") return "🎬 Видео";
@@ -64,7 +64,7 @@ export function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
       </div>
 
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-        <div className="flex items-center justify-between gap-1">
+        <div className="flex min-w-0 items-center justify-between gap-2">
           <div className="flex items-center gap-1 min-w-0">
             {display.isSaved ? (
               <KubIcon name="bookmark" size={13} className="flex-shrink-0 text-[color:var(--kub-cyan)]" />
@@ -82,7 +82,7 @@ export function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
               <KubIcon name="verified" size={13} className="flex-shrink-0 text-[color:var(--kub-cyan)]" />
             )}
           </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="flex shrink-0 items-center gap-1">
             {isOutgoing && (
               <KubIcon
                 name="doubleCheck"
@@ -103,12 +103,12 @@ export function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-1">
-          <span className="text-xs truncate flex-1 text-[color:var(--kub-muted)]">
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <span className="block min-w-0 flex-1 truncate text-left text-xs leading-4 text-[color:var(--kub-muted)]">
             {display.isSaved && !lastMsg ? "Сохранённые сообщения" : getMessagePreview()}
           </span>
 
-          <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="flex shrink-0 items-center gap-1">
             {isPinned && !hasUnread && (
               <KubIcon name="pin" size={11} className="text-[color:var(--kub-muted)]" />
             )}

@@ -7,6 +7,7 @@ import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { KubButton, KubIcon, KubModal } from "@/components/kub";
 import type { Profile } from "@/types/database";
 import { prefixError } from "@/lib/errors";
+import { CHAT_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
 
 export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onRefetch?: () => void }) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
@@ -36,6 +37,10 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
 
   const handleCreate = async () => {
     if (!userId || !groupName.trim() || selected.length === 0) return;
+    if (groupName.trim().length > CHAT_NAME_MAX_LENGTH) {
+      setError(`Название группы не должно быть длиннее ${CHAT_NAME_MAX_LENGTH} символов.`);
+      return;
+    }
     setLoading(true);
     setError(null);
     const { data: chat, error: chatErr } = await supabase.from("chats")
@@ -148,8 +153,9 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
         <input
           autoFocus
           value={groupName}
-          onChange={(e) => setGroupName(e.target.value)}
+          onChange={(e) => setGroupName(limitText(e.target.value, CHAT_NAME_MAX_LENGTH))}
           placeholder="Название группы"
+          maxLength={CHAT_NAME_MAX_LENGTH}
           className="w-full text-sm outline-none rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-text)] focus:border-[color:var(--kub-cyan)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all"
         />
       )}

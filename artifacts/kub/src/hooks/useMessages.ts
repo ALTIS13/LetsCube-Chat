@@ -7,10 +7,12 @@ import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { mapPgError } from "@/lib/errors";
 
-export function useMessages(chatId: string | null, topicId: string | null = null) {
+export function useMessages(chatId: string | null, topicId: string | null | undefined = undefined) {
   const [loading, setLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState<MessageWithSender[]>([]);
+  const [pinnedReady, setPinnedReady] = useState(false);
+  const [pinnedKey, setPinnedKey] = useState<string | null>(null);
   const [clearedAt, setClearedAt] = useState<string | null>(null);
   // Per-slice selectors: не подписываемся на весь store (раньше любая
   // мутация — chats, selectedChatId, mutedChatIds — ререндерила хук). Сами
@@ -44,6 +46,8 @@ export function useMessages(chatId: string | null, topicId: string | null = null
 
   useEffect(() => {
     setPinnedMessages([]);
+    setPinnedReady(false);
+    setPinnedKey(null);
     setClearedAt(null);
   }, [chatId, topicId]);
 
@@ -76,7 +80,9 @@ export function useMessages(chatId: string | null, topicId: string | null = null
       .eq("chat_id", chatId);
     // Forum chats: scope to the selected topic.  Non-forum: all messages
     // have topic_id = null, so the filter is a no-op when topicId is null.
-    query = topicId ? query.eq("topic_id", topicId) : query.is("topic_id", null);
+    if (topicId !== undefined) {
+      query = topicId ? query.eq("topic_id", topicId) : query.is("topic_id", null);
+    }
     if (localClearedAt) query = query.gt("created_at", localClearedAt);
     const { data } = await query
       .order("created_at", { ascending: false })
@@ -103,8 +109,12 @@ export function useMessages(chatId: string | null, topicId: string | null = null
   const fetchPinnedMessages = useCallback(async () => {
     if (!chatId) {
       setPinnedMessages([]);
+      setPinnedReady(true);
+      setPinnedKey(null);
       return;
     }
+    setPinnedReady(false);
+    const fetchKey = getPinnedKey(chatId, topicId);
     let localClearedAt = clearedAt;
     const user = currentUserRef.current;
     if (user) {
@@ -123,16 +133,23 @@ export function useMessages(chatId: string | null, topicId: string | null = null
       .eq("chat_id", chatId)
       .eq("pinned", true)
       .is("deleted_at", null);
-    query = topicId ? query.eq("topic_id", topicId) : query.is("topic_id", null);
+    if (topicId !== undefined) {
+      query = topicId ? query.eq("topic_id", topicId) : query.is("topic_id", null);
+    }
     if (localClearedAt) query = query.gt("created_at", localClearedAt);
     const { data, error } = await query
       .order("created_at", { ascending: false })
       .limit(50);
     if (error) {
       console.error("Pinned messages fetch error:", error);
+      setPinnedMessages([]);
+      setPinnedReady(true);
+      setPinnedKey(fetchKey);
       return;
     }
     setPinnedMessages(sortPinnedMessages((data ?? []) as unknown as MessageWithSender[]));
+    setPinnedKey(fetchKey);
+    setPinnedReady(true);
   }, [chatId, topicId, supabase, clearedAt]);
 
   useEffect(() => { fetchPinnedMessages(); }, [fetchPinnedMessages]);
@@ -191,7 +208,10 @@ export function useMessages(chatId: string | null, topicId: string | null = null
           const clearedAtMs = clearedAt ? new Date(clearedAt).getTime() : null;
           if (clearedAtMs && new Date(payload.new.created_at).getTime() <= clearedAtMs) return;
           // Filter by topic — ignore messages from other topics in the same chat.
-          if ((payload.new.topic_id ?? null) !== (topicIdRef.current ?? null)) return;
+          if (
+            topicIdRef.current !== undefined &&
+            (payload.new.topic_id ?? null) !== (topicIdRef.current ?? null)
+          ) return;
           const provisional = buildRealtimeMessage(payload.new);
           // Render every realtime row immediately. The joined REST fetch below
           // can lag under rapid sends; keeping this provisional row prevents an
@@ -271,7 +291,7 @@ export function useMessages(chatId: string | null, topicId: string | null = null
     const optimistic: MessageWithSender = {
       id: tempId,
       chat_id: chatId,
-      topic_id: topicId,
+      topic_id: topicId ?? null,
       user_id: user.id,
       content: trimmed,
       type: "text",
@@ -291,7 +311,7 @@ export function useMessages(chatId: string | null, topicId: string | null = null
     // 2) Real INSERT.
     const { data, error } = await supabase
       .from("messages")
-      .insert({ chat_id: chatId, topic_id: topicId, user_id: user.id, content: trimmed, type: "text", reply_to_id: replyToId ?? null })
+      .insert({ chat_id: chatId, topic_id: topicId ?? null, user_id: user.id, content: trimmed, type: "text", reply_to_id: replyToId ?? null })
       .select("*, sender:profiles!user_id(*), reactions(*)")
       .single();
 
@@ -420,12 +440,15 @@ export function useMessages(chatId: string | null, topicId: string | null = null
     setClearedAt(nextClearedAt);
     setMessages(chatId, []);
     setPinnedMessages([]);
+    setPinnedKey(getPinnedKey(chatId, topicId));
+    setPinnedReady(true);
     return { ok: true, error: null };
   }, [chatId, supabase, setMessages]);
 
   return {
     messages: messages[chatId ?? ""] ?? [],
-    pinnedMessages,
+    pinnedMessages: pinnedKey === getPinnedKey(chatId, topicId) ? pinnedMessages : [],
+    pinnedReady: pinnedKey === getPinnedKey(chatId, topicId) && pinnedReady,
     loading, isTyping,
     sendMessage, sendTyping, toggleReaction,
     editMessage, deleteMessage, togglePin, forwardMessage,
@@ -433,6 +456,10 @@ export function useMessages(chatId: string | null, topicId: string | null = null
     refetch: fetchMessages,
     refetchPinnedMessages: fetchPinnedMessages,
   };
+}
+
+function getPinnedKey(chatId: string | null, topicId: string | null | undefined): string {
+  return `${chatId ?? "none"}:${topicId === undefined ? "all" : topicId ?? "root"}`;
 }
 
 function buildRealtimeMessage(row: MessageWithSender): MessageWithSender {

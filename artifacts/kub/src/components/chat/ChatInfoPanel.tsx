@@ -12,6 +12,7 @@ import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
 import type { ChatWithLastMessage, Profile, Message } from "@/types/database";
+import { CHAT_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
 
 interface ChatInfoPanelProps {
   chat: ChatWithLastMessage;
@@ -43,6 +44,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const [description, setDescription] = useState(chat.description ?? "");
   const [saving, setSaving] = useState(false);
   const [deletingChat, setDeletingChat] = useState(false);
+  const [leavingChat, setLeavingChat] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   type MemberRow = Profile & { chat_role: "owner" | "admin" | "member" };
   const [members, setMembers] = useState<MemberRow[]>([]);
@@ -119,9 +121,14 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
 
   const handleSave = async () => {
     setSaving(true);
+    const trimmedName = name.trim();
+    if (trimmedName.length > CHAT_NAME_MAX_LENGTH) {
+      setSaving(false);
+      return;
+    }
     const { data } = await supabase
       .from("chats")
-      .update({ name: name.trim() || null, description: description.trim() || null, updated_at: new Date().toISOString() })
+      .update({ name: trimmedName || null, description: description.trim() || null, updated_at: new Date().toISOString() })
       .eq("id", chat.id)
       .select("*")
       .single();
@@ -162,8 +169,9 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   };
 
   const handleLeave = async () => {
-    if (!currentUser) return;
+    if (!currentUser || leavingChat) return;
     if (!confirm("Покинуть этот чат?")) return;
+    setLeavingChat(true);
     const { error } = await supabase.from("chat_members")
       .delete().eq("chat_id", chat.id).eq("user_id", currentUser.id);
     if (error) {
@@ -171,8 +179,10 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       // server-side message so the user understands why nothing happened.
       console.error("leave chat failed:", error);
       alert(mapPgError(error));
+      setLeavingChat(false);
       return;
     }
+    setLeavingChat(false);
     setChats(chats.filter((c) => c.id !== chat.id));
     setSelectedChatId(null);
     onClose();
@@ -232,6 +242,13 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       alert(result.error ?? "Не удалось очистить историю у себя.");
       return;
     }
+    const clearedAt = new Date().toISOString();
+    setMessages(chat.id, []);
+    setChats(chats.map((c) =>
+      c.id === chat.id
+        ? { ...c, last_message: undefined, unread_count: 0, cleared_at: clearedAt }
+        : c
+    ));
     setMedia([]);
     setMediaHasMore(false);
     setOpenMedia(null);
@@ -365,7 +382,8 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
           <div className="w-full space-y-2">
             <input
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => setName(limitText(e.target.value, CHAT_NAME_MAX_LENGTH))}
+              maxLength={CHAT_NAME_MAX_LENGTH}
               className="w-full text-sm rounded-xl px-3 py-2 outline-none text-center font-semibold bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)]"
             />
             <textarea
@@ -520,13 +538,14 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                   <span className="min-w-0 flex-1 truncate">Удалить чат у себя</span>
                 </button>
               )}
-              {isGroup && (
+              {isGroup && !isOwner && (
                 <button
                   onClick={handleLeave}
+                  disabled={leavingChat}
                   className={dangerActionRowClass}
                 >
                   <KubIcon name="logout" size={17} className="shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">Покинуть группу</span>
+                  <span className="min-w-0 flex-1 truncate">{leavingChat ? "Выходим..." : "Покинуть группу"}</span>
                 </button>
               )}
               {isGroup && isOwner && (

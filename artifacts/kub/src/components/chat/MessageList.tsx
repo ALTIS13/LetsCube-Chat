@@ -16,6 +16,7 @@ interface MessageListProps {
   onReaction: (messageId: string, emoji: string) => void;
   onEdit?: (msg: MessageWithSender) => void;
   onDelete?: (msg: MessageWithSender) => void;
+  onBulkDelete?: (messages: MessageWithSender[]) => Promise<void> | void;
   onTogglePin?: (msg: MessageWithSender) => void;
   onForward?: (msg: MessageWithSender) => void;
   onOpenMedia?: (media: MediaViewerItem) => void;
@@ -40,6 +41,7 @@ export function MessageList({
   onReaction,
   onEdit,
   onDelete,
+  onBulkDelete,
   onTogglePin,
   onForward,
   onOpenMedia,
@@ -52,6 +54,7 @@ export function MessageList({
   myRole,
 }: MessageListProps) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
+  const canModerate = myRole === "owner" || myRole === "admin";
 
   // Compute: latest timestamp that any non-me member has read up to
   const othersLastReadAt = React.useMemo(() => {
@@ -81,7 +84,39 @@ export function MessageList({
   }, [messages]);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [newCount, setNewCount] = useState(0);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const isAtBottomRef = useRef(true);
+
+  const selectableMessages = React.useMemo(
+    () => messages.filter((message) => !message.deleted_at && (message.user_id === userId || canModerate)),
+    [messages, userId, canModerate],
+  );
+  const selectedMessages = React.useMemo(
+    () => selectableMessages.filter((message) => selectedIds.has(message.id)),
+    [selectableMessages, selectedIds],
+  );
+
+  const toggleSelected = useCallback((messageId: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(messageId)) next.delete(messageId);
+      else next.add(messageId);
+      return next;
+    });
+  }, []);
+
+  const cancelSelection = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleBulkDelete = useCallback(async () => {
+    if (!onBulkDelete || selectedMessages.length === 0) return;
+    if (!confirm(`Удалить выбранные сообщения (${selectedMessages.length})?`)) return;
+    await onBulkDelete(selectedMessages);
+    cancelSelection();
+  }, [cancelSelection, onBulkDelete, selectedMessages]);
 
   const handleScroll = useCallback(() => {
     const el = containerRef.current;
@@ -117,6 +152,42 @@ export function MessageList({
 
   return (
     <div className="relative flex-1 overflow-hidden">
+      {onBulkDelete && selectableMessages.length > 0 && (
+        <div className="absolute right-3 top-2 z-20 flex items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]/95 p-1.5 shadow-lg backdrop-blur">
+          {selectionMode ? (
+            <>
+              <span className="px-2 text-xs font-semibold text-[color:var(--kub-muted)]">
+                Выбрано: {selectedMessages.length}
+              </span>
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                disabled={selectedMessages.length === 0}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:opacity-40"
+              >
+                <KubIcon name="delete" size={14} />
+                Удалить
+              </button>
+              <button
+                type="button"
+                onClick={cancelSelection}
+                className="inline-flex h-8 items-center justify-center rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)]"
+              >
+                Отмена
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setSelectionMode(true)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-text)]"
+            >
+              <KubIcon name="check" size={14} />
+              Выбрать
+            </button>
+          )}
+        </div>
+      )}
       <div
         ref={containerRef}
         onScroll={handleScroll}
@@ -134,6 +205,7 @@ export function MessageList({
           const isRead = isMe && othersLastReadAt
             ? othersLastReadAt >= msg.created_at
             : false;
+          const canSelect = !msg.deleted_at && (isMe || canModerate);
 
           return (
             <div
@@ -151,23 +223,42 @@ export function MessageList({
                   </span>
                 </div>
               )}
-              <MessageBubble
-                message={msg}
-                isMe={isMe}
-                isFirstInGroup={!isSameSenderAsPrev}
-                isLastInGroup={!isSameSenderAsNext}
-                onReply={() => onReply(msg)}
-                onReaction={(emoji) => onReaction(msg.id, emoji)}
-                onEdit={onEdit ? () => onEdit(msg) : undefined}
-                onDelete={onDelete ? () => onDelete(msg) : undefined}
-                onTogglePin={onTogglePin ? () => onTogglePin(msg) : undefined}
-                onForward={onForward ? () => onForward(msg) : undefined}
-                onOpenMedia={onOpenMedia}
-                usersMap={usersMap}
-                messagesMap={messagesMap}
-                isRead={isRead}
-                myRole={myRole}
-              />
+              <div className={cn("flex items-center gap-2", isMe ? "justify-end" : "justify-start")}>
+                {selectionMode && canSelect && (
+                  <button
+                    type="button"
+                    onClick={() => toggleSelected(msg.id)}
+                    className={cn(
+                      "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors",
+                      selectedIds.has(msg.id)
+                        ? "border-[var(--kub-cyan)] bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
+                        : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] text-[color:var(--kub-muted)]"
+                    )}
+                    aria-label={selectedIds.has(msg.id) ? "Снять выбор" : "Выбрать сообщение"}
+                  >
+                    {selectedIds.has(msg.id) && <KubIcon name="check" size={14} />}
+                  </button>
+                )}
+                <div className={selectionMode && canSelect ? "min-w-0 flex-1" : "min-w-0"}>
+                  <MessageBubble
+                    message={msg}
+                    isMe={isMe}
+                    isFirstInGroup={!isSameSenderAsPrev}
+                    isLastInGroup={!isSameSenderAsNext}
+                    onReply={() => onReply(msg)}
+                    onReaction={(emoji) => onReaction(msg.id, emoji)}
+                    onEdit={onEdit ? () => onEdit(msg) : undefined}
+                    onDelete={onDelete ? () => onDelete(msg) : undefined}
+                    onTogglePin={onTogglePin ? () => onTogglePin(msg) : undefined}
+                    onForward={onForward ? () => onForward(msg) : undefined}
+                    onOpenMedia={onOpenMedia}
+                    usersMap={usersMap}
+                    messagesMap={messagesMap}
+                    isRead={isRead}
+                    myRole={myRole}
+                  />
+                </div>
+              </div>
             </div>
           );
         })}

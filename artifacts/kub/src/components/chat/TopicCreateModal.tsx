@@ -5,6 +5,7 @@ import type { Topic } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { KubButton, KubIcon, KubModal } from "@/components/kub";
 import { cn } from "@/lib/utils";
+import { TOPIC_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
 
 const QUICK_EMOJI = ["💬", "📌", "🔥", "⚙️", "🐛", "📢", "🎉", "❓", "💡", "📦"];
 
@@ -21,6 +22,7 @@ export function TopicCreateModal({ onClose, onCreate }: TopicCreateModalProps) {
 
   const handleSubmit = async () => {
     if (!name.trim() || busy) return;
+    if (name.trim().length > TOPIC_NAME_MAX_LENGTH) return;
     setBusy(true);
     const created = await onCreate(name, emoji);
     setBusy(false);
@@ -51,9 +53,9 @@ export function TopicCreateModal({ onClose, onCreate }: TopicCreateModalProps) {
         <input
           autoFocus
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => setName(limitText(e.target.value, TOPIC_NAME_MAX_LENGTH))}
           placeholder="Общее, Релизы, Оффтоп…"
-          maxLength={50}
+          maxLength={TOPIC_NAME_MAX_LENGTH}
           onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
           className="w-full text-sm outline-none rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-text)] focus:border-[color:var(--kub-cyan)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all"
         />
