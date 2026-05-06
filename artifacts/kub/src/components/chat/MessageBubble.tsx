@@ -409,7 +409,7 @@ export function MessageBubble({
               </p>
             )}
 
-            <div className="mt-1 -mb-0.5 flex min-w-[5.25rem] max-w-full items-center justify-end gap-1 whitespace-nowrap text-right">
+            <div className="mt-0.5 -mb-0.5 ml-auto flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap pl-3 text-right leading-none">
               {message.pinned && (
                 <KubIcon name="pin" size={12} tone="muted" label="Закреплено" className="shrink-0" />
               )}
@@ -446,20 +446,20 @@ export function MessageBubble({
           </div>
 
           {Object.keys(reactionGroups).length > 0 && (
-            <div className={cn("flex flex-wrap gap-1 mt-1", isMe ? "justify-end" : "justify-start")}>
+            <div className={cn("relative z-10 -mt-1 flex max-w-full flex-wrap gap-0.5 px-1", isMe ? "justify-end self-end pr-2" : "justify-start self-start pl-2")}>
               {Object.entries(reactionGroups).map(([emoji, { count, mine }]) => (
                 <button
                   key={emoji}
                   onClick={() => onReaction(emoji)}
                   className={cn(
-                    "flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs transition-all hover:scale-105 active:scale-95 border",
+                    "inline-flex h-5 items-center gap-0.5 rounded-full border px-1.5 text-[11px] leading-none shadow-sm transition-all hover:scale-105 active:scale-95",
                     mine
                       ? "bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] border-[color:var(--kub-cyan)] text-[color:var(--kub-cyan)]"
                       : "bg-[var(--kub-surface-2)] border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)]"
                   )}
                 >
-                  <span className="text-sm">{emoji}</span>
-                  {count > 1 && <span>{count}</span>}
+                  <span className="text-[13px] leading-none">{emoji}</span>
+                  {count > 1 && <span className="tabular-nums">{count}</span>}
                 </button>
               ))}
             </div>
