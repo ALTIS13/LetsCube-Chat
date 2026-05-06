@@ -102,7 +102,6 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen }: ChatHeade
   const menuItems: Array<{ icon: KubIconName; label: string; danger?: boolean; disabled?: boolean; action: () => void }> = [
     { icon: "search", label: "Поиск в чате", action: () => { setShowMenu(false); onSearchOpen?.(); } },
     { icon: "notifications", label: isMuted ? "Включить уведомления" : "Отключить уведомления", action: () => { toggleMutedChat(chatId); setShowMenu(false); } },
-    { icon: "delete", label: "Очистить историю", danger: true, action: () => setShowMenu(false) },
     ...(canDeleteGroup
       ? [{ icon: "userRemove" as KubIconName, label: "Удалить групповой чат", danger: true, disabled: deletingChat, action: handleDeleteGroup }]
       : []),

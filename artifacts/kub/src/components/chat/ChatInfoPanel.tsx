@@ -29,6 +29,7 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
       | "owner" | "admin" | "member" | undefined) ?? null;
   const isOwner = myRole === "owner";
   const isOwnerOrAdmin = !isSaved && (myRole === "owner" || myRole === "admin");
+  const canEditChatProfile = isGroup && isOwnerOrAdmin;
 
   const [tab, setTab] = useState<Tab>("info");
   const [editing, setEditing] = useState(false);
@@ -210,7 +211,7 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
         <span className="text-sm font-semibold text-[color:var(--kub-text)]">
           {isSaved ? "Избранное" : isGroup ? "Информация о группе" : "Профиль пользователя"}
         </span>
-        {isOwnerOrAdmin && !editing && (
+        {canEditChatProfile && !editing && (
           <button
             onClick={() => setEditing(true)}
             className="ml-auto p-2 rounded-lg hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]"
@@ -238,7 +239,7 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
             size="xl"
             isSaved={display.isSaved}
           />
-          {isOwnerOrAdmin && (
+          {canEditChatProfile && (
             <label className="absolute bottom-0 right-0 w-9 h-9 rounded-full flex items-center justify-center cursor-pointer bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan">
               <KubIcon name="camera" size={14} label="Сменить аватар" />
               <input
@@ -409,16 +410,6 @@ export function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
                   </span>
                 </button>
               )}
-              <button
-                onClick={async () => {
-                  if (!confirm("Удалить все сообщения?")) return;
-                  await supabase.from("messages").update({ deleted_at: new Date().toISOString() }).eq("chat_id", chat.id);
-                }}
-                className={dangerActionRowClass}
-              >
-                <KubIcon name="delete" size={17} className="shrink-0" />
-                <span className="min-w-0 flex-1 truncate">Очистить историю</span>
-              </button>
             </div>
           </div>
         )}

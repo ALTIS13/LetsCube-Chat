@@ -12,6 +12,13 @@ export interface ChatDisplayInfo {
   isSaved: boolean;
 }
 
+export function getChatSecondaryLine(info: ChatDisplayInfo, context?: string | null): string {
+  const cleanContext = context?.trim();
+  if (!cleanContext || cleanContext === info.typeLabel) return info.subtitle;
+  if (cleanContext === info.subtitle) return info.subtitle;
+  return `${info.typeLabel} · ${cleanContext}`;
+}
+
 export function isSavedChatLikeName(name: string | null | undefined): boolean {
   const normalized = (name ?? "").trim().toLocaleLowerCase("ru-RU");
   return normalized === "избранное" || normalized === "сохранённое" || normalized === "saved messages";

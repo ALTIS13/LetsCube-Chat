@@ -49,6 +49,7 @@ export function MessageBubble({
   const [contextPos, setContextPos] = useState({ x: 0, y: 0 });
   const [selected] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const { currentUser } = useAppStore();
 
   // Belt-and-suspenders cleanup: if the bubble unmounts mid-touch (e.g. user
@@ -67,21 +68,49 @@ export function MessageBubble({
     }, {}
   );
 
-  const openContext = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    const x = Math.min(e.clientX, window.innerWidth - 200);
-    const y = Math.min(e.clientY, window.innerHeight - 280);
+  const clearLongPressTimer = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  const openContextAt = useCallback((clientX: number, clientY: number) => {
+    const x = Math.min(clientX, window.innerWidth - 200);
+    const y = Math.min(clientY, window.innerHeight - 280);
     setContextPos({ x, y });
     setShowContext(true);
     setShowEmojiBar(false);
   }, []);
 
-  const handleTouchStart = useCallback(() => {
-    longPressTimer.current = setTimeout(() => setShowContext(true), 500);
-  }, []);
+  const openContext = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    openContextAt(e.clientX, e.clientY);
+  }, [openContextAt]);
+
+  const handleTouchStart = useCallback((event: React.TouchEvent) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("button,a,input,textarea,select,video,audio,[role='slider']")) return;
+    const touch = event.touches[0];
+    if (!touch) return;
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    clearLongPressTimer();
+    longPressTimer.current = setTimeout(() => {
+      openContextAt(touch.clientX, touch.clientY);
+      longPressTimer.current = null;
+    }, 650);
+  }, [clearLongPressTimer, openContextAt]);
+  const handleTouchMove = useCallback((event: React.TouchEvent) => {
+    const touch = event.touches[0];
+    const start = touchStartRef.current;
+    if (!touch || !start) return;
+    const moved = Math.hypot(touch.clientX - start.x, touch.clientY - start.y);
+    if (moved > 10) clearLongPressTimer();
+  }, [clearLongPressTimer]);
   const handleTouchEnd = useCallback(() => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
-  }, []);
+    clearLongPressTimer();
+    touchStartRef.current = null;
+  }, [clearLongPressTimer]);
 
   const contextItems: ContextItem[] = [
     { icon: "reply", label: "Ответить", action: () => { onReply(); setShowContext(false); } },
@@ -189,7 +218,9 @@ export function MessageBubble({
         )}
         onContextMenu={openContext}
         onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
       >
         {!isMe && (
           <div className="flex-shrink-0 self-end mb-1 w-8">
@@ -337,6 +368,18 @@ export function MessageBubble({
                   <KubIcon name="check" size={13} tone="muted" />
                 )
               )}
+              <button
+                type="button"
+                className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)] sm:hidden"
+                aria-label="Действия сообщения"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  openContextAt(rect.left, rect.bottom + 4);
+                }}
+              >
+                <KubIcon name="more" size={13} />
+              </button>
             </div>
           </div>
 

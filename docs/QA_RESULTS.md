@@ -170,3 +170,19 @@ Next safe task UI alignment:
 - After successful `supabase.auth.updateUser({ password })`, the app clears recovery state, signs the user out, and returns to `/login?password_reset=1`.
 - Invalid/expired recovery links show a friendly Russian message instead of raw Supabase output.
 - Confirmation email flow remains separate: non-recovery auth callback can still complete login/confirmation normally.
+
+## Chat Safety And Task Roadmap Notes
+
+2026-05-06 avatar/profile and chat safety pass:
+
+- Own avatar/profile editing remains in `SettingsModal`; other users' avatars are not edited from normal user profile surfaces.
+- Group/channel avatar editing is only shown for chat owner/admin; private chats and `Избранное` do not show chat avatar/name edit controls.
+- Direct global `Очистить историю` was removed from chat header/info UI because production DB does not yet have a safe per-user clear/hide model.
+- Manual SQL proposal prepared, not applied: `.migration-backup/supabase/migrations/20260506_chat_history_private_hide_permissions.sql`.
+- Manual SQL proposal prepared, not applied: `.migration-backup/supabase/migrations/20260506_chat_pins.sql`.
+- Until those proposals are applied and frontend-aligned, private chat deletion is intentionally not exposed as a destructive global delete.
+- `Избранное` is sorted above regular chats in frontend as a system-like saved space.
+
+Recurring tasks roadmap note:
+
+- Future task-system phase should add recurring tasks: daily, weekly, monthly, yearly, custom interval, `next_run_at`, auto-create next occurrence, stop recurrence, reuse `visibility` / `assignment_scope`, and history of occurrences.

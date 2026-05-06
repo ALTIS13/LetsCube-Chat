@@ -230,6 +230,11 @@ export function UsersTab() {
               const st = stateById[u.id] ?? { banned: false, muted: false };
               const isSelf = u.id === currentUser?.id;
               const email = emails[u.id];
+              const canMakeAdmin = canSetRole(u, "admin");
+              const canMakeManager = canSetRole(u, "manager");
+              const canMakeUser = canSetRole(u, "user");
+              const canManageSanctions = canSanction(u);
+              const hasRoleActions = canMakeAdmin || canMakeManager || canMakeUser;
               const badges = (
                 <>
                   <KubBadge tone={u.role === "admin" ? "pink" : u.role === "manager" ? "cyan" : "muted"}>
@@ -297,39 +302,44 @@ export function UsersTab() {
                       <DropdownMenuItem onClick={() => setProfileTarget(u)}>
                         <KubIcon name="eye" size={14} className="mr-2" /> Открыть профиль
                       </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem disabled={!canSetRole(u, "admin")} onClick={() => setRole(u.id, "admin")}>
-                        <KubIcon name="crown" size={14} className="mr-2" /> Сделать администратором
-                      </DropdownMenuItem>
-                      <DropdownMenuItem disabled={!canSetRole(u, "manager")} onClick={() => setRole(u.id, "manager")}>
-                        <KubIcon name="admin" size={14} className="mr-2" /> Сделать менеджером
-                      </DropdownMenuItem>
-                      <DropdownMenuItem disabled={!canSetRole(u, "user")} onClick={() => setRole(u.id, "user")}>
-                        <KubIcon name="userCog" size={14} className="mr-2" /> Сделать пользователем
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      {st.banned ? (
+                      {hasRoleActions && <DropdownMenuSeparator />}
+                      {canMakeAdmin && (
+                        <DropdownMenuItem onClick={() => setRole(u.id, "admin")}>
+                          <KubIcon name="crown" size={14} className="mr-2" /> Сделать администратором
+                        </DropdownMenuItem>
+                      )}
+                      {canMakeManager && (
+                        <DropdownMenuItem onClick={() => setRole(u.id, "manager")}>
+                          <KubIcon name="admin" size={14} className="mr-2" /> Сделать менеджером
+                        </DropdownMenuItem>
+                      )}
+                      {canMakeUser && (
+                        <DropdownMenuItem onClick={() => setRole(u.id, "user")}>
+                          <KubIcon name="userCog" size={14} className="mr-2" /> Сделать пользователем
+                        </DropdownMenuItem>
+                      )}
+                      {canManageSanctions && <DropdownMenuSeparator />}
+                      {st.banned && canManageSanctions ? (
                         <DropdownMenuItem onClick={() => unban(u.id)}>
                           <KubIcon name="unban" size={14} className="mr-2" /> Снять блокировку
                         </DropdownMenuItem>
-                      ) : (
+                      ) : !st.banned && canManageSanctions ? (
                         <DropdownMenuItem
-                          disabled={!canSanction(u)}
                           onClick={() => setBanTarget(u)}
                           className="text-red-500 focus:text-red-500"
                         >
                           <KubIcon name="shieldOff" size={14} className="mr-2" /> Заблокировать…
                         </DropdownMenuItem>
-                      )}
-                      {st.muted ? (
+                      ) : null}
+                      {st.muted && canManageSanctions ? (
                         <DropdownMenuItem onClick={() => unmute(u.id)}>
                           <KubIcon name="volume" size={14} className="mr-2" /> Снять мьют
                         </DropdownMenuItem>
-                      ) : (
-                        <DropdownMenuItem disabled={!canSanction(u)} onClick={() => setMuteTarget(u)}>
+                      ) : !st.muted && canManageSanctions ? (
+                        <DropdownMenuItem onClick={() => setMuteTarget(u)}>
                           <KubIcon name="muted" size={14} className="mr-2" /> Замьютить…
                         </DropdownMenuItem>
-                      )}
+                      ) : null}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>

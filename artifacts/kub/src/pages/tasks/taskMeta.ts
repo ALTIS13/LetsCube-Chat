@@ -124,7 +124,7 @@ export function getTaskDeadlineState(
   const dueMs = new Date(task.due_at).getTime();
   const isActive = ACTIVE_DEADLINE_STATUSES.includes(task.status) && Number.isFinite(dueMs);
   if (!isActive) {
-    const completedLabel =
+    const statusLabel =
       task.status === "cancelled"
         ? "Отменена"
         : task.status === "rejected"
@@ -135,8 +135,8 @@ export function getTaskDeadlineState(
       isActive: false,
       isOverdue: false,
       isDueSoon: false,
-      timeLabel: completedLabel,
-      detailLabel: `${completedLabel}. Дедлайн больше не требует срочного действия.`,
+      timeLabel: "Дедлайн закрыт",
+      detailLabel: `${statusLabel}. Дедлайн больше не требует срочного действия.`,
       badgeLabel: null,
       urgencyRatio: null,
       fillPercent: null,

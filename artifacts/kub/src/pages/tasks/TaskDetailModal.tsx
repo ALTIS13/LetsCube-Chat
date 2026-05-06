@@ -6,7 +6,7 @@ import { KubBadge, KubButton, KubIcon, KubModal } from "@/components/kub";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
 import { useAppStore } from "@/store/app.store";
 import { useIsManagerOrAdmin } from "@/hooks/useRole";
-import { getChatDisplayInfo } from "@/lib/chatDisplay";
+import { getChatDisplayInfo, getChatSecondaryLine } from "@/lib/chatDisplay";
 import { useTask } from "@/hooks/useTask";
 import {
   TASK_EVENT_LABEL,
@@ -373,7 +373,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
                     {linkedChat.title}
                   </div>
                   <div className="truncate text-[11px] text-[color:var(--kub-muted)]">
-                    {linkedChat.typeLabel} · {linkedChat.subtitle}
+                    {getChatSecondaryLine(linkedChat)}
                   </div>
                 </div>
               </div>

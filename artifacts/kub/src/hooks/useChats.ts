@@ -6,6 +6,7 @@ import type { ChatWithLastMessage, Profile } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
+import { isSavedChat } from "@/lib/chatDisplay";
 
 const VISIBILITY_REFRESH_THROTTLE_MS = 10_000;
 const CHAT_REFETCH_DEBOUNCE_MS = 350;
@@ -120,6 +121,9 @@ export function useChats() {
       );
 
       enriched.sort((a, b) => {
+        const aSaved = isSavedChat(a, userId);
+        const bSaved = isSavedChat(b, userId);
+        if (aSaved !== bSaved) return aSaved ? -1 : 1;
         const aTime = a.last_message?.created_at ?? a.updated_at;
         const bTime = b.last_message?.created_at ?? b.updated_at;
         return new Date(bTime).getTime() - new Date(aTime).getTime();

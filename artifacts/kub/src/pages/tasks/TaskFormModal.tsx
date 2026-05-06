@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { KubButton, KubIcon, KubInput, KubModal } from "@/components/kub";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
-import { getChatDisplayInfo } from "@/lib/chatDisplay";
+import { getChatDisplayInfo, getChatSecondaryLine } from "@/lib/chatDisplay";
 import { useAppStore } from "@/store/app.store";
 import type { ChatMember, ChatWithLastMessage, Profile, TaskPriority, TaskWithPeople } from "@/types/database";
 import { PRIORITIES, TASK_PRIORITY_META } from "./taskMeta";
@@ -280,7 +280,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                       {display.title}
                     </span>
                     <span className="block truncate text-[11px] text-[color:var(--kub-muted)]">
-                      {display.typeLabel} · {formatChatContext(chat, display.subtitle)}
+                      {getChatSecondaryLine(display, formatChatContext(chat, display.subtitle))}
                     </span>
                   </span>
                   {active && <KubIcon name="check" size={14} tone="accent" className="shrink-0" />}
