@@ -10,9 +10,8 @@ import { TOPIC_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
 /**
  * Loads and watches the topic list for a forum chat.
  *
- * Auto-selects the first topic (preferring the `is_general = true` one) when
- * topics arrive and none has been chosen yet — that mirrors the Telegram
- * behaviour of dropping into "General" by default when you open a forum.
+ * Forum mode keeps `selectedTopicId = null` as the visible "Общие" stream.
+ * That pseudo-topic shows legacy/general messages with `messages.topic_id IS NULL`.
  *
  * For non-forum chats the hook is a no-op: `topics` stays empty and
  * selectedTopicId stays null, so the rest of the UI behaves like before.
@@ -42,16 +41,19 @@ export function useTopics(chatId: string | null, isForum: boolean) {
   // Initial load + when chat changes.
   useEffect(() => { fetchTopics(); }, [fetchTopics]);
 
-  // Auto-select the general topic (or first available) once data arrives.
+  // Keep legacy/general messages visible by default. If the selected topic was
+  // removed, fall back to the pseudo-topic "Общие" (`selectedTopicId = null`).
   useEffect(() => {
-    if (!isForum || !topics.length) return;
-    const stillThere = topics.some((t) => t.id === selectedTopicId);
-    if (!stillThere) {
-      const general = topics.find((t) => t.is_general) ?? topics[0];
-      setSelectedTopicId(general.id);
+    if (!isForum) {
+      if (selectedTopicId !== null) setSelectedTopicId(null);
+      return;
+    }
+    const selectedTopic = selectedTopicId ? topics.find((t) => t.id === selectedTopicId) : null;
+    if (selectedTopic?.is_general || (selectedTopicId && !selectedTopic)) {
+      setSelectedTopicId(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topics, isForum]);
+  }, [topics, isForum, selectedTopicId]);
 
   // Realtime: react to topic create / update / delete in this chat.
   // Three separate `.on` calls because supabase-js's typings disallow event="*".

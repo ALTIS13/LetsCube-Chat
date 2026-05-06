@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 const CHECK_INTERVAL_MS = 5 * 60_000;
+const SNOOZE_MS = 15 * 60_000;
 
 export function AppUpdateBanner() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [snoozedUntil, setSnoozedUntil] = useState(0);
   const currentBundle = useMemo(() => getCurrentBundlePath(), []);
 
   const checkForUpdate = useCallback(async () => {
@@ -36,7 +38,7 @@ export function AppUpdateBanner() {
     };
   }, [checkForUpdate]);
 
-  if (!updateAvailable) return null;
+  if (!updateAvailable || Date.now() < snoozedUntil) return null;
 
   return (
     <div className="fixed bottom-4 left-1/2 z-[80] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-3 shadow-2xl">
@@ -45,8 +47,8 @@ export function AppUpdateBanner() {
           ↻
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-[color:var(--kub-text)]">Доступна новая версия</div>
-          <div className="text-xs text-[color:var(--kub-muted)]">Обновите страницу, когда закончите текущее действие.</div>
+          <div className="text-sm font-semibold text-[color:var(--kub-text)]">Доступна новая версия приложения</div>
+          <div className="text-xs text-[color:var(--kub-muted)]">Обновите страницу, чтобы получить последние исправления.</div>
         </div>
         <button
           type="button"
@@ -57,10 +59,10 @@ export function AppUpdateBanner() {
         </button>
         <button
           type="button"
-          onClick={() => setUpdateAvailable(false)}
+          onClick={() => setSnoozedUntil(Date.now() + SNOOZE_MS)}
           className="h-9 rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)]"
         >
-          Позже
+          Напомнить позже
         </button>
       </div>
     </div>

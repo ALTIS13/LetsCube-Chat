@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { ChatHeader } from "./ChatHeader";
 import { PinnedMessage } from "./PinnedMessage";
 import { MessageList } from "./MessageList";
@@ -22,6 +22,8 @@ interface ChatWindowProps {
   chatId: string;
 }
 
+const EMPTY_GENERAL_TOPIC_IDS: string[] = [];
+
 export function ChatWindow({ chatId }: ChatWindowProps) {
   // Dev-only mount/unmount счётчик. Должен скакать только при смене чата
   // (новый key={chatId} в родителе), не при heartbeat-эхо (Task #48).
@@ -39,11 +41,17 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const chat = chats.find((c) => c.id === chatId);
   const isForum = !!chat?.is_forum;
   const { topics, createTopic } = useTopics(chatId, isForum);
+  const generalTopicIds = useMemo(
+    () => topics.filter((topic) => topic.is_general).map((topic) => topic.id),
+    [topics],
+  );
+  const messageTopicId = isForum ? selectedTopicId : undefined;
+  const messageGeneralTopicIds = isForum ? generalTopicIds : EMPTY_GENERAL_TOPIC_IDS;
   const {
     messages, pinnedMessages, pinnedReady, loading, isTyping,
     sendMessage, sendTyping, toggleReaction,
     editMessage, deleteMessage, togglePin, forwardMessage, clearChatForMe,
-  } = useMessages(chatId, isForum ? selectedTopicId : undefined);
+  } = useMessages(chatId, messageTopicId, messageGeneralTopicIds);
 
   useEffect(() => { markChatRead(chatId); }, [chatId, markChatRead]);
 

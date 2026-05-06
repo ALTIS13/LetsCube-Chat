@@ -29,9 +29,13 @@ interface MessageBubbleProps {
   onReaction: (emoji: string) => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onStartSelection?: () => void;
   onTogglePin?: () => void;
   onForward?: () => void;
   onOpenMedia?: (media: MediaViewerItem) => void;
+  reactionMenuOpen?: boolean;
+  onToggleReactionMenu?: () => void;
+  onCloseReactionMenu?: () => void;
   usersMap?: Record<string, string>;
   messagesMap?: Record<string, MessageWithSender>;
   isRead?: boolean;
@@ -40,12 +44,12 @@ interface MessageBubbleProps {
 
 export function MessageBubble({
   message, isMe, isFirstInGroup, isLastInGroup,
-  onReply, onReaction, onEdit, onDelete, onTogglePin, onForward, onOpenMedia,
+  onReply, onReaction, onEdit, onDelete, onStartSelection, onTogglePin, onForward, onOpenMedia,
+  reactionMenuOpen = false, onToggleReactionMenu, onCloseReactionMenu,
   usersMap = {}, messagesMap = {}, isRead, myRole,
 }: MessageBubbleProps) {
   const canModerate = myRole === "owner" || myRole === "admin";
   const [showContext, setShowContext] = useState(false);
-  const [showEmojiBar, setShowEmojiBar] = useState(false);
   const [contextPos, setContextPos] = useState({ x: 0, y: 0 });
   const [selected] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -63,6 +67,15 @@ export function MessageBubble({
   useEffect(() => {
     if (!showContext) setBodySelectionSuppressed(false);
   }, [showContext]);
+
+  useEffect(() => {
+    if (!reactionMenuOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onCloseReactionMenu?.();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onCloseReactionMenu, reactionMenuOpen]);
 
   const reactionGroups = (message.reactions ?? []).reduce<Record<string, { count: number; mine: boolean }>>(
     (acc, r) => {
@@ -85,8 +98,8 @@ export function MessageBubble({
     const y = Math.min(clientY, window.innerHeight - 280);
     setContextPos({ x, y });
     setShowContext(true);
-    setShowEmojiBar(false);
-  }, []);
+    onCloseReactionMenu?.();
+  }, [onCloseReactionMenu]);
 
   const openContext = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -136,6 +149,9 @@ export function MessageBubble({
     ...(onForward ? [
       { icon: "forward" as KubIconName, label: "Переслать", action: () => { onForward(); setShowContext(false); } },
     ] : []),
+    ...(onStartSelection ? [
+      { icon: "check" as KubIconName, label: "Выбрать сообщения", action: () => { onStartSelection(); setShowContext(false); } },
+    ] : []),
     ...((isMe || canModerate) && onDelete ? [
       { icon: "delete" as KubIconName, label: "Удалить", danger: true, action: () => {
           if (confirm("Удалить сообщение?")) onDelete();
@@ -159,12 +175,12 @@ export function MessageBubble({
         <div className={cn("flex max-w-[78%] sm:max-w-[72%] md:max-w-[65%]", isMe ? "items-end" : "items-start")}>
           <div
             className={cn(
-              "px-3 py-2 rounded-2xl flex items-center gap-1.5 text-sm italic select-none",
-              "bg-[var(--kub-surface-2)] border border-dashed border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)]",
+              "flex items-center gap-1.5 rounded-2xl px-2.5 py-1.5 text-xs italic leading-none select-none",
+              "bg-[var(--kub-surface-2)]/80 border border-dashed border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)]",
               isMe ? "rounded-br-sm" : "rounded-bl-sm",
             )}
           >
-            <KubIcon name="delete" size={13} tone="muted" />
+            <KubIcon name="delete" size={12} tone="muted" className="shrink-0" />
             <span>Сообщение удалено</span>
           </div>
         </div>
@@ -296,7 +312,8 @@ export function MessageBubble({
               )}
             >
               <button
-                onClick={() => setShowEmojiBar(!showEmojiBar)}
+                onClick={onToggleReactionMenu}
+                data-reaction-trigger="true"
                 aria-label="Реакция"
                 className="w-7 h-7 rounded-full flex items-center justify-center transition-colors bg-[var(--kub-surface-2)] hover:bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]"
               >
@@ -322,8 +339,9 @@ export function MessageBubble({
               </button>
             </div>
 
-            {showEmojiBar && (
+            {reactionMenuOpen && (
               <div
+                data-reaction-menu="true"
                 className={cn(
                   "absolute -top-12 flex items-center gap-0.5 rounded-full px-2 py-1.5 shadow-2xl z-20 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] kub-glow-soft",
                   isMe ? "right-0" : "left-0"
@@ -332,7 +350,7 @@ export function MessageBubble({
                 {EMOJI_QUICK.slice(0, 6).map((emoji) => (
                   <button
                     key={emoji}
-                    onClick={() => { onReaction(emoji); setShowEmojiBar(false); }}
+                    onClick={() => { onReaction(emoji); onCloseReactionMenu?.(); }}
                     className="text-lg w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--kub-surface-3)] transition-all hover:scale-125"
                   >
                     {emoji}

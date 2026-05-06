@@ -28,9 +28,13 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
     return (
       <main className="min-h-screen bg-[var(--kub-bg)] text-[color:var(--kub-text)] kub-grid-bg flex items-center justify-center p-6">
         <div className="w-full max-w-md rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-6 text-center shadow-2xl">
-          <h1 className="text-lg font-semibold">Произошла ошибка интерфейса</h1>
+          <h1 className="text-lg font-semibold">
+            {this.state.isChunkLoadError ? "Приложение обновилось" : "Произошла ошибка интерфейса"}
+          </h1>
           <p className="mt-2 text-sm text-[color:var(--kub-muted)]">
-            Обновите страницу. Если ошибка повторится, сообщите администратору.
+            {this.state.isChunkLoadError
+              ? "Нужно обновить страницу, чтобы загрузить новую версию приложения."
+              : "Обновите страницу. Если ошибка повторится, сообщите администратору."}
           </p>
           <button
             type="button"

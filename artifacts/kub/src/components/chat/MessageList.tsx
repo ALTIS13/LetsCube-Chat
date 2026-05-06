@@ -86,6 +86,7 @@ export function MessageList({
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkError, setBulkError] = useState<string | null>(null);
+  const [openReactionMessageId, setOpenReactionMessageId] = useState<string | null>(null);
   const isAtBottomRef = useRef(true);
 
   const selectableMessages = React.useMemo(
@@ -159,40 +160,27 @@ export function MessageList({
 
   return (
     <div className="relative flex-1 overflow-hidden">
-      {onBulkDelete && selectableMessages.length > 0 && (
+      {onBulkDelete && selectionMode && (
         <div className="absolute right-3 top-2 z-20 flex items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]/95 p-1.5 shadow-lg backdrop-blur">
-          {selectionMode ? (
-            <>
-              <span className="px-2 text-xs font-semibold text-[color:var(--kub-muted)]">
-                Выбрано: {selectedMessages.length}
-              </span>
-              <button
-                type="button"
-                onClick={handleBulkDelete}
-                disabled={selectedMessages.length === 0}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:opacity-40"
-              >
-                <KubIcon name="delete" size={14} />
-                Удалить
-              </button>
-              <button
-                type="button"
-                onClick={cancelSelection}
-                className="inline-flex h-8 items-center justify-center rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)]"
-              >
-                Отмена
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setSelectionMode(true)}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-text)]"
-            >
-              <KubIcon name="check" size={14} />
-              Выбрать
-            </button>
-          )}
+          <span className="px-2 text-xs font-semibold text-[color:var(--kub-muted)]">
+            Выбрано: {selectedMessages.length}
+          </span>
+          <button
+            type="button"
+            onClick={handleBulkDelete}
+            disabled={selectedMessages.length === 0}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:opacity-40"
+          >
+            <KubIcon name="delete" size={14} />
+            Удалить
+          </button>
+          <button
+            type="button"
+            onClick={cancelSelection}
+            className="inline-flex h-8 items-center justify-center rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)]"
+          >
+            Отмена
+          </button>
         </div>
       )}
       {bulkError && (
@@ -203,6 +191,12 @@ export function MessageList({
       <div
         ref={containerRef}
         onScroll={handleScroll}
+        onClickCapture={(event) => {
+          if (!openReactionMessageId) return;
+          const target = event.target as HTMLElement | null;
+          if (target?.closest("[data-reaction-menu], [data-reaction-trigger]")) return;
+          setOpenReactionMessageId(null);
+        }}
         className="chat-bg h-full overflow-y-auto px-4 py-2 pb-4"
       >
         {messages.map((msg, idx) => {
@@ -277,9 +271,18 @@ export function MessageList({
                     onReaction={(emoji) => onReaction(msg.id, emoji)}
                     onEdit={onEdit ? () => onEdit(msg) : undefined}
                     onDelete={onDelete ? () => onDelete(msg) : undefined}
+                    onStartSelection={onBulkDelete && canSelect ? () => {
+                      setSelectionMode(true);
+                      setSelectedIds(new Set([msg.id]));
+                    } : undefined}
                     onTogglePin={onTogglePin ? () => onTogglePin(msg) : undefined}
                     onForward={onForward ? () => onForward(msg) : undefined}
                     onOpenMedia={onOpenMedia}
+                    reactionMenuOpen={openReactionMessageId === msg.id}
+                    onToggleReactionMenu={() =>
+                      setOpenReactionMessageId((current) => current === msg.id ? null : msg.id)
+                    }
+                    onCloseReactionMenu={() => setOpenReactionMessageId(null)}
                     usersMap={usersMap}
                     messagesMap={messagesMap}
                     isRead={isRead}

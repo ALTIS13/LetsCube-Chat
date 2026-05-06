@@ -225,3 +225,11 @@ Recurring tasks roadmap note:
 - Chat search ignores soft-deleted message placeholders.
 - Topic-aware text/media/voice sends now include `topic_id`; when topics are disabled the message hook no longer filters out topic messages.
 - Frontend name limits were added for group/chat/folder/topic names. `.migration-backup/supabase/migrations/20260506_entity_name_constraints.sql` was applied manually on 2026-05-06; read-only MCP confirmed active checks on `chats.name`, `folders.name` and `topics.name`.
+
+2026-05-06 messenger polish follow-up:
+
+- `rg` is installed and available in PATH (`ripgrep 15.1.0`); use it as the primary project search tool.
+- Forum chats now expose a frontend pseudo-topic `Общие` for legacy/general messages with `messages.topic_id IS NULL`; database `topics.is_general` rows are treated as part of that general stream for compatibility.
+- Bulk message selection is entered from the message action menu (`Выбрать сообщения`) instead of a persistent toolbar button.
+- Media gallery uses lightweight placeholder tiles for image/GIF/video batches; full media is loaded only when opened in the in-app viewer. Real thumbnail generation remains a future media pipeline task.
+- App update prompt no longer has a permanent skip action. `Напомнить позже` snoozes briefly; fatal chunk-load errors show a blocking reload prompt.

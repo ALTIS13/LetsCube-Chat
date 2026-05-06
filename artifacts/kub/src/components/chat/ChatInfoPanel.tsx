@@ -679,22 +679,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                         title: m.content ?? (m.type === "image" ? "Фото" : "Видео"),
                       })}
                     >
-                      {m.type === "image" ? (
-                        <img
-                          src={m.media_url!}
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                          className="h-full w-full object-cover transition-transform duration-200 hover:scale-[1.03]"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--kub-cyan)_18%,#111827),#0b0f18)] text-white">
-                          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/14 backdrop-blur">
-                            <KubIcon name="video" size={18} className="text-white" />
-                          </span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-white/70">Видео</span>
-                        </div>
-                      )}
+                      <MediaGalleryTile message={m} />
                     </button>
                   ))}
                 </div>
@@ -812,4 +797,33 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
     </div>
   );
+}
+
+function MediaGalleryTile({ message }: { message: Message }) {
+  const kind = getMediaTileKind(message);
+  const icon = kind === "video" ? "video" : kind === "gif" ? "image" : "image";
+  const label = kind === "video" ? "Видео" : kind === "gif" ? "GIF" : "Фото";
+
+  return (
+    <div className={cn(
+      "flex h-full w-full flex-col items-center justify-center gap-1 text-white",
+      kind === "video"
+        ? "bg-[linear-gradient(135deg,color-mix(in_srgb,var(--kub-cyan)_18%,#111827),#0b0f18)]"
+        : "bg-[linear-gradient(135deg,color-mix(in_srgb,var(--kub-pink)_16%,#111827),color-mix(in_srgb,var(--kub-cyan)_14%,#0b0f18))]"
+    )}>
+      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/14 backdrop-blur">
+        <KubIcon name={icon} size={18} className="text-white" />
+      </span>
+      <span className="rounded-full bg-black/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/80">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function getMediaTileKind(message: Message): "image" | "gif" | "video" {
+  if (message.type === "video") return "video";
+  const source = `${message.content ?? ""} ${message.media_url ?? ""}`.toLowerCase();
+  if (source.includes(".gif")) return "gif";
+  return "image";
 }

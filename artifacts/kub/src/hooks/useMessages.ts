@@ -7,7 +7,11 @@ import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { mapPgError } from "@/lib/errors";
 
-export function useMessages(chatId: string | null, topicId: string | null | undefined = undefined) {
+export function useMessages(
+  chatId: string | null,
+  topicId: string | null | undefined = undefined,
+  generalTopicIds: string[] = [],
+) {
   const [loading, setLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState<MessageWithSender[]>([]);
@@ -44,6 +48,8 @@ export function useMessages(chatId: string | null, topicId: string | null | unde
   // means "topics disabled": show the whole chat without topic scoping.
   const topicIdRef = useRef(topicId);
   useEffect(() => { topicIdRef.current = topicId; }, [topicId]);
+  const generalTopicIdsRef = useRef(generalTopicIds);
+  useEffect(() => { generalTopicIdsRef.current = generalTopicIds; }, [generalTopicIds]);
 
   useEffect(() => {
     setPinnedMessages([]);
@@ -82,7 +88,8 @@ export function useMessages(chatId: string | null, topicId: string | null | unde
     // Forum chats: scope to the selected topic.  Non-forum: all messages
     // have topic_id = null, so the filter is a no-op when topicId is null.
     if (topicId !== undefined) {
-      query = topicId ? query.eq("topic_id", topicId) : query.is("topic_id", null);
+      if (topicId) query = query.eq("topic_id", topicId);
+      else query = applyGeneralTopicFilter(query, generalTopicIds);
     }
     if (localClearedAt) query = query.gt("created_at", localClearedAt);
     const { data } = await query
@@ -92,7 +99,7 @@ export function useMessages(chatId: string | null, topicId: string | null | unde
       const fetched = (data as unknown as MessageWithSender[]).reverse();
       const existing = useAppStore.getState().messages[chatId] ?? [];
       const visibleExisting = existing.filter((message) => {
-        if (!messageBelongsToTopic(message, topicId)) return false;
+        if (!messageBelongsToTopic(message, topicId, generalTopicIds)) return false;
         if (!localClearedAt) return true;
         return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
       });
@@ -105,7 +112,7 @@ export function useMessages(chatId: string | null, topicId: string | null | unde
         .eq("chat_id", chatId)
         .eq("user_id", user.id);
     }
-  }, [chatId, topicId, supabase, setMessages]);
+  }, [chatId, topicId, generalTopicIds, supabase, setMessages]);
 
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
 
@@ -137,7 +144,8 @@ export function useMessages(chatId: string | null, topicId: string | null | unde
       .eq("pinned", true)
       .is("deleted_at", null);
     if (topicId !== undefined) {
-      query = topicId ? query.eq("topic_id", topicId) : query.is("topic_id", null);
+      if (topicId) query = query.eq("topic_id", topicId);
+      else query = applyGeneralTopicFilter(query, generalTopicIds);
     }
     if (localClearedAt) query = query.gt("created_at", localClearedAt);
     const { data, error } = await query
@@ -153,7 +161,7 @@ export function useMessages(chatId: string | null, topicId: string | null | unde
     setPinnedMessages(sortPinnedMessages((data ?? []) as unknown as MessageWithSender[]));
     setPinnedKey(fetchKey);
     setPinnedReady(true);
-  }, [chatId, topicId, supabase, clearedAt]);
+  }, [chatId, topicId, generalTopicIds, supabase, clearedAt]);
 
   useEffect(() => { fetchPinnedMessages(); }, [fetchPinnedMessages]);
 
@@ -213,7 +221,7 @@ export function useMessages(chatId: string | null, topicId: string | null | unde
           // Filter by topic — ignore messages from other topics in the same chat.
           if (
             topicIdRef.current !== undefined &&
-            (payload.new.topic_id ?? null) !== (topicIdRef.current ?? null)
+            !messageBelongsToTopic(payload.new, topicIdRef.current, generalTopicIdsRef.current)
           ) return;
           const provisional = buildRealtimeMessage(payload.new);
           // Render every realtime row immediately. The joined REST fetch below
@@ -226,7 +234,7 @@ export function useMessages(chatId: string | null, topicId: string | null | unde
             .eq("id", payload.new.id)
             .maybeSingle();
           if (!data) return;
-          if (!messageBelongsToTopic(data as unknown as MessageWithSender, topicIdRef.current)) return;
+          if (!messageBelongsToTopic(data as unknown as MessageWithSender, topicIdRef.current, generalTopicIdsRef.current)) return;
           addMessage(payload.new.chat_id, data as unknown as MessageWithSender);
           const user = currentUserRef.current;
           if (user && data.user_id !== user.id && document.hidden &&
@@ -263,7 +271,7 @@ export function useMessages(chatId: string | null, topicId: string | null | unde
           if (data) {
             const current = useAppStore.getState().messages[payload.new.chat_id] ?? [];
             const nextMessage = data as MessageWithSender;
-            if (!messageBelongsToTopic(nextMessage, topicIdRef.current)) return;
+            if (!messageBelongsToTopic(nextMessage, topicIdRef.current, generalTopicIdsRef.current)) return;
             setMessages(payload.new.chat_id, current.map((m) => m.id === nextMessage.id ? nextMessage : m));
             setPinnedMessages((currentPinned) =>
               nextMessage.pinned && !nextMessage.deleted_at
@@ -455,7 +463,7 @@ export function useMessages(chatId: string | null, topicId: string | null | unde
   }, [chatId, supabase, setMessages]);
 
   return {
-    messages: (messages[chatId ?? ""] ?? []).filter((message) => messageBelongsToTopic(message, topicId)),
+    messages: (messages[chatId ?? ""] ?? []).filter((message) => messageBelongsToTopic(message, topicId, generalTopicIds)),
     pinnedMessages: pinnedKey === getPinnedKey(chatId, topicId) ? pinnedMessages : [],
     pinnedReady: pinnedKey === getPinnedKey(chatId, topicId) && pinnedReady,
     loading, isTyping,
@@ -474,9 +482,22 @@ function getPinnedKey(chatId: string | null, topicId: string | null | undefined)
 function messageBelongsToTopic(
   message: Pick<MessageWithSender, "topic_id">,
   topicId: string | null | undefined,
+  generalTopicIds: string[] = [],
 ): boolean {
   if (topicId === undefined) return true;
+  if (topicId === null) {
+    return message.topic_id === null || (message.topic_id ? generalTopicIds.includes(message.topic_id) : false);
+  }
   return (message.topic_id ?? null) === (topicId ?? null);
+}
+
+function applyGeneralTopicFilter<T extends { or: (filters: string) => T; is: (column: string, value: null) => T }>(
+  query: T,
+  generalTopicIds: string[],
+): T {
+  if (!generalTopicIds.length) return query.is("topic_id", null);
+  const ids = generalTopicIds.join(",");
+  return query.or(`topic_id.is.null,topic_id.in.(${ids})`);
 }
 
 function buildRealtimeMessage(row: MessageWithSender): MessageWithSender {
