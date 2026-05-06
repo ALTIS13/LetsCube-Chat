@@ -28,6 +28,7 @@ interface MessageListProps {
   messageRefs?: React.MutableRefObject<Record<string, HTMLDivElement>>;
   chatMembers?: (ChatMember & { profile?: unknown })[];
   chatType?: string | null;
+  isSavedChat?: boolean;
   /** Role of the current user in this chat — propagated to MessageBubble. */
   myRole?: "owner" | "admin" | "member" | null;
 }
@@ -54,6 +55,7 @@ export function MessageList({
   messageRefs,
   chatMembers,
   chatType,
+  isSavedChat,
   myRole,
 }: MessageListProps) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
@@ -221,6 +223,7 @@ export function MessageList({
             currentUserId: userId,
             chatType,
             members: chatMembers,
+            isSavedChat,
           });
 
           return (

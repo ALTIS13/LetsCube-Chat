@@ -28,6 +28,7 @@ export function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
     currentUserId,
     chatType: chat.type,
     members: chat.members,
+    isSavedChat: display.isSaved,
   });
   const hasUnread = (chat.unread_count ?? 0) > 0;
   const isMuted = chat.is_muted;

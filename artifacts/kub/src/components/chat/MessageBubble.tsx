@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, type CSSProperties } from "react";
 import type { MessageWithSender } from "@/types/database";
 import { formatFullTime } from "@/lib/format";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
@@ -21,6 +21,8 @@ interface ContextItem {
   danger?: boolean;
   action: () => void;
 }
+
+type TextLayoutKind = "short" | "regular" | "link" | "longToken" | "preformatted" | "media";
 
 interface MessageBubbleProps {
   message: MessageWithSender;
@@ -44,6 +46,72 @@ interface MessageBubbleProps {
   myRole?: "owner" | "admin" | "member" | null;
 }
 
+function getMessageTextLayoutKind(type: MessageWithSender["type"], content: string): TextLayoutKind {
+  if (type !== "text") return "media";
+  const text = content.trim();
+  if (!text) return "short";
+
+  const hasUrl = /\bhttps?:\/\/\S+/.test(text);
+  const lines = text.split(/\r?\n/);
+  const longestLine = lines.reduce((max, line) => Math.max(max, line.length), 0);
+  const longestToken = text
+    .split(/\s+/)
+    .reduce((max, token) => Math.max(max, token.length), 0);
+  const multiline = lines.length > 1;
+  const preformattedLike =
+    lines.length >= 3 ||
+    (multiline && longestLine >= 32) ||
+    /^(\s{2,}|\t|[+\-|=_*`~./\\()[\]{}<>]{4,})/m.test(content);
+
+  if (preformattedLike && !hasUrl) return "preformatted";
+  if (hasUrl) return "link";
+  if (longestToken >= 34) return "longToken";
+  if (text.length >= 8 && /\s/.test(text)) return "regular";
+  return "short";
+}
+
+function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: string; text: string } {
+  switch (kind) {
+    case "link":
+      return {
+        stack: "w-[min(86vw,30rem)] max-w-[86vw] sm:w-[min(64vw,38rem)] sm:max-w-[min(72%,680px)] md:w-[min(56vw,42rem)] md:max-w-[min(65%,680px)]",
+        bubble: "w-full",
+        text: "",
+      };
+    case "preformatted":
+      return {
+        stack: "w-[min(86vw,54rem)] max-w-[86vw] sm:w-[min(74vw,54rem)] md:w-[min(70vw,54rem)]",
+        bubble: "w-full overflow-x-auto",
+        text: "font-mono text-[13px] leading-snug [tab-size:2]",
+      };
+    case "longToken":
+      return {
+        stack: "w-[min(86vw,34rem)] max-w-[86vw] sm:w-[min(60vw,40rem)] md:w-[min(54vw,42rem)]",
+        bubble: "w-full",
+        text: "",
+      };
+    case "regular":
+      return {
+        stack: "w-fit min-w-36 max-w-[86vw] sm:min-w-44 sm:max-w-[min(72%,680px)] md:max-w-[min(65%,680px)]",
+        bubble: "w-fit min-w-36 sm:min-w-44",
+        text: "",
+      };
+    case "short":
+      return {
+        stack: "w-fit min-w-24 max-w-[86vw] sm:max-w-[min(72%,680px)] md:max-w-[min(65%,680px)]",
+        bubble: "w-fit min-w-24",
+        text: "",
+      };
+    case "media":
+    default:
+      return {
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(72%,680px)] md:max-w-[min(65%,680px)]",
+        bubble: "w-fit",
+        text: "",
+      };
+  }
+}
+
 export function MessageBubble({
   message, isMe, isFirstInGroup, isLastInGroup,
   onReply, onReaction, onEdit, onDelete, onStartSelection, onTogglePin, onForward, onOpenMedia,
@@ -58,16 +126,32 @@ export function MessageBubble({
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const { currentUser } = useAppStore();
   const textContent = message.content ?? "";
-  const shouldUseComfortTextWidth =
-    message.type === "text" &&
-    textContent.trim().length >= 8 &&
-    /\s/.test(textContent);
-  const hasLink = message.type === "text" && /\bhttps?:\/\/\S+/.test(textContent);
-  const bubbleMinWidthClass = hasLink
-    ? "min-w-44 sm:min-w-72"
-    : shouldUseComfortTextWidth
-      ? "min-w-36 sm:min-w-44"
-      : "min-w-24";
+  const textLayoutKind = getMessageTextLayoutKind(message.type, textContent);
+  const widthClasses = getMessageWidthClasses(textLayoutKind);
+  const viewportWidth = typeof window === "undefined" ? 1024 : window.innerWidth;
+  const viewportHeight = typeof window === "undefined" ? 768 : window.innerHeight;
+  const compactContextMenu = viewportWidth < 640;
+  const contextMenuWidth = 256;
+  const contextMenuMaxHeight = Math.max(180, Math.min(480, viewportHeight - 16));
+  const contextMenuOpensUp = !compactContextMenu && contextPos.y > viewportHeight / 2;
+  const contextMenuStyle: CSSProperties = compactContextMenu
+    ? { left: 12, right: 12, bottom: 12, maxHeight: "min(65vh, 480px)" }
+    : {
+        left: Math.min(Math.max(8, contextPos.x), Math.max(8, viewportWidth - contextMenuWidth - 8)),
+        width: contextMenuWidth,
+        maxHeight: contextMenuMaxHeight,
+        ...(contextMenuOpensUp
+          ? { bottom: Math.max(8, viewportHeight - contextPos.y + 8) }
+          : { top: Math.min(contextPos.y + 8, Math.max(8, viewportHeight - contextMenuMaxHeight - 8)) }),
+      };
+  const reactionQuickStyle: CSSProperties = compactContextMenu
+    ? { left: 12, right: 12, bottom: "calc(min(65vh, 480px) + 20px)" }
+    : {
+        left: Math.min(Math.max(8, contextPos.x), Math.max(8, viewportWidth - 326)),
+        ...(contextMenuOpensUp
+          ? { bottom: Math.max(68, viewportHeight - contextPos.y + 62) }
+          : { top: Math.max(8, contextPos.y - 56) }),
+      };
 
   // Belt-and-suspenders cleanup: if the bubble unmounts mid-touch (e.g. user
   // navigates away during a long-press), clear the pending timer so it
@@ -107,12 +191,15 @@ export function MessageBubble({
   }, []);
 
   const openContextAt = useCallback((clientX: number, clientY: number) => {
-    const x = Math.min(clientX, window.innerWidth - 200);
-    const y = Math.min(clientY, window.innerHeight - 280);
-    setContextPos({ x, y });
+    setContextPos({ x: clientX, y: clientY });
     setShowContext(true);
     onCloseReactionMenu?.();
   }, [onCloseReactionMenu]);
+
+  const handleToggleReactionMenu = useCallback(() => {
+    setShowContext(false);
+    onToggleReactionMenu?.();
+  }, [onToggleReactionMenu]);
 
   const openContext = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -219,11 +306,8 @@ export function MessageBubble({
       {showContext && (
         <div className="fixed inset-0 z-50" onClick={() => setShowContext(false)}>
           <div
-            className="absolute flex items-center gap-1 rounded-full px-3 py-2 shadow-2xl bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] kub-glow-soft"
-            style={{
-              left: Math.min(contextPos.x, window.innerWidth - 290),
-              top: Math.max(contextPos.y - 56, 8),
-            }}
+            className="absolute flex items-center justify-center gap-1 rounded-full px-3 py-2 shadow-2xl bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] kub-glow-soft"
+            style={reactionQuickStyle}
             onClick={(e) => e.stopPropagation()}
           >
             {EMOJI_QUICK.map((emoji) => (
@@ -238,11 +322,8 @@ export function MessageBubble({
           </div>
 
           <div
-            className="absolute rounded-xl shadow-2xl z-50 w-48 py-1 overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] kub-glow-soft"
-            style={{
-              left: Math.min(contextPos.x, window.innerWidth - 200),
-              top: contextPos.y + 4,
-            }}
+            className="absolute z-50 min-w-60 overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] py-1 shadow-2xl kub-glow-soft"
+            style={contextMenuStyle}
             onClick={(e) => e.stopPropagation()}
           >
             {contextItems.map(({ icon, label, danger, action }) => (
@@ -250,7 +331,7 @@ export function MessageBubble({
                 key={label}
                 onClick={action}
                 className={cn(
-                  "flex items-center gap-3 w-full px-4 py-2.5 text-sm transition-colors hover:bg-[var(--kub-surface-3)]",
+                  "flex w-full items-center gap-3 whitespace-nowrap px-4 py-2.5 text-left text-sm transition-colors hover:bg-[var(--kub-surface-3)]",
                   danger ? "text-[color:var(--kub-danger)]" : "text-[color:var(--kub-text)]"
                 )}
               >
@@ -282,7 +363,7 @@ export function MessageBubble({
           </div>
         )}
 
-        <div className={cn("flex w-fit max-w-[86vw] flex-col sm:max-w-[min(72%,680px)] md:max-w-[min(65%,680px)]", bubbleMinWidthClass, isMe ? "items-end" : "items-start")}>
+        <div className={cn("inline-flex flex-col", widthClasses.stack, isMe ? "items-end" : "items-start")}>
 
           {!isMe && isFirstInGroup && message.sender && (
             <span className="text-xs font-semibold ml-3 mb-0.5 text-[color:var(--kub-cyan)]">
@@ -320,8 +401,8 @@ export function MessageBubble({
 
           <div
             className={cn(
-              "relative w-fit max-w-full px-3 py-2 rounded-2xl transition-opacity select-none sm:select-text",
-              bubbleMinWidthClass,
+              "relative max-w-full px-3 py-2 rounded-2xl transition-opacity select-none sm:select-text",
+              widthClasses.bubble,
               bubbleClass,
               isMe
                 ? cn("rounded-br-sm", message.reply_to_id && "rounded-tr-none")
@@ -339,7 +420,7 @@ export function MessageBubble({
               )}
             >
               <button
-                onClick={onToggleReactionMenu}
+                onClick={handleToggleReactionMenu}
                 data-reaction-trigger="true"
                 aria-label="Реакция"
                 className="w-7 h-7 rounded-full flex items-center justify-center transition-colors bg-[var(--kub-surface-2)] hover:bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]"
@@ -411,7 +492,7 @@ export function MessageBubble({
                 <span className="truncate max-w-[200px]">{message.content ?? "File"}</span>
               </a>
             ) : (
-              <p className="min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:normal] text-[color:var(--kub-text)]">
+              <p className={cn("min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:normal] text-[color:var(--kub-text)]", widthClasses.text)}>
                 <FormattedText content={message.content ?? ""} />
               </p>
             )}
@@ -450,7 +531,14 @@ export function MessageBubble({
           </div>
 
           {Object.keys(reactionGroups).length > 0 && (
-            <div className={cn("mt-0.5 mb-0.5 flex w-fit max-w-[min(86vw,28rem)] flex-wrap gap-0.5 px-2", isMe ? "justify-end self-end" : "justify-start self-start")}>
+            <div
+              className={cn(
+                "-mt-px mb-1 flex w-fit max-h-11 max-w-full flex-wrap gap-0.5 overflow-y-auto border px-1.5 py-0.5 shadow-sm",
+                isMe
+                  ? "self-end rounded-bl-xl rounded-br-xl rounded-tl-xl border-[color:var(--kub-cyan)]/30 bg-[color-mix(in_srgb,var(--kub-cyan)_12%,var(--kub-surface))]"
+                  : "self-start rounded-bl-xl rounded-br-xl rounded-tr-xl border-[color:var(--kub-border-color)] bg-[var(--kub-message-in)]",
+              )}
+            >
               {Object.entries(reactionGroups).map(([emoji, { count, mine }]) => (
                 <button
                   key={emoji}

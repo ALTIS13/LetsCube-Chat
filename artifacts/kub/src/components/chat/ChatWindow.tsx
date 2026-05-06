@@ -16,6 +16,7 @@ import { useAppStore } from "@/store/app.store";
 import { createClient } from "@/lib/supabase/client";
 import { KubEmptyState, KubIcon } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
+import { isSavedChat } from "@/lib/chatDisplay";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import type { MessageWithSender } from "@/types/database";
 
@@ -40,6 +41,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const forwardingMessage = useAppStore((s) => s.forwardingMessage);
   const selectedTopicId = useAppStore((s) => s.selectedTopicId);
   const chat = chats.find((c) => c.id === chatId);
+  const savedChat = chat ? isSavedChat(chat, userId) : false;
   const isForum = !!chat?.is_forum;
   const { topics, createTopic } = useTopics(chatId, isForum);
   const generalTopicIds = useMemo(
@@ -249,6 +251,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             messageRefs={messageRefs}
             chatMembers={chat?.members}
             chatType={chat?.type}
+            isSavedChat={savedChat}
             myRole={myRole}
           />
         )}

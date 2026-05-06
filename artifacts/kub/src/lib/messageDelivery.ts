@@ -15,6 +15,7 @@ interface MessageDeliveryContext {
   currentUserId: string | null;
   chatType?: string | null;
   members?: Array<Pick<ChatMember, "user_id" | "last_read_at">> | null;
+  isSavedChat?: boolean;
 }
 
 export function getMessageDeliveryState(
@@ -22,6 +23,7 @@ export function getMessageDeliveryState(
   context: MessageDeliveryContext,
 ): MessageDeliveryState | null {
   if (!message || !context.currentUserId || message.user_id !== context.currentUserId) return null;
+  if (context.isSavedChat) return null;
 
   if (message.failed) {
     return {
