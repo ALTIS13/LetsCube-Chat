@@ -38,6 +38,19 @@ export function TaskListRow({ task, nowMs, onClick }: TaskListRowProps) {
         {task.description && (
           <div className="mt-0.5 truncate text-xs text-[color:var(--kub-muted)]">{task.description}</div>
         )}
+        <div className="mt-1 flex min-w-0 items-center gap-1.5 sm:hidden">
+          <KubBadge tone={status.tone} pill>{status.label}</KubBadge>
+          <span
+            className={cn(
+              "min-w-0 truncate text-[11px] font-medium",
+              deadline.isOverdue && "text-[color:var(--kub-danger)]",
+              deadline.isDueSoon && !deadline.isOverdue && "text-[color:var(--kub-warn)]",
+              !deadline.isOverdue && !deadline.isDueSoon && "text-[color:var(--kub-muted)]",
+            )}
+          >
+            {deadline.timeLabel}
+          </span>
+        </div>
       </div>
 
       <div className="hidden min-w-0 items-center gap-1.5 sm:flex">
