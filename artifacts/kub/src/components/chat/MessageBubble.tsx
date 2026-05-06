@@ -11,6 +11,7 @@ import { FormattedText } from "@/lib/formatText";
 import { KubIcon, type KubIconName } from "@/components/kub";
 import type { MediaViewerItem } from "./MediaViewer";
 import { requestAppConfirm } from "@/lib/appDialogs";
+import type { MessageDeliveryState } from "@/lib/messageDelivery";
 
 const EMOJI_QUICK = ["👍", "❤️", "😂", "😮", "😢", "🔥", "👏", "🎉"];
 
@@ -39,7 +40,7 @@ interface MessageBubbleProps {
   onCloseReactionMenu?: () => void;
   usersMap?: Record<string, string>;
   messagesMap?: Record<string, MessageWithSender>;
-  isRead?: boolean;
+  deliveryState?: MessageDeliveryState | null;
   myRole?: "owner" | "admin" | "member" | null;
 }
 
@@ -47,7 +48,7 @@ export function MessageBubble({
   message, isMe, isFirstInGroup, isLastInGroup,
   onReply, onReaction, onEdit, onDelete, onStartSelection, onTogglePin, onForward, onOpenMedia,
   reactionMenuOpen = false, onToggleReactionMenu, onCloseReactionMenu,
-  usersMap = {}, messagesMap = {}, isRead, myRole,
+  usersMap = {}, messagesMap = {}, deliveryState, myRole,
 }: MessageBubbleProps) {
   const canModerate = myRole === "owner" || myRole === "admin";
   const [showContext, setShowContext] = useState(false);
@@ -61,6 +62,7 @@ export function MessageBubble({
     message.type === "text" &&
     textContent.trim().length >= 8 &&
     /\s/.test(textContent);
+  const hasLink = message.type === "text" && /\bhttps?:\/\/\S+/.test(textContent);
 
   // Belt-and-suspenders cleanup: if the bubble unmounts mid-touch (e.g. user
   // navigates away during a long-press), clear the pending timer so it
@@ -314,7 +316,7 @@ export function MessageBubble({
           <div
             className={cn(
               "relative w-fit min-w-24 max-w-full px-3 py-2 rounded-2xl transition-opacity select-none sm:select-text",
-              shouldUseComfortTextWidth && "min-w-36 sm:min-w-44",
+              hasLink ? "min-w-44 sm:min-w-72" : shouldUseComfortTextWidth && "min-w-36 sm:min-w-44",
               bubbleClass,
               isMe
                 ? cn("rounded-br-sm", message.reply_to_id && "rounded-tr-none")
@@ -419,16 +421,13 @@ export function MessageBubble({
               <span className="shrink-0 text-[10px] leading-none text-[color:var(--kub-muted)]">
                 {formatFullTime(message.created_at)}
               </span>
-              {isMe && (
-                message.failed ? (
-                  <KubIcon name="alert" size={13} tone="danger" label="Не удалось отправить" />
-                ) : message.pending ? (
-                  <KubIcon name="clock" size={13} tone="muted" label="Отправляется" />
-                ) : isRead ? (
-                  <KubIcon name="doubleCheck" size={13} tone="accent" />
-                ) : (
-                  <KubIcon name="check" size={13} tone="muted" />
-                )
+              {deliveryState?.isOwnMessage && (
+                <KubIcon
+                  name={deliveryState.icon}
+                  size={13}
+                  tone={deliveryState.tone}
+                  label={deliveryState.label}
+                />
               )}
               <button
                 type="button"
@@ -446,7 +445,7 @@ export function MessageBubble({
           </div>
 
           {Object.keys(reactionGroups).length > 0 && (
-            <div className={cn("mt-1 flex max-w-[min(100%,28rem)] flex-wrap gap-0.5 px-1", isMe ? "justify-end self-end pr-1" : "justify-start self-start pl-1")}>
+            <div className={cn("mt-0.5 mb-0.5 flex max-w-[min(100%,28rem)] flex-wrap gap-0.5 px-2", isMe ? "justify-end self-end" : "justify-start self-start")}>
               {Object.entries(reactionGroups).map(([emoji, { count, mine }]) => (
                 <button
                   key={emoji}

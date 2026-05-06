@@ -342,36 +342,38 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
 
   return (
     <div className="flex flex-col h-full w-full md:w-80 flex-shrink-0 border-l bg-[var(--kub-surface)] border-[color:var(--kub-border-color)]">
-      <div className="flex items-center gap-2 px-3 h-14 flex-shrink-0 border-b border-[color:var(--kub-border-color)]">
+      <div className="grid h-14 flex-shrink-0 grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-2 border-b border-[color:var(--kub-border-color)] px-3">
         <button
           onClick={onClose}
-          className="p-2 rounded-lg hover:bg-[var(--kub-surface-2)] transition-colors text-[color:var(--kub-muted)]"
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)]"
           aria-label="Закрыть"
         >
           <KubIcon name="close" size={18} />
         </button>
-        <span className="text-sm font-semibold text-[color:var(--kub-text)]">
+        <span className="min-w-0 truncate text-center text-sm font-semibold text-[color:var(--kub-text)]">
           {isSaved ? "Избранное" : isGroup ? "Информация о группе" : "Профиль пользователя"}
         </span>
-        {canEditChatProfile && !editing && (
-          <button
-            onClick={() => setEditing(true)}
-            className="ml-auto p-2 rounded-lg hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]"
-            aria-label="Редактировать"
-          >
-            <KubIcon name="edit" size={16} />
-          </button>
-        )}
-        {editing && (
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="ml-auto p-2 rounded-lg hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]"
-            aria-label="Сохранить"
-          >
-            <KubIcon name="check" size={16} />
-          </button>
-        )}
+        <div className="flex h-9 w-9 items-center justify-center justify-self-end">
+          {canEditChatProfile && !editing && (
+            <button
+              onClick={() => setEditing(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-2)]"
+              aria-label="Редактировать"
+            >
+              <KubIcon name="edit" size={16} />
+            </button>
+          )}
+          {editing && (
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-2)]"
+              aria-label="Сохранить"
+            >
+              <KubIcon name="check" size={16} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col items-center py-6 px-4 gap-3 flex-shrink-0 border-b border-[color:var(--kub-border-color)] kub-grid-subtle">

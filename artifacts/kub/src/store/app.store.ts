@@ -93,9 +93,17 @@ function sameChatList(a: ChatWithLastMessage[], b: ChatWithLastMessage[]): boole
       chat.last_message?.id === next.last_message?.id &&
       chat.last_message?.created_at === next.last_message?.created_at &&
       chat.last_message?.edited_at === next.last_message?.edited_at &&
-      chat.last_message?.deleted_at === next.last_message?.deleted_at
+      chat.last_message?.deleted_at === next.last_message?.deleted_at &&
+      chatMemberReadSignature(chat) === chatMemberReadSignature(next)
     );
   });
+}
+
+function chatMemberReadSignature(chat: ChatWithLastMessage): string {
+  return (chat.members ?? [])
+    .map((member) => `${member.user_id}:${member.last_read_at ?? ""}`)
+    .sort()
+    .join("|");
 }
 
 function compareMessages(a: MessageWithSender, b: MessageWithSender): number {

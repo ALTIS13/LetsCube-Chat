@@ -9,6 +9,7 @@ import type { ChatMember, MessageWithSender } from "@/types/database";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app.store";
+import { getMessageDeliveryState } from "@/lib/messageDelivery";
 
 interface MessageListProps {
   messages: MessageWithSender[];
@@ -26,6 +27,7 @@ interface MessageListProps {
   highlightedId?: string | null;
   messageRefs?: React.MutableRefObject<Record<string, HTMLDivElement>>;
   chatMembers?: (ChatMember & { profile?: unknown })[];
+  chatType?: string | null;
   /** Role of the current user in this chat — propagated to MessageBubble. */
   myRole?: "owner" | "admin" | "member" | null;
 }
@@ -51,20 +53,10 @@ export function MessageList({
   highlightedId,
   messageRefs,
   chatMembers,
+  chatType,
   myRole,
 }: MessageListProps) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
-
-  // Compute: latest timestamp that any non-me member has read up to
-  const othersLastReadAt = React.useMemo(() => {
-    if (!chatMembers || !userId) return null;
-    const others = chatMembers.filter((m) => m.user_id !== userId);
-    if (!others.length) return null;
-    // Use the latest last_read_at among all other members
-    const timestamps = others.map((m) => m.last_read_at).filter(Boolean) as string[];
-    if (!timestamps.length) return null;
-    return timestamps.sort().at(-1) ?? null;
-  }, [chatMembers, userId]);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Build userId → fullName map and messageId → message map from loaded messages
@@ -224,10 +216,12 @@ export function MessageList({
           const isSameSenderAsNext = next?.user_id === msg.user_id &&
             !shouldShowDateSeparator(msg, next);
 
-          const isRead = isMe && othersLastReadAt
-            ? othersLastReadAt >= msg.created_at
-            : false;
           const canSelect = !msg.deleted_at && isMe;
+          const deliveryState = getMessageDeliveryState(msg, {
+            currentUserId: userId,
+            chatType,
+            members: chatMembers,
+          });
 
           return (
             <div
@@ -304,7 +298,7 @@ export function MessageList({
                     onCloseReactionMenu={() => setOpenReactionMessageId(null)}
                     usersMap={usersMap}
                     messagesMap={messagesMap}
-                    isRead={isRead}
+                    deliveryState={deliveryState}
                     myRole={myRole}
                   />
                 </div>

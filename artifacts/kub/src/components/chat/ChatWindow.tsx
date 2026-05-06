@@ -248,6 +248,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             highlightedId={highlightedId}
             messageRefs={messageRefs}
             chatMembers={chat?.members}
+            chatType={chat?.type}
             myRole={myRole}
           />
         )}

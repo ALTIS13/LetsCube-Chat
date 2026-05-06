@@ -8,6 +8,7 @@ import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import { useAppStore } from "@/store/app.store";
 import { cn } from "@/lib/utils";
 import { formatChatMessagePreview } from "@/lib/messagePreview";
+import { getMessageDeliveryState } from "@/lib/messageDelivery";
 
 interface ChatListItemProps {
   chat: ChatWithLastMessage & {
@@ -23,7 +24,11 @@ export function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
   const lastMsg = chat.last_message;
   const display = getChatDisplayInfo(chat, currentUserId);
-  const isOutgoing = !!currentUserId && lastMsg?.user_id === currentUserId;
+  const deliveryState = getMessageDeliveryState(lastMsg, {
+    currentUserId,
+    chatType: chat.type,
+    members: chat.members,
+  });
   const hasUnread = (chat.unread_count ?? 0) > 0;
   const isMuted = chat.is_muted;
   const isPinned = chat.is_pinned;
@@ -80,11 +85,12 @@ export function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
             )}
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            {isOutgoing && (
+            {deliveryState?.isOwnMessage && (
               <KubIcon
-                name="doubleCheck"
+                name={deliveryState.icon}
                 size={13}
-                className={hasUnread ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)]"}
+                label={deliveryState.label}
+                tone={deliveryState.tone}
               />
             )}
             {lastMsg && (
