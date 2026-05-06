@@ -10,11 +10,19 @@ import {
   KubEmptyState,
   KubHeader,
   KubIcon,
+  KubInput,
 } from "@/components/kub";
 import { TaskCard } from "./TaskCard";
 import { TaskDetailModal } from "./TaskDetailModal";
 import { TaskFormModal } from "./TaskFormModal";
-import type { TaskStatus } from "@/types/database";
+import {
+  TASK_ASSIGNMENT_SCOPE_META,
+  TASK_PRIORITY_META,
+  TASK_STATUS_META,
+  TASK_VISIBILITY_META,
+  getTaskDeadlineState,
+} from "./taskMeta";
+import type { TaskStatus, TaskWithPeople } from "@/types/database";
 import { cn } from "@/lib/utils";
 
 interface Tab {
@@ -24,7 +32,7 @@ interface Tab {
 }
 
 const STAFF_TABS: Tab[] = [
-  { id: "created", label: "Я создал",      filter: { mine: "created" } },
+  { id: "mine", label: "Мои", filter: { mine: "assigned" } },
   { id: "available", label: "Доступные",
     filter: {
       mine: "all",
@@ -34,16 +42,23 @@ const STAFF_TABS: Tab[] = [
     } },
   { id: "review",  label: "На подтверждении",
     filter: { mine: "all", statuses: ["waiting_confirmation"] } },
+  { id: "urgent",  label: "Срочные",       filter: { mine: "all" } },
+  { id: "private", label: "Приватные",     filter: { mine: "all", visibilities: ["private"] } },
+  { id: "chat",    label: "Чатовые",       filter: { mine: "all", visibilities: ["chat"] } },
+  { id: "unassigned", label: "Без исполнителя", filter: { mine: "all", assignee: "unassigned" } },
   { id: "all",     label: "Все",           filter: { mine: "all" } },
+  { id: "created", label: "Я создал",      filter: { mine: "created" } },
 ];
 
 const ASSIGNEE_TABS: Tab[] = [
+  { id: "mine",     label: "Мои", filter: { mine: "assigned" } },
   { id: "new",      label: "Мои новые",
     filter: { mine: "assigned", statuses: ["assigned" as TaskStatus] } },
   { id: "active",   label: "В работе",
     filter: { mine: "assigned", statuses: ["accepted", "in_progress"] as TaskStatus[] } },
   { id: "review",   label: "На подтверждении",
     filter: { mine: "assigned", statuses: ["waiting_confirmation" as TaskStatus] } },
+  { id: "urgent",   label: "Срочные", filter: { mine: "assigned" } },
 ];
 
 /**
@@ -56,6 +71,8 @@ export function TasksPage() {
   const [location, setLocation] = useLocation();
   const currentUser = useAppStore((s) => s.currentUser);
   const isStaff = useIsManagerOrAdmin();
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [search, setSearch] = useState("");
 
   const tabs = isStaff ? STAFF_TABS : ASSIGNEE_TABS;
   const [tabId, setTabId] = useState(tabs[0].id);
@@ -76,17 +93,31 @@ export function TasksPage() {
     if (taskIdFromUrl) setOpenTaskId(taskIdFromUrl);
   }, [taskIdFromUrl]);
 
+  useEffect(() => {
+    if (!tabs.some((tab) => tab.id === tabId)) setTabId(tabs[0].id);
+  }, [tabId, tabs]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 60000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const closeTaskModal = () => {
     setOpenTaskId(null);
     if (taskIdFromUrl) setLocation("/tasks", { replace: true });
   };
 
+  const visibleTasks = useMemo(
+    () => applyClientFilters(tasks, activeTab.id, search, nowMs),
+    [tasks, activeTab.id, search, nowMs],
+  );
+
   // The "Все" tab on staff is intentionally unbounded — show a small hint
   // when the visible list is large.
   const summary = useMemo(() => {
     if (loading) return "";
-    return `${tasks.length} ${pluralizeTasks(tasks.length)}`;
-  }, [tasks.length, loading]);
+    return `${visibleTasks.length} ${pluralizeTasks(visibleTasks.length)}`;
+  }, [visibleTasks.length, loading]);
 
   if (!currentUser) return null;
 
@@ -146,16 +177,38 @@ export function TasksPage() {
         </div>
       </div>
 
+      <div className="flex-shrink-0 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 sm:px-5 py-3">
+        <KubInput
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Поиск по задачам…"
+          leftIcon={<KubIcon name="search" size={15} />}
+          rightSlot={
+            search ? (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="shrink-0 rounded-md p-1 text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface)] hover:text-[color:var(--kub-text)]"
+                aria-label="Очистить поиск задач"
+              >
+                <KubIcon name="close" size={14} />
+              </button>
+            ) : null
+          }
+          containerClassName="max-w-2xl"
+        />
+      </div>
+
       {/* List */}
       <div className="flex-1 overflow-y-auto px-3 sm:px-5 py-4">
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <KubIcon name="spinner" size={24} tone="accent" label="Загрузка" />
           </div>
-        ) : tasks.length === 0 ? (
+        ) : visibleTasks.length === 0 ? (
           <KubEmptyState
             icon={<KubIcon name="tasks" size={26} />}
-            title={getEmptyTitle(activeTab.id)}
+            title={search.trim() ? "Задачи не найдены" : getEmptyTitle(activeTab.id)}
             description={getEmptyDescription(activeTab.id, isStaff)}
             action={
               isStaff && (
@@ -171,12 +224,12 @@ export function TasksPage() {
           />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-            {tasks.map((t) => (
-              <TaskCard key={t.id} task={t} onClick={() => setOpenTaskId(t.id)} />
+            {visibleTasks.map((t) => (
+              <TaskCard key={t.id} task={t} nowMs={nowMs} onClick={() => setOpenTaskId(t.id)} />
             ))}
           </div>
         )}
-        {!loading && tasks.length > 0 && (
+        {!loading && visibleTasks.length > 0 && (
           <div className="mt-4 text-center text-[11px] uppercase tracking-wide text-[color:var(--kub-muted)]">
             {summary}
           </div>
@@ -184,7 +237,7 @@ export function TasksPage() {
       </div>
 
       {openTaskId && (
-        <TaskDetailModal taskId={openTaskId} onClose={closeTaskModal} />
+        <TaskDetailModal taskId={openTaskId} nowMs={nowMs} onClose={closeTaskModal} />
       )}
       {showCreate && (
         <TaskFormModal
@@ -214,6 +267,14 @@ function getEmptyTitle(tabId: string): string {
       return "Нет задач на подтверждении";
     case "available":
       return "Нет доступных задач";
+    case "urgent":
+      return "Нет срочных задач";
+    case "private":
+      return "Нет приватных задач";
+    case "chat":
+      return "Нет чатовых задач";
+    case "unassigned":
+      return "Нет задач без исполнителя";
     case "created":
       return "Вы пока не создали задач";
     default:
@@ -231,6 +292,14 @@ function getEmptyDescription(tabId: string, isStaff: boolean): string {
       return "Здесь появятся задачи, которые ждут подтверждения выполнения.";
     case "available":
       return "Здесь появятся задачи из общего пула, которые можно взять в работу.";
+    case "urgent":
+      return "Здесь будут задачи с близким сроком или просроченным дедлайном.";
+    case "private":
+      return "Приватные задачи отображаются только тем, кому их разрешает RLS.";
+    case "chat":
+      return "Задачи с видимостью чата появятся здесь, если они доступны вам по RLS.";
+    case "unassigned":
+      return "Здесь будут задачи без назначенного исполнителя.";
     case "created":
       return "Создайте первую задачу — она появится у выбранного исполнителя.";
     default:
@@ -238,4 +307,45 @@ function getEmptyDescription(tabId: string, isStaff: boolean): string {
         ? "Пока нет задач, доступных по текущему фильтру."
         : "Когда вам назначат задачу, она появится здесь.";
   }
+}
+
+function applyClientFilters(
+  tasks: TaskWithPeople[],
+  tabId: string,
+  search: string,
+  nowMs: number,
+): TaskWithPeople[] {
+  const query = normalizeSearch(search);
+  return tasks.filter((task) => {
+    if (tabId === "urgent") {
+      const deadline = getTaskDeadlineState(task, nowMs);
+      if (!deadline.isOverdue && !deadline.isDueSoon) return false;
+    }
+
+    if (!query) return true;
+    const deadline = getTaskDeadlineState(task, nowMs);
+    const haystack = [
+      task.title,
+      task.description,
+      task.assignee?.full_name,
+      task.assignee?.username,
+      task.creator?.full_name,
+      task.creator?.username,
+      TASK_STATUS_META[task.status].label,
+      TASK_PRIORITY_META[task.priority].label,
+      TASK_VISIBILITY_META[task.visibility].label,
+      TASK_ASSIGNMENT_SCOPE_META[task.assignment_scope].label,
+      deadline.timeLabel,
+      deadline.badgeLabel,
+    ]
+      .filter(Boolean)
+      .map((value) => normalizeSearch(String(value)))
+      .join(" ");
+
+    return haystack.includes(query);
+  });
+}
+
+function normalizeSearch(value: string): string {
+  return value.trim().toLocaleLowerCase("ru-RU");
 }

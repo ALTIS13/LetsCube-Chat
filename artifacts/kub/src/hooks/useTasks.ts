@@ -8,6 +8,7 @@ import type {
   TaskAssignmentScope,
   Profile,
   TaskStatus,
+  TaskVisibility,
   TaskWithPeople,
 } from "@/types/database";
 
@@ -27,6 +28,7 @@ export interface TasksFilter {
   mine: "assigned" | "created" | "all";
   statuses?: TaskStatus[];
   assignmentScopes?: TaskAssignmentScope[];
+  visibilities?: TaskVisibility[];
   assignee?: "unassigned";
 }
 
@@ -41,6 +43,7 @@ export function useTasks(filter: TasksFilter) {
   // новые callback identity при тех же значениях.
   const statusKey = (filter.statuses ?? []).slice().sort().join(",");
   const assignmentScopeKey = (filter.assignmentScopes ?? []).slice().sort().join(",");
+  const visibilityKey = (filter.visibilities ?? []).slice().sort().join(",");
 
   const fetchTasks = useCallback(async () => {
     if (!userId) return;
@@ -68,6 +71,9 @@ export function useTasks(filter: TasksFilter) {
     if (filter.assignmentScopes && filter.assignmentScopes.length > 0) {
       q = q.in("assignment_scope", filter.assignmentScopes);
     }
+    if (filter.visibilities && filter.visibilities.length > 0) {
+      q = q.in("visibility", filter.visibilities);
+    }
     if (filter.assignee === "unassigned") {
       q = q.is("assignee_id", null);
     }
@@ -86,7 +92,7 @@ export function useTasks(filter: TasksFilter) {
       );
     }
     setLoading(false);
-  }, [userId, supabase, filter.mine, statusKey, assignmentScopeKey, filter.assignee]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userId, supabase, filter.mine, statusKey, assignmentScopeKey, visibilityKey, filter.assignee]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
 

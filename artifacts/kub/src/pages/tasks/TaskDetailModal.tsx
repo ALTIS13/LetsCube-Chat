@@ -13,7 +13,9 @@ import {
   TASK_PRIORITY_META,
   TASK_STATUS_META,
   TASK_VISIBILITY_META,
+  formatTaskDueDate,
   formatRelative,
+  getTaskDeadlineState,
 } from "./taskMeta";
 import { TaskAssignModal } from "./TaskAssignModal";
 import { TaskConfirmModal } from "./TaskConfirmModal";
@@ -23,6 +25,7 @@ import { mapPgError } from "@/lib/errors";
 
 interface Props {
   taskId: string;
+  nowMs?: number;
   onClose: () => void;
 }
 
@@ -33,7 +36,7 @@ type Subdialog = null | "confirm" | "reject" | "cancel" | "assign" | "edit";
  * action buttons.  Every state-changing button calls a SECURITY DEFINER RPC
  * — the modal never updates `tasks` directly.
  */
-export function TaskDetailModal({ taskId, onClose }: Props) {
+export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) {
   const supabase = createClient();
   const currentUser = useAppStore((s) => s.currentUser);
   const isStaff = useIsManagerOrAdmin();
@@ -75,6 +78,7 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
   const priority = TASK_PRIORITY_META[task.priority];
   const visibility = TASK_VISIBILITY_META[task.visibility];
   const assignmentScope = TASK_ASSIGNMENT_SCOPE_META[task.assignment_scope];
+  const deadline = getTaskDeadlineState(task, nowMs);
   const isPoolAvailable = task.assignment_scope !== "user" && !task.assignee_id;
   const isAssignee = currentUser?.id === task.assignee_id;
   const isCreator  = currentUser?.id === task.created_by;
@@ -198,11 +202,14 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
             </KubBadge>
           )}
           {task.due_at && (
-            <KubBadge tone="muted" pill>
+            <KubBadge tone={deadline.tone} pill>
               <KubIcon name="clock" size={11} className="mr-1" />
-              {new Date(task.due_at).toLocaleString("ru-RU", {
-                day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
-              })}
+              {formatTaskDueDate(task.due_at)}
+            </KubBadge>
+          )}
+          {deadline.badgeLabel && (
+            <KubBadge tone={deadline.tone} pill>
+              {deadline.badgeLabel}
             </KubBadge>
           )}
         </div>
@@ -212,6 +219,39 @@ export function TaskDetailModal({ taskId, onClose }: Props) {
             {task.description}
           </p>
         )}
+
+        <div className="rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--kub-text)]">
+                <KubIcon
+                  name={deadline.isOverdue || deadline.isDueSoon ? "warning" : "clock"}
+                  size={16}
+                  tone={deadline.tone === "cyan" ? "accent" : deadline.tone}
+                />
+                <span>{deadline.timeLabel}</span>
+              </div>
+              <p className="mt-1 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                {deadline.detailLabel}
+              </p>
+            </div>
+            {task.due_at && (
+              <div className="shrink-0 rounded-lg border border-[color:var(--kub-border-color)] px-2.5 py-1.5 text-xs font-medium text-[color:var(--kub-text)]">
+                {formatTaskDueDate(task.due_at)}
+              </div>
+            )}
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--kub-border-color)_65%,transparent)]">
+            {deadline.urgencyRatio !== null ? (
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[color:var(--kub-online)] via-[color:var(--kub-warn)] to-[color:var(--kub-danger)] transition-[width] duration-300"
+                style={{ width: `${Math.max(5, Math.round(deadline.urgencyRatio * 100))}%` }}
+              />
+            ) : (
+              <div className="h-full w-0" />
+            )}
+          </div>
+        </div>
 
         {task.status === "waiting_confirmation" && (
           <div className="flex items-start gap-2 rounded-xl border border-[color:var(--kub-warn)]/30 bg-[color-mix(in_srgb,var(--kub-warn)_12%,transparent)] px-3 py-2">

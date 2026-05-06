@@ -8,25 +8,25 @@ import {
   TASK_PRIORITY_META,
   TASK_STATUS_META,
   TASK_VISIBILITY_META,
+  formatTaskDueDate,
   formatRelative,
+  getTaskDeadlineState,
 } from "./taskMeta";
 import { cn } from "@/lib/utils";
 
 interface TaskCardProps {
   task: TaskWithPeople;
+  nowMs: number;
   onClick: () => void;
 }
 
-export function TaskCard({ task, onClick }: TaskCardProps) {
+export function TaskCard({ task, nowMs, onClick }: TaskCardProps) {
   const status = TASK_STATUS_META[task.status];
   const priority = TASK_PRIORITY_META[task.priority];
   const visibility = TASK_VISIBILITY_META[task.visibility];
   const assignmentScope = TASK_ASSIGNMENT_SCOPE_META[task.assignment_scope];
   const isPoolAvailable = task.assignment_scope !== "user" && !task.assignee_id;
-  const overdue =
-    task.due_at &&
-    new Date(task.due_at).getTime() < Date.now() &&
-    !["confirmed", "rejected", "cancelled"].includes(task.status);
+  const deadline = getTaskDeadlineState(task, nowMs);
 
   return (
     <button
@@ -69,6 +69,40 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
               Доступна для взятия
             </KubBadge>
           )}
+          {deadline.badgeLabel && (
+            <KubBadge tone={deadline.tone} pill>
+              {deadline.badgeLabel}
+            </KubBadge>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
+          <div className="flex min-w-0 items-center justify-between gap-2 text-[11px]">
+            <span className={cn(
+              "flex min-w-0 items-center gap-1.5 font-medium",
+              deadline.isOverdue && "text-[color:var(--kub-danger)]",
+              deadline.isDueSoon && !deadline.isOverdue && "text-[color:var(--kub-warn)]",
+              !deadline.isOverdue && !deadline.isDueSoon && "text-[color:var(--kub-text)]",
+            )}>
+              <KubIcon name={deadline.isOverdue || deadline.isDueSoon ? "warning" : "clock"} size={12} />
+              <span className="truncate">{deadline.timeLabel}</span>
+            </span>
+            {task.due_at && (
+              <span className="shrink-0 text-[color:var(--kub-muted)]">
+                {formatTaskDueDate(task.due_at)}
+              </span>
+            )}
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--kub-border-color)_65%,transparent)]">
+            {deadline.urgencyRatio !== null ? (
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[color:var(--kub-online)] via-[color:var(--kub-warn)] to-[color:var(--kub-danger)] transition-[width] duration-300"
+                style={{ width: `${Math.max(6, Math.round(deadline.urgencyRatio * 100))}%` }}
+              />
+            ) : (
+              <div className="h-full w-0" />
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px] text-[color:var(--kub-muted)]">
@@ -91,17 +125,6 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
             {formatRelative(task.updated_at)}
           </span>
 
-          {task.due_at && (
-            <span
-              className={cn(
-                "flex items-center gap-1",
-                overdue && "text-[color:var(--kub-danger)] font-semibold"
-              )}
-            >
-              <KubIcon name="warning" size={12} />
-              {new Date(task.due_at).toLocaleDateString("ru-RU", { day: "2-digit", month: "short" })}
-            </span>
-          )}
         </div>
       </KubPanel>
     </button>

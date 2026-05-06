@@ -3,6 +3,7 @@ import type {
   TaskEventKind,
   TaskPriority,
   TaskStatus,
+  Task,
   TaskVisibility,
 } from "@/types/database";
 
@@ -71,6 +72,122 @@ export const TASK_EVENT_LABEL: Record<TaskEventKind, string> = {
 
 export const PRIORITIES: TaskPriority[] = ["low", "normal", "high", "urgent"];
 
+const ACTIVE_DEADLINE_STATUSES: TaskStatus[] = [
+  "new",
+  "assigned",
+  "accepted",
+  "in_progress",
+  "waiting_confirmation",
+];
+
+const DEADLINE_SOON_MS = 3 * 60 * 60 * 1000;
+const DEADLINE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+export interface TaskDeadlineState {
+  hasDueDate: boolean;
+  isActive: boolean;
+  isOverdue: boolean;
+  isDueSoon: boolean;
+  timeLabel: string;
+  detailLabel: string;
+  badgeLabel: string | null;
+  urgencyRatio: number | null;
+  tone: Tone;
+}
+
+/**
+ * Deadline urgency is not task completion progress. It is a 24h risk window:
+ * tasks outside the window stay calm, then gradually move toward warning/danger.
+ */
+export function getTaskDeadlineState(
+  task: Pick<Task, "due_at" | "status">,
+  nowMs: number = Date.now(),
+): TaskDeadlineState {
+  if (!task.due_at) {
+    return {
+      hasDueDate: false,
+      isActive: false,
+      isOverdue: false,
+      isDueSoon: false,
+      timeLabel: "Без срока",
+      detailLabel: "Для задачи не задан срок выполнения.",
+      badgeLabel: null,
+      urgencyRatio: null,
+      tone: "muted",
+    };
+  }
+
+  const dueMs = new Date(task.due_at).getTime();
+  const isActive = ACTIVE_DEADLINE_STATUSES.includes(task.status) && Number.isFinite(dueMs);
+  if (!isActive) {
+    const completedLabel =
+      task.status === "cancelled"
+        ? "Отменена"
+        : task.status === "rejected"
+          ? "Отклонена"
+          : "Завершена";
+    return {
+      hasDueDate: true,
+      isActive: false,
+      isOverdue: false,
+      isDueSoon: false,
+      timeLabel: completedLabel,
+      detailLabel: `${completedLabel}. Дедлайн больше не требует срочного действия.`,
+      badgeLabel: null,
+      urgencyRatio: null,
+      tone: "muted",
+    };
+  }
+
+  const remainingMs = dueMs - nowMs;
+  const isOverdue = remainingMs < 0;
+  const isDueSoon =
+    !isOverdue &&
+    remainingMs <= DEADLINE_SOON_MS &&
+    (task.status === "new" || task.status === "assigned");
+  const urgencyRatio = isOverdue
+    ? 1
+    : clamp01(1 - Math.min(Math.max(remainingMs, 0), DEADLINE_WINDOW_MS) / DEADLINE_WINDOW_MS);
+  const tone: Tone = isOverdue ? "danger" : isDueSoon ? "warn" : urgencyRatio >= 0.5 ? "warn" : "online";
+
+  if (isOverdue) {
+    const overdue = formatDuration(Math.abs(remainingMs));
+    return {
+      hasDueDate: true,
+      isActive: true,
+      isOverdue: true,
+      isDueSoon: false,
+      timeLabel: `Просрочено на ${overdue}`,
+      detailLabel: `Задача просрочена на ${overdue}.`,
+      badgeLabel: "Просрочена",
+      urgencyRatio,
+      tone,
+    };
+  }
+
+  const left = formatDuration(remainingMs);
+  return {
+    hasDueDate: true,
+    isActive: true,
+    isOverdue: false,
+    isDueSoon,
+    timeLabel: `Осталось: ${left}`,
+    detailLabel: `До срока осталось ${left}.`,
+    badgeLabel: isDueSoon ? "Почти просрочена" : null,
+    urgencyRatio,
+    tone,
+  };
+}
+
+export function formatTaskDueDate(iso: string): string {
+  return new Date(iso).toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 /** Human-friendly Russian relative date used inside cards/event log. */
 export function formatRelative(iso: string): string {
   const d = new Date(iso);
@@ -86,4 +203,20 @@ export function formatRelative(iso: string): string {
   const days = Math.round(abs / 86400);
   if (abs < 7 * 86400) return diff < 0 ? `${fmt(days, "дн назад")}` : `через ${fmt(days, "дн")}`;
   return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+
+function formatDuration(ms: number): string {
+  const totalMinutes = Math.max(0, Math.round(ms / 60000));
+  if (totalMinutes < 1) return "меньше минуты";
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}д ${hours}ч`;
+  if (hours > 0) return `${hours}ч ${minutes}м`;
+  return `${minutes}м`;
 }
