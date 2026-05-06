@@ -44,6 +44,8 @@ export function useMessages(
   useEffect(() => { mutedRef.current = mutedChatIds; }, [mutedChatIds]);
   const chatIdRef = useRef(chatId);
   useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
+  const clearedAtRef = useRef(clearedAt);
+  useEffect(() => { clearedAtRef.current = clearedAt; }, [clearedAt]);
   // topicId is passed into INSERTs and used to filter the realtime stream so
   // we only show messages from the active topic in forum chats. Undefined
   // means "topics disabled": show the whole chat without topic scoping.
@@ -122,23 +124,45 @@ export function useMessages(
 
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
 
+  const fetchMessageById = useCallback(async (messageId: string) => {
+    const activeChatId = chatIdRef.current;
+    if (!activeChatId) return;
+    const { data } = await supabase
+      .from("messages")
+      .select(`*, sender:profiles!user_id(*), reply_to:messages!reply_to_id(id, content, type, user_id, sender:profiles(id, full_name)), reactions(*)`)
+      .eq("id", messageId)
+      .eq("chat_id", activeChatId)
+      .maybeSingle();
+    if (!data) return;
+    const message = data as unknown as MessageWithSender;
+    const localClearedAt = clearedAtRef.current;
+    if (localClearedAt && new Date(message.created_at).getTime() <= new Date(localClearedAt).getTime()) return;
+    if (!messageBelongsToTopic(message, topicIdRef.current, generalTopicIdsRef.current)) return;
+    addMessage(activeChatId, message);
+  }, [addMessage, supabase]);
+
   useEffect(() => {
     if (!chatId) return;
-    let timer: ReturnType<typeof setTimeout> | null = null;
+    const timers = new Map<string, ReturnType<typeof setTimeout>>();
     const handleRefresh = (event: Event) => {
       const detail = (event as CustomEvent<ChatsRefreshDetail>).detail;
-      if (detail?.reason !== "message-realtime" || detail.chatId !== chatIdRef.current) return;
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        void fetchMessages();
-      }, 300);
+      if (detail?.reason !== "message-realtime" || detail.chatId !== chatIdRef.current || !detail.messageId) return;
+      if (timers.has(detail.messageId)) return;
+      const timer = setTimeout(() => {
+        timers.delete(detail.messageId!);
+        const current = useAppStore.getState().messages[chatIdRef.current ?? ""] ?? [];
+        if (current.some((message) => message.id === detail.messageId)) return;
+        void fetchMessageById(detail.messageId!);
+      }, 900);
+      timers.set(detail.messageId, timer);
     };
     window.addEventListener(KUB_CHATS_REFRESH_EVENT, handleRefresh);
     return () => {
-      if (timer) clearTimeout(timer);
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
       window.removeEventListener(KUB_CHATS_REFRESH_EVENT, handleRefresh);
     };
-  }, [chatId, fetchMessages]);
+  }, [chatId, fetchMessageById]);
 
   const fetchPinnedMessages = useCallback(async () => {
     if (!chatId) {
@@ -248,7 +272,8 @@ export function useMessages(
         { event: "INSERT", schema: "public", table: "messages", filter: `chat_id=eq.${chatId}` },
         async (payload: { new: MessageWithSender }) => {
           if (payload.new.chat_id !== chatIdRef.current) return;
-          const clearedAtMs = clearedAt ? new Date(clearedAt).getTime() : null;
+          const localClearedAt = clearedAtRef.current;
+          const clearedAtMs = localClearedAt ? new Date(localClearedAt).getTime() : null;
           if (clearedAtMs && new Date(payload.new.created_at).getTime() <= clearedAtMs) return;
           // Filter by topic — ignore messages from other topics in the same chat.
           if (
@@ -322,7 +347,7 @@ export function useMessages(
       rt.removeChannel(channel);
       unregisterChannel(channelName);
     };
-  }, [chatId, userId, rt, addMessage, setMessages, clearedAt]);
+  }, [chatId, userId, rt, addMessage, setMessages]);
 
   const sendMessage = useCallback(async (content: string, replyToId?: string) => {
     const user = currentUserRef.current;

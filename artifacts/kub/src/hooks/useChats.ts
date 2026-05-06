@@ -210,10 +210,10 @@ export function useChats() {
   useEffect(() => {
     if (!userId) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const debouncedRefetch = (payload?: { new?: { chat_id?: string }; old?: { chat_id?: string } }) => {
+    const debouncedRefetch = (payload?: { eventType?: string; new?: { id?: string; chat_id?: string }; old?: { chat_id?: string } }) => {
       const eventChatId = payload?.new?.chat_id ?? payload?.old?.chat_id;
-      if (eventChatId) {
-        dispatchChatsRefresh({ reason: "message-realtime", chatId: eventChatId });
+      if (eventChatId && payload?.eventType === "INSERT" && payload.new?.id) {
+        dispatchChatsRefresh({ reason: "message-realtime", chatId: eventChatId, messageId: payload.new.id });
       }
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {

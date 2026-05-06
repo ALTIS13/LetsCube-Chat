@@ -313,7 +313,7 @@ export function MessageBubble({
 
           <div
             className={cn(
-              "relative min-w-0 max-w-full px-3 py-2 rounded-2xl transition-opacity select-none sm:select-text",
+              "relative min-w-24 max-w-full px-3 py-2 rounded-2xl transition-opacity select-none sm:select-text",
               shouldUseComfortTextWidth && "min-w-36 sm:min-w-44",
               bubbleClass,
               isMe
