@@ -6,14 +6,27 @@ import { useState } from "react";
 
 interface PinnedMessageProps {
   message: MessageWithSender;
+  onJump?: () => void;
+  onUnpin?: () => void;
 }
 
-export function PinnedMessage({ message }: PinnedMessageProps) {
+export function PinnedMessage({ message, onJump, onUnpin }: PinnedMessageProps) {
   const [dismissed, setDismissed] = useState(false);
   if (dismissed) return null;
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors flex-shrink-0 bg-[var(--kub-surface)] border-b border-[color:var(--kub-border-color)] hover:bg-[var(--kub-surface-2)] relative">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onJump}
+      onKeyDown={(e) => {
+        if ((e.key === "Enter" || e.key === " ") && onJump) {
+          e.preventDefault();
+          onJump();
+        }
+      }}
+      className="flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors flex-shrink-0 bg-[var(--kub-surface)] border-b border-[color:var(--kub-border-color)] hover:bg-[var(--kub-surface-2)] relative"
+    >
       <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-[var(--kub-cyan)]" />
       <KubIcon name="pin" size={14} className="flex-shrink-0 text-[color:var(--kub-cyan)]" />
       <div className="flex-1 min-w-0">
@@ -24,6 +37,16 @@ export function PinnedMessage({ message }: PinnedMessageProps) {
           {message.content}
         </div>
       </div>
+      {onUnpin && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onUnpin(); }}
+          className="flex-shrink-0 p-1 rounded-lg hover:bg-[var(--kub-surface-3)] transition-colors text-[color:var(--kub-muted)]"
+          aria-label="Открепить сообщение"
+          title="Открепить"
+        >
+          <KubIcon name="pinOff" size={14} />
+        </button>
+      )}
       <button
         onClick={(e) => { e.stopPropagation(); setDismissed(true); }}
         className="flex-shrink-0 p-1 rounded-lg hover:bg-[var(--kub-surface-3)] transition-colors text-[color:var(--kub-muted)]"

@@ -721,6 +721,14 @@ export interface Database {
         Args: Record<string, never>
         Returns: void
       }
+      pin_message: {
+        Args: { p_message_id: string }
+        Returns: Message
+      }
+      unpin_message: {
+        Args: { p_message_id: string }
+        Returns: Message
+      }
     }
     Enums: {
       app_role: AppRole

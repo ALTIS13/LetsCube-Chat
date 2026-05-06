@@ -50,6 +50,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const [showSearch, setShowSearch] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const [pinError, setPinError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement>>({});
   const supabase = createClient();
@@ -137,6 +138,15 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     }
   }, []);
 
+  const handleTogglePin = useCallback(async (msg: MessageWithSender) => {
+    setPinError(null);
+    const result = await togglePin(msg.id, msg.pinned);
+    if (!result.ok) {
+      setPinError(result.error ?? "Недостаточно прав для закрепления сообщения.");
+      window.setTimeout(() => setPinError(null), 5000);
+    }
+  }, [togglePin]);
+
   return (
     <div className="flex h-full w-full bg-[var(--kub-chat-bg)]">
       <div className="flex flex-col flex-1 min-w-0">
@@ -163,7 +173,19 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           />
         )}
 
-        {pinnedMessage && <PinnedMessage message={pinnedMessage} />}
+        {pinError && (
+          <div className="mx-3 mt-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
+            {pinError}
+          </div>
+        )}
+
+        {pinnedMessage && (
+          <PinnedMessage
+            message={pinnedMessage}
+            onJump={() => jumpToMessage(pinnedMessage.id)}
+            onUnpin={myRole ? () => void handleTogglePin(pinnedMessage) : undefined}
+          />
+        )}
 
         {loading ? (
           <div className="flex-1 flex items-center justify-center chat-bg">
@@ -184,7 +206,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             onReaction={toggleReaction}
             onEdit={(msg) => setEditingMessage(msg)}
             onDelete={(msg) => deleteMessage(msg.id)}
-            onTogglePin={(msg) => togglePin(msg.id, msg.pinned)}
+            onTogglePin={myRole ? handleTogglePin : undefined}
             onForward={(msg) => setForwardingMessage(msg)}
             bottomRef={bottomRef}
             isTyping={isTyping}

@@ -5,6 +5,7 @@ import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import type { MessageWithSender } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
+import { mapPgError } from "@/lib/errors";
 
 export function useMessages(chatId: string | null, topicId: string | null = null) {
   const [loading, setLoading] = useState(false);
@@ -266,13 +267,23 @@ export function useMessages(chatId: string | null, topicId: string | null = null
 
   // ── Pin / unpin ─────────────────────────────────────────────────────────
   const togglePin = useCallback(async (messageId: string, currentlyPinned: boolean) => {
-    if (!chatId) return;
-    const { error } = await supabase
-      .from("messages")
-      .update({ pinned: !currentlyPinned })
-      .eq("id", messageId);
-    if (error) console.error("Pin error:", error);
-  }, [chatId, supabase]);
+    if (!chatId) return { ok: false, error: "Чат не выбран." };
+    const rpcName = currentlyPinned ? "unpin_message" : "pin_message";
+    const { data, error } = await supabase.rpc(rpcName, { p_message_id: messageId });
+    if (error) {
+      console.error("Pin error:", error);
+      return { ok: false, error: mapPgError(error) };
+    }
+    if (data) {
+      const current = useAppStore.getState().messages[chatId] ?? [];
+      setMessages(chatId, current.map((message) =>
+        message.id === messageId
+          ? { ...message, pinned: Boolean(data.pinned) }
+          : message
+      ));
+    }
+    return { ok: true, error: null };
+  }, [chatId, supabase, setMessages]);
 
   // ── Forward ─────────────────────────────────────────────────────────────
   // Insert a copy of the message into a target chat.  We carry over content,
