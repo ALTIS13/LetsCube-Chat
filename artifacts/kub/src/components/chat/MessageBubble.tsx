@@ -188,6 +188,10 @@ export function MessageBubble({
       return acc;
     }, {}
   );
+  const reactionEntries = Object.entries(reactionGroups);
+  const visibleReactionEntries = reactionEntries.slice(0, 6);
+  const hiddenReactionCount = reactionEntries.slice(6).reduce((total, [, { count }]) => total + count, 0);
+  const hasReactions = reactionEntries.length > 0;
 
   const clearLongPressTimer = useCallback(() => {
     if (longPressTimer.current) {
@@ -405,6 +409,7 @@ export function MessageBubble({
             );
           })()}
 
+          <div className={cn("relative max-w-full", widthClasses.bubble, hasReactions && "pb-5")}>
           <div
             className={cn(
               "relative max-w-full px-3 py-2 rounded-2xl transition-opacity select-none sm:select-text",
@@ -536,16 +541,16 @@ export function MessageBubble({
             </div>
           </div>
 
-          {Object.keys(reactionGroups).length > 0 && (
+          {hasReactions && (
             <div
               className={cn(
-                "-mt-px mb-1 flex w-fit max-w-full flex-wrap gap-0.5 border px-1.5 py-0.5 shadow-sm",
+                "absolute z-20 -bottom-4 flex w-max max-w-[min(18rem,calc(100vw-4rem))] flex-wrap items-center gap-0.5 rounded-full border px-1.5 py-0.5 shadow-md backdrop-blur-sm",
                 isMe
-                  ? "self-end rounded-bl-xl rounded-br-xl rounded-tl-xl border-[color:var(--kub-cyan)]/30 bg-[color-mix(in_srgb,var(--kub-cyan)_12%,var(--kub-surface))]"
-                  : "self-start rounded-bl-xl rounded-br-xl rounded-tr-xl border-[color:var(--kub-border-color)] bg-[var(--kub-message-in)]",
+                  ? "right-2 justify-end border-[color:var(--kub-cyan)]/35 bg-[color-mix(in_srgb,var(--kub-cyan)_14%,var(--kub-surface))]"
+                  : "left-2 justify-start border-[color:var(--kub-border-color)] bg-[var(--kub-message-in)]",
               )}
             >
-              {Object.entries(reactionGroups).map(([emoji, { count, mine }]) => (
+              {visibleReactionEntries.map(([emoji, { count, mine }]) => (
                 <button
                   key={emoji}
                   onClick={() => onReaction(emoji)}
@@ -560,8 +565,14 @@ export function MessageBubble({
                   {count > 1 && <span className="tabular-nums">{count}</span>}
                 </button>
               ))}
+              {hiddenReactionCount > 0 && (
+                <span className="inline-flex h-5 items-center rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-1.5 text-[11px] leading-none text-[color:var(--kub-muted)]">
+                  +{hiddenReactionCount}
+                </span>
+              )}
             </div>
           )}
+          </div>
         </div>
       </div>
     </>
