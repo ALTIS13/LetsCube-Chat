@@ -88,8 +88,8 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
   switch (kind) {
     case "link":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(64vw,620px)] md:max-w-[min(52vw,620px)]",
-        bubble: "w-fit max-w-full",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(60vw,580px)] md:max-w-[min(48vw,580px)]",
+        bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:anywhere]",
       };
     case "preformatted":
@@ -100,8 +100,8 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
       };
     case "longToken":
       return {
-        stack: "w-[min(86vw,34rem)] max-w-[86vw] sm:w-[min(60vw,40rem)] md:w-[min(54vw,42rem)]",
-        bubble: "w-full",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(60vw,640px)] md:max-w-[min(52vw,640px)]",
+        bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:anywhere]",
       };
     case "regular":
@@ -335,7 +335,7 @@ export function MessageBubble({
   const inlineTextFooter =
     message.type === "text" &&
     !hasReactions &&
-    (textLayoutKind === "short" || textLayoutKind === "regular");
+    textLayoutKind !== "preformatted";
   const renderFooterContent = () => (
     <>
       {message.pinned && (
