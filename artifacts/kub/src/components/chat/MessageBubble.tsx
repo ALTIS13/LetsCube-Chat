@@ -88,7 +88,7 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
   switch (kind) {
     case "link":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(60vw,580px)] md:max-w-[min(48vw,580px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(58vw,520px)] md:max-w-[min(42vw,500px)]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:anywhere]",
       };
@@ -595,14 +595,17 @@ export function MessageBubble({
                 <span className="truncate max-w-[200px]">{message.content ?? "File"}</span>
               </a>
             ) : (
-              <p className={cn("min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [word-break:normal] text-[color:var(--kub-text)]", widthClasses.text)}>
+              <p
+                data-message-text-flow="true"
+                className={cn("min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [word-break:normal] text-[color:var(--kub-text)]", widthClasses.text)}
+              >
                 <FormattedText content={message.content ?? ""} />
                 {inlineTextFooter && (
                   <>
-                    <span className="inline-block w-2" aria-hidden="true" />
+                    <span className="inline-block w-1.5" aria-hidden="true" />
                     <span
                       data-message-footer="true"
-                      className="relative top-px inline-flex max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap align-baseline leading-none"
+                      className="inline-flex max-w-max shrink-0 items-center justify-end gap-1 whitespace-nowrap align-text-bottom leading-none"
                     >
                       {renderFooterContent()}
                     </span>
@@ -613,6 +616,7 @@ export function MessageBubble({
 
             {!inlineTextFooter && (
               <div
+                data-message-bottom-meta="true"
                 className={cn(
                   "flex max-w-full items-end leading-none",
                   hasReactions ? "mt-1 w-full min-w-[6.75rem] gap-1.5" : "ml-auto mt-px w-fit justify-end gap-1 pl-3",
