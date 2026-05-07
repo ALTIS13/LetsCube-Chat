@@ -516,7 +516,7 @@ export function MessageBubble({
             <div
               className={cn(
                 "-mb-0.5 flex max-w-full items-end gap-1.5 leading-none",
-                hasReactions ? "mt-1 w-full" : "ml-auto mt-0.5 w-fit justify-end pl-3",
+                hasReactions ? "mt-1 w-full min-w-[6.75rem]" : "ml-auto mt-0.5 w-fit justify-end pl-3",
               )}
             >
               {hasReactions && (
