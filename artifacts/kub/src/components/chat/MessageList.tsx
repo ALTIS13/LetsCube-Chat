@@ -83,7 +83,9 @@ export function MessageList({
   const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [openReactionMessageId, setOpenReactionMessageId] = useState<string | null>(null);
+  const [openActionMessageId, setOpenActionMessageId] = useState<string | null>(null);
   const isAtBottomRef = useRef(true);
+  const prevMessageCountRef = useRef(messages.length);
 
   const selectableMessages = React.useMemo(
     // Current backend policy allows soft-delete through message UPDATE only for
@@ -110,6 +112,8 @@ export function MessageList({
     setSelectedIds(new Set());
     setConfirmingBulkDelete(false);
     setBulkDeleting(false);
+    setOpenReactionMessageId(null);
+    setOpenActionMessageId(null);
   }, []);
 
   const handleBulkDelete = useCallback(async () => {
@@ -137,7 +141,7 @@ export function MessageList({
     const el = containerRef.current;
     if (!el) return;
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const atBottom = distFromBottom < 80;
+    const atBottom = distFromBottom < 120;
     isAtBottomRef.current = atBottom;
     setShowScrollBtn(!atBottom);
     if (atBottom) setNewCount(0);
@@ -146,19 +150,24 @@ export function MessageList({
   const scrollToBottom = useCallback((smooth = true) => {
     const el = containerRef.current;
     if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "instant" });
-    setNewCount(0);
-    setShowScrollBtn(false);
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "instant" });
+      setNewCount(0);
+      setShowScrollBtn(false);
+    });
   }, []);
 
-  // Auto-scroll on new messages
+  // Keep bottom lock for new messages and typing indicator without pulling
+  // users down when they intentionally scrolled up.
   useEffect(() => {
+    const messageCountChanged = prevMessageCountRef.current !== messages.length;
+    prevMessageCountRef.current = messages.length;
     if (isAtBottomRef.current) {
       scrollToBottom(true);
-    } else {
+    } else if (messageCountChanged) {
       setNewCount((n) => n + 1);
     }
-  }, [messages.length, scrollToBottom]);
+  }, [isTyping, messages.length, scrollToBottom]);
 
   // Initial scroll
   useEffect(() => {
@@ -166,7 +175,7 @@ export function MessageList({
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="relative flex-1 overflow-hidden">
+    <div className="relative flex-1 min-w-0 overflow-hidden">
       {onBulkDelete && selectionMode && (
         <div className="fixed bottom-[4.75rem] left-3 right-3 z-[70] flex items-center justify-between gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]/95 p-2 shadow-lg backdrop-blur sm:absolute sm:bottom-auto sm:left-auto sm:right-3 sm:top-2 sm:w-auto sm:justify-start sm:p-1.5">
           <span className="px-2 text-xs font-semibold text-[color:var(--kub-muted)]">
@@ -202,12 +211,12 @@ export function MessageList({
         ref={containerRef}
         onScroll={handleScroll}
         onClickCapture={(event) => {
-          if (!openReactionMessageId) return;
           const target = event.target as HTMLElement | null;
           if (target?.closest("[data-reaction-menu], [data-reaction-trigger]")) return;
-          setOpenReactionMessageId(null);
+          if (openReactionMessageId) setOpenReactionMessageId(null);
+          if (openActionMessageId) setOpenActionMessageId(null);
         }}
-        className="chat-bg h-full overflow-y-auto px-4 py-2 pb-4"
+        className="chat-bg h-full min-w-0 overflow-y-auto overflow-x-hidden px-3 py-2 pb-6 sm:px-4"
       >
         {messages.map((msg, idx) => {
           const prev = idx > 0 ? messages[idx - 1] : null;
@@ -242,7 +251,7 @@ export function MessageList({
                   </span>
                 </div>
               )}
-              <div className={cn("flex items-center gap-2", isMe ? "justify-end" : "justify-start")}>
+              <div className={cn("flex w-full min-w-0 items-center gap-1.5 overflow-hidden", isMe ? "justify-end" : "justify-start")}>
                 {selectionMode && canSelect && (
                   <button
                     type="button"
@@ -263,8 +272,9 @@ export function MessageList({
                 )}
                 <div
                   className={cn(
-                    selectionMode && canSelect ? "min-w-0 max-w-full cursor-pointer rounded-xl" : "min-w-0",
-                    selectionMode && selectedIds.has(msg.id) && "ring-2 ring-[color:var(--kub-cyan)]/50"
+                    "min-w-0 max-w-full",
+                    selectionMode && canSelect ? "cursor-pointer rounded-xl" : "",
+                    selectionMode && canSelect && "max-w-[calc(100%-2.25rem)]"
                   )}
                   onClickCapture={(event) => {
                     if (!selectionMode || !canSelect) return;
@@ -286,6 +296,7 @@ export function MessageList({
                     onDelete={onDelete ? () => onDelete(msg) : undefined}
                     onStartSelection={onBulkDelete && canSelect ? () => {
                       setOpenReactionMessageId(null);
+                      setOpenActionMessageId(null);
                       setBulkError(null);
                       setConfirmingBulkDelete(false);
                       setSelectionMode(true);
@@ -295,10 +306,18 @@ export function MessageList({
                     onForward={onForward ? () => onForward(msg) : undefined}
                     onOpenMedia={onOpenMedia}
                     reactionMenuOpen={openReactionMessageId === msg.id}
-                    onToggleReactionMenu={() =>
-                      setOpenReactionMessageId((current) => current === msg.id ? null : msg.id)
-                    }
+                    onToggleReactionMenu={() => {
+                      setOpenActionMessageId(null);
+                      setOpenReactionMessageId((current) => current === msg.id ? null : msg.id);
+                    }}
                     onCloseReactionMenu={() => setOpenReactionMessageId(null)}
+                    actionMenuOpen={openActionMessageId === msg.id}
+                    onOpenActionMenu={() => {
+                      setOpenReactionMessageId(null);
+                      setOpenActionMessageId(msg.id);
+                    }}
+                    onCloseActionMenu={() => setOpenActionMessageId(null)}
+                    selected={selectionMode && selectedIds.has(msg.id)}
                     usersMap={usersMap}
                     messagesMap={messagesMap}
                     deliveryState={deliveryState}
@@ -312,7 +331,7 @@ export function MessageList({
 
         {/* Typing indicator */}
         {isTyping && (
-          <div className="flex justify-start mt-1">
+          <div className="flex justify-start mt-1 mb-3">
             <TypingIndicator name={typingUser} />
           </div>
         )}

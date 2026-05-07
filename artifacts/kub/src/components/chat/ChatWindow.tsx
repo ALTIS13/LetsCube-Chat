@@ -182,8 +182,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   }, [deleteMessage]);
 
   return (
-    <div className="flex h-full w-full bg-[var(--kub-chat-bg)]">
-      <div className="flex flex-col flex-1 min-w-0">
+    <div className="flex h-full w-full min-w-0 overflow-hidden bg-[var(--kub-chat-bg)]">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <ChatHeader
           chatId={chatId}
           chat={chat}
