@@ -336,17 +336,6 @@ export function MessageBubble({
     message.type === "text" &&
     !hasReactions &&
     textLayoutKind !== "preformatted";
-  const compactInlineTextFooter =
-    textLikeNoReactionFooter &&
-    textLayoutKind !== "link" &&
-    textLayoutKind !== "longToken" &&
-    !textContent.includes("\n") &&
-    textContent.trim().length <= 80;
-  const anchoredTextFooter = textLikeNoReactionFooter && !compactInlineTextFooter;
-  const anchoredFooterSpacerClass = cn(
-    deliveryState?.isOwnMessage ? "w-[4.75rem] sm:w-[3.25rem]" : "w-14 sm:w-8",
-    (message.edited_at || message.pinned) && (deliveryState?.isOwnMessage ? "w-24 sm:w-20" : "w-20 sm:w-14"),
-  );
   const renderFooterContent = () => (
     <>
       {message.pinned && (
@@ -532,11 +521,11 @@ export function MessageBubble({
             data-message-bubble="true"
             data-message-layout-kind={textLayoutKind}
             data-message-footer-mode={
-              compactInlineTextFooter ? "compact-inline" : anchoredTextFooter ? "anchored" : hasReactions ? "reactions" : "bottom-meta"
+              textLikeNoReactionFooter ? "float" : hasReactions ? "reactions" : "bottom-meta"
             }
             className={cn(
               "relative flex flex-col max-w-full px-3 pt-2 rounded-2xl transition-opacity select-none sm:select-text",
-              hasReactions ? "pb-2" : compactInlineTextFooter ? "pb-0.5 pr-2.5" : "pb-1.5",
+              hasReactions ? "pb-2" : textLikeNoReactionFooter ? "pb-1 pr-2.5" : "pb-1.5",
               widthClasses.bubble,
               bubbleClass,
               isMe
@@ -612,34 +601,22 @@ export function MessageBubble({
             ) : (
               <p
                 data-message-text-flow="true"
-                className={cn("min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [word-break:normal] text-[color:var(--kub-text)]", widthClasses.text)}
+                className={cn(
+                  "min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [word-break:normal] text-[color:var(--kub-text)]",
+                  textLikeNoReactionFooter && "flow-root",
+                  widthClasses.text
+                )}
               >
                 <FormattedText content={message.content ?? ""} />
-                {compactInlineTextFooter && (
+                {textLikeNoReactionFooter && (
                   <span
                     data-message-footer="true"
-                    className="ml-1.5 inline-flex max-w-max shrink-0 items-center justify-end gap-1 whitespace-nowrap align-text-bottom leading-none"
+                    className="float-right ml-2 mt-0.5 inline-flex max-w-max shrink-0 items-center justify-end gap-1 whitespace-nowrap leading-none"
                   >
                     {renderFooterContent()}
                   </span>
                 )}
-                {anchoredTextFooter && (
-                  <span
-                    data-message-footer-spacer="true"
-                    className={cn("inline-block h-[1em] align-baseline", anchoredFooterSpacerClass)}
-                    aria-hidden="true"
-                  />
-                )}
               </p>
-            )}
-
-            {anchoredTextFooter && (
-              <span
-                data-message-footer="true"
-                className="absolute bottom-1.5 right-2.5 inline-flex max-w-max shrink-0 items-center justify-end gap-1 whitespace-nowrap leading-none"
-              >
-                {renderFooterContent()}
-              </span>
             )}
 
             {!textLikeNoReactionFooter && (
