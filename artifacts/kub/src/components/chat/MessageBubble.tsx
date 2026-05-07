@@ -187,8 +187,19 @@ export function MessageBubble({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onCloseReactionMenu?.();
     };
+    const handleOutsidePointer = (event: PointerEvent | MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[data-reaction-menu], [data-reaction-trigger]")) return;
+      onCloseReactionMenu?.();
+    };
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("pointerdown", handleOutsidePointer, true);
+    window.addEventListener("contextmenu", handleOutsidePointer, true);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("pointerdown", handleOutsidePointer, true);
+      window.removeEventListener("contextmenu", handleOutsidePointer, true);
+    };
   }, [onCloseReactionMenu, reactionMenuOpen]);
 
   const reactionGroups = (message.reactions ?? []).reduce<Record<string, { count: number; mine: boolean }>>(
@@ -376,24 +387,22 @@ export function MessageBubble({
       )}
 
       {reactionMenuOpen && !compactContextMenu && (
-        <div className="fixed inset-0 z-[55]" onClick={onCloseReactionMenu}>
-          <div
-            data-reaction-menu="true"
-            className="fixed flex max-w-[calc(100vw-16px)] items-center justify-center gap-0.5 rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 py-1.5 shadow-2xl kub-glow-soft"
-            style={reactionPickerStyle}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {EMOJI_QUICK.slice(0, 6).map((emoji) => (
-              <button
-                key={emoji}
-                onClick={() => { onReaction(emoji); onCloseReactionMenu?.(); }}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-lg transition-all hover:scale-125 hover:bg-[var(--kub-surface-3)]"
-                aria-label={`Поставить реакцию ${emoji}`}
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
+        <div
+          data-reaction-menu="true"
+          className="fixed z-[55] flex max-w-[calc(100vw-16px)] items-center justify-center gap-0.5 rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 py-1.5 shadow-2xl kub-glow-soft"
+          style={reactionPickerStyle}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {EMOJI_QUICK.slice(0, 6).map((emoji) => (
+            <button
+              key={emoji}
+              onClick={() => { onReaction(emoji); onCloseReactionMenu?.(); }}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-lg transition-all hover:scale-125 hover:bg-[var(--kub-surface-3)]"
+              aria-label={`Поставить реакцию ${emoji}`}
+            >
+              {emoji}
+            </button>
+          ))}
         </div>
       )}
 
