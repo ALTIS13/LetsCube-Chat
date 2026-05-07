@@ -332,7 +332,10 @@ export function MessageBubble({
         } },
     ] : []),
   ];
-  const inlineTextFooter = message.type === "text" && !hasReactions;
+  const inlineTextFooter =
+    message.type === "text" &&
+    !hasReactions &&
+    (textLayoutKind === "short" || textLayoutKind === "regular");
   const renderFooterContent = () => (
     <>
       {message.pinned && (
@@ -381,6 +384,7 @@ export function MessageBubble({
         {!isMe && <div className="flex-shrink-0 self-end mb-1 w-8" />}
         <div className={cn("flex max-w-[78%] sm:max-w-[72%] md:max-w-[65%]", isMe ? "items-end" : "items-start")}>
           <div
+            data-message-bubble="true"
             className={cn(
               "flex items-center gap-1.5 rounded-2xl px-2.5 py-1.5 text-xs italic leading-none select-none",
               "bg-[var(--kub-surface-2)]/80 border border-dashed border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)]",
@@ -514,6 +518,7 @@ export function MessageBubble({
           })()}
 
           <div
+            data-message-bubble="true"
             className={cn(
               "relative flex flex-col max-w-full px-3 pt-2 rounded-2xl transition-opacity select-none sm:select-text",
               hasReactions ? "pb-2" : "pb-1.5",
@@ -595,7 +600,10 @@ export function MessageBubble({
                 {inlineTextFooter && (
                   <>
                     <span className="inline-block w-2" aria-hidden="true" />
-                    <span className="relative top-px inline-flex max-w-full items-center justify-end gap-1 whitespace-nowrap align-baseline leading-none">
+                    <span
+                      data-message-footer="true"
+                      className="relative top-px inline-flex max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap align-baseline leading-none"
+                    >
                       {renderFooterContent()}
                     </span>
                   </>
@@ -639,7 +647,10 @@ export function MessageBubble({
                   </div>
                 )}
 
-                <div className="ml-auto flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap text-right">
+                <div
+                  data-message-footer="true"
+                  className="ml-auto flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap text-right leading-none"
+                >
                   {renderFooterContent()}
                 </div>
               </div>
