@@ -263,6 +263,38 @@ export function useChats() {
 
   useEffect(() => {
     if (!userId) return;
+    const channelName = `chat-members:receipts:${userId}`;
+    const channel = rt
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "chat_members" },
+        (payload: { new: { chat_id: string; user_id: string; last_read_at: string | null; last_delivered_at: string | null } }) => {
+          if (!payload.new.chat_id || payload.new.user_id === userId) return;
+          const chat = useAppStore.getState().chats.find((item) => item.id === payload.new.chat_id);
+          if (!chat?.members?.some((member) => member.user_id === payload.new.user_id)) return;
+          useAppStore.getState().updateChat({
+            ...chat,
+            members: chat.members.map((member) =>
+              member.user_id === payload.new.user_id
+                ? { ...member, last_read_at: payload.new.last_read_at, last_delivered_at: payload.new.last_delivered_at }
+                : member
+            ),
+          });
+        },
+      )
+      .subscribe((status: string) => {
+        if (import.meta.env.DEV) console.debug("[chat-members:receipts]", userId, status);
+      });
+    registerChannel(channelName);
+    return () => {
+      rt.removeChannel(channel);
+      unregisterChannel(channelName);
+    };
+  }, [userId, rt]);
+
+  useEffect(() => {
+    if (!userId) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const scheduleRefresh = () => {
       if (timer) clearTimeout(timer);

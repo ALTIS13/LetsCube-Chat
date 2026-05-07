@@ -406,38 +406,6 @@ export function useMessages(
 
   useEffect(() => {
     if (!chatId || !userId) return;
-    const channelName = `chat-members:read:${chatId}`;
-    const channel = rt
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "chat_members", filter: `chat_id=eq.${chatId}` },
-        (payload: { new: { chat_id: string; user_id: string; last_read_at: string | null; last_delivered_at: string | null } }) => {
-          if (payload.new.chat_id !== chatIdRef.current) return;
-          const chat = useAppStore.getState().chats.find((item) => item.id === payload.new.chat_id);
-          if (!chat?.members?.length) return;
-          useAppStore.getState().updateChat({
-            ...chat,
-            members: chat.members.map((member) =>
-              member.user_id === payload.new.user_id
-                ? { ...member, last_read_at: payload.new.last_read_at, last_delivered_at: payload.new.last_delivered_at }
-                : member
-            ),
-          });
-        },
-      )
-      .subscribe((status: string) => {
-        if (import.meta.env.DEV) console.debug("[chat-members:read]", chatId, status);
-      });
-    registerChannel(channelName);
-    return () => {
-      rt.removeChannel(channel);
-      unregisterChannel(channelName);
-    };
-  }, [chatId, userId, rt]);
-
-  useEffect(() => {
-    if (!chatId || !userId) return;
     const markReadWhenVisible = () => {
       if (document.visibilityState !== "visible") return;
       const activeChatId = chatIdRef.current;

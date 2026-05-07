@@ -88,8 +88,8 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
   switch (kind) {
     case "link":
       return {
-        stack: "w-[min(86vw,30rem)] max-w-[86vw] sm:w-[min(70vw,42rem)] sm:max-w-[min(72vw,700px)] md:w-[min(58vw,44rem)] md:max-w-[min(68vw,720px)]",
-        bubble: "w-full",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(64vw,620px)] md:max-w-[min(52vw,620px)]",
+        bubble: "w-fit max-w-full",
         text: "[overflow-wrap:anywhere]",
       };
     case "preformatted":
@@ -332,6 +332,40 @@ export function MessageBubble({
         } },
     ] : []),
   ];
+  const inlineTextFooter = message.type === "text" && !hasReactions;
+  const renderFooterContent = () => (
+    <>
+      {message.pinned && (
+        <KubIcon name="pin" size={12} tone="muted" label="Закреплено" className="shrink-0" />
+      )}
+      {message.edited_at && (
+        <span className="max-w-8 shrink truncate text-[10px] text-[color:var(--kub-muted)]" title="изменено">изм.</span>
+      )}
+      <span className="shrink-0 text-[10px] leading-none text-[color:var(--kub-muted)]">
+        {formatFullTime(message.created_at)}
+      </span>
+      {deliveryState?.isOwnMessage && (
+        <KubIcon
+          name={deliveryState.icon}
+          size={13}
+          tone={deliveryState.tone}
+          label={deliveryState.label}
+        />
+      )}
+      <button
+        type="button"
+        className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)] sm:hidden"
+        aria-label="Действия сообщения"
+        onClick={(event) => {
+          event.stopPropagation();
+          const rect = event.currentTarget.getBoundingClientRect();
+          openContextAt(rect.left, rect.bottom + 4);
+        }}
+      >
+        <KubIcon name="more" size={13} />
+      </button>
+    </>
+  );
 
   const bubbleClass = isMe
     ? "bg-[color-mix(in_srgb,var(--kub-cyan)_22%,var(--kub-surface))] border border-[color:var(--kub-cyan)]/40 text-[color:var(--kub-text)]"
@@ -558,76 +592,58 @@ export function MessageBubble({
             ) : (
               <p className={cn("min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [word-break:normal] text-[color:var(--kub-text)]", widthClasses.text)}>
                 <FormattedText content={message.content ?? ""} />
+                {inlineTextFooter && (
+                  <>
+                    <span className="inline-block w-2" aria-hidden="true" />
+                    <span className="relative top-px inline-flex max-w-full items-center justify-end gap-1 whitespace-nowrap align-baseline leading-none">
+                      {renderFooterContent()}
+                    </span>
+                  </>
+                )}
               </p>
             )}
 
-            <div
-              className={cn(
-                "flex max-w-full items-end leading-none",
-                hasReactions ? "mt-1 w-full min-w-[6.75rem] gap-1.5" : "ml-auto mt-px w-fit justify-end gap-1 pl-3",
-              )}
-            >
-              {hasReactions && (
-                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-start gap-1">
-                  {visibleReactionEntries.map(([emoji, { count, mine }]) => (
-                    <button
-                      key={emoji}
-                      onClick={() => onReaction(emoji)}
-                      className={cn(
-                        "inline-flex h-[22px] items-center gap-1 rounded-full border px-2 text-[11px] leading-none transition-all hover:scale-105 active:scale-95",
-                        mine
-                          ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] border-[color-mix(in_srgb,var(--kub-cyan)_72%,transparent)] text-[color:var(--kub-cyan)]"
-                          : "bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] text-[color:var(--kub-muted)]"
-                      )}
-                    >
-                      <span className="text-sm leading-none">{emoji}</span>
-                      {count > 1 && <span className="tabular-nums">{count}</span>}
-                    </button>
-                  ))}
-                  {hiddenReactionCount > 0 && (
-                    <span
-                      className="inline-flex h-[22px] items-center rounded-full border border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] px-2 text-[11px] leading-none text-[color:var(--kub-muted)]"
-                      title={`Ещё ${hiddenReactionCount} реакций`}
-                      aria-label={`Ещё ${hiddenReactionCount} реакций`}
-                    >
-                      +{hiddenReactionCount}
-                    </span>
-                  )}
-                </div>
-              )}
-
-              <div className="ml-auto flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap text-right">
-              {message.pinned && (
-                <KubIcon name="pin" size={12} tone="muted" label="Закреплено" className="shrink-0" />
-              )}
-              {message.edited_at && (
-                <span className="max-w-8 shrink truncate text-[10px] text-[color:var(--kub-muted)]" title="изменено">изм.</span>
-              )}
-              <span className="shrink-0 text-[10px] leading-none text-[color:var(--kub-muted)]">
-                {formatFullTime(message.created_at)}
-              </span>
-              {deliveryState?.isOwnMessage && (
-                <KubIcon
-                  name={deliveryState.icon}
-                  size={13}
-                  tone={deliveryState.tone}
-                  label={deliveryState.label}
-                />
-              )}
-              <button
-                type="button"
-                className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)] sm:hidden"
-                aria-label="Действия сообщения"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  const rect = event.currentTarget.getBoundingClientRect();
-                  openContextAt(rect.left, rect.bottom + 4);
-                }}
+            {!inlineTextFooter && (
+              <div
+                className={cn(
+                  "flex max-w-full items-end leading-none",
+                  hasReactions ? "mt-1 w-full min-w-[6.75rem] gap-1.5" : "ml-auto mt-px w-fit justify-end gap-1 pl-3",
+                )}
               >
-                <KubIcon name="more" size={13} />
-              </button>
+                {hasReactions && (
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center justify-start gap-1">
+                    {visibleReactionEntries.map(([emoji, { count, mine }]) => (
+                      <button
+                        key={emoji}
+                        onClick={() => onReaction(emoji)}
+                        className={cn(
+                          "inline-flex h-[22px] items-center gap-1 rounded-full border px-2 text-[11px] leading-none transition-all hover:scale-105 active:scale-95",
+                          mine
+                            ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] border-[color-mix(in_srgb,var(--kub-cyan)_72%,transparent)] text-[color:var(--kub-cyan)]"
+                            : "bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] text-[color:var(--kub-muted)]"
+                        )}
+                      >
+                        <span className="text-sm leading-none">{emoji}</span>
+                        {count > 1 && <span className="tabular-nums">{count}</span>}
+                      </button>
+                    ))}
+                    {hiddenReactionCount > 0 && (
+                      <span
+                        className="inline-flex h-[22px] items-center rounded-full border border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] px-2 text-[11px] leading-none text-[color:var(--kub-muted)]"
+                        title={`Ещё ${hiddenReactionCount} реакций`}
+                        aria-label={`Ещё ${hiddenReactionCount} реакций`}
+                      >
+                        +{hiddenReactionCount}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                <div className="ml-auto flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap text-right">
+                  {renderFooterContent()}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
         </div>

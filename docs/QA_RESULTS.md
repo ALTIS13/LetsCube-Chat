@@ -266,3 +266,10 @@ Recurring tasks roadmap note:
 - `20260507_message_delivery_receipts.sql` is now applied. Read-only MCP confirmed `chat_members.last_delivered_at`, `mark_chat_delivered(p_chat_id uuid)` and `mark_chat_read(p_chat_id uuid)` with authenticated-only execute grants.
 - Bubble and chat-list preview now support private-chat delivered state via the other member's `last_delivered_at`; saved chats still show no checkmarks and group chats still do not show fake read/delivered state.
 - Desktop message action menu now includes the same quick reaction row as the mobile long-press sheet.
+
+2026-05-07 receipt sync / bubble rhythm follow-up:
+
+- Sender-side receipt sync now uses one stable `chat-members:receipts:{userId}` subscription in `useChats` for RLS-visible `chat_members` UPDATE rows. It patches affected chat members in store instead of refetching all chats, so inactive chat preview can move from sent to delivered/read.
+- The older active-chat-only receipt path was the reason sender checkmarks updated after entering the chat; active bubbles and preview now read the same store member receipt state.
+- Text bubbles without reactions render footer meta inline at the end of the text flow; reaction bubbles keep the compact bottom meta row.
+- Link bubbles no longer force a wide desktop width; they use fit-content with responsive max-width and URL wrapping.

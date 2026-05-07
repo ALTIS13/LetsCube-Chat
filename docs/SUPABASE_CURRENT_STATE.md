@@ -223,3 +223,4 @@ Frontend task UI можно выравнивать под новые task column
 - RPC `mark_chat_delivered(p_chat_id uuid)` and `mark_chat_read(p_chat_id uuid)` exist as `SECURITY INVOKER` functions. `authenticated` has `EXECUTE`; `anon`/`PUBLIC` grants are absent.
 - `chat_members` remains in the `supabase_realtime` publication, so member receipt updates can update checkmarks without refresh.
 - Frontend delivered-flow is enabled for private chats only. Group chats still do not show fake read/delivered state because there is no group read-count/all-delivered model.
+- Sender-side receipt updates are consumed through one stable `chat-members:receipts:{userId}` frontend subscription to RLS-visible `chat_members` updates; no per-chat list subscriptions are required.
