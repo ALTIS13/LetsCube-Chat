@@ -544,7 +544,7 @@ export function MessageBubble({
           {hasReactions && (
             <div
               className={cn(
-                "absolute z-20 -bottom-4 flex w-max max-w-[min(18rem,calc(100vw-4rem))] flex-wrap items-center gap-0.5 rounded-full border px-1.5 py-0.5 shadow-md backdrop-blur-sm",
+                "absolute z-20 -bottom-0.5 flex w-max max-w-[min(18rem,calc(100vw-4rem))] flex-wrap items-center gap-0.5 rounded-full border px-1.5 py-0.5 shadow-md backdrop-blur-sm",
                 isMe
                   ? "right-2 justify-end border-[color:var(--kub-cyan)]/35 bg-[color-mix(in_srgb,var(--kub-cyan)_14%,var(--kub-surface))]"
                   : "left-2 justify-start border-[color:var(--kub-border-color)] bg-[var(--kub-message-in)]",
