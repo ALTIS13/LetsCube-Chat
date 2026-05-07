@@ -336,6 +336,10 @@ export function MessageBubble({
     message.type === "text" &&
     !hasReactions &&
     textLayoutKind !== "preformatted";
+  const inlineFooterSpacerClass = cn(
+    deliveryState?.isOwnMessage ? "w-[4.75rem] sm:w-[3.25rem]" : "w-14 sm:w-8",
+    (message.edited_at || message.pinned) && (deliveryState?.isOwnMessage ? "w-24 sm:w-20" : "w-20 sm:w-14"),
+  );
   const renderFooterContent = () => (
     <>
       {message.pinned && (
@@ -601,17 +605,18 @@ export function MessageBubble({
               >
                 <FormattedText content={message.content ?? ""} />
                 {inlineTextFooter && (
-                  <>
-                    <span className="inline-block w-1.5" aria-hidden="true" />
-                    <span
-                      data-message-footer="true"
-                      className="inline-flex max-w-max shrink-0 items-center justify-end gap-1 whitespace-nowrap align-text-bottom leading-none"
-                    >
-                      {renderFooterContent()}
-                    </span>
-                  </>
+                  <span className={cn("inline-block h-[1em] align-baseline", inlineFooterSpacerClass)} aria-hidden="true" />
                 )}
               </p>
+            )}
+
+            {inlineTextFooter && (
+              <span
+                data-message-footer="true"
+                className="absolute bottom-1.5 right-2.5 inline-flex max-w-max shrink-0 items-center justify-end gap-1 whitespace-nowrap leading-none"
+              >
+                {renderFooterContent()}
+              </span>
             )}
 
             {!inlineTextFooter && (
