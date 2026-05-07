@@ -52,16 +52,23 @@ function getMessageTextLayoutKind(type: MessageWithSender["type"], content: stri
   if (!text) return "short";
 
   const hasUrl = /\bhttps?:\/\/\S+/.test(text);
+  const hasCodeFence = /```[\s\S]*```/.test(content);
   const lines = text.split(/\r?\n/);
-  const longestLine = lines.reduce((max, line) => Math.max(max, line.length), 0);
   const longestToken = text
     .split(/\s+/)
     .reduce((max, token) => Math.max(max, token.length), 0);
-  const multiline = lines.length > 1;
+  const meaningfulLines = lines.filter((line) => line.trim().length > 0);
+  const indentedLines = meaningfulLines.filter((line) => /^( {2,}|\t)/.test(line)).length;
+  const spacedLines = meaningfulLines.filter((line) => / {3,}|\t/.test(line)).length;
+  const asciiArtLines = meaningfulLines.filter((line) => {
+    const compact = line.replace(/\s/g, "");
+    if (compact.length < 8) return false;
+    const asciiArtChars = compact.match(/[+\-|=_*`~./\\()[\]{}<>#@░▒▓█─│┌┐└┘]/g)?.length ?? 0;
+    return asciiArtChars / compact.length >= 0.45;
+  }).length;
   const preformattedLike =
-    lines.length >= 3 ||
-    (multiline && longestLine >= 32) ||
-    /^(\s{2,}|\t|[+\-|=_*`~./\\()[\]{}<>]{4,})/m.test(content);
+    hasCodeFence ||
+    (meaningfulLines.length >= 3 && (indentedLines >= 2 || spacedLines >= 2 || asciiArtLines >= 2));
 
   if (preformattedLike && !hasUrl) return "preformatted";
   if (hasUrl) return "link";
@@ -81,8 +88,8 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
     case "preformatted":
       return {
         stack: "w-[min(86vw,54rem)] max-w-[86vw] sm:w-[min(74vw,54rem)] md:w-[min(70vw,54rem)]",
-        bubble: "w-full overflow-x-auto",
-        text: "font-mono text-[13px] leading-snug [tab-size:2]",
+        bubble: "w-full",
+        text: "overflow-x-auto font-mono text-[13px] leading-snug [tab-size:2]",
       };
     case "longToken":
       return {
@@ -116,9 +123,8 @@ export function MessageBubble({
   message, isMe, isFirstInGroup, isLastInGroup,
   onReply, onReaction, onEdit, onDelete, onStartSelection, onTogglePin, onForward, onOpenMedia,
   reactionMenuOpen = false, onToggleReactionMenu, onCloseReactionMenu,
-  usersMap = {}, messagesMap = {}, deliveryState, myRole,
+  usersMap = {}, messagesMap = {}, deliveryState,
 }: MessageBubbleProps) {
-  const canModerate = myRole === "owner" || myRole === "admin";
   const [showContext, setShowContext] = useState(false);
   const [contextPos, setContextPos] = useState({ x: 0, y: 0 });
   const [selected] = useState(false);
@@ -257,11 +263,11 @@ export function MessageBubble({
         onStartSelection();
       } },
     ] : []),
-    ...((isMe || canModerate) && onDelete ? [
+    ...(isMe && onDelete ? [
       { icon: "delete" as KubIconName, label: "Удалить", danger: true, action: () => {
           void requestAppConfirm({
             title: "Удалить сообщение?",
-            description: "Сообщение будет заменено компактной плашкой удаления.",
+            description: "Это действие нельзя отменить. Сообщение будет заменено компактной плашкой удаления.",
             confirmLabel: "Удалить",
             tone: "danger",
             icon: "delete",
@@ -533,7 +539,7 @@ export function MessageBubble({
           {Object.keys(reactionGroups).length > 0 && (
             <div
               className={cn(
-                "-mt-px mb-1 flex w-fit max-h-11 max-w-full flex-wrap gap-0.5 overflow-y-auto border px-1.5 py-0.5 shadow-sm",
+                "-mt-px mb-1 flex w-fit max-w-full flex-wrap gap-0.5 border px-1.5 py-0.5 shadow-sm",
                 isMe
                   ? "self-end rounded-bl-xl rounded-br-xl rounded-tl-xl border-[color:var(--kub-cyan)]/30 bg-[color-mix(in_srgb,var(--kub-cyan)_12%,var(--kub-surface))]"
                   : "self-start rounded-bl-xl rounded-br-xl rounded-tr-xl border-[color:var(--kub-border-color)] bg-[var(--kub-message-in)]",

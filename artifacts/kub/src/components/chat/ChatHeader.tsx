@@ -251,7 +251,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
               <div
                 role="menu"
                 data-kub-menu="true"
-                className="absolute right-0 top-10 w-60 rounded-xl shadow-2xl z-50 py-1 overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] kub-glow-soft"
+                className="fixed inset-x-3 bottom-3 z-50 max-h-[min(70vh,480px)] overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] py-1 shadow-2xl kub-glow-soft sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-10 sm:w-60"
               >
                 {menuItems.map(({ icon, label, danger, disabled, action }) => (
                   <button
@@ -259,7 +259,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
                     onClick={action}
                     disabled={disabled}
                     className={cn(
-                      "flex min-w-0 items-center gap-3 w-full px-4 py-2.5 text-sm transition-colors hover:bg-[var(--kub-surface-3)] disabled:cursor-not-allowed disabled:opacity-60",
+                      "flex min-w-0 items-center gap-3 w-full px-4 py-2.5 text-left text-sm whitespace-nowrap transition-colors hover:bg-[var(--kub-surface-3)] disabled:cursor-not-allowed disabled:opacity-60",
                       danger ? "text-[color:var(--kub-danger)]" : "text-[color:var(--kub-text)]"
                     )}
                   >
