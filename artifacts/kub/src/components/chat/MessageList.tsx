@@ -278,9 +278,17 @@ export function MessageList({
                     selectionMode && canSelect && "max-w-[calc(100%-2.25rem)]"
                   )}
                   onClickCapture={(event) => {
-                    if (!selectionMode || !canSelect) return;
+                    if (!selectionMode) return;
                     const target = event.target as HTMLElement | null;
-                    if (target?.closest("button,a,input,textarea,select,video,audio,[role='slider']")) return;
+                    const isInteractive = Boolean(target?.closest("button,a,input,textarea,select,video,audio,[role='slider']"));
+                    if (!canSelect) {
+                      if (isInteractive) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }
+                      return;
+                    }
+                    event.preventDefault();
                     event.stopPropagation();
                     toggleSelected(msg.id);
                   }}
@@ -319,6 +327,7 @@ export function MessageList({
                     }}
                     onCloseActionMenu={() => setOpenActionMessageId(null)}
                     selected={selectionMode && selectedIds.has(msg.id)}
+                    isSelectionMode={selectionMode}
                     usersMap={usersMap}
                     messagesMap={messagesMap}
                     deliveryState={deliveryState}

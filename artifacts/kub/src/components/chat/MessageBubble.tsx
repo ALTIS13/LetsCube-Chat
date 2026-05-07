@@ -44,6 +44,7 @@ interface MessageBubbleProps {
   onOpenActionMenu?: () => void;
   onCloseActionMenu?: () => void;
   selected?: boolean;
+  isSelectionMode?: boolean;
   usersMap?: Record<string, string>;
   messagesMap?: Record<string, MessageWithSender>;
   deliveryState?: MessageDeliveryState | null;
@@ -127,11 +128,12 @@ export function MessageBubble({
   message, isMe, isFirstInGroup, isLastInGroup,
   onReply, onReaction, onEdit, onDelete, onStartSelection, onTogglePin, onForward, onOpenMedia,
   reactionMenuOpen = false, onToggleReactionMenu, onCloseReactionMenu,
-  actionMenuOpen, onOpenActionMenu, onCloseActionMenu, selected = false,
+  actionMenuOpen, onOpenActionMenu, onCloseActionMenu, selected = false, isSelectionMode = false,
   usersMap = {}, messagesMap = {}, deliveryState,
 }: MessageBubbleProps) {
   const [showContext, setShowContext] = useState(false);
   const [contextPos, setContextPos] = useState({ x: 0, y: 0 });
+  const [reactionPos, setReactionPos] = useState({ x: 0, y: 0 });
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const { currentUser } = useAppStore();
@@ -154,14 +156,14 @@ export function MessageBubble({
           ? { bottom: Math.max(8, viewportHeight - contextPos.y + 8) }
           : { top: Math.min(contextPos.y + 8, Math.max(8, viewportHeight - contextMenuMaxHeight - 8)) }),
       };
-  const reactionQuickStyle: CSSProperties = compactContextMenu
-    ? { left: 12, right: 12, bottom: "calc(min(65vh, 480px) + 20px)" }
-    : {
-        left: Math.min(Math.max(8, contextPos.x), Math.max(8, viewportWidth - 326)),
-        ...(contextMenuOpensUp
-          ? { bottom: Math.max(68, viewportHeight - contextPos.y + 62) }
-          : { top: Math.max(8, contextPos.y - 56) }),
-      };
+  const reactionPickerWidth = 284;
+  const reactionPickerStyle: CSSProperties = {
+    left: Math.min(Math.max(8, reactionPos.x - reactionPickerWidth / 2), Math.max(8, viewportWidth - reactionPickerWidth - 8)),
+    width: Math.min(reactionPickerWidth, viewportWidth - 16),
+    ...(reactionPos.y > 64
+      ? { top: Math.max(8, reactionPos.y - 52) }
+      : { top: Math.min(viewportHeight - 52, reactionPos.y + 36) }),
+  };
   const contextOpen = actionMenuOpen ?? showContext;
   const closeContext = useCallback(() => {
     setShowContext(false);
@@ -222,17 +224,22 @@ export function MessageBubble({
     onCloseReactionMenu?.();
   }, [onCloseReactionMenu, onOpenActionMenu]);
 
-  const handleToggleReactionMenu = useCallback(() => {
+  const handleToggleReactionMenu = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    setReactionPos({ x: rect.left + rect.width / 2, y: rect.top });
     closeContext();
     onToggleReactionMenu?.();
   }, [closeContext, onToggleReactionMenu]);
 
   const openContext = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
+    if (isSelectionMode) return;
     openContextAt(e.clientX, e.clientY);
-  }, [openContextAt]);
+  }, [isSelectionMode, openContextAt]);
 
   const handleTouchStart = useCallback((event: React.TouchEvent) => {
+    if (isSelectionMode) return;
     const target = event.target as HTMLElement | null;
     if (target?.closest("button,a,input,textarea,select,video,audio,[role='slider']")) return;
     const touch = event.touches[0];
@@ -244,7 +251,7 @@ export function MessageBubble({
       openContextAt(touch.clientX, touch.clientY);
       longPressTimer.current = null;
     }, 650);
-  }, [clearLongPressTimer, openContextAt]);
+  }, [clearLongPressTimer, isSelectionMode, openContextAt]);
   const handleTouchMove = useCallback((event: React.TouchEvent) => {
     const touch = event.touches[0];
     const start = touchStartRef.current;
@@ -332,27 +339,25 @@ export function MessageBubble({
       {contextOpen && (
         <div className="fixed inset-0 z-50" onClick={closeContext}>
           <div
-            className="absolute flex items-center justify-center gap-1 rounded-full px-3 py-2 shadow-2xl bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] kub-glow-soft"
-            style={reactionQuickStyle}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {EMOJI_QUICK.map((emoji) => (
-              <button
-                key={emoji}
-                onClick={() => { onReaction(emoji); closeContext(); }}
-                className="text-xl w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--kub-surface-3)] transition-all hover:scale-125 active:scale-95"
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
-
-          <div
             data-action-menu="true"
             className="absolute z-50 min-w-60 overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] py-1 shadow-2xl kub-glow-soft"
             style={contextMenuStyle}
             onClick={(e) => e.stopPropagation()}
           >
+            {compactContextMenu && (
+              <div className="mb-1 flex items-center justify-between gap-1 border-b border-[color:var(--kub-border-color)] px-3 pb-2 pt-1">
+                {EMOJI_QUICK.map((emoji) => (
+                  <button
+                    key={emoji}
+                    onClick={() => { onReaction(emoji); closeContext(); }}
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-xl transition-all hover:bg-[var(--kub-surface-3)] active:scale-95"
+                    aria-label={`Поставить реакцию ${emoji}`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
             {contextItems.map(({ icon, label, danger, action }) => (
               <button
                 key={label}
@@ -364,6 +369,28 @@ export function MessageBubble({
               >
                 <KubIcon name={icon} size={16} tone={danger ? "danger" : "muted"} />
                 {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {reactionMenuOpen && !compactContextMenu && (
+        <div className="fixed inset-0 z-[55]" onClick={onCloseReactionMenu}>
+          <div
+            data-reaction-menu="true"
+            className="fixed flex max-w-[calc(100vw-16px)] items-center justify-center gap-0.5 rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 py-1.5 shadow-2xl kub-glow-soft"
+            style={reactionPickerStyle}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {EMOJI_QUICK.slice(0, 6).map((emoji) => (
+              <button
+                key={emoji}
+                onClick={() => { onReaction(emoji); onCloseReactionMenu?.(); }}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-lg transition-all hover:scale-125 hover:bg-[var(--kub-surface-3)]"
+                aria-label={`Поставить реакцию ${emoji}`}
+              >
+                {emoji}
               </button>
             ))}
           </div>
@@ -439,6 +466,7 @@ export function MessageBubble({
               message.pending && "opacity-70",
               message.failed && "opacity-60",
               selected && "ring-2 ring-[color:var(--kub-cyan)]/55 bg-[color-mix(in_srgb,var(--kub-cyan)_10%,var(--kub-message-in))]",
+              isSelectionMode && "cursor-pointer [&_a]:pointer-events-none [&_audio]:pointer-events-none [&_button]:pointer-events-none [&_input]:pointer-events-none [&_video]:pointer-events-none",
             )}
             style={hasReactions && textLayoutKind === "short" ? { minWidth: "9rem" } : undefined}
           >
@@ -475,26 +503,6 @@ export function MessageBubble({
                 <KubIcon name="more" size={14} />
               </button>
             </div>
-
-            {reactionMenuOpen && (
-              <div
-                data-reaction-menu="true"
-                className={cn(
-                  "absolute -top-12 flex items-center gap-0.5 rounded-full px-2 py-1.5 shadow-2xl z-20 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] kub-glow-soft",
-                  isMe ? "right-0" : "left-0"
-                )}
-              >
-                {EMOJI_QUICK.slice(0, 6).map((emoji) => (
-                  <button
-                    key={emoji}
-                    onClick={() => { onReaction(emoji); onCloseReactionMenu?.(); }}
-                    className="text-lg w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--kub-surface-3)] transition-all hover:scale-125"
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            )}
 
             {isVoiceMessage(message) ? (
               <AudioMessage url={message.media_url} duration={parseAudioDuration(message.content)} isMe={isMe} />
