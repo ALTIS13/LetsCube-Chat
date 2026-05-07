@@ -443,7 +443,7 @@ export function MessageBubble({
           >
             <div
               className={cn(
-                "absolute top-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10",
+                "absolute top-1 hidden items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 sm:flex z-10",
                 isMe ? "-left-20" : "-right-20"
               )}
             >
