@@ -295,12 +295,12 @@ export function MessageList({
                     onEdit={onEdit ? () => onEdit(msg) : undefined}
                     onDelete={onDelete ? () => onDelete(msg) : undefined}
                     onStartSelection={onBulkDelete && canSelect ? () => {
-                      setOpenReactionMessageId(null);
-                      setOpenActionMessageId(null);
                       setBulkError(null);
                       setConfirmingBulkDelete(false);
                       setSelectionMode(true);
                       setSelectedIds(new Set([msg.id]));
+                      setOpenReactionMessageId(null);
+                      setOpenActionMessageId(null);
                     } : undefined}
                     onTogglePin={onTogglePin ? () => onTogglePin(msg) : undefined}
                     onForward={onForward ? () => onForward(msg) : undefined}

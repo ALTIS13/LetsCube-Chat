@@ -277,10 +277,10 @@ export function MessageBubble({
     ] : []),
     ...(onStartSelection ? [
       { icon: "check" as KubIconName, label: "Выбрать сообщения", action: () => {
-        closeContext();
         setBodySelectionSuppressed(false);
         onCloseReactionMenu?.();
         onStartSelection();
+        closeContext();
       } },
     ] : []),
     ...(isMe && onDelete ? [
