@@ -6,7 +6,7 @@ import type { MessageWithSender } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { mapPgError } from "@/lib/errors";
-import { KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
+import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 
 export function useMessages(
   chatId: string | null,
@@ -19,6 +19,7 @@ export function useMessages(
   const [pinnedReady, setPinnedReady] = useState(false);
   const [pinnedKey, setPinnedKey] = useState<string | null>(null);
   const [clearedAt, setClearedAt] = useState<string | null>(null);
+  const [hiddenMessageIds, setHiddenMessageIds] = useState<Set<string>>(() => new Set());
   // Per-slice selectors: не подписываемся на весь store (раньше любая
   // мутация — chats, selectedChatId, mutedChatIds — ререндерила хук). Сами
   // setMessages/addMessage/replaceMessage в zustand стабильны по ссылке.
@@ -28,6 +29,8 @@ export function useMessages(
   const setMessages = useAppStore((s) => s.setMessages);
   const addMessage = useAppStore((s) => s.addMessage);
   const replaceMessage = useAppStore((s) => s.replaceMessage);
+  const removeMessage = useAppStore((s) => s.removeMessage);
+  const updateChat = useAppStore((s) => s.updateChat);
   const currentUser = useAppStore((s) => s.currentUser);
   const mutedChatIds = useAppStore((s) => s.mutedChatIds);
   const userId = currentUser?.id ?? null;
@@ -46,6 +49,8 @@ export function useMessages(
   useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
   const clearedAtRef = useRef(clearedAt);
   useEffect(() => { clearedAtRef.current = clearedAt; }, [clearedAt]);
+  const hiddenMessageIdsRef = useRef(hiddenMessageIds);
+  useEffect(() => { hiddenMessageIdsRef.current = hiddenMessageIds; }, [hiddenMessageIds]);
   // topicId is passed into INSERTs and used to filter the realtime stream so
   // we only show messages from the active topic in forum chats. Undefined
   // means "topics disabled": show the whole chat without topic scoping.
@@ -65,6 +70,26 @@ export function useMessages(
       typingTimer.current = null;
     }
   }, [chatId, topicId]);
+
+  useEffect(() => {
+    setHiddenMessageIds(new Set());
+  }, [chatId]);
+
+  const rememberHiddenMessageIds = useCallback((ids: Iterable<string>) => {
+    const incoming = Array.from(ids).filter(Boolean);
+    if (!incoming.length) return;
+    setHiddenMessageIds((current) => {
+      const next = new Set(current);
+      let changed = false;
+      for (const id of incoming) {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, []);
 
   const fetchMessages = useCallback(async () => {
     if (!chatId) return;
@@ -105,13 +130,18 @@ export function useMessages(
       .limit(100);
     if (data) {
       const fetched = (data as unknown as MessageWithSender[]).reverse();
+      const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, fetched.map((message) => message.id));
+      rememberHiddenMessageIds(fetchedHiddenIds);
+      const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
+      const visibleFetched = fetched.filter((message) => !effectiveHiddenIds.has(message.id));
       const existing = useAppStore.getState().messages[chatId] ?? [];
       const visibleExisting = existing.filter((message) => {
+        if (effectiveHiddenIds.has(message.id)) return false;
         if (!messageBelongsToTopic(message, topicId, generalTopicIds)) return false;
         if (!localClearedAt) return true;
         return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
       });
-      setMessages(chatId, mergeMessagesById(fetched, visibleExisting));
+      setMessages(chatId, mergeMessagesById(visibleFetched, visibleExisting));
     }
     setLoading(false);
     if (user) {
@@ -120,7 +150,7 @@ export function useMessages(
         .eq("chat_id", chatId)
         .eq("user_id", user.id);
     }
-  }, [chatId, topicId, generalTopicIds, supabase, setMessages]);
+  }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds]);
 
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
 
@@ -135,11 +165,16 @@ export function useMessages(
       .maybeSingle();
     if (!data) return;
     const message = data as unknown as MessageWithSender;
+    const hiddenIds = await fetchHiddenMessageIdSet(supabase, [message.id]);
+    if (hiddenIds.has(message.id)) {
+      rememberHiddenMessageIds(hiddenIds);
+      return;
+    }
     const localClearedAt = clearedAtRef.current;
     if (localClearedAt && new Date(message.created_at).getTime() <= new Date(localClearedAt).getTime()) return;
     if (!messageBelongsToTopic(message, topicIdRef.current, generalTopicIdsRef.current)) return;
     addMessage(activeChatId, message);
-  }, [addMessage, supabase]);
+  }, [addMessage, rememberHiddenMessageIds, supabase]);
 
   useEffect(() => {
     if (!chatId) return;
@@ -206,10 +241,14 @@ export function useMessages(
       setPinnedKey(fetchKey);
       return;
     }
-    setPinnedMessages(sortPinnedMessages((data ?? []) as unknown as MessageWithSender[]));
+    const pinnedRows = (data ?? []) as unknown as MessageWithSender[];
+    const pinnedHiddenIds = await fetchHiddenMessageIdSet(supabase, pinnedRows.map((message) => message.id));
+    rememberHiddenMessageIds(pinnedHiddenIds);
+    const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...pinnedHiddenIds]);
+    setPinnedMessages(sortPinnedMessages(pinnedRows.filter((message) => !effectiveHiddenIds.has(message.id))));
     setPinnedKey(fetchKey);
     setPinnedReady(true);
-  }, [chatId, topicId, generalTopicIds, supabase, clearedAt]);
+  }, [chatId, topicId, generalTopicIds, supabase, clearedAt, rememberHiddenMessageIds]);
 
   useEffect(() => { fetchPinnedMessages(); }, [fetchPinnedMessages]);
 
@@ -280,6 +319,7 @@ export function useMessages(
             topicIdRef.current !== undefined &&
             !messageBelongsToTopic(payload.new, topicIdRef.current, generalTopicIdsRef.current)
           ) return;
+          if (hiddenMessageIdsRef.current.has(payload.new.id)) return;
           const provisional = buildRealtimeMessage(payload.new);
           // Render every realtime row immediately. The joined REST fetch below
           // can lag under rapid sends; keeping this provisional row prevents an
@@ -291,6 +331,7 @@ export function useMessages(
             .eq("id", payload.new.id)
             .maybeSingle();
           if (!data) return;
+          if (hiddenMessageIdsRef.current.has(payload.new.id)) return;
           if (!messageBelongsToTopic(data as unknown as MessageWithSender, topicIdRef.current, generalTopicIdsRef.current)) return;
           addMessage(payload.new.chat_id, data as unknown as MessageWithSender);
           const user = currentUserRef.current;
@@ -328,6 +369,7 @@ export function useMessages(
           if (data) {
             const current = useAppStore.getState().messages[payload.new.chat_id] ?? [];
             const nextMessage = data as MessageWithSender;
+            if (hiddenMessageIdsRef.current.has(nextMessage.id)) return;
             if (!messageBelongsToTopic(nextMessage, topicIdRef.current, generalTopicIdsRef.current)) return;
             setMessages(payload.new.chat_id, current.map((m) => m.id === nextMessage.id ? nextMessage : m));
             setPinnedMessages((currentPinned) =>
@@ -459,6 +501,53 @@ export function useMessages(
     return { ok: true, error: null };
   }, [chatId, supabase]);
 
+  const hideMessageForMe = useCallback(async (messageId: string) => {
+    if (!chatId) return { ok: false, error: "Чат не выбран." };
+    const { error } = await supabase.rpc("hide_message_for_me", { p_message_id: messageId });
+    if (error) {
+      console.error("Hide message for me error:", error);
+      return { ok: false, error: mapPgError(error) || "Не удалось скрыть сообщение." };
+    }
+    rememberHiddenMessageIds([messageId]);
+    removeMessage(chatId, messageId);
+    setPinnedMessages((current) => current.filter((message) => message.id !== messageId));
+    const chat = useAppStore.getState().chats.find((item) => item.id === chatId);
+    if (chat?.last_message?.id === messageId) {
+      updateChat({ ...chat, last_message: undefined });
+    }
+    dispatchChatsRefresh({ reason: "message-hidden", chatId, messageId });
+    return { ok: true, error: null };
+  }, [chatId, rememberHiddenMessageIds, removeMessage, supabase, updateChat]);
+
+  const hideMessagesForMe = useCallback(async (messageIds: string[]) => {
+    if (!chatId) return { ok: false, error: "Чат не выбран.", failed: messageIds.length };
+    const uniqueIds = Array.from(new Set(messageIds)).filter(Boolean);
+    if (!uniqueIds.length) return { ok: true, error: null, failed: 0 };
+    const failed: string[] = [];
+    for (const messageId of uniqueIds) {
+      const { error } = await supabase.rpc("hide_message_for_me", { p_message_id: messageId });
+      if (error) {
+        console.error("Bulk hide message for me error:", error);
+        failed.push(messageId);
+      }
+    }
+    const hiddenIds = uniqueIds.filter((id) => !failed.includes(id));
+    if (hiddenIds.length) {
+      rememberHiddenMessageIds(hiddenIds);
+      for (const messageId of hiddenIds) removeMessage(chatId, messageId);
+      setPinnedMessages((current) => current.filter((message) => !hiddenIds.includes(message.id)));
+      const chat = useAppStore.getState().chats.find((item) => item.id === chatId);
+      if (chat?.last_message && hiddenIds.includes(chat.last_message.id)) {
+        updateChat({ ...chat, last_message: undefined });
+      }
+      dispatchChatsRefresh({ reason: "message-hidden", chatId });
+    }
+    if (failed.length) {
+      return { ok: false, error: `Не удалось скрыть ${failed.length} из ${uniqueIds.length} сообщений.`, failed: failed.length };
+    }
+    return { ok: true, error: null, failed: 0 };
+  }, [chatId, rememberHiddenMessageIds, removeMessage, supabase, updateChat]);
+
   // ── Pin / unpin ─────────────────────────────────────────────────────────
   const togglePin = useCallback(async (messageId: string, currentlyPinned: boolean) => {
     if (!chatId) return { ok: false, error: "Чат не выбран." };
@@ -552,12 +641,16 @@ export function useMessages(
   }, [chatId, supabase, setMessages]);
 
   return {
-    messages: (messages[chatId ?? ""] ?? []).filter((message) => messageBelongsToTopic(message, topicId, generalTopicIds)),
-    pinnedMessages: pinnedKey === getPinnedKey(chatId, topicId) ? pinnedMessages : [],
+    messages: (messages[chatId ?? ""] ?? []).filter((message) =>
+      !hiddenMessageIds.has(message.id) && messageBelongsToTopic(message, topicId, generalTopicIds)
+    ),
+    pinnedMessages: pinnedKey === getPinnedKey(chatId, topicId)
+      ? pinnedMessages.filter((message) => !hiddenMessageIds.has(message.id))
+      : [],
     pinnedReady: pinnedKey === getPinnedKey(chatId, topicId) && pinnedReady,
     loading, isTyping,
     sendMessage, sendTyping, toggleReaction,
-    editMessage, deleteMessage, togglePin, forwardMessage,
+    editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, togglePin, forwardMessage,
     clearChatForMe,
     refetch: fetchMessages,
     refetchPinnedMessages: fetchPinnedMessages,
@@ -634,4 +727,21 @@ function upsertPinnedMessage(
     nextMessage,
     ...messages.filter((message) => message.id !== nextMessage.id),
   ]);
+}
+
+async function fetchHiddenMessageIdSet(
+  supabase: ReturnType<typeof createClient>,
+  messageIds: string[],
+): Promise<Set<string>> {
+  const ids = Array.from(new Set(messageIds.filter(Boolean)));
+  if (!ids.length) return new Set();
+  const { data, error } = await supabase
+    .from("message_hidden_for_users")
+    .select("message_id")
+    .in("message_id", ids);
+  if (error) {
+    console.error("Hidden message ids fetch error:", error);
+    return new Set();
+  }
+  return new Set((data ?? []).map((row) => row.message_id));
 }

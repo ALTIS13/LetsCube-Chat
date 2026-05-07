@@ -346,6 +346,35 @@ export interface Database {
           }
         ]
       }
+      message_hidden_for_users: {
+        Row: {
+          message_id: string
+          user_id: string
+          hidden_at: string
+        }
+        Insert: {
+          message_id: string
+          user_id?: string
+          hidden_at?: string
+        }
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "message_hidden_for_users_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_hidden_for_users_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       reactions: {
         Row: {
           id: string
@@ -753,6 +782,14 @@ export interface Database {
         Args: { p_chat_id: string }
         Returns: void
       }
+      hide_message_for_me: {
+        Args: { p_message_id: string }
+        Returns: void
+      }
+      unhide_message_for_me: {
+        Args: { p_message_id: string }
+        Returns: void
+      }
       pin_chat: {
         Args: { p_chat_id: string }
         Returns: void
@@ -779,6 +816,7 @@ export type Profile = Database['public']['Tables']['profiles']['Row']
 export type Chat = Database['public']['Tables']['chats']['Row']
 export type ChatMember = Database['public']['Tables']['chat_members']['Row']
 export type Message = Database['public']['Tables']['messages']['Row']
+export type MessageHiddenForUser = Database['public']['Tables']['message_hidden_for_users']['Row']
 export type Reaction = Database['public']['Tables']['reactions']['Row']
 export type Folder = Database['public']['Tables']['folders']['Row']
 export type FolderChat = Database['public']['Tables']['folder_chats']['Row']

@@ -1,7 +1,7 @@
 export const KUB_CHATS_REFRESH_EVENT = "kub:chats-refresh";
 
 export interface ChatsRefreshDetail {
-  reason: "membership-change" | "chat-notification" | "message-realtime";
+  reason: "membership-change" | "chat-notification" | "message-realtime" | "message-hidden";
   chatId?: string;
   messageId?: string;
 }

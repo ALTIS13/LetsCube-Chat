@@ -84,10 +84,12 @@ export function useChats() {
           if (myMembership?.cleared_at) {
             lastMessageQuery = lastMessageQuery.gt("created_at", myMembership.cleared_at);
           }
-          const { data: lastMsgData } = await lastMessageQuery
+          const { data: lastMsgRows } = await lastMessageQuery
             .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
+            .limit(25);
+          const lastRows = (lastMsgRows ?? []) as NonNullable<ChatWithLastMessage["last_message"]>[];
+          const hiddenLastIds = await fetchHiddenMessageIdSet(supabase, lastRows.map((message) => message.id));
+          const lastMsgData = lastRows.find((message) => !hiddenLastIds.has(message.id)) ?? null;
 
           let unreadCount = 0;
           if (myMembership?.last_read_at) {
@@ -314,4 +316,21 @@ export function useChats() {
   }, [fetchChats]);
 
   return { chats, loading, refetch: fetchChats };
+}
+
+async function fetchHiddenMessageIdSet(
+  supabase: ReturnType<typeof createClient>,
+  messageIds: string[],
+): Promise<Set<string>> {
+  const ids = Array.from(new Set(messageIds.filter(Boolean)));
+  if (!ids.length) return new Set();
+  const { data, error } = await supabase
+    .from("message_hidden_for_users")
+    .select("message_id")
+    .in("message_id", ids);
+  if (error) {
+    console.error("Hidden chat preview ids fetch error:", error);
+    return new Set();
+  }
+  return new Set((data ?? []).map((row) => row.message_id));
 }

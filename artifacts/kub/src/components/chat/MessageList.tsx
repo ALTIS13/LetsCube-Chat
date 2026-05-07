@@ -10,6 +10,7 @@ import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app.store";
 import { getMessageDeliveryState } from "@/lib/messageDelivery";
+import { requestAppConfirm } from "@/lib/appDialogs";
 
 interface MessageListProps {
   messages: MessageWithSender[];
@@ -17,7 +18,9 @@ interface MessageListProps {
   onReaction: (messageId: string, emoji: string) => void;
   onEdit?: (msg: MessageWithSender) => void;
   onDelete?: (msg: MessageWithSender) => void;
-  onBulkDelete?: (messages: MessageWithSender[]) => Promise<void> | void;
+  onHideForMe?: (msg: MessageWithSender) => void;
+  onBulkHideForMe?: (messages: MessageWithSender[]) => Promise<void> | void;
+  onBulkDeleteForEveryone?: (messages: MessageWithSender[]) => Promise<void> | void;
   onTogglePin?: (msg: MessageWithSender) => void;
   onForward?: (msg: MessageWithSender) => void;
   onOpenMedia?: (media: MediaViewerItem) => void;
@@ -44,7 +47,9 @@ export function MessageList({
   onReaction,
   onEdit,
   onDelete,
-  onBulkDelete,
+  onHideForMe,
+  onBulkHideForMe,
+  onBulkDeleteForEveryone,
   onTogglePin,
   onForward,
   onOpenMedia,
@@ -80,7 +85,7 @@ export function MessageList({
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkError, setBulkError] = useState<string | null>(null);
-  const [confirmingBulkDelete, setConfirmingBulkDelete] = useState(false);
+  const [bulkConfirmAction, setBulkConfirmAction] = useState<"hide" | "delete" | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [openReactionMessageId, setOpenReactionMessageId] = useState<string | null>(null);
   const [openActionMessageId, setOpenActionMessageId] = useState<string | null>(null);
@@ -88,14 +93,21 @@ export function MessageList({
   const prevMessageCountRef = useRef(messages.length);
 
   const selectableMessages = React.useMemo(
-    // Current backend policy allows soft-delete through message UPDATE only for
-    // the author. Do not let users select rows that the server will reject.
-    () => messages.filter((message) => !message.deleted_at && message.user_id === userId),
-    [messages, userId],
+    () => messages.filter((message) => !message.deleted_at),
+    [messages],
   );
   const selectedMessages = React.useMemo(
     () => selectableMessages.filter((message) => selectedIds.has(message.id)),
     [selectableMessages, selectedIds],
+  );
+  const selectedCanDeleteForEveryone = React.useMemo(
+    () => Boolean(
+      onBulkDeleteForEveryone &&
+      !isSavedChat &&
+      selectedMessages.length > 0 &&
+      selectedMessages.every((message) => message.user_id === userId)
+    ),
+    [isSavedChat, onBulkDeleteForEveryone, selectedMessages, userId],
   );
 
   const toggleSelected = useCallback((messageId: string) => {
@@ -110,31 +122,58 @@ export function MessageList({
   const cancelSelection = useCallback(() => {
     setSelectionMode(false);
     setSelectedIds(new Set());
-    setConfirmingBulkDelete(false);
+    setBulkConfirmAction(null);
     setBulkDeleting(false);
     setOpenReactionMessageId(null);
     setOpenActionMessageId(null);
   }, []);
 
-  const handleBulkDelete = useCallback(async () => {
-    if (!onBulkDelete || selectedMessages.length === 0) return;
-    if (!confirmingBulkDelete) {
-      setConfirmingBulkDelete(true);
-      return;
-    }
+  const handleBulkHideForMe = useCallback(async () => {
+    if (!onBulkHideForMe || selectedMessages.length === 0) return;
+    const confirmed = await requestAppConfirm({
+      title: "Удалить выбранные сообщения у себя?",
+      description: "Сообщения исчезнут только у вас. У других участников они останутся.",
+      confirmLabel: "Удалить у себя",
+      tone: "danger",
+      icon: "delete",
+    });
+    if (!confirmed) return;
+    setBulkConfirmAction("hide");
     setBulkDeleting(true);
     setBulkError(null);
     try {
-      await onBulkDelete(selectedMessages);
+      await onBulkHideForMe(selectedMessages);
       cancelSelection();
     } catch (error) {
-      setBulkError(error instanceof Error ? error.message : "Не удалось удалить выбранные сообщения.");
+      setBulkError(error instanceof Error ? error.message : "Не удалось скрыть выбранные сообщения.");
       setBulkDeleting(false);
     }
-  }, [cancelSelection, confirmingBulkDelete, onBulkDelete, selectedMessages]);
+  }, [cancelSelection, onBulkHideForMe, selectedMessages]);
+
+  const handleBulkDeleteForEveryone = useCallback(async () => {
+    if (!onBulkDeleteForEveryone || !selectedCanDeleteForEveryone) return;
+    const confirmed = await requestAppConfirm({
+      title: "Удалить выбранные сообщения для всех?",
+      description: "Это действие нельзя отменить. Сообщения будут заменены плашками удаления.",
+      confirmLabel: "Удалить для всех",
+      tone: "danger",
+      icon: "delete",
+    });
+    if (!confirmed) return;
+    setBulkConfirmAction("delete");
+    setBulkDeleting(true);
+    setBulkError(null);
+    try {
+      await onBulkDeleteForEveryone(selectedMessages);
+      cancelSelection();
+    } catch (error) {
+      setBulkError(error instanceof Error ? error.message : "Не удалось удалить выбранные сообщения для всех.");
+      setBulkDeleting(false);
+    }
+  }, [cancelSelection, onBulkDeleteForEveryone, selectedCanDeleteForEveryone, selectedMessages]);
 
   useEffect(() => {
-    setConfirmingBulkDelete(false);
+    setBulkConfirmAction(null);
   }, [selectedIds]);
 
   const handleScroll = useCallback(() => {
@@ -176,23 +215,37 @@ export function MessageList({
 
   return (
     <div className="relative flex-1 min-w-0 overflow-hidden">
-      {onBulkDelete && selectionMode && (
+      {onBulkHideForMe && selectionMode && (
         <div className="fixed bottom-[4.75rem] left-3 right-3 z-[70] flex items-center justify-between gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]/95 p-2 shadow-lg backdrop-blur sm:absolute sm:bottom-auto sm:left-auto sm:right-3 sm:top-2 sm:w-auto sm:justify-start sm:p-1.5">
           <span className="px-2 text-xs font-semibold text-[color:var(--kub-muted)]">
             Выбрано: {selectedMessages.length}
           </span>
           <button
             type="button"
-            onClick={handleBulkDelete}
+            onClick={handleBulkHideForMe}
             disabled={selectedMessages.length === 0 || bulkDeleting}
             className={cn(
               "inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:opacity-40",
-              confirmingBulkDelete ? "bg-[color-mix(in_srgb,var(--kub-danger)_15%,transparent)] text-[color:var(--kub-danger)]" : "text-[color:var(--kub-danger)]",
+              bulkConfirmAction === "hide" ? "bg-[color-mix(in_srgb,var(--kub-danger)_15%,transparent)] text-[color:var(--kub-danger)]" : "text-[color:var(--kub-danger)]",
             )}
           >
             <KubIcon name="delete" size={14} />
-            {bulkDeleting ? "Удаляем..." : confirmingBulkDelete ? "Подтвердить" : "Удалить"}
+            {bulkDeleting && bulkConfirmAction === "hide" ? "Удаляем..." : "Удалить у себя"}
           </button>
+          {selectedCanDeleteForEveryone && (
+            <button
+              type="button"
+              onClick={handleBulkDeleteForEveryone}
+              disabled={selectedMessages.length === 0 || bulkDeleting}
+              className={cn(
+                "inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:opacity-40",
+                bulkConfirmAction === "delete" ? "bg-[color-mix(in_srgb,var(--kub-danger)_15%,transparent)] text-[color:var(--kub-danger)]" : "text-[color:var(--kub-danger)]",
+              )}
+            >
+              <KubIcon name="delete" size={14} />
+              {bulkDeleting && bulkConfirmAction === "delete" ? "Удаляем..." : "Удалить для всех"}
+            </button>
+          )}
           <button
             type="button"
             onClick={cancelSelection}
@@ -228,7 +281,7 @@ export function MessageList({
           const isSameSenderAsNext = next?.user_id === msg.user_id &&
             !shouldShowDateSeparator(msg, next);
 
-          const canSelect = !msg.deleted_at && isMe;
+          const canSelect = !msg.deleted_at;
           const deliveryState = getMessageDeliveryState(msg, {
             currentUserId: userId,
             chatType,
@@ -303,9 +356,10 @@ export function MessageList({
                     onReaction={(emoji) => onReaction(msg.id, emoji)}
                     onEdit={onEdit ? () => onEdit(msg) : undefined}
                     onDelete={onDelete ? () => onDelete(msg) : undefined}
-                    onStartSelection={onBulkDelete && canSelect ? () => {
+                    onHideForMe={onHideForMe ? () => onHideForMe(msg) : undefined}
+                    onStartSelection={onBulkHideForMe && canSelect ? () => {
                       setBulkError(null);
-                      setConfirmingBulkDelete(false);
+                      setBulkConfirmAction(null);
                       setSelectionMode(true);
                       setSelectedIds(new Set([msg.id]));
                       setOpenReactionMessageId(null);
@@ -331,6 +385,7 @@ export function MessageList({
                     usersMap={usersMap}
                     messagesMap={messagesMap}
                     deliveryState={deliveryState}
+                    isSavedChat={isSavedChat}
                     myRole={myRole}
                   />
                 </div>

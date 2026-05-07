@@ -204,3 +204,12 @@ Frontend task UI можно выравнивать под новые task column
 - Read-only MCP check confirmed private bucket `chat-media`, chat-member Storage policies and `messages.media_bucket` / `messages.media_path`.
 - Legacy bucket `media` remains public for avatars and old media compatibility; frontend migration to signed `chat-media` URLs remains a separate compatibility step.
 - `.migration-backup/supabase/migrations/20260506_entity_name_constraints.sql` was applied manually on 2026-05-06; read-only MCP confirmed DB-level max length checks for `chats.name`, `folders.name` and `topics.name`.
+
+## 2026-05-07 Message Hide For Me State
+
+- `.migration-backup/supabase/migrations/20260507_message_hide_for_me.sql` was applied manually by the user.
+- Read-only MCP confirmed `public.message_hidden_for_users(message_id, user_id, hidden_at)` exists and has RLS enabled.
+- Policies are authenticated-only and scope `select`, `insert` and `delete` to `auth.uid()` rows; insert additionally checks that the message is visible to the current chat member.
+- RPC `hide_message_for_me(p_message_id uuid)` and `unhide_message_for_me(p_message_id uuid)` exist as `SECURITY INVOKER` functions.
+- Frontend alignment is enabled: local message hide can now remove a message only for the current user without deleting the global `messages` row or Storage media.
+- Read-only MCP also showed default table/function grants still visible for `anon`/`PUBLIC`; RLS still protects rows, but `.migration-backup/supabase/migrations/20260507_message_hide_for_me_grants_hardening.sql` was added as a manual hardening follow-up to revoke those extra grants and keep only authenticated access.

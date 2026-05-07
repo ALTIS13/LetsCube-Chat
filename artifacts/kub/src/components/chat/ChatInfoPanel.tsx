@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
-import { dispatchChatsRefresh } from "@/lib/chatEvents";
+import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
 import type { ChatWithLastMessage, Profile, Message } from "@/types/database";
@@ -97,14 +97,17 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     }
     const { data } = await query
       .order("created_at", { ascending: false })
-      .range(start, start + MEDIA_PAGE_SIZE);
+      .range(start, start + MEDIA_PAGE_SIZE + 12);
     if (data) {
-      const page = (data as Message[]).slice(0, MEDIA_PAGE_SIZE);
+      const rawPage = data as Message[];
+      const hiddenIds = await fetchHiddenMessageIdSet(supabase, rawPage.map((item) => item.id));
+      const visibleRows = rawPage.filter((item) => !hiddenIds.has(item.id));
+      const page = visibleRows.slice(0, MEDIA_PAGE_SIZE);
       setMedia((current) => {
         const next = reset ? page : [...current, ...page];
         return Array.from(new Map(next.map((item) => [item.id, item])).values());
       });
-      setMediaHasMore(data.length > MEDIA_PAGE_SIZE);
+      setMediaHasMore(rawPage.length > MEDIA_PAGE_SIZE || visibleRows.length > MEDIA_PAGE_SIZE);
     }
     setLoadingMedia(false);
   }, [chat.id, currentUser, supabase]);
@@ -123,6 +126,20 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     setMediaHasMore(false);
     setOpenMedia(null);
   }, [chat.id]);
+
+  useEffect(() => {
+    const handleHiddenMessage = (event: Event) => {
+      const detail = (event as CustomEvent<ChatsRefreshDetail>).detail;
+      if (detail?.reason !== "message-hidden" || detail.chatId !== chat.id) return;
+      if (detail.messageId) {
+        setMedia((current) => current.filter((item) => item.id !== detail.messageId));
+        return;
+      }
+      if (tab === "media") void loadMedia(true);
+    };
+    window.addEventListener(KUB_CHATS_REFRESH_EVENT, handleHiddenMessage);
+    return () => window.removeEventListener(KUB_CHATS_REFRESH_EVENT, handleHiddenMessage);
+  }, [chat.id, loadMedia, tab]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -880,4 +897,21 @@ function getMediaTileKind(message: Message): "image" | "gif" | "video" {
   const source = `${message.content ?? ""} ${message.media_url ?? ""}`.toLowerCase();
   if (source.includes(".gif")) return "gif";
   return "image";
+}
+
+async function fetchHiddenMessageIdSet(
+  supabase: ReturnType<typeof createClient>,
+  messageIds: string[],
+): Promise<Set<string>> {
+  const ids = Array.from(new Set(messageIds.filter(Boolean)));
+  if (!ids.length) return new Set();
+  const { data, error } = await supabase
+    .from("message_hidden_for_users")
+    .select("message_id")
+    .in("message_id", ids);
+  if (error) {
+    console.error("Hidden media ids fetch error:", error);
+    return new Set();
+  }
+  return new Set((data ?? []).map((row) => row.message_id));
 }

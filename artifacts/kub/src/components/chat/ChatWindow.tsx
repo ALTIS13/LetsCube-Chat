@@ -53,7 +53,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const {
     messages, pinnedMessages, pinnedReady, loading, isTyping,
     sendMessage, sendTyping, toggleReaction,
-    editMessage, deleteMessage, togglePin, forwardMessage, clearChatForMe,
+    editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, togglePin, forwardMessage, clearChatForMe,
   } = useMessages(chatId, messageTopicId, messageGeneralTopicIds);
 
   useEffect(() => { markChatRead(chatId); }, [chatId, markChatRead]);
@@ -170,7 +170,21 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     }
   }, [togglePin]);
 
-  const handleBulkDelete = useCallback(async (items: MessageWithSender[]) => {
+  const handleHideForMe = useCallback(async (msg: MessageWithSender) => {
+    const result = await hideMessageForMe(msg.id);
+    if (!result.ok) {
+      showAppAlert(result.error ?? "Не удалось скрыть сообщение.", "Ошибка");
+    }
+  }, [hideMessageForMe]);
+
+  const handleBulkHideForMe = useCallback(async (items: MessageWithSender[]) => {
+    const result = await hideMessagesForMe(items.map((item) => item.id));
+    if (!result.ok) {
+      throw new Error(result.error ?? "Не удалось скрыть выбранные сообщения.");
+    }
+  }, [hideMessagesForMe]);
+
+  const handleBulkDeleteForEveryone = useCallback(async (items: MessageWithSender[]) => {
     const failures: string[] = [];
     for (const item of items) {
       const result = await deleteMessage(item.id);
@@ -241,7 +255,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             onReaction={toggleReaction}
             onEdit={(msg) => setEditingMessage(msg)}
             onDelete={(msg) => deleteMessage(msg.id)}
-            onBulkDelete={handleBulkDelete}
+            onHideForMe={handleHideForMe}
+            onBulkHideForMe={handleBulkHideForMe}
+            onBulkDeleteForEveryone={savedChat ? undefined : handleBulkDeleteForEveryone}
             onTogglePin={userId ? handleTogglePin : undefined}
             onForward={(msg) => setForwardingMessage(msg)}
             onOpenMedia={setOpenMedia}

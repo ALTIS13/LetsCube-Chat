@@ -22,6 +22,7 @@
 - Task privacy/assignment уже применены: `tasks.visibility`, `tasks.assignment_scope`, `task_create_v2`, `task_update_v2`, `task_claim`, RLS `tasks select with visibility`.
 - Storage `media` уже переведен на scoped policies: `media authenticated scoped read`, `insert`, `update`, `delete`.
 - Folders policy cleanup уже применен: legacy `folders`/`folder_chats` `*_own` policies отсутствуют, остались scope-aware policies и restrictive banned-user guards.
+- User manually applied `.migration-backup/supabase/migrations/20260507_message_hide_for_me.sql`; read-only MCP confirmed `message_hidden_for_users`, authenticated-only RLS policies and `hide_message_for_me` / `unhide_message_for_me` RPC.
 
 ## Needs Manual Verification
 
@@ -46,7 +47,7 @@
 
 ## Needs DB Migration
 
-- На текущем read-only MCP snapshot новых обязательных SQL-миграций не найдено. Следующие DB изменения нужны только после отдельного подтвержденного этапа.
+- Manual hardening follow-up prepared, not applied: `.migration-backup/supabase/migrations/20260507_message_hide_for_me_grants_hardening.sql`. It revokes extra default `anon`/`PUBLIC` table/function grants for message hide-for-me and leaves authenticated access/RLS.
 
 ## Needs UX Polish
 
@@ -250,3 +251,10 @@ Recurring tasks roadmap note:
 - Chat list media previews now use semantic labels (`Фото`, `GIF`, `Видео`, `Голосовое`, `Файл`) instead of raw media URLs.
 - Muted chat state is still local per-device (`ng_muted` in localStorage); the UI now uses a larger bell-off indicator. A DB-backed per-user preference can be added later if cross-device mute sync is required.
 - Active chat message sync has a fallback: sidebar message realtime events dispatch a debounced active-chat refetch/merge event so the open MessageList does not miss rows that already appeared in the chat preview.
+
+2026-05-07 message hide-for-me frontend follow-up:
+
+- Frontend now exposes `Удалить у себя` for visible messages and keeps `Удалить для всех` separate for own non-saved-chat messages.
+- Bulk selection can hide any selected visible messages locally; global bulk delete is offered only when all selected messages are own messages in a non-saved chat.
+- Active MessageList, pinned messages, in-chat search, media gallery and chat preview now filter out rows present in `message_hidden_for_users` for the current user.
+- `20260507_message_hide_for_me.sql` is no longer pending. Optional grant hardening remains pending in `.migration-backup/supabase/migrations/20260507_message_hide_for_me_grants_hardening.sql`.

@@ -33,6 +33,7 @@ interface MessageBubbleProps {
   onReaction: (emoji: string) => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onHideForMe?: () => void;
   onStartSelection?: () => void;
   onTogglePin?: () => void;
   onForward?: () => void;
@@ -49,6 +50,7 @@ interface MessageBubbleProps {
   messagesMap?: Record<string, MessageWithSender>;
   deliveryState?: MessageDeliveryState | null;
   myRole?: "owner" | "admin" | "member" | null;
+  isSavedChat?: boolean;
 }
 
 function getMessageTextLayoutKind(type: MessageWithSender["type"], content: string): TextLayoutKind {
@@ -86,50 +88,50 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
   switch (kind) {
     case "link":
       return {
-        stack: "w-[min(86vw,30rem)] max-w-[86vw] sm:w-[min(64vw,38rem)] sm:max-w-[min(72%,680px)] md:w-[min(56vw,42rem)] md:max-w-[min(65%,680px)]",
+        stack: "w-[min(86vw,30rem)] max-w-[86vw] sm:w-[min(70vw,42rem)] sm:max-w-[min(72vw,700px)] md:w-[min(58vw,44rem)] md:max-w-[min(68vw,720px)]",
         bubble: "w-full",
-        text: "",
+        text: "[overflow-wrap:anywhere]",
       };
     case "preformatted":
       return {
         stack: "w-[min(86vw,54rem)] max-w-[86vw] sm:w-[min(74vw,54rem)] md:w-[min(70vw,54rem)]",
         bubble: "w-full",
-        text: "overflow-x-auto font-mono text-[13px] leading-snug [tab-size:2]",
+        text: "overflow-x-auto font-mono text-[13px] leading-snug [overflow-wrap:anywhere] [tab-size:2]",
       };
     case "longToken":
       return {
         stack: "w-[min(86vw,34rem)] max-w-[86vw] sm:w-[min(60vw,40rem)] md:w-[min(54vw,42rem)]",
         bubble: "w-full",
-        text: "",
+        text: "[overflow-wrap:anywhere]",
       };
     case "regular":
       return {
-        stack: "w-fit min-w-36 max-w-[86vw] sm:min-w-44 sm:max-w-[min(72%,680px)] md:max-w-[min(65%,680px)]",
-        bubble: "w-fit min-w-36 sm:min-w-44",
-        text: "",
+        stack: "w-max min-w-36 max-w-[86vw] sm:min-w-44 sm:max-w-[min(72vw,680px)] md:max-w-[min(65vw,680px)]",
+        bubble: "w-full min-w-36 sm:min-w-44",
+        text: "[overflow-wrap:break-word]",
       };
     case "short":
       return {
-        stack: "w-fit min-w-24 max-w-[86vw] sm:max-w-[min(72%,680px)] md:max-w-[min(65%,680px)]",
-        bubble: "w-fit min-w-24",
-        text: "",
+        stack: "w-max min-w-24 max-w-[86vw] sm:max-w-[min(72vw,680px)] md:max-w-[min(65vw,680px)]",
+        bubble: "w-full min-w-24",
+        text: "[overflow-wrap:break-word]",
       };
     case "media":
     default:
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(72%,680px)] md:max-w-[min(65%,680px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px)] md:max-w-[min(65vw,680px)]",
         bubble: "w-fit",
-        text: "",
+        text: "[overflow-wrap:break-word]",
       };
   }
 }
 
 export function MessageBubble({
   message, isMe, isFirstInGroup, isLastInGroup,
-  onReply, onReaction, onEdit, onDelete, onStartSelection, onTogglePin, onForward, onOpenMedia,
+  onReply, onReaction, onEdit, onDelete, onHideForMe, onStartSelection, onTogglePin, onForward, onOpenMedia,
   reactionMenuOpen = false, onToggleReactionMenu, onCloseReactionMenu,
   actionMenuOpen, onOpenActionMenu, onCloseActionMenu, selected = false, isSelectionMode = false,
-  usersMap = {}, messagesMap = {}, deliveryState,
+  usersMap = {}, messagesMap = {}, deliveryState, isSavedChat,
 }: MessageBubbleProps) {
   const [showContext, setShowContext] = useState(false);
   const [contextPos, setContextPos] = useState({ x: 0, y: 0 });
@@ -301,12 +303,26 @@ export function MessageBubble({
         closeContext();
       } },
     ] : []),
-    ...(isMe && onDelete ? [
-      { icon: "delete" as KubIconName, label: "Удалить", danger: true, action: () => {
+    ...(onHideForMe ? [
+      { icon: "delete" as KubIconName, label: "Удалить у себя", danger: true, action: () => {
           void requestAppConfirm({
-            title: "Удалить сообщение?",
+            title: "Удалить сообщение у себя?",
+            description: "Сообщение исчезнет только у вас. У других участников оно останется.",
+            confirmLabel: "Удалить у себя",
+            tone: "danger",
+            icon: "delete",
+          }).then((confirmed) => {
+            if (confirmed) onHideForMe();
+          });
+          closeContext();
+        } },
+    ] : []),
+    ...(isMe && onDelete && !isSavedChat ? [
+      { icon: "delete" as KubIconName, label: "Удалить для всех", danger: true, action: () => {
+          void requestAppConfirm({
+            title: "Удалить сообщение для всех?",
             description: "Это действие нельзя отменить. Сообщение будет заменено компактной плашкой удаления.",
-            confirmLabel: "Удалить",
+            confirmLabel: "Удалить для всех",
             tone: "danger",
             icon: "delete",
           }).then((confirmed) => {
@@ -538,7 +554,7 @@ export function MessageBubble({
                 <span className="truncate max-w-[200px]">{message.content ?? "File"}</span>
               </a>
             ) : (
-              <p className={cn("min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:normal] text-[color:var(--kub-text)]", widthClasses.text)}>
+              <p className={cn("min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [word-break:normal] text-[color:var(--kub-text)]", widthClasses.text)}>
                 <FormattedText content={message.content ?? ""} />
               </p>
             )}

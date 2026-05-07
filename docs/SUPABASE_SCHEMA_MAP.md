@@ -47,6 +47,14 @@ Role helpers:
 - Moderation/status: `edited_at`, `deleted_at`, `pinned`.
 - `created_at`, `topic_id`.
 
+`message_hidden_for_users`:
+
+- Composite PK: `message_id`, `user_id`.
+- `hidden_at timestamptz`.
+- Per-user local message hide state for "Удалить у себя"; hiding a row here does not soft-delete `messages` and does not remove Storage objects.
+- RLS: authenticated users can read/insert/delete only their own hide rows.
+- RPC: `hide_message_for_me(p_message_id)`, `unhide_message_for_me(p_message_id)`.
+
 `reactions`:
 
 - `message_id`, `user_id`, `emoji`.
@@ -258,6 +266,8 @@ Manual/idempotent migrations are stored in `.migration-backup/supabase/migration
 - `20260505_folders_policy_cleanup.sql` - applied in production Supabase as of 2026-05-05; legacy `folders`/`folder_chats` `*_own` policies are absent.
 - `20260506_chat_history_private_hide_permissions.sql` - applied in production Supabase as of 2026-05-06; adds per-user chat hide/clear RPC and columns.
 - `20260506_chat_pins.sql` - applied in production Supabase as of 2026-05-06; adds per-user pinned chats and RPC.
+- `20260507_message_hide_for_me.sql` - applied in production Supabase as of 2026-05-07; adds per-user message hide table and RPC.
+- `20260507_message_hide_for_me_grants_hardening.sql` - pending manual hardening follow-up; revokes extra `anon`/`PUBLIC` grants observed by read-only MCP and keeps authenticated access.
 - `20260506_admin_avatar_management.sql` - applied in production Supabase as of 2026-05-06; allows admins to upload avatars for non-admin users through the scoped media path helper.
 - `20260506_secure_chat_media_access.sql` - applied in production Supabase as of 2026-05-06; adds private `chat-media` bucket, chat-member storage policies and `messages.media_bucket` / `messages.media_path`.
 - `20260506_entity_name_constraints.sql` - applied manually in production Supabase as of 2026-05-06; DB-level max length checks for `chats.name`, `folders.name` and `topics.name` are active.
