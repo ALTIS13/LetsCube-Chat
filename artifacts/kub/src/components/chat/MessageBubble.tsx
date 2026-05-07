@@ -536,7 +536,7 @@ export function MessageBubble({
             }
             className={cn(
               "relative flex flex-col max-w-full px-3 pt-2 rounded-2xl transition-opacity select-none sm:select-text",
-              hasReactions ? "pb-2" : compactInlineTextFooter ? "pb-1" : "pb-1.5",
+              hasReactions ? "pb-2" : compactInlineTextFooter ? "pb-0.5 pr-2.5" : "pb-1.5",
               widthClasses.bubble,
               bubbleClass,
               isMe
