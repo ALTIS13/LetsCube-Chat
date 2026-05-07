@@ -513,41 +513,42 @@ export function MessageBubble({
               </p>
             )}
 
-            {hasReactions && (
-              <div
-                className={cn(
-                  "mt-1 flex max-w-full flex-wrap items-center gap-1",
-                  isMe ? "justify-end self-end" : "justify-start self-start",
-                )}
-              >
-                {visibleReactionEntries.map(([emoji, { count, mine }]) => (
-                  <button
-                    key={emoji}
-                    onClick={() => onReaction(emoji)}
-                    className={cn(
-                      "inline-flex h-5 items-center gap-0.5 rounded-full border px-1.5 text-[11px] leading-none shadow-sm transition-all hover:scale-105 active:scale-95",
-                      mine
-                        ? "bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] border-[color:var(--kub-cyan)] text-[color:var(--kub-cyan)]"
-                        : "bg-[var(--kub-surface-2)] border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)]"
-                    )}
-                  >
-                    <span className="text-[13px] leading-none">{emoji}</span>
-                    {count > 1 && <span className="tabular-nums">{count}</span>}
-                  </button>
-                ))}
-                {hiddenReactionCount > 0 && (
-                  <span
-                    className="inline-flex h-5 items-center rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-1.5 text-[11px] leading-none text-[color:var(--kub-muted)]"
-                    title={`Р•С‰С‘ ${hiddenReactionCount} СЂРµР°РєС†РёР№`}
-                    aria-label={`Р•С‰С‘ ${hiddenReactionCount} СЂРµР°РєС†РёР№`}
-                  >
-                    +{hiddenReactionCount}
-                  </span>
-                )}
-              </div>
-            )}
+            <div
+              className={cn(
+                "-mb-0.5 flex max-w-full items-end gap-1.5 leading-none",
+                hasReactions ? "mt-1 w-full" : "ml-auto mt-0.5 w-fit justify-end pl-3",
+              )}
+            >
+              {hasReactions && (
+                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-start gap-0.5">
+                  {visibleReactionEntries.map(([emoji, { count, mine }]) => (
+                    <button
+                      key={emoji}
+                      onClick={() => onReaction(emoji)}
+                      className={cn(
+                        "inline-flex h-[18px] items-center gap-0.5 rounded-full border px-1 text-[10px] leading-none transition-all hover:scale-105 active:scale-95",
+                        mine
+                          ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] border-[color-mix(in_srgb,var(--kub-cyan)_72%,transparent)] text-[color:var(--kub-cyan)]"
+                          : "bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] text-[color:var(--kub-muted)]"
+                      )}
+                    >
+                      <span className="text-[12px] leading-none">{emoji}</span>
+                      {count > 1 && <span className="tabular-nums">{count}</span>}
+                    </button>
+                  ))}
+                  {hiddenReactionCount > 0 && (
+                    <span
+                      className="inline-flex h-[18px] items-center rounded-full border border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] px-1 text-[10px] leading-none text-[color:var(--kub-muted)]"
+                      title={`Р•С‰С‘ ${hiddenReactionCount} СЂРµР°РєС†РёР№`}
+                      aria-label={`Р•С‰С‘ ${hiddenReactionCount} СЂРµР°РєС†РёР№`}
+                    >
+                      +{hiddenReactionCount}
+                    </span>
+                  )}
+                </div>
+              )}
 
-            <div className="mt-0.5 -mb-0.5 ml-auto flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap pl-3 text-right leading-none">
+              <div className="ml-auto flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap text-right">
               {message.pinned && (
                 <KubIcon name="pin" size={12} tone="muted" label="Закреплено" className="shrink-0" />
               )}
@@ -577,6 +578,7 @@ export function MessageBubble({
               >
                 <KubIcon name="more" size={13} />
               </button>
+              </div>
             </div>
           </div>
 
