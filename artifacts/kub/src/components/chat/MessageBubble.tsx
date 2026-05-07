@@ -611,7 +611,7 @@ export function MessageBubble({
                 {textLikeNoReactionFooter && (
                   <span
                     data-message-footer="true"
-                    className="float-right ml-2 mt-0.5 inline-flex max-w-max shrink-0 items-center justify-end gap-1 whitespace-nowrap leading-none"
+                    className="float-right ml-2 mt-0.5 inline-flex max-w-max shrink-0 items-center justify-end gap-1 whitespace-nowrap leading-none sm:mt-2.5"
                   >
                     {renderFooterContent()}
                   </span>
