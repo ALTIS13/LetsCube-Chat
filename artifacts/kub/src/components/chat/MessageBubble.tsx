@@ -336,6 +336,10 @@ export function MessageBubble({
     message.type === "text" &&
     !hasReactions &&
     textLayoutKind !== "preformatted";
+  const footerReserveClass = cn(
+    deliveryState?.isOwnMessage ? "pr-20 sm:pr-16" : "pr-16 sm:pr-12",
+    (message.edited_at || message.pinned) && (deliveryState?.isOwnMessage ? "pr-24 sm:pr-20" : "pr-20 sm:pr-16"),
+  );
   const renderFooterContent = () => (
     <>
       {message.pinned && (
@@ -521,7 +525,7 @@ export function MessageBubble({
             data-message-bubble="true"
             data-message-layout-kind={textLayoutKind}
             data-message-footer-mode={
-              textLikeNoReactionFooter ? "float" : hasReactions ? "reactions" : "bottom-meta"
+              textLikeNoReactionFooter ? "absolute-reserve" : hasReactions ? "reactions" : "bottom-meta"
             }
             className={cn(
               "relative flex flex-col max-w-full px-3 pt-2 rounded-2xl transition-opacity select-none sm:select-text",
@@ -603,20 +607,21 @@ export function MessageBubble({
                 data-message-text-flow="true"
                 className={cn(
                   "min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [word-break:normal] text-[color:var(--kub-text)]",
-                  textLikeNoReactionFooter && "flow-root",
+                  textLikeNoReactionFooter && footerReserveClass,
                   widthClasses.text
                 )}
               >
                 <FormattedText content={message.content ?? ""} />
-                {textLikeNoReactionFooter && (
-                  <span
-                    data-message-footer="true"
-                    className="float-right ml-2 mt-0.5 inline-flex max-w-max shrink-0 items-center justify-end gap-1 whitespace-nowrap leading-none sm:mt-2.5"
-                  >
-                    {renderFooterContent()}
-                  </span>
-                )}
               </p>
+            )}
+
+            {textLikeNoReactionFooter && (
+              <span
+                data-message-footer="true"
+                className="absolute bottom-1.5 right-2.5 inline-flex max-w-max shrink-0 items-center justify-end gap-1 whitespace-nowrap leading-none"
+              >
+                {renderFooterContent()}
+              </span>
             )}
 
             {!textLikeNoReactionFooter && (
