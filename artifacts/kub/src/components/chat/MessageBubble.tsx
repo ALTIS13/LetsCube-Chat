@@ -189,8 +189,14 @@ export function MessageBubble({
     }, {}
   );
   const reactionEntries = Object.entries(reactionGroups);
-  const visibleReactionEntries = reactionEntries.slice(0, 6);
-  const hiddenReactionCount = reactionEntries.slice(6).reduce((total, [, { count }]) => total + count, 0);
+  const compactReactionText =
+    message.type === "text" &&
+    (textLayoutKind === "short" || (textLayoutKind === "regular" && textContent.trim().length <= 80));
+  const visibleReactionLimit = compactReactionText ? 3 : 6;
+  const visibleReactionEntries = reactionEntries.slice(0, visibleReactionLimit);
+  const hiddenReactionCount = reactionEntries
+    .slice(visibleReactionLimit)
+    .reduce((total, [, { count }]) => total + count, 0);
   const hasReactions = reactionEntries.length > 0;
 
   const clearLongPressTimer = useCallback(() => {
@@ -530,7 +536,11 @@ export function MessageBubble({
                   </button>
                 ))}
                 {hiddenReactionCount > 0 && (
-                  <span className="inline-flex h-5 items-center rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-1.5 text-[11px] leading-none text-[color:var(--kub-muted)]">
+                  <span
+                    className="inline-flex h-5 items-center rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-1.5 text-[11px] leading-none text-[color:var(--kub-muted)]"
+                    title={`Р•С‰С‘ ${hiddenReactionCount} СЂРµР°РєС†РёР№`}
+                    aria-label={`Р•С‰С‘ ${hiddenReactionCount} СЂРµР°РєС†РёР№`}
+                  >
                     +{hiddenReactionCount}
                   </span>
                 )}
