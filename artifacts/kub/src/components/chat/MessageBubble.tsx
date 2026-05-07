@@ -428,6 +428,7 @@ export function MessageBubble({
               message.pending && "opacity-70",
               message.failed && "opacity-60",
             )}
+            style={hasReactions && textLayoutKind === "short" ? { minWidth: "9rem" } : undefined}
           >
             <div
               className={cn(
