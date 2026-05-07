@@ -192,7 +192,7 @@ export function MessageBubble({
   const compactReactionText =
     message.type === "text" &&
     (textLayoutKind === "short" || (textLayoutKind === "regular" && textContent.trim().length <= 80));
-  const visibleReactionLimit = compactReactionText ? 3 : 6;
+  const visibleReactionLimit = compactReactionText ? (textLayoutKind === "short" ? 2 : 3) : 6;
   const visibleReactionEntries = reactionEntries.slice(0, visibleReactionLimit);
   const hiddenReactionCount = reactionEntries
     .slice(visibleReactionLimit)
