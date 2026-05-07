@@ -409,10 +409,9 @@ export function MessageBubble({
             );
           })()}
 
-          <div className={cn("relative max-w-full", widthClasses.bubble, hasReactions && "pb-5")}>
           <div
             className={cn(
-              "relative max-w-full px-3 py-2 rounded-2xl transition-opacity select-none sm:select-text",
+              "relative flex flex-col max-w-full px-3 py-2 rounded-2xl transition-opacity select-none sm:select-text",
               widthClasses.bubble,
               bubbleClass,
               isMe
@@ -508,6 +507,36 @@ export function MessageBubble({
               </p>
             )}
 
+            {hasReactions && (
+              <div
+                className={cn(
+                  "mt-1 flex max-w-full flex-wrap items-center gap-1",
+                  isMe ? "justify-end self-end" : "justify-start self-start",
+                )}
+              >
+                {visibleReactionEntries.map(([emoji, { count, mine }]) => (
+                  <button
+                    key={emoji}
+                    onClick={() => onReaction(emoji)}
+                    className={cn(
+                      "inline-flex h-5 items-center gap-0.5 rounded-full border px-1.5 text-[11px] leading-none shadow-sm transition-all hover:scale-105 active:scale-95",
+                      mine
+                        ? "bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] border-[color:var(--kub-cyan)] text-[color:var(--kub-cyan)]"
+                        : "bg-[var(--kub-surface-2)] border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)]"
+                    )}
+                  >
+                    <span className="text-[13px] leading-none">{emoji}</span>
+                    {count > 1 && <span className="tabular-nums">{count}</span>}
+                  </button>
+                ))}
+                {hiddenReactionCount > 0 && (
+                  <span className="inline-flex h-5 items-center rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-1.5 text-[11px] leading-none text-[color:var(--kub-muted)]">
+                    +{hiddenReactionCount}
+                  </span>
+                )}
+              </div>
+            )}
+
             <div className="mt-0.5 -mb-0.5 ml-auto flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap pl-3 text-right leading-none">
               {message.pinned && (
                 <KubIcon name="pin" size={12} tone="muted" label="Закреплено" className="shrink-0" />
@@ -541,36 +570,6 @@ export function MessageBubble({
             </div>
           </div>
 
-          {hasReactions && (
-            <div
-              className={cn(
-                "absolute z-20 -bottom-0.5 flex w-max max-w-[min(18rem,calc(100vw-4rem))] flex-wrap items-center gap-1",
-                isMe ? "right-2 justify-end" : "left-2 justify-start",
-              )}
-            >
-              {visibleReactionEntries.map(([emoji, { count, mine }]) => (
-                <button
-                  key={emoji}
-                  onClick={() => onReaction(emoji)}
-                  className={cn(
-                    "inline-flex h-5 items-center gap-0.5 rounded-full border px-1.5 text-[11px] leading-none shadow-sm transition-all hover:scale-105 active:scale-95",
-                    mine
-                      ? "bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] border-[color:var(--kub-cyan)] text-[color:var(--kub-cyan)]"
-                      : "bg-[var(--kub-surface-2)] border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)]"
-                  )}
-                >
-                  <span className="text-[13px] leading-none">{emoji}</span>
-                  {count > 1 && <span className="tabular-nums">{count}</span>}
-                </button>
-              ))}
-              {hiddenReactionCount > 0 && (
-                <span className="inline-flex h-5 items-center rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-1.5 text-[11px] leading-none text-[color:var(--kub-muted)]">
-                  +{hiddenReactionCount}
-                </span>
-              )}
-            </div>
-          )}
-          </div>
         </div>
       </div>
     </>
