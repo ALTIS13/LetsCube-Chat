@@ -48,7 +48,7 @@
 
 ## Needs DB Migration
 
-- Delivered receipts are not supported by the current production schema. Read-only MCP found `chat_members.last_read_at`, but no `last_delivered_at`, no receipt tables and no delivery/read RPC for chat messages. Manual proposal prepared: `.migration-backup/supabase/migrations/20260507_message_delivery_receipts.sql`.
+- No pending DB migration for message hide-for-me or delivery receipts after the user's 2026-05-07 manual applies. Future group read-count/all-delivered UX would need a separate schema design.
 
 ## Needs UX Polish
 
@@ -263,5 +263,6 @@ Recurring tasks roadmap note:
 2026-05-07 message receipts / reactions follow-up:
 
 - Bubble and chat-list preview both use `getMessageDeliveryState`. Current honest states are: sending, sent, failed and private-chat read via the other member's `last_read_at`; saved chats show no checkmarks and group chats do not show fake read state.
-- Delivered state is intentionally not shown until `last_delivered_at` / `mark_chat_delivered` backend support is applied and wired.
+- `20260507_message_delivery_receipts.sql` is now applied. Read-only MCP confirmed `chat_members.last_delivered_at`, `mark_chat_delivered(p_chat_id uuid)` and `mark_chat_read(p_chat_id uuid)` with authenticated-only execute grants.
+- Bubble and chat-list preview now support private-chat delivered state via the other member's `last_delivered_at`; saved chats still show no checkmarks and group chats still do not show fake read/delivered state.
 - Desktop message action menu now includes the same quick reaction row as the mobile long-press sheet.

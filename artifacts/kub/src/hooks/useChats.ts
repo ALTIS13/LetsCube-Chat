@@ -7,6 +7,7 @@ import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 import { isSavedChat } from "@/lib/chatDisplay";
+import { scheduleMarkChatDelivered } from "@/lib/deliveryReceipts";
 
 const VISIBILITY_REFRESH_THROTTLE_MS = 10_000;
 const CHAT_REFETCH_DEBOUNCE_MS = 350;
@@ -26,6 +27,7 @@ export function useChats() {
   type MyMembershipRow = {
     chat_id: string;
     last_read_at: string | null;
+    last_delivered_at: string | null;
     hidden_at: string | null;
     cleared_at: string | null;
     pinned: boolean;
@@ -50,7 +52,7 @@ export function useChats() {
     try {
       const { data: memberships } = await supabase
         .from("chat_members")
-        .select("chat_id, last_read_at, hidden_at, cleared_at, pinned, pinned_at")
+        .select("chat_id, last_read_at, last_delivered_at, hidden_at, cleared_at, pinned, pinned_at")
         .eq("user_id", userId);
 
       if (!memberships?.length) {
@@ -66,7 +68,7 @@ export function useChats() {
 
       const { data: chatsData } = await supabase
         .from("chats")
-        .select("*, members:chat_members(user_id, role, last_read_at, profile:profiles(*))")
+        .select("*, members:chat_members(user_id, role, last_read_at, last_delivered_at, profile:profiles(*))")
         .in("id", chatIds)
         .order("updated_at", { ascending: false });
 
@@ -131,6 +133,16 @@ export function useChats() {
               displayAvatarUrl = other.profile.avatar_url ?? null;
               otherUser = other.profile;
             }
+          }
+          if (
+            chat.type === "private" &&
+            lastMsgData?.user_id &&
+            lastMsgData.user_id !== userId &&
+            !isSavedChat(chat as unknown as ChatWithLastMessage, userId) &&
+            (!myMembership?.last_delivered_at ||
+              new Date(lastMsgData.created_at).getTime() > new Date(myMembership.last_delivered_at).getTime())
+          ) {
+            scheduleMarkChatDelivered(supabase, chat.id, lastMsgData.created_at);
           }
 
           return {
@@ -212,10 +224,19 @@ export function useChats() {
   useEffect(() => {
     if (!userId) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const debouncedRefetch = (payload?: { eventType?: string; new?: { id?: string; chat_id?: string }; old?: { chat_id?: string } }) => {
+    const debouncedRefetch = (payload?: { eventType?: string; new?: { id?: string; chat_id?: string; user_id?: string | null; created_at?: string }; old?: { chat_id?: string } }) => {
       const eventChatId = payload?.new?.chat_id ?? payload?.old?.chat_id;
       if (eventChatId && payload?.eventType === "INSERT" && payload.new?.id) {
         dispatchChatsRefresh({ reason: "message-realtime", chatId: eventChatId, messageId: payload.new.id });
+        const chat = useAppStore.getState().chats.find((item) => item.id === eventChatId);
+        if (
+          chat?.type === "private" &&
+          payload.new.user_id &&
+          payload.new.user_id !== userId &&
+          !isSavedChat(chat, userId)
+        ) {
+          scheduleMarkChatDelivered(supabase, eventChatId, payload.new.created_at);
+        }
       }
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {

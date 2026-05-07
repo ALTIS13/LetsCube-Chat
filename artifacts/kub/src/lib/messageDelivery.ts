@@ -14,7 +14,7 @@ export interface MessageDeliveryState {
 interface MessageDeliveryContext {
   currentUserId: string | null;
   chatType?: string | null;
-  members?: Array<Pick<ChatMember, "user_id" | "last_read_at">> | null;
+  members?: Array<Pick<ChatMember, "user_id" | "last_read_at" | "last_delivered_at">> | null;
   isSavedChat?: boolean;
 }
 
@@ -55,6 +55,16 @@ export function getMessageDeliveryState(
     };
   }
 
+  if (context.chatType === "private" && isDeliveredToPrivateRecipient(message, context)) {
+    return {
+      state: "delivered",
+      icon: "doubleCheck",
+      tone: "muted",
+      label: "Доставлено",
+      isOwnMessage: true,
+    };
+  }
+
   return {
     state: "sent",
     icon: "check",
@@ -73,4 +83,15 @@ function isReadByPrivateRecipient(
   const readAt = new Date(recipient.last_read_at).getTime();
   const sentAt = new Date(message.created_at).getTime();
   return Number.isFinite(readAt) && Number.isFinite(sentAt) && readAt >= sentAt;
+}
+
+function isDeliveredToPrivateRecipient(
+  message: Pick<MessageWithSender, "created_at">,
+  context: MessageDeliveryContext,
+): boolean {
+  const recipient = context.members?.find((member) => member.user_id !== context.currentUserId);
+  if (!recipient?.last_delivered_at) return false;
+  const deliveredAt = new Date(recipient.last_delivered_at).getTime();
+  const sentAt = new Date(message.created_at).getTime();
+  return Number.isFinite(deliveredAt) && Number.isFinite(sentAt) && deliveredAt >= sentAt;
 }

@@ -244,6 +244,7 @@ export interface Database {
           role: ChatMemberRole
           joined_at: string
           last_read_at: string | null
+          last_delivered_at: string | null
           hidden_at: string | null
           cleared_at: string | null
           pinned: boolean
@@ -255,6 +256,7 @@ export interface Database {
           role?: ChatMemberRole
           joined_at?: string
           last_read_at?: string | null
+          last_delivered_at?: string | null
           hidden_at?: string | null
           cleared_at?: string | null
           pinned?: boolean
@@ -263,6 +265,7 @@ export interface Database {
         Update: {
           role?: ChatMemberRole
           last_read_at?: string | null
+          last_delivered_at?: string | null
           hidden_at?: string | null
           cleared_at?: string | null
           pinned?: boolean
@@ -784,6 +787,14 @@ export interface Database {
       }
       hide_message_for_me: {
         Args: { p_message_id: string }
+        Returns: void
+      }
+      mark_chat_delivered: {
+        Args: { p_chat_id: string }
+        Returns: void
+      }
+      mark_chat_read: {
+        Args: { p_chat_id: string }
         Returns: void
       }
       unhide_message_for_me: {

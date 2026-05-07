@@ -218,6 +218,8 @@ Frontend task UI можно выравнивать под новые task column
 ## 2026-05-07 Message Receipt State
 
 - Read-only MCP confirmed `messages` has no `status`, `delivered_at` or `read_at` columns.
-- `chat_members.last_read_at` exists and is available through the current frontend members query, so private-chat read receipts can be shown honestly when the other participant's `last_read_at >= message.created_at`.
-- There is no `chat_members.last_delivered_at`, no receipt table (`message_reads`, `read_receipts`, `delivery_receipts`, `message_statuses`) and no `mark_chat_delivered` / `mark_chat_read` RPC in production as of this audit.
-- Frontend must not infer delivered state from online status. `.migration-backup/supabase/migrations/20260507_message_delivery_receipts.sql` is prepared as a manual proposal for honest delivered receipts.
+- `.migration-backup/supabase/migrations/20260507_message_delivery_receipts.sql` was applied manually by the user.
+- Read-only MCP confirmed `chat_members.last_read_at` and `chat_members.last_delivered_at` exist as nullable `timestamptz` columns.
+- RPC `mark_chat_delivered(p_chat_id uuid)` and `mark_chat_read(p_chat_id uuid)` exist as `SECURITY INVOKER` functions. `authenticated` has `EXECUTE`; `anon`/`PUBLIC` grants are absent.
+- `chat_members` remains in the `supabase_realtime` publication, so member receipt updates can update checkmarks without refresh.
+- Frontend delivered-flow is enabled for private chats only. Group chats still do not show fake read/delivered state because there is no group read-count/all-delivered model.

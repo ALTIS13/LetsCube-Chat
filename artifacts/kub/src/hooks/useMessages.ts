@@ -7,6 +7,8 @@ import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { mapPgError } from "@/lib/errors";
 import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
+import { isSavedChat } from "@/lib/chatDisplay";
+import { scheduleMarkChatDelivered, scheduleMarkChatRead } from "@/lib/deliveryReceipts";
 
 export function useMessages(
   chatId: string | null,
@@ -91,6 +93,11 @@ export function useMessages(
     });
   }, []);
 
+  const shouldMarkDeliveredForPrivateChat = useCallback((targetChatId: string, targetUserId: string) => {
+    const chat = useAppStore.getState().chats.find((item) => item.id === targetChatId);
+    return Boolean(chat && chat.type === "private" && !isSavedChat(chat, targetUserId));
+  }, []);
+
   const fetchMessages = useCallback(async () => {
     if (!chatId) return;
     bumpFetch("useMessages");
@@ -142,15 +149,20 @@ export function useMessages(
         return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
       });
       setMessages(chatId, mergeMessagesById(visibleFetched, visibleExisting));
+      if (user) {
+        const latestVisible = visibleFetched[visibleFetched.length - 1] ?? visibleExisting[visibleExisting.length - 1] ?? null;
+        const latestIncoming = [...visibleFetched].reverse().find((message) =>
+          message.user_id && message.user_id !== user.id && !message.deleted_at
+        );
+        if (latestVisible && document.visibilityState === "visible") {
+          scheduleMarkChatRead(supabase, chatId, latestVisible.created_at);
+        } else if (latestIncoming && shouldMarkDeliveredForPrivateChat(chatId, user.id)) {
+          scheduleMarkChatDelivered(supabase, chatId, latestIncoming.created_at);
+        }
+      }
     }
     setLoading(false);
-    if (user) {
-      await supabase.from("chat_members")
-        .update({ last_read_at: new Date().toISOString() })
-        .eq("chat_id", chatId)
-        .eq("user_id", user.id);
-    }
-  }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds]);
+  }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds, shouldMarkDeliveredForPrivateChat]);
 
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
 
@@ -345,10 +357,11 @@ export function useMessages(
             new Notification(senderName, { body, icon: "/icons/icon-192.png", tag: payload.new.chat_id });
           }
           if (user && data.user_id !== user.id) {
-            await supabase.from("chat_members")
-              .update({ last_read_at: new Date().toISOString() })
-              .eq("chat_id", payload.new.chat_id)
-              .eq("user_id", user.id);
+            if (document.visibilityState === "visible") {
+              scheduleMarkChatRead(supabase, payload.new.chat_id, data.created_at);
+            } else if (shouldMarkDeliveredForPrivateChat(payload.new.chat_id, user.id)) {
+              scheduleMarkChatDelivered(supabase, payload.new.chat_id, data.created_at);
+            }
           }
         }
       )
@@ -389,7 +402,7 @@ export function useMessages(
       rt.removeChannel(channel);
       unregisterChannel(channelName);
     };
-  }, [chatId, userId, rt, addMessage, setMessages]);
+  }, [chatId, userId, rt, addMessage, setMessages, shouldMarkDeliveredForPrivateChat]);
 
   useEffect(() => {
     if (!chatId || !userId) return;
@@ -399,7 +412,7 @@ export function useMessages(
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "chat_members", filter: `chat_id=eq.${chatId}` },
-        (payload: { new: { chat_id: string; user_id: string; last_read_at: string | null } }) => {
+        (payload: { new: { chat_id: string; user_id: string; last_read_at: string | null; last_delivered_at: string | null } }) => {
           if (payload.new.chat_id !== chatIdRef.current) return;
           const chat = useAppStore.getState().chats.find((item) => item.id === payload.new.chat_id);
           if (!chat?.members?.length) return;
@@ -407,7 +420,7 @@ export function useMessages(
             ...chat,
             members: chat.members.map((member) =>
               member.user_id === payload.new.user_id
-                ? { ...member, last_read_at: payload.new.last_read_at }
+                ? { ...member, last_read_at: payload.new.last_read_at, last_delivered_at: payload.new.last_delivered_at }
                 : member
             ),
           });
@@ -422,6 +435,21 @@ export function useMessages(
       unregisterChannel(channelName);
     };
   }, [chatId, userId, rt]);
+
+  useEffect(() => {
+    if (!chatId || !userId) return;
+    const markReadWhenVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const activeChatId = chatIdRef.current;
+      if (!activeChatId) return;
+      const latestIncoming = [...(useAppStore.getState().messages[activeChatId] ?? [])]
+        .reverse()
+        .find((message) => message.user_id && message.user_id !== userId && !message.deleted_at);
+      if (latestIncoming) scheduleMarkChatRead(supabase, activeChatId, latestIncoming.created_at);
+    };
+    document.addEventListener("visibilitychange", markReadWhenVisible);
+    return () => document.removeEventListener("visibilitychange", markReadWhenVisible);
+  }, [chatId, userId, supabase]);
 
   const sendMessage = useCallback(async (content: string, replyToId?: string) => {
     const user = currentUserRef.current;

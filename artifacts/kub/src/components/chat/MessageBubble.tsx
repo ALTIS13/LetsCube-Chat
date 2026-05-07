@@ -481,7 +481,8 @@ export function MessageBubble({
 
           <div
             className={cn(
-              "relative flex flex-col max-w-full px-3 py-2 rounded-2xl transition-opacity select-none sm:select-text",
+              "relative flex flex-col max-w-full px-3 pt-2 rounded-2xl transition-opacity select-none sm:select-text",
+              hasReactions ? "pb-2" : "pb-1.5",
               widthClasses.bubble,
               bubbleClass,
               isMe
@@ -563,7 +564,7 @@ export function MessageBubble({
             <div
               className={cn(
                 "flex max-w-full items-end leading-none",
-                hasReactions ? "mt-1 w-full min-w-[6.75rem] gap-1.5" : "ml-auto mt-0.5 w-fit justify-end gap-1 pl-3",
+                hasReactions ? "mt-1 w-full min-w-[6.75rem] gap-1.5" : "ml-auto mt-px w-fit justify-end gap-1 pl-3",
               )}
             >
               {hasReactions && (

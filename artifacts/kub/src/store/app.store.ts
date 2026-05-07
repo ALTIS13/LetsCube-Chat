@@ -94,14 +94,14 @@ function sameChatList(a: ChatWithLastMessage[], b: ChatWithLastMessage[]): boole
       chat.last_message?.created_at === next.last_message?.created_at &&
       chat.last_message?.edited_at === next.last_message?.edited_at &&
       chat.last_message?.deleted_at === next.last_message?.deleted_at &&
-      chatMemberReadSignature(chat) === chatMemberReadSignature(next)
+      chatMemberReceiptSignature(chat) === chatMemberReceiptSignature(next)
     );
   });
 }
 
-function chatMemberReadSignature(chat: ChatWithLastMessage): string {
+function chatMemberReceiptSignature(chat: ChatWithLastMessage): string {
   return (chat.members ?? [])
-    .map((member) => `${member.user_id}:${member.last_read_at ?? ""}`)
+    .map((member) => `${member.user_id}:${member.last_read_at ?? ""}:${member.last_delivered_at ?? ""}`)
     .sort()
     .join("|");
 }
