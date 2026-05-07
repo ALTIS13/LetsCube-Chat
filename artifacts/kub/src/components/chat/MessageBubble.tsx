@@ -348,6 +348,7 @@ export function MessageBubble({
           </div>
 
           <div
+            data-action-menu="true"
             className="absolute z-50 min-w-60 overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] py-1 shadow-2xl kub-glow-soft"
             style={contextMenuStyle}
             onClick={(e) => e.stopPropagation()}

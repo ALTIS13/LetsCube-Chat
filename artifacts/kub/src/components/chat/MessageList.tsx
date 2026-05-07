@@ -213,6 +213,7 @@ export function MessageList({
         onClickCapture={(event) => {
           const target = event.target as HTMLElement | null;
           if (target?.closest("[data-reaction-menu], [data-reaction-trigger]")) return;
+          if (target?.closest("[data-action-menu]")) return;
           if (openReactionMessageId) setOpenReactionMessageId(null);
           if (openActionMessageId) setOpenActionMessageId(null);
         }}
