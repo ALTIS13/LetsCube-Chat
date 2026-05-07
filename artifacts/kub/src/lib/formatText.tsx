@@ -81,6 +81,18 @@ function tokenize(input: string): Token[] {
   return out;
 }
 
+function renderUrlText(href: string): React.ReactNode[] {
+  const nodes: React.ReactNode[] = [];
+  for (let index = 0; index < href.length; index += 1) {
+    const char = href[index];
+    nodes.push(char);
+    if (index < href.length - 1 && "/.?&=-_#".includes(char)) {
+      nodes.push(<wbr key={`br-${index}`} />);
+    }
+  }
+  return nodes;
+}
+
 function renderToken(t: Token, key: number): React.ReactNode {
   switch (t.kind) {
     case "text":
@@ -108,10 +120,10 @@ function renderToken(t: Token, key: number): React.ReactNode {
           href={t.href}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline max-w-full underline [overflow-wrap:anywhere] [word-break:break-word]"
+          className="inline max-w-full underline [overflow-wrap:break-word] [word-break:normal]"
           style={{ color: "var(--tg-accent)" }}
         >
-          {t.href}
+          {renderUrlText(t.href)}
         </a>
       );
     case "mention":

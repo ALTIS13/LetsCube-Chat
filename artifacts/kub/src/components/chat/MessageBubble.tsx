@@ -88,9 +88,9 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
   switch (kind) {
     case "link":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(58vw,520px)] md:max-w-[min(42vw,500px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(64vw,620px)] md:max-w-[min(52vw,620px)]",
         bubble: "w-fit max-w-full min-w-0",
-        text: "[overflow-wrap:anywhere]",
+        text: "[overflow-wrap:break-word]",
       };
     case "preformatted":
       return {
@@ -112,8 +112,8 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
       };
     case "short":
       return {
-        stack: "w-max min-w-24 max-w-[86vw] sm:max-w-[min(72vw,680px)] md:max-w-[min(65vw,680px)]",
-        bubble: "w-full min-w-24",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px)] md:max-w-[min(65vw,680px)]",
+        bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:break-word]",
       };
     case "media":
@@ -332,11 +332,18 @@ export function MessageBubble({
         } },
     ] : []),
   ];
-  const inlineTextFooter =
+  const textLikeNoReactionFooter =
     message.type === "text" &&
     !hasReactions &&
     textLayoutKind !== "preformatted";
-  const inlineFooterSpacerClass = cn(
+  const compactInlineTextFooter =
+    textLikeNoReactionFooter &&
+    textLayoutKind !== "link" &&
+    textLayoutKind !== "longToken" &&
+    !textContent.includes("\n") &&
+    textContent.trim().length <= 80;
+  const anchoredTextFooter = textLikeNoReactionFooter && !compactInlineTextFooter;
+  const anchoredFooterSpacerClass = cn(
     deliveryState?.isOwnMessage ? "w-[4.75rem] sm:w-[3.25rem]" : "w-14 sm:w-8",
     (message.edited_at || message.pinned) && (deliveryState?.isOwnMessage ? "w-24 sm:w-20" : "w-20 sm:w-14"),
   );
@@ -523,9 +530,13 @@ export function MessageBubble({
 
           <div
             data-message-bubble="true"
+            data-message-layout-kind={textLayoutKind}
+            data-message-footer-mode={
+              compactInlineTextFooter ? "compact-inline" : anchoredTextFooter ? "anchored" : hasReactions ? "reactions" : "bottom-meta"
+            }
             className={cn(
               "relative flex flex-col max-w-full px-3 pt-2 rounded-2xl transition-opacity select-none sm:select-text",
-              hasReactions ? "pb-2" : "pb-1.5",
+              hasReactions ? "pb-2" : compactInlineTextFooter ? "pb-1" : "pb-1.5",
               widthClasses.bubble,
               bubbleClass,
               isMe
@@ -604,13 +615,25 @@ export function MessageBubble({
                 className={cn("min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [word-break:normal] text-[color:var(--kub-text)]", widthClasses.text)}
               >
                 <FormattedText content={message.content ?? ""} />
-                {inlineTextFooter && (
-                  <span className={cn("inline-block h-[1em] align-baseline", inlineFooterSpacerClass)} aria-hidden="true" />
+                {compactInlineTextFooter && (
+                  <span
+                    data-message-footer="true"
+                    className="ml-1.5 inline-flex max-w-max shrink-0 items-center justify-end gap-1 whitespace-nowrap align-text-bottom leading-none"
+                  >
+                    {renderFooterContent()}
+                  </span>
+                )}
+                {anchoredTextFooter && (
+                  <span
+                    data-message-footer-spacer="true"
+                    className={cn("inline-block h-[1em] align-baseline", anchoredFooterSpacerClass)}
+                    aria-hidden="true"
+                  />
                 )}
               </p>
             )}
 
-            {inlineTextFooter && (
+            {anchoredTextFooter && (
               <span
                 data-message-footer="true"
                 className="absolute bottom-1.5 right-2.5 inline-flex max-w-max shrink-0 items-center justify-end gap-1 whitespace-nowrap leading-none"
@@ -619,7 +642,7 @@ export function MessageBubble({
               </span>
             )}
 
-            {!inlineTextFooter && (
+            {!textLikeNoReactionFooter && (
               <div
                 data-message-bottom-meta="true"
                 className={cn(
