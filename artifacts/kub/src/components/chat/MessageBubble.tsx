@@ -106,8 +106,8 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
       };
     case "regular":
       return {
-        stack: "w-max min-w-36 max-w-[86vw] sm:min-w-44 sm:max-w-[min(72vw,680px)] md:max-w-[min(65vw,680px)]",
-        bubble: "w-full min-w-36 sm:min-w-44",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px)] md:max-w-[min(65vw,680px)]",
+        bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:break-word]",
       };
     case "short":
