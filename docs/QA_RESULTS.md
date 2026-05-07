@@ -23,6 +23,7 @@
 - Storage `media` уже переведен на scoped policies: `media authenticated scoped read`, `insert`, `update`, `delete`.
 - Folders policy cleanup уже применен: legacy `folders`/`folder_chats` `*_own` policies отсутствуют, остались scope-aware policies и restrictive banned-user guards.
 - User manually applied `.migration-backup/supabase/migrations/20260507_message_hide_for_me.sql`; read-only MCP confirmed `message_hidden_for_users`, authenticated-only RLS policies and `hide_message_for_me` / `unhide_message_for_me` RPC.
+- User manually applied `.migration-backup/supabase/migrations/20260507_message_hide_for_me_grants_hardening.sql`; read-only MCP confirmed `anon`/`PUBLIC` table/function grants are absent and authenticated access remains.
 
 ## Needs Manual Verification
 
@@ -47,7 +48,7 @@
 
 ## Needs DB Migration
 
-- Manual hardening follow-up prepared, not applied: `.migration-backup/supabase/migrations/20260507_message_hide_for_me_grants_hardening.sql`. It revokes extra default `anon`/`PUBLIC` table/function grants for message hide-for-me and leaves authenticated access/RLS.
+- Delivered receipts are not supported by the current production schema. Read-only MCP found `chat_members.last_read_at`, but no `last_delivered_at`, no receipt tables and no delivery/read RPC for chat messages. Manual proposal prepared: `.migration-backup/supabase/migrations/20260507_message_delivery_receipts.sql`.
 
 ## Needs UX Polish
 
@@ -257,4 +258,10 @@ Recurring tasks roadmap note:
 - Frontend now exposes `Удалить у себя` for visible messages and keeps `Удалить для всех` separate for own non-saved-chat messages.
 - Bulk selection can hide any selected visible messages locally; global bulk delete is offered only when all selected messages are own messages in a non-saved chat.
 - Active MessageList, pinned messages, in-chat search, media gallery and chat preview now filter out rows present in `message_hidden_for_users` for the current user.
-- `20260507_message_hide_for_me.sql` is no longer pending. Optional grant hardening remains pending in `.migration-backup/supabase/migrations/20260507_message_hide_for_me_grants_hardening.sql`.
+- `20260507_message_hide_for_me.sql` and `20260507_message_hide_for_me_grants_hardening.sql` are no longer pending.
+
+2026-05-07 message receipts / reactions follow-up:
+
+- Bubble and chat-list preview both use `getMessageDeliveryState`. Current honest states are: sending, sent, failed and private-chat read via the other member's `last_read_at`; saved chats show no checkmarks and group chats do not show fake read state.
+- Delivered state is intentionally not shown until `last_delivered_at` / `mark_chat_delivered` backend support is applied and wired.
+- Desktop message action menu now includes the same quick reaction row as the mobile long-press sheet.

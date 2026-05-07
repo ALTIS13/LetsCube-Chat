@@ -212,4 +212,12 @@ Frontend task UI можно выравнивать под новые task column
 - Policies are authenticated-only and scope `select`, `insert` and `delete` to `auth.uid()` rows; insert additionally checks that the message is visible to the current chat member.
 - RPC `hide_message_for_me(p_message_id uuid)` and `unhide_message_for_me(p_message_id uuid)` exist as `SECURITY INVOKER` functions.
 - Frontend alignment is enabled: local message hide can now remove a message only for the current user without deleting the global `messages` row or Storage media.
-- Read-only MCP also showed default table/function grants still visible for `anon`/`PUBLIC`; RLS still protects rows, but `.migration-backup/supabase/migrations/20260507_message_hide_for_me_grants_hardening.sql` was added as a manual hardening follow-up to revoke those extra grants and keep only authenticated access.
+- `.migration-backup/supabase/migrations/20260507_message_hide_for_me_grants_hardening.sql` was applied manually by the user.
+- Read-only MCP confirmed `anon`/`PUBLIC` table/function grants are absent for `message_hidden_for_users`, `hide_message_for_me` and `unhide_message_for_me`; `authenticated` keeps `select/insert/delete` table access and RPC `execute`.
+
+## 2026-05-07 Message Receipt State
+
+- Read-only MCP confirmed `messages` has no `status`, `delivered_at` or `read_at` columns.
+- `chat_members.last_read_at` exists and is available through the current frontend members query, so private-chat read receipts can be shown honestly when the other participant's `last_read_at >= message.created_at`.
+- There is no `chat_members.last_delivered_at`, no receipt table (`message_reads`, `read_receipts`, `delivery_receipts`, `message_statuses`) and no `mark_chat_delivered` / `mark_chat_read` RPC in production as of this audit.
+- Frontend must not infer delivered state from online status. `.migration-backup/supabase/migrations/20260507_message_delivery_receipts.sql` is prepared as a manual proposal for honest delivered receipts.

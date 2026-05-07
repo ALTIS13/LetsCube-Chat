@@ -371,20 +371,21 @@ export function MessageBubble({
             style={contextMenuStyle}
             onClick={(e) => e.stopPropagation()}
           >
-            {compactContextMenu && (
-              <div className="mb-1 flex items-center justify-between gap-1 border-b border-[color:var(--kub-border-color)] px-3 pb-2 pt-1">
+            <div className="mb-1 flex items-center justify-between gap-1 border-b border-[color:var(--kub-border-color)] px-3 pb-2 pt-1">
                 {EMOJI_QUICK.map((emoji) => (
                   <button
                     key={emoji}
                     onClick={() => { onReaction(emoji); closeContext(); }}
-                    className="flex h-9 w-9 items-center justify-center rounded-full text-xl transition-all hover:bg-[var(--kub-surface-3)] active:scale-95"
+                    className={cn(
+                      "flex min-w-0 flex-1 items-center justify-center rounded-full transition-all hover:bg-[var(--kub-surface-3)] active:scale-95",
+                      compactContextMenu ? "h-9 text-xl" : "h-8 text-lg",
+                    )}
                     aria-label={`Поставить реакцию ${emoji}`}
                   >
                     {emoji}
                   </button>
                 ))}
               </div>
-            )}
             {contextItems.map(({ icon, label, danger, action }) => (
               <button
                 key={label}
@@ -561,30 +562,30 @@ export function MessageBubble({
 
             <div
               className={cn(
-                "-mb-0.5 flex max-w-full items-end gap-1.5 leading-none",
-                hasReactions ? "mt-1 w-full min-w-[6.75rem]" : "ml-auto mt-0.5 w-fit justify-end pl-3",
+                "flex max-w-full items-end leading-none",
+                hasReactions ? "mt-1 w-full min-w-[6.75rem] gap-1.5" : "ml-auto mt-0.5 w-fit justify-end gap-1 pl-3",
               )}
             >
               {hasReactions && (
-                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-start gap-0.5">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-start gap-1">
                   {visibleReactionEntries.map(([emoji, { count, mine }]) => (
                     <button
                       key={emoji}
                       onClick={() => onReaction(emoji)}
                       className={cn(
-                        "inline-flex h-5 items-center gap-0.5 rounded-full border px-1.5 text-[11px] leading-none transition-all hover:scale-105 active:scale-95",
+                        "inline-flex h-[22px] items-center gap-1 rounded-full border px-2 text-[11px] leading-none transition-all hover:scale-105 active:scale-95",
                         mine
                           ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] border-[color-mix(in_srgb,var(--kub-cyan)_72%,transparent)] text-[color:var(--kub-cyan)]"
                           : "bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] text-[color:var(--kub-muted)]"
                       )}
                     >
-                      <span className="text-[13px] leading-none">{emoji}</span>
+                      <span className="text-sm leading-none">{emoji}</span>
                       {count > 1 && <span className="tabular-nums">{count}</span>}
                     </button>
                   ))}
                   {hiddenReactionCount > 0 && (
                     <span
-                      className="inline-flex h-5 items-center rounded-full border border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] px-1.5 text-[11px] leading-none text-[color:var(--kub-muted)]"
+                      className="inline-flex h-[22px] items-center rounded-full border border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] px-2 text-[11px] leading-none text-[color:var(--kub-muted)]"
                       title={`Ещё ${hiddenReactionCount} реакций`}
                       aria-label={`Ещё ${hiddenReactionCount} реакций`}
                     >

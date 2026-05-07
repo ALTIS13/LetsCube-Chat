@@ -39,6 +39,7 @@ Role helpers:
 - Composite PK: `chat_id`, `user_id`.
 - `role chat_member_role`, `joined_at`, `last_read_at`.
 - Per-user local state: `hidden_at`, `cleared_at`, `pinned`, `pinned_at`.
+- `last_delivered_at` is not present in production yet; `.migration-backup/supabase/migrations/20260507_message_delivery_receipts.sql` is a pending manual proposal for honest delivered receipts.
 
 `messages`:
 
@@ -267,7 +268,8 @@ Manual/idempotent migrations are stored in `.migration-backup/supabase/migration
 - `20260506_chat_history_private_hide_permissions.sql` - applied in production Supabase as of 2026-05-06; adds per-user chat hide/clear RPC and columns.
 - `20260506_chat_pins.sql` - applied in production Supabase as of 2026-05-06; adds per-user pinned chats and RPC.
 - `20260507_message_hide_for_me.sql` - applied in production Supabase as of 2026-05-07; adds per-user message hide table and RPC.
-- `20260507_message_hide_for_me_grants_hardening.sql` - pending manual hardening follow-up; revokes extra `anon`/`PUBLIC` grants observed by read-only MCP and keeps authenticated access.
+- `20260507_message_hide_for_me_grants_hardening.sql` - applied manually in production Supabase as of 2026-05-07; read-only MCP confirmed `anon`/`PUBLIC` grants are absent and authenticated access remains.
+- `20260507_message_delivery_receipts.sql` - pending manual proposal; adds `chat_members.last_delivered_at` and `mark_chat_delivered` / `mark_chat_read` RPC for honest delivered/read receipts. Do not apply automatically.
 - `20260506_admin_avatar_management.sql` - applied in production Supabase as of 2026-05-06; allows admins to upload avatars for non-admin users through the scoped media path helper.
 - `20260506_secure_chat_media_access.sql` - applied in production Supabase as of 2026-05-06; adds private `chat-media` bucket, chat-member storage policies and `messages.media_bucket` / `messages.media_path`.
 - `20260506_entity_name_constraints.sql` - applied manually in production Supabase as of 2026-05-06; DB-level max length checks for `chats.name`, `folders.name` and `topics.name` are active.

@@ -1,7 +1,7 @@
 import type { KubIconName, KubIconTone } from "@/components/kub";
 import type { ChatMember, MessageWithSender } from "@/types/database";
 
-export type MessageDeliveryStateName = "incoming" | "sending" | "sent" | "read" | "failed";
+export type MessageDeliveryStateName = "sending" | "sent" | "delivered" | "read" | "failed";
 
 export interface MessageDeliveryState {
   state: MessageDeliveryStateName;
