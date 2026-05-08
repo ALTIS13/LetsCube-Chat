@@ -10,12 +10,17 @@ import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail 
 import { isSavedChat } from "@/lib/chatDisplay";
 import { scheduleMarkChatDelivered, scheduleMarkChatRead } from "@/lib/deliveryReceipts";
 
+const MESSAGE_PAGE_SIZE = 100;
+
 export function useMessages(
   chatId: string | null,
   topicId: string | null | undefined = undefined,
   generalTopicIds: string[] = [],
 ) {
   const [loading, setLoading] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMoreOlder, setHasMoreOlder] = useState(false);
+  const [olderError, setOlderError] = useState<string | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState<MessageWithSender[]>([]);
   const [pinnedReady, setPinnedReady] = useState(false);
@@ -53,6 +58,10 @@ export function useMessages(
   useEffect(() => { clearedAtRef.current = clearedAt; }, [clearedAt]);
   const hiddenMessageIdsRef = useRef(hiddenMessageIds);
   useEffect(() => { hiddenMessageIdsRef.current = hiddenMessageIds; }, [hiddenMessageIds]);
+  const loadingOlderRef = useRef(loadingOlder);
+  useEffect(() => { loadingOlderRef.current = loadingOlder; }, [loadingOlder]);
+  const hasMoreOlderRef = useRef(hasMoreOlder);
+  useEffect(() => { hasMoreOlderRef.current = hasMoreOlder; }, [hasMoreOlder]);
   // topicId is passed into INSERTs and used to filter the realtime stream so
   // we only show messages from the active topic in forum chats. Undefined
   // means "topics disabled": show the whole chat without topic scoping.
@@ -66,6 +75,9 @@ export function useMessages(
     setPinnedReady(false);
     setPinnedKey(null);
     setClearedAt(null);
+    setLoadingOlder(false);
+    setHasMoreOlder(false);
+    setOlderError(null);
     setIsTyping(false);
     if (typingTimer.current) {
       clearTimeout(typingTimer.current);
@@ -132,11 +144,22 @@ export function useMessages(
       else query = applyGeneralTopicFilter(query, generalTopicIds);
     }
     if (localClearedAt) query = query.gt("created_at", localClearedAt);
-    const { data } = await query
+    const { data, error } = await query
       .order("created_at", { ascending: false })
-      .limit(100);
+      .order("id", { ascending: false })
+      .limit(MESSAGE_PAGE_SIZE + 1);
+    if (error) {
+      console.error("Messages fetch error:", error);
+      setLoading(false);
+      return;
+    }
     if (data) {
-      const fetched = (data as unknown as MessageWithSender[]).reverse();
+      const rawFetched = data as unknown as MessageWithSender[];
+      const fetched = rawFetched.slice(0, MESSAGE_PAGE_SIZE).reverse();
+      const nextHasMoreOlder = rawFetched.length > MESSAGE_PAGE_SIZE;
+      hasMoreOlderRef.current = nextHasMoreOlder;
+      setHasMoreOlder(nextHasMoreOlder);
+      setOlderError(null);
       const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, fetched.map((message) => message.id));
       rememberHiddenMessageIds(fetchedHiddenIds);
       const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
@@ -165,6 +188,84 @@ export function useMessages(
   }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds, shouldMarkDeliveredForPrivateChat]);
 
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
+
+  const loadOlderMessages = useCallback(async () => {
+    const activeChatId = chatIdRef.current;
+    if (!activeChatId || loadingOlderRef.current || !hasMoreOlderRef.current) return { loaded: 0 };
+    const activeTopicId = topicIdRef.current;
+    const activeGeneralTopicIds = generalTopicIdsRef.current;
+    const localClearedAt = clearedAtRef.current;
+    const hiddenIds = hiddenMessageIdsRef.current;
+    const currentMessages = useAppStore.getState().messages[activeChatId] ?? [];
+    const visibleCurrent = currentMessages.filter((message) => {
+      if (hiddenIds.has(message.id)) return false;
+      if (!messageBelongsToTopic(message, activeTopicId, activeGeneralTopicIds)) return false;
+      if (!localClearedAt) return true;
+      return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
+    });
+    const oldest = visibleCurrent[0];
+    if (!oldest) {
+      hasMoreOlderRef.current = false;
+      setHasMoreOlder(false);
+      return { loaded: 0 };
+    }
+
+    loadingOlderRef.current = true;
+    setLoadingOlder(true);
+    setOlderError(null);
+    try {
+      let query = supabase
+        .from("messages")
+        .select(`*, sender:profiles!user_id(*), reactions(*)`)
+        .eq("chat_id", activeChatId);
+      if (activeTopicId !== undefined) {
+        if (activeTopicId) query = query.eq("topic_id", activeTopicId);
+        else query = applyGeneralTopicFilter(query, activeGeneralTopicIds);
+      }
+      if (localClearedAt) query = query.gt("created_at", localClearedAt);
+
+      const { data, error } = await query
+        .lt("created_at", oldest.created_at)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(MESSAGE_PAGE_SIZE + 1);
+
+      if (error) throw error;
+      const rawFetched = (data ?? []) as unknown as MessageWithSender[];
+      if (chatIdRef.current !== activeChatId || topicIdRef.current !== activeTopicId) return { loaded: 0 };
+      const fetched = rawFetched.slice(0, MESSAGE_PAGE_SIZE).reverse();
+      const nextHasMoreOlder = rawFetched.length > MESSAGE_PAGE_SIZE;
+      hasMoreOlderRef.current = nextHasMoreOlder;
+      setHasMoreOlder(nextHasMoreOlder);
+      if (!fetched.length) return { loaded: 0 };
+
+      const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, fetched.map((message) => message.id));
+      rememberHiddenMessageIds(fetchedHiddenIds);
+      const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
+      const visibleFetched = fetched.filter((message) => {
+        if (effectiveHiddenIds.has(message.id)) return false;
+        if (!messageBelongsToTopic(message, activeTopicId, activeGeneralTopicIds)) return false;
+        if (!localClearedAt) return true;
+        return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
+      });
+      const existing = useAppStore.getState().messages[activeChatId] ?? [];
+      const visibleExisting = existing.filter((message) => {
+        if (effectiveHiddenIds.has(message.id)) return false;
+        if (!messageBelongsToTopic(message, activeTopicId, activeGeneralTopicIds)) return false;
+        if (!localClearedAt) return true;
+        return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
+      });
+      setMessages(activeChatId, mergeMessagesById(visibleFetched, visibleExisting));
+      return { loaded: visibleFetched.length };
+    } catch (error) {
+      console.error("Older messages fetch error:", error);
+      setOlderError("Не удалось загрузить более ранние сообщения.");
+      return { loaded: 0 };
+    } finally {
+      loadingOlderRef.current = false;
+      setLoadingOlder(false);
+    }
+  }, [rememberHiddenMessageIds, setMessages, supabase]);
 
   const fetchMessageById = useCallback(async (messageId: string) => {
     const activeChatId = chatIdRef.current;
@@ -644,10 +745,11 @@ export function useMessages(
       ? pinnedMessages.filter((message) => !hiddenMessageIds.has(message.id))
       : [],
     pinnedReady: pinnedKey === getPinnedKey(chatId, topicId) && pinnedReady,
-    loading, isTyping,
+    loading, loadingOlder, hasMoreOlder, olderError, isTyping,
     sendMessage, sendTyping, toggleReaction,
     editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, togglePin, forwardMessage,
     clearChatForMe,
+    loadOlderMessages,
     refetch: fetchMessages,
     refetchPinnedMessages: fetchPinnedMessages,
   };

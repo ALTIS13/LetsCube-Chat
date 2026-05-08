@@ -6,7 +6,6 @@ import { MessageBubble } from "./MessageBubble";
 import type { MediaViewerItem } from "./MediaViewer";
 import { TypingIndicator } from "./TypingIndicator";
 import type { ChatMember, MessageWithSender } from "@/types/database";
-import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app.store";
 import { getMessageDeliveryState } from "@/lib/messageDelivery";
@@ -34,11 +33,40 @@ interface MessageListProps {
   isSavedChat?: boolean;
   /** Role of the current user in this chat — propagated to MessageBubble. */
   myRole?: "owner" | "admin" | "member" | null;
+  onLoadOlder?: () => Promise<{ loaded: number } | void> | { loaded: number } | void;
+  hasMoreOlder?: boolean;
+  loadingOlder?: boolean;
+  olderError?: string | null;
+}
+
+function compareMessagesForRender(a: MessageWithSender, b: MessageWithSender): number {
+  const byCreatedAt = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  if (byCreatedAt !== 0) return byCreatedAt;
+  return a.id.localeCompare(b.id);
+}
+
+function getMessageDayKey(dateStr: string): string {
+  const date = new Date(dateStr);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getMessageDayLabel(dateStr: string): string {
+  const date = new Date(dateStr);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const dayKey = getMessageDayKey(dateStr);
+  if (dayKey === getMessageDayKey(today.toISOString())) return "Сегодня";
+  if (dayKey === getMessageDayKey(yesterday.toISOString())) return "Вчера";
+  return date.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
 }
 
 function shouldShowDateSeparator(prev: MessageWithSender | null, current: MessageWithSender): boolean {
   if (!prev) return true;
-  return new Date(prev.created_at).toDateString() !== new Date(current.created_at).toDateString();
+  return getMessageDayKey(prev.created_at) !== getMessageDayKey(current.created_at);
 }
 
 export function MessageList({
@@ -62,24 +90,32 @@ export function MessageList({
   chatType,
   isSavedChat,
   myRole,
+  onLoadOlder,
+  hasMoreOlder = false,
+  loadingOlder = false,
+  olderError = null,
 }: MessageListProps) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const sortedMessages = React.useMemo(
+    () => [...messages].sort(compareMessagesForRender),
+    [messages],
+  );
 
   // Build userId → fullName map and messageId → message map from loaded messages
   const usersMap = React.useMemo(() => {
     const map: Record<string, string> = {};
-    messages.forEach((m) => {
+    sortedMessages.forEach((m) => {
       if (m.user_id && m.sender?.full_name) map[m.user_id] = m.sender.full_name;
     });
     return map;
-  }, [messages]);
+  }, [sortedMessages]);
 
   const messagesMap = React.useMemo(() => {
-    const map: Record<string, typeof messages[0]> = {};
-    messages.forEach((m) => { map[m.id] = m; });
+    const map: Record<string, MessageWithSender> = {};
+    sortedMessages.forEach((m) => { map[m.id] = m; });
     return map;
-  }, [messages]);
+  }, [sortedMessages]);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [newCount, setNewCount] = useState(0);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -90,11 +126,16 @@ export function MessageList({
   const [openReactionMessageId, setOpenReactionMessageId] = useState<string | null>(null);
   const [openActionMessageId, setOpenActionMessageId] = useState<string | null>(null);
   const isAtBottomRef = useRef(true);
-  const prevMessageCountRef = useRef(messages.length);
+  const prevMessageCountRef = useRef(sortedMessages.length);
+  const loadingOlderRef = useRef(loadingOlder);
+  useEffect(() => { loadingOlderRef.current = loadingOlder; }, [loadingOlder]);
+  const hasMoreOlderRef = useRef(hasMoreOlder);
+  useEffect(() => { hasMoreOlderRef.current = hasMoreOlder; }, [hasMoreOlder]);
+  const preservingOlderScrollRef = useRef(false);
 
   const selectableMessages = React.useMemo(
-    () => messages.filter((message) => !message.deleted_at),
-    [messages],
+    () => sortedMessages.filter((message) => !message.deleted_at),
+    [sortedMessages],
   );
   const selectedMessages = React.useMemo(
     () => selectableMessages.filter((message) => selectedIds.has(message.id)),
@@ -176,6 +217,22 @@ export function MessageList({
     setBulkConfirmAction(null);
   }, [selectedIds]);
 
+  const loadOlderAtTop = useCallback(async () => {
+    const el = containerRef.current;
+    if (!el || !onLoadOlder || loadingOlderRef.current || !hasMoreOlderRef.current) return;
+    const beforeHeight = el.scrollHeight;
+    const beforeTop = el.scrollTop;
+    preservingOlderScrollRef.current = true;
+    await onLoadOlder();
+    requestAnimationFrame(() => {
+      const current = containerRef.current;
+      if (current) {
+        current.scrollTop = beforeTop + (current.scrollHeight - beforeHeight);
+      }
+      preservingOlderScrollRef.current = false;
+    });
+  }, [onLoadOlder]);
+
   const handleScroll = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -184,7 +241,8 @@ export function MessageList({
     isAtBottomRef.current = atBottom;
     setShowScrollBtn(!atBottom);
     if (atBottom) setNewCount(0);
-  }, []);
+    if (el.scrollTop < 160) void loadOlderAtTop();
+  }, [loadOlderAtTop]);
 
   const scrollToBottom = useCallback((smooth = true) => {
     const el = containerRef.current;
@@ -199,14 +257,14 @@ export function MessageList({
   // Keep bottom lock for new messages and typing indicator without pulling
   // users down when they intentionally scrolled up.
   useEffect(() => {
-    const messageCountChanged = prevMessageCountRef.current !== messages.length;
-    prevMessageCountRef.current = messages.length;
+    const messageCountChanged = prevMessageCountRef.current !== sortedMessages.length;
+    prevMessageCountRef.current = sortedMessages.length;
     if (isAtBottomRef.current) {
       scrollToBottom(true);
-    } else if (messageCountChanged) {
+    } else if (messageCountChanged && !preservingOlderScrollRef.current && !loadingOlderRef.current) {
       setNewCount((n) => n + 1);
     }
-  }, [isTyping, messages.length, scrollToBottom]);
+  }, [isTyping, sortedMessages.length, scrollToBottom]);
 
   // Initial scroll
   useEffect(() => {
@@ -272,9 +330,18 @@ export function MessageList({
         }}
         className="chat-bg h-full min-w-0 overflow-y-auto overflow-x-hidden px-3 py-2 pb-6 sm:px-4"
       >
-        {messages.map((msg, idx) => {
-          const prev = idx > 0 ? messages[idx - 1] : null;
-          const next = idx < messages.length - 1 ? messages[idx + 1] : null;
+        {(loadingOlder || olderError) && (
+          <div className="flex justify-center py-2" data-message-history-status>
+            <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--kub-border-color)] bg-[color-mix(in_srgb,var(--kub-bg)_78%,transparent)] px-3 py-1 text-xs text-[color:var(--kub-muted)] backdrop-blur-sm">
+              {loadingOlder && <KubIcon name="spinner" size={12} />}
+              {olderError ?? "Загружаем историю..."}
+            </span>
+          </div>
+        )}
+
+        {sortedMessages.map((msg, idx) => {
+          const prev = idx > 0 ? sortedMessages[idx - 1] : null;
+          const next = idx < sortedMessages.length - 1 ? sortedMessages[idx + 1] : null;
           const showDate = shouldShowDateSeparator(prev, msg);
           const isMe = msg.user_id === userId;
           const isSameSenderAsPrev = !showDate && prev?.user_id === msg.user_id;
@@ -299,9 +366,9 @@ export function MessageList({
               )}
             >
               {showDate && (
-                <div className="flex justify-center my-3">
+                <div className="flex justify-center my-3" data-message-date-separator={getMessageDayKey(msg.created_at)}>
                   <span className="px-3 py-1 rounded-full text-xs select-none backdrop-blur-sm bg-[color-mix(in_srgb,var(--kub-bg)_75%,transparent)] text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]">
-                    {formatDate(msg.created_at)}
+                    {getMessageDayLabel(msg.created_at)}
                   </span>
                 </div>
               )}

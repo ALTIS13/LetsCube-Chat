@@ -51,9 +51,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const messageTopicId = isForum ? selectedTopicId : undefined;
   const messageGeneralTopicIds = isForum ? generalTopicIds : EMPTY_GENERAL_TOPIC_IDS;
   const {
-    messages, pinnedMessages, pinnedReady, loading, isTyping,
+    messages, pinnedMessages, pinnedReady, loading, loadingOlder, hasMoreOlder, olderError, isTyping,
     sendMessage, sendTyping, toggleReaction,
     editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, togglePin, forwardMessage, clearChatForMe,
+    loadOlderMessages,
   } = useMessages(chatId, messageTopicId, messageGeneralTopicIds);
 
   useEffect(() => { markChatRead(chatId); }, [chatId, markChatRead]);
@@ -269,6 +270,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             chatType={chat?.type}
             isSavedChat={savedChat}
             myRole={myRole}
+            onLoadOlder={loadOlderMessages}
+            hasMoreOlder={hasMoreOlder}
+            loadingOlder={loadingOlder}
+            olderError={olderError}
           />
         )}
 
