@@ -29,7 +29,7 @@ interface ContextItem {
 }
 
 type TextLayoutKind = "short" | "regular" | "link" | "longToken" | "preformatted" | "media";
-type MetaPlacement = "inline" | "next-line-end";
+type MetaPlacement = "inline" | "anchored";
 
 interface MessageBubbleProps {
   message: MessageWithSender;
@@ -142,8 +142,8 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
 function getInitialMetaPlacement(content: string): MetaPlacement {
   const text = content.trim();
   if (!text) return "inline";
-  if (/[\r\n]/.test(content)) return "next-line-end";
-  return text.length <= 56 ? "inline" : "next-line-end";
+  if (/[\r\n]/.test(content)) return "anchored";
+  return text.length <= 56 ? "inline" : "anchored";
 }
 
 function parsePixelValue(value: string): number | null {
@@ -151,12 +151,35 @@ function parsePixelValue(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function getLastTextLineRect(contentEl: HTMLElement): DOMRect | null {
+function getTextLineRects(contentEl: HTMLElement): DOMRect[] {
   const range = document.createRange();
   range.selectNodeContents(contentEl);
-  const rects = Array.from(range.getClientRects()).filter((rect) => rect.width > 0.5 && rect.height > 0.5);
+  const rects = Array.from(range.getClientRects())
+    .filter((rect) => rect.width > 0.5 && rect.height > 0.5)
+    .sort((a, b) => (a.top === b.top ? a.left - b.left : a.top - b.top));
   range.detach();
-  return rects.at(-1) ?? null;
+
+  const lines: Array<{ top: number; right: number; bottom: number; left: number }> = [];
+  for (const rect of rects) {
+    const rectCenter = (rect.top + rect.bottom) / 2;
+    const line = lines.find((candidate) => {
+      const candidateCenter = (candidate.top + candidate.bottom) / 2;
+      return Math.abs(candidateCenter - rectCenter) <= Math.max(4, Math.min(candidate.bottom - candidate.top, rect.height) * 0.7);
+    });
+
+    if (line) {
+      line.top = Math.min(line.top, rect.top);
+      line.right = Math.max(line.right, rect.right);
+      line.bottom = Math.max(line.bottom, rect.bottom);
+      line.left = Math.min(line.left, rect.left);
+    } else {
+      lines.push({ top: rect.top, right: rect.right, bottom: rect.bottom, left: rect.left });
+    }
+  }
+
+  return lines
+    .sort((a, b) => (a.top === b.top ? a.left - b.left : a.top - b.top))
+    .map((line) => new DOMRect(line.left, line.top, line.right - line.left, line.bottom - line.top));
 }
 
 function getTextRightLimit(textEl: HTMLElement, bubbleEl: HTMLElement, stackEl: HTMLElement | null): number {
@@ -173,6 +196,13 @@ function getTextRightLimit(textEl: HTMLElement, bubbleEl: HTMLElement, stackEl: 
   const maxRightFromText = textRect.left + maxContentWidth;
   const viewportRight = typeof window === "undefined" ? maxRightFromText : window.innerWidth - 8;
   return Math.min(Math.max(currentContentRight, maxRightFromText), viewportRight);
+}
+
+function getBubbleInnerRight(bubbleEl: HTMLElement): number {
+  const bubbleRect = bubbleEl.getBoundingClientRect();
+  const bubbleStyle = getComputedStyle(bubbleEl);
+  const paddingRight = parsePixelValue(bubbleStyle.paddingRight) ?? 0;
+  return bubbleRect.right - paddingRight;
 }
 
 function isFooterOnLastTextLine(lastLine: DOMRect, footerRect: DOMRect): boolean {
@@ -201,6 +231,7 @@ function MeasuredTextWithMeta({
   compound = false,
 }: MeasuredTextWithMetaProps) {
   const [placement, setPlacement] = useState<MetaPlacement>(() => getInitialMetaPlacement(content));
+  const [tailReserveWidth, setTailReserveWidth] = useState(0);
   const textFlowRef = useRef<HTMLParagraphElement | null>(null);
   const textContentRef = useRef<HTMLSpanElement | null>(null);
   const footerRef = useRef<HTMLSpanElement | null>(null);
@@ -213,15 +244,21 @@ function MeasuredTextWithMeta({
     const bubbleEl = bubbleRef.current;
     if (!textEl || !contentEl || !footerEl || !bubbleEl) return;
 
-    const lastLine = getLastTextLineRect(contentEl);
+    const lineRects = getTextLineRects(contentEl);
+    const lastLine = lineRects.at(-1) ?? null;
     if (!lastLine) {
       setPlacement((current) => (current === "inline" ? current : "inline"));
+      setTailReserveWidth((current) => (current === 0 ? current : 0));
       return;
     }
 
     const footerRect = footerEl.getBoundingClientRect();
     const rightLimit = getTextRightLimit(textEl, bubbleEl, stackRef.current);
+    const bubbleInnerRight = getBubbleInnerRight(bubbleEl);
+    const gap = 8;
     const signature = [
+      compound ? "compound" : "simple",
+      lineRects.length,
       Math.round(textEl.getBoundingClientRect().width),
       Math.round(footerRect.width),
       Math.round(rightLimit),
@@ -231,23 +268,31 @@ function MeasuredTextWithMeta({
 
     if (placement === "inline" && !isFooterOnLastTextLine(lastLine, footerRect)) {
       blockedInlineSignatureRef.current = signature;
-      setPlacement((previous) => (previous === "next-line-end" ? previous : "next-line-end"));
+      setPlacement((previous) => (previous === "anchored" ? previous : "anchored"));
       return;
     }
 
     const available = rightLimit - lastLine.right;
-    const current = placement;
-    const threshold = current === "inline" ? 4 : 8;
-    const next: MetaPlacement =
-      available >= footerRect.width + threshold && blockedInlineSignatureRef.current !== signature
-        ? "inline"
-        : "next-line-end";
+    const singleLineSimple = !compound && lineRects.length <= 1;
+    const canInline =
+      singleLineSimple &&
+      available >= footerRect.width + gap &&
+      blockedInlineSignatureRef.current !== signature;
+    const next: MetaPlacement = canInline ? "inline" : "anchored";
+    const overlapTail = lastLine.right > bubbleInnerRight - footerRect.width - gap;
+    const clearlyClearTail = lastLine.right <= bubbleInnerRight - footerRect.width - gap - 24;
+    const nextTailReserveWidth = next === "anchored" && (overlapTail || (tailReserveWidth > 0 && !clearlyClearTail))
+      ? Math.ceil(footerRect.width + gap)
+      : 0;
+
     setPlacement((previous) => (previous === next ? previous : next));
-  }, [bubbleRef, placement, stackRef]);
+    setTailReserveWidth((previous) => (previous === nextTailReserveWidth ? previous : nextTailReserveWidth));
+  }, [bubbleRef, compound, placement, stackRef, tailReserveWidth]);
 
   useEffect(() => {
     blockedInlineSignatureRef.current = null;
     setPlacement(getInitialMetaPlacement(content));
+    setTailReserveWidth(0);
   }, [content, measureKey]);
 
   useLayoutEffect(() => {
@@ -280,34 +325,11 @@ function MeasuredTextWithMeta({
 
   const footerClassName = "inline-flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap text-right leading-none";
 
-  if (placement === "inline" && compound) {
-    return (
-      <div
-        data-message-text-meta-group="true"
-        data-message-meta-placement="inline"
-        className="flex max-w-full min-w-0 items-end gap-1.5"
-      >
-        <p
-          ref={textFlowRef}
-          data-message-text-flow="true"
-          className={cn(textClassName, "min-w-0 flex-1")}
-        >
-          <span ref={textContentRef} data-message-text-content="true">
-            <FormattedText content={content} />
-          </span>
-        </p>
-        <span ref={footerRef} data-message-footer="true" className={footerClassName}>
-          {meta}
-        </span>
-      </div>
-    );
-  }
-
   return (
     <div
       data-message-text-meta-group="true"
       data-message-meta-placement={placement}
-      className="max-w-full min-w-0"
+      className={cn("relative max-w-full min-w-0", compound && "w-full")}
     >
       <p
         ref={textFlowRef}
@@ -326,16 +348,23 @@ function MeasuredTextWithMeta({
             {meta}
           </span>
         )}
+        {placement === "anchored" && tailReserveWidth > 0 && (
+          <span
+            aria-hidden="true"
+            data-message-meta-tail="true"
+            className="inline-block h-[1em] align-baseline"
+            style={{ width: tailReserveWidth }}
+          />
+        )}
       </p>
-      {placement === "next-line-end" && (
-        <div
-          data-message-bottom-meta="true"
-          className="mt-0.5 flex max-w-full items-center justify-end leading-none"
+      {placement === "anchored" && (
+        <span
+          ref={footerRef}
+          data-message-footer="true"
+          className={cn(footerClassName, "absolute bottom-[3px] right-0")}
         >
-          <span ref={footerRef} data-message-footer="true" className={footerClassName}>
-            {meta}
-          </span>
-        </div>
+          {meta}
+        </span>
       )}
     </div>
   );
@@ -350,12 +379,14 @@ export function MessageBubble({
   usersMap = {}, messagesMap = {}, deliveryState, groupReadInfo, onOpenGroupReadReceipts, isSavedChat,
 }: MessageBubbleProps) {
   const [showContext, setShowContext] = useState(false);
+  const [reactionsExpanded, setReactionsExpanded] = useState(false);
   const [contextPos, setContextPos] = useState({ x: 0, y: 0 });
   const [reactionPos, setReactionPos] = useState({ x: 0, y: 0 });
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const stackRef = useRef<HTMLDivElement | null>(null);
   const bubbleRef = useRef<HTMLDivElement | null>(null);
+  const reactionsLayerRef = useRef<HTMLDivElement | null>(null);
   const { currentUser } = useAppStore();
   const textContent = message.content ?? "";
   const textLayoutKind = getMessageTextLayoutKind(message.type, textContent);
@@ -422,6 +453,18 @@ export function MessageBubble({
     };
   }, [onCloseReactionMenu, reactionMenuOpen]);
 
+  useEffect(() => {
+    if (!reactionsExpanded) return;
+    const handleOutsidePointer = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && reactionsLayerRef.current?.contains(target)) return;
+      setReactionsExpanded(false);
+    };
+
+    window.addEventListener("pointerdown", handleOutsidePointer, true);
+    return () => window.removeEventListener("pointerdown", handleOutsidePointer, true);
+  }, [reactionsExpanded]);
+
   const reactionGroups = (message.reactions ?? []).reduce<Record<string, { count: number; mine: boolean }>>(
     (acc, r) => {
       if (!acc[r.emoji]) acc[r.emoji] = { count: 0, mine: false };
@@ -431,11 +474,9 @@ export function MessageBubble({
     }, {}
   );
   const reactionEntries = Object.entries(reactionGroups);
-  const compactReactionText =
-    message.type === "text" &&
-    (textLayoutKind === "short" || (textLayoutKind === "regular" && textContent.trim().length <= 80));
-  const visibleReactionLimit = compactReactionText ? (textLayoutKind === "short" ? 2 : 3) : 6;
+  const visibleReactionLimit = Math.min(2, reactionEntries.length);
   const visibleReactionEntries = reactionEntries.slice(0, visibleReactionLimit);
+  const overflowReactionEntries = reactionEntries.slice(visibleReactionLimit);
   const hiddenReactionCount = reactionEntries
     .slice(visibleReactionLimit)
     .reduce((total, [, { count }]) => total + count, 0);
@@ -634,36 +675,73 @@ export function MessageBubble({
       </button>
     </>
   );
+  const renderReactionChip = ([emoji, { count, mine }]: [string, { count: number; mine: boolean }], keyPrefix = "reaction") => (
+    <button
+      key={`${keyPrefix}-${emoji}`}
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onReaction(emoji);
+      }}
+      className={cn(
+        "inline-flex h-[22px] items-center gap-1 rounded-full border px-2 text-[11px] leading-none transition-all hover:scale-105 active:scale-95",
+        mine
+          ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] border-[color-mix(in_srgb,var(--kub-cyan)_72%,transparent)] text-[color:var(--kub-cyan)]"
+          : "bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] text-[color:var(--kub-muted)]"
+      )}
+    >
+      <span className="text-sm leading-none">{emoji}</span>
+      {count > 1 && <span className="tabular-nums">{count}</span>}
+    </button>
+  );
+
   const renderReactionsRow = () => {
     if (!hasReactions) return null;
     return (
       <div
+        ref={reactionsLayerRef}
         data-message-reactions-row="true"
-        className="mt-1 flex w-fit max-w-full flex-wrap items-center justify-start gap-1 self-start"
+        data-message-reactions-expanded={reactionsExpanded ? "true" : "false"}
+        className="relative mt-1 flex w-fit max-w-full flex-wrap items-center justify-start gap-1 self-start"
+        onMouseEnter={() => {
+          if (hiddenReactionCount > 0) setReactionsExpanded(true);
+        }}
+        onMouseLeave={() => setReactionsExpanded(false)}
+        onFocusCapture={() => {
+          if (hiddenReactionCount > 0) setReactionsExpanded(true);
+        }}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setReactionsExpanded(false);
+          }
+        }}
       >
-        {visibleReactionEntries.map(([emoji, { count, mine }]) => (
-          <button
-            key={emoji}
-            onClick={() => onReaction(emoji)}
-            className={cn(
-              "inline-flex h-[22px] items-center gap-1 rounded-full border px-2 text-[11px] leading-none transition-all hover:scale-105 active:scale-95",
-              mine
-                ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] border-[color-mix(in_srgb,var(--kub-cyan)_72%,transparent)] text-[color:var(--kub-cyan)]"
-                : "bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] text-[color:var(--kub-muted)]"
-            )}
-          >
-            <span className="text-sm leading-none">{emoji}</span>
-            {count > 1 && <span className="tabular-nums">{count}</span>}
-          </button>
-        ))}
+        {visibleReactionEntries.map((entry) => renderReactionChip(entry))}
         {hiddenReactionCount > 0 && (
-          <span
+          <button
+            type="button"
             className="inline-flex h-[22px] items-center rounded-full border border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] px-2 text-[11px] leading-none text-[color:var(--kub-muted)]"
             title={`Ещё ${hiddenReactionCount} реакций`}
             aria-label={`Ещё ${hiddenReactionCount} реакций`}
+            aria-expanded={reactionsExpanded}
+            onClick={(event) => {
+              event.stopPropagation();
+              setReactionsExpanded((expanded) => !expanded);
+            }}
           >
             +{hiddenReactionCount}
-          </span>
+          </button>
+        )}
+        {hiddenReactionCount > 0 && (
+          <div
+            data-message-reactions-overflow="true"
+            className={cn(
+              "absolute left-0 top-full z-20 mt-1 flex w-max max-w-[min(20rem,calc(100vw-2rem))] flex-wrap items-center gap-1 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-1.5 shadow-xl transition-opacity kub-glow-soft",
+              reactionsExpanded ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+            )}
+          >
+            {overflowReactionEntries.map((entry) => renderReactionChip(entry, "overflow-reaction"))}
+          </div>
         )}
       </div>
     );

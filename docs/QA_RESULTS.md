@@ -299,3 +299,9 @@ Recurring tasks roadmap note:
 - Message bubble meta now uses measured Telegram-like placement for text/link/reply cases: meta stays inline when it fits the measured last text line and falls back to a compact next-line-end row only when needed. Reactions render below the text+meta group, while float/absolute text footer, artificial spacer/wbr, and large padding reserve are not used for ordinary text bubbles.
 - Chat-list preview now derives own group-message read count from the same `chat_members.last_read_at` member data as in-chat receipts; online status is not used as read state.
 - Desktop pinned chat drag reorder is enabled through a lightweight handle and still persists through `set_pinned_chat_order(uuid[])`; context-menu and mobile sheet move up/down actions remain the fallback.
+
+2026-05-08 anchored bubble meta / compact reactions follow-up:
+
+- Text meta no longer uses "fits last line" as the only Telegram-like rule. Inline meta is limited to simple single-line text; wrapped multiline text, long URLs/tokens and reply/compound bubbles use anchored bottom-right meta inside the bubble.
+- Anchored meta uses a measured final-line tail reserve only when the last text line would run under the footer; it does not apply global right/bottom padding and reactions do not participate in the text/meta placement decision.
+- Reactions are rendered as a secondary compact layer below text+meta: the default row shows up to two reaction chips plus `+N`, with the overflow list shown as an overlay on hover/focus or by tapping `+N`.
