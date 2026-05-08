@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChatListItem } from "./ChatListItem";
 import { useAppStore } from "@/store/app.store";
-import { KubEmptyState, KubIcon } from "@/components/kub";
+import { KubEmptyState, KubIcon, type KubIconName } from "@/components/kub";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
+import { createClient } from "@/lib/supabase/client";
+import { dispatchChatsRefresh } from "@/lib/chatEvents";
+import { getChatDisplayInfo, isSavedChat } from "@/lib/chatDisplay";
+import { mapPgError, prefixError } from "@/lib/errors";
+import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
+import { cn } from "@/lib/utils";
 import type { ChatWithLastMessage } from "@/types/database";
 
 interface ChatListProps {
@@ -13,14 +19,329 @@ interface ChatListProps {
   onChatSelect: (id: string) => void;
 }
 
-export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps) {
-  const mutedChatIds = useAppStore((s) => s.mutedChatIds);
+type ChatMenuState =
+  | { chatId: string; mode: "menu"; left: number; y: number; openUp: boolean }
+  | { chatId: string; mode: "sheet" };
 
-  // Dev-only mount/unmount счётчик для проверки стабильности (Task #48).
+interface ChatAction {
+  id: string;
+  label: string;
+  icon: KubIconName;
+  danger?: boolean;
+  disabled?: boolean;
+  run: () => void | Promise<void>;
+}
+
+const DESKTOP_MENU_WIDTH = 272;
+const DESKTOP_MENU_HEIGHT_ESTIMATE = 388;
+
+export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps) {
+  const supabase = createClient();
+  const currentUser = useAppStore((s) => s.currentUser);
+  const mutedChatIds = useAppStore((s) => s.mutedChatIds);
+  const setChats = useAppStore((s) => s.setChats);
+  const setMessages = useAppStore((s) => s.setMessages);
+  const setSelectedChatId = useAppStore((s) => s.setSelectedChatId);
+  const toggleMutedChat = useAppStore((s) => s.toggleMutedChat);
+  const requestChatPanel = useAppStore((s) => s.requestChatPanel);
+  const [openMenu, setOpenMenu] = useState<ChatMenuState | null>(null);
+  const [busyActionId, setBusyActionId] = useState<string | null>(null);
+
+  // Dev-only mount/unmount счетчик для проверки стабильности (Task #48).
   useEffect(() => {
     bumpMount("ChatList");
     return () => bumpUnmount("ChatList");
   }, []);
+
+  useEffect(() => {
+    if (!openMenu) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setOpenMenu(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [openMenu]);
+
+  useEffect(() => {
+    if (!openMenu) return;
+    if (!chats.some((chat) => chat.id === openMenu.chatId)) setOpenMenu(null);
+  }, [chats, openMenu]);
+
+  const chatsWithMute = useMemo(
+    () => chats.map((chat) => ({ ...chat, is_muted: mutedChatIds.includes(chat.id) })),
+    [chats, mutedChatIds],
+  );
+
+  const closeMenu = useCallback(() => setOpenMenu(null), []);
+
+  const openDesktopMenu = useCallback((chatId: string, position: { x: number; y: number }) => {
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const left = Math.min(
+      Math.max(12, position.x),
+      Math.max(12, viewportWidth - DESKTOP_MENU_WIDTH - 12),
+    );
+    setOpenMenu({
+      chatId,
+      mode: "menu",
+      left,
+      y: position.y,
+      openUp: position.y > viewportHeight - DESKTOP_MENU_HEIGHT_ESTIMATE,
+    });
+  }, []);
+
+  const openMobileSheet = useCallback((chatId: string) => {
+    setOpenMenu({ chatId, mode: "sheet" });
+  }, []);
+
+  const updateChatList = useCallback((updater: (current: ChatWithLastMessage[]) => ChatWithLastMessage[]) => {
+    const next = sortChatsForSidebar(updater(useAppStore.getState().chats), currentUser?.id ?? null);
+    setChats(next);
+  }, [currentUser?.id, setChats]);
+
+  const clearChatLocally = useCallback((chatId: string) => {
+    const clearedAt = new Date().toISOString();
+    setMessages(chatId, []);
+    updateChatList((current) => current.map((chat) =>
+      chat.id === chatId
+        ? { ...chat, last_message: undefined, unread_count: 0, cleared_at: clearedAt }
+        : chat
+    ));
+  }, [setMessages, updateChatList]);
+
+  const removeChatLocally = useCallback((chatId: string) => {
+    setMessages(chatId, []);
+    updateChatList((current) => current.filter((chat) => chat.id !== chatId));
+    if (useAppStore.getState().selectedChatId === chatId) setSelectedChatId(null);
+  }, [setMessages, setSelectedChatId, updateChatList]);
+
+  const buildActions = useCallback((chat: ChatWithLastMessage): ChatAction[] => {
+    const display = getChatDisplayInfo(chat, currentUser?.id ?? null);
+    const isSaved = display.isSaved;
+    const isPrivate = chat.type === "private" && !isSaved;
+    const isGroupLike = !isSaved && (chat.type === "group" || chat.type === "channel");
+    const myRole =
+      (chat.members?.find((member) => member.user_id === currentUser?.id)?.role as
+        | "owner"
+        | "admin"
+        | "member"
+        | undefined) ?? null;
+    const isPinned = Boolean(chat.is_pinned);
+    const isMuted = mutedChatIds.includes(chat.id);
+    const groupLabel = chat.type === "channel" ? "канал" : "группу";
+
+    const selectChat = () => onChatSelect(chat.id);
+    const selectAndOpenPanel = (panel: "info" | "search") => {
+      onChatSelect(chat.id);
+      requestChatPanel(chat.id, panel);
+    };
+
+    const actions: ChatAction[] = [
+      {
+        id: "open",
+        icon: "chatRect",
+        label: "Открыть",
+        run: selectChat,
+      },
+    ];
+
+    if (isPrivate) {
+      actions.push({
+        id: "profile",
+        icon: "profile",
+        label: "Открыть профиль",
+        run: () => selectAndOpenPanel("info"),
+      });
+    }
+
+    if (isGroupLike) {
+      actions.push({
+        id: "group-info",
+        icon: "info",
+        label: chat.type === "channel" ? "Информация о канале" : "Информация о группе",
+        run: () => selectAndOpenPanel("info"),
+      });
+    }
+
+    if (!isSaved) {
+      actions.push({
+        id: "search",
+        icon: "search",
+        label: "Поиск в чате",
+        run: () => selectAndOpenPanel("search"),
+      });
+      actions.push({
+        id: "pin",
+        icon: isPinned ? "pinOff" : "pin",
+        label: isPinned ? "Открепить чат" : "Закрепить чат",
+        run: async () => {
+          const { error } = await supabase.rpc(isPinned ? "unpin_chat" : "pin_chat", { p_chat_id: chat.id });
+          if (error) {
+            showAppAlert(prefixError(isPinned ? "Не удалось открепить чат" : "Не удалось закрепить чат", error), "Ошибка");
+            return;
+          }
+          updateChatList((current) => current.map((item) =>
+            item.id === chat.id
+              ? { ...item, is_pinned: !isPinned, pinned_at: isPinned ? null : new Date().toISOString() }
+              : item
+          ));
+          dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
+        },
+      });
+    }
+
+    actions.push({
+      id: "mute",
+      icon: isMuted ? "notificationsOff" : "notifications",
+      label: isMuted ? "Включить уведомления" : "Отключить уведомления",
+      run: () => toggleMutedChat(chat.id),
+    });
+
+    actions.push({
+      id: "clear",
+      icon: "delete",
+      label: isSaved ? "Очистить избранное у себя" : "Очистить историю у себя",
+      danger: true,
+      run: async () => {
+        const confirmed = await requestAppConfirm({
+          title: isSaved ? "Очистить избранное у себя?" : "Очистить историю у себя?",
+          description: "Сообщения будут скрыты только у вас. У других участников они останутся.",
+          confirmLabel: "Очистить",
+          tone: "danger",
+          icon: "delete",
+        });
+        if (!confirmed) return;
+        const { error } = await supabase.rpc("clear_chat_for_me", { p_chat_id: chat.id });
+        if (error) {
+          showAppAlert(prefixError("Не удалось очистить историю у себя", error), "Ошибка");
+          return;
+        }
+        clearChatLocally(chat.id);
+        dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
+      },
+    });
+
+    if (isPrivate) {
+      actions.push({
+        id: "hide-private",
+        icon: "logout",
+        label: "Удалить чат у себя",
+        danger: true,
+        run: async () => {
+          const confirmed = await requestAppConfirm({
+            title: "Удалить чат у себя?",
+            description: "Чат исчезнет только из вашего списка. У собеседника история останется.",
+            confirmLabel: "Удалить у себя",
+            tone: "danger",
+            icon: "logout",
+          });
+          if (!confirmed) return;
+          const { error } = await supabase.rpc("hide_private_chat", { p_chat_id: chat.id });
+          if (error) {
+            showAppAlert(prefixError("Не удалось удалить чат у себя", error), "Ошибка");
+            return;
+          }
+          removeChatLocally(chat.id);
+          dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
+        },
+      });
+    }
+
+    if (isGroupLike && myRole !== "owner") {
+      actions.push({
+        id: "leave-group",
+        icon: "logout",
+        label: `Покинуть ${groupLabel}`,
+        danger: true,
+        disabled: !currentUser?.id,
+        run: async () => {
+          if (!currentUser?.id) return;
+          const confirmed = await requestAppConfirm({
+            title: chat.type === "channel" ? "Покинуть канал?" : "Покинуть группу?",
+            description: `${chat.type === "channel" ? "Канал" : "Группа"} исчезнет из вашего списка. История у других участников останется.`,
+            confirmLabel: "Покинуть",
+            tone: "danger",
+            icon: "logout",
+          });
+          if (!confirmed) return;
+          const { error } = await supabase
+            .from("chat_members")
+            .delete()
+            .eq("chat_id", chat.id)
+            .eq("user_id", currentUser.id);
+          if (error) {
+            showAppAlert(mapPgError(error), "Ошибка");
+            return;
+          }
+          removeChatLocally(chat.id);
+          dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
+        },
+      });
+    }
+
+    if (isGroupLike && myRole === "owner") {
+      actions.push({
+        id: "delete-group",
+        icon: "userRemove",
+        label: chat.type === "channel" ? "Удалить канал" : "Удалить групповой чат",
+        danger: true,
+        run: async () => {
+          const confirmed = await requestAppConfirm({
+            title: chat.type === "channel" ? "Удалить канал?" : "Удалить групповой чат?",
+            description: "Это действие нельзя отменить.",
+            confirmLabel: "Удалить",
+            tone: "danger",
+            icon: "userRemove",
+          });
+          if (!confirmed) return;
+          const { data, error } = await supabase
+            .from("chats")
+            .delete()
+            .eq("id", chat.id)
+            .select("id")
+            .maybeSingle();
+          if (error) {
+            showAppAlert(prefixError("Не удалось удалить групповой чат", error), "Ошибка");
+            return;
+          }
+          if (!data) {
+            showAppAlert("Недостаточно прав для удаления этого чата.", "Ошибка");
+            return;
+          }
+          removeChatLocally(chat.id);
+          dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
+        },
+      });
+    }
+
+    return actions;
+  }, [
+    clearChatLocally,
+    currentUser?.id,
+    mutedChatIds,
+    onChatSelect,
+    removeChatLocally,
+    requestChatPanel,
+    supabase,
+    toggleMutedChat,
+    updateChatList,
+  ]);
+
+  const openChat = openMenu ? chatsWithMute.find((chat) => chat.id === openMenu.chatId) ?? null : null;
+  const openActions = openChat ? buildActions(openChat) : [];
+
+  const runAction = async (action: ChatAction) => {
+    if (action.disabled || busyActionId) return;
+    setBusyActionId(action.id);
+    setOpenMenu(null);
+    try {
+      await action.run();
+    } finally {
+      setBusyActionId(null);
+    }
+  };
 
   if (chats.length === 0) {
     return (
@@ -35,15 +356,205 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
-      {chats.map((chat) => (
-        <ChatListItem
-          key={chat.id}
-          chat={{ ...chat, is_muted: mutedChatIds.includes(chat.id) }}
-          isSelected={selectedChatId === chat.id}
-          onClick={() => onChatSelect(chat.id)}
+    <>
+      <div className="flex-1 overflow-y-auto">
+        {chatsWithMute.map((chat) => (
+          <ChatListItem
+            key={chat.id}
+            chat={chat}
+            isSelected={selectedChatId === chat.id}
+            onClick={() => onChatSelect(chat.id)}
+            onContextMenuOpen={(position) => openDesktopMenu(chat.id, position)}
+            onLongPressOpen={() => openMobileSheet(chat.id)}
+          />
+        ))}
+      </div>
+
+      {openMenu?.mode === "menu" && openChat && (
+        <ChatDesktopContextMenu
+          chat={openChat}
+          actions={openActions}
+          left={openMenu.left}
+          y={openMenu.y}
+          openUp={openMenu.openUp}
+          busyActionId={busyActionId}
+          onClose={closeMenu}
+          onRun={runAction}
         />
-      ))}
+      )}
+
+      {openMenu?.mode === "sheet" && openChat && (
+        <ChatMobileActionSheet
+          chat={openChat}
+          actions={openActions}
+          busyActionId={busyActionId}
+          onClose={closeMenu}
+          onRun={runAction}
+        />
+      )}
+    </>
+  );
+}
+
+function ChatDesktopContextMenu({
+  chat,
+  actions,
+  left,
+  y,
+  openUp,
+  busyActionId,
+  onClose,
+  onRun,
+}: {
+  chat: ChatWithLastMessage;
+  actions: ChatAction[];
+  left: number;
+  y: number;
+  openUp: boolean;
+  busyActionId: string | null;
+  onClose: () => void;
+  onRun: (action: ChatAction) => void | Promise<void>;
+}) {
+  const style = openUp
+    ? { left, bottom: Math.max(12, window.innerHeight - y) }
+    : { left, top: Math.min(y, window.innerHeight - 12) };
+
+  return (
+    <>
+      <div className="fixed inset-0 z-50" onClick={onClose} />
+      <div
+        role="menu"
+        data-chat-context-menu="desktop"
+        className="fixed z-50 w-[272px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] py-1 shadow-2xl kub-glow-soft"
+        style={style}
+      >
+        <ChatActionHeader chat={chat} />
+        <div className="max-h-[min(70vh,420px)] overflow-y-auto py-1">
+          {actions.map((action) => (
+            <ChatActionButton
+              key={action.id}
+              action={action}
+              busy={busyActionId === action.id}
+              onRun={onRun}
+            />
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ChatMobileActionSheet({
+  chat,
+  actions,
+  busyActionId,
+  onClose,
+  onRun,
+}: {
+  chat: ChatWithLastMessage;
+  actions: ChatAction[];
+  busyActionId: string | null;
+  onClose: () => void;
+  onRun: (action: ChatAction) => void | Promise<void>;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-[color:var(--kub-bg)]/65 backdrop-blur-sm" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        data-chat-context-menu="mobile"
+        className="max-h-[82vh] w-full overflow-hidden rounded-t-2xl border-t border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] pb-safe shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="mx-auto mt-2 h-1.5 w-11 rounded-full bg-[var(--kub-surface-3)]" />
+        <ChatActionHeader chat={chat} />
+        <div className="max-h-[calc(82vh-82px)] overflow-y-auto px-2 pb-3">
+          {actions.map((action) => (
+            <ChatActionButton
+              key={action.id}
+              action={action}
+              busy={busyActionId === action.id}
+              mobile
+              onRun={onRun}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
+}
+
+function ChatActionHeader({ chat }: { chat: ChatWithLastMessage }) {
+  const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
+  const display = getChatDisplayInfo(chat, currentUserId);
+  return (
+    <div className="flex min-w-0 items-center gap-3 border-b border-[color:var(--kub-border-color)] px-3 py-3">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--kub-surface-3)]">
+        <KubIcon
+          name={display.isSaved ? "bookmark" : chat.type === "private" ? "user" : "group"}
+          size={17}
+          tone={display.isSaved ? "accent" : "muted"}
+        />
+      </div>
+      <div className="min-w-0">
+        <div className="truncate text-sm font-semibold text-[color:var(--kub-text)]">{display.title}</div>
+        <div className="truncate text-xs text-[color:var(--kub-muted)]">{display.typeLabel}</div>
+      </div>
+    </div>
+  );
+}
+
+function ChatActionButton({
+  action,
+  busy,
+  mobile = false,
+  onRun,
+}: {
+  action: ChatAction;
+  busy: boolean;
+  mobile?: boolean;
+  onRun: (action: ChatAction) => void | Promise<void>;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      disabled={action.disabled || busy}
+      onClick={() => void onRun(action)}
+      className={cn(
+        "flex w-full min-w-0 items-center gap-3 rounded-lg text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+        mobile ? "px-3 py-3" : "px-3 py-2.5",
+        action.danger
+          ? "text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)]"
+          : "text-[color:var(--kub-text)] hover:bg-[var(--kub-surface-3)]",
+      )}
+    >
+      <KubIcon
+        name={busy ? "spinner" : action.icon}
+        size={17}
+        tone={action.danger ? "danger" : "muted"}
+        className={cn("shrink-0", busy && "animate-spin")}
+      />
+      <span className="min-w-0 flex-1 truncate">{busy ? "Выполняем..." : action.label}</span>
+    </button>
+  );
+}
+
+function sortChatsForSidebar(chats: ChatWithLastMessage[], currentUserId: string | null): ChatWithLastMessage[] {
+  return [...chats].sort((a, b) => {
+    const aSaved = isSavedChat(a, currentUserId);
+    const bSaved = isSavedChat(b, currentUserId);
+    if (aSaved !== bSaved) return aSaved ? -1 : 1;
+    const aPinned = Boolean(a.is_pinned);
+    const bPinned = Boolean(b.is_pinned);
+    if (aPinned !== bPinned) return aPinned ? -1 : 1;
+    if (aPinned && bPinned) {
+      const aPinnedAt = a.pinned_at ? new Date(a.pinned_at).getTime() : 0;
+      const bPinnedAt = b.pinned_at ? new Date(b.pinned_at).getTime() : 0;
+      if (aPinnedAt !== bPinnedAt) return bPinnedAt - aPinnedAt;
+    }
+    const aTime = a.last_message?.created_at ?? a.updated_at;
+    const bTime = b.last_message?.created_at ?? b.updated_at;
+    return new Date(bTime).getTime() - new Date(aTime).getTime();
+  });
 }

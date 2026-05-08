@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import type { ChatWithLastMessage } from "@/types/database";
 import { formatTime } from "@/lib/format";
 import { ChatAvatar } from "@/components/ui/ChatAvatar";
@@ -18,10 +19,15 @@ interface ChatListItemProps {
   };
   isSelected: boolean;
   onClick: () => void;
+  onContextMenuOpen?: (position: { x: number; y: number }) => void;
+  onLongPressOpen?: () => void;
 }
 
-export function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
+export function ChatListItem({ chat, isSelected, onClick, onContextMenuOpen, onLongPressOpen }: ChatListItemProps) {
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const suppressClickRef = useRef(false);
   const lastMsg = chat.last_message;
   const display = getChatDisplayInfo(chat, currentUserId);
   const deliveryState = getMessageDeliveryState(lastMsg, {
@@ -37,6 +43,14 @@ export function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
     && !!chat.other_user?.online_at
     && Date.now() - new Date(chat.other_user.online_at).getTime() < 90_000;
 
+  const clearLongPressTimer = () => {
+    touchStartRef.current = null;
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
   const getMessagePreview = () => {
     if (!lastMsg) return chat.cleared_at ? "История очищена" : "Сообщений пока нет";
     return formatChatMessagePreview(lastMsg);
@@ -44,7 +58,37 @@ export function ChatListItem({ chat, isSelected, onClick }: ChatListItemProps) {
 
   return (
     <button
-      onClick={onClick}
+      onClick={(event) => {
+        if (suppressClickRef.current) {
+          event.preventDefault();
+          suppressClickRef.current = false;
+          return;
+        }
+        onClick();
+      }}
+      onContextMenu={(event) => {
+        if (!onContextMenuOpen) return;
+        event.preventDefault();
+        if (suppressClickRef.current) return;
+        onContextMenuOpen({ x: event.clientX, y: event.clientY });
+      }}
+      onPointerDown={(event) => {
+        if (event.pointerType !== "touch" || !onLongPressOpen) return;
+        clearLongPressTimer();
+        touchStartRef.current = { x: event.clientX, y: event.clientY };
+        longPressTimerRef.current = window.setTimeout(() => {
+          suppressClickRef.current = true;
+          onLongPressOpen();
+        }, 520);
+      }}
+      onPointerMove={(event) => {
+        if (event.pointerType !== "touch" || !touchStartRef.current) return;
+        const dx = Math.abs(event.clientX - touchStartRef.current.x);
+        const dy = Math.abs(event.clientY - touchStartRef.current.y);
+        if (dx > 8 || dy > 8) clearLongPressTimer();
+      }}
+      onPointerUp={clearLongPressTimer}
+      onPointerCancel={clearLongPressTimer}
       className={cn(
         "w-full flex items-center gap-3 px-3 py-2.5 transition-colors relative group",
         "hover:bg-[var(--kub-surface-2)]",

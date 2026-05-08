@@ -40,6 +40,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const setForwardingMessage = useAppStore((s) => s.setForwardingMessage);
   const forwardingMessage = useAppStore((s) => s.forwardingMessage);
   const selectedTopicId = useAppStore((s) => s.selectedTopicId);
+  const chatPanelRequest = useAppStore((s) => s.chatPanelRequest);
+  const clearChatPanelRequest = useAppStore((s) => s.clearChatPanelRequest);
   const chat = chats.find((c) => c.id === chatId);
   const savedChat = chat ? isSavedChat(chat, userId) : false;
   const isForum = !!chat?.is_forum;
@@ -72,6 +74,13 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const messageRefs = useRef<Record<string, HTMLDivElement>>({});
   const pendingJumpRef = useRef<string | null>(null);
   const supabase = createClient();
+
+  useEffect(() => {
+    if (!chatPanelRequest || chatPanelRequest.chatId !== chatId) return;
+    if (chatPanelRequest.panel === "info") setShowInfo(true);
+    if (chatPanelRequest.panel === "search") setShowSearch(true);
+    clearChatPanelRequest(chatPanelRequest.key);
+  }, [chatId, chatPanelRequest, clearChatPanelRequest]);
 
   const myRole = (chat?.members?.find((m) => m.user_id === userId)?.role ?? null) as
     | "owner" | "admin" | "member" | null;

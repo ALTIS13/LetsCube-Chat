@@ -72,6 +72,11 @@ interface AppState {
 
   // Mark chat read (zero out unread_count in store)
   markChatRead: (chatId: string) => void
+
+  // Cross-surface chat panel requests, used by sidebar context actions.
+  chatPanelRequest: { chatId: string; panel: 'info' | 'search'; key: number } | null
+  requestChatPanel: (chatId: string, panel: 'info' | 'search') => void
+  clearChatPanelRequest: (key: number) => void
 }
 
 function sameChatList(a: ChatWithLastMessage[], b: ChatWithLastMessage[]): boolean {
@@ -250,4 +255,18 @@ export const useAppStore = create<AppState>((set) => ({
     set((state) => ({
       chats: state.chats.map((c) => c.id === chatId ? { ...c, unread_count: 0 } : c),
     })),
+
+  chatPanelRequest: null,
+  requestChatPanel: (chatId, panel) =>
+    set((state) => ({
+      chatPanelRequest: {
+        chatId,
+        panel,
+        key: (state.chatPanelRequest?.key ?? 0) + 1,
+      },
+    })),
+  clearChatPanelRequest: (key) =>
+    set((state) => (
+      state.chatPanelRequest?.key === key ? { chatPanelRequest: null } : state
+    )),
 }))
