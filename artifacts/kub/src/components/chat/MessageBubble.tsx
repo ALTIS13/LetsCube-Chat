@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, type CSSProperties } from "react";
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, type CSSProperties, type ReactNode } from "react";
 import type { MessageWithSender } from "@/types/database";
 import { formatFullTime } from "@/lib/format";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
@@ -29,6 +29,7 @@ interface ContextItem {
 }
 
 type TextLayoutKind = "short" | "regular" | "link" | "longToken" | "preformatted" | "media";
+type MetaPlacement = "inline" | "next-line-end";
 
 interface MessageBubbleProps {
   message: MessageWithSender;
@@ -138,6 +139,179 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
   }
 }
 
+function getInitialMetaPlacement(content: string): MetaPlacement {
+  const text = content.trim();
+  if (!text) return "inline";
+  if (/[\r\n]/.test(content)) return "next-line-end";
+  return text.length <= 56 ? "inline" : "next-line-end";
+}
+
+function parsePixelValue(value: string): number | null {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getLastTextLineRect(contentEl: HTMLElement): DOMRect | null {
+  const range = document.createRange();
+  range.selectNodeContents(contentEl);
+  const rects = Array.from(range.getClientRects()).filter((rect) => rect.width > 0.5 && rect.height > 0.5);
+  range.detach();
+  return rects.at(-1) ?? null;
+}
+
+function getTextRightLimit(textEl: HTMLElement, bubbleEl: HTMLElement, stackEl: HTMLElement | null): number {
+  const textRect = textEl.getBoundingClientRect();
+  const bubbleRect = bubbleEl.getBoundingClientRect();
+  const bubbleStyle = getComputedStyle(bubbleEl);
+  const paddingLeft = parsePixelValue(bubbleStyle.paddingLeft) ?? 0;
+  const paddingRight = parsePixelValue(bubbleStyle.paddingRight) ?? 0;
+  const currentContentRight = bubbleRect.right - paddingRight;
+  const stackMaxWidth = stackEl ? parsePixelValue(getComputedStyle(stackEl).maxWidth) : null;
+  const maxContentWidth = stackMaxWidth
+    ? Math.max(textRect.width, stackMaxWidth - paddingLeft - paddingRight)
+    : textRect.width;
+  const maxRightFromText = textRect.left + maxContentWidth;
+  const viewportRight = typeof window === "undefined" ? maxRightFromText : window.innerWidth - 8;
+  return Math.min(Math.max(currentContentRight, maxRightFromText), viewportRight);
+}
+
+interface MeasuredTextWithMetaProps {
+  content: string;
+  textClassName: string;
+  meta: ReactNode;
+  bubbleRef: React.RefObject<HTMLDivElement | null>;
+  stackRef: React.RefObject<HTMLDivElement | null>;
+  measureKey: string;
+  compound?: boolean;
+}
+
+function MeasuredTextWithMeta({
+  content,
+  textClassName,
+  meta,
+  bubbleRef,
+  stackRef,
+  measureKey,
+  compound = false,
+}: MeasuredTextWithMetaProps) {
+  const [placement, setPlacement] = useState<MetaPlacement>(() => getInitialMetaPlacement(content));
+  const textFlowRef = useRef<HTMLParagraphElement | null>(null);
+  const textContentRef = useRef<HTMLSpanElement | null>(null);
+  const footerRef = useRef<HTMLSpanElement | null>(null);
+
+  const measure = useCallback(() => {
+    const textEl = textFlowRef.current;
+    const contentEl = textContentRef.current;
+    const footerEl = footerRef.current;
+    const bubbleEl = bubbleRef.current;
+    if (!textEl || !contentEl || !footerEl || !bubbleEl) return;
+
+    const lastLine = getLastTextLineRect(contentEl);
+    if (!lastLine) {
+      setPlacement((current) => (current === "inline" ? current : "inline"));
+      return;
+    }
+
+    const footerRect = footerEl.getBoundingClientRect();
+    const rightLimit = getTextRightLimit(textEl, bubbleEl, stackRef.current);
+    const available = rightLimit - lastLine.right;
+    const current = placement;
+    const threshold = current === "inline" ? 4 : 8;
+    const next: MetaPlacement = available >= footerRect.width + threshold ? "inline" : "next-line-end";
+    setPlacement((previous) => (previous === next ? previous : next));
+  }, [bubbleRef, placement, stackRef]);
+
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    let frame = 0;
+    let cancelled = false;
+    const schedule = () => {
+      if (cancelled) return;
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(measure);
+    };
+
+    schedule();
+    const secondFrame = window.requestAnimationFrame(schedule);
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null;
+    [textFlowRef.current, textContentRef.current, footerRef.current, bubbleRef.current, stackRef.current]
+      .filter(Boolean)
+      .forEach((node) => observer?.observe(node as Element));
+    window.addEventListener("resize", schedule);
+    document.fonts?.ready.then(schedule).catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+      window.cancelAnimationFrame(secondFrame);
+      window.removeEventListener("resize", schedule);
+      observer?.disconnect();
+    };
+  }, [bubbleRef, measure, measureKey, placement, stackRef]);
+
+  const footerClassName = "inline-flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap text-right leading-none";
+
+  if (placement === "inline" && compound) {
+    return (
+      <div
+        data-message-text-meta-group="true"
+        data-message-meta-placement="inline"
+        className="flex max-w-full min-w-0 items-end gap-1.5"
+      >
+        <p
+          ref={textFlowRef}
+          data-message-text-flow="true"
+          className={cn(textClassName, "min-w-0 flex-1")}
+        >
+          <span ref={textContentRef} data-message-text-content="true">
+            <FormattedText content={content} />
+          </span>
+        </p>
+        <span ref={footerRef} data-message-footer="true" className={footerClassName}>
+          {meta}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      data-message-text-meta-group="true"
+      data-message-meta-placement={placement}
+      className="max-w-full min-w-0"
+    >
+      <p
+        ref={textFlowRef}
+        data-message-text-flow="true"
+        className={textClassName}
+      >
+        <span ref={textContentRef} data-message-text-content="true">
+          <FormattedText content={content} />
+        </span>
+        {placement === "inline" && (
+          <span
+            ref={footerRef}
+            data-message-footer="true"
+            className={cn(footerClassName, "ml-1.5 translate-y-[1px] [vertical-align:-0.12em]")}
+          >
+            {meta}
+          </span>
+        )}
+      </p>
+      {placement === "next-line-end" && (
+        <div
+          data-message-bottom-meta="true"
+          className="mt-0.5 flex max-w-full items-center justify-end leading-none"
+        >
+          <span ref={footerRef} data-message-footer="true" className={footerClassName}>
+            {meta}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function MessageBubble({
   message, isMe, isFirstInGroup, isLastInGroup,
   onReply, onJumpToReply, onReaction, onEdit, onDelete, onHideForMe, onStartSelection, onTogglePin, onForward, onOpenMedia,
@@ -151,6 +325,8 @@ export function MessageBubble({
   const [reactionPos, setReactionPos] = useState({ x: 0, y: 0 });
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const stackRef = useRef<HTMLDivElement | null>(null);
+  const bubbleRef = useRef<HTMLDivElement | null>(null);
   const { currentUser } = useAppStore();
   const textContent = message.content ?? "";
   const textLayoutKind = getMessageTextLayoutKind(message.type, textContent);
@@ -363,10 +539,24 @@ export function MessageBubble({
     ] : []),
   ];
   const contextItems = isLocalSend ? localSendContextItems : regularContextItems;
-  const footerMode = hasReactions ? "meta-row-reactions" : "meta-row";
+  const canUseMeasuredTextMeta = message.type === "text" && textLayoutKind !== "preformatted" && !message.failed;
+  const footerMode = canUseMeasuredTextMeta ? "measured" : hasReactions ? "meta-row-reactions" : "meta-row";
   const showGroupReadIndicator = Boolean(groupReadInfo && groupReadInfo.readCount > 0);
   const groupReadLabel = groupReadInfo ? getGroupReadReceiptCompactLabel(groupReadInfo) : "";
   const groupReadAriaLabel = groupReadInfo ? getGroupReadReceiptAriaLabel(groupReadInfo) : "";
+  const footerMeasureKey = [
+    message.id,
+    textContent,
+    message.created_at,
+    message.edited_at ?? "",
+    message.pinned ? "pinned" : "",
+    deliveryState?.state ?? "",
+    deliveryState?.icon ?? "",
+    deliveryState?.label ?? "",
+    groupReadLabel,
+    groupReadAriaLabel,
+    compactContextMenu ? "mobile-actions" : "desktop-actions",
+  ].join("|");
   const renderFooterContent = () => (
     <>
       {message.pinned && (
@@ -563,7 +753,7 @@ export function MessageBubble({
           </div>
         )}
 
-        <div className={cn("inline-flex min-w-0 max-w-full flex-col", widthClasses.stack, isMe ? "items-end" : "items-start")}>
+        <div ref={stackRef} className={cn("inline-flex min-w-0 max-w-full flex-col", widthClasses.stack, isMe ? "items-end" : "items-start")}>
 
           {!isMe && isFirstInGroup && message.sender && (
             <span className="text-xs font-semibold ml-3 mb-0.5 text-[color:var(--kub-cyan)]">
@@ -572,6 +762,7 @@ export function MessageBubble({
           )}
 
           <div
+            ref={bubbleRef}
             data-message-bubble="true"
             data-message-layout-kind={textLayoutKind}
             data-message-footer-mode={footerMode}
@@ -682,6 +873,19 @@ export function MessageBubble({
                 <KubIcon name="file" size={16} />
                 <span className="truncate max-w-[200px]">{message.content ?? "File"}</span>
               </a>
+            ) : canUseMeasuredTextMeta ? (
+              <MeasuredTextWithMeta
+                content={message.content ?? ""}
+                textClassName={cn(
+                  "min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:break-word] text-[color:var(--kub-text)]",
+                  widthClasses.text
+                )}
+                meta={renderFooterContent()}
+                bubbleRef={bubbleRef}
+                stackRef={stackRef}
+                measureKey={footerMeasureKey}
+                compound={Boolean(message.reply_to_id)}
+              />
             ) : (
               <p
                 data-message-text-flow="true"
@@ -732,17 +936,19 @@ export function MessageBubble({
               </div>
             )}
 
-            <div
-              data-message-bottom-meta="true"
-              className="mt-0.5 flex self-stretch max-w-full items-center justify-end leading-none"
-            >
+            {!canUseMeasuredTextMeta && (
               <div
-                data-message-footer="true"
-                className="inline-flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap text-right leading-none"
+                data-message-bottom-meta="true"
+                className="mt-0.5 flex self-stretch max-w-full items-center justify-end leading-none"
               >
-                {renderFooterContent()}
+                <div
+                  data-message-footer="true"
+                  className="inline-flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap text-right leading-none"
+                >
+                  {renderFooterContent()}
+                </div>
               </div>
-            </div>
+            )}
 
             {renderReactionsRow()}
           </div>
