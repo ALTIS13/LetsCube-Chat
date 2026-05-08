@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, type DragEvent } from "react";
 import type { ChatWithLastMessage } from "@/types/database";
 import { formatTime } from "@/lib/format";
 import { ChatAvatar } from "@/components/ui/ChatAvatar";
@@ -10,6 +10,11 @@ import { useAppStore } from "@/store/app.store";
 import { cn } from "@/lib/utils";
 import { formatChatMessagePreview } from "@/lib/messagePreview";
 import { getMessageDeliveryState } from "@/lib/messageDelivery";
+import {
+  getGroupReadReceiptAriaLabel,
+  getGroupReadReceiptCompactLabel,
+  getGroupReadReceiptInfo,
+} from "@/lib/groupReadReceipts";
 
 interface ChatListItemProps {
   chat: ChatWithLastMessage & {
@@ -21,9 +26,31 @@ interface ChatListItemProps {
   onClick: () => void;
   onContextMenuOpen?: (position: { x: number; y: number }) => void;
   onLongPressOpen?: () => void;
+  isReorderable?: boolean;
+  isDragging?: boolean;
+  isDragOver?: boolean;
+  onPinnedDragStart?: () => void;
+  onPinnedDragEnter?: () => void;
+  onPinnedDragOver?: (event: DragEvent<HTMLButtonElement>) => void;
+  onPinnedDrop?: () => void;
+  onPinnedDragEnd?: () => void;
 }
 
-export function ChatListItem({ chat, isSelected, onClick, onContextMenuOpen, onLongPressOpen }: ChatListItemProps) {
+export function ChatListItem({
+  chat,
+  isSelected,
+  onClick,
+  onContextMenuOpen,
+  onLongPressOpen,
+  isReorderable = false,
+  isDragging = false,
+  isDragOver = false,
+  onPinnedDragStart,
+  onPinnedDragEnter,
+  onPinnedDragOver,
+  onPinnedDrop,
+  onPinnedDragEnd,
+}: ChatListItemProps) {
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
   const longPressTimerRef = useRef<number | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -37,6 +64,13 @@ export function ChatListItem({ chat, isSelected, onClick, onContextMenuOpen, onL
     members: chat.members,
     isSavedChat: display.isSaved,
   });
+  const groupReadInfo = getGroupReadReceiptInfo(lastMsg, {
+    currentUserId,
+    chatType: chat.type,
+    members: chat.members,
+    isSavedChat: display.isSaved,
+  });
+  const showGroupReadIndicator = Boolean(groupReadInfo && groupReadInfo.readCount > 0);
   const hasUnread = (chat.unread_count ?? 0) > 0;
   const isMuted = chat.is_muted;
   const isPinned = chat.is_pinned;
@@ -95,15 +129,61 @@ export function ChatListItem({ chat, isSelected, onClick, onContextMenuOpen, onL
       }}
       onPointerUp={clearLongPressTimer}
       onPointerCancel={clearLongPressTimer}
+      onDragEnter={(event) => {
+        if (!isReorderable) return;
+        event.preventDefault();
+        onPinnedDragEnter?.();
+      }}
+      onDragOver={(event) => {
+        if (!isReorderable) return;
+        onPinnedDragOver?.(event);
+      }}
+      onDrop={(event) => {
+        if (!isReorderable) return;
+        event.preventDefault();
+        onPinnedDrop?.();
+      }}
       className={cn(
         "w-full flex items-center gap-3 px-3 py-2.5 transition-colors relative group",
         "hover:bg-[var(--kub-surface-2)]",
-        isSelected && "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] hover:bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]"
+        isSelected && "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] hover:bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]",
+        isDragging && "opacity-55",
+        isDragOver && "bg-[color-mix(in_srgb,var(--kub-cyan)_10%,transparent)] outline outline-1 outline-[color:var(--kub-cyan)]/45"
       )}
     >
       {/* Active accent rail */}
       {isSelected && (
         <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-[var(--kub-cyan)]" />
+      )}
+
+      {isReorderable && (
+        <span
+          draggable
+          data-pinned-drag-handle="true"
+          className="hidden h-8 w-4 shrink-0 cursor-grab items-center justify-center rounded-md text-[color:var(--kub-muted)] opacity-45 transition-opacity hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-cyan)] active:cursor-grabbing group-hover:opacity-100 sm:inline-flex"
+          title="Перетащить закреплённый чат"
+          aria-label="Перетащить закреплённый чат"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onMouseDown={(event) => {
+            event.stopPropagation();
+          }}
+          onDragStart={(event) => {
+            suppressClickRef.current = true;
+            event.stopPropagation();
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", chat.id);
+            onPinnedDragStart?.();
+          }}
+          onDragEnd={(event) => {
+            event.stopPropagation();
+            onPinnedDragEnd?.();
+          }}
+        >
+          <KubIcon name="menu" size={13} />
+        </span>
       )}
 
       <div className="flex-shrink-0 relative">
@@ -136,7 +216,20 @@ export function ChatListItem({ chat, isSelected, onClick, onContextMenuOpen, onL
             )}
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            {deliveryState?.isOwnMessage && (
+            {showGroupReadIndicator && groupReadInfo ? (
+              <span
+                className="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-full text-[10px] leading-none text-[color:var(--kub-muted)]"
+                title={getGroupReadReceiptAriaLabel(groupReadInfo)}
+                aria-label={getGroupReadReceiptAriaLabel(groupReadInfo)}
+              >
+                <KubIcon
+                  name={groupReadInfo.allRead ? "doubleCheck" : "check"}
+                  size={12}
+                  tone={groupReadInfo.allRead ? "accent" : "muted"}
+                />
+                <span className="tabular-nums">{getGroupReadReceiptCompactLabel(groupReadInfo)}</span>
+              </span>
+            ) : deliveryState?.isOwnMessage && (
               <KubIcon
                 name={deliveryState.icon}
                 size={13}

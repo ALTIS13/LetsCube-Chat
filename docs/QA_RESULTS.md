@@ -293,3 +293,9 @@ Recurring tasks roadmap note:
 - Group own-message footer now uses a compact `✓ count/total` read indicator instead of appending a second loose read badge after the sent check; full names remain in the `Кто прочитал` modal.
 - Pinned chat order UI is enabled through context menu / mobile sheet `Переместить выше` and `Переместить ниже`; saved chat remains above all pinned chats.
 - Mini-profile preview no longer shows service copy about preview mode and now displays profile `bio` plus a localized app role label when available.
+
+2026-05-08 bubble/footer/group preview/pinned drag polish:
+
+- Text-like message footers keep the absolute bottom-right footer, but the wide padding-right reserve was replaced by a small end-of-text inline spacer, reducing the visible empty column while preserving overlap protection.
+- Chat-list preview now derives own group-message read count from the same `chat_members.last_read_at` member data as in-chat receipts; online status is not used as read state.
+- Desktop pinned chat drag reorder is enabled through a lightweight handle and still persists through `set_pinned_chat_order(uuid[])`; context-menu and mobile sheet move up/down actions remain the fallback.

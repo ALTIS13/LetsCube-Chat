@@ -21,9 +21,10 @@ interface GroupReadReceiptContext {
 }
 
 export function getGroupReadReceiptInfo(
-  message: Pick<MessageWithSender, "user_id" | "created_at" | "deleted_at" | "pending" | "checking" | "failed">,
+  message: Pick<MessageWithSender, "user_id" | "created_at" | "deleted_at" | "pending" | "checking" | "failed"> | null | undefined,
   context: GroupReadReceiptContext,
 ): GroupReadReceiptInfo | null {
+  if (!message) return null;
   if (!context.currentUserId || context.isSavedChat) return null;
   if (context.chatType !== "group" && context.chatType !== "channel") return null;
   if (message.user_id !== context.currentUserId) return null;
@@ -56,4 +57,16 @@ export function getGroupReadReceiptInfo(
 
 export function getReceiptDisplayName(reader: GroupReadReceiptUser): string {
   return reader.profile?.full_name ?? reader.profile?.username ?? "Без имени";
+}
+
+export function getGroupReadReceiptCompactLabel(info: GroupReadReceiptInfo): string {
+  if (info.totalRecipients > 0) return `${info.readCount}/${info.totalRecipients}`;
+  return String(info.readCount);
+}
+
+export function getGroupReadReceiptAriaLabel(info: GroupReadReceiptInfo): string {
+  const countLabel = info.totalRecipients > 0
+    ? `${info.readCount} из ${info.totalRecipients}`
+    : String(info.readCount);
+  return info.allRead ? `Прочитано всеми: ${countLabel}` : `Прочитали: ${countLabel}`;
 }

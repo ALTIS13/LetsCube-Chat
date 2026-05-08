@@ -12,7 +12,11 @@ import { KubIcon, type KubIconName } from "@/components/kub";
 import type { MediaViewerItem } from "./MediaViewer";
 import { requestAppConfirm } from "@/lib/appDialogs";
 import type { MessageDeliveryState } from "@/lib/messageDelivery";
-import type { GroupReadReceiptInfo } from "@/lib/groupReadReceipts";
+import {
+  getGroupReadReceiptAriaLabel,
+  getGroupReadReceiptCompactLabel,
+  type GroupReadReceiptInfo,
+} from "@/lib/groupReadReceipts";
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
 
 const EMOJI_QUICK = ["👍", "❤️", "😂", "😮", "😢", "🔥", "👏", "🎉"];
@@ -365,10 +369,9 @@ export function MessageBubble({
     textLayoutKind !== "preformatted" &&
     !message.failed;
   const showGroupReadIndicator = Boolean(groupReadInfo && groupReadInfo.readCount > 0);
-  const groupReadLabel = groupReadInfo
-    ? `${groupReadInfo.readCount}/${Math.max(groupReadInfo.totalRecipients, groupReadInfo.readCount)}`
-    : "";
-  const footerReserveClass = getFooterReserveClass({
+  const groupReadLabel = groupReadInfo ? getGroupReadReceiptCompactLabel(groupReadInfo) : "";
+  const groupReadAriaLabel = groupReadInfo ? getGroupReadReceiptAriaLabel(groupReadInfo) : "";
+  const footerSpacerClass = getFooterSpacerClass({
     own: Boolean(deliveryState?.isOwnMessage),
     compactGroupRead: showGroupReadIndicator,
     hasExtraMeta: Boolean(message.edited_at || message.pinned),
@@ -396,8 +399,8 @@ export function MessageBubble({
         <button
           type="button"
           className="inline-flex h-4 items-center gap-0.5 rounded-full px-0.5 text-[10px] leading-none text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)]"
-          title={groupReadInfo.allRead ? `Прочитано всеми: ${groupReadLabel}` : `Прочитали: ${groupReadLabel}`}
-          aria-label={groupReadInfo.allRead ? `Прочитано всеми: ${groupReadLabel}` : `Прочитали: ${groupReadLabel}`}
+          title={groupReadAriaLabel}
+          aria-label={groupReadAriaLabel}
           onClick={(event) => {
             event.stopPropagation();
             onOpenGroupReadReceipts?.();
@@ -547,7 +550,7 @@ export function MessageBubble({
             data-message-bubble="true"
             data-message-layout-kind={textLayoutKind}
             data-message-footer-mode={
-              textLikeNoReactionFooter ? "absolute-reserve" : hasReactions ? "reactions" : "bottom-meta"
+              textLikeNoReactionFooter ? "absolute-spacer" : hasReactions ? "reactions" : "bottom-meta"
             }
             className={cn(
               "relative flex flex-col max-w-full px-3 pt-2 rounded-2xl transition-opacity select-none sm:select-text",
@@ -662,11 +665,17 @@ export function MessageBubble({
                 data-message-text-flow="true"
                 className={cn(
                   "min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [word-break:normal] text-[color:var(--kub-text)]",
-                  textLikeNoReactionFooter && footerReserveClass,
                   widthClasses.text
                 )}
               >
                 <FormattedText content={message.content ?? ""} />
+                {textLikeNoReactionFooter && (
+                  <span
+                    aria-hidden="true"
+                    data-message-footer-spacer="true"
+                    className={cn("ml-1 inline-block h-0 align-baseline", footerSpacerClass)}
+                  />
+                )}
               </p>
             )}
 
@@ -770,7 +779,7 @@ export function MessageBubble({
   );
 }
 
-function getFooterReserveClass({
+function getFooterSpacerClass({
   own,
   compactGroupRead,
   hasExtraMeta,
@@ -779,9 +788,9 @@ function getFooterReserveClass({
   compactGroupRead: boolean;
   hasExtraMeta: boolean;
 }): string {
-  if (compactGroupRead) return hasExtraMeta ? "pr-32 sm:pr-28" : "pr-28 sm:pr-24";
-  if (hasExtraMeta) return own ? "pr-24 sm:pr-20" : "pr-20 sm:pr-16";
-  return own ? "pr-20 sm:pr-16" : "pr-16 sm:pr-12";
+  if (compactGroupRead) return hasExtraMeta ? "w-24" : "w-20";
+  if (hasExtraMeta) return own ? "w-20" : "w-16";
+  return own ? "w-16" : "w-12";
 }
 
 function setBodySelectionSuppressed(suppressed: boolean) {

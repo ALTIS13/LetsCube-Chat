@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react";
 import { ChatListItem } from "./ChatListItem";
 import { useAppStore } from "@/store/app.store";
 import { KubEmptyState, KubIcon, KubModal, type KubIconName } from "@/components/kub";
@@ -48,6 +48,8 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
   const [openMenu, setOpenMenu] = useState<ChatMenuState | null>(null);
   const [previewChatId, setPreviewChatId] = useState<string | null>(null);
   const [busyActionId, setBusyActionId] = useState<string | null>(null);
+  const [draggedPinnedChatId, setDraggedPinnedChatId] = useState<string | null>(null);
+  const [dragOverPinnedChatId, setDragOverPinnedChatId] = useState<string | null>(null);
 
   // Dev-only mount/unmount счетчик для проверки стабильности (Task #48).
   useEffect(() => {
@@ -108,6 +110,75 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
     setChats(next);
   }, [currentUser?.id, setChats]);
 
+  const orderedPinnedChatIds = useMemo(
+    () => getOrderedPinnedChats(chatsWithMute, currentUser?.id ?? null).map((chat) => chat.id),
+    [chatsWithMute, currentUser?.id],
+  );
+
+  const persistPinnedOrder = useCallback(async (reorderedIds: string[], sourceChatId: string) => {
+    const previousChats = useAppStore.getState().chats;
+    updateChatList((current) => current.map((item) => {
+      const nextOrder = reorderedIds.indexOf(item.id);
+      return nextOrder >= 0 ? { ...item, pinned_order: nextOrder + 1 } : item;
+    }));
+
+    const { error } = await supabase.rpc("set_pinned_chat_order", { p_chat_ids: reorderedIds });
+    if (error) {
+      setChats(previousChats);
+      showAppAlert(prefixError("Не удалось изменить порядок закреплённых чатов", error), "Ошибка");
+      dispatchChatsRefresh({ reason: "membership-change", chatId: sourceChatId });
+    }
+  }, [setChats, supabase, updateChatList]);
+
+  const movePinnedChat = useCallback(async (chatId: string, direction: "up" | "down") => {
+    const pinnedIndex = orderedPinnedChatIds.indexOf(chatId);
+    if (pinnedIndex < 0) return;
+    const targetIndex = direction === "up" ? pinnedIndex - 1 : pinnedIndex + 1;
+    if (targetIndex < 0 || targetIndex >= orderedPinnedChatIds.length) return;
+    const reordered = [...orderedPinnedChatIds];
+    [reordered[pinnedIndex], reordered[targetIndex]] = [reordered[targetIndex], reordered[pinnedIndex]];
+    await persistPinnedOrder(reordered, chatId);
+  }, [orderedPinnedChatIds, persistPinnedOrder]);
+
+  const handlePinnedDragStart = useCallback((chatId: string) => {
+    if (!orderedPinnedChatIds.includes(chatId)) return;
+    setOpenMenu(null);
+    setDraggedPinnedChatId(chatId);
+    setDragOverPinnedChatId(null);
+  }, [orderedPinnedChatIds]);
+
+  const handlePinnedDragOver = useCallback((event: DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }, []);
+
+  const handlePinnedDragEnter = useCallback((chatId: string) => {
+    if (!draggedPinnedChatId || draggedPinnedChatId === chatId) return;
+    setDragOverPinnedChatId(chatId);
+  }, [draggedPinnedChatId]);
+
+  const handlePinnedDrop = useCallback((targetChatId: string) => {
+    const sourceChatId = draggedPinnedChatId;
+    setDraggedPinnedChatId(null);
+    setDragOverPinnedChatId(null);
+    if (!sourceChatId || sourceChatId === targetChatId) return;
+
+    const sourceIndex = orderedPinnedChatIds.indexOf(sourceChatId);
+    const targetIndex = orderedPinnedChatIds.indexOf(targetChatId);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+
+    const reordered = orderedPinnedChatIds.filter((id) => id !== sourceChatId);
+    const targetIndexAfterRemoval = reordered.indexOf(targetChatId);
+    const insertIndex = sourceIndex < targetIndex ? targetIndexAfterRemoval + 1 : targetIndexAfterRemoval;
+    reordered.splice(insertIndex, 0, sourceChatId);
+    void persistPinnedOrder(reordered, sourceChatId);
+  }, [draggedPinnedChatId, orderedPinnedChatIds, persistPinnedOrder]);
+
+  const handlePinnedDragEnd = useCallback(() => {
+    setDraggedPinnedChatId(null);
+    setDragOverPinnedChatId(null);
+  }, []);
+
   const clearChatLocally = useCallback((chatId: string) => {
     const clearedAt = new Date().toISOString();
     setMessages(chatId, []);
@@ -138,33 +209,13 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
     const isPinned = Boolean(chat.is_pinned);
     const isMuted = mutedChatIds.includes(chat.id);
     const groupLabel = chat.type === "channel" ? "канал" : "группу";
-    const pinnedChats = getOrderedPinnedChats(chatsWithMute, currentUser?.id ?? null);
-    const pinnedIndex = pinnedChats.findIndex((item) => item.id === chat.id);
+    const pinnedIndex = orderedPinnedChatIds.indexOf(chat.id);
 
     const selectChat = () => onChatSelect(chat.id);
     const selectAndOpenPanel = (panel: "info" | "search") => {
       onChatSelect(chat.id);
       requestChatPanel(chat.id, panel);
     };
-    const reorderPinnedChat = async (direction: "up" | "down") => {
-      if (pinnedIndex < 0) return;
-      const targetIndex = direction === "up" ? pinnedIndex - 1 : pinnedIndex + 1;
-      if (targetIndex < 0 || targetIndex >= pinnedChats.length) return;
-      const reordered = pinnedChats.map((item) => item.id);
-      [reordered[pinnedIndex], reordered[targetIndex]] = [reordered[targetIndex], reordered[pinnedIndex]];
-
-      updateChatList((current) => current.map((item) => {
-        const nextOrder = reordered.indexOf(item.id);
-        return nextOrder >= 0 ? { ...item, pinned_order: nextOrder + 1 } : item;
-      }));
-
-      const { error } = await supabase.rpc("set_pinned_chat_order", { p_chat_ids: reordered });
-      if (error) {
-        showAppAlert(prefixError("Не удалось изменить порядок закреплённых чатов", error), "Ошибка");
-        dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
-      }
-    };
-
     const actions: ChatAction[] = [
       {
         id: "open",
@@ -235,16 +286,16 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
           id: "move-pinned-up",
           icon: "chevronUp",
           label: "Переместить выше",
-          run: () => reorderPinnedChat("up"),
+          run: () => movePinnedChat(chat.id, "up"),
         });
       }
 
-      if (isPinned && pinnedIndex >= 0 && pinnedIndex < pinnedChats.length - 1) {
+      if (isPinned && pinnedIndex >= 0 && pinnedIndex < orderedPinnedChatIds.length - 1) {
         actions.push({
           id: "move-pinned-down",
           icon: "chevronDown",
           label: "Переместить ниже",
-          run: () => reorderPinnedChat("down"),
+          run: () => movePinnedChat(chat.id, "down"),
         });
       }
     }
@@ -375,11 +426,12 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
 
     return actions;
   }, [
-    chatsWithMute,
     clearChatLocally,
     currentUser?.id,
+    movePinnedChat,
     mutedChatIds,
     onChatSelect,
+    orderedPinnedChatIds,
     removeChatLocally,
     requestChatPanel,
     supabase,
@@ -430,7 +482,9 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
   return (
     <>
       <div className="flex-1 overflow-y-auto">
-        {chatsWithMute.map((chat) => (
+        {chatsWithMute.map((chat) => {
+          const isReorderable = orderedPinnedChatIds.length > 1 && orderedPinnedChatIds.includes(chat.id);
+          return (
           <ChatListItem
             key={chat.id}
             chat={chat}
@@ -438,8 +492,17 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
             onClick={() => onChatSelect(chat.id)}
             onContextMenuOpen={(position) => openDesktopMenu(chat.id, position)}
             onLongPressOpen={() => openMobileSheet(chat.id)}
+            isReorderable={isReorderable}
+            isDragging={draggedPinnedChatId === chat.id}
+            isDragOver={dragOverPinnedChatId === chat.id}
+            onPinnedDragStart={() => handlePinnedDragStart(chat.id)}
+            onPinnedDragEnter={() => handlePinnedDragEnter(chat.id)}
+            onPinnedDragOver={handlePinnedDragOver}
+            onPinnedDrop={() => handlePinnedDrop(chat.id)}
+            onPinnedDragEnd={handlePinnedDragEnd}
           />
-        ))}
+          );
+        })}
       </div>
 
       {openMenu?.mode === "menu" && openChat && (
