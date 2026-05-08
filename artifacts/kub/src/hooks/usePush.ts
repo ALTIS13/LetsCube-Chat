@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { safeOpenChat } from "@/lib/safeOpenChat";
 import { useAppStore } from "@/store/app.store";
 
 /**
@@ -53,19 +54,6 @@ export function usePush() {
       const sub = await reg.pushManager.getSubscription();
       setStatus(sub ? "active" : "inactive");
     });
-  }, []);
-
-  // Listen for SW messages (notification click) — focus the requested chat.
-  useEffect(() => {
-    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
-    const onMsg = (e: MessageEvent) => {
-      if (e.data?.type === "kub-open" && typeof e.data.url === "string") {
-        // Keep notification-click navigation inside the SPA; no document reload.
-        openPushTargetInApp(e.data.url);
-      }
-    };
-    navigator.serviceWorker.addEventListener("message", onMsg);
-    return () => navigator.serviceWorker.removeEventListener("message", onMsg);
   }, []);
 
   const enable = useCallback(async () => {
@@ -137,6 +125,20 @@ export function usePush() {
   return { status, enable, disable };
 }
 
+export function usePushNotificationNavigation() {
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type === "kub-open" && typeof e.data.url === "string") {
+        // Keep notification-click navigation inside the SPA; no document reload.
+        openPushTargetInApp(e.data.url);
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", onMsg);
+    return () => navigator.serviceWorker.removeEventListener("message", onMsg);
+  }, []);
+}
+
 function openPushTargetInApp(rawUrl: string): void {
   if (typeof window === "undefined") return;
   let target: URL;
@@ -149,8 +151,12 @@ function openPushTargetInApp(rawUrl: string): void {
 
   const chatId = target.searchParams.get("chat");
   if (chatId) {
-    useAppStore.getState().setSelectedChatId(chatId);
-    window.history.replaceState(null, "", window.location.pathname);
+    void safeOpenChat(chatId).then((opened) => {
+      if (opened) {
+        window.history.pushState(null, "", `${target.pathname}${target.hash}`);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }
+    });
     return;
   }
 

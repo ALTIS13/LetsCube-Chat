@@ -8,6 +8,7 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { useUser } from "@/hooks/useUser";
 import { useHeartbeat } from "@/hooks/useHeartbeat";
 import { useBanState } from "@/hooks/useBanState";
+import { usePushNotificationNavigation } from "@/hooks/usePush";
 import { createClient } from "@/lib/supabase/client";
 import { IframeAuthBanner } from "@/components/IframeAuthBanner";
 import { AppUpdateBanner } from "@/components/AppUpdateBanner";
@@ -268,6 +269,7 @@ function AppRoutes() {
 
   // Keep the user's online_at fresh while a session exists.
   useHeartbeat();
+  usePushNotificationNavigation();
 
   // Browser notification permission prompt — once on first authenticated load.
   useEffect(() => {

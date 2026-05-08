@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { useAppStore } from "@/store/app.store";
 import { useNotifications } from "@/hooks/useNotifications";
 import { KubIcon, KubTooltip } from "@/components/kub";
+import { safeOpenChat } from "@/lib/safeOpenChat";
 import { cn } from "@/lib/utils";
 import type { Notification } from "@/types/database";
 
@@ -20,7 +20,6 @@ import type { Notification } from "@/types/database";
  */
 export function NotificationBell() {
   const [, setLocation] = useLocation();
-  const setSelectedChatId = useAppStore((s) => s.setSelectedChatId);
   const { items, unreadCount, loading, markRead, markAllRead } = useNotifications();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -48,8 +47,8 @@ export function NotificationBell() {
     setOpen(false);
     const target = navigateTarget(n);
     if (target?.kind === "chat" && target.chatId) {
-      setSelectedChatId(target.chatId);
-      setLocation("/");
+      const opened = await safeOpenChat(target.chatId);
+      if (opened) setLocation("/");
     } else if (target?.kind === "tasks") {
       setLocation(target.taskId ? `/tasks?task=${encodeURIComponent(target.taskId)}` : "/tasks");
     } else if (target?.kind === "admin") {
