@@ -280,3 +280,10 @@ Recurring tasks roadmap note:
 - Text, location, media, voice and forwarded message inserts now include `client_message_id` and `client_sent_at`, but do not send client `created_at`.
 - Message bubbles stay pending until the DB insert returns/fetches the server row; the server `created_at` replaces the local pending timestamp after acknowledgement.
 - Retry reuses the same `client_message_id` and fetches an existing row on duplicate/unknown responses, preventing duplicate messages after network timeouts.
+
+2026-05-08 chat actions/profile/group receipts follow-up:
+
+- Chat list `Открыть профиль` / group info actions now open a separate preview modal/sheet without changing `selectedChatId`; the chat opens only from the explicit `Открыть чат` button.
+- Mobile chat long-press suppresses the touch `contextmenu` path, so only the bottom action sheet should appear.
+- Supabase read-only check confirmed `chat_members.last_read_at` is visible to chat members through existing RLS and `chat_members` is in realtime; group own-message read counts and the `Кто прочитал` modal use that data without faking private receipt states.
+- `chat_members` has no persistent pinned sort field. Added migration proposal `.migration-backup/supabase/migrations/20260508_chat_pinned_order.sql`; pinned reordering UI should wait until that SQL is reviewed and applied manually.

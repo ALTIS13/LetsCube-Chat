@@ -28,6 +28,7 @@ export function ChatListItem({ chat, isSelected, onClick, onContextMenuOpen, onL
   const longPressTimerRef = useRef<number | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const suppressClickRef = useRef(false);
+  const lastTouchAtRef = useRef(0);
   const lastMsg = chat.last_message;
   const display = getChatDisplayInfo(chat, currentUserId);
   const deliveryState = getMessageDeliveryState(lastMsg, {
@@ -67,13 +68,18 @@ export function ChatListItem({ chat, isSelected, onClick, onContextMenuOpen, onL
         onClick();
       }}
       onContextMenu={(event) => {
-        if (!onContextMenuOpen) return;
         event.preventDefault();
+        const isRecentTouch = Date.now() - lastTouchAtRef.current < 1_000;
+        const isCoarsePointer = typeof window !== "undefined"
+          && window.matchMedia?.("(pointer: coarse)").matches;
+        if (isRecentTouch || isCoarsePointer) return;
+        if (!onContextMenuOpen) return;
         if (suppressClickRef.current) return;
         onContextMenuOpen({ x: event.clientX, y: event.clientY });
       }}
       onPointerDown={(event) => {
         if (event.pointerType !== "touch" || !onLongPressOpen) return;
+        lastTouchAtRef.current = Date.now();
         clearLongPressTimer();
         touchStartRef.current = { x: event.clientX, y: event.clientY };
         longPressTimerRef.current = window.setTimeout(() => {

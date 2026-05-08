@@ -12,6 +12,7 @@ import { KubIcon, type KubIconName } from "@/components/kub";
 import type { MediaViewerItem } from "./MediaViewer";
 import { requestAppConfirm } from "@/lib/appDialogs";
 import type { MessageDeliveryState } from "@/lib/messageDelivery";
+import type { GroupReadReceiptInfo } from "@/lib/groupReadReceipts";
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
 
 const EMOJI_QUICK = ["👍", "❤️", "😂", "😮", "😢", "🔥", "👏", "🎉"];
@@ -54,6 +55,8 @@ interface MessageBubbleProps {
   usersMap?: Record<string, string>;
   messagesMap?: Record<string, MessageWithSender>;
   deliveryState?: MessageDeliveryState | null;
+  groupReadInfo?: GroupReadReceiptInfo | null;
+  onOpenGroupReadReceipts?: () => void;
   myRole?: "owner" | "admin" | "member" | null;
   isSavedChat?: boolean;
 }
@@ -137,7 +140,7 @@ export function MessageBubble({
   onRetrySend, onEditFailedSend, onDiscardLocalMessage,
   reactionMenuOpen = false, onToggleReactionMenu, onCloseReactionMenu,
   actionMenuOpen, onOpenActionMenu, onCloseActionMenu, selected = false, isSelectionMode = false,
-  usersMap = {}, messagesMap = {}, deliveryState, isSavedChat,
+  usersMap = {}, messagesMap = {}, deliveryState, groupReadInfo, onOpenGroupReadReceipts, isSavedChat,
 }: MessageBubbleProps) {
   const [showContext, setShowContext] = useState(false);
   const [contextPos, setContextPos] = useState({ x: 0, y: 0 });
@@ -291,6 +294,9 @@ export function MessageBubble({
 
   const regularContextItems: ContextItem[] = [
     { icon: "reply", label: "Ответить", action: () => { onReply(); closeContext(); } },
+    ...(groupReadInfo && onOpenGroupReadReceipts ? [
+      { icon: "eye" as KubIconName, label: "Кто прочитал", action: () => { onOpenGroupReadReceipts(); closeContext(); } },
+    ] : []),
     { icon: "copy",  label: "Копировать", action: () => { navigator.clipboard.writeText(message.content ?? ""); closeContext(); } },
     ...(isMe && message.type === "text" && onEdit ? [
       { icon: "edit" as KubIconName, label: "Изменить", action: () => { onEdit(); closeContext(); } },
@@ -380,6 +386,21 @@ export function MessageBubble({
           tone={deliveryState.tone}
           label={deliveryState.label}
         />
+      )}
+      {groupReadInfo && groupReadInfo.readCount > 0 && (
+        <button
+          type="button"
+          className="inline-flex h-4 items-center gap-0.5 rounded-full px-0.5 text-[10px] leading-none text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)]"
+          title={groupReadInfo.allRead ? "Прочитано всеми" : `Прочитали: ${groupReadInfo.readCount}`}
+          aria-label={groupReadInfo.allRead ? "Прочитано всеми" : `Прочитали: ${groupReadInfo.readCount}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenGroupReadReceipts?.();
+          }}
+        >
+          <KubIcon name="eye" size={11} tone={groupReadInfo.allRead ? "accent" : "muted"} />
+          <span className="tabular-nums">{groupReadInfo.readCount}</span>
+        </button>
       )}
       <button
         type="button"

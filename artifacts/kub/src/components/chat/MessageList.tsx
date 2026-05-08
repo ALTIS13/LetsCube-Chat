@@ -1,15 +1,18 @@
 "use client";
 
 import React, { RefObject, useState, useEffect, useCallback, useRef } from "react";
-import { KubIcon } from "@/components/kub";
+import { KubIcon, KubModal } from "@/components/kub";
 import { MessageBubble } from "./MessageBubble";
 import type { MediaViewerItem } from "./MediaViewer";
 import { TypingIndicator } from "./TypingIndicator";
-import type { ChatMember, MessageWithSender } from "@/types/database";
+import type { ChatMember, MessageWithSender, Profile } from "@/types/database";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app.store";
 import { getMessageDeliveryState } from "@/lib/messageDelivery";
+import { getGroupReadReceiptInfo, getReceiptDisplayName, type GroupReadReceiptInfo } from "@/lib/groupReadReceipts";
 import { requestAppConfirm } from "@/lib/appDialogs";
+import { UserAvatar } from "@/components/ui/ChatAvatar";
+import { formatFullTime } from "@/lib/format";
 
 interface MessageListProps {
   messages: MessageWithSender[];
@@ -32,7 +35,7 @@ interface MessageListProps {
   typingUser?: string;
   highlightedId?: string | null;
   messageRefs?: React.MutableRefObject<Record<string, HTMLDivElement>>;
-  chatMembers?: (ChatMember & { profile?: unknown })[];
+  chatMembers?: (ChatMember & { profile?: Profile | null })[];
   chatType?: string | null;
   isSavedChat?: boolean;
   /** Role of the current user in this chat — propagated to MessageBubble. */
@@ -133,6 +136,7 @@ export function MessageList({
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [openReactionMessageId, setOpenReactionMessageId] = useState<string | null>(null);
   const [openActionMessageId, setOpenActionMessageId] = useState<string | null>(null);
+  const [readReceiptsMessageId, setReadReceiptsMessageId] = useState<string | null>(null);
   const isAtBottomRef = useRef(true);
   const prevMessageCountRef = useRef(sortedMessages.length);
   const loadingOlderRef = useRef(loadingOlder);
@@ -157,6 +161,21 @@ export function MessageList({
       selectedMessages.every((message) => message.user_id === userId)
     ),
     [isSavedChat, onBulkDeleteForEveryone, selectedMessages, userId],
+  );
+  const readReceiptsMessage = React.useMemo(
+    () => readReceiptsMessageId ? sortedMessages.find((message) => message.id === readReceiptsMessageId) ?? null : null,
+    [readReceiptsMessageId, sortedMessages],
+  );
+  const readReceiptsInfo = React.useMemo(
+    () => readReceiptsMessage
+      ? getGroupReadReceiptInfo(readReceiptsMessage, {
+        currentUserId: userId,
+        chatType,
+        members: chatMembers,
+        isSavedChat,
+      })
+      : null,
+    [chatMembers, chatType, isSavedChat, readReceiptsMessage, userId],
   );
 
   const toggleSelected = useCallback((messageId: string) => {
@@ -364,6 +383,12 @@ export function MessageList({
             members: chatMembers,
             isSavedChat,
           });
+          const groupReadInfo = getGroupReadReceiptInfo(msg, {
+            currentUserId: userId,
+            chatType,
+            members: chatMembers,
+            isSavedChat,
+          });
 
           return (
             <div
@@ -469,6 +494,8 @@ export function MessageList({
                     usersMap={usersMap}
                     messagesMap={messagesMap}
                     deliveryState={deliveryState}
+                    groupReadInfo={groupReadInfo}
+                    onOpenGroupReadReceipts={groupReadInfo ? () => setReadReceiptsMessageId(msg.id) : undefined}
                     isSavedChat={isSavedChat}
                     myRole={myRole}
                   />
@@ -502,6 +529,62 @@ export function MessageList({
           <KubIcon name="chevronDown" size={18} />
         </button>
       )}
+
+      {readReceiptsMessage && readReceiptsInfo && (
+        <GroupReadReceiptsModal
+          info={readReceiptsInfo}
+          onClose={() => setReadReceiptsMessageId(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function GroupReadReceiptsModal({
+  info,
+  onClose,
+}: {
+  info: GroupReadReceiptInfo;
+  onClose: () => void;
+}) {
+  return (
+    <KubModal
+      open
+      onClose={onClose}
+      title="Прочитали"
+      description={`${info.readCount} из ${info.totalRecipients}`}
+      icon={<KubIcon name={info.allRead ? "doubleCheck" : "eye"} size={18} />}
+      size="sm"
+    >
+      {info.readers.length === 0 ? (
+        <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-4 text-center text-sm text-[color:var(--kub-muted)]">
+          Пока никто не прочитал
+        </div>
+      ) : (
+        <div className="grid gap-2">
+          {info.readers.map((reader) => {
+            const name = getReceiptDisplayName(reader);
+            const avatarProfile = reader.profile ?? {
+              id: reader.userId,
+              full_name: name,
+              username: null,
+              avatar_url: null,
+            };
+            return (
+              <div
+                key={reader.userId}
+                className="flex min-w-0 items-center gap-3 rounded-xl bg-[var(--kub-surface-2)] px-3 py-2"
+              >
+                <UserAvatar user={avatarProfile} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold text-[color:var(--kub-text)]">{name}</div>
+                  <div className="text-xs text-[color:var(--kub-muted)]">{formatFullTime(reader.readAt)}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </KubModal>
   );
 }
