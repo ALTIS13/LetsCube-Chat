@@ -296,6 +296,6 @@ Recurring tasks roadmap note:
 
 2026-05-08 bubble/footer/group preview/pinned drag polish:
 
-- Text-like message footers now live in the text flow: short messages use inline meta, longer text/link/long-token messages use a right-floated meta element. The previous absolute footer plus artificial reserve/spacer model is removed for ordinary text bubbles.
+- Message bubble meta now uses deterministic flow layout: simple text/link/long-token messages keep meta inline in the text flow, while compound/reply/media/code bubbles use a compact bottom-end meta row. Float, absolute footer, artificial spacer, and large padding reserve are not used for ordinary text bubbles.
 - Chat-list preview now derives own group-message read count from the same `chat_members.last_read_at` member data as in-chat receipts; online status is not used as read state.
 - Desktop pinned chat drag reorder is enabled through a lightweight handle and still persists through `set_pinned_chat_order(uuid[])`; context-menu and mobile sheet move up/down actions remain the fallback.

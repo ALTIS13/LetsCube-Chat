@@ -363,20 +363,16 @@ export function MessageBubble({
     ] : []),
   ];
   const contextItems = isLocalSend ? localSendContextItems : regularContextItems;
-  const textLikeNoReactionFooter =
-    message.type === "text" &&
-    !hasReactions &&
-    textLayoutKind !== "preformatted" &&
-    !message.failed;
+  const isCompoundBubble =
+    Boolean(message.reply_to_id) ||
+    textLayoutKind === "preformatted" ||
+    message.type !== "text" ||
+    Boolean(message.failed);
+  const simpleTextFooter = message.type === "text" && !isCompoundBubble;
+  const compoundFooter = !simpleTextFooter;
   const showGroupReadIndicator = Boolean(groupReadInfo && groupReadInfo.readCount > 0);
   const groupReadLabel = groupReadInfo ? getGroupReadReceiptCompactLabel(groupReadInfo) : "";
   const groupReadAriaLabel = groupReadInfo ? getGroupReadReceiptAriaLabel(groupReadInfo) : "";
-  const useInlineTextMeta =
-    textLikeNoReactionFooter &&
-    textLayoutKind !== "link" &&
-    textLayoutKind !== "longToken" &&
-    !/[\r\n]/.test(textContent) &&
-    textContent.trim().length <= 28;
   const renderFooterContent = () => (
     <>
       {message.pinned && (
@@ -425,6 +421,40 @@ export function MessageBubble({
       </button>
     </>
   );
+  const renderReactionsRow = () => {
+    if (!hasReactions) return null;
+    return (
+      <div
+        data-message-reactions-row="true"
+        className="mt-1 flex w-fit max-w-full flex-wrap items-center justify-start gap-1 self-start"
+      >
+        {visibleReactionEntries.map(([emoji, { count, mine }]) => (
+          <button
+            key={emoji}
+            onClick={() => onReaction(emoji)}
+            className={cn(
+              "inline-flex h-[22px] items-center gap-1 rounded-full border px-2 text-[11px] leading-none transition-all hover:scale-105 active:scale-95",
+              mine
+                ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] border-[color-mix(in_srgb,var(--kub-cyan)_72%,transparent)] text-[color:var(--kub-cyan)]"
+                : "bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] text-[color:var(--kub-muted)]"
+            )}
+          >
+            <span className="text-sm leading-none">{emoji}</span>
+            {count > 1 && <span className="tabular-nums">{count}</span>}
+          </button>
+        ))}
+        {hiddenReactionCount > 0 && (
+          <span
+            className="inline-flex h-[22px] items-center rounded-full border border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] px-2 text-[11px] leading-none text-[color:var(--kub-muted)]"
+            title={`Ещё ${hiddenReactionCount} реакций`}
+            aria-label={`Ещё ${hiddenReactionCount} реакций`}
+          >
+            +{hiddenReactionCount}
+          </span>
+        )}
+      </div>
+    );
+  };
 
   const bubbleClass = isMe
     ? "bg-[color-mix(in_srgb,var(--kub-cyan)_22%,var(--kub-surface))] border border-[color:var(--kub-cyan)]/40 text-[color:var(--kub-text)]"
@@ -551,7 +581,7 @@ export function MessageBubble({
             data-message-bubble="true"
             data-message-layout-kind={textLayoutKind}
             data-message-footer-mode={
-              textLikeNoReactionFooter ? (useInlineTextMeta ? "inline-flow" : "float-flow") : hasReactions ? "reactions" : "bottom-meta"
+              simpleTextFooter ? (hasReactions ? "simple-inline-reactions" : "simple-inline") : hasReactions ? "compound-reactions" : "compound-meta"
             }
             className={cn(
               "relative flex flex-col max-w-full px-3 pt-2 rounded-2xl transition-opacity select-none sm:select-text",
@@ -566,7 +596,6 @@ export function MessageBubble({
               selected && "ring-2 ring-[color:var(--kub-cyan)]/55 bg-[color-mix(in_srgb,var(--kub-cyan)_10%,var(--kub-message-in))]",
               isSelectionMode && "cursor-pointer [&_a]:pointer-events-none [&_audio]:pointer-events-none [&_button]:pointer-events-none [&_input]:pointer-events-none [&_video]:pointer-events-none",
             )}
-            style={hasReactions && textLayoutKind === "short" ? { minWidth: "9rem" } : undefined}
           >
             <div
               className={cn(
@@ -666,24 +695,27 @@ export function MessageBubble({
                 data-message-text-flow="true"
                 className={cn(
                   "min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [word-break:normal] text-[color:var(--kub-text)]",
-                  textLikeNoReactionFooter && !useInlineTextMeta && "flow-root",
                   widthClasses.text
                 )}
               >
                 <FormattedText content={message.content ?? ""} />
-                {textLikeNoReactionFooter && (
-                  <span
-                    data-message-footer="true"
-                    className={cn(
-                      "relative top-[4px] inline-flex max-w-max shrink-0 items-center justify-end gap-1 whitespace-nowrap leading-none align-baseline",
-                      useInlineTextMeta ? "ml-1.5 translate-y-[1px]" : "float-right ml-2 mt-1",
-                    )}
-                  >
-                    {renderFooterContent()}
-                  </span>
+                {simpleTextFooter && (
+                  <>
+                    <wbr />
+                    <span
+                      data-message-footer="true"
+                      className={cn(
+                        "ml-1.5 inline-flex max-w-max shrink-0 translate-y-[1px] items-center justify-end gap-1 whitespace-nowrap leading-none [vertical-align:-0.12em]",
+                      )}
+                    >
+                      {renderFooterContent()}
+                    </span>
+                  </>
                 )}
               </p>
             )}
+
+            {renderReactionsRow()}
 
             {message.failed && isMe && (
               <div
@@ -723,46 +755,14 @@ export function MessageBubble({
               </div>
             )}
 
-            {!textLikeNoReactionFooter && (
+            {compoundFooter && (
               <div
                 data-message-bottom-meta="true"
-                className={cn(
-                  "flex max-w-full items-end leading-none",
-                  hasReactions ? "mt-1 w-full min-w-[6.75rem] gap-1.5" : "ml-auto mt-px w-fit justify-end gap-1 pl-3",
-                )}
+                className="ml-auto mt-1 flex w-fit max-w-full items-center justify-end gap-1 leading-none"
               >
-                {hasReactions && (
-                  <div className="flex min-w-0 flex-1 flex-wrap items-center justify-start gap-1">
-                    {visibleReactionEntries.map(([emoji, { count, mine }]) => (
-                      <button
-                        key={emoji}
-                        onClick={() => onReaction(emoji)}
-                        className={cn(
-                          "inline-flex h-[22px] items-center gap-1 rounded-full border px-2 text-[11px] leading-none transition-all hover:scale-105 active:scale-95",
-                          mine
-                            ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] border-[color-mix(in_srgb,var(--kub-cyan)_72%,transparent)] text-[color:var(--kub-cyan)]"
-                            : "bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] text-[color:var(--kub-muted)]"
-                        )}
-                      >
-                        <span className="text-sm leading-none">{emoji}</span>
-                        {count > 1 && <span className="tabular-nums">{count}</span>}
-                      </button>
-                    ))}
-                    {hiddenReactionCount > 0 && (
-                      <span
-                        className="inline-flex h-[22px] items-center rounded-full border border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] px-2 text-[11px] leading-none text-[color:var(--kub-muted)]"
-                        title={`Ещё ${hiddenReactionCount} реакций`}
-                        aria-label={`Ещё ${hiddenReactionCount} реакций`}
-                      >
-                        +{hiddenReactionCount}
-                      </span>
-                    )}
-                  </div>
-                )}
-
                 <div
                   data-message-footer="true"
-                  className="ml-auto flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap text-right leading-none"
+                  className="flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap text-right leading-none"
                 >
                   {renderFooterContent()}
                 </div>
