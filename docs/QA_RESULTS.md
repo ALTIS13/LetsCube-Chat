@@ -286,4 +286,10 @@ Recurring tasks roadmap note:
 - Chat list `Открыть профиль` / group info actions now open a separate preview modal/sheet without changing `selectedChatId`; the chat opens only from the explicit `Открыть чат` button.
 - Mobile chat long-press suppresses the touch `contextmenu` path, so only the bottom action sheet should appear.
 - Supabase read-only check confirmed `chat_members.last_read_at` is visible to chat members through existing RLS and `chat_members` is in realtime; group own-message read counts and the `Кто прочитал` modal use that data without faking private receipt states.
-- `chat_members` has no persistent pinned sort field. Added migration proposal `.migration-backup/supabase/migrations/20260508_chat_pinned_order.sql`; pinned reordering UI should wait until that SQL is reviewed and applied manually.
+- User manually applied `.migration-backup/supabase/migrations/20260508_chat_pinned_order.sql`; read-only MCP confirmed `chat_members.pinned_order`, `set_pinned_chat_order(uuid[])`, authenticated-only execute grants and no anon/PUBLIC execute access.
+
+2026-05-08 pinned/profile/group receipt polish:
+
+- Group own-message footer now uses a compact `✓ count/total` read indicator instead of appending a second loose read badge after the sent check; full names remain in the `Кто прочитал` modal.
+- Pinned chat order UI is enabled through context menu / mobile sheet `Переместить выше` and `Переместить ниже`; saved chat remains above all pinned chats.
+- Mini-profile preview no longer shows service copy about preview mode and now displays profile `bio` plus a localized app role label when available.

@@ -32,6 +32,7 @@ export function useChats() {
     cleared_at: string | null;
     pinned: boolean;
     pinned_at: string | null;
+    pinned_order: number | null;
   };
 
   const fetchChats = useCallback(async () => {
@@ -52,7 +53,7 @@ export function useChats() {
     try {
       const { data: memberships } = await supabase
         .from("chat_members")
-        .select("chat_id, last_read_at, last_delivered_at, hidden_at, cleared_at, pinned, pinned_at")
+        .select("chat_id, last_read_at, last_delivered_at, hidden_at, cleared_at, pinned, pinned_at, pinned_order")
         .eq("user_id", userId);
 
       if (!memberships?.length) {
@@ -154,6 +155,7 @@ export function useChats() {
             unread_count: unreadCount,
             is_pinned: Boolean(myMembership?.pinned),
             pinned_at: myMembership?.pinned_at ?? null,
+            pinned_order: myMembership?.pinned_order ?? null,
             hidden_at: myMembership?.hidden_at ?? null,
             cleared_at: myMembership?.cleared_at ?? null,
           } as ChatWithLastMessage;
@@ -188,6 +190,13 @@ export function useChats() {
         const bPinned = Boolean(b.is_pinned);
         if (aPinned !== bPinned) return aPinned ? -1 : 1;
         if (aPinned && bPinned) {
+          const aOrder = typeof a.pinned_order === "number" ? a.pinned_order : null;
+          const bOrder = typeof b.pinned_order === "number" ? b.pinned_order : null;
+          if (aOrder !== null || bOrder !== null) {
+            if (aOrder === null) return 1;
+            if (bOrder === null) return -1;
+            if (aOrder !== bOrder) return aOrder - bOrder;
+          }
           const aPinnedAt = a.pinned_at ? new Date(a.pinned_at).getTime() : 0;
           const bPinnedAt = b.pinned_at ? new Date(b.pinned_at).getTime() : 0;
           if (aPinnedAt !== bPinnedAt) return bPinnedAt - aPinnedAt;

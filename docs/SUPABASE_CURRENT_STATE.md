@@ -12,7 +12,7 @@ Project ref: `nhogbeojfnbjcfipitrh`.
 
 - `profiles` - 4 rows, пользователи/профили, `role app_role`.
 - `chats` - 12 rows, private/group/channel chats, `is_forum`.
-- `chat_members` - membership/roles, `last_read_at`, per-user `hidden_at`, `cleared_at`, `pinned`, `pinned_at`.
+- `chat_members` - membership/roles, `last_read_at`, per-user `hidden_at`, `cleared_at`, `pinned`, `pinned_at`, `pinned_order`.
 - `messages` - 163 rows, сообщения, media/reply/forward/topic fields.
 - `reactions` - 5 rows, реакции на сообщения.
 - `folders` - 4 rows, personal/shared/system folders.
@@ -234,3 +234,11 @@ Frontend task UI можно выравнивать под новые task column
   - `messages_client_message_id_unique_idx` on `(chat_id, user_id, client_message_id)` where `client_message_id is not null`.
   - `messages_client_message_lookup_idx` on `(user_id, client_message_id)` where `client_message_id is not null`.
 - Frontend alignment is enabled: text, location, media, voice and forwarded messages can use a client-generated idempotency key while persisted ordering remains based on server `created_at`.
+
+## 2026-05-08 Pinned Chat Order State
+
+- `.migration-backup/supabase/migrations/20260508_chat_pinned_order.sql` was applied manually by the user.
+- Read-only MCP confirmed `chat_members.pinned_order integer null`.
+- Read-only MCP confirmed `set_pinned_chat_order(p_chat_ids uuid[])`, updated `pin_chat(p_chat_id uuid)` and updated `unpin_chat(p_chat_id uuid)`.
+- `authenticated` has `EXECUTE`; `anon`/`PUBLIC` execute grants are absent for pinned order RPC.
+- Frontend pinned-chat reorder UI is enabled with per-user move up/down actions; saved chat remains sorted above pinned chats.

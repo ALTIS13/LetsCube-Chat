@@ -138,11 +138,31 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
     const isPinned = Boolean(chat.is_pinned);
     const isMuted = mutedChatIds.includes(chat.id);
     const groupLabel = chat.type === "channel" ? "канал" : "группу";
+    const pinnedChats = getOrderedPinnedChats(chatsWithMute, currentUser?.id ?? null);
+    const pinnedIndex = pinnedChats.findIndex((item) => item.id === chat.id);
 
     const selectChat = () => onChatSelect(chat.id);
     const selectAndOpenPanel = (panel: "info" | "search") => {
       onChatSelect(chat.id);
       requestChatPanel(chat.id, panel);
+    };
+    const reorderPinnedChat = async (direction: "up" | "down") => {
+      if (pinnedIndex < 0) return;
+      const targetIndex = direction === "up" ? pinnedIndex - 1 : pinnedIndex + 1;
+      if (targetIndex < 0 || targetIndex >= pinnedChats.length) return;
+      const reordered = pinnedChats.map((item) => item.id);
+      [reordered[pinnedIndex], reordered[targetIndex]] = [reordered[targetIndex], reordered[pinnedIndex]];
+
+      updateChatList((current) => current.map((item) => {
+        const nextOrder = reordered.indexOf(item.id);
+        return nextOrder >= 0 ? { ...item, pinned_order: nextOrder + 1 } : item;
+      }));
+
+      const { error } = await supabase.rpc("set_pinned_chat_order", { p_chat_ids: reordered });
+      if (error) {
+        showAppAlert(prefixError("Не удалось изменить порядок закреплённых чатов", error), "Ошибка");
+        dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
+      }
     };
 
     const actions: ChatAction[] = [
@@ -189,14 +209,44 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
             showAppAlert(prefixError(isPinned ? "Не удалось открепить чат" : "Не удалось закрепить чат", error), "Ошибка");
             return;
           }
-          updateChatList((current) => current.map((item) =>
-            item.id === chat.id
-              ? { ...item, is_pinned: !isPinned, pinned_at: isPinned ? null : new Date().toISOString() }
-              : item
-          ));
+          updateChatList((current) => {
+            const pinnedOrders = current
+              .filter((item) => item.id !== chat.id && item.is_pinned && !isSavedChat(item, currentUser?.id ?? null))
+              .map((item) => item.pinned_order)
+              .filter((order): order is number => typeof order === "number");
+            const nextOrder = pinnedOrders.length ? Math.min(...pinnedOrders) - 1 : 1;
+            return current.map((item) =>
+              item.id === chat.id
+                ? {
+                  ...item,
+                  is_pinned: !isPinned,
+                  pinned_at: isPinned ? null : new Date().toISOString(),
+                  pinned_order: isPinned ? null : nextOrder,
+                }
+                : item
+            );
+          });
           dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
         },
       });
+
+      if (isPinned && pinnedIndex > 0) {
+        actions.push({
+          id: "move-pinned-up",
+          icon: "chevronUp",
+          label: "Переместить выше",
+          run: () => reorderPinnedChat("up"),
+        });
+      }
+
+      if (isPinned && pinnedIndex >= 0 && pinnedIndex < pinnedChats.length - 1) {
+        actions.push({
+          id: "move-pinned-down",
+          icon: "chevronDown",
+          label: "Переместить ниже",
+          run: () => reorderPinnedChat("down"),
+        });
+      }
     }
 
     actions.push({
@@ -325,6 +375,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
 
     return actions;
   }, [
+    chatsWithMute,
     clearChatLocally,
     currentUser?.id,
     mutedChatIds,
@@ -464,7 +515,6 @@ function ChatProfilePreviewModal({
       open
       onClose={onClose}
       title={isPrivate ? "Профиль" : display.isSaved ? "Избранное" : "Информация"}
-      description="Просмотр без перехода в чат"
       icon={<KubIcon name={isPrivate ? "profile" : display.isSaved ? "bookmark" : "group"} size={18} />}
       size="md"
       contentClassName="px-0 py-0"
@@ -509,12 +559,20 @@ function ChatProfilePreviewModal({
                 </span>
               </div>
             )}
+            {isPrivate && otherUser && (
+              <div className="flex items-center justify-between gap-3 py-1">
+                <span>Роль</span>
+                <span className="font-semibold text-[color:var(--kub-text)]">
+                  {getAppRoleLabel(otherUser.role)}
+                </span>
+              </div>
+            )}
             {isGroupLike && (
               <>
                 <div className="flex items-center justify-between gap-3 py-1">
                   <span>Ваша роль</span>
                   <span className="font-semibold text-[color:var(--kub-text)]">
-                    {myRole === "owner" ? "владелец" : myRole === "admin" ? "администратор" : "участник"}
+                    {getChatMemberRoleLabel(myRole)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3 py-1">
@@ -529,6 +587,20 @@ function ChatProfilePreviewModal({
               <div className="py-1">Сохранённые сообщения открываются только по явному переходу.</div>
             )}
           </div>
+
+          {isPrivate && otherUser?.bio && (
+            <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/45 px-3 py-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">О себе</div>
+              <div className="mt-1 whitespace-pre-wrap break-words text-sm text-[color:var(--kub-text)]">{otherUser.bio}</div>
+            </div>
+          )}
+
+          {isGroupLike && chat.description && (
+            <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/45 px-3 py-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">Описание</div>
+              <div className="mt-1 whitespace-pre-wrap break-words text-sm text-[color:var(--kub-text)]">{chat.description}</div>
+            </div>
+          )}
 
           {previewActions.length > 0 && (
             <div className="overflow-hidden rounded-xl border border-[color:var(--kub-border-color)]">
@@ -701,6 +773,8 @@ function sortChatsForSidebar(chats: ChatWithLastMessage[], currentUserId: string
     const bPinned = Boolean(b.is_pinned);
     if (aPinned !== bPinned) return aPinned ? -1 : 1;
     if (aPinned && bPinned) {
+      const byPinnedOrder = comparePinnedOrder(a, b);
+      if (byPinnedOrder !== 0) return byPinnedOrder;
       const aPinnedAt = a.pinned_at ? new Date(a.pinned_at).getTime() : 0;
       const bPinnedAt = b.pinned_at ? new Date(b.pinned_at).getTime() : 0;
       if (aPinnedAt !== bPinnedAt) return bPinnedAt - aPinnedAt;
@@ -709,4 +783,54 @@ function sortChatsForSidebar(chats: ChatWithLastMessage[], currentUserId: string
     const bTime = b.last_message?.created_at ?? b.updated_at;
     return new Date(bTime).getTime() - new Date(aTime).getTime();
   });
+}
+
+function getOrderedPinnedChats(chats: ChatWithLastMessage[], currentUserId: string | null): ChatWithLastMessage[] {
+  return chats
+    .filter((chat) => chat.is_pinned && !isSavedChat(chat, currentUserId))
+    .sort((a, b) => {
+      const byPinnedOrder = comparePinnedOrder(a, b);
+      if (byPinnedOrder !== 0) return byPinnedOrder;
+      const aPinnedAt = a.pinned_at ? new Date(a.pinned_at).getTime() : 0;
+      const bPinnedAt = b.pinned_at ? new Date(b.pinned_at).getTime() : 0;
+      if (aPinnedAt !== bPinnedAt) return bPinnedAt - aPinnedAt;
+      return a.id.localeCompare(b.id);
+    });
+}
+
+function comparePinnedOrder(a: ChatWithLastMessage, b: ChatWithLastMessage): number {
+  const aOrder = typeof a.pinned_order === "number" ? a.pinned_order : null;
+  const bOrder = typeof b.pinned_order === "number" ? b.pinned_order : null;
+  if (aOrder === null && bOrder === null) return 0;
+  if (aOrder === null) return 1;
+  if (bOrder === null) return -1;
+  return aOrder - bOrder;
+}
+
+function getAppRoleLabel(role: string | null | undefined): string {
+  switch (role) {
+    case "admin":
+      return "Администратор";
+    case "manager":
+      return "Менеджер";
+    case "staff":
+      return "Персонал";
+    case "technical_admin":
+    case "tech_admin":
+      return "Тех. администратор";
+    case "user":
+    default:
+      return "Пользователь";
+  }
+}
+
+function getChatMemberRoleLabel(role: string | null | undefined): string {
+  switch (role) {
+    case "owner":
+      return "Владелец";
+    case "admin":
+      return "Администратор";
+    default:
+      return "Участник";
+  }
 }

@@ -249,6 +249,7 @@ export interface Database {
           cleared_at: string | null
           pinned: boolean
           pinned_at: string | null
+          pinned_order: number | null
         }
         Insert: {
           chat_id: string
@@ -261,6 +262,7 @@ export interface Database {
           cleared_at?: string | null
           pinned?: boolean
           pinned_at?: string | null
+          pinned_order?: number | null
         }
         Update: {
           role?: ChatMemberRole
@@ -270,6 +272,7 @@ export interface Database {
           cleared_at?: string | null
           pinned?: boolean
           pinned_at?: string | null
+          pinned_order?: number | null
         }
         Relationships: [
           {
@@ -811,6 +814,10 @@ export interface Database {
         Args: { p_chat_id: string }
         Returns: void
       }
+      set_pinned_chat_order: {
+        Args: { p_chat_ids: string[] }
+        Returns: void
+      }
       unpin_chat: {
         Args: { p_chat_id: string }
         Returns: void
@@ -888,6 +895,7 @@ export interface ChatWithLastMessage extends Chat {
   is_muted?: boolean
   is_pinned?: boolean
   pinned_at?: string | null
+  pinned_order?: number | null
   hidden_at?: string | null
   cleared_at?: string | null
 }

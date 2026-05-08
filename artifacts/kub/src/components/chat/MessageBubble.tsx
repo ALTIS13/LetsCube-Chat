@@ -364,10 +364,15 @@ export function MessageBubble({
     !hasReactions &&
     textLayoutKind !== "preformatted" &&
     !message.failed;
-  const footerReserveClass = cn(
-    deliveryState?.isOwnMessage ? "pr-20 sm:pr-16" : "pr-16 sm:pr-12",
-    (message.edited_at || message.pinned) && (deliveryState?.isOwnMessage ? "pr-24 sm:pr-20" : "pr-20 sm:pr-16"),
-  );
+  const showGroupReadIndicator = Boolean(groupReadInfo && groupReadInfo.readCount > 0);
+  const groupReadLabel = groupReadInfo
+    ? `${groupReadInfo.readCount}/${Math.max(groupReadInfo.totalRecipients, groupReadInfo.readCount)}`
+    : "";
+  const footerReserveClass = getFooterReserveClass({
+    own: Boolean(deliveryState?.isOwnMessage),
+    compactGroupRead: showGroupReadIndicator,
+    hasExtraMeta: Boolean(message.edited_at || message.pinned),
+  });
   const renderFooterContent = () => (
     <>
       {message.pinned && (
@@ -379,7 +384,7 @@ export function MessageBubble({
       <span className="shrink-0 text-[10px] leading-none text-[color:var(--kub-muted)]">
         {formatFullTime(message.created_at)}
       </span>
-      {deliveryState?.isOwnMessage && (
+      {deliveryState?.isOwnMessage && !showGroupReadIndicator && (
         <KubIcon
           name={deliveryState.icon}
           size={13}
@@ -387,19 +392,19 @@ export function MessageBubble({
           label={deliveryState.label}
         />
       )}
-      {groupReadInfo && groupReadInfo.readCount > 0 && (
+      {groupReadInfo && showGroupReadIndicator && (
         <button
           type="button"
           className="inline-flex h-4 items-center gap-0.5 rounded-full px-0.5 text-[10px] leading-none text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)]"
-          title={groupReadInfo.allRead ? "Прочитано всеми" : `Прочитали: ${groupReadInfo.readCount}`}
-          aria-label={groupReadInfo.allRead ? "Прочитано всеми" : `Прочитали: ${groupReadInfo.readCount}`}
+          title={groupReadInfo.allRead ? `Прочитано всеми: ${groupReadLabel}` : `Прочитали: ${groupReadLabel}`}
+          aria-label={groupReadInfo.allRead ? `Прочитано всеми: ${groupReadLabel}` : `Прочитали: ${groupReadLabel}`}
           onClick={(event) => {
             event.stopPropagation();
             onOpenGroupReadReceipts?.();
           }}
         >
-          <KubIcon name="eye" size={11} tone={groupReadInfo.allRead ? "accent" : "muted"} />
-          <span className="tabular-nums">{groupReadInfo.readCount}</span>
+          <KubIcon name={groupReadInfo.allRead ? "doubleCheck" : "check"} size={11} tone={groupReadInfo.allRead ? "accent" : "muted"} />
+          <span className="tabular-nums">{groupReadLabel}</span>
         </button>
       )}
       <button
@@ -763,6 +768,20 @@ export function MessageBubble({
       </div>
     </>
   );
+}
+
+function getFooterReserveClass({
+  own,
+  compactGroupRead,
+  hasExtraMeta,
+}: {
+  own: boolean;
+  compactGroupRead: boolean;
+  hasExtraMeta: boolean;
+}): string {
+  if (compactGroupRead) return hasExtraMeta ? "pr-32 sm:pr-28" : "pr-28 sm:pr-24";
+  if (hasExtraMeta) return own ? "pr-24 sm:pr-20" : "pr-20 sm:pr-16";
+  return own ? "pr-20 sm:pr-16" : "pr-16 sm:pr-12";
 }
 
 function setBodySelectionSuppressed(suppressed: boolean) {

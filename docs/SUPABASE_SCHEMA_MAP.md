@@ -38,7 +38,7 @@ Role helpers:
 
 - Composite PK: `chat_id`, `user_id`.
 - `role chat_member_role`, `joined_at`, `last_read_at`, `last_delivered_at`.
-- Per-user local state: `hidden_at`, `cleared_at`, `pinned`, `pinned_at`.
+- Per-user local state: `hidden_at`, `cleared_at`, `pinned`, `pinned_at`, `pinned_order`.
 
 `messages`:
 
@@ -272,6 +272,7 @@ Manual/idempotent migrations are stored in `.migration-backup/supabase/migration
 - `20260507_message_hide_for_me_grants_hardening.sql` - applied manually in production Supabase as of 2026-05-07; read-only MCP confirmed `anon`/`PUBLIC` grants are absent and authenticated access remains.
 - `20260507_message_delivery_receipts.sql` - applied manually in production Supabase as of 2026-05-07; adds `chat_members.last_delivered_at` and `mark_chat_delivered` / `mark_chat_read` RPC for honest private-chat delivered/read receipts.
 - `20260508_messages_client_message_id.sql` - applied manually in production Supabase as of 2026-05-08; adds message send idempotency columns and partial indexes for safe retry.
+- `20260508_chat_pinned_order.sql` - applied manually in production Supabase as of 2026-05-08; adds per-user `chat_members.pinned_order` and `set_pinned_chat_order(uuid[])`.
 - `20260506_admin_avatar_management.sql` - applied in production Supabase as of 2026-05-06; allows admins to upload avatars for non-admin users through the scoped media path helper.
 - `20260506_secure_chat_media_access.sql` - applied in production Supabase as of 2026-05-06; adds private `chat-media` bucket, chat-member storage policies and `messages.media_bucket` / `messages.media_path`.
 - `20260506_entity_name_constraints.sql` - applied manually in production Supabase as of 2026-05-06; DB-level max length checks for `chats.name`, `folders.name` and `topics.name` are active.
