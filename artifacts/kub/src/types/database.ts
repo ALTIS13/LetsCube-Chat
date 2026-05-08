@@ -303,6 +303,8 @@ export interface Database {
           deleted_at: string | null
           pinned: boolean
           created_at: string
+          client_message_id: string | null
+          client_sent_at: string | null
         }
         Insert: {
           id?: string
@@ -318,12 +320,16 @@ export interface Database {
           deleted_at?: string | null
           pinned?: boolean
           created_at?: string
+          client_message_id?: string | null
+          client_sent_at?: string | null
         }
         Update: {
           content?: string | null
           edited_at?: string | null
           deleted_at?: string | null
           pinned?: boolean
+          client_message_id?: string | null
+          client_sent_at?: string | null
         }
         Relationships: [
           {
@@ -892,6 +898,10 @@ export interface MessageWithSender extends Message {
   reply_to?: MessageWithSender
   /** Optimistic UI: true while the INSERT is in flight. Cleared once the server returns. */
   pending?: boolean
+  /** Local UI: true while we are checking whether an unknown insert reached the DB. */
+  checking?: boolean
   /** Optimistic UI: true if the INSERT failed; lets MessageBubble show a retry/error icon. */
   failed?: boolean
+  /** Local UI: friendly failed-send reason. Not persisted. */
+  send_error?: string | null
 }

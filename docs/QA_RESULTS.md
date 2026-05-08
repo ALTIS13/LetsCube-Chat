@@ -24,6 +24,7 @@
 - Folders policy cleanup уже применен: legacy `folders`/`folder_chats` `*_own` policies отсутствуют, остались scope-aware policies и restrictive banned-user guards.
 - User manually applied `.migration-backup/supabase/migrations/20260507_message_hide_for_me.sql`; read-only MCP confirmed `message_hidden_for_users`, authenticated-only RLS policies and `hide_message_for_me` / `unhide_message_for_me` RPC.
 - User manually applied `.migration-backup/supabase/migrations/20260507_message_hide_for_me_grants_hardening.sql`; read-only MCP confirmed `anon`/`PUBLIC` table/function grants are absent and authenticated access remains.
+- User manually applied `.migration-backup/supabase/migrations/20260508_messages_client_message_id.sql`; read-only MCP confirmed `messages.client_message_id`, `messages.client_sent_at`, server `created_at default now()` and the idempotency lookup/unique indexes.
 
 ## Needs Manual Verification
 
@@ -273,3 +274,9 @@ Recurring tasks roadmap note:
 - The older active-chat-only receipt path was the reason sender checkmarks updated after entering the chat; active bubbles and preview now read the same store member receipt state.
 - Text bubbles without reactions render footer meta inline at the end of the text flow; reaction bubbles keep the compact bottom meta row.
 - Link bubbles no longer force a wide desktop width; they use fit-content with responsive max-width and URL wrapping.
+
+2026-05-08 reliable send follow-up:
+
+- Text, location, media, voice and forwarded message inserts now include `client_message_id` and `client_sent_at`, but do not send client `created_at`.
+- Message bubbles stay pending until the DB insert returns/fetches the server row; the server `created_at` replaces the local pending timestamp after acknowledgement.
+- Retry reuses the same `client_message_id` and fetches an existing row on duplicate/unknown responses, preventing duplicate messages after network timeouts.

@@ -46,6 +46,8 @@ Role helpers:
 - Media/relation fields: `media_url`, `reply_to_id`, `forwarded_from_id`.
 - Moderation/status: `edited_at`, `deleted_at`, `pinned`.
 - `created_at`, `topic_id`.
+- Send idempotency fields: `client_message_id uuid null`, `client_sent_at timestamptz null`.
+- `created_at` is server-owned (`default now()`) and remains the persisted ordering/receipt timestamp. `client_sent_at` is diagnostic/pending-only context, not a canonical send time.
 
 `message_hidden_for_users`:
 
@@ -269,6 +271,7 @@ Manual/idempotent migrations are stored in `.migration-backup/supabase/migration
 - `20260507_message_hide_for_me.sql` - applied in production Supabase as of 2026-05-07; adds per-user message hide table and RPC.
 - `20260507_message_hide_for_me_grants_hardening.sql` - applied manually in production Supabase as of 2026-05-07; read-only MCP confirmed `anon`/`PUBLIC` grants are absent and authenticated access remains.
 - `20260507_message_delivery_receipts.sql` - applied manually in production Supabase as of 2026-05-07; adds `chat_members.last_delivered_at` and `mark_chat_delivered` / `mark_chat_read` RPC for honest private-chat delivered/read receipts.
+- `20260508_messages_client_message_id.sql` - applied manually in production Supabase as of 2026-05-08; adds message send idempotency columns and partial indexes for safe retry.
 - `20260506_admin_avatar_management.sql` - applied in production Supabase as of 2026-05-06; allows admins to upload avatars for non-admin users through the scoped media path helper.
 - `20260506_secure_chat_media_access.sql` - applied in production Supabase as of 2026-05-06; adds private `chat-media` bucket, chat-member storage policies and `messages.media_bucket` / `messages.media_path`.
 - `20260506_entity_name_constraints.sql` - applied manually in production Supabase as of 2026-05-06; DB-level max length checks for `chats.name`, `folders.name` and `topics.name` are active.

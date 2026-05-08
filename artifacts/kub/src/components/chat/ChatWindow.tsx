@@ -52,7 +52,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const messageGeneralTopicIds = isForum ? generalTopicIds : EMPTY_GENERAL_TOPIC_IDS;
   const {
     messages, pinnedMessages, pinnedReady, loading, loadingOlder, hasMoreOlder, olderError, isTyping,
-    sendMessage, sendTyping, toggleReaction,
+    sendMessage, sendMediaMessage, sendTyping, toggleReaction,
+    retryMessageSend, discardLocalMessage,
     editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, togglePin, forwardMessage, clearChatForMe,
     loadOlderMessages,
   } = useMessages(chatId, messageTopicId, messageGeneralTopicIds);
@@ -65,6 +66,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [pinError, setPinError] = useState<string | null>(null);
   const [openMedia, setOpenMedia] = useState<MediaViewerItem | null>(null);
+  const [draftRestore, setDraftRestore] = useState<{ id: string; text: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement>>({});
   const supabase = createClient();
@@ -110,38 +112,14 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
     const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(uploadedPath);
 
-    try {
-      const mm = Math.floor(durationSec / 60).toString().padStart(2, "0");
-      const ss = (durationSec % 60).toString().padStart(2, "0");
-      const { error: insertErr } = await supabase.from("messages").insert({
-        chat_id: chatId,
-        topic_id: isForum ? selectedTopicId : null,
-        user_id: userId,
-        type: "audio",
-        media_url: publicUrl,
-        content: `🎤 Голосовое сообщение (${mm}:${ss})`,
-      });
-      if (insertErr) {
-        console.error("[voice] insert error:", insertErr);
-        try { await supabase.storage.from("media").remove([uploadedPath]); }
-        catch (cleanupErr) { console.error("[voice] orphan cleanup failed:", cleanupErr); }
-        showAppAlert("Не удалось сохранить сообщение в чате. Попробуйте позже.", "Ошибка");
-        return;
-      }
-    } catch (err) {
-      console.error("[voice] insert threw:", err);
-      try { await supabase.storage.from("media").remove([uploadedPath]); }
-      catch (cleanupErr) { console.error("[voice] orphan cleanup failed:", cleanupErr); }
-      showAppAlert("Не удалось сохранить сообщение в чате. Попробуйте позже.", "Ошибка");
-      return;
-    }
-
-    try {
-      await supabase.from("chats").update({ updated_at: new Date().toISOString() }).eq("id", chatId);
-    } catch (err) {
-      console.error("[voice] chats.updated_at bump failed:", err);
-    }
-  }, [chatId, isForum, selectedTopicId, userId, supabase]);
+    const mm = Math.floor(durationSec / 60).toString().padStart(2, "0");
+    const ss = (durationSec % 60).toString().padStart(2, "0");
+    await sendMediaMessage({
+      type: "audio",
+      mediaUrl: publicUrl,
+      content: `🎤 Голосовое сообщение (${mm}:${ss})`,
+    });
+  }, [sendMediaMessage, userId, supabase]);
 
   const jumpToMessage = useCallback((messageId: string) => {
     setHighlightedId(messageId);
@@ -195,6 +173,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       throw new Error(`Не удалось удалить ${failures.length} из ${items.length} сообщений.`);
     }
   }, [deleteMessage]);
+
+  const handleEditFailedSend = useCallback((msg: MessageWithSender) => {
+    if (msg.type !== "text") return;
+    discardLocalMessage(msg.id);
+    setDraftRestore({ id: `${msg.id}:${Date.now()}`, text: msg.content ?? "" });
+  }, [discardLocalMessage]);
 
   return (
     <div className="flex h-full w-full min-w-0 overflow-hidden bg-[var(--kub-chat-bg)]">
@@ -261,6 +245,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             onBulkDeleteForEveryone={savedChat ? undefined : handleBulkDeleteForEveryone}
             onTogglePin={userId ? handleTogglePin : undefined}
             onForward={(msg) => setForwardingMessage(msg)}
+            onRetrySend={(msg) => void retryMessageSend(msg)}
+            onEditFailedSend={handleEditFailedSend}
+            onDiscardLocalMessage={(msg) => discardLocalMessage(msg.id)}
             onOpenMedia={setOpenMedia}
             bottomRef={bottomRef}
             isTyping={isTyping}
@@ -279,13 +266,14 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
         <MessageInput
           chatId={chatId}
-          topicId={isForum ? selectedTopicId : null}
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
           onSend={handleSend}
+          onSendMedia={sendMediaMessage}
           onEdit={editMessage}
           onSendVoice={handleSendVoice}
           onTyping={sendTyping}
+          draftOverride={draftRestore}
         />
       </div>
       {showInfo && chat && (

@@ -22,6 +22,9 @@ interface MessageListProps {
   onBulkDeleteForEveryone?: (messages: MessageWithSender[]) => Promise<void> | void;
   onTogglePin?: (msg: MessageWithSender) => void;
   onForward?: (msg: MessageWithSender) => void;
+  onRetrySend?: (msg: MessageWithSender) => void;
+  onEditFailedSend?: (msg: MessageWithSender) => void;
+  onDiscardLocalMessage?: (msg: MessageWithSender) => void;
   onOpenMedia?: (media: MediaViewerItem) => void;
   bottomRef: RefObject<HTMLDivElement | null>;
   isTyping?: boolean;
@@ -80,6 +83,9 @@ export function MessageList({
   onBulkDeleteForEveryone,
   onTogglePin,
   onForward,
+  onRetrySend,
+  onEditFailedSend,
+  onDiscardLocalMessage,
   onOpenMedia,
   bottomRef,
   isTyping = false,
@@ -349,6 +355,7 @@ export function MessageList({
             !shouldShowDateSeparator(msg, next);
 
           const canSelect = !msg.deleted_at;
+          const isLocalSend = msg.id.startsWith("tmp:") || Boolean(msg.pending || msg.checking || msg.failed);
           const deliveryState = getMessageDeliveryState(msg, {
             currentUserId: userId,
             chatType,
@@ -419,11 +426,14 @@ export function MessageList({
                     isMe={isMe}
                     isFirstInGroup={!isSameSenderAsPrev}
                     isLastInGroup={!isSameSenderAsNext}
-                    onReply={() => onReply(msg)}
-                    onReaction={(emoji) => onReaction(msg.id, emoji)}
-                    onEdit={onEdit ? () => onEdit(msg) : undefined}
-                    onDelete={onDelete ? () => onDelete(msg) : undefined}
-                    onHideForMe={onHideForMe ? () => onHideForMe(msg) : undefined}
+                    onReply={isLocalSend ? () => undefined : () => onReply(msg)}
+                    onReaction={isLocalSend ? () => undefined : (emoji) => onReaction(msg.id, emoji)}
+                    onEdit={!isLocalSend && onEdit ? () => onEdit(msg) : undefined}
+                    onDelete={!isLocalSend && onDelete ? () => onDelete(msg) : undefined}
+                    onHideForMe={!isLocalSend && onHideForMe ? () => onHideForMe(msg) : undefined}
+                    onRetrySend={onRetrySend && msg.failed ? () => onRetrySend(msg) : undefined}
+                    onEditFailedSend={onEditFailedSend && msg.failed ? () => onEditFailedSend(msg) : undefined}
+                    onDiscardLocalMessage={onDiscardLocalMessage && isLocalSend ? () => onDiscardLocalMessage(msg) : undefined}
                     onStartSelection={onBulkHideForMe && canSelect ? () => {
                       setBulkError(null);
                       setBulkConfirmAction(null);
@@ -432,8 +442,8 @@ export function MessageList({
                       setOpenReactionMessageId(null);
                       setOpenActionMessageId(null);
                     } : undefined}
-                    onTogglePin={onTogglePin ? () => onTogglePin(msg) : undefined}
-                    onForward={onForward ? () => onForward(msg) : undefined}
+                    onTogglePin={!isLocalSend && onTogglePin ? () => onTogglePin(msg) : undefined}
+                    onForward={!isLocalSend && onForward ? () => onForward(msg) : undefined}
                     onOpenMedia={onOpenMedia}
                     reactionMenuOpen={openReactionMessageId === msg.id}
                     onToggleReactionMenu={() => {

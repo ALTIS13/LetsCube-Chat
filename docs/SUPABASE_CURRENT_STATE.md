@@ -224,3 +224,13 @@ Frontend task UI можно выравнивать под новые task column
 - `chat_members` remains in the `supabase_realtime` publication, so member receipt updates can update checkmarks without refresh.
 - Frontend delivered-flow is enabled for private chats only. Group chats still do not show fake read/delivered state because there is no group read-count/all-delivered model.
 - Sender-side receipt updates are consumed through one stable `chat-members:receipts:{userId}` frontend subscription to RLS-visible `chat_members` updates; no per-chat list subscriptions are required.
+
+## 2026-05-08 Message Send Idempotency State
+
+- `.migration-backup/supabase/migrations/20260508_messages_client_message_id.sql` was applied manually by the user.
+- Read-only MCP confirmed `messages.created_at timestamptz not null default now()`.
+- Read-only MCP confirmed `messages.client_message_id uuid null` and `messages.client_sent_at timestamptz null`.
+- Read-only MCP confirmed partial indexes:
+  - `messages_client_message_id_unique_idx` on `(chat_id, user_id, client_message_id)` where `client_message_id is not null`.
+  - `messages_client_message_lookup_idx` on `(user_id, client_message_id)` where `client_message_id is not null`.
+- Frontend alignment is enabled: text, location, media, voice and forwarded messages can use a client-generated idempotency key while persisted ordering remains based on server `created_at`.

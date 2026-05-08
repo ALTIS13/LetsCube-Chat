@@ -112,6 +112,10 @@ function compareMessages(a: MessageWithSender, b: MessageWithSender): number {
   return a.id.localeCompare(b.id);
 }
 
+function sameClientMessage(a: MessageWithSender, b: MessageWithSender): boolean {
+  return Boolean(a.client_message_id && b.client_message_id && a.client_message_id === b.client_message_id);
+}
+
 function sortMessages(messages: MessageWithSender[]): MessageWithSender[] {
   return [...messages].sort(compareMessages);
 }
@@ -171,7 +175,7 @@ export const useAppStore = create<AppState>((set) => ({
   addMessage: (chatId, message) =>
     set((state) => {
       const existing = state.messages[chatId] || []
-      const idx = existing.findIndex((m) => m.id === message.id)
+      const idx = existing.findIndex((m) => m.id === message.id || sameClientMessage(m, message))
       // Upsert: if a message with this id is already in the store (e.g. optimistic copy
       // already replaced with real data, then realtime echo arrives), replace it in place
       // rather than appending a duplicate.
@@ -197,8 +201,8 @@ export const useAppStore = create<AppState>((set) => ({
   replaceMessage: (chatId, oldId, message) =>
     set((state) => {
       const existing = state.messages[chatId] || []
-      const withoutOld = existing.filter((m) => m.id !== oldId)
-      const idx = withoutOld.findIndex((m) => m.id === message.id)
+      const withoutOld = existing.filter((m) => m.id !== oldId && !sameClientMessage(m, message))
+      const idx = withoutOld.findIndex((m) => m.id === message.id || sameClientMessage(m, message))
       const next = idx === -1
         ? [...withoutOld, message]
         : withoutOld.map((m, i) => (i === idx ? message : m))

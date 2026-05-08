@@ -37,6 +37,9 @@ interface MessageBubbleProps {
   onStartSelection?: () => void;
   onTogglePin?: () => void;
   onForward?: () => void;
+  onRetrySend?: () => void;
+  onEditFailedSend?: () => void;
+  onDiscardLocalMessage?: () => void;
   onOpenMedia?: (media: MediaViewerItem) => void;
   reactionMenuOpen?: boolean;
   onToggleReactionMenu?: () => void;
@@ -129,6 +132,7 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
 export function MessageBubble({
   message, isMe, isFirstInGroup, isLastInGroup,
   onReply, onReaction, onEdit, onDelete, onHideForMe, onStartSelection, onTogglePin, onForward, onOpenMedia,
+  onRetrySend, onEditFailedSend, onDiscardLocalMessage,
   reactionMenuOpen = false, onToggleReactionMenu, onCloseReactionMenu,
   actionMenuOpen, onOpenActionMenu, onCloseActionMenu, selected = false, isSelectionMode = false,
   usersMap = {}, messagesMap = {}, deliveryState, isSavedChat,
@@ -222,6 +226,8 @@ export function MessageBubble({
     .slice(visibleReactionLimit)
     .reduce((total, [, { count }]) => total + count, 0);
   const hasReactions = reactionEntries.length > 0;
+  const isLocalSend = message.id.startsWith("tmp:") || Boolean(message.pending || message.checking || message.failed);
+  const canReact = !isLocalSend;
 
   const clearLongPressTimer = useCallback(() => {
     if (longPressTimer.current) {
@@ -281,7 +287,7 @@ export function MessageBubble({
     if (!contextOpen) setBodySelectionSuppressed(false);
   }, [clearLongPressTimer, contextOpen]);
 
-  const contextItems: ContextItem[] = [
+  const regularContextItems: ContextItem[] = [
     { icon: "reply", label: "Ответить", action: () => { onReply(); closeContext(); } },
     { icon: "copy",  label: "Копировать", action: () => { navigator.clipboard.writeText(message.content ?? ""); closeContext(); } },
     ...(isMe && message.type === "text" && onEdit ? [
@@ -332,10 +338,24 @@ export function MessageBubble({
         } },
     ] : []),
   ];
+  const localSendContextItems: ContextItem[] = [
+    ...(onRetrySend ? [
+      { icon: "rotate" as KubIconName, label: "Повторить", action: () => { onRetrySend(); closeContext(); } },
+    ] : []),
+    ...(message.type === "text" && onEditFailedSend ? [
+      { icon: "edit" as KubIconName, label: "Изменить", action: () => { onEditFailedSend(); closeContext(); } },
+    ] : []),
+    { icon: "copy", label: "Копировать", action: () => { navigator.clipboard.writeText(message.content ?? ""); closeContext(); } },
+    ...(onDiscardLocalMessage ? [
+      { icon: "delete" as KubIconName, label: "Удалить", danger: true, action: () => { onDiscardLocalMessage(); closeContext(); } },
+    ] : []),
+  ];
+  const contextItems = isLocalSend ? localSendContextItems : regularContextItems;
   const textLikeNoReactionFooter =
     message.type === "text" &&
     !hasReactions &&
-    textLayoutKind !== "preformatted";
+    textLayoutKind !== "preformatted" &&
+    !message.failed;
   const footerReserveClass = cn(
     deliveryState?.isOwnMessage ? "pr-20 sm:pr-16" : "pr-16 sm:pr-12",
     (message.edited_at || message.pinned) && (deliveryState?.isOwnMessage ? "pr-24 sm:pr-20" : "pr-20 sm:pr-16"),
@@ -413,7 +433,8 @@ export function MessageBubble({
             style={contextMenuStyle}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-1 flex items-center justify-between gap-1 border-b border-[color:var(--kub-border-color)] px-3 pb-2 pt-1">
+            {canReact && (
+              <div className="mb-1 flex items-center justify-between gap-1 border-b border-[color:var(--kub-border-color)] px-3 pb-2 pt-1">
                 {EMOJI_QUICK.map((emoji) => (
                   <button
                     key={emoji}
@@ -428,6 +449,7 @@ export function MessageBubble({
                   </button>
                 ))}
               </div>
+            )}
             {contextItems.map(({ icon, label, danger, action }) => (
               <button
                 key={label}
@@ -445,7 +467,7 @@ export function MessageBubble({
         </div>
       )}
 
-      {reactionMenuOpen && !compactContextMenu && (
+      {canReact && reactionMenuOpen && !compactContextMenu && (
         <div
           data-reaction-menu="true"
           className="fixed z-[55] flex max-w-[calc(100vw-16px)] items-center justify-center gap-0.5 rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 py-1.5 shadow-2xl kub-glow-soft"
@@ -550,14 +572,16 @@ export function MessageBubble({
                 isMe ? "-left-20" : "-right-20"
               )}
             >
-              <button
-                onClick={handleToggleReactionMenu}
-                data-reaction-trigger="true"
-                aria-label="Реакция"
-                className="w-7 h-7 rounded-full flex items-center justify-center transition-colors bg-[var(--kub-surface-2)] hover:bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]"
-              >
-                <KubIcon name="smile" size={14} />
-              </button>
+              {canReact && (
+                <button
+                  onClick={handleToggleReactionMenu}
+                  data-reaction-trigger="true"
+                  aria-label="Реакция"
+                  className="w-7 h-7 rounded-full flex items-center justify-center transition-colors bg-[var(--kub-surface-2)] hover:bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]"
+                >
+                  <KubIcon name="smile" size={14} />
+                </button>
+              )}
               <button
                 onClick={onReply}
                 aria-label="Ответить"
@@ -613,6 +637,44 @@ export function MessageBubble({
               >
                 <FormattedText content={message.content ?? ""} />
               </p>
+            )}
+
+            {message.failed && isMe && (
+              <div
+                data-message-send-error="true"
+                className="mt-1 flex max-w-full flex-wrap items-center gap-1.5 border-t border-[color:var(--kub-border-color)]/60 pt-1 text-[11px] leading-none text-[color:var(--kub-danger)]"
+              >
+                <span className="mr-auto min-w-0">
+                  {message.send_error ?? "Не удалось отправить"}
+                </span>
+                {onRetrySend && (
+                  <button
+                    type="button"
+                    className="inline-flex h-6 items-center rounded-full px-2 font-semibold text-[color:var(--kub-cyan)] hover:bg-[color-mix(in_srgb,var(--kub-cyan)_12%,transparent)]"
+                    onClick={(event) => { event.stopPropagation(); onRetrySend(); }}
+                  >
+                    Повторить
+                  </button>
+                )}
+                {message.type === "text" && onEditFailedSend && (
+                  <button
+                    type="button"
+                    className="inline-flex h-6 items-center rounded-full px-2 font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)]"
+                    onClick={(event) => { event.stopPropagation(); onEditFailedSend(); }}
+                  >
+                    Изменить
+                  </button>
+                )}
+                {onDiscardLocalMessage && (
+                  <button
+                    type="button"
+                    className="inline-flex h-6 items-center rounded-full px-2 font-semibold text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)]"
+                    onClick={(event) => { event.stopPropagation(); onDiscardLocalMessage(); }}
+                  >
+                    Удалить
+                  </button>
+                )}
+              </div>
             )}
 
             {textLikeNoReactionFooter && (

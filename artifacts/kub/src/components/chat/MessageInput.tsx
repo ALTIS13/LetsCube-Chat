@@ -21,16 +21,31 @@ const EMOJI_PANEL = [
 
 interface MessageInputProps {
   chatId: string;
-  topicId?: string | null;
   replyTo: MessageWithSender | null;
   onCancelReply: () => void;
-  onSend: (content: string) => void;
+  onSend: (content: string) => void | Promise<unknown>;
+  onSendMedia?: (input: {
+    type: "image" | "video" | "file";
+    content: string;
+    mediaUrl: string;
+  }) => void | Promise<unknown>;
   onEdit?: (messageId: string, newContent: string) => Promise<void>;
   onSendVoice?: (blob: Blob, durationMs: number, mimeType: string) => void | Promise<void>;
   onTyping?: () => void;
+  draftOverride?: { id: string; text: string } | null;
 }
 
-export function MessageInput({ chatId, topicId = null, replyTo, onCancelReply, onSend, onEdit, onSendVoice, onTyping }: MessageInputProps) {
+export function MessageInput({
+  chatId,
+  replyTo,
+  onCancelReply,
+  onSend,
+  onSendMedia,
+  onEdit,
+  onSendVoice,
+  onTyping,
+  draftOverride,
+}: MessageInputProps) {
   const [text, setText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
@@ -44,7 +59,6 @@ export function MessageInput({ chatId, topicId = null, replyTo, onCancelReply, o
   const hasText = text.trim().length > 0;
   const supabase = createClient();
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
-  const addMessage = useAppStore((s) => s.addMessage);
   const editingMessage = useAppStore((s) => s.editingMessage);
   const setEditingMessage = useAppStore((s) => s.setEditingMessage);
   const isEditing = editingMessage !== null && editingMessage.chat_id === chatId;
@@ -75,6 +89,16 @@ export function MessageInput({ chatId, topicId = null, replyTo, onCancelReply, o
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingMessage?.id]);
 
+  useEffect(() => {
+    if (!draftOverride) return;
+    setEditingMessage(null);
+    preEditTextRef.current = null;
+    setText(draftOverride.text);
+    setShowEmoji(false);
+    setShowAttach(false);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }, [draftOverride, setEditingMessage]);
+
   const exitEditMode = useCallback(() => {
     setEditingMessage(null);
     setText(preEditTextRef.current ?? "");
@@ -82,32 +106,27 @@ export function MessageInput({ chatId, topicId = null, replyTo, onCancelReply, o
   }, [setEditingMessage]);
 
   const uploadAndSend = useCallback(async (file: File) => {
-    if (!userId) return;
+    if (!userId || !onSendMedia) return;
     setUploading(true);
     setShowAttach(false);
     try {
       const ext = file.name.split(".").pop() ?? "bin";
       const path = `${userId}/${Date.now()}.${ext}`;
       const { data, error } = await supabase.storage.from("media").upload(path, file);
-      if (error) { console.error("Upload error:", error); return; }
+      if (error || !data) {
+        console.error("Upload error:", error);
+        showAppAlert("Не удалось загрузить файл. Проверьте соединение и попробуйте ещё раз.", "Ошибка");
+        return;
+      }
       const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(data.path);
       const isImage = file.type.startsWith("image/");
       const isVideo = file.type.startsWith("video/");
       const type = isImage ? "image" : isVideo ? "video" : "file";
-      const { data: newMsg } = await supabase.from("messages").insert({
-        chat_id: chatId,
-        topic_id: topicId,
-        user_id: userId,
-        type,
-        media_url: publicUrl,
-        content: file.name,
-      }).select("*, sender:profiles!user_id(*), reactions(*)").single();
-      if (newMsg) addMessage(chatId, newMsg as never);
-      await supabase.from("chats").update({ updated_at: new Date().toISOString() }).eq("id", chatId);
+      await onSendMedia({ type, mediaUrl: publicUrl, content: file.name });
     } finally {
       setUploading(false);
     }
-  }, [chatId, topicId, userId, supabase, addMessage]);
+  }, [onSendMedia, userId, supabase]);
 
   const handleLocation = useCallback(() => {
     setShowAttach(false);
@@ -115,7 +134,7 @@ export function MessageInput({ chatId, topicId = null, replyTo, onCancelReply, o
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude } = pos.coords;
-        onSend(`📍 Местоположение: https://maps.google.com/?q=${latitude},${longitude}`);
+        void onSend(`📍 Местоположение: https://maps.google.com/?q=${latitude},${longitude}`);
       },
       () => showAppAlert("Не удалось определить местоположение", "Геолокация")
     );
@@ -130,7 +149,7 @@ export function MessageInput({ chatId, topicId = null, replyTo, onCancelReply, o
       setText(preEditTextRef.current ?? "");
       preEditTextRef.current = null;
     } else {
-      onSend(trimmed);
+      void onSend(trimmed);
       setText("");
       if (typeof window !== "undefined") localStorage.removeItem(draftKey(chatId));
     }

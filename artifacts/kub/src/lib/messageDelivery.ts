@@ -1,7 +1,7 @@
 import type { KubIconName, KubIconTone } from "@/components/kub";
 import type { ChatMember, MessageWithSender } from "@/types/database";
 
-export type MessageDeliveryStateName = "sending" | "sent" | "delivered" | "read" | "failed";
+export type MessageDeliveryStateName = "sending" | "checking" | "sent" | "delivered" | "read" | "failed";
 
 export interface MessageDeliveryState {
   state: MessageDeliveryStateName;
@@ -19,7 +19,7 @@ interface MessageDeliveryContext {
 }
 
 export function getMessageDeliveryState(
-  message: Pick<MessageWithSender, "user_id" | "created_at" | "pending" | "failed"> | null | undefined,
+  message: Pick<MessageWithSender, "user_id" | "created_at" | "pending" | "checking" | "failed"> | null | undefined,
   context: MessageDeliveryContext,
 ): MessageDeliveryState | null {
   if (!message || !context.currentUserId || message.user_id !== context.currentUserId) return null;
@@ -31,6 +31,16 @@ export function getMessageDeliveryState(
       icon: "alert",
       tone: "danger",
       label: "Не удалось отправить",
+      isOwnMessage: true,
+    };
+  }
+
+  if (message.checking) {
+    return {
+      state: "checking",
+      icon: "clock",
+      tone: "muted",
+      label: "Проверяем отправку",
       isOwnMessage: true,
     };
   }

@@ -11,6 +11,32 @@ import { isSavedChat } from "@/lib/chatDisplay";
 import { scheduleMarkChatDelivered, scheduleMarkChatRead } from "@/lib/deliveryReceipts";
 
 const MESSAGE_PAGE_SIZE = 100;
+const SEND_ACK_TIMEOUT_MS = 12_000;
+const MESSAGE_SELECT_WITH_JOINS =
+  "*, sender:profiles!user_id(*), reply_to:messages!reply_to_id(id, content, type, user_id, sender:profiles(id, full_name)), reactions(*)";
+
+type SendableMessageType = Extract<MessageWithSender["type"], "text" | "image" | "video" | "audio" | "file">;
+
+interface SendMessageInput {
+  type: SendableMessageType;
+  content: string | null;
+  mediaUrl?: string | null;
+  replyToId?: string | null;
+  forwardedFromId?: string | null;
+  topicId?: string | null;
+  targetChatId?: string;
+  clientMessageId?: string | null;
+  clientSentAt?: string | null;
+  tempId?: string;
+}
+
+interface SendMessageAck {
+  data: MessageWithSender | null;
+  error: unknown;
+  timedOut: boolean;
+}
+
+type TimeoutResult = { timedOut: true };
 
 export function useMessages(
   chatId: string | null,
@@ -289,6 +315,21 @@ export function useMessages(
     addMessage(activeChatId, message);
   }, [addMessage, rememberHiddenMessageIds, supabase]);
 
+  const fetchMessageByClientId = useCallback(async (
+    targetChatId: string,
+    targetUserId: string,
+    clientMessageId: string,
+  ): Promise<MessageWithSender | null> => {
+    const { data } = await supabase
+      .from("messages")
+      .select(MESSAGE_SELECT_WITH_JOINS)
+      .eq("chat_id", targetChatId)
+      .eq("user_id", targetUserId)
+      .eq("client_message_id", clientMessageId)
+      .maybeSingle();
+    return data ? data as unknown as MessageWithSender : null;
+  }, [supabase]);
+
   useEffect(() => {
     if (!chatId) return;
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -520,55 +561,181 @@ export function useMessages(
     return () => document.removeEventListener("visibilitychange", markReadWhenVisible);
   }, [chatId, userId, supabase]);
 
-  const sendMessage = useCallback(async (content: string, replyToId?: string) => {
-    const user = currentUserRef.current;
-    const trimmed = content.trim();
-    if (!chatId || !user || !trimmed) return null;
+  const insertMessageWithAck = useCallback(async (
+    input: Required<Pick<SendMessageInput, "type" | "content">> & {
+      targetChatId: string;
+      userId: string;
+      topicId: string | null;
+      mediaUrl: string | null;
+      replyToId: string | null;
+      forwardedFromId: string | null;
+      clientMessageId: string;
+      clientSentAt: string;
+    },
+  ): Promise<SendMessageAck> => {
+    const insertPromise = supabase
+      .from("messages")
+      .insert({
+        chat_id: input.targetChatId,
+        topic_id: input.topicId,
+        user_id: input.userId,
+        content: input.content,
+        type: input.type,
+        media_url: input.mediaUrl,
+        reply_to_id: input.replyToId,
+        forwarded_from_id: input.forwardedFromId,
+        client_message_id: input.clientMessageId,
+        client_sent_at: input.clientSentAt,
+      })
+      .select(MESSAGE_SELECT_WITH_JOINS)
+      .single();
 
-    // 1) Optimistic: render the message instantly with a temporary id.
-    //    The real DB id will replace `tempId` when INSERT returns; the realtime
-    //    echo that follows is deduped by the upsert in addMessage.
-    const tempId = `tmp:${crypto.randomUUID()}`;
+    const result = await withTimeout(insertPromise, SEND_ACK_TIMEOUT_MS);
+    if (isTimeoutResult(result)) {
+      return { data: null, error: null, timedOut: true };
+    }
+
+    if (result.data) {
+      return { data: result.data as unknown as MessageWithSender, error: null, timedOut: false };
+    }
+
+    const existing = await fetchMessageByClientId(input.targetChatId, input.userId, input.clientMessageId);
+    return { data: existing, error: result.error, timedOut: false };
+  }, [fetchMessageByClientId, supabase]);
+
+  const sendLocalMessage = useCallback(async (input: SendMessageInput) => {
+    const user = currentUserRef.current;
+    const activeChatId = input.targetChatId ?? chatIdRef.current;
+    const trimmedContent = input.type === "text" ? (input.content ?? "").trim() : input.content;
+    if (!activeChatId || !user || (input.type === "text" && !trimmedContent)) return null;
+
+    const clientMessageId = input.clientMessageId ?? crypto.randomUUID();
+    const clientSentAt = input.clientSentAt ?? new Date().toISOString();
+    const tempId = input.tempId ?? `tmp:${clientMessageId}`;
+    const messageTopicId = input.topicId === undefined ? (topicIdRef.current ?? null) : input.topicId;
     const optimistic: MessageWithSender = {
       id: tempId,
-      chat_id: chatId,
-      topic_id: topicId ?? null,
+      chat_id: activeChatId,
+      topic_id: messageTopicId,
       user_id: user.id,
-      content: trimmed,
-      type: "text",
-      media_url: null,
-      reply_to_id: replyToId ?? null,
-      forwarded_from_id: null,
+      content: trimmedContent,
+      type: input.type,
+      media_url: input.mediaUrl ?? null,
+      reply_to_id: input.replyToId ?? null,
+      forwarded_from_id: input.forwardedFromId ?? null,
       edited_at: null,
       deleted_at: null,
       pinned: false,
-      created_at: new Date().toISOString(),
+      created_at: clientSentAt,
+      client_message_id: clientMessageId,
+      client_sent_at: clientSentAt,
       sender: user,
       reactions: [],
       pending: true,
+      checking: false,
+      failed: false,
+      send_error: null,
     };
-    addMessage(chatId, optimistic);
 
-    // 2) Real INSERT.
-    const { data, error } = await supabase
-      .from("messages")
-      .insert({ chat_id: chatId, topic_id: topicId ?? null, user_id: user.id, content: trimmed, type: "text", reply_to_id: replyToId ?? null })
-      .select("*, sender:profiles!user_id(*), reactions(*)")
-      .single();
+    if (input.tempId) replaceMessage(activeChatId, tempId, optimistic);
+    else addMessage(activeChatId, optimistic);
 
-    if (error || !data) {
-      console.error("Send error:", error);
-      // Mark as failed but keep the bubble visible so the user can see something went wrong.
-      replaceMessage(chatId, tempId, { ...optimistic, pending: false, failed: true });
+    const ack = await insertMessageWithAck({
+      targetChatId: activeChatId,
+      userId: user.id,
+      type: input.type,
+      content: trimmedContent,
+      mediaUrl: input.mediaUrl ?? null,
+      replyToId: input.replyToId ?? null,
+      forwardedFromId: input.forwardedFromId ?? null,
+      topicId: messageTopicId,
+      clientMessageId,
+      clientSentAt,
+    });
+
+    if (ack.data) {
+      replaceMessage(activeChatId, tempId, ack.data);
+      await supabase.from("chats").update({ updated_at: ack.data.created_at }).eq("id", activeChatId);
+      return ack.data;
+    }
+
+    if (ack.timedOut) {
+      replaceMessage(activeChatId, tempId, {
+        ...optimistic,
+        pending: false,
+        checking: true,
+        failed: false,
+        send_error: null,
+      });
+      await delay(1_200);
+      const existing = await fetchMessageByClientId(activeChatId, user.id, clientMessageId);
+      if (existing) {
+        replaceMessage(activeChatId, tempId, existing);
+        await supabase.from("chats").update({ updated_at: existing.created_at }).eq("id", activeChatId);
+        return existing;
+      }
+      replaceMessage(activeChatId, tempId, {
+        ...optimistic,
+        pending: false,
+        checking: false,
+        failed: true,
+        send_error: "Не удалось подтвердить отправку. Проверьте соединение и повторите.",
+      });
       return null;
     }
 
-    // 3) Swap the temp message for the canonical server copy.
-    replaceMessage(chatId, tempId, data as unknown as MessageWithSender);
+    console.error("Send error:", ack.error);
+    replaceMessage(activeChatId, tempId, {
+      ...optimistic,
+      pending: false,
+      checking: false,
+      failed: true,
+      send_error: mapPgError(ack.error) || "Не удалось отправить сообщение.",
+    });
+    return null;
+  }, [addMessage, fetchMessageByClientId, insertMessageWithAck, replaceMessage, supabase]);
 
-    await supabase.from("chats").update({ updated_at: new Date().toISOString() }).eq("id", chatId);
-    return data;
-  }, [chatId, topicId, supabase, addMessage, replaceMessage]);
+  const sendMessage = useCallback(async (content: string, replyToId?: string) => {
+    return sendLocalMessage({
+      type: "text",
+      content,
+      replyToId: replyToId ?? null,
+    });
+  }, [sendLocalMessage]);
+
+  const sendMediaMessage = useCallback(async (input: {
+    type: Extract<SendableMessageType, "image" | "video" | "audio" | "file">;
+    content: string | null;
+    mediaUrl: string;
+  }) => {
+    return sendLocalMessage({
+      type: input.type,
+      content: input.content,
+      mediaUrl: input.mediaUrl,
+    });
+  }, [sendLocalMessage]);
+
+  const retryMessageSend = useCallback(async (message: MessageWithSender) => {
+    if (!message.failed && !message.checking) return null;
+    return sendLocalMessage({
+      type: message.type as SendableMessageType,
+      content: message.content,
+      mediaUrl: message.media_url,
+      replyToId: message.reply_to_id,
+      forwardedFromId: message.forwarded_from_id,
+      topicId: message.topic_id,
+      clientMessageId: message.client_message_id ?? crypto.randomUUID(),
+      clientSentAt: message.client_sent_at ?? message.created_at,
+      tempId: message.id,
+      targetChatId: message.chat_id,
+    });
+  }, [sendLocalMessage]);
+
+  const discardLocalMessage = useCallback((messageId: string) => {
+    const activeChatId = chatIdRef.current;
+    if (!activeChatId) return;
+    removeMessage(activeChatId, messageId);
+  }, [removeMessage]);
 
   // ── Edit ────────────────────────────────────────────────────────────────
   // UPDATE the row; the realtime UPDATE handler above will replace the message
@@ -681,6 +848,8 @@ export function useMessages(
   ) => {
     const user = currentUserRef.current;
     if (!user) return null;
+    const clientMessageId = crypto.randomUUID();
+    const clientSentAt = new Date().toISOString();
     const { data, error } = await supabase
       .from("messages")
       .insert({
@@ -690,11 +859,14 @@ export function useMessages(
         type: src.type,
         media_url: src.media_url,
         forwarded_from_id: src.id,
+        client_message_id: clientMessageId,
+        client_sent_at: clientSentAt,
       })
-      .select("*, sender:profiles!user_id(*), reactions(*)")
+      .select(MESSAGE_SELECT_WITH_JOINS)
       .single();
     if (error) { console.error("Forward error:", error); return null; }
-    await supabase.from("chats").update({ updated_at: new Date().toISOString() }).eq("id", targetChatId);
+    const forwarded = data as unknown as MessageWithSender;
+    await supabase.from("chats").update({ updated_at: forwarded.created_at }).eq("id", targetChatId);
     return data;
   }, [supabase]);
 
@@ -746,7 +918,8 @@ export function useMessages(
       : [],
     pinnedReady: pinnedKey === getPinnedKey(chatId, topicId) && pinnedReady,
     loading, loadingOlder, hasMoreOlder, olderError, isTyping,
-    sendMessage, sendTyping, toggleReaction,
+    sendMessage, sendMediaMessage, sendTyping, toggleReaction,
+    retryMessageSend, discardLocalMessage,
     editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, togglePin, forwardMessage,
     clearChatForMe,
     loadOlderMessages,
@@ -790,7 +963,38 @@ function buildRealtimeMessage(row: MessageWithSender): MessageWithSender {
     content: row.content ?? null,
     reactions: row.reactions ?? [],
     pending: false,
+    checking: false,
+    failed: false,
   };
+}
+
+function isTimeoutResult<T>(value: T | TimeoutResult): value is TimeoutResult {
+  return Boolean(value && typeof value === "object" && "timedOut" in value);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T | TimeoutResult> {
+  return Promise.race<T | TimeoutResult>([
+    Promise.resolve(promise),
+    new Promise<TimeoutResult>((resolve) => window.setTimeout(() => resolve({ timedOut: true }), ms)),
+  ]);
+}
+
+function isLocalOnlyMessage(message: MessageWithSender): boolean {
+  return message.id.startsWith("tmp:") || Boolean(message.pending || message.checking || message.failed);
+}
+
+function sameClientMessage(a: MessageWithSender, b: MessageWithSender): boolean {
+  return Boolean(a.client_message_id && b.client_message_id && a.client_message_id === b.client_message_id);
+}
+
+function chooseMergedMessage(current: MessageWithSender, next: MessageWithSender): MessageWithSender {
+  if (isLocalOnlyMessage(current) && !isLocalOnlyMessage(next)) return next;
+  if (!isLocalOnlyMessage(current) && isLocalOnlyMessage(next)) return current;
+  return next;
 }
 
 function mergeMessagesById(
@@ -798,11 +1002,26 @@ function mergeMessagesById(
   existing: MessageWithSender[],
 ): MessageWithSender[] {
   if (!existing.length) return fetched;
-  const byId = new Map(fetched.map((message) => [message.id, message]));
-  for (const message of existing) {
-    if (!byId.has(message.id)) byId.set(message.id, message);
+  const merged: MessageWithSender[] = [];
+  const byId = new Map<string, number>();
+  const byClientId = new Map<string, number>();
+
+  for (const message of [...fetched, ...existing]) {
+    const idIndex = byId.get(message.id);
+    const clientIndex = message.client_message_id ? byClientId.get(message.client_message_id) : undefined;
+    const index = idIndex ?? clientIndex;
+    if (index === undefined) {
+      byId.set(message.id, merged.length);
+      if (message.client_message_id) byClientId.set(message.client_message_id, merged.length);
+      merged.push(message);
+      continue;
+    }
+    const chosen = chooseMergedMessage(merged[index], message);
+    merged[index] = chosen;
+    byId.set(chosen.id, index);
+    if (chosen.client_message_id) byClientId.set(chosen.client_message_id, index);
   }
-  return Array.from(byId.values()).sort(
+  return merged.sort(
     (a, b) => {
       const byCreatedAt = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       if (byCreatedAt !== 0) return byCreatedAt;
