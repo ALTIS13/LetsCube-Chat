@@ -175,6 +175,12 @@ function getTextRightLimit(textEl: HTMLElement, bubbleEl: HTMLElement, stackEl: 
   return Math.min(Math.max(currentContentRight, maxRightFromText), viewportRight);
 }
 
+function isFooterOnLastTextLine(lastLine: DOMRect, footerRect: DOMRect): boolean {
+  const lineCenter = (lastLine.top + lastLine.bottom) / 2;
+  const footerCenter = (footerRect.top + footerRect.bottom) / 2;
+  return Math.abs(lineCenter - footerCenter) <= Math.max(8, lastLine.height * 0.75);
+}
+
 interface MeasuredTextWithMetaProps {
   content: string;
   textClassName: string;
@@ -198,6 +204,7 @@ function MeasuredTextWithMeta({
   const textFlowRef = useRef<HTMLParagraphElement | null>(null);
   const textContentRef = useRef<HTMLSpanElement | null>(null);
   const footerRef = useRef<HTMLSpanElement | null>(null);
+  const blockedInlineSignatureRef = useRef<string | null>(null);
 
   const measure = useCallback(() => {
     const textEl = textFlowRef.current;
@@ -214,12 +221,34 @@ function MeasuredTextWithMeta({
 
     const footerRect = footerEl.getBoundingClientRect();
     const rightLimit = getTextRightLimit(textEl, bubbleEl, stackRef.current);
+    const signature = [
+      Math.round(textEl.getBoundingClientRect().width),
+      Math.round(footerRect.width),
+      Math.round(rightLimit),
+      Math.round(lastLine.left),
+      Math.round(lastLine.right),
+    ].join("|");
+
+    if (placement === "inline" && !isFooterOnLastTextLine(lastLine, footerRect)) {
+      blockedInlineSignatureRef.current = signature;
+      setPlacement((previous) => (previous === "next-line-end" ? previous : "next-line-end"));
+      return;
+    }
+
     const available = rightLimit - lastLine.right;
     const current = placement;
     const threshold = current === "inline" ? 4 : 8;
-    const next: MetaPlacement = available >= footerRect.width + threshold ? "inline" : "next-line-end";
+    const next: MetaPlacement =
+      available >= footerRect.width + threshold && blockedInlineSignatureRef.current !== signature
+        ? "inline"
+        : "next-line-end";
     setPlacement((previous) => (previous === next ? previous : next));
   }, [bubbleRef, placement, stackRef]);
+
+  useEffect(() => {
+    blockedInlineSignatureRef.current = null;
+    setPlacement(getInitialMetaPlacement(content));
+  }, [content, measureKey]);
 
   useLayoutEffect(() => {
     if (typeof window === "undefined") return;
