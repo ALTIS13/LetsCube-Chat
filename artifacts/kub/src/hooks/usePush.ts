@@ -60,9 +60,8 @@ export function usePush() {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
     const onMsg = (e: MessageEvent) => {
       if (e.data?.type === "kub-open" && typeof e.data.url === "string") {
-        // Naive: navigate via location; the SPA's chat selection on mount
-        // can read ?chat=… in a future iteration.
-        if (typeof window !== "undefined") window.location.assign(e.data.url);
+        // Keep notification-click navigation inside the SPA; no document reload.
+        openPushTargetInApp(e.data.url);
       }
     };
     navigator.serviceWorker.addEventListener("message", onMsg);
@@ -136,4 +135,25 @@ export function usePush() {
   }, [supabase]);
 
   return { status, enable, disable };
+}
+
+function openPushTargetInApp(rawUrl: string): void {
+  if (typeof window === "undefined") return;
+  let target: URL;
+  try {
+    target = new URL(rawUrl, window.location.origin);
+  } catch {
+    return;
+  }
+  if (target.origin !== window.location.origin) return;
+
+  const chatId = target.searchParams.get("chat");
+  if (chatId) {
+    useAppStore.getState().setSelectedChatId(chatId);
+    window.history.replaceState(null, "", window.location.pathname);
+    return;
+  }
+
+  window.history.pushState(null, "", `${target.pathname}${target.search}${target.hash}`);
+  window.dispatchEvent(new PopStateEvent("popstate"));
 }

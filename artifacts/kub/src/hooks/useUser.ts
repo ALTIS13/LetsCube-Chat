@@ -146,18 +146,29 @@ export function useUser() {
 
     void loadSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
         supabase.realtime.setAuth(session.access_token);
-        setLoading(true);
-        setLoadingError(null);
+        const currentProfile = useAppStore.getState().currentUser;
+        const isSameLoadedUser = currentProfile?.id === session.user.id;
+        const shouldBlockUiForProfile =
+          !isSameLoadedUser || event === "SIGNED_IN" || event === "INITIAL_SESSION";
+
+        if (shouldBlockUiForProfile) {
+          setLoading(true);
+          setLoadingError(null);
+        }
         void fetchProfile(session.user.id)
           .then((ok) => {
-            if (!ok) setLoadingError(PROFILE_LOAD_ERROR);
+            if (!ok && shouldBlockUiForProfile) setLoadingError(PROFILE_LOAD_ERROR);
           })
-          .catch(() => setLoadingError(PROFILE_LOAD_ERROR))
-          .finally(() => setLoading(false));
+          .catch(() => {
+            if (shouldBlockUiForProfile) setLoadingError(PROFILE_LOAD_ERROR);
+          })
+          .finally(() => {
+            if (shouldBlockUiForProfile) setLoading(false);
+          });
       } else {
         supabase.realtime.setAuth(null);
         setCurrentUser(null);

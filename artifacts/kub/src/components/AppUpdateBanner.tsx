@@ -7,6 +7,9 @@ export function AppUpdateBanner() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [snoozedUntil, setSnoozedUntil] = useState(0);
   const currentBundle = useMemo(() => getCurrentBundlePath(), []);
+  const handleUserRequestedReload = useCallback(() => {
+    window.location.reload();
+  }, []);
 
   const checkForUpdate = useCallback(async () => {
     if (!currentBundle) return;
@@ -44,7 +47,7 @@ export function AppUpdateBanner() {
   if (!showUpdate) return null;
 
   return (
-    <div className="fixed bottom-3 left-1/2 z-[80] w-[calc(100vw-24px)] max-w-sm -translate-x-1/2 rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-3 shadow-2xl sm:bottom-4 sm:w-[calc(100%-2rem)] sm:max-w-md">
+    <div className="fixed left-1/2 top-3 z-[80] w-[calc(100vw-24px)] max-w-sm -translate-x-1/2 rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-3 shadow-2xl sm:top-4 sm:w-[calc(100%-2rem)] sm:max-w-md">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="flex min-w-0 items-start gap-3 sm:items-center">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] text-[color:var(--kub-cyan)]">
@@ -65,7 +68,7 @@ export function AppUpdateBanner() {
           <div className="flex w-full gap-2 sm:w-auto sm:shrink-0">
             <button
               type="button"
-              onClick={() => window.location.reload()}
+              onClick={handleUserRequestedReload}
               className="h-9 flex-1 rounded-lg bg-[var(--kub-cyan)] px-3 text-xs font-semibold text-[color:var(--kub-bg)] hover:brightness-110 sm:flex-none"
             >
               Обновить

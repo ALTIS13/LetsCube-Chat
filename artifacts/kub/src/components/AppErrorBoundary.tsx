@@ -12,6 +12,10 @@ interface AppErrorBoundaryState {
 export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorBoundaryState> {
   state: AppErrorBoundaryState = { hasError: false, isChunkLoadError: false };
 
+  private handleUserRequestedReload = () => {
+    window.location.reload();
+  };
+
   static getDerivedStateFromError(error: unknown): AppErrorBoundaryState {
     return { hasError: true, isChunkLoadError: isChunkLoadError(error) };
   }
@@ -38,7 +42,7 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
           </p>
           <button
             type="button"
-            onClick={() => window.location.reload()}
+            onClick={this.handleUserRequestedReload}
             className="mt-5 inline-flex h-10 items-center justify-center rounded-lg bg-[var(--kub-cyan)] px-5 text-sm font-semibold text-[color:var(--kub-bg)] transition hover:brightness-110"
           >
             Обновить
