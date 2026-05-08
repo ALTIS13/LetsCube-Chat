@@ -102,7 +102,7 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
       return {
         stack: "w-fit max-w-[86vw] sm:max-w-[min(64vw,620px)] md:max-w-[min(52vw,620px)]",
         bubble: "w-fit max-w-full min-w-0",
-        text: "[overflow-wrap:break-word]",
+        text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
     case "preformatted":
       return {
@@ -114,26 +114,26 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
       return {
         stack: "w-fit max-w-[86vw] sm:max-w-[min(60vw,640px)] md:max-w-[min(52vw,640px)]",
         bubble: "w-fit max-w-full min-w-0",
-        text: "[overflow-wrap:anywhere]",
+        text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
     case "regular":
       return {
         stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px)] md:max-w-[min(65vw,680px)]",
         bubble: "w-fit max-w-full min-w-0",
-        text: "[overflow-wrap:break-word]",
+        text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
     case "short":
       return {
         stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px)] md:max-w-[min(65vw,680px)]",
         bubble: "w-fit max-w-full min-w-0",
-        text: "[overflow-wrap:break-word]",
+        text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
     case "media":
     default:
       return {
         stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px)] md:max-w-[min(65vw,680px)]",
         bubble: "w-fit",
-        text: "[overflow-wrap:break-word]",
+        text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
   }
 }
@@ -363,13 +363,7 @@ export function MessageBubble({
     ] : []),
   ];
   const contextItems = isLocalSend ? localSendContextItems : regularContextItems;
-  const isCompoundBubble =
-    Boolean(message.reply_to_id) ||
-    textLayoutKind === "preformatted" ||
-    message.type !== "text" ||
-    Boolean(message.failed);
-  const simpleTextFooter = message.type === "text" && !isCompoundBubble;
-  const compoundFooter = !simpleTextFooter;
+  const footerMode = hasReactions ? "meta-row-reactions" : "meta-row";
   const showGroupReadIndicator = Boolean(groupReadInfo && groupReadInfo.readCount > 0);
   const groupReadLabel = groupReadInfo ? getGroupReadReceiptCompactLabel(groupReadInfo) : "";
   const groupReadAriaLabel = groupReadInfo ? getGroupReadReceiptAriaLabel(groupReadInfo) : "";
@@ -580,9 +574,7 @@ export function MessageBubble({
           <div
             data-message-bubble="true"
             data-message-layout-kind={textLayoutKind}
-            data-message-footer-mode={
-              simpleTextFooter ? (hasReactions ? "simple-inline-reactions" : "simple-inline") : hasReactions ? "compound-reactions" : "compound-meta"
-            }
+            data-message-footer-mode={footerMode}
             className={cn(
               "relative flex flex-col max-w-full px-3 pt-2 rounded-2xl transition-opacity select-none sm:select-text",
               hasReactions ? "pb-2" : "pb-1",
@@ -694,28 +686,13 @@ export function MessageBubble({
               <p
                 data-message-text-flow="true"
                 className={cn(
-                  "min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [word-break:normal] text-[color:var(--kub-text)]",
+                  "min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:break-word] text-[color:var(--kub-text)]",
                   widthClasses.text
                 )}
               >
                 <FormattedText content={message.content ?? ""} />
-                {simpleTextFooter && (
-                  <>
-                    <wbr />
-                    <span
-                      data-message-footer="true"
-                      className={cn(
-                        "ml-1.5 inline-flex max-w-max shrink-0 translate-y-[1px] items-center justify-end gap-1 whitespace-nowrap leading-none [vertical-align:-0.12em]",
-                      )}
-                    >
-                      {renderFooterContent()}
-                    </span>
-                  </>
-                )}
               </p>
             )}
-
-            {renderReactionsRow()}
 
             {message.failed && isMe && (
               <div
@@ -755,19 +732,19 @@ export function MessageBubble({
               </div>
             )}
 
-            {compoundFooter && (
+            <div
+              data-message-bottom-meta="true"
+              className="mt-0.5 flex self-stretch max-w-full items-center justify-end leading-none"
+            >
               <div
-                data-message-bottom-meta="true"
-                className="ml-auto mt-1 flex w-fit max-w-full items-center justify-end gap-1 leading-none"
+                data-message-footer="true"
+                className="inline-flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap text-right leading-none"
               >
-                <div
-                  data-message-footer="true"
-                  className="flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap text-right leading-none"
-                >
-                  {renderFooterContent()}
-                </div>
+                {renderFooterContent()}
               </div>
-            )}
+            </div>
+
+            {renderReactionsRow()}
           </div>
 
         </div>
