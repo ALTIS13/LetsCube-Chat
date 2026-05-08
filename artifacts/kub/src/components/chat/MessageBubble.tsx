@@ -555,7 +555,7 @@ export function MessageBubble({
             }
             className={cn(
               "relative flex flex-col max-w-full px-3 pt-2 rounded-2xl transition-opacity select-none sm:select-text",
-              hasReactions ? "pb-2" : "pb-1.5",
+              hasReactions ? "pb-2" : "pb-1",
               widthClasses.bubble,
               bubbleClass,
               isMe ? "rounded-br-sm" : "rounded-bl-sm",
@@ -675,7 +675,7 @@ export function MessageBubble({
                   <span
                     data-message-footer="true"
                     className={cn(
-                      "inline-flex max-w-max shrink-0 items-center justify-end gap-1 whitespace-nowrap leading-none align-baseline",
+                      "relative top-[4px] inline-flex max-w-max shrink-0 items-center justify-end gap-1 whitespace-nowrap leading-none align-baseline",
                       useInlineTextMeta ? "ml-1.5 translate-y-[1px]" : "float-right ml-2 mt-1",
                     )}
                   >
