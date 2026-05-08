@@ -55,12 +55,13 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     sendMessage, sendMediaMessage, sendTyping, toggleReaction,
     retryMessageSend, discardLocalMessage,
     editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, togglePin, forwardMessage, clearChatForMe,
-    loadOlderMessages,
+    loadOlderMessages, ensureMessageLoaded,
   } = useMessages(chatId, messageTopicId, messageGeneralTopicIds);
 
   useEffect(() => { markChatRead(chatId); }, [chatId, markChatRead]);
 
   const [replyTo, setReplyTo] = useState<MessageWithSender | null>(null);
+  const [replyFocusKey, setReplyFocusKey] = useState(0);
   const [showSearch, setShowSearch] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
@@ -69,6 +70,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const [draftRestore, setDraftRestore] = useState<{ id: string; text: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement>>({});
+  const pendingJumpRef = useRef<string | null>(null);
   const supabase = createClient();
 
   const myRole = (chat?.members?.find((m) => m.user_id === userId)?.role ?? null) as
@@ -76,9 +78,24 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const canManageTopics = myRole === "owner" || myRole === "admin";
 
   const handleSend = async (content: string) => {
-    await sendMessage(content, replyTo?.id);
+    const replyToId = replyTo?.id;
+    await sendMessage(content, replyToId);
     setReplyTo(null);
   };
+
+  const handleReply = useCallback((msg: MessageWithSender) => {
+    setReplyTo(msg);
+    setReplyFocusKey((key) => key + 1);
+  }, []);
+
+  const handleSendMedia = useCallback(async (input: {
+    type: "image" | "video" | "file";
+    content: string;
+    mediaUrl: string;
+  }) => {
+    await sendMediaMessage({ ...input, replyToId: replyTo?.id ?? null });
+    setReplyTo(null);
+  }, [replyTo?.id, sendMediaMessage]);
 
   const handleSendVoice = useCallback(async (blob: Blob, durationMs: number, mimeType: string) => {
     if (!userId) {
@@ -118,27 +135,62 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       type: "audio",
       mediaUrl: publicUrl,
       content: `🎤 Голосовое сообщение (${mm}:${ss})`,
+      replyToId: replyTo?.id ?? null,
     });
-  }, [sendMediaMessage, userId, supabase]);
+    setReplyTo(null);
+  }, [replyTo?.id, sendMediaMessage, userId, supabase]);
+
+  const showJumpNotice = useCallback((message: string) => {
+    setPinError(message);
+    window.setTimeout(() => setPinError(null), 4000);
+  }, []);
+
+  const scrollToMessage = useCallback((messageId: string) => {
+    const el = messageRefs.current[messageId];
+    if (!el) return false;
+    setHighlightedId(messageId);
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => setHighlightedId(null), 2000);
+    return true;
+  }, []);
 
   const jumpToMessage = useCallback((messageId: string) => {
-    setHighlightedId(messageId);
-    const el = messageRefs.current[messageId];
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      setTimeout(() => setHighlightedId(null), 2000);
+    if (!scrollToMessage(messageId)) showJumpNotice("Сообщение пока не загружено.");
+  }, [scrollToMessage, showJumpNotice]);
+
+  const handleJumpToReply = useCallback(async (messageId: string) => {
+    const localTarget = messages.find((message) => message.id === messageId);
+    if (localTarget?.deleted_at) {
+      showJumpNotice("Исходное сообщение недоступно.");
+      return;
     }
-  }, []);
+    if (scrollToMessage(messageId)) return;
+    const result = await ensureMessageLoaded(messageId);
+    if (!result.ok || result.message.deleted_at) {
+      const message =
+        !result.ok && result.reason === "topic"
+          ? "Сообщение находится в другом топике."
+          : "Исходное сообщение недоступно.";
+      showJumpNotice(message);
+      return;
+    }
+    pendingJumpRef.current = messageId;
+    requestAnimationFrame(() => {
+      if (scrollToMessage(messageId)) pendingJumpRef.current = null;
+    });
+  }, [ensureMessageLoaded, messages, scrollToMessage, showJumpNotice]);
+
+  useEffect(() => {
+    const pendingId = pendingJumpRef.current;
+    if (!pendingId) return;
+    if (scrollToMessage(pendingId)) pendingJumpRef.current = null;
+  }, [messages, scrollToMessage]);
 
   const handleJumpToPinned = useCallback((msg: MessageWithSender) => {
     const el = messageRefs.current[msg.id];
-    if (!el) {
-      setPinError("Сообщение пока не загружено.");
-      window.setTimeout(() => setPinError(null), 4000);
-      return;
-    }
+    if (!el) return showJumpNotice("Сообщение пока не загружено.");
     jumpToMessage(msg.id);
-  }, [jumpToMessage]);
+  }, [jumpToMessage, showJumpNotice]);
 
   const handleTogglePin = useCallback(async (msg: MessageWithSender) => {
     setPinError(null);
@@ -236,7 +288,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         ) : (
           <MessageList
             messages={messages}
-            onReply={setReplyTo}
+            onReply={handleReply}
+            onJumpToReply={handleJumpToReply}
             onReaction={toggleReaction}
             onEdit={(msg) => setEditingMessage(msg)}
             onDelete={(msg) => deleteMessage(msg.id)}
@@ -269,11 +322,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
           onSend={handleSend}
-          onSendMedia={sendMediaMessage}
+          onSendMedia={handleSendMedia}
           onEdit={editMessage}
           onSendVoice={handleSendVoice}
           onTyping={sendTyping}
           draftOverride={draftRestore}
+          focusRequestKey={replyFocusKey}
         />
       </div>
       {showInfo && chat && (

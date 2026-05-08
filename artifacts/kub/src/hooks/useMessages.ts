@@ -13,7 +13,7 @@ import { scheduleMarkChatDelivered, scheduleMarkChatRead } from "@/lib/deliveryR
 const MESSAGE_PAGE_SIZE = 100;
 const SEND_ACK_TIMEOUT_MS = 12_000;
 const MESSAGE_SELECT_WITH_JOINS =
-  "*, sender:profiles!user_id(*), reply_to:messages!reply_to_id(id, content, type, user_id, sender:profiles(id, full_name)), reactions(*)";
+  "*, sender:profiles!user_id(*), reply_to:messages!reply_to_id(id, content, type, media_url, deleted_at, user_id, sender:profiles(id, full_name)), reactions(*)";
 
 type SendableMessageType = Extract<MessageWithSender["type"], "text" | "image" | "video" | "audio" | "file">;
 
@@ -37,6 +37,10 @@ interface SendMessageAck {
 }
 
 type TimeoutResult = { timedOut: true };
+
+type EnsureMessageLoadedResult =
+  | { ok: true; message: MessageWithSender }
+  | { ok: false; reason: "not-found" | "hidden" | "deleted" | "cleared" | "topic" };
 
 export function useMessages(
   chatId: string | null,
@@ -161,7 +165,7 @@ export function useMessages(
     // is scrubbed server-side by policy / scheduled job.
     let query = supabase
       .from("messages")
-      .select(`*, sender:profiles!user_id(*), reactions(*)`)
+      .select(MESSAGE_SELECT_WITH_JOINS)
       .eq("chat_id", chatId);
     // Forum chats: scope to the selected topic.  Non-forum: all messages
     // have topic_id = null, so the filter is a no-op when topicId is null.
@@ -186,17 +190,20 @@ export function useMessages(
       hasMoreOlderRef.current = nextHasMoreOlder;
       setHasMoreOlder(nextHasMoreOlder);
       setOlderError(null);
-      const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, fetched.map((message) => message.id));
+      const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds(fetched));
       rememberHiddenMessageIds(fetchedHiddenIds);
       const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
-      const visibleFetched = fetched.filter((message) => !effectiveHiddenIds.has(message.id));
+      const visibleFetched = sanitizeHiddenReplies(
+        fetched.filter((message) => !effectiveHiddenIds.has(message.id)),
+        effectiveHiddenIds,
+      );
       const existing = useAppStore.getState().messages[chatId] ?? [];
-      const visibleExisting = existing.filter((message) => {
+      const visibleExisting = sanitizeHiddenReplies(existing.filter((message) => {
         if (effectiveHiddenIds.has(message.id)) return false;
         if (!messageBelongsToTopic(message, topicId, generalTopicIds)) return false;
         if (!localClearedAt) return true;
         return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
-      });
+      }), effectiveHiddenIds);
       setMessages(chatId, mergeMessagesById(visibleFetched, visibleExisting));
       if (user) {
         const latestVisible = visibleFetched[visibleFetched.length - 1] ?? visibleExisting[visibleExisting.length - 1] ?? null;
@@ -242,7 +249,7 @@ export function useMessages(
     try {
       let query = supabase
         .from("messages")
-        .select(`*, sender:profiles!user_id(*), reactions(*)`)
+        .select(MESSAGE_SELECT_WITH_JOINS)
         .eq("chat_id", activeChatId);
       if (activeTopicId !== undefined) {
         if (activeTopicId) query = query.eq("topic_id", activeTopicId);
@@ -265,22 +272,22 @@ export function useMessages(
       setHasMoreOlder(nextHasMoreOlder);
       if (!fetched.length) return { loaded: 0 };
 
-      const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, fetched.map((message) => message.id));
+      const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds(fetched));
       rememberHiddenMessageIds(fetchedHiddenIds);
       const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
-      const visibleFetched = fetched.filter((message) => {
+      const visibleFetched = sanitizeHiddenReplies(fetched.filter((message) => {
         if (effectiveHiddenIds.has(message.id)) return false;
         if (!messageBelongsToTopic(message, activeTopicId, activeGeneralTopicIds)) return false;
         if (!localClearedAt) return true;
         return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
-      });
+      }), effectiveHiddenIds);
       const existing = useAppStore.getState().messages[activeChatId] ?? [];
-      const visibleExisting = existing.filter((message) => {
+      const visibleExisting = sanitizeHiddenReplies(existing.filter((message) => {
         if (effectiveHiddenIds.has(message.id)) return false;
         if (!messageBelongsToTopic(message, activeTopicId, activeGeneralTopicIds)) return false;
         if (!localClearedAt) return true;
         return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
-      });
+      }), effectiveHiddenIds);
       setMessages(activeChatId, mergeMessagesById(visibleFetched, visibleExisting));
       return { loaded: visibleFetched.length };
     } catch (error) {
@@ -293,26 +300,36 @@ export function useMessages(
     }
   }, [rememberHiddenMessageIds, setMessages, supabase]);
 
-  const fetchMessageById = useCallback(async (messageId: string) => {
+  const fetchMessageById = useCallback(async (messageId: string): Promise<EnsureMessageLoadedResult> => {
     const activeChatId = chatIdRef.current;
-    if (!activeChatId) return;
+    if (!activeChatId) return { ok: false, reason: "not-found" };
     const { data } = await supabase
       .from("messages")
-      .select(`*, sender:profiles!user_id(*), reply_to:messages!reply_to_id(id, content, type, user_id, sender:profiles(id, full_name)), reactions(*)`)
+      .select(MESSAGE_SELECT_WITH_JOINS)
       .eq("id", messageId)
       .eq("chat_id", activeChatId)
       .maybeSingle();
-    if (!data) return;
+    if (!data) return { ok: false, reason: "not-found" };
     const message = data as unknown as MessageWithSender;
-    const hiddenIds = await fetchHiddenMessageIdSet(supabase, [message.id]);
+    const hiddenIds = await fetchHiddenMessageIdSet(supabase, [message.id, message.reply_to_id].filter(Boolean) as string[]);
     if (hiddenIds.has(message.id)) {
       rememberHiddenMessageIds(hiddenIds);
-      return;
+      return { ok: false, reason: "hidden" };
+    }
+    if (hiddenIds.size) rememberHiddenMessageIds(hiddenIds);
+    if (message.deleted_at) {
+      return { ok: false, reason: "deleted" };
     }
     const localClearedAt = clearedAtRef.current;
-    if (localClearedAt && new Date(message.created_at).getTime() <= new Date(localClearedAt).getTime()) return;
-    if (!messageBelongsToTopic(message, topicIdRef.current, generalTopicIdsRef.current)) return;
-    addMessage(activeChatId, message);
+    if (localClearedAt && new Date(message.created_at).getTime() <= new Date(localClearedAt).getTime()) {
+      return { ok: false, reason: "cleared" };
+    }
+    if (!messageBelongsToTopic(message, topicIdRef.current, generalTopicIdsRef.current)) {
+      return { ok: false, reason: "topic" };
+    }
+    const visibleMessage = sanitizeHiddenReply(message, hiddenIds);
+    addMessage(activeChatId, visibleMessage);
+    return { ok: true, message: visibleMessage };
   }, [addMessage, rememberHiddenMessageIds, supabase]);
 
   const fetchMessageByClientId = useCallback(async (
@@ -376,7 +393,7 @@ export function useMessages(
     }
     let query = supabase
       .from("messages")
-      .select(`*, sender:profiles!user_id(*), reactions(*)`)
+      .select(MESSAGE_SELECT_WITH_JOINS)
       .eq("chat_id", chatId)
       .eq("pinned", true)
       .is("deleted_at", null);
@@ -396,10 +413,13 @@ export function useMessages(
       return;
     }
     const pinnedRows = (data ?? []) as unknown as MessageWithSender[];
-    const pinnedHiddenIds = await fetchHiddenMessageIdSet(supabase, pinnedRows.map((message) => message.id));
+    const pinnedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds(pinnedRows));
     rememberHiddenMessageIds(pinnedHiddenIds);
     const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...pinnedHiddenIds]);
-    setPinnedMessages(sortPinnedMessages(pinnedRows.filter((message) => !effectiveHiddenIds.has(message.id))));
+    setPinnedMessages(sortPinnedMessages(sanitizeHiddenReplies(
+      pinnedRows.filter((message) => !effectiveHiddenIds.has(message.id)),
+      effectiveHiddenIds,
+    )));
     setPinnedKey(fetchKey);
     setPinnedReady(true);
   }, [chatId, topicId, generalTopicIds, supabase, clearedAt, rememberHiddenMessageIds]);
@@ -481,13 +501,17 @@ export function useMessages(
           addMessage(payload.new.chat_id, provisional);
           const { data } = await supabase
             .from("messages")
-            .select(`*, sender:profiles!user_id(*), reply_to:messages!reply_to_id(id, content, type, user_id, sender:profiles(id, full_name)), reactions(*)`)
+            .select(MESSAGE_SELECT_WITH_JOINS)
             .eq("id", payload.new.id)
             .maybeSingle();
           if (!data) return;
-          if (hiddenMessageIdsRef.current.has(payload.new.id)) return;
-          if (!messageBelongsToTopic(data as unknown as MessageWithSender, topicIdRef.current, generalTopicIdsRef.current)) return;
-          addMessage(payload.new.chat_id, data as unknown as MessageWithSender);
+          const nextMessage = data as unknown as MessageWithSender;
+          const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]));
+          if (fetchedHiddenIds.size) rememberHiddenMessageIds(fetchedHiddenIds);
+          const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
+          if (effectiveHiddenIds.has(nextMessage.id)) return;
+          if (!messageBelongsToTopic(nextMessage, topicIdRef.current, generalTopicIdsRef.current)) return;
+          addMessage(payload.new.chat_id, sanitizeHiddenReply(nextMessage, effectiveHiddenIds));
           const user = currentUserRef.current;
           if (user && data.user_id !== user.id && document.hidden &&
               Notification.permission === "granted" && !mutedRef.current.includes(payload.new.chat_id)) {
@@ -518,19 +542,23 @@ export function useMessages(
           // rather than vanishing — matches Telegram-style soft delete UX.
           const { data } = await supabase
             .from("messages")
-            .select("*, sender:profiles!user_id(*), reactions(*)")
+            .select(MESSAGE_SELECT_WITH_JOINS)
             .eq("id", payload.new.id)
             .single();
           if (data) {
             const current = useAppStore.getState().messages[payload.new.chat_id] ?? [];
             const nextMessage = data as MessageWithSender;
-            if (hiddenMessageIdsRef.current.has(nextMessage.id)) return;
+            const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]));
+            if (fetchedHiddenIds.size) rememberHiddenMessageIds(fetchedHiddenIds);
+            const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
+            if (effectiveHiddenIds.has(nextMessage.id)) return;
             if (!messageBelongsToTopic(nextMessage, topicIdRef.current, generalTopicIdsRef.current)) return;
-            setMessages(payload.new.chat_id, current.map((m) => m.id === nextMessage.id ? nextMessage : m));
+            const visibleMessage = sanitizeHiddenReply(nextMessage, effectiveHiddenIds);
+            setMessages(payload.new.chat_id, current.map((m) => m.id === visibleMessage.id ? visibleMessage : m));
             setPinnedMessages((currentPinned) =>
-              nextMessage.pinned && !nextMessage.deleted_at
-                ? upsertPinnedMessage(currentPinned, nextMessage)
-                : currentPinned.filter((message) => message.id !== nextMessage.id)
+              visibleMessage.pinned && !visibleMessage.deleted_at
+                ? upsertPinnedMessage(currentPinned, visibleMessage)
+                : currentPinned.filter((message) => message.id !== visibleMessage.id)
             );
           }
         }
@@ -544,7 +572,7 @@ export function useMessages(
       rt.removeChannel(channel);
       unregisterChannel(channelName);
     };
-  }, [chatId, userId, rt, addMessage, setMessages, shouldMarkDeliveredForPrivateChat]);
+  }, [chatId, userId, rt, addMessage, rememberHiddenMessageIds, setMessages, shouldMarkDeliveredForPrivateChat, supabase]);
 
   useEffect(() => {
     if (!chatId || !userId) return;
@@ -707,11 +735,13 @@ export function useMessages(
     type: Extract<SendableMessageType, "image" | "video" | "audio" | "file">;
     content: string | null;
     mediaUrl: string;
+    replyToId?: string | null;
   }) => {
     return sendLocalMessage({
       type: input.type,
       content: input.content,
       mediaUrl: input.mediaUrl,
+      replyToId: input.replyToId ?? null,
     });
   }, [sendLocalMessage]);
 
@@ -885,7 +915,7 @@ export function useMessages(
       await supabase.from("reactions").insert({ message_id: messageId, user_id: user.id, emoji });
     }
     const { data: updatedMsg } = await supabase.from("messages")
-      .select("*, sender:profiles!user_id(*), reactions(*)")
+      .select(MESSAGE_SELECT_WITH_JOINS)
       .eq("id", messageId).single();
     if (updatedMsg && chatId) {
       const current = useAppStore.getState().messages[chatId] ?? [];
@@ -910,11 +940,11 @@ export function useMessages(
   }, [chatId, supabase, setMessages]);
 
   return {
-    messages: (messages[chatId ?? ""] ?? []).filter((message) =>
+    messages: sanitizeHiddenReplies((messages[chatId ?? ""] ?? []).filter((message) =>
       !hiddenMessageIds.has(message.id) && messageBelongsToTopic(message, topicId, generalTopicIds)
-    ),
+    ), hiddenMessageIds),
     pinnedMessages: pinnedKey === getPinnedKey(chatId, topicId)
-      ? pinnedMessages.filter((message) => !hiddenMessageIds.has(message.id))
+      ? sanitizeHiddenReplies(pinnedMessages.filter((message) => !hiddenMessageIds.has(message.id)), hiddenMessageIds)
       : [],
     pinnedReady: pinnedKey === getPinnedKey(chatId, topicId) && pinnedReady,
     loading, loadingOlder, hasMoreOlder, olderError, isTyping,
@@ -923,6 +953,7 @@ export function useMessages(
     editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, togglePin, forwardMessage,
     clearChatForMe,
     loadOlderMessages,
+    ensureMessageLoaded: fetchMessageById,
     refetch: fetchMessages,
     refetchPinnedMessages: fetchPinnedMessages,
   };
@@ -951,6 +982,20 @@ function applyGeneralTopicFilter<T extends { or: (filters: string) => T; is: (co
   if (!generalTopicIds.length) return query.is("topic_id", null);
   const ids = generalTopicIds.join(",");
   return query.or(`topic_id.is.null,topic_id.in.(${ids})`);
+}
+
+function getMessageAndReplyIds(messages: MessageWithSender[]): string[] {
+  return Array.from(new Set(messages.flatMap((message) => [message.id, message.reply_to_id].filter(Boolean) as string[])));
+}
+
+function sanitizeHiddenReply(message: MessageWithSender, hiddenIds: Set<string>): MessageWithSender {
+  if (!message.reply_to_id || !hiddenIds.has(message.reply_to_id)) return message;
+  return { ...message, reply_to: undefined };
+}
+
+function sanitizeHiddenReplies(messages: MessageWithSender[], hiddenIds: Set<string>): MessageWithSender[] {
+  if (!hiddenIds.size) return messages;
+  return messages.map((message) => sanitizeHiddenReply(message, hiddenIds));
 }
 
 function buildRealtimeMessage(row: MessageWithSender): MessageWithSender {

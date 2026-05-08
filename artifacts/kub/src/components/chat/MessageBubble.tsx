@@ -12,6 +12,7 @@ import { KubIcon, type KubIconName } from "@/components/kub";
 import type { MediaViewerItem } from "./MediaViewer";
 import { requestAppConfirm } from "@/lib/appDialogs";
 import type { MessageDeliveryState } from "@/lib/messageDelivery";
+import { formatReplyMessagePreview } from "@/lib/messagePreview";
 
 const EMOJI_QUICK = ["👍", "❤️", "😂", "😮", "😢", "🔥", "👏", "🎉"];
 
@@ -30,6 +31,7 @@ interface MessageBubbleProps {
   isFirstInGroup: boolean;
   isLastInGroup: boolean;
   onReply: () => void;
+  onJumpToReply?: (messageId: string) => void;
   onReaction: (emoji: string) => void;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -131,7 +133,7 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
 
 export function MessageBubble({
   message, isMe, isFirstInGroup, isLastInGroup,
-  onReply, onReaction, onEdit, onDelete, onHideForMe, onStartSelection, onTogglePin, onForward, onOpenMedia,
+  onReply, onJumpToReply, onReaction, onEdit, onDelete, onHideForMe, onStartSelection, onTogglePin, onForward, onOpenMedia,
   onRetrySend, onEditFailedSend, onDiscardLocalMessage,
   reactionMenuOpen = false, onToggleReactionMenu, onCloseReactionMenu,
   actionMenuOpen, onOpenActionMenu, onCloseActionMenu, selected = false, isSelectionMode = false,
@@ -515,34 +517,6 @@ export function MessageBubble({
             </span>
           )}
 
-          {message.reply_to_id && (() => {
-            const replyMsg = messagesMap[message.reply_to_id] ?? message.reply_to;
-            if (!replyMsg) return null;
-            const replyUserId = replyMsg.user_id;
-            const replyName = replyUserId === currentUser?.id
-              ? "Вы"
-              : (replyUserId ? usersMap[replyUserId] : null) ?? replyMsg.sender?.full_name ?? "Без имени";
-            return (
-              <div
-                className={cn(
-                  "flex items-stretch gap-2 px-3 py-1.5 mb-px text-xs max-w-full rounded-t-2xl",
-                  isMe ? "rounded-br-sm self-end" : "rounded-bl-sm self-start",
-                  bubbleClass, "opacity-90"
-                )}
-              >
-                <div className="w-0.5 rounded-full flex-shrink-0 self-stretch bg-[var(--kub-cyan)]" />
-                <div className="min-w-0">
-                  <div className="font-semibold truncate text-[color:var(--kub-cyan)]">
-                    {replyName}
-                  </div>
-                  <div className="truncate opacity-70 text-[color:var(--kub-text)]">
-                    {replyMsg.content}
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
           <div
             data-message-bubble="true"
             data-message-layout-kind={textLayoutKind}
@@ -554,9 +528,7 @@ export function MessageBubble({
               hasReactions ? "pb-2" : textLikeNoReactionFooter ? "pb-1 pr-2.5" : "pb-1.5",
               widthClasses.bubble,
               bubbleClass,
-              isMe
-                ? cn("rounded-br-sm", message.reply_to_id && "rounded-tr-none")
-                : cn("rounded-bl-sm", message.reply_to_id && "rounded-tl-none"),
+              isMe ? "rounded-br-sm" : "rounded-bl-sm",
               isMe && isLastInGroup ? "bubble-out" : "",
               !isMe && isLastInGroup ? "bubble-in" : "",
               message.pending && "opacity-70",
@@ -601,6 +573,39 @@ export function MessageBubble({
                 <KubIcon name="more" size={14} />
               </button>
             </div>
+
+            {message.reply_to_id && (() => {
+              const replyMsg = messagesMap[message.reply_to_id] ?? message.reply_to ?? null;
+              const replyUserId = replyMsg?.user_id ?? null;
+              const replyName = replyMsg && !replyMsg.deleted_at
+                ? replyUserId === currentUser?.id
+                  ? "Вы"
+                  : (replyUserId ? usersMap[replyUserId] : null) ?? replyMsg.sender?.full_name ?? "Без имени"
+                : "Ответ";
+              const preview = formatReplyMessagePreview(replyMsg);
+              return (
+                <button
+                  type="button"
+                  data-message-reply-preview="true"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onJumpToReply?.(message.reply_to_id!);
+                  }}
+                  className="mb-1.5 flex max-w-full items-stretch gap-2 rounded-xl bg-[color-mix(in_srgb,var(--kub-surface-2)_55%,transparent)] px-2 py-1.5 text-left text-xs transition-colors hover:bg-[color-mix(in_srgb,var(--kub-surface-3)_72%,transparent)]"
+                  aria-label="Перейти к исходному сообщению"
+                >
+                  <span className="w-0.5 flex-shrink-0 self-stretch rounded-full bg-[var(--kub-cyan)]" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold leading-tight text-[color:var(--kub-cyan)]">
+                      {replyName}
+                    </span>
+                    <span className="block truncate leading-tight text-[color:var(--kub-muted)]">
+                      {preview}
+                    </span>
+                  </span>
+                </button>
+              );
+            })()}
 
             {isVoiceMessage(message) ? (
               <AudioMessage url={message.media_url} duration={parseAudioDuration(message.content)} isMe={isMe} />

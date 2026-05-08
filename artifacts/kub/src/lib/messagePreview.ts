@@ -12,8 +12,19 @@ export function formatChatMessagePreview(message: Pick<Message, "type" | "conten
   return message.content ?? "";
 }
 
+export function formatReplyMessagePreview(message: Pick<Message, "type" | "content" | "media_url" | "deleted_at"> | null | undefined): string {
+  if (!message || message.deleted_at) return "Сообщение недоступно";
+  if (isLocationMessage(message.content)) return "Местоположение";
+  return formatChatMessagePreview(message) || "Сообщение";
+}
+
 function isGifMessage(message: Pick<Message, "type" | "content" | "media_url">): boolean {
   if (message.type !== "image") return false;
   const source = `${message.content ?? ""} ${message.media_url ?? ""}`.toLowerCase();
   return source.includes(".gif") || source.includes("image/gif");
+}
+
+function isLocationMessage(content: string | null | undefined): boolean {
+  if (!content) return false;
+  return /(^|\s)(📍\s*)?Местоположение:\s*https:\/\/maps\.google\.com\/\?q=/i.test(content);
 }

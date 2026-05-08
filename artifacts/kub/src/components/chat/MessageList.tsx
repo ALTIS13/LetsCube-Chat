@@ -14,6 +14,7 @@ import { requestAppConfirm } from "@/lib/appDialogs";
 interface MessageListProps {
   messages: MessageWithSender[];
   onReply: (msg: MessageWithSender) => void;
+  onJumpToReply?: (messageId: string) => void;
   onReaction: (messageId: string, emoji: string) => void;
   onEdit?: (msg: MessageWithSender) => void;
   onDelete?: (msg: MessageWithSender) => void;
@@ -75,6 +76,7 @@ function shouldShowDateSeparator(prev: MessageWithSender | null, current: Messag
 export function MessageList({
   messages,
   onReply,
+  onJumpToReply,
   onReaction,
   onEdit,
   onDelete,
@@ -426,7 +428,12 @@ export function MessageList({
                     isMe={isMe}
                     isFirstInGroup={!isSameSenderAsPrev}
                     isLastInGroup={!isSameSenderAsNext}
-                    onReply={isLocalSend ? () => undefined : () => onReply(msg)}
+                    onReply={isLocalSend ? () => undefined : () => {
+                      setOpenActionMessageId(null);
+                      setOpenReactionMessageId(null);
+                      onReply(msg);
+                    }}
+                    onJumpToReply={onJumpToReply}
                     onReaction={isLocalSend ? () => undefined : (emoji) => onReaction(msg.id, emoji)}
                     onEdit={!isLocalSend && onEdit ? () => onEdit(msg) : undefined}
                     onDelete={!isLocalSend && onDelete ? () => onDelete(msg) : undefined}

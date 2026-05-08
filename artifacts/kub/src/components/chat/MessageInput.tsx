@@ -9,6 +9,7 @@ import { useAppStore } from "@/store/app.store";
 import { useMuteState } from "@/hooks/useMuteState";
 import { KubIcon, type KubIconName } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
+import { formatReplyMessagePreview } from "@/lib/messagePreview";
 
 const DRAFT_PREFIX = "kub:draft:";
 const draftKey = (chatId: string) => `${DRAFT_PREFIX}${chatId}`;
@@ -33,6 +34,7 @@ interface MessageInputProps {
   onSendVoice?: (blob: Blob, durationMs: number, mimeType: string) => void | Promise<void>;
   onTyping?: () => void;
   draftOverride?: { id: string; text: string } | null;
+  focusRequestKey?: number;
 }
 
 export function MessageInput({
@@ -45,6 +47,7 @@ export function MessageInput({
   onSendVoice,
   onTyping,
   draftOverride,
+  focusRequestKey = 0,
 }: MessageInputProps) {
   const [text, setText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
@@ -98,6 +101,14 @@ export function MessageInput({
     setShowAttach(false);
     setTimeout(() => textareaRef.current?.focus(), 0);
   }, [draftOverride, setEditingMessage]);
+
+  useEffect(() => {
+    if (!replyTo || isEditing) return;
+    setShowEmoji(false);
+    setShowAttach(false);
+    setShowVoice(false);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }, [focusRequestKey, isEditing, replyTo]);
 
   const exitEditMode = useCallback(() => {
     setEditingMessage(null);
@@ -166,6 +177,9 @@ export function MessageInput({
         e.preventDefault();
         setShowEmoji(false);
         setShowAttach(false);
+      } else if (!isEditing && replyTo) {
+        e.preventDefault();
+        onCancelReply();
       }
       return;
     }
@@ -320,7 +334,7 @@ export function MessageInput({
               <div className="text-xs font-semibold text-[color:var(--kub-cyan)]">
                 {replyTo.sender?.full_name ?? "Вы"}
               </div>
-              <div className="text-xs truncate text-[color:var(--kub-muted)]">{replyTo.content}</div>
+              <div className="text-xs truncate text-[color:var(--kub-muted)]">{formatReplyMessagePreview(replyTo)}</div>
             </div>
             <button
               onClick={onCancelReply}
