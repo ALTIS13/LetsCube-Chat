@@ -371,11 +371,12 @@ export function MessageBubble({
   const showGroupReadIndicator = Boolean(groupReadInfo && groupReadInfo.readCount > 0);
   const groupReadLabel = groupReadInfo ? getGroupReadReceiptCompactLabel(groupReadInfo) : "";
   const groupReadAriaLabel = groupReadInfo ? getGroupReadReceiptAriaLabel(groupReadInfo) : "";
-  const footerSpacerClass = getFooterSpacerClass({
-    own: Boolean(deliveryState?.isOwnMessage),
-    compactGroupRead: showGroupReadIndicator,
-    hasExtraMeta: Boolean(message.edited_at || message.pinned),
-  });
+  const useInlineTextMeta =
+    textLikeNoReactionFooter &&
+    textLayoutKind !== "link" &&
+    textLayoutKind !== "longToken" &&
+    !/[\r\n]/.test(textContent) &&
+    textContent.trim().length <= 28;
   const renderFooterContent = () => (
     <>
       {message.pinned && (
@@ -550,11 +551,11 @@ export function MessageBubble({
             data-message-bubble="true"
             data-message-layout-kind={textLayoutKind}
             data-message-footer-mode={
-              textLikeNoReactionFooter ? "absolute-spacer" : hasReactions ? "reactions" : "bottom-meta"
+              textLikeNoReactionFooter ? (useInlineTextMeta ? "inline-flow" : "float-flow") : hasReactions ? "reactions" : "bottom-meta"
             }
             className={cn(
               "relative flex flex-col max-w-full px-3 pt-2 rounded-2xl transition-opacity select-none sm:select-text",
-              hasReactions ? "pb-2" : textLikeNoReactionFooter ? "pb-1 pr-2.5" : "pb-1.5",
+              hasReactions ? "pb-2" : "pb-1.5",
               widthClasses.bubble,
               bubbleClass,
               isMe ? "rounded-br-sm" : "rounded-bl-sm",
@@ -665,16 +666,21 @@ export function MessageBubble({
                 data-message-text-flow="true"
                 className={cn(
                   "min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap break-words [word-break:normal] text-[color:var(--kub-text)]",
+                  textLikeNoReactionFooter && !useInlineTextMeta && "flow-root",
                   widthClasses.text
                 )}
               >
                 <FormattedText content={message.content ?? ""} />
                 {textLikeNoReactionFooter && (
                   <span
-                    aria-hidden="true"
-                    data-message-footer-spacer="true"
-                    className={cn("ml-1 inline-block h-0 align-baseline", footerSpacerClass)}
-                  />
+                    data-message-footer="true"
+                    className={cn(
+                      "inline-flex max-w-max shrink-0 items-center justify-end gap-1 whitespace-nowrap leading-none align-baseline",
+                      useInlineTextMeta ? "ml-1.5 translate-y-[1px]" : "float-right ml-2 mt-1",
+                    )}
+                  >
+                    {renderFooterContent()}
+                  </span>
                 )}
               </p>
             )}
@@ -715,15 +721,6 @@ export function MessageBubble({
                   </button>
                 )}
               </div>
-            )}
-
-            {textLikeNoReactionFooter && (
-              <span
-                data-message-footer="true"
-                className="absolute bottom-1.5 right-2.5 inline-flex max-w-max shrink-0 items-center justify-end gap-1 whitespace-nowrap leading-none"
-              >
-                {renderFooterContent()}
-              </span>
             )}
 
             {!textLikeNoReactionFooter && (
@@ -777,20 +774,6 @@ export function MessageBubble({
       </div>
     </>
   );
-}
-
-function getFooterSpacerClass({
-  own,
-  compactGroupRead,
-  hasExtraMeta,
-}: {
-  own: boolean;
-  compactGroupRead: boolean;
-  hasExtraMeta: boolean;
-}): string {
-  if (compactGroupRead) return hasExtraMeta ? "w-24" : "w-20";
-  if (hasExtraMeta) return own ? "w-20" : "w-16";
-  return own ? "w-16" : "w-12";
 }
 
 function setBodySelectionSuppressed(suppressed: boolean) {
