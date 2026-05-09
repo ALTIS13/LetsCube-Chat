@@ -161,6 +161,20 @@ function clampReplyPreviewText(value: string, maxLength: number): string {
   return `${chars.slice(0, Math.max(1, maxLength - 3)).join("")}...`;
 }
 
+function getCompactReplyPreviewCap(replyBody: string): { chars: number; maxWidth: string } {
+  const length = Array.from(replyBody.replace(/\s+/g, " ").trim()).length;
+
+  if (length <= 6) {
+    return { chars: 12, maxWidth: "min(100%, 108px, 13ch)" };
+  }
+
+  if (length <= 12) {
+    return { chars: 14, maxWidth: "min(100%, 116px, 14ch)" };
+  }
+
+  return { chars: 16, maxWidth: "min(100%, 124px, 16ch)" };
+}
+
 function getInitialMetaPlacement(content: string): MetaPlacement {
   const text = content.trim();
   if (!text) return "inline";
@@ -266,6 +280,7 @@ function MeasuredTextWithMeta({
 }: MeasuredTextWithMetaProps) {
   const [placement, setPlacement] = useState<MetaPlacement>(() => getInitialMetaPlacement(content));
   const [anchoredMetaSlot, setAnchoredMetaSlot] = useState(false);
+  const [terminalReserveWidth, setTerminalReserveWidth] = useState(0);
   const textFlowRef = useRef<HTMLParagraphElement | null>(null);
   const textContentRef = useRef<HTMLSpanElement | null>(null);
   const footerRef = useRef<HTMLSpanElement | null>(null);
@@ -284,6 +299,7 @@ function MeasuredTextWithMeta({
     if (!lastLine) {
       setPlacement((current) => (current === "inline" ? current : "inline"));
       setAnchoredMetaSlot((current) => (current ? false : current));
+      setTerminalReserveWidth((current) => (current === 0 ? current : 0));
       return;
     }
 
@@ -314,16 +330,19 @@ function MeasuredTextWithMeta({
       available >= footerRect.width + gap &&
       blockedInlineSignatureRef.current !== signature;
     const next: MetaPlacement = canInline ? "inline" : "anchored";
-    const nextAnchoredMetaSlot = next === "anchored" && lastLine.right > bubbleInnerRight - footerRect.width - gap;
+    const nextReserveWidth = next === "anchored" ? Math.ceil(footerRect.width + gap) : 0;
+    const nextAnchoredMetaSlot = false;
 
     setPlacement((previous) => (previous === next ? previous : next));
     setAnchoredMetaSlot((previous) => (previous === nextAnchoredMetaSlot ? previous : nextAnchoredMetaSlot));
+    setTerminalReserveWidth((previous) => (previous === nextReserveWidth ? previous : nextReserveWidth));
   }, [bubbleRef, compound, hasMeta, placement, stackRef]);
 
   useEffect(() => {
     blockedInlineSignatureRef.current = null;
     setPlacement(getInitialMetaPlacement(content));
     setAnchoredMetaSlot(false);
+    setTerminalReserveWidth(0);
   }, [content, measureKey]);
 
   useLayoutEffect(() => {
@@ -373,6 +392,14 @@ function MeasuredTextWithMeta({
         <span ref={textContentRef} data-message-text-content="true">
           <FormattedText content={content} />
         </span>
+        {hasMeta && placement === "anchored" && terminalReserveWidth > 0 && (
+          <span
+            aria-hidden="true"
+            data-message-terminal-reserve="true"
+            className="inline-block h-[1em] align-baseline"
+            style={{ width: terminalReserveWidth }}
+          />
+        )}
         {hasMeta && placement === "inline" && (
           <span
             ref={footerRef}
@@ -721,7 +748,7 @@ export function MessageBubble({
   const contextItems = isLocalSend ? localSendContextItems : regularContextItems;
   const canUseCompactReplyInline = canRenderCompactReplyInline(message, textLayoutKind, hasReactions);
   const canUseMeasuredTextMeta = message.type === "text" && textLayoutKind !== "preformatted" && !message.failed && !canUseCompactReplyInline;
-  const footerMode = hasReactions ? "bottom-layer-reactions" : canUseMeasuredTextMeta ? "measured" : "meta-row";
+  const footerMode = hasReactions ? "bottom-layer-reactions" : canUseCompactReplyInline ? "compact-reply-inline" : canUseMeasuredTextMeta ? "measured" : "meta-row";
   const showGroupReadIndicator = Boolean(groupReadInfo && groupReadInfo.readCount > 0);
   const groupReadLabel = groupReadInfo ? getGroupReadReceiptCompactLabel(groupReadInfo) : "";
   const groupReadAriaLabel = groupReadInfo ? getGroupReadReceiptAriaLabel(groupReadInfo) : "";
@@ -1070,8 +1097,12 @@ export function MessageBubble({
                   ? "Вы"
                   : (replyUserId ? usersMap[replyUserId] : null) ?? replyMsg.sender?.full_name ?? "Без имени"
                 : "Ответ";
-              const preview = clampReplyPreviewText(formatReplyMessagePreview(replyMsg), 28);
-              const replyNameLabel = clampReplyPreviewText(replyName, 24);
+              const compactPreview = canUseCompactReplyInline;
+              const compactPreviewCap = compactPreview
+                ? getCompactReplyPreviewCap(message.content ?? "")
+                : null;
+              const preview = clampReplyPreviewText(formatReplyMessagePreview(replyMsg), compactPreviewCap?.chars ?? 28);
+              const replyNameLabel = clampReplyPreviewText(replyName, compactPreview ? 18 : 24);
               return (
                 <button
                   type="button"
@@ -1081,7 +1112,7 @@ export function MessageBubble({
                     onJumpToReply?.(message.reply_to_id!);
                   }}
                   className="mb-1.5 flex w-fit min-w-0 items-stretch gap-2 overflow-hidden rounded-xl bg-[color-mix(in_srgb,var(--kub-surface-2)_55%,transparent)] px-2 py-1.5 text-left text-xs transition-colors hover:bg-[color-mix(in_srgb,var(--kub-surface-3)_72%,transparent)]"
-                  style={{ maxWidth: "min(100%, 170px, 22ch)" }}
+                  style={{ maxWidth: compactPreviewCap?.maxWidth ?? "min(100%, 170px, 22ch)" }}
                   aria-label="Перейти к исходному сообщению"
                 >
                   <span className="w-0.5 flex-shrink-0 self-stretch rounded-full bg-[var(--kub-cyan)]" />
