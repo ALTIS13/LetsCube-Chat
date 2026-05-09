@@ -103,7 +103,7 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
   switch (kind) {
     case "link":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(64vw,620px)] md:max-w-[min(52vw,620px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(64vw,580px)] md:max-w-[min(52vw,580px)]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
@@ -115,13 +115,13 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
       };
     case "longToken":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(60vw,640px)] md:max-w-[min(52vw,640px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(60vw,580px)] md:max-w-[min(52vw,580px)]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
     case "regular":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px)] md:max-w-[min(65vw,680px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,600px)] md:max-w-[min(58vw,600px)]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
@@ -138,6 +138,18 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
         bubble: "w-fit",
         text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
+  }
+}
+
+function getMessageStackStyle(kind: TextLayoutKind): CSSProperties | undefined {
+  switch (kind) {
+    case "link":
+    case "longToken":
+      return { maxWidth: "min(86vw, 580px)" };
+    case "regular":
+      return { maxWidth: "min(86vw, 600px)" };
+    default:
+      return undefined;
   }
 }
 
@@ -405,6 +417,7 @@ export function MessageBubble({
   const textContent = message.content ?? "";
   const textLayoutKind = getMessageTextLayoutKind(message.type, textContent);
   const widthClasses = getMessageWidthClasses(textLayoutKind);
+  const stackStyle = getMessageStackStyle(textLayoutKind);
   const viewportWidth = typeof window === "undefined" ? 1024 : window.innerWidth;
   const viewportHeight = typeof window === "undefined" ? 768 : window.innerHeight;
   const compactContextMenu = viewportWidth < 640;
@@ -963,7 +976,11 @@ export function MessageBubble({
           </div>
         )}
 
-        <div ref={stackRef} className={cn("inline-flex min-w-0 max-w-full flex-col", widthClasses.stack, isMe ? "items-end" : "items-start")}>
+        <div
+          ref={stackRef}
+          className={cn("inline-flex min-w-0 max-w-full flex-col", widthClasses.stack, isMe ? "items-end" : "items-start")}
+          style={stackStyle}
+        >
 
           {!isMe && isFirstInGroup && message.sender && (
             <span className="text-xs font-semibold ml-3 mb-0.5 text-[color:var(--kub-cyan)]">
@@ -1043,7 +1060,8 @@ export function MessageBubble({
                     event.stopPropagation();
                     onJumpToReply?.(message.reply_to_id!);
                   }}
-                  className="mb-1.5 flex max-w-full items-stretch gap-2 rounded-xl bg-[color-mix(in_srgb,var(--kub-surface-2)_55%,transparent)] px-2 py-1.5 text-left text-xs transition-colors hover:bg-[color-mix(in_srgb,var(--kub-surface-3)_72%,transparent)]"
+                  className="mb-1.5 flex w-fit max-w-[min(100%,30rem)] min-w-0 items-stretch gap-2 overflow-hidden rounded-xl bg-[color-mix(in_srgb,var(--kub-surface-2)_55%,transparent)] px-2 py-1.5 text-left text-xs transition-colors hover:bg-[color-mix(in_srgb,var(--kub-surface-3)_72%,transparent)]"
+                  style={{ maxWidth: "min(100%, 30rem)" }}
                   aria-label="Перейти к исходному сообщению"
                 >
                   <span className="w-0.5 flex-shrink-0 self-stretch rounded-full bg-[var(--kub-cyan)]" />
@@ -1051,7 +1069,16 @@ export function MessageBubble({
                     <span className="block truncate font-semibold leading-tight text-[color:var(--kub-cyan)]">
                       {replyName}
                     </span>
-                    <span className="block truncate leading-tight text-[color:var(--kub-muted)]">
+                    <span
+                      className="block overflow-hidden leading-tight text-[color:var(--kub-muted)] [overflow-wrap:anywhere] [word-break:break-word]"
+                      style={{
+                        display: "-webkit-box",
+                        WebkitBoxOrient: "vertical",
+                        WebkitLineClamp: 2,
+                        overflowWrap: "anywhere",
+                        wordBreak: "break-word",
+                      }}
+                    >
                       {preview}
                     </span>
                   </span>
