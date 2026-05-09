@@ -305,3 +305,9 @@ Recurring tasks roadmap note:
 - Text meta no longer uses "fits last line" as the only Telegram-like rule. Inline meta is limited to simple single-line text; wrapped multiline text, long URLs/tokens and reply/compound bubbles use anchored bottom-right meta inside the bubble.
 - Anchored meta uses a measured final-line tail reserve only when the last text line would run under the footer; it does not apply global right/bottom padding and reactions do not participate in the text/meta placement decision.
 - Reactions are rendered as a secondary compact layer below text+meta: the default row shows up to two reaction chips plus `+N`, with the overflow list shown as an overlay on hover/focus or by tapping `+N`.
+
+2026-05-09 final message bubble polish:
+
+- Anchored text meta no longer inserts an inline tail spacer for long CAPS / long-token messages. If the final text line would collide with the footer, the footer uses a compact bottom-end flow row; otherwise it stays anchored over the natural free corner.
+- Location messages that match `📍 Местоположение: https://maps.google.com/?q=lat,lng` are displayed as rounded coordinates while preserving the original map href; ordinary Google and non-map URLs still use the regular formatter.
+- Very short messages with multiple reactions now default to one visible reaction chip plus `+N`, so the reaction layer does not widen the core text+meta bubble.

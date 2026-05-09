@@ -30,6 +30,12 @@ type Token =
   | { kind: "url"; href: string }
   | { kind: "mention"; user: string; lead: string };
 
+interface LocationPreview {
+  href: string;
+  lat: number;
+  lng: number;
+}
+
 function nextMatch(input: string): { start: number; len: number; token: Token } | null {
   let best: { start: number; len: number; token: Token } | null = null;
   for (const { name, re } of PATTERNS) {
@@ -93,6 +99,37 @@ function renderUrlText(href: string): React.ReactNode[] {
   return nodes;
 }
 
+function parseLocationPreview(content: string): LocationPreview | null {
+  const trimmed = content.trim();
+  const prefixMatch = /^(?:📍\s*)?Местоположение:\s*/u.exec(trimmed);
+  if (!prefixMatch) return null;
+
+  const rest = trimmed.slice(prefixMatch[0].length);
+  const urlMatch = /^\bhttps?:\/\/[^\s<]+[^\s<.,;:'")\]]/.exec(rest);
+  if (!urlMatch) return null;
+  if (rest.slice(urlMatch[0].length).trim().length > 0) return null;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(urlMatch[0]);
+  } catch {
+    return null;
+  }
+
+  if (parsed.hostname !== "maps.google.com" && parsed.hostname !== "www.maps.google.com") return null;
+  const query = parsed.searchParams.get("q");
+  if (!query) return null;
+
+  const [latRaw, lngRaw] = query.split(",");
+  if (!latRaw || !lngRaw) return null;
+  const lat = Number.parseFloat(latRaw.trim());
+  const lng = Number.parseFloat(lngRaw.trim());
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+
+  return { href: urlMatch[0], lat, lng };
+}
+
 function renderToken(t: Token, key: number): React.ReactNode {
   switch (t.kind) {
     case "text":
@@ -137,6 +174,24 @@ function renderToken(t: Token, key: number): React.ReactNode {
 }
 
 export function FormattedText({ content }: { content: string }) {
+  const location = parseLocationPreview(content);
+  if (location) {
+    return (
+      <>
+        <span>📍 Местоположение: </span>
+        <a
+          href={location.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline max-w-full underline [overflow-wrap:break-word] [word-break:normal]"
+          style={{ color: "var(--tg-accent)" }}
+        >
+          {location.lat.toFixed(5)}, {location.lng.toFixed(5)}
+        </a>
+      </>
+    );
+  }
+
   // Preserve line breaks while still letting tokens span within a line.
   const lines = content.split("\n");
   return (

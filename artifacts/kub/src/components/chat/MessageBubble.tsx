@@ -231,7 +231,7 @@ function MeasuredTextWithMeta({
   compound = false,
 }: MeasuredTextWithMetaProps) {
   const [placement, setPlacement] = useState<MetaPlacement>(() => getInitialMetaPlacement(content));
-  const [tailReserveWidth, setTailReserveWidth] = useState(0);
+  const [anchoredMetaRow, setAnchoredMetaRow] = useState(false);
   const textFlowRef = useRef<HTMLParagraphElement | null>(null);
   const textContentRef = useRef<HTMLSpanElement | null>(null);
   const footerRef = useRef<HTMLSpanElement | null>(null);
@@ -248,7 +248,7 @@ function MeasuredTextWithMeta({
     const lastLine = lineRects.at(-1) ?? null;
     if (!lastLine) {
       setPlacement((current) => (current === "inline" ? current : "inline"));
-      setTailReserveWidth((current) => (current === 0 ? current : 0));
+      setAnchoredMetaRow((current) => (current ? false : current));
       return;
     }
 
@@ -280,19 +280,16 @@ function MeasuredTextWithMeta({
       blockedInlineSignatureRef.current !== signature;
     const next: MetaPlacement = canInline ? "inline" : "anchored";
     const overlapTail = lastLine.right > bubbleInnerRight - footerRect.width - gap;
-    const clearlyClearTail = lastLine.right <= bubbleInnerRight - footerRect.width - gap - 24;
-    const nextTailReserveWidth = next === "anchored" && (overlapTail || (tailReserveWidth > 0 && !clearlyClearTail))
-      ? Math.ceil(footerRect.width + gap)
-      : 0;
+    const nextAnchoredMetaRow = next === "anchored" && overlapTail;
 
     setPlacement((previous) => (previous === next ? previous : next));
-    setTailReserveWidth((previous) => (previous === nextTailReserveWidth ? previous : nextTailReserveWidth));
-  }, [bubbleRef, compound, placement, stackRef, tailReserveWidth]);
+    setAnchoredMetaRow((previous) => (previous === nextAnchoredMetaRow ? previous : nextAnchoredMetaRow));
+  }, [bubbleRef, compound, placement, stackRef]);
 
   useEffect(() => {
     blockedInlineSignatureRef.current = null;
     setPlacement(getInitialMetaPlacement(content));
-    setTailReserveWidth(0);
+    setAnchoredMetaRow(false);
   }, [content, measureKey]);
 
   useLayoutEffect(() => {
@@ -348,16 +345,18 @@ function MeasuredTextWithMeta({
             {meta}
           </span>
         )}
-        {placement === "anchored" && tailReserveWidth > 0 && (
-          <span
-            aria-hidden="true"
-            data-message-meta-tail="true"
-            className="inline-block h-[1em] align-baseline"
-            style={{ width: tailReserveWidth }}
-          />
-        )}
       </p>
-      {placement === "anchored" && (
+      {placement === "anchored" && anchoredMetaRow && (
+        <div
+          data-message-bottom-meta="true"
+          className="mt-0 flex max-w-full items-center justify-end leading-none"
+        >
+          <span ref={footerRef} data-message-footer="true" className={footerClassName}>
+            {meta}
+          </span>
+        </div>
+      )}
+      {placement === "anchored" && !anchoredMetaRow && (
         <span
           ref={footerRef}
           data-message-footer="true"
@@ -474,7 +473,12 @@ export function MessageBubble({
     }, {}
   );
   const reactionEntries = Object.entries(reactionGroups);
-  const visibleReactionLimit = Math.min(2, reactionEntries.length);
+  const isVeryShortReactionText =
+    message.type === "text" &&
+    textLayoutKind === "short" &&
+    textContent.trim().length <= 4 &&
+    reactionEntries.length > 1;
+  const visibleReactionLimit = Math.min(isVeryShortReactionText ? 1 : 2, reactionEntries.length);
   const visibleReactionEntries = reactionEntries.slice(0, visibleReactionLimit);
   const overflowReactionEntries = reactionEntries.slice(visibleReactionLimit);
   const hiddenReactionCount = reactionEntries
