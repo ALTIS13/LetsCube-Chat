@@ -121,7 +121,7 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
       };
     case "regular":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(70vw,560px)] md:max-w-[min(56vw,560px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(68vw,500px)] md:max-w-[min(52vw,500px)]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:break-word] [word-break:normal]",
       };
@@ -147,7 +147,7 @@ function getMessageStackStyle(kind: TextLayoutKind): CSSProperties | undefined {
     case "longToken":
       return { maxWidth: "min(86vw, 580px)" };
     case "regular":
-      return { maxWidth: "min(86vw, 560px)" };
+      return { maxWidth: "min(86vw, 500px)" };
     default:
       return undefined;
   }
@@ -294,9 +294,11 @@ function MeasuredTextWithMeta({
 
     const available = rightLimit - lastLine.right;
     const singleLineText = lineRects.length <= 1;
+    const inlineSlack = available - footerRect.width - gap;
     const canInline =
       singleLineText &&
       available >= footerRect.width + gap &&
+      (!compound || inlineSlack <= 32) &&
       blockedInlineSignatureRef.current !== signature;
     const next: MetaPlacement = canInline ? "inline" : "anchored";
     const nextAnchoredMetaSlot = next === "anchored" && lastLine.right > bubbleInnerRight - footerRect.width - gap;
@@ -1061,7 +1063,7 @@ export function MessageBubble({
                     onJumpToReply?.(message.reply_to_id!);
                   }}
                   className="mb-1.5 flex w-fit min-w-0 items-stretch gap-2 overflow-hidden rounded-xl bg-[color-mix(in_srgb,var(--kub-surface-2)_55%,transparent)] px-2 py-1.5 text-left text-xs transition-colors hover:bg-[color-mix(in_srgb,var(--kub-surface-3)_72%,transparent)]"
-                  style={{ maxWidth: "min(100%, 260px, 32ch)" }}
+                  style={{ maxWidth: "min(100%, 210px, 26ch)" }}
                   aria-label="Перейти к исходному сообщению"
                 >
                   <span className="w-0.5 flex-shrink-0 self-stretch rounded-full bg-[var(--kub-cyan)]" />
