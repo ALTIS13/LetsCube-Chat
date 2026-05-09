@@ -273,8 +273,8 @@ function MeasuredTextWithMeta({
     }
 
     const footerRect = footerEl.getBoundingClientRect();
-    const rightLimit = getTextRightLimit(textEl, bubbleEl, stackRef.current);
     const bubbleInnerRight = getBubbleInnerRight(bubbleEl);
+    const rightLimit = compound ? bubbleInnerRight : getTextRightLimit(textEl, bubbleEl, stackRef.current);
     const gap = 8;
     const signature = [
       compound ? "compound" : "simple",
@@ -347,7 +347,7 @@ function MeasuredTextWithMeta({
     <div
       data-message-text-meta-group="true"
       data-message-meta-placement={placement}
-      className={cn("relative max-w-full min-w-0", compound && "w-full")}
+      className="relative max-w-full min-w-0"
     >
       <p
         ref={textFlowRef}
