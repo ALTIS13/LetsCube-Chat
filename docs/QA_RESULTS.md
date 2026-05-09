@@ -61,6 +61,8 @@
 
 ## Browser QA Notes
 
+Safe QA note: Live QA should use the Codex/QA browser session or QA credentials from a secure environment; never store secrets in the repo and do not depend on the user's mouse/manual browser.
+
 2026-05-05 logged-in Browser QA на `https://kub.apollot.ru`:
 
 - Sidebar/profile menu на desktop работает; пункт `Админ-панель` доступен из меню профиля.

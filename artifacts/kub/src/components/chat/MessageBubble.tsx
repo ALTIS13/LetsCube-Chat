@@ -103,7 +103,7 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
   switch (kind) {
     case "link":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(64vw,520px)] md:max-w-[min(52vw,520px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(64vw,580px)] md:max-w-[min(52vw,580px)]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
@@ -115,13 +115,13 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
       };
     case "longToken":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(60vw,520px)] md:max-w-[min(52vw,520px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(60vw,580px)] md:max-w-[min(52vw,580px)]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
     case "regular":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(68vw,460px)] md:max-w-[min(52vw,460px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(70vw,560px)] md:max-w-[min(56vw,560px)]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:break-word] [word-break:normal]",
       };
@@ -145,12 +145,20 @@ function getMessageStackStyle(kind: TextLayoutKind): CSSProperties | undefined {
   switch (kind) {
     case "link":
     case "longToken":
-      return { maxWidth: "min(86vw, 520px)" };
+      return { maxWidth: "min(86vw, 580px)" };
     case "regular":
-      return { maxWidth: "min(86vw, 460px)" };
+      return { maxWidth: "min(86vw, 560px)" };
     default:
       return undefined;
   }
+}
+
+function clampReplyPreviewText(value: string, maxLength: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) return normalized;
+  const chars = Array.from(normalized);
+  if (chars.length <= maxLength) return normalized;
+  return `${chars.slice(0, Math.max(1, maxLength - 3)).join("")}...`;
 }
 
 function getInitialMetaPlacement(content: string): MetaPlacement {
@@ -294,11 +302,9 @@ function MeasuredTextWithMeta({
 
     const available = rightLimit - lastLine.right;
     const singleLineText = lineRects.length <= 1;
-    const inlineSlack = available - footerRect.width - gap;
     const canInline =
       singleLineText &&
       available >= footerRect.width + gap &&
-      (!compound || inlineSlack <= 32) &&
       blockedInlineSignatureRef.current !== signature;
     const next: MetaPlacement = canInline ? "inline" : "anchored";
     const nextAnchoredMetaSlot = next === "anchored" && lastLine.right > bubbleInnerRight - footerRect.width - gap;
@@ -1056,7 +1062,8 @@ export function MessageBubble({
                   ? "Вы"
                   : (replyUserId ? usersMap[replyUserId] : null) ?? replyMsg.sender?.full_name ?? "Без имени"
                 : "Ответ";
-              const preview = formatReplyMessagePreview(replyMsg);
+              const preview = clampReplyPreviewText(formatReplyMessagePreview(replyMsg), 36);
+              const replyNameLabel = clampReplyPreviewText(replyName, 28);
               return (
                 <button
                   type="button"
@@ -1072,7 +1079,7 @@ export function MessageBubble({
                   <span className="w-0.5 flex-shrink-0 self-stretch rounded-full bg-[var(--kub-cyan)]" />
                   <span className="min-w-0 flex-1 overflow-hidden">
                     <span className="block truncate font-semibold leading-tight text-[color:var(--kub-cyan)]">
-                      {replyName}
+                      {replyNameLabel}
                     </span>
                     <span
                       className="block overflow-hidden truncate whitespace-nowrap leading-tight text-[color:var(--kub-muted)]"
