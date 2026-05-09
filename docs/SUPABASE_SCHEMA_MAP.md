@@ -210,6 +210,53 @@ Important behavior:
 - In-app notification bell does not require push worker.
 - Push worker must use server-side env only; never expose service role to frontend.
 
+Notification kinds handled by the current frontend:
+
+- Task: `task_assigned`, `task_waiting_confirmation`, `task_confirmed`, `task_rejected`.
+- Chat: `chat_added`.
+- Group invitation: `group_invite` (requires the manual group-invites migration).
+- System: `mute_issued`, `ban_issued`, unknown/fallback kinds.
+
+`group_invite` notification payload proposal:
+
+- `invite_id uuid`.
+- `chat_id uuid`.
+- `chat_name text`.
+- `inviter_id uuid`.
+- `inviter_name text`.
+- `inviter_avatar_url text null`.
+- `status`: `pending`, `accepted`, `declined`, `cancelled`, `expired`.
+- `expires_at timestamptz null`.
+
+### Group Invites Proposal
+
+`group_invites` is not present in the current production-like schema as of the 2026-05-09 read-only MCP check. The proposal file is:
+
+- `.migration-backup/supabase/migrations/20260509_group_invites.sql`.
+
+Proposed `group_invites`:
+
+- `id uuid` PK.
+- `chat_id uuid` FK `chats(id)` on delete cascade.
+- `inviter_id uuid` FK `profiles(id)`.
+- `invitee_id uuid` FK `profiles(id)`.
+- `status text`: `pending`, `accepted`, `declined`, `cancelled`, `expired`.
+- `created_at`, `expires_at`, `responded_at`.
+- Unique pending invite per `(chat_id, invitee_id)`.
+
+Proposed RPC:
+
+- `group_invite_create(p_chat_id uuid, p_invitee_id uuid)` - owner/admin creates or reuses a pending invite and sends a `group_invite` notification.
+- `group_invite_accept(p_invite_id uuid)` - invitee accepts, RPC inserts `chat_members` with role `member`, updates invite/notification, returns `chat_id`.
+- `group_invite_decline(p_invite_id uuid)` - invitee declines and updates invite/notification.
+- `group_invite_cancel(p_invite_id uuid)` - inviter or chat owner/admin cancels a pending invite.
+
+Important behavior:
+
+- Frontend must not insert directly into `chat_members` for existing group invites.
+- Frontend must not use service role.
+- Until the migration is manually applied, the app shows a friendly "Приглашения требуют обновления базы данных." fallback.
+
 ### Storage
 
 Bucket `media`:

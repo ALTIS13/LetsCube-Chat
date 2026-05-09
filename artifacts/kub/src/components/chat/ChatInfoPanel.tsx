@@ -12,6 +12,7 @@ import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
+import { GroupInviteModal } from "./GroupInviteModal";
 import type { ChatWithLastMessage, Profile, Message } from "@/types/database";
 import { CHAT_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
 
@@ -49,6 +50,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const [leavingChat, setLeavingChat] = useState(false);
   const [deleteGroupOpen, setDeleteGroupOpen] = useState(false);
   const [leaveGroupOpen, setLeaveGroupOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [destructiveError, setDestructiveError] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   type MemberRow = Profile & { chat_role: "owner" | "admin" | "member" };
@@ -515,6 +517,15 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                   {isMuted ? "Включить уведомления" : "Отключить уведомления"}
                 </span>
               </button>
+              {isGroup && isOwnerOrAdmin && (
+                <button
+                  onClick={() => setInviteOpen(true)}
+                  className={cn(actionRowClass, "text-[color:var(--kub-text)]")}
+                >
+                  <KubIcon name="userPlus" size={17} tone="muted" className="shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">Пригласить пользователя</span>
+                </button>
+              )}
               {isGroup && chat.type === "group" && isOwner && (
                 <button
                   onClick={async () => {
@@ -627,6 +638,18 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
 
         {tab === "members" && isGroup && (
           <div className="py-2">
+            {isOwnerOrAdmin && (
+              <div className="px-4 pb-2">
+                <button
+                  type="button"
+                  onClick={() => setInviteOpen(true)}
+                  className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm font-semibold text-[color:var(--kub-cyan)] transition-colors hover:bg-[var(--kub-surface-3)]"
+                >
+                  <KubIcon name="userPlus" size={15} />
+                  Пригласить пользователя
+                </button>
+              </div>
+            )}
             {members.map((member) => {
               const isSelf = member.id === currentUser?.id;
               const isMemberOwner = member.chat_role === "owner";
@@ -847,6 +870,15 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         )}
       </KubModal>
       <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
+      {inviteOpen && (
+        <GroupInviteModal
+          chatId={chat.id}
+          chatName={display.title}
+          currentUserId={currentUser?.id ?? null}
+          memberIds={(chat.members ?? members.map((member) => ({ user_id: member.id }))).map((member) => member.user_id)}
+          onClose={() => setInviteOpen(false)}
+        />
+      )}
     </div>
   );
 }

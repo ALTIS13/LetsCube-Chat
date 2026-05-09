@@ -48,31 +48,39 @@ export function useNotifications() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const refresh = useCallback(async () => {
+    if (!userId) {
+      setItems([]);
+      return;
+    }
+    setLoading(true);
+    bumpFetch("useNotifications");
+    const { data, error: err } = await supabase
+      .from("notifications")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(PAGE_SIZE);
+    setLoading(false);
+    if (err) {
+      setError(mapPgError(err));
+      return;
+    }
+    setError(null);
+    setItems((prev) => mergeRows(prev, filterMutedNotifications((data ?? []) as Notification[], mutedChatIds)));
+  }, [userId, supabase, mutedChatIds]);
+
   useEffect(() => {
     if (!userId) {
       setItems([]);
       return;
     }
     let cancelled = false;
-    setLoading(true);
-    bumpFetch("useNotifications");
-    supabase
-      .from("notifications")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(PAGE_SIZE)
-      .then(({ data, error: err }) => {
-        if (cancelled) return;
-        setLoading(false);
-        if (err) {
-          setError(mapPgError(err));
-          return;
-        }
-        // Merge — never replace — so any realtime INSERTs that
-        // landed before this fetch resolved aren't dropped.
-        setItems((prev) => mergeRows(prev, filterMutedNotifications((data ?? []) as Notification[], mutedChatIds)));
-      });
+    void refresh().then(() => {
+      if (cancelled) return;
+      // Merge — never replace — so any realtime INSERTs that landed before
+      // this fetch resolved aren't dropped. `refresh` itself already merges.
+    });
 
     const channelName = `notifications:${userId}`;
     registerChannel(channelName);
@@ -83,7 +91,7 @@ export function useNotifications() {
         { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
         (payload) => {
           const row = payload.new as Notification;
-          if (row.kind === "chat_added") {
+          if (row.kind === "chat_added" || row.kind === "group_invite") {
             dispatchChatsRefresh({
               reason: "chat-notification",
               chatId: payloadString(row.payload, "chat_id"),
@@ -108,7 +116,7 @@ export function useNotifications() {
       supabase.removeChannel(ch);
       unregisterChannel(channelName);
     };
-  }, [userId, supabase, mutedChatIds]);
+  }, [userId, supabase, mutedChatIds, refresh]);
 
   useEffect(() => {
     setItems((prev) => filterMutedNotifications(prev, mutedChatIds));
@@ -163,7 +171,7 @@ export function useNotifications() {
     }
   }, [supabase]);
 
-  return { items, unreadCount, loading, error, markRead, markAllRead };
+  return { items, unreadCount, loading, error, markRead, markAllRead, refresh };
 }
 
 // Merge two unordered notification lists by id, keep the newest copy

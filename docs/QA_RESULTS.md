@@ -63,6 +63,13 @@
 
 Safe QA note: Live QA should use the Codex/QA browser session or QA credentials from a secure environment; never store secrets in the repo and do not depend on the user's mouse/manual browser.
 
+2026-05-09 notifications/group-invites stage note:
+
+- Live/authenticated QA must use the Codex/QA browser session or local QA credentials kept outside the repo.
+- Do not store QA passwords, auth tokens, cookies or service-role keys in docs, `.env.example`, README or committed source.
+- Group invites require manual application of `.migration-backup/supabase/migrations/20260509_group_invites.sql`; until then frontend must show the migration-required fallback instead of crashing.
+- SQL was not applied automatically during this stage.
+
 2026-05-05 logged-in Browser QA на `https://kub.apollot.ru`:
 
 - Sidebar/profile menu на desktop работает; пункт `Админ-панель` доступен из меню профиля.

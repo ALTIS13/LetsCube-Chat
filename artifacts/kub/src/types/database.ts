@@ -291,6 +291,43 @@ export interface Database {
           }
         ]
       }
+      group_invites: {
+        Row: {
+          id: string
+          chat_id: string
+          inviter_id: string
+          invitee_id: string
+          status: 'pending' | 'accepted' | 'declined' | 'cancelled' | 'expired'
+          created_at: string
+          expires_at: string | null
+          responded_at: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "group_invites_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_invites_inviter_id_fkey"
+            columns: ["inviter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_invites_invitee_id_fkey"
+            columns: ["invitee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       messages: {
         Row: {
           id: string
@@ -774,6 +811,22 @@ export interface Database {
         Args: Record<string, never>
         Returns: void
       }
+      group_invite_create: {
+        Args: { p_chat_id: string; p_invitee_id: string }
+        Returns: Database['public']['Tables']['group_invites']['Row']
+      }
+      group_invite_accept: {
+        Args: { p_invite_id: string }
+        Returns: string
+      }
+      group_invite_decline: {
+        Args: { p_invite_id: string }
+        Returns: Database['public']['Tables']['group_invites']['Row']
+      }
+      group_invite_cancel: {
+        Args: { p_invite_id: string }
+        Returns: Database['public']['Tables']['group_invites']['Row']
+      }
       pin_message: {
         Args: { p_message_id: string }
         Returns: Message
@@ -839,6 +892,7 @@ export interface Database {
 export type Profile = Database['public']['Tables']['profiles']['Row']
 export type Chat = Database['public']['Tables']['chats']['Row']
 export type ChatMember = Database['public']['Tables']['chat_members']['Row']
+export type GroupInvite = Database['public']['Tables']['group_invites']['Row']
 export type Message = Database['public']['Tables']['messages']['Row']
 export type MessageHiddenForUser = Database['public']['Tables']['message_hidden_for_users']['Row']
 export type Reaction = Database['public']['Tables']['reactions']['Row']
@@ -857,6 +911,7 @@ export type NotificationKind =
   | 'task_confirmed'
   | 'task_rejected'
   | 'chat_added'
+  | 'group_invite'
   | 'mute_issued'
   | 'ban_issued'
 export type AuditLog = Database['public']['Tables']['audit_logs']['Row']

@@ -198,6 +198,23 @@ Auth logs показывают успешные login/token/verify events и с�
 
 Frontend task UI можно выравнивать под новые task columns/RPC отдельным подтвержденным этапом; источник прав остается RLS/RPC.
 
+## 2026-05-09 Notifications And Group Invites State
+
+Read-only Supabase MCP sync for project `nhogbeojfnbjcfipitrh` confirmed the current production-like schema before the notifications redesign:
+
+- `public.notifications` exists with columns `id`, `user_id`, `kind text`, `payload jsonb`, `read_at`, `created_at`; RLS is enabled and users read only own rows.
+- Existing notification RPCs: `notifications_mark_read(p_id uuid)` and `notifications_mark_all_read()`.
+- Existing notification kinds in frontend/server contract: `task_assigned`, `task_waiting_confirmation`, `task_confirmed`, `task_rejected`, `chat_added`, `mute_issued`, `ban_issued`.
+- `public.chats` supports `private`, `group`, `channel` and `is_forum`.
+- `public.chat_members` stores `owner`, `admin`, `member`, read/delivery watermarks and per-user pinned/hidden state.
+- `public.group_invites` does not exist yet.
+
+No SQL was applied automatically. A manual/idempotent proposal was added:
+
+- `.migration-backup/supabase/migrations/20260509_group_invites.sql`.
+
+The proposal adds `public.group_invites`, scoped RLS, indexes, `group_invite_create`, `group_invite_accept`, `group_invite_decline`, `group_invite_cancel`, and `group_invite` notification payload support. Frontend code must keep a graceful fallback until this SQL is applied manually.
+
 ## 2026-05-06 Media And Name State
 
 - `.migration-backup/supabase/migrations/20260506_secure_chat_media_access.sql` was applied manually by the user.
