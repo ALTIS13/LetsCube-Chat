@@ -99,7 +99,7 @@ function renderUrlText(href: string): React.ReactNode[] {
   return nodes;
 }
 
-function parseLocationPreview(content: string): LocationPreview | null {
+export function parseLocationPreview(content: string): LocationPreview | null {
   const trimmed = content.trim();
   const prefixMatch = /^(?:📍\s*)?Местоположение:\s*/u.exec(trimmed);
   if (!prefixMatch) return null;
@@ -128,6 +128,10 @@ function parseLocationPreview(content: string): LocationPreview | null {
   if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
 
   return { href: urlMatch[0], lat, lng };
+}
+
+export function isLocationPreviewMessage(content: string): boolean {
+  return parseLocationPreview(content) !== null;
 }
 
 function renderToken(t: Token, key: number): React.ReactNode {
@@ -178,7 +182,8 @@ export function FormattedText({ content }: { content: string }) {
   if (location) {
     return (
       <>
-        <span>📍 Местоположение: </span>
+        <span className="hidden sm:inline">📍 Местоположение: </span>
+        <span className="sm:hidden">📍 </span>
         <a
           href={location.href}
           target="_blank"

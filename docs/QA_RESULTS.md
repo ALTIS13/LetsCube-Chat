@@ -311,3 +311,9 @@ Recurring tasks roadmap note:
 - Anchored text meta no longer inserts an inline tail spacer for long CAPS / long-token messages. If the final text line would collide with the footer, the footer uses a compact bottom-end flow row; otherwise it stays anchored over the natural free corner.
 - Location messages that match `📍 Местоположение: https://maps.google.com/?q=lat,lng` are displayed as rounded coordinates while preserving the original map href; ordinary Google and non-map URLs still use the regular formatter.
 - Very short messages with multiple reactions now default to one visible reaction chip plus `+N`, so the reaction layer does not widen the core text+meta bubble.
+
+2026-05-09 final bubble geometry follow-up:
+
+- `+N` reaction overflow now opens in a fixed portal popover anchored to the `+N` chip instead of expanding inline inside the bubble, so hidden reactions do not shift message geometry or render under neighboring messages.
+- Location messages are classified as compact short text before URL layout is chosen. Desktop keeps the full `📍 Местоположение:` label, while narrow/mobile viewports use the shorter `📍` label; both preserve the original Google Maps href.
+- Anchored multiline/long-token text meta no longer falls back to a static bottom meta row; the footer remains visually anchored bottom-right inside the bubble.

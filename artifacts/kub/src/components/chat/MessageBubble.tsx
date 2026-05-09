@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { MessageWithSender } from "@/types/database";
 import { formatFullTime } from "@/lib/format";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { AudioMessage } from "./AudioMessage";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app.store";
-import { FormattedText } from "@/lib/formatText";
+import { FormattedText, isLocationPreviewMessage } from "@/lib/formatText";
 import { KubIcon, type KubIconName } from "@/components/kub";
 import type { MediaViewerItem } from "./MediaViewer";
 import { requestAppConfirm } from "@/lib/appDialogs";
@@ -91,6 +92,7 @@ function getMessageTextLayoutKind(type: MessageWithSender["type"], content: stri
     (meaningfulLines.length >= 3 && (indentedLines >= 2 || spacedLines >= 2 || asciiArtLines >= 2));
 
   if (preformattedLike && !hasUrl) return "preformatted";
+  if (isLocationPreviewMessage(content)) return "short";
   if (hasUrl) return "link";
   if (longestToken >= 34) return "longToken";
   if (text.length >= 8 && /\s/.test(text)) return "regular";
@@ -142,6 +144,7 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
 function getInitialMetaPlacement(content: string): MetaPlacement {
   const text = content.trim();
   if (!text) return "inline";
+  if (isLocationPreviewMessage(content)) return "inline";
   if (/[\r\n]/.test(content)) return "anchored";
   return text.length <= 56 ? "inline" : "anchored";
 }
@@ -198,17 +201,14 @@ function getTextRightLimit(textEl: HTMLElement, bubbleEl: HTMLElement, stackEl: 
   return Math.min(Math.max(currentContentRight, maxRightFromText), viewportRight);
 }
 
-function getBubbleInnerRight(bubbleEl: HTMLElement): number {
-  const bubbleRect = bubbleEl.getBoundingClientRect();
-  const bubbleStyle = getComputedStyle(bubbleEl);
-  const paddingRight = parsePixelValue(bubbleStyle.paddingRight) ?? 0;
-  return bubbleRect.right - paddingRight;
-}
-
 function isFooterOnLastTextLine(lastLine: DOMRect, footerRect: DOMRect): boolean {
   const lineCenter = (lastLine.top + lastLine.bottom) / 2;
   const footerCenter = (footerRect.top + footerRect.bottom) / 2;
   return Math.abs(lineCenter - footerCenter) <= Math.max(8, lastLine.height * 0.75);
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }
 
 interface MeasuredTextWithMetaProps {
@@ -231,7 +231,6 @@ function MeasuredTextWithMeta({
   compound = false,
 }: MeasuredTextWithMetaProps) {
   const [placement, setPlacement] = useState<MetaPlacement>(() => getInitialMetaPlacement(content));
-  const [anchoredMetaRow, setAnchoredMetaRow] = useState(false);
   const textFlowRef = useRef<HTMLParagraphElement | null>(null);
   const textContentRef = useRef<HTMLSpanElement | null>(null);
   const footerRef = useRef<HTMLSpanElement | null>(null);
@@ -248,13 +247,11 @@ function MeasuredTextWithMeta({
     const lastLine = lineRects.at(-1) ?? null;
     if (!lastLine) {
       setPlacement((current) => (current === "inline" ? current : "inline"));
-      setAnchoredMetaRow((current) => (current ? false : current));
       return;
     }
 
     const footerRect = footerEl.getBoundingClientRect();
     const rightLimit = getTextRightLimit(textEl, bubbleEl, stackRef.current);
-    const bubbleInnerRight = getBubbleInnerRight(bubbleEl);
     const gap = 8;
     const signature = [
       compound ? "compound" : "simple",
@@ -279,17 +276,13 @@ function MeasuredTextWithMeta({
       available >= footerRect.width + gap &&
       blockedInlineSignatureRef.current !== signature;
     const next: MetaPlacement = canInline ? "inline" : "anchored";
-    const overlapTail = lastLine.right > bubbleInnerRight - footerRect.width - gap;
-    const nextAnchoredMetaRow = next === "anchored" && overlapTail;
 
     setPlacement((previous) => (previous === next ? previous : next));
-    setAnchoredMetaRow((previous) => (previous === nextAnchoredMetaRow ? previous : nextAnchoredMetaRow));
   }, [bubbleRef, compound, placement, stackRef]);
 
   useEffect(() => {
     blockedInlineSignatureRef.current = null;
     setPlacement(getInitialMetaPlacement(content));
-    setAnchoredMetaRow(false);
   }, [content, measureKey]);
 
   useLayoutEffect(() => {
@@ -346,17 +339,7 @@ function MeasuredTextWithMeta({
           </span>
         )}
       </p>
-      {placement === "anchored" && anchoredMetaRow && (
-        <div
-          data-message-bottom-meta="true"
-          className="mt-0 flex max-w-full items-center justify-end leading-none"
-        >
-          <span ref={footerRef} data-message-footer="true" className={footerClassName}>
-            {meta}
-          </span>
-        </div>
-      )}
-      {placement === "anchored" && !anchoredMetaRow && (
+      {placement === "anchored" && (
         <span
           ref={footerRef}
           data-message-footer="true"
@@ -386,6 +369,14 @@ export function MessageBubble({
   const stackRef = useRef<HTMLDivElement | null>(null);
   const bubbleRef = useRef<HTMLDivElement | null>(null);
   const reactionsLayerRef = useRef<HTMLDivElement | null>(null);
+  const reactionOverflowTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const reactionOverflowPopoverRef = useRef<HTMLDivElement | null>(null);
+  const reactionOverflowCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [reactionOverflowStyle, setReactionOverflowStyle] = useState<CSSProperties>({
+    left: 8,
+    top: 8,
+    maxWidth: "calc(100vw - 16px)",
+  });
   const { currentUser } = useAppStore();
   const textContent = message.content ?? "";
   const textLayoutKind = getMessageTextLayoutKind(message.type, textContent);
@@ -425,6 +416,7 @@ export function MessageBubble({
   // doesn't try to setShowContext on a torn-down component.
   useEffect(() => () => {
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    if (reactionOverflowCloseTimer.current) clearTimeout(reactionOverflowCloseTimer.current);
     setBodySelectionSuppressed(false);
   }, []);
 
@@ -457,12 +449,71 @@ export function MessageBubble({
     const handleOutsidePointer = (event: PointerEvent) => {
       const target = event.target as HTMLElement | null;
       if (target && reactionsLayerRef.current?.contains(target)) return;
+      if (target && reactionOverflowPopoverRef.current?.contains(target)) return;
       setReactionsExpanded(false);
     };
 
     window.addEventListener("pointerdown", handleOutsidePointer, true);
     return () => window.removeEventListener("pointerdown", handleOutsidePointer, true);
   }, [reactionsExpanded]);
+
+  const updateReactionOverflowPosition = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const trigger = reactionOverflowTriggerRef.current;
+    if (!trigger) return;
+
+    const triggerRect = trigger.getBoundingClientRect();
+    const popoverRect = reactionOverflowPopoverRef.current?.getBoundingClientRect();
+    const maxWidth = Math.min(320, window.innerWidth - 16);
+    const width = Math.min(popoverRect?.width ?? 220, maxWidth);
+    const height = popoverRect?.height ?? 44;
+    const topBelow = triggerRect.bottom + 6;
+    const top = topBelow + height <= window.innerHeight - 8
+      ? topBelow
+      : Math.max(8, triggerRect.top - height - 6);
+    const left = clampNumber(triggerRect.right - width, 8, Math.max(8, window.innerWidth - width - 8));
+
+    setReactionOverflowStyle({
+      left,
+      top,
+      maxWidth,
+    });
+  }, []);
+
+  const clearReactionOverflowClose = useCallback(() => {
+    if (reactionOverflowCloseTimer.current) {
+      clearTimeout(reactionOverflowCloseTimer.current);
+      reactionOverflowCloseTimer.current = null;
+    }
+  }, []);
+
+  const openReactionOverflow = useCallback(() => {
+    clearReactionOverflowClose();
+    setReactionsExpanded(true);
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(updateReactionOverflowPosition);
+    }
+  }, [clearReactionOverflowClose, updateReactionOverflowPosition]);
+
+  const closeReactionOverflowSoon = useCallback(() => {
+    clearReactionOverflowClose();
+    reactionOverflowCloseTimer.current = setTimeout(() => {
+      setReactionsExpanded(false);
+      reactionOverflowCloseTimer.current = null;
+    }, 120);
+  }, [clearReactionOverflowClose]);
+
+  useLayoutEffect(() => {
+    if (!reactionsExpanded || typeof window === "undefined") return;
+    updateReactionOverflowPosition();
+    const handleViewportChange = () => updateReactionOverflowPosition();
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+    return () => {
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [reactionsExpanded, updateReactionOverflowPosition]);
 
   const reactionGroups = (message.reactions ?? []).reduce<Record<string, { count: number; mine: boolean }>>(
     (acc, r) => {
@@ -707,45 +758,31 @@ export function MessageBubble({
         data-message-reactions-row="true"
         data-message-reactions-expanded={reactionsExpanded ? "true" : "false"}
         className="relative mt-1 flex w-fit max-w-full flex-wrap items-center justify-start gap-1 self-start"
-        onMouseEnter={() => {
-          if (hiddenReactionCount > 0) setReactionsExpanded(true);
-        }}
-        onMouseLeave={() => setReactionsExpanded(false)}
-        onFocusCapture={() => {
-          if (hiddenReactionCount > 0) setReactionsExpanded(true);
-        }}
-        onBlurCapture={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-            setReactionsExpanded(false);
-          }
-        }}
       >
         {visibleReactionEntries.map((entry) => renderReactionChip(entry))}
         {hiddenReactionCount > 0 && (
           <button
+            ref={reactionOverflowTriggerRef}
             type="button"
             className="inline-flex h-[22px] items-center rounded-full border border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] px-2 text-[11px] leading-none text-[color:var(--kub-muted)]"
             title={`Ещё ${hiddenReactionCount} реакций`}
             aria-label={`Ещё ${hiddenReactionCount} реакций`}
             aria-expanded={reactionsExpanded}
+            onMouseEnter={openReactionOverflow}
+            onMouseLeave={closeReactionOverflowSoon}
+            onFocus={openReactionOverflow}
+            onBlur={closeReactionOverflowSoon}
             onClick={(event) => {
               event.stopPropagation();
-              setReactionsExpanded((expanded) => !expanded);
+              if (reactionsExpanded) {
+                setReactionsExpanded(false);
+              } else {
+                openReactionOverflow();
+              }
             }}
           >
             +{hiddenReactionCount}
           </button>
-        )}
-        {hiddenReactionCount > 0 && (
-          <div
-            data-message-reactions-overflow="true"
-            className={cn(
-              "absolute left-0 top-full z-20 mt-1 flex w-max max-w-[min(20rem,calc(100vw-2rem))] flex-wrap items-center gap-1 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-1.5 shadow-xl transition-opacity kub-glow-soft",
-              reactionsExpanded ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
-            )}
-          >
-            {overflowReactionEntries.map((entry) => renderReactionChip(entry, "overflow-reaction"))}
-          </div>
         )}
       </div>
     );
@@ -842,6 +879,23 @@ export function MessageBubble({
             </button>
           ))}
         </div>
+      )}
+
+      {hiddenReactionCount > 0 && reactionsExpanded && typeof document !== "undefined" && createPortal(
+        <div
+          ref={reactionOverflowPopoverRef}
+          data-message-reactions-overflow="true"
+          className="fixed z-[45] flex w-max flex-wrap items-center gap-1 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-1.5 shadow-2xl kub-glow-soft"
+          style={reactionOverflowStyle}
+          onMouseEnter={clearReactionOverflowClose}
+          onMouseLeave={closeReactionOverflowSoon}
+          onFocus={openReactionOverflow}
+          onBlur={closeReactionOverflowSoon}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {overflowReactionEntries.map((entry) => renderReactionChip(entry, "overflow-reaction"))}
+        </div>,
+        document.body
       )}
 
       <div
