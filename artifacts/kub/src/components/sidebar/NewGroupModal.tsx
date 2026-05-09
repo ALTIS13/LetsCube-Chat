@@ -8,6 +8,8 @@ import { KubButton, KubIcon, KubModal } from "@/components/kub";
 import type { Profile } from "@/types/database";
 import { prefixError } from "@/lib/errors";
 import { CHAT_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
+import { GROUP_INVITES_MIGRATION_REQUIRED, createGroupInvite } from "@/lib/groupInvites";
+import { showAppAlert } from "@/lib/appDialogs";
 
 export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onRefetch?: () => void }) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
@@ -52,28 +54,33 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
       return;
     }
     // Owner row is inserted automatically by the `trg_add_chat_creator_as_owner`
-    // trigger (SECURITY DEFINER), so we only insert the picked members here.
-    if (selected.length > 0) {
-      const { error: memErr } = await supabase.from("chat_members").insert(
-        selected.map((u) => ({ chat_id: chat.id, user_id: u.id, role: "member" as const })),
-      );
-      if (memErr) {
-        setError(prefixError("Не удалось добавить участников", memErr));
-        setLoading(false);
-        return;
-      }
-    }
+    // trigger. Picked users are invitees now; they become members only after
+    // accepting the group_invite notification.
+    const inviteResults = await sendInitialInvites(selected, (inviteeId) =>
+      createGroupInvite(supabase, chat.id, inviteeId),
+    );
     setSelectedChatId(chat.id);
     onRefetch?.();
     setLoading(false);
     onClose();
+    if (inviteResults.failed === 0) {
+      showAppAlert("Группа создана. Приглашения отправлены.", "Новая группа", "checkCircle");
+    } else if (inviteResults.migrationRequired) {
+      showAppAlert(GROUP_INVITES_MIGRATION_REQUIRED, "Новая группа");
+    } else {
+      showAppAlert(
+        `Группа создана, но ${inviteResults.failed} из ${selected.length} приглашений не удалось отправить. Попробуйте пригласить пользователей из информации о группе.`,
+        "Новая группа",
+      );
+    }
   };
 
   return (
     <KubModal
       open={true}
       onClose={onClose}
-      title={step === "pick" ? "Добавить участников" : "Название группы"}
+      title={step === "pick" ? "Пригласить участников" : "Название группы"}
+      description={step === "pick" ? "Выберите пользователей, которым отправить приглашение." : "Пользователи смогут принять или отклонить приглашение."}
       icon={<KubIcon name="group" size={15} />}
       size="sm"
       contentClassName="px-4 py-3 space-y-3"
@@ -84,7 +91,7 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
             disabled={selected.length === 0}
             onClick={() => setStep("name")}
           >
-            Далее (выбрано: {selected.length})
+            Далее (приглашений: {selected.length})
           </KubButton>
         ) : (
           <KubButton
@@ -112,7 +119,7 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Поиск пользователей…"
+              placeholder="Поиск пользователей для приглашения…"
               className="flex-1 bg-transparent text-sm outline-none text-[color:var(--kub-text)]"
             />
           </div>
@@ -161,4 +168,34 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
       )}
     </KubModal>
   );
+}
+
+async function sendInitialInvites(
+  invitees: Profile[],
+  sendInvite: (inviteeId: string) => ReturnType<typeof createGroupInvite>,
+): Promise<{ failed: number; migrationRequired: boolean }> {
+  let failed = 0;
+  let migrationRequired = false;
+
+  for (const invitee of invitees) {
+    let result = await sendInvite(invitee.id);
+    if (!result.ok) {
+      // The owner row is created by a DB trigger in the same create flow.
+      // If RLS/RPC observes the new chat before membership is visible, one
+      // short retry avoids falling back to unsafe client-side membership writes.
+      await delay(400);
+      result = await sendInvite(invitee.id);
+    }
+
+    if (!result.ok) {
+      failed += 1;
+      migrationRequired ||= result.migrationRequired;
+    }
+  }
+
+  return { failed, migrationRequired };
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
