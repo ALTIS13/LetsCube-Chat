@@ -175,6 +175,19 @@ function getCompactReplyPreviewCap(replyBody: string): { chars: number; maxWidth
   return { chars: 16, maxWidth: "min(100%, 124px, 16ch)" };
 }
 
+function shouldJustifyOrdinaryText(content: string): boolean {
+  const text = content.replace(/\s+/g, " ").trim();
+  if (!text || isLocationPreviewMessage(content) || /\bhttps?:\/\/\S+/.test(text) || /```[\s\S]*```/.test(content)) {
+    return false;
+  }
+
+  const words = text.split(/\s+/).filter(Boolean);
+  const longestToken = words.reduce((max, token) => Math.max(max, token.length), 0);
+  if (longestToken >= 34 || words.length < 10 || text.length < 72) return false;
+
+  return true;
+}
+
 function getInitialMetaPlacement(content: string): MetaPlacement {
   const text = content.trim();
   if (!text) return "inline";
@@ -721,6 +734,11 @@ export function MessageBubble({
   const contextItems = isLocalSend ? localSendContextItems : regularContextItems;
   const canUseCompactReplyInline = canRenderCompactReplyInline(message, textLayoutKind, hasReactions);
   const canUseMeasuredTextMeta = message.type === "text" && textLayoutKind !== "preformatted" && !message.failed && !canUseCompactReplyInline;
+  const justifyOrdinaryText =
+    textLayoutKind === "regular" &&
+    !message.reply_to_id &&
+    !hasReactions &&
+    shouldJustifyOrdinaryText(message.content ?? "");
   const footerMode = hasReactions ? "bottom-layer-reactions" : canUseCompactReplyInline ? "compact-reply-inline" : canUseMeasuredTextMeta ? "measured" : "meta-row";
   const showGroupReadIndicator = Boolean(groupReadInfo && groupReadInfo.readCount > 0);
   const groupReadLabel = groupReadInfo ? getGroupReadReceiptCompactLabel(groupReadInfo) : "";
@@ -1154,6 +1172,7 @@ export function MessageBubble({
                 content={message.content ?? ""}
                 textClassName={cn(
                   "min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap text-[color:var(--kub-text)]",
+                  justifyOrdinaryText && "[text-align:justify] [text-align-last:start]",
                   widthClasses.text
                 )}
                 meta={hasReactions ? null : renderFooterContent()}
