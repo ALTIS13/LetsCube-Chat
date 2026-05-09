@@ -201,6 +201,13 @@ function getTextRightLimit(textEl: HTMLElement, bubbleEl: HTMLElement, stackEl: 
   return Math.min(Math.max(currentContentRight, maxRightFromText), viewportRight);
 }
 
+function getBubbleInnerRight(bubbleEl: HTMLElement): number {
+  const bubbleRect = bubbleEl.getBoundingClientRect();
+  const bubbleStyle = getComputedStyle(bubbleEl);
+  const paddingRight = parsePixelValue(bubbleStyle.paddingRight) ?? 0;
+  return bubbleRect.right - paddingRight;
+}
+
 function isFooterOnLastTextLine(lastLine: DOMRect, footerRect: DOMRect): boolean {
   const lineCenter = (lastLine.top + lastLine.bottom) / 2;
   const footerCenter = (footerRect.top + footerRect.bottom) / 2;
@@ -231,6 +238,7 @@ function MeasuredTextWithMeta({
   compound = false,
 }: MeasuredTextWithMetaProps) {
   const [placement, setPlacement] = useState<MetaPlacement>(() => getInitialMetaPlacement(content));
+  const [anchoredMetaSlot, setAnchoredMetaSlot] = useState(false);
   const textFlowRef = useRef<HTMLParagraphElement | null>(null);
   const textContentRef = useRef<HTMLSpanElement | null>(null);
   const footerRef = useRef<HTMLSpanElement | null>(null);
@@ -247,11 +255,13 @@ function MeasuredTextWithMeta({
     const lastLine = lineRects.at(-1) ?? null;
     if (!lastLine) {
       setPlacement((current) => (current === "inline" ? current : "inline"));
+      setAnchoredMetaSlot((current) => (current ? false : current));
       return;
     }
 
     const footerRect = footerEl.getBoundingClientRect();
     const rightLimit = getTextRightLimit(textEl, bubbleEl, stackRef.current);
+    const bubbleInnerRight = getBubbleInnerRight(bubbleEl);
     const gap = 8;
     const signature = [
       compound ? "compound" : "simple",
@@ -276,13 +286,16 @@ function MeasuredTextWithMeta({
       available >= footerRect.width + gap &&
       blockedInlineSignatureRef.current !== signature;
     const next: MetaPlacement = canInline ? "inline" : "anchored";
+    const nextAnchoredMetaSlot = next === "anchored" && lastLine.right > bubbleInnerRight - footerRect.width - gap;
 
     setPlacement((previous) => (previous === next ? previous : next));
+    setAnchoredMetaSlot((previous) => (previous === nextAnchoredMetaSlot ? previous : nextAnchoredMetaSlot));
   }, [bubbleRef, compound, placement, stackRef]);
 
   useEffect(() => {
     blockedInlineSignatureRef.current = null;
     setPlacement(getInitialMetaPlacement(content));
+    setAnchoredMetaSlot(false);
   }, [content, measureKey]);
 
   useLayoutEffect(() => {
@@ -339,7 +352,17 @@ function MeasuredTextWithMeta({
           </span>
         )}
       </p>
-      {placement === "anchored" && (
+      {placement === "anchored" && anchoredMetaSlot && (
+        <div
+          data-message-bottom-meta="true"
+          className="mt-0 flex max-w-full items-center justify-end leading-none"
+        >
+          <span ref={footerRef} data-message-footer="true" className={footerClassName}>
+            {meta}
+          </span>
+        </div>
+      )}
+      {placement === "anchored" && !anchoredMetaSlot && (
         <span
           ref={footerRef}
           data-message-footer="true"

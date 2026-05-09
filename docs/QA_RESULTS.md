@@ -316,4 +316,4 @@ Recurring tasks roadmap note:
 
 - `+N` reaction overflow now opens in a fixed portal popover anchored to the `+N` chip instead of expanding inline inside the bubble, so hidden reactions do not shift message geometry or render under neighboring messages.
 - Location messages are classified as compact short text before URL layout is chosen. Desktop keeps the full `📍 Местоположение:` label, while narrow/mobile viewports use the shorter `📍` label; both preserve the original Google Maps href.
-- Anchored multiline/long-token text meta no longer falls back to a static bottom meta row; the footer remains visually anchored bottom-right inside the bubble.
+- Anchored multiline/long-token text meta keeps Telegram-like behavior: it remains bottom-right when the final text line leaves room, and uses a compact measured bottom-end slot only when the final line would collide with the footer.
