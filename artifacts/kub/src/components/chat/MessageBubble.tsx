@@ -169,6 +169,13 @@ function getInitialMetaPlacement(content: string): MetaPlacement {
   return text.length <= 56 ? "inline" : "anchored";
 }
 
+function canRenderCompactReplyInline(message: MessageWithSender, kind: TextLayoutKind, hasReactions: boolean): boolean {
+  if (!message.reply_to_id || hasReactions || message.failed) return false;
+  if (message.type !== "text" || kind !== "short") return false;
+  const text = (message.content ?? "").trim();
+  return Boolean(text) && !/[\r\n]/.test(text) && text.length <= 24;
+}
+
 function parsePixelValue(value: string): number | null {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -712,7 +719,8 @@ export function MessageBubble({
     ] : []),
   ];
   const contextItems = isLocalSend ? localSendContextItems : regularContextItems;
-  const canUseMeasuredTextMeta = message.type === "text" && textLayoutKind !== "preformatted" && !message.failed;
+  const canUseCompactReplyInline = canRenderCompactReplyInline(message, textLayoutKind, hasReactions);
+  const canUseMeasuredTextMeta = message.type === "text" && textLayoutKind !== "preformatted" && !message.failed && !canUseCompactReplyInline;
   const footerMode = hasReactions ? "bottom-layer-reactions" : canUseMeasuredTextMeta ? "measured" : "meta-row";
   const showGroupReadIndicator = Boolean(groupReadInfo && groupReadInfo.readCount > 0);
   const groupReadLabel = groupReadInfo ? getGroupReadReceiptCompactLabel(groupReadInfo) : "";
@@ -1062,8 +1070,8 @@ export function MessageBubble({
                   ? "Вы"
                   : (replyUserId ? usersMap[replyUserId] : null) ?? replyMsg.sender?.full_name ?? "Без имени"
                 : "Ответ";
-              const preview = clampReplyPreviewText(formatReplyMessagePreview(replyMsg), 36);
-              const replyNameLabel = clampReplyPreviewText(replyName, 28);
+              const preview = clampReplyPreviewText(formatReplyMessagePreview(replyMsg), 28);
+              const replyNameLabel = clampReplyPreviewText(replyName, 24);
               return (
                 <button
                   type="button"
@@ -1073,7 +1081,7 @@ export function MessageBubble({
                     onJumpToReply?.(message.reply_to_id!);
                   }}
                   className="mb-1.5 flex w-fit min-w-0 items-stretch gap-2 overflow-hidden rounded-xl bg-[color-mix(in_srgb,var(--kub-surface-2)_55%,transparent)] px-2 py-1.5 text-left text-xs transition-colors hover:bg-[color-mix(in_srgb,var(--kub-surface-3)_72%,transparent)]"
-                  style={{ maxWidth: "min(100%, 190px, 24ch)" }}
+                  style={{ maxWidth: "min(100%, 170px, 22ch)" }}
                   aria-label="Перейти к исходному сообщению"
                 >
                   <span className="w-0.5 flex-shrink-0 self-stretch rounded-full bg-[var(--kub-cyan)]" />
@@ -1118,6 +1126,25 @@ export function MessageBubble({
                 <KubIcon name="file" size={16} />
                 <span className="truncate max-w-[200px]">{message.content ?? "File"}</span>
               </a>
+            ) : canUseCompactReplyInline ? (
+              <p
+                data-message-text-flow="true"
+                data-message-meta-placement="inline"
+                className={cn(
+                  "inline-flex w-fit max-w-full min-w-0 items-baseline gap-1.5 text-sm leading-relaxed whitespace-pre-wrap text-[color:var(--kub-text)]",
+                  widthClasses.text
+                )}
+              >
+                <span className="min-w-0">
+                  <FormattedText content={message.content ?? ""} />
+                </span>
+                <span
+                  data-message-footer="true"
+                  className="inline-flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap text-right leading-none [vertical-align:-0.12em]"
+                >
+                  {renderFooterContent()}
+                </span>
+              </p>
             ) : canUseMeasuredTextMeta ? (
               <MeasuredTextWithMeta
                 content={message.content ?? ""}
@@ -1181,7 +1208,7 @@ export function MessageBubble({
               </div>
             )}
 
-            {!canUseMeasuredTextMeta && !hasReactions && (
+            {!canUseMeasuredTextMeta && !canUseCompactReplyInline && !hasReactions && (
               <div
                 data-message-bottom-meta="true"
                 className="mt-0.5 flex self-stretch max-w-full items-center justify-end leading-none"
