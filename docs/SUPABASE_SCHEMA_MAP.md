@@ -253,6 +253,13 @@ Expected RPC:
 - `group_invite_decline(p_invite_id uuid)` - invitee declines and updates invite/notification.
 - `group_invite_cancel(p_invite_id uuid)` - inviter or chat owner/admin cancels a pending invite.
 
+2026-05-10 frontend alignment:
+
+- Group info now reads scoped `group_invites` for owner/admin views and shows pending, declined, accepted, cancelled and expired statuses next to the members list.
+- `group_invites` is realtime-enabled by the 20260509 migration; the group info panel subscribes to current-chat `chat_members` and `group_invites` changes and refetches the scoped lists after each event.
+- Declined/cancelled/expired invitees can be invited again through `group_invite_create`; pending and already-member users are disabled in the invite modal.
+- New proposal only, not applied automatically: `.migration-backup/supabase/migrations/20260510_group_invite_join_system_messages.sql`. It preserves the existing accept checks and adds one persistent `messages.type = 'system'` row: `<display_name> присоединился к группе`.
+
 Important behavior:
 
 - Frontend must not insert directly into `chat_members` for existing group invites.
@@ -281,6 +288,7 @@ Realtime-enabled public tables:
 - `folder_chats`.
 - `folders`.
 - `messages`.
+- `group_invites`.
 - `mutes`.
 - `notifications`.
 - `profiles`.

@@ -13,6 +13,8 @@ import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail 
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
 import { GroupInviteModal } from "./GroupInviteModal";
+import { cancelGroupInvite, createGroupInvite, GROUP_INVITES_MIGRATION_REQUIRED, isGroupInviteUnavailableError } from "@/lib/groupInvites";
+import type { GroupInviteStatus } from "@/lib/groupInvites";
 import type { ChatWithLastMessage, Profile, Message } from "@/types/database";
 import { CHAT_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
 
@@ -24,6 +26,19 @@ interface ChatInfoPanelProps {
 
 type Tab = "info" | "members" | "media";
 const MEDIA_PAGE_SIZE = 12;
+
+type MemberRow = Profile & { chat_role: "owner" | "admin" | "member" };
+type InviteWithProfiles = {
+  id: string;
+  invitee_id: string;
+  inviter_id: string;
+  status: GroupInviteStatus;
+  created_at: string;
+  expires_at: string | null;
+  responded_at: string | null;
+  invitee: Profile | null;
+  inviter: Profile | null;
+};
 
 export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProps) {
   const { currentUser, setSelectedChatId, chats, setChats, setMessages, mutedChatIds, toggleMutedChat } = useAppStore();
@@ -53,25 +68,97 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const [inviteOpen, setInviteOpen] = useState(false);
   const [destructiveError, setDestructiveError] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
-  type MemberRow = Profile & { chat_role: "owner" | "admin" | "member" };
   const [members, setMembers] = useState<MemberRow[]>([]);
+  const [invites, setInvites] = useState<InviteWithProfiles[]>([]);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
   const [media, setMedia] = useState<Message[]>([]);
   const [loadingMedia, setLoadingMedia] = useState(false);
   const [mediaHasMore, setMediaHasMore] = useState(false);
   const [openMedia, setOpenMedia] = useState<MediaViewerItem | null>(null);
 
-  useEffect(() => {
-    if (!isGroup) return;
-    supabase
+  const loadMembers = useCallback(async () => {
+    if (!isGroup) {
+      setMembers([]);
+      return;
+    }
+    const { data } = await supabase
       .from("chat_members")
       .select("role, profile:profiles(*)")
-      .eq("chat_id", chat.id)
-      .then(({ data }) => {
-        if (data) setMembers(
-          data.map((m) => ({ ...(m.profile as Profile), chat_role: m.role as "owner" | "admin" | "member" }))
-        );
-      });
+      .eq("chat_id", chat.id);
+    if (data) {
+      setMembers(
+        data.map((m) => ({ ...(m.profile as Profile), chat_role: m.role as "owner" | "admin" | "member" }))
+      );
+    }
   }, [chat.id, isGroup, supabase]);
+
+  const loadInvites = useCallback(async () => {
+    if (!isGroup || !isOwnerOrAdmin) {
+      setInvites([]);
+      setInviteError(null);
+      return;
+    }
+    const { data, error } = await supabase
+      .from("group_invites")
+      .select("id,invitee_id,inviter_id,status,created_at,expires_at,responded_at,invitee:profiles!group_invites_invitee_id_fkey(*),inviter:profiles!group_invites_inviter_id_fkey(*)")
+      .eq("chat_id", chat.id)
+      .order("created_at", { ascending: false });
+    if (error) {
+      if (isGroupInviteUnavailableError(error)) {
+        setInviteError(GROUP_INVITES_MIGRATION_REQUIRED);
+        setInvites([]);
+        return;
+      }
+      setInviteError(mapPgError(error));
+      return;
+    }
+    setInviteError(null);
+    setInvites(
+      ((data ?? []) as Array<{
+        id: string;
+        invitee_id: string;
+        inviter_id: string;
+        status: GroupInviteStatus;
+        created_at: string;
+        expires_at: string | null;
+        responded_at: string | null;
+        invitee: Profile | null;
+        inviter: Profile | null;
+      }>).map((row) => ({
+        ...row,
+        invitee: row.invitee ?? null,
+        inviter: row.inviter ?? null,
+      }))
+    );
+  }, [chat.id, isGroup, isOwnerOrAdmin, supabase]);
+
+  useEffect(() => {
+    void loadMembers();
+    void loadInvites();
+  }, [loadInvites, loadMembers]);
+
+  useEffect(() => {
+    if (!isGroup) return;
+    let timer: number | null = null;
+    const scheduleRefresh = () => {
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        void loadMembers();
+        void loadInvites();
+        dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
+      }, 150);
+    };
+    const channel = supabase
+      .channel(`chat-info:${chat.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "chat_members", filter: `chat_id=eq.${chat.id}` }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "group_invites", filter: `chat_id=eq.${chat.id}` }, scheduleRefresh)
+      .subscribe();
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      void supabase.removeChannel(channel);
+    };
+  }, [chat.id, isGroup, loadInvites, loadMembers, supabase]);
 
   const loadMedia = useCallback(async (reset = false, offset = 0) => {
     if (!currentUser) {
@@ -322,6 +409,9 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       return;
     }
     setMembers((m) => m.filter((u) => u.id !== userId));
+    void loadMembers();
+    void loadInvites();
+    dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
   };
 
   const setMemberRole = async (userId: string, role: "admin" | "member") => {
@@ -336,6 +426,33 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       return;
     }
     setMembers((ms) => ms.map((m) => m.id === userId ? { ...m, chat_role: role } : m));
+    void loadMembers();
+  };
+
+  const handleCancelInvite = async (invite: InviteWithProfiles) => {
+    if (inviteBusyId) return;
+    setInviteBusyId(invite.id);
+    setInviteError(null);
+    const result = await cancelGroupInvite(supabase, invite.id);
+    setInviteBusyId(null);
+    if (!result.ok) {
+      setInviteError(result.message);
+      return;
+    }
+    await loadInvites();
+  };
+
+  const handleReinvite = async (invite: InviteWithProfiles) => {
+    if (inviteBusyId) return;
+    setInviteBusyId(invite.id);
+    setInviteError(null);
+    const result = await createGroupInvite(supabase, chat.id, invite.invitee_id);
+    setInviteBusyId(null);
+    if (!result.ok) {
+      setInviteError(result.message);
+      return;
+    }
+    await loadInvites();
   };
 
   const roleLabel = (role: string) =>
@@ -349,6 +466,11 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const fileItems = useMemo(
     () => media.filter((m) => m.type === "file"),
     [media],
+  );
+  const memberIdSet = useMemo(() => new Set(members.map((member) => member.id)), [members]);
+  const visibleInvites = useMemo(
+    () => invites.filter((invite) => !(invite.status === "accepted" && memberIdSet.has(invite.invitee_id))),
+    [invites, memberIdSet],
   );
   const visibleMediaGridItems = mediaGridItems;
   const hasMoreMedia = mediaHasMore;
@@ -450,7 +572,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               </div>
             ) : isGroup ? (
               <div className="text-xs text-[color:var(--kub-muted)]">
-                {chat.members?.length ?? 0} участников
+                {members.length || chat.members?.length || 0} участников
               </div>
             ) : (
               <div className="text-xs text-[color:var(--kub-muted)]">
@@ -724,6 +846,96 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                 </div>
               );
             })}
+            {isOwnerOrAdmin && (
+              <div className="mt-3 border-t border-[color:var(--kub-border-color)] px-4 pt-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--kub-cyan)]">
+                      Приглашения
+                    </div>
+                    <div className="text-xs text-[color:var(--kub-muted)]">
+                      Статусы обновляются без перезагрузки панели.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadInvites()}
+                    className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)]"
+                  >
+                    <KubIcon name="rotate" size={12} />
+                    Обновить
+                  </button>
+                </div>
+
+                {inviteError && (
+                  <div className="mb-2 rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-danger)]">
+                    {inviteError}
+                  </div>
+                )}
+
+                {visibleInvites.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-[color:var(--kub-border-color)] px-3 py-3 text-xs text-[color:var(--kub-muted)]">
+                    Активных или отклонённых приглашений пока нет.
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {visibleInvites.map((invite) => {
+                      const invitee = invite.invitee;
+                      const inviter = invite.inviter;
+                      const canReinvite = invite.status === "declined" || invite.status === "cancelled" || invite.status === "expired";
+                      const canCancel = invite.status === "pending";
+                      return (
+                        <div key={invite.id} className="rounded-xl px-2 py-2 hover:bg-[var(--kub-surface-2)]">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <UserAvatar user={invitee ?? { id: invite.invitee_id, full_name: null, username: null, avatar_url: null }} size="sm" />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span className="truncate text-sm font-medium text-[color:var(--kub-text)]">
+                                  {invitee ? displayProfileName(invitee) : "Пользователь"}
+                                </span>
+                                <span className={cn(
+                                  "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                                  inviteStatusClass(invite.status),
+                                )}>
+                                  {inviteStatusLabel(invite.status)}
+                                </span>
+                              </div>
+                              <div className="truncate text-xs text-[color:var(--kub-muted)]">
+                                Пригласил: {inviter ? displayProfileName(inviter) : "администратор"} · {formatInviteTime(invite.created_at)}
+                              </div>
+                            </div>
+                          </div>
+                          {(canCancel || canReinvite) && (
+                            <div className="mt-2 flex justify-end gap-2">
+                              {canCancel && (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleCancelInvite(invite)}
+                                  disabled={inviteBusyId === invite.id}
+                                  className="inline-flex h-7 items-center justify-center rounded-lg border border-[color:var(--kub-border-color)] px-2 text-xs font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)] disabled:opacity-60"
+                                >
+                                  {inviteBusyId === invite.id ? "Отмена..." : "Отменить"}
+                                </button>
+                              )}
+                              {canReinvite && (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleReinvite(invite)}
+                                  disabled={inviteBusyId === invite.id}
+                                  className="inline-flex h-7 items-center justify-center rounded-lg bg-[var(--kub-cyan)] px-2 text-xs font-semibold text-[color:var(--kub-bg)] hover:bg-[var(--kub-cyan-hover)] disabled:opacity-60"
+                                >
+                                  {inviteBusyId === invite.id ? "Отправка..." : "Пригласить снова"}
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -875,12 +1087,47 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
           chatId={chat.id}
           chatName={display.title}
           currentUserId={currentUser?.id ?? null}
-          memberIds={(chat.members ?? members.map((member) => ({ user_id: member.id }))).map((member) => member.user_id)}
-          onClose={() => setInviteOpen(false)}
+          memberIds={Array.from(memberIdSet)}
+          onClose={() => {
+            setInviteOpen(false);
+            void loadMembers();
+            void loadInvites();
+          }}
         />
       )}
     </div>
   );
+}
+
+function displayProfileName(profile: Profile): string {
+  return profile.full_name ?? profile.username ?? "Без имени";
+}
+
+function inviteStatusLabel(status: GroupInviteStatus): string {
+  if (status === "pending") return "Ожидает подтверждения";
+  if (status === "declined") return "Отказался";
+  if (status === "accepted") return "Принял";
+  if (status === "cancelled") return "Отменено";
+  return "Истекло";
+}
+
+function inviteStatusClass(status: GroupInviteStatus): string {
+  if (status === "pending") return "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] text-[color:var(--kub-cyan)]";
+  if (status === "declined") return "bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger)]";
+  if (status === "accepted") return "bg-[color-mix(in_srgb,var(--kub-online)_14%,transparent)] text-[color:var(--kub-online)]";
+  return "bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)]";
+}
+
+function formatInviteTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "недавно";
+  const diffMs = Date.now() - date.getTime();
+  const diffMin = Math.max(0, Math.round(diffMs / 60_000));
+  if (diffMin < 1) return "только что";
+  if (diffMin < 60) return `${diffMin} мин назад`;
+  const diffHours = Math.round(diffMin / 60);
+  if (diffHours < 24) return `${diffHours} ч назад`;
+  return date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
 }
 
 function MediaGalleryTile({ message }: { message: Message }) {

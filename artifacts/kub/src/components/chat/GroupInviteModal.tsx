@@ -7,6 +7,7 @@ import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { cn } from "@/lib/utils";
 import { createGroupInvite, GROUP_INVITES_MIGRATION_REQUIRED, isGroupInviteUnavailableError } from "@/lib/groupInvites";
 import { mapPgError } from "@/lib/errors";
+import type { GroupInviteStatus } from "@/lib/groupInvites";
 import type { GroupInvite, Profile } from "@/types/database";
 
 interface GroupInviteModalProps {
@@ -17,7 +18,7 @@ interface GroupInviteModalProps {
   onClose: () => void;
 }
 
-type CandidateStatus = "self" | "member" | "pending" | "sent" | "available";
+type CandidateStatus = "self" | "member" | "pending" | "sent" | "declined" | "cancelled" | "expired" | "accepted" | "available";
 
 export function GroupInviteModal({
   chatId,
@@ -30,7 +31,7 @@ export function GroupInviteModal({
   const memberIdSet = useMemo(() => new Set(memberIds), [memberIds]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Profile[]>([]);
-  const [pendingInviteeIds, setPendingInviteeIds] = useState<Set<string>>(new Set());
+  const [inviteStatuses, setInviteStatuses] = useState<Record<string, GroupInviteStatus>>({});
   const [sentInviteeIds, setSentInviteeIds] = useState<Set<string>>(new Set());
   const [loadingResults, setLoadingResults] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
@@ -44,7 +45,7 @@ export function GroupInviteModal({
       .from("group_invites")
       .select("invitee_id,status")
       .eq("chat_id", chatId)
-      .eq("status", "pending")
+      .order("created_at", { ascending: false })
       .then(({ data, error: err }) => {
         if (cancelled) return;
         if (err) {
@@ -56,7 +57,11 @@ export function GroupInviteModal({
           setError(mapPgError(err));
           return;
         }
-        setPendingInviteeIds(new Set(((data ?? []) as Pick<GroupInvite, "invitee_id" | "status">[]).map((row) => row.invitee_id)));
+        const next: Record<string, GroupInviteStatus> = {};
+        for (const row of (data ?? []) as Pick<GroupInvite, "invitee_id" | "status">[]) {
+          if (!next[row.invitee_id]) next[row.invitee_id] = row.status;
+        }
+        setInviteStatuses(next);
       });
     return () => {
       cancelled = true;
@@ -112,7 +117,7 @@ export function GroupInviteModal({
     }
 
     setSentInviteeIds((current) => new Set(current).add(user.id));
-    setPendingInviteeIds((current) => new Set(current).add(user.id));
+    setInviteStatuses((current) => ({ ...current, [user.id]: "pending" }));
     setMessage(`Приглашение отправлено: ${displayName(user)}.`);
   };
 
@@ -166,8 +171,9 @@ export function GroupInviteModal({
         ) : (
           <div className="space-y-1">
             {results.map((user) => {
-              const status = getCandidateStatus(user.id, currentUserId, memberIdSet, pendingInviteeIds, sentInviteeIds);
-              const disabled = migrationRequired || status !== "available" || sendingId !== null;
+              const status = getCandidateStatus(user.id, currentUserId, memberIdSet, inviteStatuses, sentInviteeIds);
+              const canInvite = canInviteCandidate(status);
+              const disabled = migrationRequired || !canInvite || sendingId !== null;
               return (
                 <div
                   key={user.id}
@@ -186,7 +192,7 @@ export function GroupInviteModal({
                     disabled={disabled}
                     className={cn(
                       "inline-flex h-8 shrink-0 items-center justify-center rounded-lg px-3 text-xs font-semibold transition-colors",
-                      status === "available" && !migrationRequired
+                      canInvite && !migrationRequired
                         ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] hover:bg-[var(--kub-cyan-hover)]"
                         : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)]",
                       "disabled:cursor-not-allowed disabled:opacity-60",
@@ -216,13 +222,14 @@ function getCandidateStatus(
   userId: string,
   currentUserId: string | null,
   memberIdSet: Set<string>,
-  pendingInviteeIds: Set<string>,
+  inviteStatuses: Record<string, GroupInviteStatus>,
   sentInviteeIds: Set<string>,
 ): CandidateStatus {
   if (userId === currentUserId) return "self";
   if (memberIdSet.has(userId)) return "member";
   if (sentInviteeIds.has(userId)) return "sent";
-  if (pendingInviteeIds.has(userId)) return "pending";
+  const inviteStatus = inviteStatuses[userId];
+  if (inviteStatus) return inviteStatus;
   return "available";
 }
 
@@ -231,7 +238,13 @@ function statusLabel(status: CandidateStatus, migrationRequired: boolean): strin
   if (status === "self") return "Это вы";
   if (status === "member") return "Уже в чате";
   if (status === "pending" || status === "sent") return "Ожидает";
+  if (status === "accepted") return "Принято";
+  if (status === "declined" || status === "cancelled" || status === "expired") return "Пригласить снова";
   return "Пригласить";
+}
+
+function canInviteCandidate(status: CandidateStatus): boolean {
+  return status === "available" || status === "declined" || status === "cancelled" || status === "expired";
 }
 
 function displayName(user: Profile): string {

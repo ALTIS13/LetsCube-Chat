@@ -332,3 +332,10 @@ Recurring tasks roadmap note:
 - User manually applied `.migration-backup/supabase/migrations/20260509_group_invites.sql`.
 - Read-only Supabase MCP confirmed `public.group_invites` exists with RLS enabled and expected FKs to `chats`/`profiles`; available MCP table introspection does not expose RPC definitions, so RPC behavior is verified through authenticated app QA.
 - Notification popover QA should use the Codex/QA browser session or secure local QA credentials; never store secrets in repo/docs and do not depend on the user's mouse.
+
+2026-05-10 group invite status/live update follow-up:
+
+- Group info now has an owner/admin invite-status section backed by `public.group_invites`.
+- The invite modal reads all latest invite statuses for the current chat: pending users are disabled, members are disabled, declined/cancelled/expired users can be invited again.
+- Chat info subscribes to current-chat `chat_members` and `group_invites` realtime changes and refetches both lists after changes; action handlers also refetch after invite/cancel/remove/role changes.
+- No SQL was applied automatically. Manual proposal pending: `.migration-backup/supabase/migrations/20260510_group_invite_join_system_messages.sql` for persistent join system messages after invite accept.

@@ -69,6 +69,15 @@ export async function declineGroupInvite(
   return { ok: true, data: data as GroupInvite };
 }
 
+export async function cancelGroupInvite(
+  supabase: Client,
+  inviteId: string,
+): Promise<RpcResult<GroupInvite>> {
+  const { data, error } = await supabase.rpc("group_invite_cancel", { p_invite_id: inviteId });
+  if (error) return groupInviteError(error);
+  return { ok: true, data: data as GroupInvite };
+}
+
 export function isGroupInviteUnavailableError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const record = error as Record<string, unknown>;

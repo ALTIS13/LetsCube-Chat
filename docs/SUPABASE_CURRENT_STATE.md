@@ -110,6 +110,7 @@ Applied manually on 2026-05-06:
 `supabase_realtime` publication contains public tables:
 
 - `bans`, `chat_members`, `chats`, `folder_chats`, `folders`, `messages`, `mutes`, `notifications`, `profiles`, `reactions`, `task_events`, `tasks`, `topics`.
+- `group_invites` was added to `supabase_realtime` by the manually applied 20260509 group invites migration.
 
 Replica identity FULL is enabled on:
 
@@ -218,6 +219,9 @@ The migration adds `public.group_invites`, scoped RLS, indexes, `group_invite_cr
 2026-05-10 follow-up:
 
 - The user manually applied `.migration-backup/supabase/migrations/20260509_group_invites.sql`.
+- Read-only Supabase MCP on 2026-05-10 confirmed `public.group_invites` exists, RLS is enabled, and FKs to `chats`/`profiles` are present.
+- `public.messages.type` already allows `system`, so a backend-created join notice can be stored without changing frontend message schema.
+- New proposal only, not applied automatically: `.migration-backup/supabase/migrations/20260510_group_invite_join_system_messages.sql`. It replaces `group_invite_accept(p_invite_id uuid)` so accepting an invite inserts a persistent `type='system'` message after the membership row is created.
 - Read-only Supabase MCP table introspection confirmed `public.group_invites` exists, RLS is enabled, and the expected columns/FKs are present (`chat_id`, `inviter_id`, `invitee_id`, `status`, `created_at`, `expires_at`, `responded_at`).
 - `_list_migrations` remains empty, so the project still appears to use manual SQL history rather than Supabase CLI migration ledger.
 - The available read-only MCP tools do not expose RPC/function definitions; invite RPCs should be verified through authenticated app/RPC QA. No SQL was applied by Codex.
