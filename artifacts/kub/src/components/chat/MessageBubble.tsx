@@ -221,7 +221,7 @@ function clampNumber(value: number, min: number, max: number): number {
 interface MeasuredTextWithMetaProps {
   content: string;
   textClassName: string;
-  meta: ReactNode;
+  meta?: ReactNode;
   bubbleRef: React.RefObject<HTMLDivElement | null>;
   stackRef: React.RefObject<HTMLDivElement | null>;
   measureKey: string;
@@ -243,13 +243,14 @@ function MeasuredTextWithMeta({
   const textContentRef = useRef<HTMLSpanElement | null>(null);
   const footerRef = useRef<HTMLSpanElement | null>(null);
   const blockedInlineSignatureRef = useRef<string | null>(null);
+  const hasMeta = meta !== null && meta !== undefined && meta !== false;
 
   const measure = useCallback(() => {
     const textEl = textFlowRef.current;
     const contentEl = textContentRef.current;
     const footerEl = footerRef.current;
     const bubbleEl = bubbleRef.current;
-    if (!textEl || !contentEl || !footerEl || !bubbleEl) return;
+    if (!hasMeta || !textEl || !contentEl || !footerEl || !bubbleEl) return;
 
     const lineRects = getTextLineRects(contentEl);
     const lastLine = lineRects.at(-1) ?? null;
@@ -290,7 +291,7 @@ function MeasuredTextWithMeta({
 
     setPlacement((previous) => (previous === next ? previous : next));
     setAnchoredMetaSlot((previous) => (previous === nextAnchoredMetaSlot ? previous : nextAnchoredMetaSlot));
-  }, [bubbleRef, compound, placement, stackRef]);
+  }, [bubbleRef, compound, hasMeta, placement, stackRef]);
 
   useEffect(() => {
     blockedInlineSignatureRef.current = null;
@@ -342,7 +343,7 @@ function MeasuredTextWithMeta({
         <span ref={textContentRef} data-message-text-content="true">
           <FormattedText content={content} />
         </span>
-        {placement === "inline" && (
+        {hasMeta && placement === "inline" && (
           <span
             ref={footerRef}
             data-message-footer="true"
@@ -352,7 +353,7 @@ function MeasuredTextWithMeta({
           </span>
         )}
       </p>
-      {placement === "anchored" && anchoredMetaSlot && (
+      {hasMeta && placement === "anchored" && anchoredMetaSlot && (
         <div
           data-message-bottom-meta="true"
           className="mt-0 flex max-w-full items-center justify-end leading-none"
@@ -362,7 +363,7 @@ function MeasuredTextWithMeta({
           </span>
         </div>
       )}
-      {placement === "anchored" && !anchoredMetaSlot && (
+      {hasMeta && placement === "anchored" && !anchoredMetaSlot && (
         <span
           ref={footerRef}
           data-message-footer="true"
@@ -688,7 +689,7 @@ export function MessageBubble({
   ];
   const contextItems = isLocalSend ? localSendContextItems : regularContextItems;
   const canUseMeasuredTextMeta = message.type === "text" && textLayoutKind !== "preformatted" && !message.failed;
-  const footerMode = canUseMeasuredTextMeta ? "measured" : hasReactions ? "meta-row-reactions" : "meta-row";
+  const footerMode = hasReactions ? "bottom-layer-reactions" : canUseMeasuredTextMeta ? "measured" : "meta-row";
   const showGroupReadIndicator = Boolean(groupReadInfo && groupReadInfo.readCount > 0);
   const groupReadLabel = groupReadInfo ? getGroupReadReceiptCompactLabel(groupReadInfo) : "";
   const groupReadAriaLabel = groupReadInfo ? getGroupReadReceiptAriaLabel(groupReadInfo) : "";
@@ -773,14 +774,17 @@ export function MessageBubble({
     </button>
   );
 
-  const renderReactionsRow = () => {
+  const renderReactionsRow = (mode: "standalone" | "bottom-layer" = "standalone") => {
     if (!hasReactions) return null;
     return (
       <div
         ref={reactionsLayerRef}
         data-message-reactions-row="true"
         data-message-reactions-expanded={reactionsExpanded ? "true" : "false"}
-        className="relative mt-1 flex w-fit max-w-full flex-wrap items-center justify-start gap-1 self-start"
+        className={cn(
+          "relative flex max-w-full flex-wrap items-center justify-start gap-1",
+          mode === "standalone" ? "mt-1 w-fit self-start" : "min-w-0 flex-1"
+        )}
       >
         {visibleReactionEntries.map((entry) => renderReactionChip(entry))}
         {hiddenReactionCount > 0 && (
@@ -807,6 +811,24 @@ export function MessageBubble({
             +{hiddenReactionCount}
           </button>
         )}
+      </div>
+    );
+  };
+
+  const renderReactionsBottomLayer = () => {
+    if (!hasReactions) return null;
+    return (
+      <div
+        data-message-bottom-layer="reactions"
+        className="mt-1 flex max-w-full items-end gap-2 self-stretch leading-none"
+      >
+        {renderReactionsRow("bottom-layer")}
+        <div
+          data-message-footer="true"
+          className="ml-auto inline-flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap text-right leading-none"
+        >
+          {renderFooterContent()}
+        </div>
       </div>
     );
   };
@@ -1068,7 +1090,7 @@ export function MessageBubble({
                   "min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:break-word] text-[color:var(--kub-text)]",
                   widthClasses.text
                 )}
-                meta={renderFooterContent()}
+                meta={hasReactions ? null : renderFooterContent()}
                 bubbleRef={bubbleRef}
                 stackRef={stackRef}
                 measureKey={footerMeasureKey}
@@ -1124,7 +1146,7 @@ export function MessageBubble({
               </div>
             )}
 
-            {!canUseMeasuredTextMeta && (
+            {!canUseMeasuredTextMeta && !hasReactions && (
               <div
                 data-message-bottom-meta="true"
                 className="mt-0.5 flex self-stretch max-w-full items-center justify-end leading-none"
@@ -1138,7 +1160,7 @@ export function MessageBubble({
               </div>
             )}
 
-            {renderReactionsRow()}
+            {hasReactions ? renderReactionsBottomLayer() : renderReactionsRow()}
           </div>
 
         </div>
