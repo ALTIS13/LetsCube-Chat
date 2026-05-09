@@ -103,7 +103,7 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
   switch (kind) {
     case "link":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(64vw,580px)] md:max-w-[min(52vw,580px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(64vw,520px)] md:max-w-[min(52vw,520px)]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
@@ -115,13 +115,13 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
       };
     case "longToken":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(60vw,580px)] md:max-w-[min(52vw,580px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(60vw,520px)] md:max-w-[min(52vw,520px)]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
     case "regular":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(68vw,500px)] md:max-w-[min(52vw,500px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(68vw,460px)] md:max-w-[min(52vw,460px)]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:break-word] [word-break:normal]",
       };
@@ -145,9 +145,9 @@ function getMessageStackStyle(kind: TextLayoutKind): CSSProperties | undefined {
   switch (kind) {
     case "link":
     case "longToken":
-      return { maxWidth: "min(86vw, 580px)" };
+      return { maxWidth: "min(86vw, 520px)" };
     case "regular":
-      return { maxWidth: "min(86vw, 500px)" };
+      return { maxWidth: "min(86vw, 460px)" };
     default:
       return undefined;
   }
@@ -347,12 +347,15 @@ function MeasuredTextWithMeta({
     <div
       data-message-text-meta-group="true"
       data-message-meta-placement={placement}
-      className="relative max-w-full min-w-0"
+      className={cn(
+        "relative max-w-full min-w-0",
+        placement === "inline" ? "w-fit self-start" : "w-full"
+      )}
     >
       <p
         ref={textFlowRef}
         data-message-text-flow="true"
-        className={textClassName}
+        className={cn(textClassName, placement === "inline" && "w-fit")}
       >
         <span ref={textContentRef} data-message-text-content="true">
           <FormattedText content={content} />
@@ -1063,7 +1066,7 @@ export function MessageBubble({
                     onJumpToReply?.(message.reply_to_id!);
                   }}
                   className="mb-1.5 flex w-fit min-w-0 items-stretch gap-2 overflow-hidden rounded-xl bg-[color-mix(in_srgb,var(--kub-surface-2)_55%,transparent)] px-2 py-1.5 text-left text-xs transition-colors hover:bg-[color-mix(in_srgb,var(--kub-surface-3)_72%,transparent)]"
-                  style={{ maxWidth: "min(100%, 210px, 26ch)" }}
+                  style={{ maxWidth: "min(100%, 190px, 24ch)" }}
                   aria-label="Перейти к исходному сообщению"
                 >
                   <span className="w-0.5 flex-shrink-0 self-stretch rounded-full bg-[var(--kub-cyan)]" />
