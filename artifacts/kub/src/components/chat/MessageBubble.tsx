@@ -279,8 +279,6 @@ function MeasuredTextWithMeta({
   compound = false,
 }: MeasuredTextWithMetaProps) {
   const [placement, setPlacement] = useState<MetaPlacement>(() => getInitialMetaPlacement(content));
-  const [anchoredMetaSlot, setAnchoredMetaSlot] = useState(false);
-  const [terminalReserveWidth, setTerminalReserveWidth] = useState(0);
   const textFlowRef = useRef<HTMLParagraphElement | null>(null);
   const textContentRef = useRef<HTMLSpanElement | null>(null);
   const footerRef = useRef<HTMLSpanElement | null>(null);
@@ -298,8 +296,6 @@ function MeasuredTextWithMeta({
     const lastLine = lineRects.at(-1) ?? null;
     if (!lastLine) {
       setPlacement((current) => (current === "inline" ? current : "inline"));
-      setAnchoredMetaSlot((current) => (current ? false : current));
-      setTerminalReserveWidth((current) => (current === 0 ? current : 0));
       return;
     }
 
@@ -330,19 +326,13 @@ function MeasuredTextWithMeta({
       available >= footerRect.width + gap &&
       blockedInlineSignatureRef.current !== signature;
     const next: MetaPlacement = canInline ? "inline" : "anchored";
-    const nextReserveWidth = next === "anchored" ? Math.ceil(footerRect.width + gap) : 0;
-    const nextAnchoredMetaSlot = false;
 
     setPlacement((previous) => (previous === next ? previous : next));
-    setAnchoredMetaSlot((previous) => (previous === nextAnchoredMetaSlot ? previous : nextAnchoredMetaSlot));
-    setTerminalReserveWidth((previous) => (previous === nextReserveWidth ? previous : nextReserveWidth));
   }, [bubbleRef, compound, hasMeta, placement, stackRef]);
 
   useEffect(() => {
     blockedInlineSignatureRef.current = null;
     setPlacement(getInitialMetaPlacement(content));
-    setAnchoredMetaSlot(false);
-    setTerminalReserveWidth(0);
   }, [content, measureKey]);
 
   useLayoutEffect(() => {
@@ -392,14 +382,6 @@ function MeasuredTextWithMeta({
         <span ref={textContentRef} data-message-text-content="true">
           <FormattedText content={content} />
         </span>
-        {hasMeta && placement === "anchored" && terminalReserveWidth > 0 && (
-          <span
-            aria-hidden="true"
-            data-message-terminal-reserve="true"
-            className="inline-block h-[1em] align-baseline"
-            style={{ width: terminalReserveWidth }}
-          />
-        )}
         {hasMeta && placement === "inline" && (
           <span
             ref={footerRef}
@@ -410,24 +392,15 @@ function MeasuredTextWithMeta({
           </span>
         )}
       </p>
-      {hasMeta && placement === "anchored" && anchoredMetaSlot && (
+      {hasMeta && placement === "anchored" && (
         <div
           data-message-bottom-meta="true"
-          className="mt-0 flex max-w-full items-center justify-end leading-none"
+          className="mt-0.5 flex max-w-full items-center justify-end leading-none"
         >
           <span ref={footerRef} data-message-footer="true" className={footerClassName}>
             {meta}
           </span>
         </div>
-      )}
-      {hasMeta && placement === "anchored" && !anchoredMetaSlot && (
-        <span
-          ref={footerRef}
-          data-message-footer="true"
-          className={cn(footerClassName, "absolute bottom-[3px] right-0")}
-        >
-          {meta}
-        </span>
       )}
     </div>
   );
@@ -1158,24 +1131,24 @@ export function MessageBubble({
                 <span className="truncate max-w-[200px]">{message.content ?? "File"}</span>
               </a>
             ) : canUseCompactReplyInline ? (
-              <p
+              <div
                 data-message-text-flow="true"
                 data-message-meta-placement="inline"
                 className={cn(
-                  "inline-flex w-fit max-w-full min-w-0 items-baseline gap-1.5 text-sm leading-relaxed whitespace-pre-wrap text-[color:var(--kub-text)]",
+                  "flex w-full max-w-full min-w-0 items-baseline gap-2 text-sm leading-relaxed whitespace-pre-wrap text-[color:var(--kub-text)]",
                   widthClasses.text
                 )}
               >
-                <span className="min-w-0">
+                <span className="min-w-0 flex-1">
                   <FormattedText content={message.content ?? ""} />
                 </span>
                 <span
                   data-message-footer="true"
-                  className="inline-flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap text-right leading-none [vertical-align:-0.12em]"
+                  className="ml-auto inline-flex w-fit max-w-full shrink-0 items-center justify-end gap-1 whitespace-nowrap text-right leading-none [vertical-align:-0.12em]"
                 >
                   {renderFooterContent()}
                 </span>
-              </p>
+              </div>
             ) : canUseMeasuredTextMeta ? (
               <MeasuredTextWithMeta
                 content={message.content ?? ""}
