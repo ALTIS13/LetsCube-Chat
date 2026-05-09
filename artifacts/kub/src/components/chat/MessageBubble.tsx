@@ -121,22 +121,22 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
       };
     case "regular":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,600px)] md:max-w-[min(58vw,600px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(70vw,560px)] md:max-w-[min(56vw,560px)]",
         bubble: "w-fit max-w-full min-w-0",
-        text: "[overflow-wrap:anywhere] [word-break:break-word]",
+        text: "[overflow-wrap:break-word] [word-break:normal]",
       };
     case "short":
       return {
         stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px)] md:max-w-[min(65vw,680px)]",
         bubble: "w-fit max-w-full min-w-0",
-        text: "[overflow-wrap:anywhere] [word-break:break-word]",
+        text: "[overflow-wrap:break-word] [word-break:normal]",
       };
     case "media":
     default:
       return {
         stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px)] md:max-w-[min(65vw,680px)]",
         bubble: "w-fit",
-        text: "[overflow-wrap:anywhere] [word-break:break-word]",
+        text: "[overflow-wrap:break-word] [word-break:normal]",
       };
   }
 }
@@ -147,7 +147,7 @@ function getMessageStackStyle(kind: TextLayoutKind): CSSProperties | undefined {
     case "longToken":
       return { maxWidth: "min(86vw, 580px)" };
     case "regular":
-      return { maxWidth: "min(86vw, 600px)" };
+      return { maxWidth: "min(86vw, 560px)" };
     default:
       return undefined;
   }
@@ -293,9 +293,9 @@ function MeasuredTextWithMeta({
     }
 
     const available = rightLimit - lastLine.right;
-    const singleLineSimple = !compound && lineRects.length <= 1;
+    const singleLineText = lineRects.length <= 1;
     const canInline =
-      singleLineSimple &&
+      singleLineText &&
       available >= footerRect.width + gap &&
       blockedInlineSignatureRef.current !== signature;
     const next: MetaPlacement = canInline ? "inline" : "anchored";
@@ -1060,23 +1060,19 @@ export function MessageBubble({
                     event.stopPropagation();
                     onJumpToReply?.(message.reply_to_id!);
                   }}
-                  className="mb-1.5 flex w-fit max-w-[min(100%,30rem)] min-w-0 items-stretch gap-2 overflow-hidden rounded-xl bg-[color-mix(in_srgb,var(--kub-surface-2)_55%,transparent)] px-2 py-1.5 text-left text-xs transition-colors hover:bg-[color-mix(in_srgb,var(--kub-surface-3)_72%,transparent)]"
-                  style={{ maxWidth: "min(100%, 30rem)" }}
+                  className="mb-1.5 flex w-fit min-w-0 items-stretch gap-2 overflow-hidden rounded-xl bg-[color-mix(in_srgb,var(--kub-surface-2)_55%,transparent)] px-2 py-1.5 text-left text-xs transition-colors hover:bg-[color-mix(in_srgb,var(--kub-surface-3)_72%,transparent)]"
+                  style={{ maxWidth: "min(100%, 260px, 32ch)" }}
                   aria-label="Перейти к исходному сообщению"
                 >
                   <span className="w-0.5 flex-shrink-0 self-stretch rounded-full bg-[var(--kub-cyan)]" />
-                  <span className="min-w-0 flex-1">
+                  <span className="min-w-0 flex-1 overflow-hidden">
                     <span className="block truncate font-semibold leading-tight text-[color:var(--kub-cyan)]">
                       {replyName}
                     </span>
                     <span
-                      className="block overflow-hidden leading-tight text-[color:var(--kub-muted)] [overflow-wrap:anywhere] [word-break:break-word]"
+                      className="block overflow-hidden truncate whitespace-nowrap leading-tight text-[color:var(--kub-muted)]"
                       style={{
-                        display: "-webkit-box",
-                        WebkitBoxOrient: "vertical",
-                        WebkitLineClamp: 2,
-                        overflowWrap: "anywhere",
-                        wordBreak: "break-word",
+                        textOverflow: "ellipsis",
                       }}
                     >
                       {preview}
@@ -1114,7 +1110,7 @@ export function MessageBubble({
               <MeasuredTextWithMeta
                 content={message.content ?? ""}
                 textClassName={cn(
-                  "min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:break-word] text-[color:var(--kub-text)]",
+                  "min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap text-[color:var(--kub-text)]",
                   widthClasses.text
                 )}
                 meta={hasReactions ? null : renderFooterContent()}
@@ -1127,7 +1123,7 @@ export function MessageBubble({
               <p
                 data-message-text-flow="true"
                 className={cn(
-                  "min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:break-word] text-[color:var(--kub-text)]",
+                  "min-w-0 max-w-full text-sm leading-relaxed whitespace-pre-wrap text-[color:var(--kub-text)]",
                   widthClasses.text
                 )}
               >
