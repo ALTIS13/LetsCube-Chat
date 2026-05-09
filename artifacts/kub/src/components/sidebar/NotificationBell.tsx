@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
 import { KubIcon, KubTooltip, type KubIconName } from "@/components/kub";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -28,6 +29,13 @@ type NotificationDisplay = {
 };
 
 const TEXT_LIMIT = 140;
+const PANEL_MARGIN = 8;
+const DESKTOP_PANEL_WIDTH = 430;
+const MIN_PANEL_WIDTH = 280;
+const MIN_PANEL_HEIGHT = 180;
+const MAX_PANEL_HEIGHT = 520;
+
+type NotificationPanelStyle = Pick<CSSProperties, "left" | "top" | "width" | "maxHeight">;
 
 export function NotificationBell() {
   const [, setLocation] = useLocation();
@@ -36,12 +44,70 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [busyInviteId, setBusyInviteId] = useState<string | null>(null);
   const [inviteStatuses, setInviteStatuses] = useState<Record<string, GroupInviteStatus>>({});
+  const [panelStyle, setPanelStyle] = useState<NotificationPanelStyle | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const updatePanelPosition = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const anchor = buttonRef.current;
+    if (!anchor) return;
+
+    const viewport = window.visualViewport;
+    const viewportWidth = viewport?.width ?? window.innerWidth;
+    const viewportHeight = viewport?.height ?? window.innerHeight;
+    const viewportLeft = viewport?.offsetLeft ?? 0;
+    const viewportTop = viewport?.offsetTop ?? 0;
+    const anchorRect = anchor.getBoundingClientRect();
+    const isMobile = viewportWidth < 640;
+    const safeWidth = Math.max(0, viewportWidth - PANEL_MARGIN * 2);
+    const width = Math.min(Math.max(MIN_PANEL_WIDTH, isMobile ? safeWidth : DESKTOP_PANEL_WIDTH), safeWidth);
+
+    const desiredLeft = isMobile
+      ? viewportLeft + PANEL_MARGIN
+      : viewportLeft + anchorRect.right - width;
+    const minLeft = viewportLeft + PANEL_MARGIN;
+    const maxLeft = viewportLeft + viewportWidth - width - PANEL_MARGIN;
+    const left = Math.min(Math.max(desiredLeft, minLeft), Math.max(minLeft, maxLeft));
+
+    const preferredTop = viewportTop + anchorRect.bottom + 8;
+    const spaceBelow = viewportTop + viewportHeight - preferredTop - PANEL_MARGIN;
+    const canFlipAbove = spaceBelow < 260 && anchorRect.top > viewportHeight / 2;
+    const desiredMaxHeight = Math.min(MAX_PANEL_HEIGHT, viewportHeight - PANEL_MARGIN * 2);
+    let top = preferredTop;
+    let maxHeight = Math.min(desiredMaxHeight, spaceBelow);
+
+    if (canFlipAbove) {
+      maxHeight = Math.min(desiredMaxHeight, anchorRect.top - PANEL_MARGIN * 2);
+      top = viewportTop + anchorRect.top - maxHeight - 8;
+    }
+
+    if (maxHeight < MIN_PANEL_HEIGHT) {
+      top = viewportTop + PANEL_MARGIN;
+      maxHeight = Math.min(desiredMaxHeight, viewportHeight - PANEL_MARGIN * 2);
+    }
+
+    setPanelStyle({
+      left,
+      top: Math.max(viewportTop + PANEL_MARGIN, top),
+      width,
+      maxHeight: Math.max(MIN_PANEL_HEIGHT, maxHeight),
+    });
+  }, []);
 
   useEffect(() => {
     if (!open) return;
+    updatePanelPosition();
+    let frame = 0;
+    const schedulePositionUpdate = () => {
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(updatePanelPosition);
+    };
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (ref.current?.contains(target) || panelRef.current?.contains(target)) return;
+      setOpen(false);
     };
     const keyHandler = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
@@ -50,11 +116,20 @@ export function NotificationBell() {
     };
     window.addEventListener("mousedown", handler);
     window.addEventListener("keydown", keyHandler);
+    window.addEventListener("resize", schedulePositionUpdate);
+    window.addEventListener("scroll", schedulePositionUpdate, true);
+    window.visualViewport?.addEventListener("resize", schedulePositionUpdate);
+    window.visualViewport?.addEventListener("scroll", schedulePositionUpdate);
     return () => {
+      if (frame) cancelAnimationFrame(frame);
       window.removeEventListener("mousedown", handler);
       window.removeEventListener("keydown", keyHandler);
+      window.removeEventListener("resize", schedulePositionUpdate);
+      window.removeEventListener("scroll", schedulePositionUpdate, true);
+      window.visualViewport?.removeEventListener("resize", schedulePositionUpdate);
+      window.visualViewport?.removeEventListener("scroll", schedulePositionUpdate);
     };
-  }, [open]);
+  }, [open, updatePanelPosition]);
 
   const handleNotificationClick = async (item: Notification) => {
     if (!item.read_at) await markRead(item.id);
@@ -142,7 +217,11 @@ export function NotificationBell() {
     <div className="relative shrink-0" ref={ref}>
       <KubTooltip label="Уведомления" side="bottom">
         <button
-          onClick={() => setOpen((v) => !v)}
+          ref={buttonRef}
+          onClick={() => {
+            if (!open) updatePanelPosition();
+            setOpen((v) => !v);
+          }}
           className={cn(
             "relative h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)]",
             "inline-flex items-center justify-center",
@@ -165,11 +244,12 @@ export function NotificationBell() {
         </button>
       </KubTooltip>
 
-      {open && (
+      {open && typeof document !== "undefined" && createPortal(
         <div
+          ref={panelRef}
+          style={panelStyle ?? undefined}
           className={cn(
-            "fixed left-2 right-2 top-14 z-50 sm:absolute sm:left-auto sm:right-0 sm:top-12",
-            "sm:w-[430px] sm:max-w-[calc(100vw-1rem)]",
+            "fixed z-[60] flex max-w-[calc(100vw-16px)] flex-col",
             "overflow-hidden rounded-2xl border border-[color:var(--kub-border-color)]",
             "bg-[var(--kub-surface)] shadow-2xl kub-glow-soft",
           )}
@@ -197,7 +277,7 @@ export function NotificationBell() {
             </div>
           )}
 
-          <div className="max-h-[min(68vh,520px)] overflow-y-auto p-2">
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
             {loading && items.length === 0 ? (
               <NotificationState icon="spinner" title="Загрузка уведомлений" body="Обновляем последние события." />
             ) : items.length === 0 ? (
@@ -224,7 +304,8 @@ export function NotificationBell() {
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -262,7 +343,7 @@ function NotificationItem({
         onClick();
       }}
       className={cn(
-        "group rounded-xl border px-3 py-3 text-left transition-colors",
+        "group max-w-full rounded-xl border px-3 py-3 text-left transition-colors",
         "border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] hover:bg-[var(--kub-surface-3)]",
         unread && "border-[color-mix(in_srgb,var(--kub-cyan)_45%,var(--kub-border-color))] bg-[color-mix(in_srgb,var(--kub-cyan)_7%,var(--kub-surface-2))]",
       )}
@@ -280,10 +361,10 @@ function NotificationItem({
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-start justify-between gap-2">
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-[color:var(--kub-text)]">
+              <div className="truncate text-sm font-semibold text-[color:var(--kub-text)] [overflow-wrap:anywhere]">
                 {display.title}
               </div>
-              <div className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-[color:var(--kub-muted)]">
+              <div className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-[color:var(--kub-muted)] [overflow-wrap:anywhere]">
                 {display.body}
               </div>
             </div>

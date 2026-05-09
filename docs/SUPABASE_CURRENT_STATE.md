@@ -207,13 +207,20 @@ Read-only Supabase MCP sync for project `nhogbeojfnbjcfipitrh` confirmed the cur
 - Existing notification kinds in frontend/server contract: `task_assigned`, `task_waiting_confirmation`, `task_confirmed`, `task_rejected`, `chat_added`, `mute_issued`, `ban_issued`.
 - `public.chats` supports `private`, `group`, `channel` and `is_forum`.
 - `public.chat_members` stores `owner`, `admin`, `member`, read/delivery watermarks and per-user pinned/hidden state.
-- `public.group_invites` does not exist yet.
+- `public.group_invites` did not exist yet in this 2026-05-09 pre-application check.
 
 No SQL was applied automatically. A manual/idempotent proposal was added:
 
 - `.migration-backup/supabase/migrations/20260509_group_invites.sql`.
 
-The proposal adds `public.group_invites`, scoped RLS, indexes, `group_invite_create`, `group_invite_accept`, `group_invite_decline`, `group_invite_cancel`, and `group_invite` notification payload support. Frontend code must keep a graceful fallback until this SQL is applied manually.
+The migration adds `public.group_invites`, scoped RLS, indexes, `group_invite_create`, `group_invite_accept`, `group_invite_decline`, `group_invite_cancel`, and `group_invite` notification payload support. Frontend code keeps a graceful fallback for environments where this SQL is not applied.
+
+2026-05-10 follow-up:
+
+- The user manually applied `.migration-backup/supabase/migrations/20260509_group_invites.sql`.
+- Read-only Supabase MCP table introspection confirmed `public.group_invites` exists, RLS is enabled, and the expected columns/FKs are present (`chat_id`, `inviter_id`, `invitee_id`, `status`, `created_at`, `expires_at`, `responded_at`).
+- `_list_migrations` remains empty, so the project still appears to use manual SQL history rather than Supabase CLI migration ledger.
+- The available read-only MCP tools do not expose RPC/function definitions; invite RPCs should be verified through authenticated app/RPC QA. No SQL was applied by Codex.
 
 ## 2026-05-06 Media And Name State
 

@@ -67,7 +67,7 @@ Safe QA note: Live QA should use the Codex/QA browser session or QA credentials 
 
 - Live/authenticated QA must use the Codex/QA browser session or local QA credentials kept outside the repo.
 - Do not store QA passwords, auth tokens, cookies or service-role keys in docs, `.env.example`, README or committed source.
-- Group invites require manual application of `.migration-backup/supabase/migrations/20260509_group_invites.sql`; until then frontend must show the migration-required fallback instead of crashing.
+- Group invites required manual application of `.migration-backup/supabase/migrations/20260509_group_invites.sql`; the user later applied it on 2026-05-10, while the frontend keeps the migration-required fallback for other environments.
 - SQL was not applied automatically during this stage.
 
 2026-05-05 logged-in Browser QA на `https://kub.apollot.ru`:
@@ -326,3 +326,9 @@ Recurring tasks roadmap note:
 - `+N` reaction overflow now opens in a fixed portal popover anchored to the `+N` chip instead of expanding inline inside the bubble, so hidden reactions do not shift message geometry or render under neighboring messages.
 - Location messages are classified as compact short text before URL layout is chosen. Desktop keeps the full `📍 Местоположение:` label, while narrow/mobile viewports use the shorter `📍` label; both preserve the original Google Maps href.
 - Anchored multiline/long-token text meta keeps Telegram-like behavior: it remains bottom-right when the final text line leaves room, and uses a compact measured bottom-end slot only when the final line would collide with the footer.
+
+2026-05-10 notifications bounds / group invites follow-up:
+
+- User manually applied `.migration-backup/supabase/migrations/20260509_group_invites.sql`.
+- Read-only Supabase MCP confirmed `public.group_invites` exists with RLS enabled and expected FKs to `chats`/`profiles`; available MCP table introspection does not expose RPC definitions, so RPC behavior is verified through authenticated app QA.
+- Notification popover QA should use the Codex/QA browser session or secure local QA credentials; never store secrets in repo/docs and do not depend on the user's mouse.

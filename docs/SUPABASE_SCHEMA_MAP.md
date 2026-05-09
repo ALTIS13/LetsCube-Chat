@@ -214,7 +214,7 @@ Notification kinds handled by the current frontend:
 
 - Task: `task_assigned`, `task_waiting_confirmation`, `task_confirmed`, `task_rejected`.
 - Chat: `chat_added`.
-- Group invitation: `group_invite` (requires the manual group-invites migration).
+- Group invitation: `group_invite` (manual group-invites migration applied by user on 2026-05-10).
 - System: `mute_issued`, `ban_issued`, unknown/fallback kinds.
 
 `group_invite` notification payload proposal:
@@ -228,13 +228,15 @@ Notification kinds handled by the current frontend:
 - `status`: `pending`, `accepted`, `declined`, `cancelled`, `expired`.
 - `expires_at timestamptz null`.
 
-### Group Invites Proposal
+### Group Invites
 
-`group_invites` is not present in the current production-like schema as of the 2026-05-09 read-only MCP check. The proposal file is:
+The user manually applied `.migration-backup/supabase/migrations/20260509_group_invites.sql`.
+The 2026-05-10 read-only Supabase MCP check confirmed `public.group_invites` exists with RLS enabled.
+The available read-only MCP table introspection does not expose function definitions, so RPC presence is validated through authenticated frontend/RPC QA rather than by applying SQL.
 
 - `.migration-backup/supabase/migrations/20260509_group_invites.sql`.
 
-Proposed `group_invites`:
+`group_invites`:
 
 - `id uuid` PK.
 - `chat_id uuid` FK `chats(id)` on delete cascade.
@@ -244,7 +246,7 @@ Proposed `group_invites`:
 - `created_at`, `expires_at`, `responded_at`.
 - Unique pending invite per `(chat_id, invitee_id)`.
 
-Proposed RPC:
+Expected RPC:
 
 - `group_invite_create(p_chat_id uuid, p_invitee_id uuid)` - owner/admin creates or reuses a pending invite and sends a `group_invite` notification.
 - `group_invite_accept(p_invite_id uuid)` - invitee accepts, RPC inserts `chat_members` with role `member`, updates invite/notification, returns `chat_id`.
