@@ -143,7 +143,8 @@ export function MessageInput({
   }, [onSend]);
 
   const handleSend = useCallback(async () => {
-    const trimmed = text.trim();
+    const currentText = textareaRef.current?.value ?? text;
+    const trimmed = currentText.trim();
     if (!trimmed && !hasAttachments) return;
     if (isEditing && editingMessage && onEdit) {
       if (!trimmed) return;
