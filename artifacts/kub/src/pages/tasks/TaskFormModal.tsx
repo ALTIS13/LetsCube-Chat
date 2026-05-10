@@ -6,10 +6,31 @@ import { KubButton, KubIcon, KubInput, KubModal } from "@/components/kub";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
 import { getChatDisplayInfo, getChatSecondaryLine } from "@/lib/chatDisplay";
 import { useAppStore } from "@/store/app.store";
-import type { ChatMember, ChatWithLastMessage, Profile, TaskPriority, TaskWithPeople } from "@/types/database";
-import { PRIORITIES, TASK_PRIORITY_META } from "./taskMeta";
+import { useTaskRouting, useTaskRoutingEnabledPreference } from "@/hooks/useTaskRouting";
+import type {
+  ChatMember,
+  ChatWithLastMessage,
+  Profile,
+  TaskAssignmentScope,
+  TaskPriority,
+  TaskTargetRole,
+  TaskVisibility,
+  TaskWithPeople,
+} from "@/types/database";
+import {
+  PRIORITIES,
+  TASK_ASSIGNMENT_SCOPE_META,
+  TASK_PRIORITY_META,
+  TASK_VISIBILITY_META,
+} from "./taskMeta";
 import { cn } from "@/lib/utils";
 import { mapPgError } from "@/lib/errors";
+import {
+  LOCATION_ROLE_LABEL,
+  LOCATION_ROUTING_REQUIRED_MESSAGE,
+  TASK_TARGET_ROLE_LABEL,
+  mapLocationRoutingError,
+} from "@/lib/locationRouting";
 
 type ChatOption = ChatWithLastMessage;
 
@@ -33,12 +54,20 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
   const supabase = createClient();
   const isEdit = !!task;
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
+  const [routingEnabled] = useTaskRoutingEnabledPreference();
+  const routing = useTaskRouting({ enabled: routingEnabled, includeMembers: true });
 
   // ── Form state, prefilled in edit mode ─────────────────────────────────
   const [title, setTitle] = useState(task?.title ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? "normal");
   const [dueAt, setDueAt] = useState<string>(toLocalInput(task?.due_at));
+  const [visibility, setVisibility] = useState<TaskVisibility>(task?.visibility ?? "staff");
+  const [assignmentScope, setAssignmentScope] = useState<TaskAssignmentScope>(task?.assignment_scope ?? "user");
+  const [locationId, setLocationId] = useState<string>((task?.location_id as string | null | undefined) ?? "");
+  const [targetRole, setTargetRole] = useState<TaskTargetRole | "">((task?.target_role as TaskTargetRole | null | undefined) ?? "");
+  const [routeAdminId, setRouteAdminId] = useState<string>((task?.route_admin_id as string | null | undefined) ?? "");
+  const [createdForAdmin, setCreatedForAdmin] = useState(Boolean(task?.created_for_admin));
 
   const [assignee, setAssignee] = useState<Profile | null>(task?.assignee ?? null);
   const [search, setSearch] = useState("");
@@ -103,6 +132,20 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
     [chats, chatId],
   );
 
+  const selectedLocationMembers = useMemo(
+    () => routing.members.filter((member) => member.location_id === locationId),
+    [routing.members, locationId],
+  );
+  const selectedLocationAdmins = useMemo(
+    () => selectedLocationMembers.filter((member) => ["owner", "admin", "manager"].includes(member.role)),
+    [selectedLocationMembers],
+  );
+
+  const selectedLocationName = useMemo(
+    () => routing.locations.find((location) => location.id === locationId)?.name ?? null,
+    [routing.locations, locationId],
+  );
+
   const handleSubmit = async () => {
     if (!title.trim()) { setError("Укажите название задачи"); return; }
     setSubmitting(true);
@@ -112,32 +155,82 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
         ? new Date(dueAt).toISOString()
         : null;
 
+    const effectiveAssigneeId = assignmentScope === "user" ? assignee?.id ?? null : null;
+    const useRoutingRpc = routing.available;
+
+    if (createdForAdmin && !locationId) {
+      setSubmitting(false);
+      setError("Нужно выбрать локацию для задачи администратору.");
+      return;
+    }
+
+    if (assignmentScope !== "user" && assignee) {
+      setAssignee(null);
+    }
+
     if (isEdit && task) {
-      const { error: rpcError } = await supabase.rpc("task_update", {
+      const { error: rpcError } = useRoutingRpc
+        ? await supabase.rpc("task_update_v3", {
+            p_task_id: task.id,
+            p_title: title.trim(),
+            p_description: description.trim() || null,
+            p_priority: priority,
+            p_due_at: due_iso,
+            p_assignee_id: effectiveAssigneeId,
+            p_chat_id: chatId,
+            p_visibility: visibility,
+            p_assignment_scope: assignmentScope,
+            p_location_id: locationId || null,
+            p_target_role: targetRole || null,
+            p_route_admin_id: routeAdminId || null,
+            p_created_for_admin: createdForAdmin,
+          })
+        : await supabase.rpc("task_update", {
         p_task_id: task.id,
         p_title: title.trim(),
         p_description: description.trim() || null,
         p_priority: priority,
         p_due_at: due_iso,
-        p_assignee_id: assignee?.id ?? null,
+        p_assignee_id: effectiveAssigneeId,
         p_chat_id: chatId,
       });
       setSubmitting(false);
-      if (rpcError) { setError(mapPgError(rpcError)); return; }
+      if (rpcError) {
+        setError(useRoutingRpc ? mapLocationRoutingError(rpcError) : mapPgError(rpcError));
+        return;
+      }
       onDone(task.id);
       return;
     }
 
-    const { data, error: rpcError } = await supabase.rpc("task_create", {
-      p_title: title.trim(),
-      p_description: description.trim() || null,
-      p_assignee_id: assignee?.id ?? null,
-      p_priority: priority,
-      p_due_at: due_iso,
-      p_chat_id: chatId,
-    });
+    const { data, error: rpcError } = useRoutingRpc
+      ? await supabase.rpc("task_create_v3", {
+          p_title: title.trim(),
+          p_description: description.trim() || null,
+          p_assignee_id: effectiveAssigneeId,
+          p_priority: priority,
+          p_due_at: due_iso,
+          p_chat_id: chatId,
+          p_visibility: visibility,
+          p_assignment_scope: assignmentScope,
+          p_location_id: locationId || null,
+          p_target_role: targetRole || null,
+          p_route_admin_id: routeAdminId || null,
+          p_created_for_admin: createdForAdmin,
+        })
+      : await supabase.rpc("task_create", {
+          p_title: title.trim(),
+          p_description: description.trim() || null,
+          p_assignee_id: effectiveAssigneeId,
+          p_priority: priority,
+          p_due_at: due_iso,
+          p_chat_id: chatId,
+        });
     setSubmitting(false);
-    if (rpcError) { setError(mapPgError(rpcError)); return; }
+    if (rpcError) {
+      setError(useRoutingRpc ? mapLocationRoutingError(rpcError) : mapPgError(rpcError));
+      return;
+    }
     onDone(data as string);
   };
 
@@ -216,6 +309,130 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
           onChange={(e) => setDueAt(e.target.value)}
           className="w-full rounded-xl px-3 py-2 text-sm outline-none bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)] transition-all"
         />
+      </div>
+
+      <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3">
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-cyan)]">
+              Маршрутизация по локации
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+              Выберите клуб, роль получателя и администратора, через которого проходит задача.
+            </p>
+          </div>
+          {routing.loading && <KubIcon name="spinner" size={14} tone="accent" className="shrink-0" />}
+        </div>
+
+        {routing.available ? (
+          <div className="grid gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
+                <span className="mb-1.5 block uppercase tracking-wide">Локация</span>
+                <select
+                  value={locationId}
+                  onChange={(event) => {
+                    setLocationId(event.target.value);
+                    setRouteAdminId("");
+                  }}
+                  className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                >
+                  <option value="">Без локации</option>
+                  {routing.locations.map((location) => (
+                    <option key={location.id} value={location.id}>
+                      {location.name}{location.is_active ? "" : " · архив"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
+                <span className="mb-1.5 block uppercase tracking-wide">Получатель</span>
+                <select
+                  value={targetRole}
+                  onChange={(event) => setTargetRole(event.target.value as TaskTargetRole | "")}
+                  className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                >
+                  <option value="">По текущему назначению</option>
+                  {(Object.keys(TASK_TARGET_ROLE_LABEL) as TaskTargetRole[]).map((role) => (
+                    <option key={role} value={role}>{TASK_TARGET_ROLE_LABEL[role]}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
+                <span className="mb-1.5 block uppercase tracking-wide">Видимость</span>
+                <select
+                  value={visibility}
+                  onChange={(event) => setVisibility(event.target.value as TaskVisibility)}
+                  className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                >
+                  {(Object.keys(TASK_VISIBILITY_META) as TaskVisibility[]).map((value) => (
+                    <option key={value} value={value}>{TASK_VISIBILITY_META[value].label}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
+                <span className="mb-1.5 block uppercase tracking-wide">Тип назначения</span>
+                <select
+                  value={assignmentScope}
+                  onChange={(event) => {
+                    const next = event.target.value as TaskAssignmentScope;
+                    setAssignmentScope(next);
+                    if (next !== "user") setAssignee(null);
+                  }}
+                  className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                >
+                  {(Object.keys(TASK_ASSIGNMENT_SCOPE_META) as TaskAssignmentScope[]).map((value) => (
+                    <option key={value} value={value}>{TASK_ASSIGNMENT_SCOPE_META[value].label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
+              <span className="mb-1.5 block uppercase tracking-wide">Администратор клуба</span>
+              <select
+                value={routeAdminId}
+                onChange={(event) => setRouteAdminId(event.target.value)}
+                disabled={!locationId || selectedLocationAdmins.length === 0}
+                className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] disabled:opacity-50"
+              >
+                <option value="">Не выбран</option>
+                {selectedLocationAdmins.map((member) => (
+                  <option key={member.user_id} value={member.user_id}>
+                    {getPersonName(member.profile, "Пользователь")} · {LOCATION_ROLE_LABEL[member.role]}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex items-start gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-sm text-[color:var(--kub-text)]">
+              <input
+                type="checkbox"
+                checked={createdForAdmin}
+                onChange={(event) => {
+                  setCreatedForAdmin(event.target.checked);
+                  if (event.target.checked && !targetRole) setTargetRole("admin");
+                }}
+                className="mt-0.5 h-4 w-4 accent-[var(--kub-cyan)]"
+              />
+              <span className="min-w-0">
+                <span className="block font-semibold">Задача для администратора</span>
+                <span className="block text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                  Обычные работники не увидят эту задачу. {selectedLocationName ? `Локация: ${selectedLocationName}.` : "Выберите локацию."}
+                </span>
+              </span>
+            </label>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+            {routing.error ?? LOCATION_ROUTING_REQUIRED_MESSAGE} Старое создание задач продолжит работать без этих полей.
+          </div>
+        )}
       </div>
 
       <div>
@@ -305,7 +522,11 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
         <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-cyan)]">
           Исполнитель
         </label>
-        {assignee ? (
+        {assignmentScope !== "user" ? (
+          <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+            Для задач из пула конкретный исполнитель не назначается сразу. Работник возьмёт задачу в работу сам.
+          </div>
+        ) : assignee ? (
           <div className="flex items-center gap-3 rounded-xl px-3 py-2 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
             <UserAvatar user={assignee} size="sm" />
             <div className="min-w-0 flex-1">
@@ -403,4 +624,8 @@ function formatChatContext(chat: ChatOption, fallback: string): string {
     .slice(0, 3)
     .join(", ");
   return names || fallback;
+}
+
+function getPersonName(person: Profile | null | undefined, fallback: string): string {
+  return person?.full_name?.trim() || person?.username?.trim() || fallback;
 }

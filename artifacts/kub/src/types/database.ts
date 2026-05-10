@@ -8,6 +8,7 @@ export type Json =
 
 export type AppRole = 'admin' | 'manager' | 'user'
 export type ChatMemberRole = 'owner' | 'admin' | 'member'
+export type LocationRole = 'owner' | 'admin' | 'manager' | 'staff'
 export type FolderScope = 'personal' | 'shared' | 'system'
 export type TaskStatus =
   | 'new'
@@ -21,6 +22,7 @@ export type TaskStatus =
 export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent'
 export type TaskVisibility = 'staff' | 'private' | 'chat'
 export type TaskAssignmentScope = 'user' | 'manager_pool' | 'staff_pool'
+export type TaskTargetRole = 'staff' | 'admin' | 'manager' | 'owner'
 export type TaskEventKind =
   | 'create'
   | 'assign'
@@ -72,6 +74,65 @@ export interface Database {
           updated_at?: string
         }
         Relationships: []
+      }
+      locations: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          address: string | null
+          is_active: boolean
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "locations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      location_members: {
+        Row: {
+          location_id: string
+          user_id: string
+          role: LocationRole
+          primary_admin_id: string | null
+          is_primary: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "location_members_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "location_members_primary_admin_id_fkey"
+            columns: ["primary_admin_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "location_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       // Phone numbers live HERE, NOT on `profiles`, so RLS can hide
       // them from non-staff readers. SELECT is granted only to the
@@ -628,6 +689,10 @@ export interface Database {
           updated_at: string
           visibility: TaskVisibility
           assignment_scope: TaskAssignmentScope
+          location_id: string | null
+          target_role: TaskTargetRole | null
+          route_admin_id: string | null
+          created_for_admin: boolean
         }
         Insert: never
         Update: never
@@ -651,6 +716,20 @@ export interface Database {
             columns: ["chat_id"]
             isOneToOne: false
             referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_route_admin_id_fkey"
+            columns: ["route_admin_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           }
         ]
@@ -728,6 +807,23 @@ export interface Database {
         }
         Returns: string
       }
+      task_create_v3: {
+        Args: {
+          p_title: string
+          p_description?: string | null
+          p_assignee_id?: string | null
+          p_priority?: TaskPriority
+          p_due_at?: string | null
+          p_chat_id?: string | null
+          p_visibility?: TaskVisibility
+          p_assignment_scope?: TaskAssignmentScope
+          p_location_id?: string | null
+          p_target_role?: TaskTargetRole | null
+          p_route_admin_id?: string | null
+          p_created_for_admin?: boolean
+        }
+        Returns: string
+      }
       task_assign: {
         Args: { p_task_id: string; p_assignee_id: string }
         Returns: void
@@ -792,6 +888,59 @@ export interface Database {
           p_visibility: TaskVisibility
           p_assignment_scope: TaskAssignmentScope
         }
+        Returns: void
+      }
+      task_update_v3: {
+        Args: {
+          p_task_id: string
+          p_title: string
+          p_description: string | null
+          p_priority: TaskPriority
+          p_due_at: string | null
+          p_assignee_id: string | null
+          p_chat_id: string | null
+          p_visibility: TaskVisibility
+          p_assignment_scope: TaskAssignmentScope
+          p_location_id?: string | null
+          p_target_role?: TaskTargetRole | null
+          p_route_admin_id?: string | null
+          p_created_for_admin?: boolean
+        }
+        Returns: void
+      }
+      location_create: {
+        Args: { p_name: string; p_description?: string | null; p_address?: string | null }
+        Returns: string
+      }
+      location_update: {
+        Args: {
+          p_location_id: string
+          p_name: string
+          p_description?: string | null
+          p_address?: string | null
+          p_is_active?: boolean
+        }
+        Returns: void
+      }
+      location_archive: {
+        Args: { p_location_id: string }
+        Returns: void
+      }
+      location_member_assign: {
+        Args: {
+          p_location_id: string
+          p_user_id: string
+          p_role: LocationRole
+          p_primary_admin_id?: string | null
+        }
+        Returns: void
+      }
+      location_member_remove: {
+        Args: { p_location_id: string; p_user_id: string }
+        Returns: void
+      }
+      location_member_set_primary_admin: {
+        Args: { p_location_id: string; p_user_id: string; p_admin_id: string }
         Returns: void
       }
       // Mirrors `auth.users.phone_confirmed_at` into
@@ -893,6 +1042,8 @@ export interface Database {
 }
 
 export type Profile = Database['public']['Tables']['profiles']['Row']
+export type Location = Database['public']['Tables']['locations']['Row']
+export type LocationMember = Database['public']['Tables']['location_members']['Row']
 export type Chat = Database['public']['Tables']['chats']['Row']
 export type ChatMember = Database['public']['Tables']['chat_members']['Row']
 export type GroupInvite = Database['public']['Tables']['group_invites']['Row']
@@ -939,6 +1090,8 @@ export interface TaskWithPeople extends Task {
   assignee?: Profile | null
   creator?: Profile | null
   chat?: Chat | null
+  location?: Location | null
+  route_admin?: Profile | null
 }
 
 export interface TaskEventWithActor extends TaskEvent {

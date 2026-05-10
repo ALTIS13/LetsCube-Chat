@@ -199,6 +199,23 @@ Auth logs показывают успешные login/token/verify events и с�
 
 Frontend task UI можно выравнивать под новые task columns/RPC отдельным подтвержденным этапом; источник прав остается RLS/RPC.
 
+# Locations / Task Routing Snapshot
+
+2026-05-10 read-only Supabase MCP check for the locations/task-routing stage:
+
+- `public.locations` отсутствует.
+- `public.location_members` отсутствует.
+- `public.tasks` пока содержит только текущие task-поля: `visibility` и `assignment_scope` уже есть, но `location_id`, `target_role`, `route_admin_id`, `created_for_admin` отсутствуют.
+- Текущие task RPC: `task_create`, `task_create_v2`, `task_update`, `task_update_v2` и transition RPC остаются рабочими.
+- Текущая task RLS использует `_task_visible_to_current_user(...)`; она ещё не учитывает локации, primary admin или admin-only задачи.
+- Текущие task notification triggers уведомляют прямого `assignee_id` и status transitions; location-aware fan-out ещё требует SQL.
+
+Новый SQL не применялся автоматически. Proposal создан в:
+
+- `.migration-backup/supabase/migrations/20260513_locations_task_routing.sql`
+
+Frontend должен работать без этой migration: раздел `Локации` показывает friendly disabled state, а существующее создание/обновление задач продолжает использовать старые RPC без routing-полей.
+
 ## 2026-05-09 Notifications And Group Invites State
 
 Read-only Supabase MCP sync for project `nhogbeojfnbjcfipitrh` confirmed the current production-like schema before the notifications redesign:

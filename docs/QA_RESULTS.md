@@ -377,3 +377,11 @@ Recurring tasks roadmap note:
 - Voice recording now uses the staged attachment model: stopping the recorder creates a local `voice` preview item with an object URL, duration and stable `clientMessageId`; upload and message insert still happen only after Send.
 - Recorded voice is sent as the existing `audio` message type through the same media bucket and `sendMediaMessage` DB-ack path. Typed text with a staged voice is sent as a separate text message first, so the voice bubble keeps the existing voice/audio rendering.
 - The recorder and mic self-monitoring remain separate. Voice recording does not enable live monitoring, and deleting/sending a staged voice revokes the local preview URL.
+
+2026-05-10 locations / task routing foundation:
+
+- Read-only Supabase MCP confirmed that `locations`, `location_members` and the routing columns on `tasks` are not yet present in the live schema.
+- New SQL was not applied automatically. Manual proposal: `.migration-backup/supabase/migrations/20260513_locations_task_routing.sql`.
+- Frontend fallback expectation: `/admin/locations` must show “Локации требуют обновления базы данных.” until the migration is applied, while existing task create/update flows continue to work through the current task RPC.
+- After applying the migration manually, QA should cover location creation, location member assignment, primary admin routing, owner-to-admin tasks, staff-only visibility, location filters and task notifications.
+- Live QA should use the Codex/QA browser session or QA credentials from secure environment; do not rely on user mouse/manual browser.

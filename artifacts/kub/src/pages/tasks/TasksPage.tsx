@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useAppStore } from "@/store/app.store";
 import { useIsManagerOrAdmin } from "@/hooks/useRole";
+import { useTaskRouting, useTaskRoutingEnabledPreference } from "@/hooks/useTaskRouting";
 import { useTasks, type TasksFilter } from "@/hooks/useTasks";
 import {
   KubButton,
@@ -34,6 +35,8 @@ interface Tab {
 
 type TaskViewMode = "cards" | "list";
 type AssigneeFilter = "all" | "me" | "unassigned" | string;
+type LocationFilter = "all" | "my" | string;
+type RecipientFilter = "all" | "admin" | "staff";
 
 const STAFF_TABS: Tab[] = [
   { id: "mine", label: "Мои", filter: { mine: "assigned" } },
@@ -73,6 +76,10 @@ export function TasksPage() {
     return saved === "list" || saved === "cards" ? saved : "cards";
   });
   const [assigneeFilter, setAssigneeFilter] = useState<AssigneeFilter>("all");
+  const [locationFilter, setLocationFilter] = useState<LocationFilter>("all");
+  const [recipientFilter, setRecipientFilter] = useState<RecipientFilter>("all");
+  const [routingEnabled] = useTaskRoutingEnabledPreference();
+  const routing = useTaskRouting({ enabled: isStaff && routingEnabled, includeMembers: true });
 
   const tabs = STAFF_TABS;
   const [tabId, setTabId] = useState(tabs[0].id);
@@ -113,16 +120,37 @@ export function TasksPage() {
   };
 
   const visibleTasks = useMemo(
-    () => applyClientFilters(tasks, activeTab.id, search, nowMs, currentUser?.id ?? null, assigneeFilter),
-    [tasks, activeTab.id, search, nowMs, currentUser?.id, assigneeFilter],
+    () => applyClientFilters(
+      tasks,
+      activeTab.id,
+      search,
+      nowMs,
+      currentUser?.id ?? null,
+      assigneeFilter,
+      routing.available ? locationFilter : "all",
+      routing.available ? recipientFilter : "all",
+      currentUser?.id ? getMyLocationIds(routing.members, currentUser.id) : new Set<string>(),
+    ),
+    [tasks, activeTab.id, search, nowMs, currentUser?.id, assigneeFilter, routing.available, routing.members, locationFilter, recipientFilter],
   );
   const tabCounts = useMemo(() => {
     const counts: Record<string, number> = {};
+    const myLocationIds = currentUser?.id ? getMyLocationIds(routing.members, currentUser.id) : new Set<string>();
     for (const tab of tabs) {
-      counts[tab.id] = applyClientFilters(tasks, tab.id, "", nowMs, currentUser?.id ?? null, assigneeFilter).length;
+      counts[tab.id] = applyClientFilters(
+        tasks,
+        tab.id,
+        "",
+        nowMs,
+        currentUser?.id ?? null,
+        assigneeFilter,
+        routing.available ? locationFilter : "all",
+        routing.available ? recipientFilter : "all",
+        myLocationIds,
+      ).length;
     }
     return counts;
-  }, [tabs, tasks, nowMs, currentUser?.id, assigneeFilter]);
+  }, [tabs, tasks, nowMs, currentUser?.id, assigneeFilter, routing.available, routing.members, locationFilter, recipientFilter]);
 
   const assigneeOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -290,6 +318,36 @@ export function TasksPage() {
               ))}
             </select>
 
+            {routing.available && (
+              <>
+                <label className="sr-only" htmlFor="task-location-filter">Локация</label>
+                <select
+                  id="task-location-filter"
+                  value={locationFilter}
+                  onChange={(event) => setLocationFilter(event.target.value)}
+                  className="h-9 min-w-0 max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                >
+                  <option value="all">Все локации</option>
+                  <option value="my">Мои локации</option>
+                  {routing.locations.map((location) => (
+                    <option key={location.id} value={location.id}>{location.name}</option>
+                  ))}
+                </select>
+
+                <label className="sr-only" htmlFor="task-recipient-filter">Получатель</label>
+                <select
+                  id="task-recipient-filter"
+                  value={recipientFilter}
+                  onChange={(event) => setRecipientFilter(event.target.value as RecipientFilter)}
+                  className="h-9 min-w-0 max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                >
+                  <option value="all">Все получатели</option>
+                  <option value="staff">Для работников</option>
+                  <option value="admin">Для админов</option>
+                </select>
+              </>
+            )}
+
             <div className="inline-flex h-9 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-0.5">
               <button
                 type="button"
@@ -449,6 +507,9 @@ function applyClientFilters(
   nowMs: number,
   userId: string | null,
   assigneeFilter: AssigneeFilter,
+  locationFilter: LocationFilter,
+  recipientFilter: RecipientFilter,
+  myLocationIds: Set<string>,
 ): TaskWithPeople[] {
   const query = normalizeSearch(search);
   return tasks.filter((task) => {
@@ -468,6 +529,16 @@ function applyClientFilters(
     if (assigneeFilter !== "all" && assigneeFilter !== "me" && assigneeFilter !== "unassigned" && task.assignee_id !== assigneeFilter) {
       return false;
     }
+    if (locationFilter !== "all") {
+      const taskLocationId = task.location_id ?? null;
+      if (locationFilter === "my") {
+        if (!taskLocationId || !myLocationIds.has(taskLocationId)) return false;
+      } else if (taskLocationId !== locationFilter) {
+        return false;
+      }
+    }
+    if (recipientFilter === "admin" && !isAdminRoutedTask(task)) return false;
+    if (recipientFilter === "staff" && !isStaffRoutedTask(task)) return false;
     if (tabId === "urgent") {
       const deadline = getTaskDeadlineState(task, nowMs);
       if (!deadline.isOverdue && !deadline.isDueSoon) return false;
@@ -499,4 +570,27 @@ function applyClientFilters(
 
 function normalizeSearch(value: string): string {
   return value.trim().toLocaleLowerCase("ru-RU");
+}
+
+function getMyLocationIds(
+  members: Array<{ user_id: string; location_id: string }>,
+  userId: string,
+): Set<string> {
+  return new Set(members.filter((member) => member.user_id === userId).map((member) => member.location_id));
+}
+
+function isAdminRoutedTask(task: TaskWithPeople): boolean {
+  return Boolean(
+    task.created_for_admin ||
+    task.target_role === "admin" ||
+    task.target_role === "manager" ||
+    task.target_role === "owner",
+  );
+}
+
+function isStaffRoutedTask(task: TaskWithPeople): boolean {
+  return Boolean(
+    !task.created_for_admin &&
+    (task.target_role === "staff" || task.assignment_scope === "staff_pool"),
+  );
 }

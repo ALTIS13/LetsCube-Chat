@@ -154,6 +154,17 @@ Important behavior:
 - `tasks` and `task_events` select policies use `_task_visible_to_current_user(...)`.
 - `tasks` and `task_events` use replica identity FULL for realtime updates.
 
+Planned locations/task-routing extension, proposal only as of 2026-05-10:
+
+- New table `locations`: club/location catalog with name, optional description/address, active flag and creator.
+- New table `location_members`: per-location user role (`owner`, `admin`, `manager`, `staff`), optional `primary_admin_id` for staff routing, and membership timestamps.
+- Planned `tasks` columns: `location_id`, `target_role`, `route_admin_id`, `created_for_admin`.
+- Planned RPC: `location_create`, `location_update`, `location_archive`, `location_member_assign`, `location_member_remove`, `location_member_set_primary_admin`, `task_create_v3`, `task_update_v3`.
+- Planned RLS: global admin sees all; location admin sees own location/tasks/workers; staff sees personal tasks, own-location staff pool tasks and chat-visible tasks, but not `created_for_admin` tasks.
+- Planned notifications: routed staff/admin task notifications should use location membership and must not notify staff about owner-to-admin tasks.
+
+SQL proposal: `.migration-backup/supabase/migrations/20260513_locations_task_routing.sql`. It is not applied automatically.
+
 ### Admin / Sanctions / Audit
 
 `bans`:
