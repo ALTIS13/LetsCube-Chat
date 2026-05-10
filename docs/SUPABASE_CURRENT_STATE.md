@@ -224,6 +224,7 @@ Frontend должен работать без этой migration: раздел `
 - Dynamic roles tables пока отсутствуют: `public.roles`, `public.permissions`, `public.role_permissions`, `public.user_global_roles` не найдены; `location_members.role_id` ещё отсутствует.
 - Новый SQL не применялся автоматически. Manual proposal: `.migration-backup/supabase/migrations/20260514_dynamic_roles_permissions.sql`.
 - Frontend fallback expectation: `/admin/roles` показывает “Роли и права требуют обновления базы данных.” до применения migration, profile/mini-profile остаются на legacy role labels, locations/tasks продолжают работать.
+- 2026-05-10 activation follow-up: read-only MCP against the live app project ref still does not expose the dynamic role tables/RPC, so the role migration is not confirmed on that project. Frontend detection now auto-probes instead of staying stuck in a cached disabled state after the migration is later applied.
 
 ## 2026-05-09 Notifications And Group Invites State
 

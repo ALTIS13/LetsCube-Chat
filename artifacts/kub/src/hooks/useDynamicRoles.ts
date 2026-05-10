@@ -8,6 +8,7 @@ import {
   ROLES_PERMISSIONS_STORAGE_EVENT,
   getRolesPermissionsEnabled,
   isRolesPermissionsMissingError,
+  isRolesPermissionsPermissionError,
   mapRolesPermissionsError,
   setRolesPermissionsEnabled,
 } from "@/lib/rolePermissions";
@@ -90,6 +91,8 @@ export function useDynamicRoles(options: UseDynamicRolesOptions = {}): DynamicRo
       if (isRolesPermissionsMissingError(firstError)) {
         setError(ROLES_PERMISSIONS_REQUIRED_MESSAGE);
         setRolesPermissionsEnabled(false);
+      } else if (isRolesPermissionsPermissionError(firstError)) {
+        setError("Недостаточно прав для управления ролями.");
       } else {
         setError(mapRolesPermissionsError(firstError));
         if (import.meta.env.DEV) console.warn("[dynamic-roles] load failed", firstError);

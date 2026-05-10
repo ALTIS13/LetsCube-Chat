@@ -11,6 +11,7 @@ import {
   ROLES_PERMISSIONS_REQUIRED_MESSAGE,
   getPermissionLabel,
   getRoleLabel,
+  hasRolesPermissionsPreference,
   mapRolesPermissionsError,
 } from "@/lib/rolePermissions";
 import type { DynamicRole, Permission, Profile, RoleScope } from "@/types/database";
@@ -23,6 +24,7 @@ export function RolesPermissionsTab() {
   const supabase = createClient();
   const [rolesProbeEnabled, setRolesProbeEnabled] = useDynamicRolesEnabledPreference();
   const rolesState = useDynamicRoles({ enabled: rolesProbeEnabled, includeAssignments: true });
+  const [autoProbeAttempted, setAutoProbeAttempted] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [createKey, setCreateKey] = useState("");
@@ -75,6 +77,12 @@ export function RolesPermissionsTab() {
         || getRoleLabel(a.role).localeCompare(getRoleLabel(b.role), "ru-RU"),
       );
   }, [profiles, rolesState.roles, rolesState.userGlobalRoles]);
+
+  useEffect(() => {
+    if (autoProbeAttempted) return;
+    setAutoProbeAttempted(true);
+    if (!rolesProbeEnabled && !hasRolesPermissionsPreference()) setRolesProbeEnabled(true);
+  }, [autoProbeAttempted, rolesProbeEnabled, setRolesProbeEnabled]);
 
   useEffect(() => {
     if (!selectedRole) return;
@@ -232,6 +240,10 @@ export function RolesPermissionsTab() {
   }
 
   if (!rolesProbeEnabled || !rolesState.available) {
+    const missingSchema = !rolesProbeEnabled || rolesState.error === ROLES_PERMISSIONS_REQUIRED_MESSAGE;
+    const panelMessage = missingSchema
+      ? ROLES_PERMISSIONS_REQUIRED_MESSAGE
+      : rolesState.error ?? "Не удалось загрузить роли. Попробуйте ещё раз.";
     return (
       <KubPanel className="space-y-3">
         <div className="flex items-start gap-3">
@@ -241,11 +253,12 @@ export function RolesPermissionsTab() {
           <div className="min-w-0">
             <h2 className="text-lg font-bold text-[color:var(--kub-text)]">Роли и права</h2>
             <p className="mt-1 text-sm leading-relaxed text-[color:var(--kub-muted)]">
-              {rolesProbeEnabled ? rolesState.error ?? ROLES_PERMISSIONS_REQUIRED_MESSAGE : ROLES_PERMISSIONS_REQUIRED_MESSAGE}
+              {panelMessage}
             </p>
             <p className="mt-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
-              До применения migration приложение продолжает использовать legacy роли admin / manager / user,
-              а локации и задачи работают по текущей модели.
+              {missingSchema
+                ? "До применения migration приложение продолжает использовать legacy роли admin / manager / user, а локации и задачи работают по текущей модели."
+                : "Динамические роли уже найдены или проверяются, но текущий пользователь не может загрузить полный набор данных. Существующие локации и задачи продолжают работать."}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <KubButton

@@ -123,6 +123,18 @@ export function isRolesPermissionsMissingError(error: unknown): boolean {
   return false;
 }
 
+export function isRolesPermissionsPermissionError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const err = error as ErrorLike;
+  const code = typeof err.code === "string" ? err.code.toUpperCase() : "";
+  const text = [err.message, err.details, err.hint]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+
+  return code === "42501" || code === "PGRST301" || text.includes("permission denied") || text.includes("insufficient");
+}
+
 export function mapRolesPermissionsError(error: unknown, fallback = "Не удалось выполнить действие. Попробуйте ещё раз."): string {
   if (isRolesPermissionsMissingError(error)) return ROLES_PERMISSIONS_REQUIRED_MESSAGE;
   const details = readErrorDetails(error);
@@ -137,7 +149,7 @@ export function mapRolesPermissionsError(error: unknown, fallback = "Не уда
   if (text.includes("already") || text.includes("duplicate") || text.includes("unique")) {
     return "Пользователь уже имеет эту роль.";
   }
-  if (text.includes("permission") || text.includes("42501") || text.includes("insufficient")) {
+  if (isRolesPermissionsPermissionError(error) || text.includes("permission") || text.includes("42501") || text.includes("insufficient")) {
     return "Недостаточно прав.";
   }
   if (text.includes("role_not_found")) return "Роль недоступна.";
@@ -152,9 +164,19 @@ export function mapRolesPermissionsError(error: unknown, fallback = "Не уда
 }
 
 export function getRolesPermissionsEnabled(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const value = window.localStorage.getItem(ROLES_PERMISSIONS_STORAGE_KEY);
+    return value !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function hasRolesPermissionsPreference(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    return window.localStorage.getItem(ROLES_PERMISSIONS_STORAGE_KEY) === "1";
+    return window.localStorage.getItem(ROLES_PERMISSIONS_STORAGE_KEY) !== null;
   } catch {
     return false;
   }
@@ -164,7 +186,7 @@ export function setRolesPermissionsEnabled(enabled: boolean): void {
   if (typeof window === "undefined") return;
   try {
     if (enabled) window.localStorage.setItem(ROLES_PERMISSIONS_STORAGE_KEY, "1");
-    else window.localStorage.removeItem(ROLES_PERMISSIONS_STORAGE_KEY);
+    else window.localStorage.setItem(ROLES_PERMISSIONS_STORAGE_KEY, "0");
     window.dispatchEvent(new Event(ROLES_PERMISSIONS_STORAGE_EVENT));
   } catch {
     // LocalStorage may be unavailable in hardened browser contexts.

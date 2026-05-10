@@ -395,6 +395,7 @@ Frontend behavior before applying this migration:
 - `/admin/roles` shows a friendly disabled state.
 - Profile and mini-profile role display falls back to `profiles.role` and location text roles.
 - Existing locations/task routing and invites remain on their current permissions.
+- 2026-05-10 activation follow-up: the live project ref still did not expose the dynamic role tables/RPC through read-only MCP. The frontend now probes the schema by default and stores an explicit local disabled state only after a missing-schema response, so old fallback cache does not block the UI after the migration is applied later.
 
 ## Common Schema Checks
 

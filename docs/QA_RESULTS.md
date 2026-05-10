@@ -394,3 +394,9 @@ Recurring tasks roadmap note:
 - Frontend fallback expectation: `/admin/roles` must show “Роли и права требуют обновления базы данных.” until the migration is applied. Existing profiles, locations and tasks must keep working through legacy `profiles.role` / `location_members.role`.
 - After applying the migration manually, QA should cover custom role create/edit, permission assignment, global role assignment/removal, location dynamic role assignment, profile/mini-profile role display, last owner/tech_admin protection, admin-only task visibility and group invite permissions.
 - Authenticated local Playwright QA covered `/admin/roles` fallback at desktop and mobile widths, `/admin/locations` after the applied routing migration, admin user profile role summary, private chat profile role summary, and the main chat shell. With the dynamic roles probe disabled while migration is absent, normal fallback pages produced no console errors.
+
+2026-05-10 roles / permissions activation follow-up:
+
+- Read-only Supabase MCP against the live app project ref `nhogbeojfnbjcfipitrh` did not find `public.roles`, `public.permissions`, `public.role_permissions`, `public.user_global_roles`, `location_members.role_id` or the role-management RPCs yet, so the applied dynamic roles migration is not confirmed on the live project.
+- Frontend schema detection no longer stays disabled just because an older browser session cached the pre-migration fallback. Dynamic roles probing is enabled by default, records an explicit local `0` only after a missing-schema response, and `/admin/roles` auto-probes once on open.
+- Fallback states now separate missing schema from permission denial: missing migration shows the database-update message, while protected/denied access shows a friendly insufficient-permissions state.
