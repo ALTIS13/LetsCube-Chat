@@ -68,6 +68,7 @@ export function MessageInput({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const hasText = text.trim().length > 0;
   const hasAttachments = attachments.length > 0;
+  const hasStagedVoice = attachments.some((item) => item.kind === "voice");
   const isAttachmentBusy = attachments.some((item) => item.status === "uploading" || item.status === "sending");
   const editingMessage = useAppStore((s) => s.editingMessage);
   const setEditingMessage = useAppStore((s) => s.setEditingMessage);
@@ -262,6 +263,15 @@ export function MessageInput({
     { icon: "image",   label: "Фото или видео", tone: "var(--kub-cyan)",   action: () => photoInputRef.current?.click() },
     { icon: "file",    label: "Файл",            tone: "var(--kub-pink)",   action: () => fileInputRef.current?.click() },
     { icon: "camera",  label: "Камера",          tone: "var(--kub-danger)", action: () => cameraInputRef.current?.click() },
+    { icon: "voice",   label: "Голосовое",       tone: "var(--kub-cyan)",   action: () => {
+      if (hasStagedVoice) {
+        showAppAlert("Удалите текущую запись или используйте «Перезаписать».", "Голосовое сообщение");
+        return;
+      }
+      setShowVoice(true);
+      setShowAttach(false);
+      setShowEmoji(false);
+    } },
     { icon: "mapPin",  label: "Местоположение",  tone: "var(--kub-online)", action: handleLocation },
   ];
 
@@ -357,6 +367,12 @@ export function MessageInput({
             onRemove={onRemoveAttachment}
             onRetry={onRetryAttachment}
             onCancel={onCancelAttachment}
+            onRerecord={(attachmentId) => {
+              onRemoveAttachment?.(attachmentId);
+              setShowVoice(true);
+              setShowAttach(false);
+              setShowEmoji(false);
+            }}
           />
         )}
 
@@ -429,11 +445,13 @@ function AttachmentTray({
   onRemove,
   onRetry,
   onCancel,
+  onRerecord,
 }: {
   attachments: StagedAttachment[];
   onRemove?: (attachmentId: string) => void;
   onRetry?: (attachmentId: string) => void;
   onCancel?: (attachmentId: string) => void;
+  onRerecord?: (attachmentId: string) => void;
 }) {
   return (
     <div className="mb-2 rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 py-2">
@@ -441,30 +459,37 @@ function AttachmentTray({
         {attachments.map((attachment) => {
           const busy = attachment.status === "uploading" || attachment.status === "sending";
           const failed = attachment.status === "failed";
+          const isVoice = attachment.kind === "voice";
           return (
             <div
               key={attachment.id}
-              className="relative flex min-w-[210px] max-w-[260px] shrink-0 items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-2"
+              className={cn(
+                "relative flex min-w-[210px] shrink-0 items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-2",
+                isVoice ? "max-w-[320px]" : "max-w-[260px]"
+              )}
             >
-              <AttachmentThumb attachment={attachment} />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-xs font-medium text-[color:var(--kub-text)]">
-                  {attachment.name}
-                </div>
-                <div className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] text-[color:var(--kub-muted)]">
-                  <span className="shrink-0">{formatAttachmentSize(attachment.size)}</span>
-                  <span className="shrink-0">·</span>
-                  <span className={cn("truncate", failed && "text-[color:var(--kub-danger)]")}>
-                    {attachment.error ?? attachmentStatusLabel(attachment.status)}
-                  </span>
-                </div>
-                {busy && (
-                  <div className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--kub-surface-3)]">
-                    <div className="h-full w-2/3 animate-pulse rounded-full bg-[var(--kub-cyan)]" />
+              {isVoice ? (
+                <VoiceAttachmentPreview attachment={attachment} busy={busy} failed={failed} />
+              ) : (
+                <>
+                  <AttachmentThumb attachment={attachment} />
+                  <div className="min-w-0 flex-1">
+                    <AttachmentMeta attachment={attachment} busy={busy} failed={failed} />
                   </div>
-                )}
-              </div>
+                </>
+              )}
               <div className="flex shrink-0 items-center gap-1">
+                {isVoice && !busy && onRerecord && (
+                  <button
+                    type="button"
+                    onClick={() => onRerecord(attachment.id)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-3)]"
+                    aria-label="Перезаписать голосовое"
+                    title="Перезаписать"
+                  >
+                    <KubIcon name="microphone" size={15} />
+                  </button>
+                )}
                 {failed && onRetry && (
                   <button
                     type="button"
@@ -513,7 +538,7 @@ function AttachmentThumb({ attachment }: { attachment: StagedAttachment }) {
     ? "image"
     : attachment.kind === "video"
     ? "video"
-    : attachment.kind === "audio"
+    : attachment.kind === "audio" || attachment.kind === "voice"
     ? "voice"
     : "file";
 
@@ -546,10 +571,130 @@ function AttachmentThumb({ attachment }: { attachment: StagedAttachment }) {
   );
 }
 
+function AttachmentMeta({
+  attachment,
+  busy,
+  failed,
+}: {
+  attachment: StagedAttachment;
+  busy: boolean;
+  failed: boolean;
+}) {
+  return (
+    <>
+      <div className="truncate text-xs font-medium text-[color:var(--kub-text)]">
+        {attachment.name}
+      </div>
+      <div className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] text-[color:var(--kub-muted)]">
+        <span className="shrink-0">{formatAttachmentSize(attachment.size)}</span>
+        <span className="shrink-0">·</span>
+        <span className={cn("truncate", failed && "text-[color:var(--kub-danger)]")}>
+          {attachment.error ?? attachmentStatusLabel(attachment.status)}
+        </span>
+      </div>
+      {busy && (
+        <div className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--kub-surface-3)]">
+          <div className="h-full w-2/3 animate-pulse rounded-full bg-[var(--kub-cyan)]" />
+        </div>
+      )}
+    </>
+  );
+}
+
+function VoiceAttachmentPreview({
+  attachment,
+  busy,
+  failed,
+}: {
+  attachment: StagedAttachment;
+  busy: boolean;
+  failed: boolean;
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const durationMs = attachment.durationMs ?? 0;
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const sync = () => {
+      const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : durationMs / 1000;
+      setProgress(duration > 0 ? Math.min(1, audio.currentTime / duration) : 0);
+    };
+    const onPause = () => setPlaying(false);
+    const onPlay = () => setPlaying(true);
+    const finish = () => {
+      setPlaying(false);
+      setProgress(0);
+    };
+    audio.addEventListener("timeupdate", sync);
+    audio.addEventListener("ended", finish);
+    audio.addEventListener("pause", onPause);
+    audio.addEventListener("play", onPlay);
+    return () => {
+      audio.pause();
+      audio.removeEventListener("timeupdate", sync);
+      audio.removeEventListener("ended", finish);
+      audio.removeEventListener("pause", onPause);
+      audio.removeEventListener("play", onPlay);
+    };
+  }, [durationMs, attachment.previewUrl]);
+
+  const toggle = () => {
+    const audio = audioRef.current;
+    if (!audio || !attachment.previewUrl) return;
+    if (playing) {
+      audio.pause();
+      return;
+    }
+    void audio.play().catch(() => setPlaying(false));
+  };
+
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-2">
+      <audio ref={audioRef} src={attachment.previewUrl ?? undefined} preload="metadata" />
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={!attachment.previewUrl || busy}
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+        aria-label={playing ? "Пауза предпросмотра" : "Прослушать голосовое"}
+      >
+        <KubIcon name={playing ? "pause" : "play"} size={16} />
+      </button>
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-xs font-medium text-[color:var(--kub-text)]">Голосовое</span>
+          <span className="shrink-0 text-[11px] tabular-nums text-[color:var(--kub-muted)]">
+            {formatDurationLabel(durationMs)}
+          </span>
+        </div>
+        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--kub-surface-3)]">
+          <div
+            className={cn("h-full rounded-full bg-[var(--kub-cyan)]", busy && "w-2/3 animate-pulse")}
+            style={busy ? undefined : { width: `${Math.round(progress * 100)}%` }}
+          />
+        </div>
+        <div className={cn("mt-1 truncate text-[11px] text-[color:var(--kub-muted)]", failed && "text-[color:var(--kub-danger)]")}>
+          {attachment.error ?? attachmentStatusLabel(attachment.status)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function attachmentStatusLabel(status: StagedAttachment["status"]): string {
   if (status === "uploading") return "Загрузка…";
   if (status === "sending") return "Отправка…";
   if (status === "failed") return "Ошибка";
   if (status === "cancelled") return "Отменено";
   return "Готово к отправке";
+}
+
+function formatDurationLabel(ms: number): string {
+  const totalSec = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(totalSec / 60).toString();
+  const seconds = (totalSec % 60).toString().padStart(2, "0");
+  return `${minutes}:${seconds}`;
 }

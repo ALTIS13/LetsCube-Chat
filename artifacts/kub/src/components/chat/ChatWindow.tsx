@@ -23,7 +23,7 @@ import {
   MAX_STAGED_ATTACHMENTS,
   chatAttachmentUploadPath,
   createStagedAttachment,
-  getAttachmentKind,
+  createStagedVoiceAttachment,
   revokeAttachmentPreview,
   validateStagedAttachment,
   type StagedAttachment,
@@ -176,6 +176,21 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     }
   }, []);
 
+  const stageVoiceRecording = useCallback((blob: Blob, durationMs: number, mimeType: string) => {
+    const error = validateStagedAttachment(new File([blob], "voice.webm", { type: mimeType || blob.type || "audio/webm" }));
+    if (error) {
+      showAppAlert(error, "Голосовое сообщение");
+      return;
+    }
+    const currentVoice = stagedAttachmentsRef.current.find((attachment) => attachment.kind === "voice");
+    if (currentVoice) removeStagedAttachment(currentVoice.id);
+    if (!currentVoice && stagedAttachmentsRef.current.length >= MAX_STAGED_ATTACHMENTS) {
+      showAppAlert(`Можно подготовить не больше ${MAX_STAGED_ATTACHMENTS} вложений за раз.`, "Голосовое сообщение");
+      return;
+    }
+    setStagedAttachments((current) => [...current, createStagedVoiceAttachment(blob, durationMs, mimeType)]);
+  }, [removeStagedAttachment]);
+
   const uploadStagedAttachment = useCallback(async (attachment: StagedAttachment): Promise<StagedAttachmentUpload> => {
     if (!userId) throw new Error("auth");
     const path = chatAttachmentUploadPath(chatId, userId, attachment);
@@ -208,6 +223,13 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     if (!targets.length) return false;
 
     let sentAny = false;
+    const firstTarget = targets[0];
+    if (captionText && firstTarget?.kind === "voice") {
+      const textMessage = await sendMessage(captionText, replyTo?.id ?? undefined);
+      if (!textMessage) return false;
+      sentAny = true;
+    }
+
     for (const attachment of targets) {
       if (cancelledAttachmentIdsRef.current.has(attachment.id)) continue;
       updateStagedAttachment(attachment.id, (current) => ({
@@ -241,9 +263,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         error: null,
       }));
 
-      const content = sentAny || !captionText ? attachment.name : captionText;
+      const content = getStagedAttachmentMessageContent(attachment, sentAny || !captionText ? null : captionText);
       const message = await sendMediaMessage({
-        type: getAttachmentKind(attachment.file),
+        type: getStagedAttachmentMessageType(attachment),
         content,
         mediaUrl: uploaded.publicUrl,
         replyToId: replyTo?.id ?? null,
@@ -266,7 +288,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
     if (sentAny) setReplyTo(null);
     return sentAny;
-  }, [replyTo?.id, removeStagedAttachment, sendMediaMessage, updateStagedAttachment, uploadStagedAttachment, userId]);
+  }, [replyTo?.id, removeStagedAttachment, sendMediaMessage, sendMessage, updateStagedAttachment, uploadStagedAttachment, userId]);
 
   const retryStagedAttachment = useCallback((attachmentId: string) => {
     void sendStagedAttachments("", attachmentId);
@@ -296,39 +318,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       showAppAlert("Запись слишком короткая или пустая.", "Голосовое сообщение");
       return;
     }
-    const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
-    const path = `${userId}/voice_${Date.now()}.${ext}`;
-    const durationSec = Math.max(1, Math.round(durationMs / 1000));
-
-    let uploadedPath: string | null = null;
-    try {
-      const { data, error } = await supabase.storage
-        .from("media")
-        .upload(path, blob, { contentType: mimeType, upsert: false });
-      if (error || !data) {
-        console.error("[voice] upload error:", error);
-        showAppAlert("Не удалось загрузить голосовое сообщение. Проверьте соединение и попробуйте ещё раз.", "Ошибка");
-        return;
-      }
-      uploadedPath = data.path;
-    } catch (err) {
-      console.error("[voice] upload threw:", err);
-      showAppAlert("Не удалось загрузить голосовое сообщение. Проверьте соединение и попробуйте ещё раз.", "Ошибка");
-      return;
-    }
-
-    const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(uploadedPath);
-
-    const mm = Math.floor(durationSec / 60).toString().padStart(2, "0");
-    const ss = (durationSec % 60).toString().padStart(2, "0");
-    await sendMediaMessage({
-      type: "audio",
-      mediaUrl: publicUrl,
-      content: `🎤 Голосовое сообщение (${mm}:${ss})`,
-      replyToId: replyTo?.id ?? null,
-    });
-    setReplyTo(null);
-  }, [replyTo?.id, sendMediaMessage, userId, supabase]);
+    stageVoiceRecording(blob, durationMs, mimeType);
+  }, [stageVoiceRecording, userId]);
 
   const showJumpNotice = useCallback((message: string) => {
     setPinError(message);
@@ -593,4 +584,24 @@ function hasDraggedFiles(dataTransfer: DataTransfer | null): boolean {
 
 function filesFromDataTransfer(dataTransfer: DataTransfer): File[] {
   return Array.from(dataTransfer.files ?? []).filter((file) => file instanceof File);
+}
+
+function getStagedAttachmentMessageType(attachment: StagedAttachment): "image" | "video" | "audio" | "file" {
+  if (attachment.kind === "voice") return "audio";
+  if (attachment.kind === "image" || attachment.kind === "video" || attachment.kind === "audio") return attachment.kind;
+  return "file";
+}
+
+function getStagedAttachmentMessageContent(attachment: StagedAttachment, caption: string | null): string {
+  if (attachment.kind === "voice") {
+    return `🎤 Голосовое сообщение (${formatVoiceDurationLabel(attachment.durationMs ?? 0)})`;
+  }
+  return caption?.trim() || attachment.name;
+}
+
+function formatVoiceDurationLabel(durationMs: number): string {
+  const totalSec = Math.max(1, Math.round(durationMs / 1000));
+  const minutes = Math.floor(totalSec / 60).toString().padStart(2, "0");
+  const seconds = (totalSec % 60).toString().padStart(2, "0");
+  return `${minutes}:${seconds}`;
 }

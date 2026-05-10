@@ -52,7 +52,7 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
       }
       await onSend(result.blob, result.durationMs, result.mimeType);
     } catch (err) {
-      console.error("[voice] send failed:", err);
+      console.error("[voice] stage failed:", err);
       if (mountedRef.current) setSending(false);
     }
   };
@@ -119,9 +119,9 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
         onClick={handleSend}
         disabled={sending}
         className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all hover:brightness-110 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan"
-        aria-label="Отправить голосовое"
+        aria-label="Готово"
       >
-        {sending ? <KubIcon name="spinner" size={18} /> : <KubIcon name="send" size={18} className="ml-0.5" />}
+        {sending ? <KubIcon name="spinner" size={18} /> : <KubIcon name="check" size={18} />}
       </button>
     </div>
   );

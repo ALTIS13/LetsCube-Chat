@@ -371,3 +371,9 @@ Recurring tasks roadmap note:
 - The chat composer/send pipeline is split between `artifacts/kub/src/components/chat/MessageInput.tsx`, `artifacts/kub/src/components/chat/ChatWindow.tsx` and `artifacts/kub/src/hooks/useMessages.ts`.
 - Existing media messages use the single-row `messages.media_url` model, so staged multi-file sends are sent sequentially as separate `image` / `video` / `audio` / `file` messages. No multi-attachment schema migration was added.
 - File picker, drag-and-drop and clipboard files now create local staged attachments first. Upload to the existing `media` storage bucket starts only after Send; successful attachments are removed from the tray only after `sendMediaMessage` returns the DB-acknowledged row through the existing `client_message_id` path.
+
+2026-05-10 staged voice follow-up:
+
+- Voice recording now uses the staged attachment model: stopping the recorder creates a local `voice` preview item with an object URL, duration and stable `clientMessageId`; upload and message insert still happen only after Send.
+- Recorded voice is sent as the existing `audio` message type through the same media bucket and `sendMediaMessage` DB-ack path. Typed text with a staged voice is sent as a separate text message first, so the voice bubble keeps the existing voice/audio rendering.
+- The recorder and mic self-monitoring remain separate. Voice recording does not enable live monitoring, and deleting/sending a staged voice revokes the local preview URL.
