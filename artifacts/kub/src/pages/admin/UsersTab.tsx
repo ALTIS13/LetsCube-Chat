@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
-import type { AppRole, Profile } from "@/types/database";
+import type { AppRole, DynamicRole, Profile } from "@/types/database";
 
 interface ContactRow {
   phone: string | null;
@@ -23,6 +23,8 @@ import { mapPgError, prefixError } from "@/lib/errors";
 import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { ProfileRoleSummary } from "@/components/profile/ProfileRoleSummary";
+import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
+import { getRoleLabel, isCriticalRoleKey } from "@/lib/rolePermissions";
 
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -52,6 +54,8 @@ export function UsersTab() {
   const supabase = createClient();
   const currentUser = useAppStore((s) => s.currentUser);
   const isAdmin = useIsAdmin();
+  const [dynamicRolesEnabled] = useDynamicRolesEnabledPreference();
+  const dynamicRoles = useDynamicRoles({ enabled: dynamicRolesEnabled, includeAssignments: true });
   const [rows, setRows] = useState<Profile[]>([]);
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [contacts, setContacts] = useState<Record<string, ContactRow>>({});
@@ -173,6 +177,23 @@ export function UsersTab() {
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
 
+  const dynamicRolesByUser = useMemo(() => {
+    if (!dynamicRoles.available) return new Map<string, DynamicRole[]>();
+    const roleById = new Map(dynamicRoles.roles.map((role) => [role.id, role]));
+    const byUser = new Map<string, DynamicRole[]>();
+    for (const assignment of dynamicRoles.userGlobalRoles) {
+      const role = roleById.get(assignment.role_id);
+      if (!role || role.scope !== "global" || !role.is_active) continue;
+      const current = byUser.get(assignment.user_id) ?? [];
+      current.push(role);
+      byUser.set(assignment.user_id, current);
+    }
+    for (const roles of byUser.values()) {
+      roles.sort((a, b) => dynamicRoleRank(a.key) - dynamicRoleRank(b.key) || getRoleLabel(a).localeCompare(getRoleLabel(b), "ru-RU"));
+    }
+    return byUser;
+  }, [dynamicRoles.available, dynamicRoles.roles, dynamicRoles.userGlobalRoles]);
+
   const canSetRole = (target: Profile, newRole: AppRole) => {
     if (target.id === currentUser?.id) return false;
     if (target.role === newRole) return false;
@@ -238,12 +259,25 @@ export function UsersTab() {
               const canMakeUser = canSetRole(u, "user");
               const canManageSanctions = canSanction(u);
               const hasRoleActions = canMakeAdmin || canMakeManager || canMakeUser;
+              const dynamicBadges = dynamicRolesByUser.get(u.id) ?? [];
               const badges = (
                 <>
-                  <KubBadge tone={u.role === "admin" ? "pink" : u.role === "manager" ? "cyan" : "muted"}>
-                    {u.role === "admin" && <KubIcon name="crown" size={10} />}
-                    {roleLabel[u.role]}
-                  </KubBadge>
+                  {dynamicBadges.length > 0 ? (
+                    <>
+                      {dynamicBadges.slice(0, 2).map((role) => (
+                        <KubBadge key={role.id} tone={isCriticalRoleKey(role.key) ? "pink" : "cyan"}>
+                          {isCriticalRoleKey(role.key) && <KubIcon name="crown" size={10} />}
+                          {getRoleLabel(role)}
+                        </KubBadge>
+                      ))}
+                      {dynamicBadges.length > 2 && <KubBadge tone="muted">+{dynamicBadges.length - 2}</KubBadge>}
+                    </>
+                  ) : (
+                    <KubBadge tone={u.role === "admin" ? "pink" : u.role === "manager" ? "cyan" : "muted"}>
+                      {u.role === "admin" && <KubIcon name="crown" size={10} />}
+                      {roleLabel[u.role]}
+                    </KubBadge>
+                  )}
                   {st.banned && <KubBadge tone="danger">Бан</KubBadge>}
                   {st.muted && <KubBadge tone="warn">Мьют</KubBadge>}
                 </>
@@ -647,4 +681,13 @@ function PhoneField({ phone, verified }: { phone: string | null; verified: boole
       )}
     </div>
   );
+}
+
+function dynamicRoleRank(key: string): number {
+  if (key === "owner") return 0;
+  if (key === "tech_admin") return 1;
+  if (key === "admin") return 2;
+  if (key === "manager") return 3;
+  if (key === "user") return 4;
+  return 9;
 }

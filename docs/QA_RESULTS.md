@@ -400,3 +400,13 @@ Recurring tasks roadmap note:
 - Read-only Supabase MCP against the live app project ref `nhogbeojfnbjcfipitrh` did not find `public.roles`, `public.permissions`, `public.role_permissions`, `public.user_global_roles`, `location_members.role_id` or the role-management RPCs yet, so the applied dynamic roles migration is not confirmed on the live project.
 - Frontend schema detection no longer stays disabled just because an older browser session cached the pre-migration fallback. Dynamic roles probing is enabled by default, records an explicit local `0` only after a missing-schema response, and `/admin/roles` auto-probes once on open.
 - Fallback states now separate missing schema from permission denial: missing migration shows the database-update message, while protected/denied access shows a friendly insufficient-permissions state.
+
+2026-05-10 dynamic roles / permissions polish:
+
+- User confirmed `.migration-backup/supabase/migrations/20260514_dynamic_roles_permissions.sql` was applied. Read-only Supabase MCP confirmed dynamic role tables, `location_members.role_id`, seeded roles/permissions, helper functions and role-management RPC on project ref `nhogbeojfnbjcfipitrh`.
+- `/admin/roles` was polished for non-technical admins: role-vs-permission helper copy, scope explanations, system-role warnings, friendly permission categories, readable permission labels/descriptions and technical keys moved to secondary text.
+- Dynamic global roles are now considered by admin/manager role hooks, and the admin users list shows dynamic global role labels before legacy `profiles.role` fallback labels.
+- Security review found RLS policies protecting role tables and authenticated-only role-management RPC grants. A grants-hardening proposal was added, not applied automatically: `.migration-backup/supabase/migrations/20260515_dynamic_roles_grants_hardening.sql`.
+- Remaining schema integration risk: `group_invite_create` currently does not enforce seeded dynamic invite permissions such as `chats.invite_any`; invite flow still uses the existing chat admin/member policy.
+- Polish QA found that the current QA admin account can view roles but does not have `roles.manage`; `/admin/roles` now presents a clear read-only state and disables create/edit/permission changes instead of letting a 403 surface after click.
+- Security review also found that `user_assign_global_role` should additionally protect owner/tech_admin assignment and self-escalation for callers that only have `users.assign_roles`. The same proposal file now includes this RPC hardening; SQL was not applied automatically.

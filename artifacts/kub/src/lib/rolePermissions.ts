@@ -11,6 +11,12 @@ export const ROLE_SCOPE_LABEL: Record<RoleScope, string> = {
   chat: "Чат",
 };
 
+export const ROLE_SCOPE_DESCRIPTION: Record<RoleScope, string> = {
+  global: "Глобальная роль действует во всем приложении: пользователи, задачи, клубы, чаты и админ-разделы.",
+  location: "Роль в локации действует только внутри выбранного клуба и не дает доступ ко всем клубам.",
+  chat: "Роль в чате действует только внутри конкретного группового чата.",
+};
+
 export const LEGACY_APP_ROLE_LABEL: Record<AppRole, string> = {
   admin: "Администратор",
   manager: "Менеджер",
@@ -34,13 +40,38 @@ export const SYSTEM_ROLE_LABEL: Record<string, string> = {
 };
 
 export const PERMISSION_CATEGORY_LABEL: Record<string, string> = {
-  system: "Система",
   users: "Пользователи",
+  roles: "Роли и права",
   locations: "Локации",
   tasks: "Задачи",
-  chats: "Чаты",
-  media: "Медиа",
-  folders: "Папки",
+  chats: "Чаты и приглашения",
+  security: "Аудит / безопасность",
+  system: "Система",
+  media: "Система",
+  folders: "Система",
+};
+
+export const PERMISSION_CATEGORY_DESCRIPTION: Record<string, string> = {
+  users: "Просмотр пользователей, карточки профилей и управление аккаунтами.",
+  roles: "Создание ролей, назначение ролей пользователям и настройка набора прав.",
+  locations: "Клубы, сотрудники локаций и основной администратор работника.",
+  tasks: "Создание, назначение и маршрутизация задач по клубам.",
+  chats: "Приглашения, модерация и роли в групповых чатах.",
+  security: "Журнал действий и контроль чувствительных операций.",
+  system: "Технические настройки, общие папки и служебные действия.",
+};
+
+export const PERMISSION_CATEGORY_ORDER = ["users", "roles", "locations", "tasks", "chats", "security", "system"];
+
+const PERMISSION_CATEGORY_BY_KEY: Record<string, string> = {
+  "roles.view": "roles",
+  "roles.manage": "roles",
+  "permissions.manage": "roles",
+  "users.assign_roles": "roles",
+  "audit.view": "security",
+  "system.manage": "system",
+  "folders.manage_shared": "system",
+  "media.moderate": "system",
 };
 
 export const PERMISSION_LABEL: Record<string, string> = {
@@ -65,12 +96,42 @@ export const PERMISSION_LABEL: Record<string, string> = {
   "tasks.view_all_locations": "Просмотр задач всех локаций",
   "tasks.manage_all_locations": "Управление задачами всех локаций",
   "chats.invite": "Приглашение в чаты",
-  "chats.invite_any": "Приглашение вне политики чата",
+  "chats.invite_any": "Приглашение в любые чаты",
   "chats.manage_invites": "Управление приглашениями",
   "chats.moderate": "Модерация чатов",
   "chats.manage_roles": "Управление ролями чата",
   "media.moderate": "Модерация медиа",
   "folders.manage_shared": "Управление общими папками",
+};
+
+export const PERMISSION_DESCRIPTION: Record<string, string> = {
+  "system.manage": "Технические настройки и аварийное обслуживание.",
+  "roles.view": "Открывать раздел ролей и видеть назначенные права.",
+  "roles.manage": "Создавать и редактировать роли.",
+  "permissions.manage": "Менять набор прав у ролей.",
+  "audit.view": "Смотреть журнал действий и расследовать изменения.",
+  "users.view": "Видеть список пользователей и карточки профилей.",
+  "users.manage": "Управлять пользователями, блокировками и ограничениями.",
+  "users.assign_roles": "Назначать глобальные и клубные роли пользователям.",
+  "locations.view": "Видеть доступные клубы и назначения.",
+  "locations.manage": "Создавать и редактировать клубы.",
+  "location_members.view": "Видеть сотрудников и администраторов клубов.",
+  "location_members.manage": "Назначать сотрудников, роли и основного администратора.",
+  "tasks.view": "Видеть задачи в доступной области.",
+  "tasks.create": "Создавать задачи в доступной области.",
+  "tasks.assign": "Назначать задачи пользователям или пулам.",
+  "tasks.manage": "Редактировать и администрировать задачи.",
+  "tasks.view_admin_tasks": "Видеть задачи, созданные для администраторов.",
+  "tasks.manage_admin_tasks": "Создавать и менять задачи для администраторов.",
+  "tasks.view_all_locations": "Видеть задачи всех клубов.",
+  "tasks.manage_all_locations": "Управлять задачами всех клубов.",
+  "chats.invite": "Приглашать пользователей там, где политика чата это разрешает.",
+  "chats.invite_any": "Приглашать пользователей в любые групповые чаты независимо от политики.",
+  "chats.manage_invites": "Отменять приглашения и управлять историей приглашений.",
+  "chats.moderate": "Модерировать групповые чаты.",
+  "chats.manage_roles": "Повышать и понижать роли участников чата.",
+  "media.moderate": "Модерировать пользовательские вложения.",
+  "folders.manage_shared": "Управлять общими папками.",
 };
 
 type ErrorLike = {
@@ -89,6 +150,35 @@ export function getRoleLabel(role: Pick<DynamicRole, "key" | "name"> | string | 
 export function getPermissionLabel(permission: Pick<Permission, "key" | "name"> | string): string {
   if (typeof permission === "string") return PERMISSION_LABEL[permission] ?? permission;
   return permission.name?.trim() || PERMISSION_LABEL[permission.key] || permission.key;
+}
+
+export function getPermissionDescription(permission: Pick<Permission, "key" | "description"> | string): string {
+  if (typeof permission === "string") return PERMISSION_DESCRIPTION[permission] ?? "";
+  return permission.description?.trim() || PERMISSION_DESCRIPTION[permission.key] || "";
+}
+
+export function getPermissionCategory(permission: Pick<Permission, "key" | "category"> | string): string {
+  const key = typeof permission === "string" ? permission : permission.key;
+  const category = typeof permission === "string" ? null : permission.category;
+  return PERMISSION_CATEGORY_BY_KEY[key] ?? normalizePermissionCategory(category);
+}
+
+export function getPermissionCategoryLabel(category: string): string {
+  return PERMISSION_CATEGORY_LABEL[category] ?? category;
+}
+
+export function getRoleScopeDescription(scope: RoleScope): string {
+  return ROLE_SCOPE_DESCRIPTION[scope];
+}
+
+export function isCriticalRoleKey(key: string | null | undefined): boolean {
+  return key === "owner" || key === "tech_admin";
+}
+
+function normalizePermissionCategory(category: string | null | undefined): string {
+  if (category === "users" || category === "locations" || category === "tasks" || category === "chats") return category;
+  if (category === "system") return "system";
+  return "system";
 }
 
 export function isRolesPermissionsMissingError(error: unknown): boolean {

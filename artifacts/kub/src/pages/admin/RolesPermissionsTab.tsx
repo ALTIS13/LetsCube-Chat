@@ -5,13 +5,20 @@ import { createClient } from "@/lib/supabase/client";
 import { KubBadge, KubButton, KubIcon, KubInput, KubPanel } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
+import { useAppStore } from "@/store/app.store";
 import {
-  PERMISSION_CATEGORY_LABEL,
+  PERMISSION_CATEGORY_DESCRIPTION,
+  PERMISSION_CATEGORY_ORDER,
   ROLE_SCOPE_LABEL,
   ROLES_PERMISSIONS_REQUIRED_MESSAGE,
+  getPermissionCategory,
+  getPermissionCategoryLabel,
+  getPermissionDescription,
   getPermissionLabel,
+  getRoleScopeDescription,
   getRoleLabel,
   hasRolesPermissionsPreference,
+  isCriticalRoleKey,
   mapRolesPermissionsError,
 } from "@/lib/rolePermissions";
 import type { DynamicRole, Permission, Profile, RoleScope } from "@/types/database";
@@ -22,6 +29,7 @@ const ROLE_KEY_RE = /^[a-z][a-z0-9_]{1,48}$/;
 
 export function RolesPermissionsTab() {
   const supabase = createClient();
+  const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
   const [rolesProbeEnabled, setRolesProbeEnabled] = useDynamicRolesEnabledPreference();
   const rolesState = useDynamicRoles({ enabled: rolesProbeEnabled, includeAssignments: true });
   const [autoProbeAttempted, setAutoProbeAttempted] = useState(false);
@@ -45,6 +53,7 @@ export function RolesPermissionsTab() {
     () => rolesState.roles.find((role) => role.id === selectedRoleId) ?? rolesState.roles[0] ?? null,
     [rolesState.roles, selectedRoleId],
   );
+  const selectedRoleIsCritical = selectedRole ? isCriticalRoleKey(selectedRole.key) : false;
 
   const globalRoles = useMemo(
     () => rolesState.roles.filter((role) => role.scope === "global" && role.is_active),
@@ -54,12 +63,21 @@ export function RolesPermissionsTab() {
   const permissionGroups = useMemo(() => {
     const groups = new Map<string, Permission[]>();
     for (const permission of rolesState.permissions) {
-      const category = permission.category ?? "system";
+      const category = getPermissionCategory(permission);
       const current = groups.get(category) ?? [];
       current.push(permission);
       groups.set(category, current);
     }
-    return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
+    return Array.from(groups.entries())
+      .map(([category, permissions]) => [
+        category,
+        permissions.sort((a, b) => getPermissionLabel(a).localeCompare(getPermissionLabel(b), "ru-RU")),
+      ] as const)
+      .sort(([a], [b]) => {
+        const ai = PERMISSION_CATEGORY_ORDER.indexOf(a);
+        const bi = PERMISSION_CATEGORY_ORDER.indexOf(b);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.localeCompare(b);
+      });
   }, [rolesState.permissions]);
 
   const roleAssignments = useMemo(() => {
@@ -77,6 +95,35 @@ export function RolesPermissionsTab() {
         || getRoleLabel(a.role).localeCompare(getRoleLabel(b.role), "ru-RU"),
       );
   }, [profiles, rolesState.roles, rolesState.userGlobalRoles]);
+
+  const currentAccess = useMemo(() => {
+    const roleMap = new Map(rolesState.roles.map((role) => [role.id, role]));
+    const permissionKeys = new Set<string>();
+    let critical = false;
+    if (!currentUserId) return { critical, permissionKeys };
+    const assignedRoleIds = rolesState.userGlobalRoles
+      .filter((assignment) => assignment.user_id === currentUserId)
+      .map((assignment) => assignment.role_id);
+    for (const roleId of assignedRoleIds) {
+      const role = roleMap.get(roleId);
+      if (!role || role.scope !== "global" || !role.is_active) continue;
+      if (isCriticalRoleKey(role.key)) critical = true;
+      for (const permission of rolesState.rolePermissions) {
+        if (permission.role_id === role.id) permissionKeys.add(permission.permission_key);
+      }
+    }
+    return { critical, permissionKeys };
+  }, [currentUserId, rolesState.rolePermissions, rolesState.roles, rolesState.userGlobalRoles]);
+
+  const canManageRoles =
+    currentAccess.critical ||
+    currentAccess.permissionKeys.has("roles.manage") ||
+    currentAccess.permissionKeys.has("permissions.manage");
+  const canAssignGlobalRoles = canManageRoles || currentAccess.permissionKeys.has("users.assign_roles");
+  const assignableGlobalRoles = useMemo(
+    () => globalRoles.filter((role) => currentAccess.critical || !isCriticalRoleKey(role.key)),
+    [currentAccess.critical, globalRoles],
+  );
 
   useEffect(() => {
     if (autoProbeAttempted) return;
@@ -138,6 +185,10 @@ export function RolesPermissionsTab() {
   }, [rolesState]);
 
   const createRole = async () => {
+    if (!canManageRoles) {
+      setError("Недостаточно прав для управления ролями.");
+      return;
+    }
     const key = createKey.trim();
     if (!ROLE_KEY_RE.test(key)) {
       setError("Ключ роли должен быть в формате snake_case и начинаться с буквы.");
@@ -167,6 +218,10 @@ export function RolesPermissionsTab() {
 
   const saveRole = async () => {
     if (!selectedRole) return;
+    if (!canManageRoles) {
+      setError("Недостаточно прав для управления ролями.");
+      return;
+    }
     if (!editName.trim()) {
       setError("Нужно указать название роли.");
       return;
@@ -185,6 +240,10 @@ export function RolesPermissionsTab() {
 
   const savePermissions = async () => {
     if (!selectedRole) return;
+    if (!canManageRoles) {
+      setError("Недостаточно прав для изменения прав роли.");
+      return;
+    }
     await runAction(
       "save-permissions",
       () => supabase.rpc("role_set_permissions", {
@@ -197,6 +256,10 @@ export function RolesPermissionsTab() {
 
   const archiveRole = async () => {
     if (!selectedRole || selectedRole.is_system) return;
+    if (!canManageRoles) {
+      setError("Недостаточно прав для управления ролями.");
+      return;
+    }
     await runAction(
       "archive-role",
       () => supabase.rpc("role_delete_or_archive", { p_role_id: selectedRole.id }),
@@ -205,6 +268,10 @@ export function RolesPermissionsTab() {
   };
 
   const assignGlobalRole = async () => {
+    if (!canAssignGlobalRoles) {
+      setError("Недостаточно прав для назначения ролей.");
+      return;
+    }
     if (!assignUserId || !assignRoleId) {
       setError("Выберите пользователя и роль.");
       return;
@@ -224,6 +291,10 @@ export function RolesPermissionsTab() {
   };
 
   const removeGlobalRole = async (userId: string, roleId: string) => {
+    if (!canAssignGlobalRoles) {
+      setError("Недостаточно прав для назначения ролей.");
+      return;
+    }
     await runAction(
       `remove-role-${userId}-${roleId}`,
       () => supabase.rpc("user_remove_global_role", { p_user_id: userId, p_role_id: roleId }),
@@ -291,7 +362,7 @@ export function RolesPermissionsTab() {
         <div>
           <h2 className="text-lg font-bold text-[color:var(--kub-text)]">Роли и права</h2>
           <p className="text-sm text-[color:var(--kub-muted)]">
-            Управление системными и кастомными ролями, permissions и глобальными назначениями пользователей.
+            Роли описывают должности и зоны ответственности. Права определяют, какие действия доступны роли.
           </p>
         </div>
         <KubButton
@@ -316,33 +387,89 @@ export function RolesPermissionsTab() {
         </div>
       )}
 
+      {!canManageRoles && (
+        <div className="rounded-xl border border-[color:var(--kub-warn)]/30 bg-[color-mix(in_srgb,var(--kub-warn)_10%,transparent)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-warn)]">
+          Режим просмотра: текущая роль позволяет видеть роли и права, но не менять их. Создание ролей, изменение прав и назначение ролей доступны владельцу, тех. администратору или роли с правом управления ролями.
+        </div>
+      )}
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <KubPanel className="space-y-1.5">
+          <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--kub-text)]">
+            <KubIcon name="shield" size={15} tone="accent" />
+            Что такое роль
+          </div>
+          <p className="text-xs leading-relaxed text-[color:var(--kub-muted)]">
+            Это понятное название доступа: например, администратор клуба, работник клуба или тех. администратор.
+          </p>
+        </KubPanel>
+        <KubPanel className="space-y-1.5">
+          <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--kub-text)]">
+            <KubIcon name="check" size={15} tone="accent" />
+            Что такое право
+          </div>
+          <p className="text-xs leading-relaxed text-[color:var(--kub-muted)]">
+            Это конкретное действие: создать задачу, пригласить в чат, назначить роль или смотреть аудит.
+          </p>
+        </KubPanel>
+        <KubPanel className="space-y-1.5">
+          <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--kub-text)]">
+            <KubIcon name="lock" size={15} tone="accent" />
+            Системные роли
+          </div>
+          <p className="text-xs leading-relaxed text-[color:var(--kub-muted)]">
+            Их нельзя удалить. Последний владелец или тех. администратор защищены backend-проверкой.
+          </p>
+        </KubPanel>
+      </div>
+
       <div className="grid gap-4 xl:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.4fr)]">
         <div className="space-y-3">
           <KubPanel className="space-y-3">
-            <h3 className="text-sm font-semibold text-[color:var(--kub-text)]">Новая роль</h3>
-            <KubInput label="Ключ" value={createKey} onChange={(event) => setCreateKey(event.target.value.toLowerCase())} placeholder="custom_staff_lead" />
-            <KubInput label="Название" value={createName} onChange={(event) => setCreateName(event.target.value)} />
+            <div>
+              <h3 className="text-sm font-semibold text-[color:var(--kub-text)]">Новая роль</h3>
+              <p className="mt-1 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                1. Назовите роль, 2. выберите где она действует, 3. после создания отметьте нужные права справа.
+              </p>
+            </div>
+            <KubInput label="Название роли" value={createName} onChange={(event) => setCreateName(event.target.value)} placeholder="Старший смены" disabled={!canManageRoles} />
+            <KubInput
+              label="Технический ключ"
+              value={createKey}
+              onChange={(event) => setCreateKey(event.target.value.toLowerCase().replace(/\s+/g, "_"))}
+              placeholder="custom_shift_lead"
+              disabled={!canManageRoles}
+            />
+            <p className="-mt-2 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+              Ключ нужен системе для безопасного хранения. Пользователи видят название роли, а не ключ.
+            </p>
             <textarea
               value={createDescription}
               onChange={(event) => setCreateDescription(event.target.value)}
+              disabled={!canManageRoles}
               rows={3}
-              placeholder="Описание"
+              placeholder="Коротко опишите, кому подходит эта роль"
               className="w-full resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
             />
             <select
               value={createScope}
               onChange={(event) => setCreateScope(event.target.value as RoleScope)}
+              disabled={!canManageRoles}
               className="h-10 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
             >
               {ROLE_SCOPES.map((scope) => (
                 <option key={scope} value={scope}>{ROLE_SCOPE_LABEL[scope]}</option>
               ))}
             </select>
+            <p className="-mt-2 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+              {getRoleScopeDescription(createScope)}
+            </p>
             <KubButton
               variant="primary"
               size="sm"
               onClick={() => void createRole()}
               loading={saving === "create-role"}
+              disabled={!canManageRoles}
               leftIcon={<KubIcon name="create" size={13} />}
             >
               Создать роль
@@ -390,7 +517,7 @@ export function RolesPermissionsTab() {
                   <div>
                     <h3 className="text-sm font-semibold text-[color:var(--kub-text)]">Настройки роли</h3>
                     <p className="text-xs text-[color:var(--kub-muted)]">
-                      Ключ и область системных ролей не редактируются. Последний owner/tech_admin защищён RPC.
+                      Ключ используется только системой. В интерфейсе пользователям показывается понятное название роли.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -400,13 +527,27 @@ export function RolesPermissionsTab() {
                     <KubBadge tone="muted" pill>{ROLE_SCOPE_LABEL[selectedRole.scope]}</KubBadge>
                   </div>
                 </div>
+                <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/55 px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                  {getRoleScopeDescription(selectedRole.scope)}
+                </div>
+                {selectedRole.is_system && (
+                  <div className="rounded-xl border border-[color:var(--kub-warn)]/30 bg-[color-mix(in_srgb,var(--kub-warn)_10%,transparent)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-warn)]">
+                    Системную роль нельзя удалить или отключить. Можно уточнить название и описание, если это не ломает смысл роли.
+                  </div>
+                )}
+                {selectedRoleIsCritical && (
+                  <div className="rounded-xl border border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-danger)]">
+                    Это критичная роль. Последний владелец или тех. администратор не может быть снят backend-проверкой.
+                  </div>
+                )}
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <KubInput label="Ключ" value={selectedRole.key} readOnly />
-                  <KubInput label="Название" value={editName} onChange={(event) => setEditName(event.target.value)} />
+                  <KubInput label="Технический ключ" value={selectedRole.key} readOnly />
+                  <KubInput label="Название" value={editName} onChange={(event) => setEditName(event.target.value)} disabled={!canManageRoles} />
                 </div>
                 <textarea
                   value={editDescription}
                   onChange={(event) => setEditDescription(event.target.value)}
+                  disabled={!canManageRoles}
                   rows={3}
                   placeholder="Описание"
                   className="w-full resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
@@ -416,7 +557,7 @@ export function RolesPermissionsTab() {
                     type="checkbox"
                     checked={editActive}
                     onChange={(event) => setEditActive(event.target.checked)}
-                    disabled={selectedRole.is_system}
+                    disabled={selectedRole.is_system || !canManageRoles}
                     className="h-4 w-4 accent-[var(--kub-cyan)] disabled:opacity-50"
                   />
                   Роль активна
@@ -427,6 +568,7 @@ export function RolesPermissionsTab() {
                     size="sm"
                     onClick={() => void saveRole()}
                     loading={saving === "save-role"}
+                    disabled={!canManageRoles}
                     leftIcon={<KubIcon name="check" size={13} />}
                   >
                     Сохранить
@@ -436,7 +578,7 @@ export function RolesPermissionsTab() {
                     size="sm"
                     onClick={() => void archiveRole()}
                     loading={saving === "archive-role"}
-                    disabled={selectedRole.is_system}
+                    disabled={selectedRole.is_system || !canManageRoles}
                     leftIcon={<KubIcon name="lock" size={13} />}
                   >
                     Отключить
@@ -448,14 +590,26 @@ export function RolesPermissionsTab() {
                 <div>
                   <h3 className="text-sm font-semibold text-[color:var(--kub-text)]">Права</h3>
                   <p className="text-xs text-[color:var(--kub-muted)]">
-                    Owner и tech_admin получают полный доступ. Изменение опасных прав проверяется backend RPC.
+                    Отмечайте только те действия, которые нужны этой роли в работе. Технический ключ показан мелко для диагностики.
                   </p>
                 </div>
+                {selectedRoleIsCritical && (
+                  <div className="rounded-xl border border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-danger)]">
+                    Owner и tech_admin всегда получают полный доступ. Набор прав здесь информационный и не ограничивает эти роли.
+                  </div>
+                )}
                 <div className="grid gap-3 lg:grid-cols-2">
                   {permissionGroups.map(([category, permissions]) => (
                     <div key={category} className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/45 p-3">
-                      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-cyan)]">
-                        {PERMISSION_CATEGORY_LABEL[category] ?? category}
+                      <div className="mb-2">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-cyan)]">
+                          {getPermissionCategoryLabel(category)}
+                        </div>
+                        {PERMISSION_CATEGORY_DESCRIPTION[category] && (
+                          <div className="mt-1 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+                            {PERMISSION_CATEGORY_DESCRIPTION[category]}
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-1.5">
                         {permissions.map((permission) => (
@@ -463,6 +617,7 @@ export function RolesPermissionsTab() {
                             <input
                               type="checkbox"
                               checked={selectedPermissions.has(permission.key)}
+                              disabled={selectedRoleIsCritical || !canManageRoles}
                               onChange={(event) => {
                                 setSelectedPermissions((current) => {
                                   const next = new Set(current);
@@ -471,13 +626,16 @@ export function RolesPermissionsTab() {
                                   return next;
                                 });
                               }}
-                              className="mt-0.5 h-4 w-4 accent-[var(--kub-cyan)]"
+                              className="mt-0.5 h-4 w-4 accent-[var(--kub-cyan)] disabled:opacity-60"
                             />
                             <span className="min-w-0">
                               <span className="block font-medium">{getPermissionLabel(permission)}</span>
-                              {permission.description && (
-                                <span className="block text-xs text-[color:var(--kub-muted)]">{permission.description}</span>
-                              )}
+                              <span className="block text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                                {getPermissionDescription(permission)}
+                              </span>
+                              <span className="block truncate text-[10px] font-medium text-[color:var(--kub-muted)] opacity-80">
+                                {permission.key}
+                              </span>
                             </span>
                           </label>
                         ))}
@@ -490,6 +648,7 @@ export function RolesPermissionsTab() {
                   size="sm"
                   onClick={() => void savePermissions()}
                   loading={saving === "save-permissions"}
+                  disabled={selectedRoleIsCritical || !canManageRoles}
                   leftIcon={<KubIcon name="shield" size={13} />}
                 >
                   Сохранить права
@@ -508,11 +667,22 @@ export function RolesPermissionsTab() {
               <p className="text-xs text-[color:var(--kub-muted)]">
                 Старая роль профиля остаётся fallback; новые назначения хранятся отдельно.
               </p>
+              {!canAssignGlobalRoles && (
+                <p className="mt-1 text-xs leading-relaxed text-[color:var(--kub-warn)]">
+                  Назначение и снятие ролей недоступно для текущей роли.
+                </p>
+              )}
+              {canAssignGlobalRoles && !currentAccess.critical && (
+                <p className="mt-1 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                  Критичные роли owner и tech_admin скрыты: их назначает только владелец или тех. администратор.
+                </p>
+              )}
             </div>
             <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
               <select
                 value={assignUserId}
                 onChange={(event) => setAssignUserId(event.target.value)}
+                disabled={!canAssignGlobalRoles}
                 className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
               >
                 <option value="">Пользователь</option>
@@ -523,10 +693,11 @@ export function RolesPermissionsTab() {
               <select
                 value={assignRoleId}
                 onChange={(event) => setAssignRoleId(event.target.value)}
+                disabled={!canAssignGlobalRoles}
                 className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
               >
                 <option value="">Глобальная роль</option>
-                {globalRoles.map((role) => (
+                {assignableGlobalRoles.map((role) => (
                   <option key={role.id} value={role.id}>{getRoleLabel(role)}</option>
                 ))}
               </select>
@@ -535,6 +706,7 @@ export function RolesPermissionsTab() {
                 size="sm"
                 onClick={() => void assignGlobalRole()}
                 loading={saving === "assign-global-role"}
+                disabled={!canAssignGlobalRoles}
                 leftIcon={<KubIcon name="userPlus" size={13} />}
               >
                 Назначить
@@ -569,6 +741,7 @@ export function RolesPermissionsTab() {
                       size="sm"
                       onClick={() => void removeGlobalRole(assignment.user_id, assignment.role_id)}
                       loading={saving === busyKey}
+                      disabled={!canAssignGlobalRoles}
                       leftIcon={<KubIcon name="userRemove" size={13} />}
                     >
                       Снять

@@ -302,3 +302,12 @@ The migration adds `public.group_invites`, scoped RLS, indexes, `group_invite_cr
 - Read-only MCP confirmed `set_pinned_chat_order(p_chat_ids uuid[])`, updated `pin_chat(p_chat_id uuid)` and updated `unpin_chat(p_chat_id uuid)`.
 - `authenticated` has `EXECUTE`; `anon`/`PUBLIC` execute grants are absent for pinned order RPC.
 - Frontend pinned-chat reorder UI is enabled with per-user move up/down actions; saved chat remains sorted above pinned chats.
+
+## 2026-05-10 Dynamic Roles Applied State
+
+- The user manually applied `.migration-backup/supabase/migrations/20260514_dynamic_roles_permissions.sql`.
+- Read-only Supabase MCP confirmed `public.roles`, `public.permissions`, `public.role_permissions`, `public.user_global_roles`, `location_members.role_id`, seeded system roles, seeded permissions, helper functions and role-management RPCs on project ref `nhogbeojfnbjcfipitrh`.
+- `profiles.role`, `location_members.role text` and `chat_members.role` remain legacy/fallback fields. Dynamic global roles and `location_members.role_id` should be preferred in UI when available, without duplicating legacy labels.
+- RLS policies protect role/permission data and dangerous management RPCs are authenticated-only. A hardening proposal was added but not applied automatically: `.migration-backup/supabase/migrations/20260515_dynamic_roles_grants_hardening.sql`.
+- The hardening proposal also blocks owner/tech_admin assignment by non-critical callers and blocks self-escalation when a caller only has `users.assign_roles`.
+- Current `group_invite_create` still uses chat membership and `invite_policy`; dynamic permissions such as `chats.invite_any` are seeded but not yet enforced by that RPC.

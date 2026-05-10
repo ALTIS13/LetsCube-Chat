@@ -397,6 +397,24 @@ Frontend behavior before applying this migration:
 - Existing locations/task routing and invites remain on their current permissions.
 - 2026-05-10 activation follow-up: the live project ref still did not expose the dynamic role tables/RPC through read-only MCP. The frontend now probes the schema by default and stores an explicit local disabled state only after a missing-schema response, so old fallback cache does not block the UI after the migration is applied later.
 
+## Applied Dynamic Roles / Permissions State
+
+The user manually applied `.migration-backup/supabase/migrations/20260514_dynamic_roles_permissions.sql` on 2026-05-10.
+
+Read-only Supabase MCP confirmed:
+
+- `public.roles`, `public.permissions`, `public.role_permissions`, `public.user_global_roles` exist with RLS enabled.
+- `public.location_members.role_id` exists and references `public.roles(id)`.
+- Expected seeded system roles are present: `owner`, `tech_admin`, `admin`, `manager`, `user`, location roles and chat roles.
+- Expected seeded permissions are present, including role, user, location, task and chat invite permissions.
+- Role helper and management RPC exist and are `security definer`; dangerous management execute grants are authenticated-only.
+
+Security note:
+
+- RLS currently protects role data, but table-level grants are broader than least privilege. New proposal only, not applied automatically: `.migration-backup/supabase/migrations/20260515_dynamic_roles_grants_hardening.sql`.
+- The same proposal hardens `user_assign_global_role` / `user_remove_global_role` so owner/tech_admin assignment requires an existing owner/tech_admin and callers with only `users.assign_roles` cannot escalate themselves.
+- Current `group_invite_create` still relies on chat membership and `invite_policy`; dynamic invite permissions are seeded for future enforcement but not wired into that RPC yet.
+
 ## Common Schema Checks
 
 Use read-only SQL only through MCP:

@@ -1,7 +1,7 @@
 "use client";
 
 import { Link, useLocation, Route, Switch, Redirect } from "wouter";
-import { useIsManagerOrAdmin, useIsAdmin } from "@/hooks/useRole";
+import { useRoleAccess } from "@/hooks/useRole";
 import { useAppStore } from "@/store/app.store";
 import { KubIcon, KubLogo, type KubIconName } from "@/components/kub";
 import { cn } from "@/lib/utils";
@@ -29,13 +29,20 @@ const TABS: ReadonlyArray<TabDef> = [
 export function AdminLayout() {
   const [location] = useLocation();
   const currentUser = useAppStore((s) => s.currentUser);
-  const isStaff = useIsManagerOrAdmin();
-  const isAdmin = useIsAdmin();
+  const { isStaff, isAdmin, checking } = useRoleAccess();
 
   if (!currentUser) {
     return (
       <div className="flex items-center justify-center h-screen bg-[var(--kub-bg)] kub-grid-bg">
         <KubIcon name="spinner" size={24} tone="accent" label="Загрузка" />
+      </div>
+    );
+  }
+
+  if (checking) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[var(--kub-bg)] kub-grid-bg">
+        <KubIcon name="spinner" size={24} tone="accent" label="РџСЂРѕРІРµСЂРєР° СЂРѕР»РµР№" />
       </div>
     );
   }
