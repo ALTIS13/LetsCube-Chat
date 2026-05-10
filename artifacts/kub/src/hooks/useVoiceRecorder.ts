@@ -1,7 +1,11 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { getAudioSettings } from "@/hooks/useAudioSettings";
+import {
+  DEFAULT_AUDIO_DEVICE_ID,
+  buildAudioTrackConstraints,
+  getAudioSettings,
+} from "@/hooks/useAudioSettings";
 
 export type RecordingState = "idle" | "recording" | "stopping";
 
@@ -157,18 +161,18 @@ export function useVoiceRecorder() {
     let stream: MediaStream | null = null;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: settings.echoCancellation,
-          noiseSuppression: settings.noiseSuppression,
-          autoGainControl: settings.autoGainControl,
-          channelCount: 1,
-        },
+        audio: buildAudioTrackConstraints(settings),
       });
     } catch (err) {
       const isOverconstrained = err instanceof Error && err.name === "OverconstrainedError";
       if (isOverconstrained) {
         try {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: buildAudioTrackConstraints({
+              ...settings,
+              selectedInputDeviceId: DEFAULT_AUDIO_DEVICE_ID,
+            }, false),
+          });
         } catch (err2) {
           if (!isStale()) setError(classifyMicError(err2));
           return false;

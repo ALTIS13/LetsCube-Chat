@@ -1,33 +1,29 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { KubButton, KubIcon } from "@/components/kub";
 import {
+  DEFAULT_AUDIO_DEVICE_ID,
+  buildAudioTrackConstraints,
   formatAudioPercent,
+  inferProcessingMode,
+  settingsForProcessingMode,
   useAudioSettings,
   type AudioSettings,
+  type AudioProcessingMode,
 } from "@/hooks/useAudioSettings";
+import { supportsAudioOutputSelection } from "@/lib/audioOutput";
 import { cn } from "@/lib/utils";
 
 type AudioContextCtor = typeof AudioContext;
-type MicProcessingMode = "clean" | "raw";
+type SinkAudioContext = AudioContext & {
+  setSinkId?: (sinkId: string) => Promise<void>;
+};
 
-const DEFAULT_MONITOR_GAIN = 0.8;
-
-function audioConstraints(mode: MicProcessingMode, includeAdvanced = true): MediaStreamConstraints {
-  const processed = mode === "clean";
-  return {
-    audio: {
-      echoCancellation: { ideal: processed },
-      noiseSuppression: { ideal: processed },
-      autoGainControl: { ideal: processed },
-      channelCount: { ideal: 1 },
-      ...(includeAdvanced ? {
-        sampleRate: { ideal: 48000 },
-        sampleSize: { ideal: 16 },
-      } : null),
-    },
-  };
+interface AudioDeviceOption {
+  deviceId: string;
+  label: string;
+  kind: MediaDeviceKind;
 }
 
 export function AudioSettingsSection() {
@@ -35,10 +31,12 @@ export function AudioSettingsSection() {
   const [testing, setTesting] = useState(false);
   const [level, setLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [processingMode, setProcessingMode] = useState<MicProcessingMode>("clean");
   const [processingNotice, setProcessingNotice] = useState<string | null>(null);
+  const [deviceNotice, setDeviceNotice] = useState<string | null>(null);
+  const [inputDevices, setInputDevices] = useState<AudioDeviceOption[]>([]);
+  const [outputDevices, setOutputDevices] = useState<AudioDeviceOption[]>([]);
+  const [applying, setApplying] = useState(false);
   const [selfMonitoring, setSelfMonitoring] = useState(false);
-  const [monitorGain, setMonitorGain] = useState(DEFAULT_MONITOR_GAIN);
   const [monitorError, setMonitorError] = useState<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const contextRef = useRef<AudioContext | null>(null);
@@ -47,7 +45,51 @@ export function AudioSettingsSection() {
   const monitorSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const monitorGainRef = useRef<GainNode | null>(null);
 
-  const stopSelfMonitoring = (updateState = true) => {
+  const outputSelectionSupported = supportsAudioOutputSelection();
+
+  const refreshDevices = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const inputs = devices
+        .filter((device) => device.kind === "audioinput")
+        .map((device, index) => ({
+          deviceId: device.deviceId || `${DEFAULT_AUDIO_DEVICE_ID}-${index}`,
+          label: device.label || `Микрофон ${index + 1}`,
+          kind: device.kind,
+        }));
+      const outputs = devices
+        .filter((device) => device.kind === "audiooutput")
+        .map((device, index) => ({
+          deviceId: device.deviceId || `${DEFAULT_AUDIO_DEVICE_ID}-${index}`,
+          label: device.label || `Устройство вывода ${index + 1}`,
+          kind: device.kind,
+        }));
+      setInputDevices(inputs);
+      setOutputDevices(outputs);
+
+      if (
+        settings.selectedInputDeviceId !== DEFAULT_AUDIO_DEVICE_ID &&
+        inputs.length > 0 &&
+        !inputs.some((device) => device.deviceId === settings.selectedInputDeviceId)
+      ) {
+        updateSettings({ selectedInputDeviceId: DEFAULT_AUDIO_DEVICE_ID });
+        setDeviceNotice("Выбранный микрофон недоступен. Используется системный.");
+      }
+      if (
+        settings.selectedOutputDeviceId !== DEFAULT_AUDIO_DEVICE_ID &&
+        outputs.length > 0 &&
+        !outputs.some((device) => device.deviceId === settings.selectedOutputDeviceId)
+      ) {
+        updateSettings({ selectedOutputDeviceId: DEFAULT_AUDIO_DEVICE_ID });
+        setDeviceNotice("Выбранное устройство вывода недоступно. Используется системное.");
+      }
+    } catch {
+      setDeviceNotice("Не удалось получить список аудиоустройств.");
+    }
+  }, [settings.selectedInputDeviceId, settings.selectedOutputDeviceId, updateSettings]);
+
+  const stopSelfMonitoring = useCallback((updateState = true) => {
     try {
       monitorSourceRef.current?.disconnect();
     } catch {
@@ -69,7 +111,7 @@ export function AudioSettingsSection() {
       setSelfMonitoring(false);
       setMonitorError(null);
     }
-  };
+  }, []);
 
   const stopMicTest = (updateState = true) => {
     stopSelfMonitoring(updateState);
@@ -93,9 +135,17 @@ export function AudioSettingsSection() {
 
   useEffect(() => {
     if (monitorGainRef.current) {
-      monitorGainRef.current.gain.value = monitorGain;
+      monitorGainRef.current.gain.value = settings.monitorGain;
     }
-  }, [monitorGain]);
+  }, [settings.monitorGain]);
+
+  useEffect(() => {
+    void refreshDevices();
+    if (!navigator.mediaDevices?.addEventListener) return;
+    const handleDeviceChange = () => void refreshDevices();
+    navigator.mediaDevices.addEventListener("devicechange", handleDeviceChange);
+    return () => navigator.mediaDevices.removeEventListener("devicechange", handleDeviceChange);
+  }, [refreshDevices]);
 
   useEffect(() => {
     return () => {
@@ -104,7 +154,7 @@ export function AudioSettingsSection() {
     };
   }, []);
 
-  const enableSelfMonitoring = async (stream: MediaStream): Promise<boolean> => {
+  const enableSelfMonitoring = async (stream: MediaStream, audioSettings = settings): Promise<boolean> => {
     setMonitorError(null);
     const AudioContextCtor = getAudioContextCtor();
     if (!AudioContextCtor) {
@@ -118,9 +168,17 @@ export function AudioSettingsSection() {
       if (context.state === "suspended") {
         await context.resume();
       }
+      if (audioSettings.selectedOutputDeviceId !== DEFAULT_AUDIO_DEVICE_ID) {
+        const sinkContext = context as SinkAudioContext;
+        if (typeof sinkContext.setSinkId === "function") {
+          await sinkContext.setSinkId(audioSettings.selectedOutputDeviceId);
+        } else {
+          setMonitorError("Выбор устройства вывода для прослушивания себя не поддерживается этим браузером. Используется системное устройство.");
+        }
+      }
       const source = context.createMediaStreamSource(stream);
       const gain = context.createGain();
-      gain.gain.value = monitorGain;
+      gain.gain.value = audioSettings.monitorGain;
       source.connect(gain);
       gain.connect(context.destination);
       monitorContextRef.current = context;
@@ -136,7 +194,7 @@ export function AudioSettingsSection() {
     }
   };
 
-  const setupMicTest = async (mode: MicProcessingMode, restoreMonitoring = false) => {
+  const setupMicTest = async (nextSettings: AudioSettings, restoreMonitoring = false) => {
     const AudioContextCtor = getAudioContextCtor();
     if (!navigator.mediaDevices?.getUserMedia || !AudioContextCtor) {
       setError("Проверка микрофона не поддерживается этим браузером.");
@@ -146,14 +204,14 @@ export function AudioSettingsSection() {
     setError(null);
     setMonitorError(null);
     try {
-      const result = await requestMicStream(mode);
+      const result = await requestMicStream(nextSettings);
       const stream = result.stream;
       const context = new AudioContextCtor();
       const analyser = context.createAnalyser();
       const gain = context.createGain();
       const source = context.createMediaStreamSource(stream);
       const data = new Uint8Array(analyser.fftSize);
-      gain.gain.value = settings.micInputGain;
+      gain.gain.value = nextSettings.micInputGain;
       source.connect(gain);
       gain.connect(analyser);
       stream.getAudioTracks().forEach((track) => {
@@ -163,12 +221,16 @@ export function AudioSettingsSection() {
         };
       });
       debugMicTrack(stream);
+      void refreshDevices();
       streamRef.current = stream;
       contextRef.current = context;
       setTesting(true);
-      setProcessingNotice(result.fallback
+      setProcessingNotice(result.deviceFallback
+        ? "Выбранный микрофон недоступен. Используется системный."
+        : result.fallback
         ? "Часть обработки микрофона не поддерживается этим браузером. Используется стандартный режим."
         : null);
+      if (result.deviceFallback) updateSettings({ selectedInputDeviceId: DEFAULT_AUDIO_DEVICE_ID });
 
       const tick = () => {
         analyser.getByteTimeDomainData(data);
@@ -176,13 +238,13 @@ export function AudioSettingsSection() {
         for (const sample of data) {
           peak = Math.max(peak, Math.abs(sample - 128));
         }
-        setLevel(Math.min(1, (peak / 128) * settings.micInputGain));
+        setLevel(Math.min(1, (peak / 128) * nextSettings.micInputGain));
         frameRef.current = requestAnimationFrame(tick);
       };
       tick();
 
       if (restoreMonitoring) {
-        await enableSelfMonitoring(stream);
+        await enableSelfMonitoring(stream, nextSettings);
       }
       return true;
     } catch (err) {
@@ -197,17 +259,81 @@ export function AudioSettingsSection() {
       stopMicTest();
       return;
     }
-    await setupMicTest(processingMode);
+    await setupMicTest(settings);
   };
 
-  const changeProcessingMode = async (mode: MicProcessingMode) => {
-    if (processingMode === mode) return;
-    setProcessingMode(mode);
+  const applySettingsLive = async (nextSettings: AudioSettings, options?: { forceReacquire?: boolean }) => {
     setProcessingNotice(null);
     if (!testing) return;
     const restoreMonitoring = selfMonitoring;
-    stopMicTest();
-    await setupMicTest(mode, restoreMonitoring);
+    setApplying(true);
+    const track = streamRef.current?.getAudioTracks()[0] ?? null;
+    if (!options?.forceReacquire && track && typeof track.applyConstraints === "function") {
+      try {
+        await track.applyConstraints(buildAudioTrackConstraints(nextSettings, false));
+        setProcessingNotice(null);
+        setApplying(false);
+        return;
+      } catch {
+        setProcessingNotice("Не удалось применить настройки микрофона на лету. Перезапускаем проверку.");
+      }
+    }
+    stopMicTest(false);
+    await setupMicTest(nextSettings, restoreMonitoring);
+    setApplying(false);
+  };
+
+  const changeProcessingMode = async (mode: Exclude<AudioProcessingMode, "custom">) => {
+    if (settings.processingMode === mode) return;
+    const nextSettings = updateSettings(settingsForProcessingMode(mode));
+    await applySettingsLive(nextSettings, { forceReacquire: true });
+  };
+
+  const changeProcessingToggle = async (
+    key: "noiseSuppression" | "echoCancellation" | "autoGainControl",
+    checked: boolean,
+  ) => {
+    const nextPatch = {
+      [key]: checked,
+    } as Pick<AudioSettings, typeof key>;
+    const merged = {
+      ...settings,
+      ...nextPatch,
+    };
+    const nextSettings = updateSettings({
+      ...nextPatch,
+      processingMode: inferProcessingMode(
+        Boolean(merged.echoCancellation),
+        Boolean(merged.noiseSuppression),
+        Boolean(merged.autoGainControl),
+      ),
+    });
+    await applySettingsLive(nextSettings);
+  };
+
+  const changeInputDevice = async (selectedInputDeviceId: string) => {
+    setDeviceNotice(null);
+    const nextSettings = updateSettings({ selectedInputDeviceId });
+    await applySettingsLive(nextSettings, { forceReacquire: true });
+  };
+
+  const changeOutputDevice = async (selectedOutputDeviceId: string) => {
+    setDeviceNotice(null);
+    const nextSettings = updateSettings({ selectedOutputDeviceId });
+    if (!outputSelectionSupported && selectedOutputDeviceId !== DEFAULT_AUDIO_DEVICE_ID) {
+      setDeviceNotice("Выбор устройства вывода не поддерживается этим браузером. Используется системное устройство.");
+    }
+    if (selfMonitoring && testing && streamRef.current) {
+      stopSelfMonitoring(false);
+      await enableSelfMonitoring(streamRef.current, nextSettings);
+    }
+    return nextSettings;
+  };
+
+  const resetAudioSettings = async () => {
+    const nextSettings = resetSettings();
+    setDeviceNotice(null);
+    await applySettingsLive(nextSettings, { forceReacquire: true });
   };
 
   const toggleSelfMonitoring = async () => {
@@ -253,21 +379,44 @@ export function AudioSettingsSection() {
           onChange={(voicePlaybackVolume) => updateSettings({ voicePlaybackVolume })}
         />
 
+        <div className="grid gap-2 sm:grid-cols-2">
+          <DeviceSelect
+            label="Микрофон"
+            value={settings.selectedInputDeviceId}
+            defaultLabel="Системный микрофон"
+            devices={inputDevices}
+            disabled={applying}
+            onChange={(deviceId) => void changeInputDevice(deviceId)}
+          />
+          <DeviceSelect
+            label="Устройство вывода"
+            value={settings.selectedOutputDeviceId}
+            defaultLabel="Системное устройство вывода"
+            devices={outputDevices}
+            disabled={applying || !outputSelectionSupported}
+            note={!outputSelectionSupported ? "Выбор устройства вывода не поддерживается этим браузером." : null}
+            onChange={(deviceId) => void changeOutputDevice(deviceId)}
+          />
+        </div>
+
         <div className="grid gap-2 sm:grid-cols-3">
           <ToggleRow
             label="Шумоподавление"
             checked={settings.noiseSuppression}
-            onChange={(noiseSuppression) => updateSettings({ noiseSuppression })}
+            disabled={applying}
+            onChange={(noiseSuppression) => void changeProcessingToggle("noiseSuppression", noiseSuppression)}
           />
           <ToggleRow
             label="Эхоподавление"
             checked={settings.echoCancellation}
-            onChange={(echoCancellation) => updateSettings({ echoCancellation })}
+            disabled={applying}
+            onChange={(echoCancellation) => void changeProcessingToggle("echoCancellation", echoCancellation)}
           />
           <ToggleRow
             label="Автоусиление"
             checked={settings.autoGainControl}
-            onChange={(autoGainControl) => updateSettings({ autoGainControl })}
+            disabled={applying}
+            onChange={(autoGainControl) => void changeProcessingToggle("autoGainControl", autoGainControl)}
           />
         </div>
 
@@ -288,19 +437,25 @@ export function AudioSettingsSection() {
             <div className="mb-2 flex items-center justify-between gap-3">
               <span className="min-w-0 text-xs font-semibold text-[color:var(--kub-text)]">Обработка микрофона</span>
               <span className="shrink-0 text-[10px] text-[color:var(--kub-muted)]">
-                {processingMode === "clean" ? "Чистый голос" : "Без обработки"}
+                {processingModeLabel(settings.processingMode)}
               </span>
             </div>
-            <div className="grid grid-cols-2 gap-1">
+            <div className="grid grid-cols-3 gap-1">
               <ModeButton
-                active={processingMode === "clean"}
+                active={settings.processingMode === "clean"}
                 label="Чистый голос"
                 onClick={() => void changeProcessingMode("clean")}
               />
               <ModeButton
-                active={processingMode === "raw"}
+                active={settings.processingMode === "raw"}
                 label="Без обработки"
                 onClick={() => void changeProcessingMode("raw")}
+              />
+              <ModeButton
+                active={settings.processingMode === "custom"}
+                label="Вручную"
+                disabled
+                onClick={() => undefined}
               />
             </div>
             <p className="mt-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
@@ -329,14 +484,24 @@ export function AudioSettingsSection() {
           {selfMonitoring && (
             <SliderRow
               label="Громкость прослушивания"
-              value={monitorGain}
+              value={settings.monitorGain}
               min={0}
               max={1}
               step={0.05}
-              onChange={setMonitorGain}
+              onChange={(monitorGain) => updateSettings({ monitorGain })}
             />
           )}
 
+          {applying && (
+            <div className="mt-2 text-xs text-[color:var(--kub-muted)]">
+              Применяем настройки…
+            </div>
+          )}
+          {deviceNotice && (
+            <div className="mt-2 text-xs text-[color:var(--kub-muted)]">
+              {deviceNotice}
+            </div>
+          )}
           {processingNotice && (
             <div className="mt-2 text-xs text-[color:var(--kub-muted)]">
               {processingNotice}
@@ -356,7 +521,7 @@ export function AudioSettingsSection() {
 
         <button
           type="button"
-          onClick={resetSettings}
+          onClick={() => void resetAudioSettings()}
           className="text-xs font-semibold text-[color:var(--kub-cyan)] hover:underline"
         >
           Сбросить настройки звука
@@ -366,20 +531,37 @@ export function AudioSettingsSection() {
   );
 }
 
-async function requestMicStream(mode: MicProcessingMode): Promise<{ stream: MediaStream; fallback: boolean }> {
+async function requestMicStream(settings: AudioSettings): Promise<{ stream: MediaStream; fallback: boolean; deviceFallback: boolean }> {
   try {
-    return { stream: await navigator.mediaDevices.getUserMedia(audioConstraints(mode)), fallback: false };
+    return {
+      stream: await navigator.mediaDevices.getUserMedia({ audio: buildAudioTrackConstraints(settings) }),
+      fallback: false,
+      deviceFallback: false,
+    };
   } catch (err) {
-    if (isPermissionOrDeviceError(err)) throw err;
+    if (isPermissionError(err)) throw err;
   }
 
   try {
-    return { stream: await navigator.mediaDevices.getUserMedia(audioConstraints(mode, false)), fallback: true };
+    return {
+      stream: await navigator.mediaDevices.getUserMedia({ audio: buildAudioTrackConstraints(settings, false) }),
+      fallback: true,
+      deviceFallback: false,
+    };
   } catch (err) {
-    if (isPermissionOrDeviceError(err)) throw err;
+    if (isPermissionError(err)) throw err;
   }
 
-  return { stream: await navigator.mediaDevices.getUserMedia({ audio: true }), fallback: true };
+  if (settings.selectedInputDeviceId !== DEFAULT_AUDIO_DEVICE_ID) {
+    const fallbackSettings = { ...settings, selectedInputDeviceId: DEFAULT_AUDIO_DEVICE_ID };
+    return {
+      stream: await navigator.mediaDevices.getUserMedia({ audio: buildAudioTrackConstraints(fallbackSettings, false) }),
+      fallback: true,
+      deviceFallback: true,
+    };
+  }
+
+  return { stream: await navigator.mediaDevices.getUserMedia({ audio: true }), fallback: true, deviceFallback: false };
 }
 
 function getAudioContextCtor(): AudioContextCtor | null {
@@ -398,16 +580,12 @@ function microphoneErrorMessage(err: unknown): string {
   return "Не удалось применить настройки обработки. Используется стандартный режим.";
 }
 
-function isPermissionOrDeviceError(err: unknown): boolean {
+function isPermissionError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   return (
     err.name === "NotAllowedError" ||
     err.name === "PermissionDeniedError" ||
-    err.name === "SecurityError" ||
-    err.name === "NotFoundError" ||
-    err.name === "DevicesNotFoundError" ||
-    err.name === "NotReadableError" ||
-    err.name === "TrackStartError"
+    err.name === "SecurityError"
   );
 }
 
@@ -426,18 +604,21 @@ function debugMicTrack(stream: MediaStream) {
 function ModeButton({
   active,
   label,
+  disabled = false,
   onClick,
 }: {
   active: boolean;
   label: string;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className={cn(
-        "h-8 rounded-lg px-2 text-xs font-semibold transition-colors",
+        "h-8 rounded-lg px-2 text-xs font-semibold transition-colors disabled:cursor-default",
         active
           ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
           : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)]",
@@ -445,6 +626,46 @@ function ModeButton({
     >
       {label}
     </button>
+  );
+}
+
+function DeviceSelect({
+  label,
+  value,
+  defaultLabel,
+  devices,
+  disabled,
+  note,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  defaultLabel: string;
+  devices: AudioDeviceOption[];
+  disabled?: boolean;
+  note?: string | null;
+  onChange: (deviceId: string) => void;
+}) {
+  return (
+    <label className="block min-w-0 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] px-3 py-2">
+      <span className="mb-1 block text-xs font-semibold text-[color:var(--kub-text)]">{label}</span>
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-9 w-full min-w-0 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 text-xs text-[color:var(--kub-text)] outline-none disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <option value={DEFAULT_AUDIO_DEVICE_ID}>{defaultLabel}</option>
+        {devices
+          .filter((device) => device.deviceId !== DEFAULT_AUDIO_DEVICE_ID)
+          .map((device) => (
+            <option key={`${device.kind}:${device.deviceId}`} value={device.deviceId}>
+              {device.label}
+            </option>
+          ))}
+      </select>
+      {note && <span className="mt-1 block text-[11px] leading-relaxed text-[color:var(--kub-muted)]">{note}</span>}
+    </label>
   );
 }
 
@@ -485,10 +706,12 @@ function SliderRow({
 function ToggleRow({
   label,
   checked,
+  disabled = false,
   onChange,
 }: {
   label: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (checked: boolean) => void;
 }) {
   return (
@@ -496,10 +719,17 @@ function ToggleRow({
       <input
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
-        className="h-4 w-4 shrink-0 accent-[var(--kub-cyan)]"
+        className="h-4 w-4 shrink-0 accent-[var(--kub-cyan)] disabled:opacity-60"
       />
       <span className="min-w-0 truncate text-xs text-[color:var(--kub-text)]">{label}</span>
     </label>
   );
+}
+
+function processingModeLabel(mode: AudioProcessingMode): string {
+  if (mode === "clean") return "Чистый голос";
+  if (mode === "raw") return "Без обработки";
+  return "Настроено вручную";
 }

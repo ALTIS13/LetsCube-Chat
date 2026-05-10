@@ -3,6 +3,7 @@
 import { type ChangeEvent, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KubIcon } from "@/components/kub";
 import { clampAudioElementVolume, useAudioSettings } from "@/hooks/useAudioSettings";
+import { applyAudioOutputDevice } from "@/lib/audioOutput";
 
 interface AudioMessageProps {
   url?: string | null;
@@ -104,6 +105,10 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
       audioRef.current.volume = clampAudioElementVolume(settings.voicePlaybackVolume);
     }
   }, [settings.voicePlaybackVolume]);
+
+  useEffect(() => {
+    void applyAudioOutputDevice(audioRef.current, settings.selectedOutputDeviceId);
+  }, [settings.selectedOutputDeviceId, url]);
 
   useEffect(() => {
     stopProgressLoop();

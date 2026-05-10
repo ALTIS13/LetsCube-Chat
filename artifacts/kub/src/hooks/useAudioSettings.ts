@@ -2,23 +2,34 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+export type AudioProcessingMode = "clean" | "raw" | "custom";
+
 export interface AudioSettings {
   micInputGain: number;
   voicePlaybackVolume: number;
+  processingMode: AudioProcessingMode;
   noiseSuppression: boolean;
   echoCancellation: boolean;
   autoGainControl: boolean;
+  monitorGain: number;
+  selectedInputDeviceId: string;
+  selectedOutputDeviceId: string;
 }
 
 export const AUDIO_SETTINGS_STORAGE_KEY = "kub:audio-settings:v1";
 export const AUDIO_SETTINGS_EVENT = "kub:audio-settings-change";
+export const DEFAULT_AUDIO_DEVICE_ID = "default";
 
 export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   micInputGain: 1,
   voicePlaybackVolume: 1,
+  processingMode: "clean",
   noiseSuppression: true,
   echoCancellation: true,
-  autoGainControl: false,
+  autoGainControl: true,
+  monitorGain: 0.8,
+  selectedInputDeviceId: DEFAULT_AUDIO_DEVICE_ID,
+  selectedOutputDeviceId: DEFAULT_AUDIO_DEVICE_ID,
 };
 
 function toFiniteNumber(value: unknown, fallback: number) {
@@ -36,6 +47,14 @@ function clamp(value: unknown, min: number, max: number, fallback: number) {
 
 function readBoolean(value: unknown, fallback: boolean) {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function readProcessingMode(value: unknown, fallback: AudioProcessingMode): AudioProcessingMode {
+  return value === "clean" || value === "raw" || value === "custom" ? value : fallback;
+}
+
+function readDeviceId(value: unknown): string {
+  return typeof value === "string" && value.trim() ? value : DEFAULT_AUDIO_DEVICE_ID;
 }
 
 export function clampAudioElementVolume(value: unknown): number {
@@ -58,6 +77,10 @@ function clampPlaybackVolume(value: unknown) {
   return clampAudioElementVolume(value);
 }
 
+function clampMonitorGain(value: unknown) {
+  return clamp(value, 0, 1, DEFAULT_AUDIO_SETTINGS.monitorGain);
+}
+
 function formatClampedPercent(value: number, max: number) {
   if (!Number.isFinite(value)) return `${Math.round(DEFAULT_AUDIO_SETTINGS.voicePlaybackVolume * 100)}%`;
   return `${Math.round(Math.min(max, Math.max(0, value)) * 100)}%`;
@@ -65,12 +88,22 @@ function formatClampedPercent(value: number, max: number) {
 
 export function normalizeAudioSettings(value: unknown): AudioSettings {
   const settings = parseAudioSettings(value);
+  const echoCancellation = readBoolean(settings?.echoCancellation, DEFAULT_AUDIO_SETTINGS.echoCancellation);
+  const noiseSuppression = readBoolean(settings?.noiseSuppression, DEFAULT_AUDIO_SETTINGS.noiseSuppression);
+  const autoGainControl = readBoolean(settings?.autoGainControl, DEFAULT_AUDIO_SETTINGS.autoGainControl);
   return {
     micInputGain: clampPercentGain(settings?.micInputGain),
     voicePlaybackVolume: clampPlaybackVolume(settings?.voicePlaybackVolume),
-    noiseSuppression: readBoolean(settings?.noiseSuppression, DEFAULT_AUDIO_SETTINGS.noiseSuppression),
-    echoCancellation: readBoolean(settings?.echoCancellation, DEFAULT_AUDIO_SETTINGS.echoCancellation),
-    autoGainControl: readBoolean(settings?.autoGainControl, DEFAULT_AUDIO_SETTINGS.autoGainControl),
+    processingMode: readProcessingMode(
+      settings?.processingMode,
+      inferProcessingMode(echoCancellation, noiseSuppression, autoGainControl),
+    ),
+    noiseSuppression,
+    echoCancellation,
+    autoGainControl,
+    monitorGain: clampMonitorGain(settings?.monitorGain),
+    selectedInputDeviceId: readDeviceId(settings?.selectedInputDeviceId),
+    selectedOutputDeviceId: readDeviceId(settings?.selectedOutputDeviceId),
   };
 }
 
@@ -110,15 +143,18 @@ export function useAudioSettings() {
   }, []);
 
   const updateSettings = useCallback((patch: Partial<AudioSettings>) => {
-    const next = normalizeAudioSettings({ ...getAudioSettings(), ...patch });
+    const current = getAudioSettings();
+    const next = normalizeAudioSettings(applyAudioSettingsPatch(current, patch));
     setSettings(next);
     saveAudioSettings(next);
+    return next;
   }, []);
 
   const resetSettings = useCallback(() => {
     const next = DEFAULT_AUDIO_SETTINGS;
     setSettings(next);
     saveAudioSettings(next);
+    return next;
   }, []);
 
   return { settings, updateSettings, resetSettings };
@@ -126,4 +162,60 @@ export function useAudioSettings() {
 
 export function formatAudioPercent(value: number) {
   return formatClampedPercent(value, 2);
+}
+
+export function buildAudioTrackConstraints(settings: AudioSettings, includeAdvanced = true): MediaTrackConstraints {
+  return {
+    echoCancellation: settings.echoCancellation,
+    noiseSuppression: settings.noiseSuppression,
+    autoGainControl: settings.autoGainControl,
+    channelCount: 1,
+    ...(settings.selectedInputDeviceId !== DEFAULT_AUDIO_DEVICE_ID
+      ? { deviceId: { exact: settings.selectedInputDeviceId } }
+      : null),
+    ...(includeAdvanced ? {
+      sampleRate: { ideal: 48000 },
+      sampleSize: { ideal: 16 },
+    } : null),
+  };
+}
+
+export function settingsForProcessingMode(mode: Exclude<AudioProcessingMode, "custom">): Pick<AudioSettings, "processingMode" | "echoCancellation" | "noiseSuppression" | "autoGainControl"> {
+  const enabled = mode === "clean";
+  return {
+    processingMode: mode,
+    echoCancellation: enabled,
+    noiseSuppression: enabled,
+    autoGainControl: enabled,
+  };
+}
+
+export function inferProcessingMode(
+  echoCancellation: boolean,
+  noiseSuppression: boolean,
+  autoGainControl: boolean,
+): AudioProcessingMode {
+  if (echoCancellation && noiseSuppression && autoGainControl) return "clean";
+  if (!echoCancellation && !noiseSuppression && !autoGainControl) return "raw";
+  return "custom";
+}
+
+function applyAudioSettingsPatch(current: AudioSettings, patch: Partial<AudioSettings>): Partial<AudioSettings> {
+  if (patch.processingMode === "clean" || patch.processingMode === "raw") {
+    return { ...current, ...patch, ...settingsForProcessingMode(patch.processingMode) };
+  }
+
+  const merged = { ...current, ...patch };
+  if (
+    "echoCancellation" in patch ||
+    "noiseSuppression" in patch ||
+    "autoGainControl" in patch
+  ) {
+    merged.processingMode = inferProcessingMode(
+      Boolean(merged.echoCancellation),
+      Boolean(merged.noiseSuppression),
+      Boolean(merged.autoGainControl),
+    );
+  }
+  return merged;
 }

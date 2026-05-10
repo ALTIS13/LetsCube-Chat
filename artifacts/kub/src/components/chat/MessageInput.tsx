@@ -8,7 +8,9 @@ import { useAppStore } from "@/store/app.store";
 import { useMuteState } from "@/hooks/useMuteState";
 import { KubIcon, type KubIconName } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
+import { applyAudioOutputDevice } from "@/lib/audioOutput";
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
+import { useAudioSettings } from "@/hooks/useAudioSettings";
 import {
   formatAttachmentSize,
   normalizeClipboardFile,
@@ -615,6 +617,11 @@ function VoiceAttachmentPreview({
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const durationMs = attachment.durationMs ?? 0;
+  const { settings } = useAudioSettings();
+
+  useEffect(() => {
+    void applyAudioOutputDevice(audioRef.current, settings.selectedOutputDeviceId);
+  }, [attachment.previewUrl, settings.selectedOutputDeviceId]);
 
   useEffect(() => {
     const audio = audioRef.current;
