@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { KubBadge, KubIcon } from "@/components/kub";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
+import { useRoleAccess } from "@/hooks/useRole";
 import { useTaskRouting } from "@/hooks/useTaskRouting";
 import { LOCATION_ROLE_LABEL } from "@/lib/locationRouting";
 import { getRoleLabel, LEGACY_APP_ROLE_LABEL } from "@/lib/rolePermissions";
@@ -14,9 +15,12 @@ interface ProfileRoleSummaryProps {
 }
 
 export function ProfileRoleSummary({ user, compact = false }: ProfileRoleSummaryProps) {
+  const access = useRoleAccess();
   const [dynamicRolesEnabled] = useDynamicRolesEnabledPreference();
-  const dynamicRoles = useDynamicRoles({ enabled: dynamicRolesEnabled, includeAssignments: true });
-  const routing = useTaskRouting({ enabled: true, includeMembers: true });
+  const canReadDynamicRoles = dynamicRolesEnabled && access.isAdmin;
+  const canReadLocationSummaries = access.isStaff;
+  const dynamicRoles = useDynamicRoles({ enabled: canReadDynamicRoles, includeAssignments: true });
+  const routing = useTaskRouting({ enabled: canReadLocationSummaries, includeMembers: true });
 
   const roleById = useMemo(() => new Map(dynamicRoles.roles.map((role) => [role.id, role])), [dynamicRoles.roles]);
   const locationById = useMemo(() => new Map(routing.locations.map((location) => [location.id, location])), [routing.locations]);

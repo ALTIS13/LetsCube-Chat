@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { KubBadge, KubButton, KubIcon, KubInput, KubPanel } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
+import { clearRoleAccessCache } from "@/hooks/useRole";
 import { useAppStore } from "@/store/app.store";
 import {
   PERMISSION_CATEGORY_DESCRIPTION,
@@ -285,6 +286,7 @@ export function RolesPermissionsTab() {
       "Роль назначена пользователю.",
     );
     if (ok) {
+      clearRoleAccessCache(assignUserId);
       setAssignUserId("");
       setAssignRoleId("");
     }
@@ -300,6 +302,7 @@ export function RolesPermissionsTab() {
       () => supabase.rpc("user_remove_global_role", { p_user_id: userId, p_role_id: roleId }),
       "Роль снята с пользователя.",
     );
+    clearRoleAccessCache(userId);
   };
 
   if (rolesProbeEnabled && rolesState.loading && !rolesState.checked) {

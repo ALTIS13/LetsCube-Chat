@@ -55,7 +55,7 @@ export function UsersTab() {
   const currentUser = useAppStore((s) => s.currentUser);
   const isAdmin = useIsAdmin();
   const [dynamicRolesEnabled] = useDynamicRolesEnabledPreference();
-  const dynamicRoles = useDynamicRoles({ enabled: dynamicRolesEnabled, includeAssignments: true });
+  const dynamicRoles = useDynamicRoles({ enabled: dynamicRolesEnabled && isAdmin, includeAssignments: true });
   const [rows, setRows] = useState<Profile[]>([]);
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [contacts, setContacts] = useState<Record<string, ContactRow>>({});

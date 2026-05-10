@@ -1,9 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
-import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
+import { useEffect, useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
-import type { AppRole, DynamicRole } from "@/types/database";
+import type { AppRole } from "@/types/database";
+
+const ACCESS_ROLE_KEYS = ["owner", "tech_admin", "admin", "manager"] as const;
+const accessCache = new Map<string, { keys: Set<string>; promise?: Promise<Set<string>> }>();
+
+export function clearRoleAccessCache(userId?: string): void {
+  if (userId) accessCache.delete(userId);
+  else accessCache.clear();
+}
 
 export function useRole(): AppRole | null {
   return useAppStore((s) => s.currentUser?.role ?? null);
@@ -19,7 +27,7 @@ export function useIsManagerOrAdmin(): boolean {
 
 export function useRoleAccess(): { isAdmin: boolean; isStaff: boolean; checking: boolean } {
   const legacyRole = useRole();
-  const dynamic = useCurrentGlobalRoleAccess(legacyRole !== "admin");
+  const dynamic = useCurrentGlobalRoleAccess(legacyRole !== "admin" && legacyRole !== "manager");
   const dynamicRoleKeys = dynamic.keys;
   const dynamicIsAdmin =
     dynamicRoleKeys.has("owner") ||
@@ -32,23 +40,68 @@ export function useRoleAccess(): { isAdmin: boolean; isStaff: boolean; checking:
 
 function useCurrentGlobalRoleAccess(shouldLoad: boolean): { keys: Set<string>; checking: boolean } {
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
-  const [dynamicRolesEnabled] = useDynamicRolesEnabledPreference();
-  const dynamicRoles = useDynamicRoles({ enabled: shouldLoad && dynamicRolesEnabled, includeAssignments: true });
+  const supabase = useMemo(() => createClient(), []);
+  const [state, setState] = useState<{ keys: Set<string>; checking: boolean }>({
+    keys: new Set<string>(),
+    checking: false,
+  });
 
-  return useMemo(() => {
-    const checking = shouldLoad && dynamicRolesEnabled && dynamicRoles.loading && !dynamicRoles.checked;
-    if (!currentUserId || !dynamicRoles.available) return { keys: new Set<string>(), checking };
-    const rolesById = new Map(dynamicRoles.roles.map((role) => [role.id, role]));
-    const keys = new Set(
-      dynamicRoles.userGlobalRoles
-        .filter((assignment) => assignment.user_id === currentUserId)
-        .map((assignment) => rolesById.get(assignment.role_id))
-        .filter((role): role is DynamicRole => {
-          if (!role) return false;
-          return role.scope === "global" && role.is_active;
-        })
-        .map((role) => role.key),
-    );
-    return { keys, checking };
-  }, [currentUserId, dynamicRoles.available, dynamicRoles.checked, dynamicRoles.loading, dynamicRoles.roles, dynamicRoles.userGlobalRoles, dynamicRolesEnabled, shouldLoad]);
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!shouldLoad || !currentUserId) {
+      setState({ keys: new Set<string>(), checking: false });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const cached = accessCache.get(currentUserId);
+    if (cached && !cached.promise) {
+      setState({ keys: new Set(cached.keys), checking: false });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setState((prev) => ({ keys: prev.keys, checking: true }));
+
+    const lookup =
+      cached?.promise ??
+      Promise.all(
+        ACCESS_ROLE_KEYS.map(async (roleKey) => {
+          const { data, error } = await supabase.rpc("has_global_role", {
+            p_user_id: currentUserId,
+            p_role_key: roleKey,
+          });
+          if (error) throw error;
+          return data ? roleKey : null;
+        }),
+      ).then((results) =>
+        new Set<string>(results.filter((roleKey): roleKey is (typeof ACCESS_ROLE_KEYS)[number] => Boolean(roleKey))),
+      );
+
+    accessCache.set(currentUserId, { keys: cached?.keys ?? new Set<string>(), promise: lookup });
+
+    lookup
+      .then((results) => {
+        accessCache.set(currentUserId, { keys: results });
+        if (cancelled) return;
+        setState({
+          keys: new Set(results),
+          checking: false,
+        });
+      })
+      .catch((error) => {
+        if (import.meta.env.DEV) console.warn("[role-access] dynamic role lookup failed", error);
+        accessCache.set(currentUserId, { keys: new Set<string>() });
+        if (!cancelled) setState({ keys: new Set<string>(), checking: false });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId, shouldLoad, supabase]);
+
+  return state;
 }
