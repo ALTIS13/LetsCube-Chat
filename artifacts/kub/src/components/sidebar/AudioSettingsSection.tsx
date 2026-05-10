@@ -7,16 +7,25 @@ import {
   useAudioSettings,
   type AudioSettings,
 } from "@/hooks/useAudioSettings";
+import { cn } from "@/lib/utils";
 
 type AudioContextCtor = typeof AudioContext;
+type MicProcessingMode = "clean" | "raw";
 
-function audioConstraints(settings: AudioSettings): MediaStreamConstraints {
+const DEFAULT_MONITOR_GAIN = 0.8;
+
+function audioConstraints(mode: MicProcessingMode, includeAdvanced = true): MediaStreamConstraints {
+  const processed = mode === "clean";
   return {
     audio: {
-      echoCancellation: settings.echoCancellation,
-      noiseSuppression: settings.noiseSuppression,
-      autoGainControl: settings.autoGainControl,
-      channelCount: 1,
+      echoCancellation: { ideal: processed },
+      noiseSuppression: { ideal: processed },
+      autoGainControl: { ideal: processed },
+      channelCount: { ideal: 1 },
+      ...(includeAdvanced ? {
+        sampleRate: { ideal: 48000 },
+        sampleSize: { ideal: 16 },
+      } : null),
     },
   };
 }
@@ -26,7 +35,10 @@ export function AudioSettingsSection() {
   const [testing, setTesting] = useState(false);
   const [level, setLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [processingMode, setProcessingMode] = useState<MicProcessingMode>("clean");
+  const [processingNotice, setProcessingNotice] = useState<string | null>(null);
   const [selfMonitoring, setSelfMonitoring] = useState(false);
+  const [monitorGain, setMonitorGain] = useState(DEFAULT_MONITOR_GAIN);
   const [monitorError, setMonitorError] = useState<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const contextRef = useRef<AudioContext | null>(null);
@@ -75,8 +87,15 @@ export function AudioSettingsSection() {
     if (updateState) {
       setTesting(false);
       setLevel(0);
+      setProcessingNotice(null);
     }
   };
+
+  useEffect(() => {
+    if (monitorGainRef.current) {
+      monitorGainRef.current.gain.value = monitorGain;
+    }
+  }, [monitorGain]);
 
   useEffect(() => {
     return () => {
@@ -85,22 +104,50 @@ export function AudioSettingsSection() {
     };
   }, []);
 
-  const startMicTest = async () => {
-    if (testing) {
-      stopMicTest();
-      return;
+  const enableSelfMonitoring = async (stream: MediaStream): Promise<boolean> => {
+    setMonitorError(null);
+    const AudioContextCtor = getAudioContextCtor();
+    if (!AudioContextCtor) {
+      setMonitorError("Прослушивание себя не поддерживается в этом браузере.");
+      return false;
     }
 
+    stopSelfMonitoring(false);
+    try {
+      const context = new AudioContextCtor();
+      if (context.state === "suspended") {
+        await context.resume();
+      }
+      const source = context.createMediaStreamSource(stream);
+      const gain = context.createGain();
+      gain.gain.value = monitorGain;
+      source.connect(gain);
+      gain.connect(context.destination);
+      monitorContextRef.current = context;
+      monitorSourceRef.current = source;
+      monitorGainRef.current = gain;
+      setSelfMonitoring(true);
+      return true;
+    } catch {
+      stopSelfMonitoring(false);
+      setSelfMonitoring(false);
+      setMonitorError("Не удалось включить прослушивание. Попробуйте ещё раз.");
+      return false;
+    }
+  };
+
+  const setupMicTest = async (mode: MicProcessingMode, restoreMonitoring = false) => {
     const AudioContextCtor = getAudioContextCtor();
     if (!navigator.mediaDevices?.getUserMedia || !AudioContextCtor) {
       setError("Проверка микрофона не поддерживается этим браузером.");
-      return;
+      return false;
     }
 
     setError(null);
     setMonitorError(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia(audioConstraints(settings));
+      const result = await requestMicStream(mode);
+      const stream = result.stream;
       const context = new AudioContextCtor();
       const analyser = context.createAnalyser();
       const gain = context.createGain();
@@ -115,9 +162,13 @@ export function AudioSettingsSection() {
           stopMicTest();
         };
       });
+      debugMicTrack(stream);
       streamRef.current = stream;
       contextRef.current = context;
       setTesting(true);
+      setProcessingNotice(result.fallback
+        ? "Часть обработки микрофона не поддерживается этим браузером. Используется стандартный режим."
+        : null);
 
       const tick = () => {
         analyser.getByteTimeDomainData(data);
@@ -129,10 +180,34 @@ export function AudioSettingsSection() {
         frameRef.current = requestAnimationFrame(tick);
       };
       tick();
+
+      if (restoreMonitoring) {
+        await enableSelfMonitoring(stream);
+      }
+      return true;
     } catch (err) {
       setError(microphoneErrorMessage(err));
       stopMicTest();
+      return false;
     }
+  };
+
+  const startMicTest = async () => {
+    if (testing) {
+      stopMicTest();
+      return;
+    }
+    await setupMicTest(processingMode);
+  };
+
+  const changeProcessingMode = async (mode: MicProcessingMode) => {
+    if (processingMode === mode) return;
+    setProcessingMode(mode);
+    setProcessingNotice(null);
+    if (!testing) return;
+    const restoreMonitoring = selfMonitoring;
+    stopMicTest();
+    await setupMicTest(mode, restoreMonitoring);
   };
 
   const toggleSelfMonitoring = async () => {
@@ -140,38 +215,12 @@ export function AudioSettingsSection() {
       stopSelfMonitoring();
       return;
     }
-    setMonitorError(null);
     const stream = streamRef.current;
     if (!testing || !stream || !stream.active || stream.getAudioTracks().every((track) => track.readyState === "ended")) {
       setMonitorError("Сначала запустите проверку микрофона.");
       return;
     }
-    const AudioContextCtor = getAudioContextCtor();
-    if (!AudioContextCtor) {
-      setMonitorError("Прослушивание себя не поддерживается в этом браузере.");
-      return;
-    }
-
-    stopSelfMonitoring(false);
-    try {
-      const context = new AudioContextCtor();
-      if (context.state === "suspended") {
-        await context.resume();
-      }
-      const source = context.createMediaStreamSource(stream);
-      const gain = context.createGain();
-      gain.gain.value = 1;
-      source.connect(gain);
-      gain.connect(context.destination);
-      monitorContextRef.current = context;
-      monitorSourceRef.current = source;
-      monitorGainRef.current = gain;
-      setSelfMonitoring(true);
-    } catch {
-      stopSelfMonitoring(false);
-      setSelfMonitoring(false);
-      setMonitorError("Не удалось включить прослушивание. Попробуйте ещё раз.");
-    }
+    await enableSelfMonitoring(stream);
   };
 
   return (
@@ -234,6 +283,31 @@ export function AudioSettingsSection() {
               />
             </div>
           </div>
+
+          <div className="mt-3 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <span className="min-w-0 text-xs font-semibold text-[color:var(--kub-text)]">Обработка микрофона</span>
+              <span className="shrink-0 text-[10px] text-[color:var(--kub-muted)]">
+                {processingMode === "clean" ? "Чистый голос" : "Без обработки"}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-1">
+              <ModeButton
+                active={processingMode === "clean"}
+                label="Чистый голос"
+                onClick={() => void changeProcessingMode("clean")}
+              />
+              <ModeButton
+                active={processingMode === "raw"}
+                label="Без обработки"
+                onClick={() => void changeProcessingMode("raw")}
+              />
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+              Если слышите эхо, используйте наушники. Если голос звучит с артефактами, попробуйте режим «Без обработки».
+            </p>
+          </div>
+
           <label className="mt-3 flex min-w-0 items-start gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
             <input
               type="checkbox"
@@ -251,6 +325,23 @@ export function AudioSettingsSection() {
               </span>
             </span>
           </label>
+
+          {selfMonitoring && (
+            <SliderRow
+              label="Громкость прослушивания"
+              value={monitorGain}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={setMonitorGain}
+            />
+          )}
+
+          {processingNotice && (
+            <div className="mt-2 text-xs text-[color:var(--kub-muted)]">
+              {processingNotice}
+            </div>
+          )}
           {error && (
             <div className="mt-2 text-xs text-[color:var(--kub-danger)]">
               {error}
@@ -275,6 +366,22 @@ export function AudioSettingsSection() {
   );
 }
 
+async function requestMicStream(mode: MicProcessingMode): Promise<{ stream: MediaStream; fallback: boolean }> {
+  try {
+    return { stream: await navigator.mediaDevices.getUserMedia(audioConstraints(mode)), fallback: false };
+  } catch (err) {
+    if (isPermissionOrDeviceError(err)) throw err;
+  }
+
+  try {
+    return { stream: await navigator.mediaDevices.getUserMedia(audioConstraints(mode, false)), fallback: true };
+  } catch (err) {
+    if (isPermissionOrDeviceError(err)) throw err;
+  }
+
+  return { stream: await navigator.mediaDevices.getUserMedia({ audio: true }), fallback: true };
+}
+
 function getAudioContextCtor(): AudioContextCtor | null {
   if (typeof window === "undefined") return null;
   return window.AudioContext ?? (window as Window & { webkitAudioContext?: AudioContextCtor }).webkitAudioContext ?? null;
@@ -288,7 +395,57 @@ function microphoneErrorMessage(err: unknown): string {
   if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError" || err.name === "NotReadableError" || err.name === "TrackStartError") {
     return "Микрофон недоступен.";
   }
-  return "Не удалось включить микрофон. Попробуйте ещё раз.";
+  return "Не удалось применить настройки обработки. Используется стандартный режим.";
+}
+
+function isPermissionOrDeviceError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return (
+    err.name === "NotAllowedError" ||
+    err.name === "PermissionDeniedError" ||
+    err.name === "SecurityError" ||
+    err.name === "NotFoundError" ||
+    err.name === "DevicesNotFoundError" ||
+    err.name === "NotReadableError" ||
+    err.name === "TrackStartError"
+  );
+}
+
+function debugMicTrack(stream: MediaStream) {
+  if (!import.meta.env.DEV) return;
+  const track = stream.getAudioTracks()[0];
+  if (!track) return;
+  const capabilities = typeof track.getCapabilities === "function" ? track.getCapabilities() : null;
+  console.debug("[audio] mic test track", {
+    settings: track.getSettings(),
+    constraints: track.getConstraints(),
+    capabilities,
+  });
+}
+
+function ModeButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "h-8 rounded-lg px-2 text-xs font-semibold transition-colors",
+        active
+          ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
+          : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)]",
+      )}
+    >
+      {label}
+    </button>
+  );
 }
 
 function SliderRow({

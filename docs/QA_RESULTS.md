@@ -359,3 +359,9 @@ Recurring tasks roadmap note:
 - Mic test lives in `artifacts/kub/src/components/sidebar/AudioSettingsSection.tsx`; voice-message recording remains isolated in `artifacts/kub/src/hooks/useVoiceRecorder.ts` and `artifacts/kub/src/components/chat/VoiceRecorder.tsx`.
 - Mic test now has an explicit "Прослушивать себя" toggle. It is off by default, enabled only while the mic test is active, and creates a local-only `AudioContext -> MediaStreamSource -> GainNode -> destination` monitoring path.
 - Stopping the mic test, closing settings, disabling the toggle, or losing the mic stream disconnects monitoring nodes and closes the owned AudioContext. The mic test stream remains separate from normal voice-message recording and is not sent to chat.
+
+2026-05-10 microphone self-monitoring quality follow-up:
+
+- Mic test adds a local-only processing mode selector: "Чистый голос" requests browser echo cancellation, noise suppression, auto gain, mono input and 48 kHz / 16-bit ideals; "Без обработки" requests those processing constraints off.
+- If advanced constraints are not supported, mic test falls back to simpler constraints and then `{ audio: true }`, showing friendly fallback copy instead of raw DOM errors.
+- Self-monitoring has an app-only "Громкость прослушивания" GainNode control with 80% default; it does not change system volume and does not affect voice-message recording.
