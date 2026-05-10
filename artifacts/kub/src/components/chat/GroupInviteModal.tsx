@@ -5,8 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { KubButton, KubIcon, KubModal } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { cn } from "@/lib/utils";
-import { createGroupInvite, GROUP_INVITES_MIGRATION_REQUIRED, isGroupInviteUnavailableError } from "@/lib/groupInvites";
-import { mapPgError } from "@/lib/errors";
+import { createGroupInvite, formatGroupInviteError, GROUP_INVITES_MIGRATION_REQUIRED, isGroupInviteUnavailableError } from "@/lib/groupInvites";
 import type { GroupInviteStatus } from "@/lib/groupInvites";
 import type { GroupInvite, Profile } from "@/types/database";
 
@@ -54,7 +53,7 @@ export function GroupInviteModal({
             setMessage(GROUP_INVITES_MIGRATION_REQUIRED);
             return;
           }
-          setError(mapPgError(err));
+          setError(formatGroupInviteError(err, "Не удалось загрузить приглашения."));
           return;
         }
         const next: Record<string, GroupInviteStatus> = {};
@@ -88,7 +87,7 @@ export function GroupInviteModal({
       if (cancelled) return;
       setLoadingResults(false);
       if (searchError) {
-        setError(mapPgError(searchError));
+        setError("Не удалось найти пользователей.");
         setResults([]);
         return;
       }
@@ -237,8 +236,8 @@ function statusLabel(status: CandidateStatus, migrationRequired: boolean): strin
   if (migrationRequired) return "Недоступно";
   if (status === "self") return "Это вы";
   if (status === "member") return "Уже в чате";
-  if (status === "pending" || status === "sent") return "Ожидает";
-  if (status === "accepted") return "Принято";
+  if (status === "pending" || status === "sent") return "Ожидает подтверждения";
+  if (status === "accepted") return "Принял";
   if (status === "declined" || status === "cancelled" || status === "expired") return "Пригласить снова";
   return "Пригласить";
 }

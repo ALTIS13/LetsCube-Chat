@@ -76,6 +76,17 @@ function shouldShowDateSeparator(prev: MessageWithSender | null, current: Messag
   return getMessageDayKey(prev.created_at) !== getMessageDayKey(current.created_at);
 }
 
+function SystemMessageNotice({ message }: { message: MessageWithSender }) {
+  const text = message.content?.trim() || "Системное уведомление";
+  return (
+    <div className="my-2 flex w-full justify-center px-8" data-system-message={message.id}>
+      <span className="max-w-[min(82vw,32rem)] rounded-full border border-[color:var(--kub-border-color)] bg-[color-mix(in_srgb,var(--kub-bg)_76%,transparent)] px-3 py-1 text-center text-[11px] leading-snug text-[color:var(--kub-muted)] shadow-sm backdrop-blur-sm">
+        {text}
+      </span>
+    </div>
+  );
+}
+
 export function MessageList({
   messages,
   onReply,
@@ -374,8 +385,9 @@ export function MessageList({
           const isSameSenderAsPrev = !showDate && prev?.user_id === msg.user_id;
           const isSameSenderAsNext = next?.user_id === msg.user_id &&
             !shouldShowDateSeparator(msg, next);
+          const isSystemMessage = msg.type === "system";
 
-          const canSelect = !msg.deleted_at;
+          const canSelect = !msg.deleted_at && !isSystemMessage;
           const isLocalSend = msg.id.startsWith("tmp:") || Boolean(msg.pending || msg.checking || msg.failed);
           const deliveryState = getMessageDeliveryState(msg, {
             currentUserId: userId,
@@ -406,6 +418,9 @@ export function MessageList({
                   </span>
                 </div>
               )}
+              {isSystemMessage ? (
+                <SystemMessageNotice message={msg} />
+              ) : (
               <div className={cn("flex w-full min-w-0 items-center gap-1.5 overflow-hidden", isMe ? "justify-end" : "justify-start")}>
                 {selectionMode && canSelect && (
                   <button
@@ -501,6 +516,7 @@ export function MessageList({
                   />
                 </div>
               </div>
+              )}
             </div>
           );
         })}

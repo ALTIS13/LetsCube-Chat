@@ -225,6 +225,8 @@ The migration adds `public.group_invites`, scoped RLS, indexes, `group_invite_cr
 - Read-only Supabase MCP table introspection confirmed `public.group_invites` exists, RLS is enabled, and the expected columns/FKs are present (`chat_id`, `inviter_id`, `invitee_id`, `status`, `created_at`, `expires_at`, `responded_at`).
 - `_list_migrations` remains empty, so the project still appears to use manual SQL history rather than Supabase CLI migration ledger.
 - The available read-only MCP tools do not expose RPC/function definitions; invite RPCs should be verified through authenticated app/RPC QA. No SQL was applied by Codex.
+- 2026-05-10 follow-up: read-only MCP confirmed `chat_members.joined_at`, `last_read_at`, `last_delivered_at` and nullable `messages.user_id`; `messages.type` includes `system`.
+- New proposal only, not applied automatically: `.migration-backup/supabase/migrations/20260511_invite_accept_read_baseline_and_system_notice.sql`. It supersedes the previous join-message proposal, sets accepted invite members' read/delivery baseline to the accept timestamp, and inserts the join notice as `messages.type = 'system'` with `user_id = null`.
 
 ## 2026-05-06 Media And Name State
 

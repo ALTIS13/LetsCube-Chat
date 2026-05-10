@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, GroupInvite, Json } from "@/types/database";
-import { mapPgError } from "@/lib/errors";
 
 export const GROUP_INVITES_MIGRATION_REQUIRED = "Приглашения требуют обновления базы данных.";
 
@@ -47,7 +46,7 @@ export async function createGroupInvite(
     p_chat_id: chatId,
     p_invitee_id: inviteeId,
   });
-  if (error) return groupInviteError(error);
+  if (error) return groupInviteError(error, "Не удалось отправить приглашение.");
   return { ok: true, data: data as GroupInvite };
 }
 
@@ -56,7 +55,7 @@ export async function acceptGroupInvite(
   inviteId: string,
 ): Promise<RpcResult<string>> {
   const { data, error } = await supabase.rpc("group_invite_accept", { p_invite_id: inviteId });
-  if (error) return groupInviteError(error);
+  if (error) return groupInviteError(error, "Не удалось принять приглашение.");
   return { ok: true, data: data as string };
 }
 
@@ -65,7 +64,7 @@ export async function declineGroupInvite(
   inviteId: string,
 ): Promise<RpcResult<GroupInvite>> {
   const { data, error } = await supabase.rpc("group_invite_decline", { p_invite_id: inviteId });
-  if (error) return groupInviteError(error);
+  if (error) return groupInviteError(error, "Не удалось отклонить приглашение.");
   return { ok: true, data: data as GroupInvite };
 }
 
@@ -74,7 +73,7 @@ export async function cancelGroupInvite(
   inviteId: string,
 ): Promise<RpcResult<GroupInvite>> {
   const { data, error } = await supabase.rpc("group_invite_cancel", { p_invite_id: inviteId });
-  if (error) return groupInviteError(error);
+  if (error) return groupInviteError(error, "Не удалось отменить приглашение.");
   return { ok: true, data: data as GroupInvite };
 }
 
@@ -94,12 +93,45 @@ export function isGroupInviteUnavailableError(error: unknown): boolean {
   );
 }
 
-function groupInviteError(error: unknown): RpcResult<never> {
+export function formatGroupInviteError(error: unknown, fallback = "Не удалось выполнить действие с приглашением."): string {
+  if (isGroupInviteUnavailableError(error)) return GROUP_INVITES_MIGRATION_REQUIRED;
+  const details = readErrorDetails(error);
+  const text = `${details.code} ${details.message} ${details.details}`.toLowerCase();
+
+  if (details.code === "42501" || text.includes("permission denied") || text.includes("admin_required")) {
+    return "Недостаточно прав для приглашения.";
+  }
+  if (text.includes("already_member")) return "Пользователь уже состоит в группе.";
+  if (text.includes("unique") || text.includes("duplicate") || text.includes("one_pending")) {
+    return "Приглашение уже отправлено.";
+  }
+  if (text.includes("not_pending")) return "Приглашение уже недоступно.";
+  if (text.includes("expired")) return "Приглашение истекло.";
+  if (text.includes("self_forbidden")) return "Нельзя пригласить самого себя.";
+  if (text.includes("chat_type_invalid")) return "Приглашения доступны только в группах.";
+  if (text.includes("invitee_not_found")) return "Пользователь не найден.";
+  if (text.includes("not_found") || text.includes("unavailable")) return "Приглашение уже недоступно.";
+  if (details.code === "28000" || text.includes("not_authenticated")) return "Войдите в аккаунт, чтобы продолжить.";
+
+  return fallback;
+}
+
+function groupInviteError(error: unknown, fallback: string): RpcResult<never> {
   const migrationRequired = isGroupInviteUnavailableError(error);
   return {
     ok: false,
     migrationRequired,
-    message: migrationRequired ? GROUP_INVITES_MIGRATION_REQUIRED : mapPgError(error),
+    message: formatGroupInviteError(error, fallback),
+  };
+}
+
+function readErrorDetails(error: unknown): { code: string; message: string; details: string } {
+  if (!error || typeof error !== "object") return { code: "", message: "", details: "" };
+  const record = error as Record<string, unknown>;
+  return {
+    code: typeof record.code === "string" ? record.code : "",
+    message: typeof record.message === "string" ? record.message : "",
+    details: typeof record.details === "string" ? record.details : "",
   };
 }
 

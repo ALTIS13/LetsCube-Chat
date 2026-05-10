@@ -259,6 +259,7 @@ Expected RPC:
 - `group_invites` is realtime-enabled by the 20260509 migration; the group info panel subscribes to current-chat `chat_members` and `group_invites` changes and refetches the scoped lists after each event.
 - Declined/cancelled/expired invitees can be invited again through `group_invite_create`; pending and already-member users are disabled in the invite modal.
 - New proposal only, not applied automatically: `.migration-backup/supabase/migrations/20260510_group_invite_join_system_messages.sql`. It preserves the existing accept checks and adds one persistent `messages.type = 'system'` row: `<display_name> присоединился к группе`.
+- Newer proposal only, not applied automatically: `.migration-backup/supabase/migrations/20260511_invite_accept_read_baseline_and_system_notice.sql`. It supersedes the 20260510 proposal, sets `chat_members.joined_at`, `last_read_at` and `last_delivered_at` to the accept timestamp on invite accept, and stores the join notice as `messages.type = 'system'` with `user_id = null`.
 
 Important behavior:
 

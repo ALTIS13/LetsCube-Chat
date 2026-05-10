@@ -13,7 +13,7 @@ import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail 
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
 import { GroupInviteModal } from "./GroupInviteModal";
-import { cancelGroupInvite, createGroupInvite, GROUP_INVITES_MIGRATION_REQUIRED, isGroupInviteUnavailableError } from "@/lib/groupInvites";
+import { cancelGroupInvite, createGroupInvite, formatGroupInviteError, GROUP_INVITES_MIGRATION_REQUIRED, isGroupInviteUnavailableError } from "@/lib/groupInvites";
 import type { GroupInviteStatus } from "@/lib/groupInvites";
 import type { ChatWithLastMessage, Profile, Message } from "@/types/database";
 import { CHAT_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
@@ -46,12 +46,9 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const display = getChatDisplayInfo(chat, currentUser?.id ?? null);
   const isSaved = display.isSaved;
   const isGroup = !isSaved && (chat.type === "group" || chat.type === "channel");
-  const myRole: "owner" | "admin" | "member" | null =
+  const storedMemberRole: "owner" | "admin" | "member" | null =
     (chat.members?.find((m) => m.user_id === currentUser?.id)?.role as
       | "owner" | "admin" | "member" | undefined) ?? null;
-  const isOwner = myRole === "owner";
-  const isOwnerOrAdmin = !isSaved && (myRole === "owner" || myRole === "admin");
-  const canEditChatProfile = isGroup && isOwnerOrAdmin;
   const canHidePrivateChat = chat.type === "private" && !isSaved;
   const isPinned = Boolean(chat.is_pinned);
   const isMuted = mutedChatIds.includes(chat.id);
@@ -76,6 +73,15 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const [loadingMedia, setLoadingMedia] = useState(false);
   const [mediaHasMore, setMediaHasMore] = useState(false);
   const [openMedia, setOpenMedia] = useState<MediaViewerItem | null>(null);
+  const localMemberRole = (members.find((member) => member.id === currentUser?.id)?.chat_role ?? null) as
+    | "owner"
+    | "admin"
+    | "member"
+    | null;
+  const myRole = localMemberRole ?? storedMemberRole;
+  const isOwner = myRole === "owner";
+  const isOwnerOrAdmin = !isSaved && (myRole === "owner" || myRole === "admin");
+  const canEditChatProfile = isGroup && isOwnerOrAdmin;
 
   const loadMembers = useCallback(async () => {
     if (!isGroup) {
@@ -110,7 +116,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         setInvites([]);
         return;
       }
-      setInviteError(mapPgError(error));
+      setInviteError(formatGroupInviteError(error, "Не удалось загрузить приглашения."));
       return;
     }
     setInviteError(null);

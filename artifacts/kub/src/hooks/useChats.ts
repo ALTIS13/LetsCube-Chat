@@ -26,6 +26,7 @@ export function useChats() {
 
   type MyMembershipRow = {
     chat_id: string;
+    joined_at: string;
     last_read_at: string | null;
     last_delivered_at: string | null;
     hidden_at: string | null;
@@ -53,7 +54,7 @@ export function useChats() {
     try {
       const { data: memberships } = await supabase
         .from("chat_members")
-        .select("chat_id, last_read_at, last_delivered_at, hidden_at, cleared_at, pinned, pinned_at, pinned_order")
+        .select("chat_id, joined_at, last_read_at, last_delivered_at, hidden_at, cleared_at, pinned, pinned_at, pinned_order")
         .eq("user_id", userId);
 
       if (!memberships?.length) {
@@ -69,7 +70,7 @@ export function useChats() {
 
       const { data: chatsData } = await supabase
         .from("chats")
-        .select("*, members:chat_members(user_id, role, last_read_at, last_delivered_at, profile:profiles(*))")
+        .select("*, members:chat_members(user_id, role, joined_at, last_read_at, last_delivered_at, profile:profiles(*))")
         .in("id", chatIds)
         .order("updated_at", { ascending: false });
 
@@ -78,6 +79,11 @@ export function useChats() {
       const enriched: ChatWithLastMessage[] = await Promise.all(
         chatsData.map(async (chat) => {
           const myMembership = membershipByChat.get(chat.id) ?? null;
+          const effectiveReadAt = latestTimestamp(
+            myMembership?.last_read_at,
+            myMembership?.joined_at,
+            myMembership?.cleared_at,
+          );
 
           let lastMessageQuery = supabase
             .from("messages")
@@ -95,17 +101,14 @@ export function useChats() {
           const lastMsgData = lastRows.find((message) => !hiddenLastIds.has(message.id)) ?? null;
 
           let unreadCount = 0;
-          if (myMembership?.last_read_at) {
+          if (effectiveReadAt) {
             let unreadQuery = supabase
               .from("messages")
               .select("id", { count: "exact", head: true })
               .eq("chat_id", chat.id)
               .neq("user_id", userId)
-              .gt("created_at", myMembership.last_read_at)
+              .gt("created_at", effectiveReadAt)
               .is("deleted_at", null);
-            if (myMembership.cleared_at) {
-              unreadQuery = unreadQuery.gt("created_at", myMembership.cleared_at);
-            }
             const { count } = await unreadQuery;
             unreadCount = count ?? 0;
           } else {
@@ -378,6 +381,19 @@ export function useChats() {
   }, [fetchChats]);
 
   return { chats, loading, refetch: fetchChats };
+}
+
+function latestTimestamp(...values: Array<string | null | undefined>): string | null {
+  let latest: string | null = null;
+  let latestMs = Number.NEGATIVE_INFINITY;
+  for (const value of values) {
+    if (!value) continue;
+    const ms = new Date(value).getTime();
+    if (!Number.isFinite(ms) || ms <= latestMs) continue;
+    latest = value;
+    latestMs = ms;
+  }
+  return latest;
 }
 
 async function fetchHiddenMessageIdSet(

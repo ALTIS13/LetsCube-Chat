@@ -339,3 +339,10 @@ Recurring tasks roadmap note:
 - The invite modal reads all latest invite statuses for the current chat: pending users are disabled, members are disabled, declined/cancelled/expired users can be invited again.
 - Chat info subscribes to current-chat `chat_members` and `group_invites` realtime changes and refetches both lists after changes; action handlers also refetch after invite/cancel/remove/role changes.
 - No SQL was applied automatically. Manual proposal pending: `.migration-backup/supabase/migrations/20260510_group_invite_join_system_messages.sql` for persistent join system messages after invite accept.
+
+2026-05-10 invite unread / role / system notice follow-up:
+
+- Frontend chat unread calculation now uses an effective baseline from `last_read_at`, `joined_at` and `cleared_at`, so accepted invitees do not inherit unread counts from pre-join history when `last_read_at` is still null.
+- Chat list/store comparison now includes `chat_members.role`, allowing current-user admin/owner role changes to update role-gated UI after realtime/refetch without a full page refresh.
+- System messages render as centered micro-notices outside `MessageBubble`; they do not show avatar, delivery checks, reactions, reply controls or normal user bubble styling.
+- No SQL was applied automatically. New manual proposal pending: `.migration-backup/supabase/migrations/20260511_invite_accept_read_baseline_and_system_notice.sql`.

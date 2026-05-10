@@ -168,7 +168,7 @@ export function NotificationBell() {
   const handleAcceptInvite = async (item: Notification) => {
     const payload = parseGroupInvitePayload(item.payload);
     if (!payload.invite_id) {
-      showAppAlert("Приглашение недоступно: в уведомлении нет invite_id.", "Приглашение");
+      showAppAlert("Приглашение недоступно.", "Приглашение");
       return;
     }
     setBusyInviteId(payload.invite_id);
@@ -196,7 +196,7 @@ export function NotificationBell() {
   const handleDeclineInvite = async (item: Notification) => {
     const payload = parseGroupInvitePayload(item.payload);
     if (!payload.invite_id) {
-      showAppAlert("Приглашение недоступно: в уведомлении нет invite_id.", "Приглашение");
+      showAppAlert("Приглашение недоступно.", "Приглашение");
       return;
     }
     setBusyInviteId(payload.invite_id);

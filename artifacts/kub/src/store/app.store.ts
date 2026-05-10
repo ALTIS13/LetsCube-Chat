@@ -107,7 +107,7 @@ function sameChatList(a: ChatWithLastMessage[], b: ChatWithLastMessage[]): boole
 
 function chatMemberReceiptSignature(chat: ChatWithLastMessage): string {
   return (chat.members ?? [])
-    .map((member) => `${member.user_id}:${member.last_read_at ?? ""}:${member.last_delivered_at ?? ""}`)
+    .map((member) => `${member.user_id}:${member.role ?? ""}:${member.last_read_at ?? ""}:${member.last_delivered_at ?? ""}`)
     .sort()
     .join("|");
 }
