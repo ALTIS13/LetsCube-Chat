@@ -446,6 +446,7 @@ export function MessageBubble({
   });
   const { currentUser } = useAppStore();
   const textContent = message.content ?? "";
+  const mediaCaption = getVisibleMediaCaption(message);
   const textLayoutKind = getMessageTextLayoutKind(message.type, textContent);
   const widthClasses = getMessageWidthClasses(textLayoutKind);
   const stackStyle = getMessageStackStyle(textLayoutKind);
@@ -1127,17 +1128,21 @@ export function MessageBubble({
             {isVoiceMessage(message) ? (
               <AudioMessage url={message.media_url} duration={parseAudioDuration(message.content)} isMe={isMe} />
             ) : message.type === "image" && message.media_url ? (
-              <MediaImage
-                url={message.media_url}
-                title={message.content ?? "Фото"}
-                onOpen={() => onOpenMedia?.({ type: "image", url: message.media_url!, title: message.content ?? "Фото" })}
-              />
+              <MediaWithCaption caption={mediaCaption}>
+                <MediaImage
+                  url={message.media_url}
+                  title={message.content ?? "Фото"}
+                  onOpen={() => onOpenMedia?.({ type: "image", url: message.media_url!, title: message.content ?? "Фото" })}
+                />
+              </MediaWithCaption>
             ) : message.type === "video" && message.media_url ? (
-              <MediaVideo
-                url={message.media_url}
-                title={message.content ?? "Видео"}
-                onOpen={() => onOpenMedia?.({ type: "video", url: message.media_url!, title: message.content ?? "Видео" })}
-              />
+              <MediaWithCaption caption={mediaCaption}>
+                <MediaVideo
+                  url={message.media_url}
+                  title={message.content ?? "Видео"}
+                  onOpen={() => onOpenMedia?.({ type: "video", url: message.media_url!, title: message.content ?? "Видео" })}
+                />
+              </MediaWithCaption>
             ) : message.type === "file" && message.media_url ? (
               <a
                 href={message.media_url}
@@ -1295,6 +1300,19 @@ function MediaImage({ url, title, onOpen }: { url: string; title: string; onOpen
   );
 }
 
+function MediaWithCaption({ children, caption }: { children: ReactNode; caption: string | null }) {
+  return (
+    <div className="flex max-w-full flex-col gap-1.5">
+      {children}
+      {caption && (
+        <p className="min-w-0 max-w-full whitespace-pre-wrap text-sm leading-relaxed text-[color:var(--kub-text)]">
+          <FormattedText content={caption} />
+        </p>
+      )}
+    </div>
+  );
+}
+
 function MediaVideo({ url, title, onOpen }: { url: string; title: string; onOpen: () => void }) {
   const [failed, setFailed] = useState(false);
 
@@ -1348,4 +1366,17 @@ function isVoiceMessage(message: MessageWithSender): boolean {
   if (/\.(webm|ogg|oga|mp3|wav|m4a|aac)(\?|#|$)/.test(mediaUrl)) return true;
   const content = message.content?.toLowerCase() ?? "";
   return content.includes("голосовое") || content.includes("voice");
+}
+
+function getVisibleMediaCaption(message: MessageWithSender): string | null {
+  if (message.type !== "image" && message.type !== "video") return null;
+  const content = message.content?.trim();
+  if (!content) return null;
+  if (looksLikeMediaFileName(content)) return null;
+  if (/^(фото|видео|image|video)$/i.test(content)) return null;
+  return content;
+}
+
+function looksLikeMediaFileName(value: string): boolean {
+  return /^[\w\s().-]+\.(png|jpe?g|webp|gif|mp4|webm|mov|m4v)$/i.test(value);
 }
