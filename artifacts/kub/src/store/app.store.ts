@@ -89,6 +89,7 @@ function sameChatList(a: ChatWithLastMessage[], b: ChatWithLastMessage[]): boole
       chat.description === next.description &&
       chat.avatar_url === next.avatar_url &&
       chat.is_forum === next.is_forum &&
+      chat.invite_policy === next.invite_policy &&
       chat.updated_at === next.updated_at &&
       chat.unread_count === next.unread_count &&
       chat.is_pinned === next.is_pinned &&

@@ -334,6 +334,22 @@ Manual/idempotent migrations are stored in `.migration-backup/supabase/migration
 - `20260506_admin_avatar_management.sql` - applied in production Supabase as of 2026-05-06; allows admins to upload avatars for non-admin users through the scoped media path helper.
 - `20260506_secure_chat_media_access.sql` - applied in production Supabase as of 2026-05-06; adds private `chat-media` bucket, chat-member storage policies and `messages.media_bucket` / `messages.media_path`.
 - `20260506_entity_name_constraints.sql` - applied manually in production Supabase as of 2026-05-06; DB-level max length checks for `chats.name`, `folders.name` and `topics.name` are active.
+- `20260512_group_invite_reinvite_and_policy.sql` - proposal only, not applied automatically. Adds `chats.invite_policy` (`owner_admin_only` / `members_can_invite`) and updates invite RPC behavior so historical accepted/declined/cancelled/expired invites do not block reinviting users who are no longer current `chat_members`.
+
+## Pending Group Invite Policy Proposal
+
+`20260512_group_invite_reinvite_and_policy.sql` keeps `chat_members` as the authoritative current-membership table. A historical `group_invites.status = 'accepted'` row is no longer enough to block a new invite if the user was removed from the group.
+
+The proposal updates:
+
+- `public.chats.invite_policy text not null default 'owner_admin_only'`.
+- `public.group_invite_create(p_chat_id uuid, p_invitee_id uuid)`:
+  - rejects current members;
+  - returns an existing pending invite;
+  - creates a fresh pending invite and `group_invite` notification for removed/former users;
+  - allows all current members to invite only when `invite_policy = 'members_can_invite'`.
+- `public.group_invite_cancel(p_invite_id uuid)`:
+  - remains owner/admin only, so ordinary members in common groups can invite but cannot manage invitations.
 
 Supabase MCP migration ledger is empty; do not rely on Supabase CLI migration history for this project.
 

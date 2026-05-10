@@ -346,3 +346,10 @@ Recurring tasks roadmap note:
 - Chat list/store comparison now includes `chat_members.role`, allowing current-user admin/owner role changes to update role-gated UI after realtime/refetch without a full page refresh.
 - System messages render as centered micro-notices outside `MessageBubble`; they do not show avatar, delivery checks, reactions, reply controls or normal user bubble styling.
 - No SQL was applied automatically. New manual proposal pending: `.migration-backup/supabase/migrations/20260511_invite_accept_read_baseline_and_system_notice.sql`.
+
+2026-05-10 reinvite / invite policy follow-up:
+
+- Historical accepted invites are now treated as history unless the invitee is still present in `chat_members`; removed ex-members become inviteable again in both the invite modal and owner/admin invite status list.
+- Invite UI uses friendly status/error copy only. Technical RPC names, raw payloads, UUIDs, PostgreSQL codes and stack details remain console-only diagnostics.
+- Group info includes a gated "Кто может приглашать" setting. Until the manual DB proposal is applied, the UI falls back to `owner_admin_only` and shows a friendly migration-required note instead of breaking.
+- No SQL was applied automatically. New manual proposal pending: `.migration-backup/supabase/migrations/20260512_group_invite_reinvite_and_policy.sql`.

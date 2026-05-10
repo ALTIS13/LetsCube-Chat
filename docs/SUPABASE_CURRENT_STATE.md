@@ -227,6 +227,9 @@ The migration adds `public.group_invites`, scoped RLS, indexes, `group_invite_cr
 - The available read-only MCP tools do not expose RPC/function definitions; invite RPCs should be verified through authenticated app/RPC QA. No SQL was applied by Codex.
 - 2026-05-10 follow-up: read-only MCP confirmed `chat_members.joined_at`, `last_read_at`, `last_delivered_at` and nullable `messages.user_id`; `messages.type` includes `system`.
 - New proposal only, not applied automatically: `.migration-backup/supabase/migrations/20260511_invite_accept_read_baseline_and_system_notice.sql`. It supersedes the previous join-message proposal, sets accepted invite members' read/delivery baseline to the accept timestamp, and inserts the join notice as `messages.type = 'system'` with `user_id = null`.
+- 2026-05-10 follow-up: the user manually applied `.migration-backup/supabase/migrations/20260511_invite_accept_read_baseline_and_system_notice.sql`.
+- New proposal only, not applied automatically: `.migration-backup/supabase/migrations/20260512_group_invite_reinvite_and_policy.sql`. It adds `chats.invite_policy`, keeps current `chat_members` membership as the source of truth over historical accepted invites, lets removed ex-members receive a fresh pending invite/notification, and separates `owner_admin_only` from `members_can_invite` group invite modes.
+- Read-only Supabase MCP on 2026-05-10 confirmed the invite RPCs exist and `chat_members` has the accepted-invite baseline columns from the previous migration; `chats.invite_policy` is not present yet, so the 20260512 proposal still requires manual application before common-group invite mode is active.
 
 ## 2026-05-06 Media And Name State
 

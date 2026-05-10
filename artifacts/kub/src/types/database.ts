@@ -169,6 +169,7 @@ export interface Database {
           avatar_url: string | null
           created_by: string | null
           is_forum: boolean
+          invite_policy: 'owner_admin_only' | 'members_can_invite'
           created_at: string
           updated_at: string
         }
@@ -180,6 +181,7 @@ export interface Database {
           avatar_url?: string | null
           created_by?: string | null
           is_forum?: boolean
+          invite_policy?: 'owner_admin_only' | 'members_can_invite'
           created_at?: string
           updated_at?: string
         }
@@ -191,6 +193,7 @@ export interface Database {
           avatar_url?: string | null
           created_by?: string | null
           is_forum?: boolean
+          invite_policy?: 'owner_admin_only' | 'members_can_invite'
           updated_at?: string
         }
         Relationships: []

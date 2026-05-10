@@ -17,7 +17,7 @@ interface GroupInviteModalProps {
   onClose: () => void;
 }
 
-type CandidateStatus = "self" | "member" | "pending" | "sent" | "declined" | "cancelled" | "expired" | "accepted" | "available";
+type CandidateStatus = "self" | "member" | "pending" | "sent" | "declined" | "cancelled" | "expired" | "former" | "available";
 
 export function GroupInviteModal({
   chatId,
@@ -228,6 +228,7 @@ function getCandidateStatus(
   if (memberIdSet.has(userId)) return "member";
   if (sentInviteeIds.has(userId)) return "sent";
   const inviteStatus = inviteStatuses[userId];
+  if (inviteStatus === "accepted") return "former";
   if (inviteStatus) return inviteStatus;
   return "available";
 }
@@ -236,14 +237,13 @@ function statusLabel(status: CandidateStatus, migrationRequired: boolean): strin
   if (migrationRequired) return "Недоступно";
   if (status === "self") return "Это вы";
   if (status === "member") return "Уже в чате";
-  if (status === "pending" || status === "sent") return "Ожидает подтверждения";
-  if (status === "accepted") return "Принял";
-  if (status === "declined" || status === "cancelled" || status === "expired") return "Пригласить снова";
+  if (status === "pending" || status === "sent") return "Приглашение отправлено";
+  if (status === "former" || status === "declined" || status === "cancelled" || status === "expired") return "Пригласить снова";
   return "Пригласить";
 }
 
 function canInviteCandidate(status: CandidateStatus): boolean {
-  return status === "available" || status === "declined" || status === "cancelled" || status === "expired";
+  return status === "available" || status === "former" || status === "declined" || status === "cancelled" || status === "expired";
 }
 
 function displayName(user: Profile): string {

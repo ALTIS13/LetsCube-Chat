@@ -13,8 +13,16 @@ import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail 
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
 import { GroupInviteModal } from "./GroupInviteModal";
-import { cancelGroupInvite, createGroupInvite, formatGroupInviteError, GROUP_INVITES_MIGRATION_REQUIRED, isGroupInviteUnavailableError } from "@/lib/groupInvites";
-import type { GroupInviteStatus } from "@/lib/groupInvites";
+import {
+  cancelGroupInvite,
+  createGroupInvite,
+  formatGroupInviteError,
+  GROUP_INVITES_MIGRATION_REQUIRED,
+  INVITE_POLICY_MIGRATION_REQUIRED,
+  isGroupInviteUnavailableError,
+  isInvitePolicyUnavailableError,
+} from "@/lib/groupInvites";
+import type { GroupInviteStatus, InvitePolicy } from "@/lib/groupInvites";
 import type { ChatWithLastMessage, Profile, Message } from "@/types/database";
 import { CHAT_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
 
@@ -39,6 +47,8 @@ type InviteWithProfiles = {
   invitee: Profile | null;
   inviter: Profile | null;
 };
+
+const DEFAULT_INVITE_POLICY: InvitePolicy = "owner_admin_only";
 
 export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProps) {
   const { currentUser, setSelectedChatId, chats, setChats, setMessages, mutedChatIds, toggleMutedChat } = useAppStore();
@@ -73,6 +83,11 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const [loadingMedia, setLoadingMedia] = useState(false);
   const [mediaHasMore, setMediaHasMore] = useState(false);
   const [openMedia, setOpenMedia] = useState<MediaViewerItem | null>(null);
+  const chatInvitePolicy = readChatInvitePolicy(chat);
+  const [invitePolicy, setInvitePolicy] = useState<InvitePolicy>(chatInvitePolicy ?? DEFAULT_INVITE_POLICY);
+  const [invitePolicySupported, setInvitePolicySupported] = useState(chatInvitePolicy !== null);
+  const [invitePolicySaving, setInvitePolicySaving] = useState(false);
+  const [invitePolicyError, setInvitePolicyError] = useState<string | null>(null);
   const localMemberRole = (members.find((member) => member.id === currentUser?.id)?.chat_role ?? null) as
     | "owner"
     | "admin"
@@ -82,6 +97,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const isOwner = myRole === "owner";
   const isOwnerOrAdmin = !isSaved && (myRole === "owner" || myRole === "admin");
   const canEditChatProfile = isGroup && isOwnerOrAdmin;
+  const canSendInvites = isGroup && Boolean(myRole) && (isOwnerOrAdmin || (invitePolicySupported && invitePolicy === "members_can_invite"));
 
   const loadMembers = useCallback(async () => {
     if (!isGroup) {
@@ -139,10 +155,29 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     );
   }, [chat.id, isGroup, isOwnerOrAdmin, supabase]);
 
+  const loadInvitePolicy = useCallback(async () => {
+    if (!isGroup) {
+      setInvitePolicy(DEFAULT_INVITE_POLICY);
+      setInvitePolicySupported(false);
+      setInvitePolicyError(null);
+      return;
+    }
+    if (chatInvitePolicy === null) {
+      setInvitePolicy(DEFAULT_INVITE_POLICY);
+      setInvitePolicySupported(false);
+      setInvitePolicyError(null);
+      return;
+    }
+    setInvitePolicySupported(true);
+    setInvitePolicyError(null);
+    setInvitePolicy(chatInvitePolicy);
+  }, [chatInvitePolicy, isGroup]);
+
   useEffect(() => {
     void loadMembers();
     void loadInvites();
-  }, [loadInvites, loadMembers]);
+    void loadInvitePolicy();
+  }, [loadInvitePolicy, loadInvites, loadMembers]);
 
   useEffect(() => {
     if (!isGroup) return;
@@ -152,11 +187,13 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       timer = window.setTimeout(() => {
         void loadMembers();
         void loadInvites();
+        void loadInvitePolicy();
         dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
       }, 150);
     };
     const channel = supabase
       .channel(`chat-info:${chat.id}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chats", filter: `id=eq.${chat.id}` }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "chat_members", filter: `chat_id=eq.${chat.id}` }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "group_invites", filter: `chat_id=eq.${chat.id}` }, scheduleRefresh)
       .subscribe();
@@ -164,7 +201,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       if (timer) window.clearTimeout(timer);
       void supabase.removeChannel(channel);
     };
-  }, [chat.id, isGroup, loadInvites, loadMembers, supabase]);
+  }, [chat.id, isGroup, loadInvitePolicy, loadInvites, loadMembers, supabase]);
 
   const loadMedia = useCallback(async (reset = false, offset = 0) => {
     if (!currentUser) {
@@ -435,6 +472,38 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     void loadMembers();
   };
 
+  const handleInvitePolicyChange = async (nextPolicy: InvitePolicy) => {
+    if (!isOwnerOrAdmin || invitePolicySaving || invitePolicy === nextPolicy) return;
+    if (!invitePolicySupported) {
+      setInvitePolicyError(INVITE_POLICY_MIGRATION_REQUIRED);
+      return;
+    }
+    setInvitePolicySaving(true);
+    setInvitePolicyError(null);
+    const { data, error } = await supabase
+      .from("chats")
+      .update({ invite_policy: nextPolicy })
+      .eq("id", chat.id)
+      .select("invite_policy")
+      .maybeSingle();
+    setInvitePolicySaving(false);
+    if (error) {
+      if (isInvitePolicyUnavailableError(error)) {
+        setInvitePolicySupported(false);
+        setInvitePolicyError(INVITE_POLICY_MIGRATION_REQUIRED);
+        return;
+      }
+      setInvitePolicyError("Не удалось изменить режим приглашений.");
+      return;
+    }
+    const savedPolicy = normalizeInvitePolicy(data?.invite_policy);
+    setInvitePolicy(savedPolicy);
+    setChats(chats.map((item) =>
+      item.id === chat.id ? { ...item, invite_policy: savedPolicy } : item
+    ));
+    dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
+  };
+
   const handleCancelInvite = async (invite: InviteWithProfiles) => {
     if (inviteBusyId) return;
     setInviteBusyId(invite.id);
@@ -645,7 +714,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                   {isMuted ? "Включить уведомления" : "Отключить уведомления"}
                 </span>
               </button>
-              {isGroup && isOwnerOrAdmin && (
+              {isGroup && canSendInvites && (
                 <button
                   onClick={() => setInviteOpen(true)}
                   className={cn(actionRowClass, "text-[color:var(--kub-text)]")}
@@ -653,6 +722,63 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                   <KubIcon name="userPlus" size={17} tone="muted" className="shrink-0" />
                   <span className="min-w-0 flex-1 truncate">Пригласить пользователя</span>
                 </button>
+              )}
+              {isGroup && (
+                <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-[color:var(--kub-text)]">Кто может приглашать</div>
+                      <div className="text-xs text-[color:var(--kub-muted)]">
+                        {invitePolicy === "members_can_invite" ? "Все участники" : "Только администраторы"}
+                      </div>
+                    </div>
+                    {!invitePolicySupported && (
+                      <span className="shrink-0 rounded-full border border-[color:var(--kub-border-color)] px-2 py-0.5 text-[10px] font-semibold text-[color:var(--kub-muted)]">
+                        Недоступно
+                      </span>
+                    )}
+                  </div>
+                  {isOwnerOrAdmin && (
+                    <div className="grid grid-cols-2 gap-1">
+                      <button
+                        type="button"
+                        disabled={!invitePolicySupported || invitePolicySaving}
+                        onClick={() => void handleInvitePolicyChange("owner_admin_only")}
+                        className={cn(
+                          "h-8 rounded-lg px-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                          invitePolicy === "owner_admin_only"
+                            ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
+                            : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)]",
+                        )}
+                      >
+                        Администраторы
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!invitePolicySupported || invitePolicySaving}
+                        onClick={() => void handleInvitePolicyChange("members_can_invite")}
+                        className={cn(
+                          "h-8 rounded-lg px-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                          invitePolicy === "members_can_invite"
+                            ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
+                            : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)]",
+                        )}
+                      >
+                        Все участники
+                      </button>
+                    </div>
+                  )}
+                  {!invitePolicySupported && isOwnerOrAdmin && (
+                    <div className="mt-2 text-xs text-[color:var(--kub-muted)]">
+                      {INVITE_POLICY_MIGRATION_REQUIRED}
+                    </div>
+                  )}
+                  {invitePolicyError && (
+                    <div className="mt-2 text-xs text-[color:var(--kub-danger)]">
+                      {invitePolicyError}
+                    </div>
+                  )}
+                </div>
               )}
               {isGroup && chat.type === "group" && isOwner && (
                 <button
@@ -766,7 +892,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
 
         {tab === "members" && isGroup && (
           <div className="py-2">
-            {isOwnerOrAdmin && (
+            {canSendInvites && (
               <div className="px-4 pb-2">
                 <button
                   type="button"
@@ -888,7 +1014,13 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                     {visibleInvites.map((invite) => {
                       const invitee = invite.invitee;
                       const inviter = invite.inviter;
-                      const canReinvite = invite.status === "declined" || invite.status === "cancelled" || invite.status === "expired";
+                      const inviteeIsCurrentMember = memberIdSet.has(invite.invitee_id);
+                      const canReinvite = !inviteeIsCurrentMember && (
+                        invite.status === "accepted" ||
+                        invite.status === "declined" ||
+                        invite.status === "cancelled" ||
+                        invite.status === "expired"
+                      );
                       const canCancel = invite.status === "pending";
                       return (
                         <div key={invite.id} className="rounded-xl px-2 py-2 hover:bg-[var(--kub-surface-2)]">
@@ -903,7 +1035,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                                   "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
                                   inviteStatusClass(invite.status),
                                 )}>
-                                  {inviteStatusLabel(invite.status)}
+                                  {inviteStatusLabel(invite.status, inviteeIsCurrentMember)}
                                 </span>
                               </div>
                               <div className="truncate text-xs text-[color:var(--kub-muted)]">
@@ -1098,6 +1230,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
             setInviteOpen(false);
             void loadMembers();
             void loadInvites();
+            void loadInvitePolicy();
           }}
         />
       )}
@@ -1109,10 +1242,10 @@ function displayProfileName(profile: Profile): string {
   return profile.full_name ?? profile.username ?? "Без имени";
 }
 
-function inviteStatusLabel(status: GroupInviteStatus): string {
+function inviteStatusLabel(status: GroupInviteStatus, isCurrentMember = false): string {
   if (status === "pending") return "Ожидает подтверждения";
   if (status === "declined") return "Отказался";
-  if (status === "accepted") return "Принял";
+  if (status === "accepted") return isCurrentMember ? "Принял" : "Был участником";
   if (status === "cancelled") return "Отменено";
   return "Истекло";
 }
@@ -1134,6 +1267,16 @@ function formatInviteTime(value: string): string {
   const diffHours = Math.round(diffMin / 60);
   if (diffHours < 24) return `${diffHours} ч назад`;
   return date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+}
+
+function readChatInvitePolicy(chat: ChatWithLastMessage): InvitePolicy | null {
+  const value = (chat as ChatWithLastMessage & { invite_policy?: string | null }).invite_policy;
+  if (value === "owner_admin_only" || value === "members_can_invite") return value;
+  return null;
+}
+
+function normalizeInvitePolicy(value: string | null | undefined): InvitePolicy {
+  return value === "members_can_invite" ? "members_can_invite" : DEFAULT_INVITE_POLICY;
 }
 
 function MediaGalleryTile({ message }: { message: Message }) {

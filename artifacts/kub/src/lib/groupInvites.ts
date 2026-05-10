@@ -2,8 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, GroupInvite, Json } from "@/types/database";
 
 export const GROUP_INVITES_MIGRATION_REQUIRED = "Приглашения требуют обновления базы данных.";
+export const INVITE_POLICY_MIGRATION_REQUIRED = "Настройка режима приглашений станет доступна после обновления базы данных.";
 
 export type GroupInviteStatus = "pending" | "accepted" | "declined" | "cancelled" | "expired";
+export type InvitePolicy = "owner_admin_only" | "members_can_invite";
 
 export interface GroupInvitePayload {
   invite_id?: string;
@@ -47,7 +49,15 @@ export async function createGroupInvite(
     p_invitee_id: inviteeId,
   });
   if (error) return groupInviteError(error, "Не удалось отправить приглашение.");
-  return { ok: true, data: data as GroupInvite };
+  const invite = data as GroupInvite;
+  if (invite.status !== "pending") {
+    return {
+      ok: false,
+      migrationRequired: false,
+      message: "Не удалось отправить приглашение. Попробуйте ещё раз.",
+    };
+  }
+  return { ok: true, data: invite };
 }
 
 export async function acceptGroupInvite(
@@ -93,7 +103,15 @@ export function isGroupInviteUnavailableError(error: unknown): boolean {
   );
 }
 
-export function formatGroupInviteError(error: unknown, fallback = "Не удалось выполнить действие с приглашением."): string {
+export function isInvitePolicyUnavailableError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const record = error as Record<string, unknown>;
+  const code = typeof record.code === "string" ? record.code.toUpperCase() : "";
+  const message = typeof record.message === "string" ? record.message.toLowerCase() : "";
+  return code === "PGRST204" || message.includes("invite_policy");
+}
+
+export function formatGroupInviteError(error: unknown, fallback = "Не удалось выполнить действие. Попробуйте ещё раз."): string {
   if (isGroupInviteUnavailableError(error)) return GROUP_INVITES_MIGRATION_REQUIRED;
   const details = readErrorDetails(error);
   const text = `${details.code} ${details.message} ${details.details}`.toLowerCase();
@@ -102,13 +120,14 @@ export function formatGroupInviteError(error: unknown, fallback = "Не удал
     return "Недостаточно прав для приглашения.";
   }
   if (text.includes("already_member")) return "Пользователь уже состоит в группе.";
-  if (text.includes("unique") || text.includes("duplicate") || text.includes("one_pending")) {
+  if (text.includes("pending_exists") || text.includes("unique") || text.includes("duplicate") || text.includes("one_pending")) {
     return "Приглашение уже отправлено.";
   }
   if (text.includes("not_pending")) return "Приглашение уже недоступно.";
-  if (text.includes("expired")) return "Приглашение истекло.";
+  if (text.includes("expired")) return "Срок приглашения истёк.";
+  if (text.includes("cancelled")) return "Приглашение отменено.";
   if (text.includes("self_forbidden")) return "Нельзя пригласить самого себя.";
-  if (text.includes("chat_type_invalid")) return "Приглашения доступны только в группах.";
+  if (text.includes("chat_type_invalid") || text.includes("not_group_chat")) return "Приглашения доступны только для групп.";
   if (text.includes("invitee_not_found")) return "Пользователь не найден.";
   if (text.includes("not_found") || text.includes("unavailable")) return "Приглашение уже недоступно.";
   if (details.code === "28000" || text.includes("not_authenticated")) return "Войдите в аккаунт, чтобы продолжить.";
