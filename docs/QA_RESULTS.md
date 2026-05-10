@@ -63,6 +63,13 @@
 
 Safe QA note: Live QA should use the Codex/QA browser session or QA credentials from a secure environment; never store secrets in the repo and do not depend on the user's mouse/manual browser.
 
+2026-05-10 admin users bulk roles / location QoL note:
+
+- Users panel now has selection, visible-row select/clear, global-role and location bulk actions, and location/global-role/status filters.
+- Mobile admin content received `min-h-0`/bottom padding so long users lists and sticky bulk controls can scroll to the end on 390/412px viewports.
+- Bulk role assignment uses existing `user_assign_global_role` / `user_remove_global_role` RPC per selected user; bulk location assignment uses existing `location_member_assign_role` or `location_member_assign` per selected user.
+- New SQL was not applied automatically. Proposal `.migration-backup/supabase/migrations/20260516_dynamic_roles_default_user_baseline.sql` adds an idempotent default dynamic `user` role trigger/backfill for newly registered normal users.
+
 2026-05-09 notifications/group-invites stage note:
 
 - Live/authenticated QA must use the Codex/QA browser session or local QA credentials kept outside the repo.
@@ -410,3 +417,11 @@ Recurring tasks roadmap note:
 - Remaining schema integration risk: `group_invite_create` currently does not enforce seeded dynamic invite permissions such as `chats.invite_any`; invite flow still uses the existing chat admin/member policy.
 - Polish QA found that the current QA admin account can view roles but does not have `roles.manage`; `/admin/roles` now presents a clear read-only state and disables create/edit/permission changes instead of letting a 403 surface after click.
 - Security review also found that `user_assign_global_role` should additionally protect owner/tech_admin assignment and self-escalation for callers that only have `users.assign_roles`. The same proposal file now includes this RPC hardening; SQL was not applied automatically.
+
+2026-05-10 admin users bulk roles/location QoL:
+
+- Admin users panel now has mobile-safe scrolling through the admin layout content scroller (`min-h-0`, `overflow-y-auto`, extra bottom padding) and a UsersTab bottom padding so bulk controls do not cover the last rows on mobile.
+- UsersTab adds visible-row selection, per-user checkboxes, a sticky bulk toolbar, global role assignment/removal, location assignment, location role assignment and primary-admin assignment. Bulk actions use the existing per-user RPCs and report partial success with friendly errors; no service role or direct table writes are used.
+- Users can be filtered by search, global role, location, location role, primary admin and status. Rows now show friendly dynamic global role labels, location badges and primary-admin labels with legacy role fallback.
+- Read-only Supabase MCP confirmed the live dynamic roles schema is present; `user` already has `tasks.view` and `chats.invite`, and existing legacy `profiles.role = user` profiles have dynamic global role coverage. A default-role trigger for future profiles is not present yet.
+- SQL was not applied automatically. Manual proposal for future default-role/backfill safety: `.migration-backup/supabase/migrations/20260516_dynamic_roles_default_user_baseline.sql`.

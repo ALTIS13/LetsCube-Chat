@@ -50,7 +50,7 @@ export function AdminLayout() {
   if (!isStaff) return <Redirect to="/" />;
 
   return (
-    <div className="flex flex-col h-screen bg-[var(--kub-bg)] text-[color:var(--kub-text)]">
+    <div className="flex h-screen min-h-0 flex-col bg-[var(--kub-bg)] text-[color:var(--kub-text)]">
       <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 h-14 flex-shrink-0 bg-[var(--kub-surface)] border-b border-[color:var(--kub-border-color)]">
         <Link
           href="/"
@@ -95,8 +95,8 @@ export function AdminLayout() {
         })}
       </div>
 
-      <div className="flex-1 overflow-y-auto kub-grid-subtle">
-        <div className="max-w-5xl mx-auto p-3 sm:p-4 md:p-6">
+      <div className="min-h-0 flex-1 overflow-y-auto kub-grid-subtle">
+        <div className="mx-auto max-w-5xl p-3 pb-24 sm:p-4 sm:pb-8 md:p-6">
           <Switch>
             <Route path="/admin" component={DashboardTab} />
             <Route path="/admin/users" component={UsersTab} />

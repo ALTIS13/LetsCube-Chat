@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
-import type { AppRole, DynamicRole, Profile } from "@/types/database";
+import type { AppRole, DynamicRole, LocationRole, Profile } from "@/types/database";
 
 interface ContactRow {
   phone: string | null;
@@ -14,8 +14,9 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
-import { useIsAdmin } from "@/hooks/useRole";
-import { KubBadge, KubIcon, KubModal, KubPanel } from "@/components/kub";
+import { clearRoleAccessCache, useIsAdmin } from "@/hooks/useRole";
+import { useTaskRouting } from "@/hooks/useTaskRouting";
+import { KubBadge, KubButton, KubIcon, KubModal, KubPanel } from "@/components/kub";
 import { BanModal } from "./BanModal";
 import { MuteModal } from "./MuteModal";
 import { cn } from "@/lib/utils";
@@ -24,10 +25,13 @@ import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { ProfileRoleSummary } from "@/components/profile/ProfileRoleSummary";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
-import { getRoleLabel, isCriticalRoleKey } from "@/lib/rolePermissions";
+import { LOCATION_ROLE_LABEL, mapLocationRoutingError } from "@/lib/locationRouting";
+import { getRoleLabel, isCriticalRoleKey, mapRolesPermissionsError } from "@/lib/rolePermissions";
+import type { LocationMemberWithProfile } from "@/hooks/useTaskRouting";
 
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
+const LEGACY_LOCATION_ROLES = ["admin", "manager", "staff"] as const;
 
 const roleLabel: Record<AppRole, string> = {
   admin: "Администратор",
@@ -56,14 +60,29 @@ export function UsersTab() {
   const isAdmin = useIsAdmin();
   const [dynamicRolesEnabled] = useDynamicRolesEnabledPreference();
   const dynamicRoles = useDynamicRoles({ enabled: dynamicRolesEnabled && isAdmin, includeAssignments: true });
+  const routing = useTaskRouting({ enabled: isAdmin, includeMembers: true });
   const [rows, setRows] = useState<Profile[]>([]);
   const [emails, setEmails] = useState<Record<string, string>>({});
   const [contacts, setContacts] = useState<Record<string, ContactRow>>({});
   const [stateById, setStateById] = useState<Record<string, RowState>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [queryRaw, setQueryRaw] = useState("");
   const [query, setQuery] = useState("");
+  const [globalRoleFilter, setGlobalRoleFilter] = useState("");
+  const [locationFilter, setLocationFilter] = useState("");
+  const [locationRoleFilter, setLocationRoleFilter] = useState("");
+  const [primaryAdminFilter, setPrimaryAdminFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkGlobalRoleId, setBulkGlobalRoleId] = useState("");
+  const [bulkLocationId, setBulkLocationId] = useState("");
+  const [bulkLocationRoleId, setBulkLocationRoleId] = useState("");
+  const [bulkLocationRole, setBulkLocationRole] = useState<LocationRole>("staff");
+  const [bulkPrimaryAdminId, setBulkPrimaryAdminId] = useState("");
+  const [bulkSaving, setBulkSaving] = useState<string | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [total, setTotal] = useState(0);
   const [banTarget, setBanTarget] = useState<Profile | null>(null);
@@ -110,6 +129,20 @@ export function UsersTab() {
   }, [supabase, query, page]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    const onFocus = () => { void load(); };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [load]);
+
+  useEffect(() => {
+    setSelectedIds((current) => {
+      const rowIds = new Set(rows.map((row) => row.id));
+      const next = new Set([...current].filter((id) => rowIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [rows]);
 
   useEffect(() => {
     if (rows.length === 0) {
@@ -177,12 +210,46 @@ export function UsersTab() {
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
 
+  const dynamicRoleById = useMemo(
+    () => new Map(dynamicRoles.roles.map((role) => [role.id, role])),
+    [dynamicRoles.roles],
+  );
+
+  const globalRoleOptions = useMemo(
+    () => dynamicRoles.roles.filter((role) => role.scope === "global" && role.is_active),
+    [dynamicRoles.roles],
+  );
+
+  const locationRoleOptions = useMemo(
+    () => dynamicRoles.roles.filter((role) => role.scope === "location" && role.is_active),
+    [dynamicRoles.roles],
+  );
+
+  const locationById = useMemo(
+    () => new Map(routing.locations.map((location) => [location.id, location])),
+    [routing.locations],
+  );
+
+  const locationMembersByUser = useMemo(() => {
+    const map = new Map<string, LocationMemberWithProfile[]>();
+    for (const member of routing.members) {
+      const current = map.get(member.user_id) ?? [];
+      current.push(member);
+      map.set(member.user_id, current);
+    }
+    return map;
+  }, [routing.members]);
+
+  const locationAdmins = useMemo(
+    () => routing.members.filter((member) => ["owner", "admin", "manager"].includes(member.role)),
+    [routing.members],
+  );
+
   const dynamicRolesByUser = useMemo(() => {
     if (!dynamicRoles.available) return new Map<string, DynamicRole[]>();
-    const roleById = new Map(dynamicRoles.roles.map((role) => [role.id, role]));
     const byUser = new Map<string, DynamicRole[]>();
     for (const assignment of dynamicRoles.userGlobalRoles) {
-      const role = roleById.get(assignment.role_id);
+      const role = dynamicRoleById.get(assignment.role_id);
       if (!role || role.scope !== "global" || !role.is_active) continue;
       const current = byUser.get(assignment.user_id) ?? [];
       current.push(role);
@@ -192,7 +259,56 @@ export function UsersTab() {
       roles.sort((a, b) => dynamicRoleRank(a.key) - dynamicRoleRank(b.key) || getRoleLabel(a).localeCompare(getRoleLabel(b), "ru-RU"));
     }
     return byUser;
-  }, [dynamicRoles.available, dynamicRoles.roles, dynamicRoles.userGlobalRoles]);
+  }, [dynamicRoleById, dynamicRoles.available, dynamicRoles.userGlobalRoles]);
+
+  const filteredRows = useMemo(() => {
+    const q = queryRaw.trim().toLocaleLowerCase("ru-RU");
+    return rows.filter((user) => {
+      const userGlobalRoles = dynamicRolesByUser.get(user.id) ?? [];
+      const memberships = locationMembersByUser.get(user.id) ?? [];
+      if (q) {
+        const haystack = [
+          user.full_name,
+          user.username,
+          user.id,
+          emails[user.id],
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLocaleLowerCase("ru-RU");
+        if (!haystack.includes(q)) return false;
+      }
+      if (globalRoleFilter) {
+        if (globalRoleFilter.startsWith("legacy:")) {
+          if (user.role !== globalRoleFilter.slice("legacy:".length)) return false;
+        } else if (!userGlobalRoles.some((role) => role.id === globalRoleFilter)) {
+          return false;
+        }
+      }
+      if (locationFilter && !memberships.some((member) => member.location_id === locationFilter)) return false;
+      if (locationRoleFilter) {
+        const matchesLocationRole = memberships.some((member) => {
+          if (locationRoleFilter.startsWith("legacy:")) return member.role === locationRoleFilter.slice("legacy:".length);
+          return member.role_id === locationRoleFilter;
+        });
+        if (!matchesLocationRole) return false;
+      }
+      if (primaryAdminFilter && !memberships.some((member) => member.primary_admin_id === primaryAdminFilter)) return false;
+      if (statusFilter === "no_location" && memberships.length > 0) return false;
+      if (statusFilter === "no_dynamic_role" && userGlobalRoles.length > 0) return false;
+      if (statusFilter === "client" && user.role !== "user" && !userGlobalRoles.some((role) => role.key === "user")) return false;
+      if (statusFilter === "admin" && user.role !== "admin" && !userGlobalRoles.some((role) => ["owner", "tech_admin", "admin"].includes(role.key))) return false;
+      if (statusFilter === "tech_admin" && !userGlobalRoles.some((role) => role.key === "tech_admin")) return false;
+      return true;
+    });
+  }, [dynamicRolesByUser, emails, globalRoleFilter, locationFilter, locationMembersByUser, locationRoleFilter, primaryAdminFilter, queryRaw, rows, statusFilter]);
+
+  const selectedUsers = useMemo(
+    () => rows.filter((user) => selectedIds.has(user.id)),
+    [rows, selectedIds],
+  );
+
+  const allVisibleSelected = filteredRows.length > 0 && filteredRows.every((user) => selectedIds.has(user.id));
 
   const canSetRole = (target: Profile, newRole: AppRole) => {
     if (target.id === currentUser?.id) return false;
@@ -205,16 +321,168 @@ export function UsersTab() {
   const canSanction = (target: Profile) =>
     target.id !== currentUser?.id && (isAdmin || target.role !== "admin");
 
+  const refreshAdminData = async () => {
+    await Promise.all([
+      load(),
+      dynamicRoles.refetch(),
+      routing.refetch(),
+    ]);
+  };
+
+  const toggleUserSelection = (userId: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  };
+
+  const toggleVisibleSelection = () => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (allVisibleSelected) {
+        for (const user of filteredRows) next.delete(user.id);
+      } else {
+        for (const user of filteredRows) next.add(user.id);
+      }
+      return next;
+    });
+  };
+
+  const clearFilters = () => {
+    setQueryRaw("");
+    setGlobalRoleFilter("");
+    setLocationFilter("");
+    setLocationRoleFilter("");
+    setPrimaryAdminFilter("");
+    setStatusFilter("");
+    setPage(0);
+  };
+
+  const runBulk = async (
+    key: string,
+    action: (user: Profile) => PromiseLike<{ error: unknown }>,
+    successText: (count: number) => string,
+  ) => {
+    if (selectedUsers.length === 0) return;
+    setBulkSaving(key);
+    setBulkError(null);
+    setNotice(null);
+    let ok = 0;
+    let failed = 0;
+    let firstError: unknown = null;
+    for (const user of selectedUsers) {
+      const result = await action(user);
+      if (result.error) {
+        failed += 1;
+        firstError ??= result.error;
+      } else {
+        ok += 1;
+        clearRoleAccessCache(user.id);
+      }
+    }
+    setBulkSaving(null);
+    await refreshAdminData();
+    if (failed > 0) {
+      const friendly = firstError
+        ? mapRolesPermissionsError(firstError, mapLocationRoutingError(firstError))
+        : "Часть изменений не применена.";
+      setBulkError(ok > 0 ? `${successText(ok)}. Не удалось применить: ${failed}. ${friendly}` : friendly);
+      return;
+    }
+    setNotice(successText(ok));
+  };
+
+  const bulkAssignGlobalRole = async () => {
+    if (!bulkGlobalRoleId) {
+      setBulkError("Выберите глобальную роль.");
+      return;
+    }
+    await runBulk(
+      "assign-global",
+      async (user) => await supabase.rpc("user_assign_global_role", { p_user_id: user.id, p_role_id: bulkGlobalRoleId }),
+      (count) => `Роль назначена пользователям: ${count}`,
+    );
+  };
+
+  const bulkRemoveGlobalRole = async () => {
+    if (!bulkGlobalRoleId) {
+      setBulkError("Выберите глобальную роль.");
+      return;
+    }
+    const role = dynamicRoleById.get(bulkGlobalRoleId);
+    const confirmed = await requestAppConfirm({
+      title: "Снять роль у выбранных пользователей?",
+      description: role ? `Роль «${getRoleLabel(role)}» будет снята у ${selectedUsers.length} пользователей. Защита последнего владельца или тех. администратора останется на стороне сервера.` : undefined,
+      confirmLabel: "Снять роль",
+      tone: "danger",
+      icon: "shieldOff",
+    });
+    if (!confirmed) return;
+    await runBulk(
+      "remove-global",
+      async (user) => await supabase.rpc("user_remove_global_role", { p_user_id: user.id, p_role_id: bulkGlobalRoleId }),
+      (count) => `Роль снята у пользователей: ${count}`,
+    );
+  };
+
+  const bulkAssignLocation = async () => {
+    if (!bulkLocationId) {
+      setBulkError("Выберите локацию.");
+      return;
+    }
+    const selectedDynamicLocationRole = dynamicRoleById.get(bulkLocationRoleId);
+    await runBulk(
+      "assign-location",
+      async (user) => {
+        const primaryAdminId = bulkPrimaryAdminId || null;
+        if (selectedDynamicLocationRole && selectedDynamicLocationRole.scope === "location") {
+          return await supabase.rpc("location_member_assign_role", {
+            p_location_id: bulkLocationId,
+            p_user_id: user.id,
+            p_role_id: selectedDynamicLocationRole.id,
+            p_primary_admin_id: primaryAdminId,
+          });
+        }
+        return await supabase.rpc("location_member_assign", {
+          p_location_id: bulkLocationId,
+          p_user_id: user.id,
+          p_role: bulkLocationRole,
+          p_primary_admin_id: primaryAdminId,
+        });
+      },
+      (count) => `Локация назначена пользователям: ${count}`,
+    );
+  };
+
+  const activeLocationAdmins = useMemo(
+    () => locationAdmins.filter((member) => !bulkLocationId || member.location_id === bulkLocationId),
+    [bulkLocationId, locationAdmins],
+  );
+
   return (
-    <div>
-      <div className="flex items-center justify-between gap-3 mb-4">
+    <div className="min-w-0 space-y-3 pb-24 sm:pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-bold text-[color:var(--kub-text)]">
           Пользователи{" "}
           <span className="text-sm font-normal text-[color:var(--kub-muted)]">· {total}</span>
         </h2>
+        {isAdmin && (
+          <KubButton
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={toggleVisibleSelection}
+            disabled={filteredRows.length === 0}
+            leftIcon={<KubIcon name={allVisibleSelected ? "check" : "users"} size={13} />}
+          >
+            {allVisibleSelected ? "Снять выбор" : "Выбрать видимых"}
+          </KubButton>
+        )}
       </div>
 
-      <div className="flex items-center gap-2 rounded-xl px-3 h-10 mb-3 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
+      <div className="flex items-center gap-2 rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
         <KubIcon name="search" size={14} tone="muted" />
         <input
           value={queryRaw}
@@ -233,6 +501,129 @@ export function UsersTab() {
         )}
       </div>
 
+      {isAdmin && (
+        <KubPanel className="space-y-3">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            <SelectField label="Глобальная роль" value={globalRoleFilter} onChange={setGlobalRoleFilter}>
+              <option value="">Все роли</option>
+              {globalRoleOptions.map((role) => (
+                <option key={role.id} value={role.id}>{getRoleLabel(role)}</option>
+              ))}
+              <option value="legacy:admin">Старая роль: Администратор</option>
+              <option value="legacy:manager">Старая роль: Менеджер</option>
+              <option value="legacy:user">Старая роль: Пользователь</option>
+            </SelectField>
+            <SelectField label="Локация" value={locationFilter} onChange={setLocationFilter} disabled={!routing.available}>
+              <option value="">Все локации</option>
+              {routing.locations.map((location) => (
+                <option key={location.id} value={location.id}>{location.name}</option>
+              ))}
+            </SelectField>
+            <SelectField label="Роль в локации" value={locationRoleFilter} onChange={setLocationRoleFilter} disabled={!routing.available}>
+              <option value="">Все роли</option>
+              {locationRoleOptions.map((role) => (
+                <option key={role.id} value={role.id}>{getRoleLabel(role)}</option>
+              ))}
+              {LEGACY_LOCATION_ROLES.map((role) => (
+                <option key={role} value={`legacy:${role}`}>{LOCATION_ROLE_LABEL[role]}</option>
+              ))}
+            </SelectField>
+            <SelectField label="Основной админ" value={primaryAdminFilter} onChange={setPrimaryAdminFilter} disabled={!routing.available}>
+              <option value="">Любой</option>
+              {locationAdmins.map((member) => (
+                <option key={`${member.location_id}:${member.user_id}`} value={member.user_id}>
+                  {member.profile?.full_name ?? member.profile?.username ?? "Администратор"} · {locationById.get(member.location_id)?.name ?? "Локация"}
+                </option>
+              ))}
+            </SelectField>
+            <SelectField label="Статус" value={statusFilter} onChange={setStatusFilter}>
+              <option value="">Любой</option>
+              <option value="client">Клиент / пользователь</option>
+              <option value="admin">Администраторы</option>
+              <option value="tech_admin">Тех. администратор</option>
+              <option value="no_location">Без локации</option>
+              <option value="no_dynamic_role">Без динамической роли</option>
+            </SelectField>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <KubButton type="button" variant="ghost" size="sm" onClick={clearFilters} leftIcon={<KubIcon name="close" size={13} />}>
+              Очистить фильтры
+            </KubButton>
+            {!routing.available && (
+              <span className="text-xs text-[color:var(--kub-muted)]">Локации недоступны или требуют обновления базы данных.</span>
+            )}
+          </div>
+        </KubPanel>
+      )}
+
+      {isAdmin && selectedUsers.length > 0 && (
+        <KubPanel className="sticky top-2 z-10 space-y-3 border-[color:var(--kub-cyan)]/40 bg-[var(--kub-surface)]/95 backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm font-semibold text-[color:var(--kub-text)]">
+              Выбрано: {selectedUsers.length}
+            </div>
+            <KubButton type="button" variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+              Очистить выбор
+            </KubButton>
+          </div>
+          <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
+            <SelectField label="Глобальная роль" value={bulkGlobalRoleId} onChange={setBulkGlobalRoleId} disabled={!dynamicRoles.available}>
+              <option value="">Выберите роль</option>
+              {globalRoleOptions.map((role) => (
+                <option key={role.id} value={role.id}>{getRoleLabel(role)}</option>
+              ))}
+            </SelectField>
+            <KubButton type="button" size="sm" onClick={bulkAssignGlobalRole} loading={bulkSaving === "assign-global"} disabled={!bulkGlobalRoleId}>
+              Назначить роль
+            </KubButton>
+            <KubButton type="button" size="sm" variant="danger" onClick={bulkRemoveGlobalRole} loading={bulkSaving === "remove-global"} disabled={!bulkGlobalRoleId}>
+              Снять роль
+            </KubButton>
+          </div>
+          <div className="grid gap-2 lg:grid-cols-5">
+            <SelectField label="Локация" value={bulkLocationId} onChange={setBulkLocationId} disabled={!routing.available}>
+              <option value="">Выберите локацию</option>
+              {routing.locations.map((location) => (
+                <option key={location.id} value={location.id}>{location.name}</option>
+              ))}
+            </SelectField>
+            <SelectField label="Роль локации" value={bulkLocationRoleId} onChange={setBulkLocationRoleId} disabled={!dynamicRoles.available}>
+              <option value="">Использовать старую роль</option>
+              {locationRoleOptions.map((role) => (
+                <option key={role.id} value={role.id}>{getRoleLabel(role)}</option>
+              ))}
+            </SelectField>
+            <SelectField label="Старая роль" value={bulkLocationRole} onChange={(value) => setBulkLocationRole(value as LocationRole)}>
+              {LEGACY_LOCATION_ROLES.map((role) => (
+                <option key={role} value={role}>{LOCATION_ROLE_LABEL[role]}</option>
+              ))}
+            </SelectField>
+            <SelectField label="Основной админ" value={bulkPrimaryAdminId} onChange={setBulkPrimaryAdminId} disabled={!bulkLocationId || activeLocationAdmins.length === 0}>
+              <option value="">Не назначать</option>
+              {activeLocationAdmins.map((member) => (
+                <option key={`${member.location_id}:${member.user_id}`} value={member.user_id}>
+                  {member.profile?.full_name ?? member.profile?.username ?? "Администратор"}
+                </option>
+              ))}
+            </SelectField>
+            <KubButton type="button" size="sm" onClick={bulkAssignLocation} loading={bulkSaving === "assign-location"} disabled={!bulkLocationId}>
+              Назначить локацию
+            </KubButton>
+          </div>
+          {bulkError && (
+            <div className="rounded-lg border border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-danger)]">
+              {bulkError}
+            </div>
+          )}
+        </KubPanel>
+      )}
+
+      {notice && (
+        <div className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-cyan)_12%,transparent)] text-[color:var(--kub-cyan)] border border-[color:var(--kub-cyan)]/30">
+          {notice}
+        </div>
+      )}
+
       {error && (
         <div className="rounded-xl px-3 py-2 text-xs mb-3 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger)] border border-[color:var(--kub-danger)]/30">
           {error}
@@ -244,13 +635,13 @@ export function UsersTab() {
           <div className="flex items-center justify-center py-12">
             <KubIcon name="spinner" size={20} tone="accent" label="Загрузка" />
           </div>
-        ) : rows.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <div className="text-center py-12 text-sm text-[color:var(--kub-muted)]">
             Никого не найдено
           </div>
         ) : (
           <div>
-            {rows.map((u, i) => {
+            {filteredRows.map((u, i) => {
               const st = stateById[u.id] ?? { banned: false, muted: false };
               const isSelf = u.id === currentUser?.id;
               const email = emails[u.id];
@@ -260,6 +651,17 @@ export function UsersTab() {
               const canManageSanctions = canSanction(u);
               const hasRoleActions = canMakeAdmin || canMakeManager || canMakeUser;
               const dynamicBadges = dynamicRolesByUser.get(u.id) ?? [];
+              const memberships = locationMembersByUser.get(u.id) ?? [];
+              const locationBadges = memberships.slice(0, 2).map((member) => {
+                const location = locationById.get(member.location_id);
+                const dynamicLocationRole = member.role_id ? dynamicRoleById.get(member.role_id) : null;
+                const primaryAdminName = member.primary_admin?.full_name ?? member.primary_admin?.username ?? null;
+                return {
+                  key: `${member.location_id}:${member.user_id}`,
+                  label: `${location?.name ?? "Локация"} · ${dynamicLocationRole ? getRoleLabel(dynamicLocationRole) : LOCATION_ROLE_LABEL[member.role]}`,
+                  primaryAdminName,
+                };
+              });
               const badges = (
                 <>
                   {dynamicBadges.length > 0 ? (
@@ -293,6 +695,17 @@ export function UsersTab() {
                     "hover:bg-[var(--kub-surface-3)] sm:hover:bg-[var(--kub-surface-2)]",
                   )}
                 >
+                  {isAdmin && (
+                    <label className="mt-1 inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] sm:mt-0">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-[var(--kub-cyan)]"
+                        checked={selectedIds.has(u.id)}
+                        onChange={() => toggleUserSelection(u.id)}
+                        aria-label="Выбрать пользователя"
+                      />
+                    </label>
+                  )}
                   <div className="flex-shrink-0 mt-0.5 sm:mt-0">
                     <UserAvatar user={u} size="sm" />
                   </div>
@@ -320,6 +733,17 @@ export function UsersTab() {
                     <div className="flex flex-wrap items-center gap-1.5 mt-1.5 sm:hidden">
                       {badges}
                     </div>
+                    {locationBadges.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[color:var(--kub-muted)]">
+                        {locationBadges.map((badge) => (
+                          <span key={badge.key} className="rounded-full bg-[var(--kub-surface)] px-2 py-0.5">
+                            {badge.label}
+                            {badge.primaryAdminName ? ` · админ: ${badge.primaryAdminName}` : ""}
+                          </span>
+                        ))}
+                        {memberships.length > 2 && <span>+{memberships.length - 2} локац.</span>}
+                      </div>
+                    )}
                   </div>
 
                   <div className="hidden sm:flex flex-wrap items-center gap-1.5 flex-shrink-0">
@@ -680,6 +1104,36 @@ function PhoneField({ phone, verified }: { phone: string | null; verified: boole
         <div className="font-medium text-[color:var(--kub-text)]">—</div>
       )}
     </div>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  disabled,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <label className="min-w-0 space-y-1">
+      <span className="block text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-cyan)]">
+        {label}
+      </span>
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-9 w-full min-w-0 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 text-xs text-[color:var(--kub-text)] outline-none disabled:opacity-50"
+      >
+        {children}
+      </select>
+    </label>
   );
 }
 
