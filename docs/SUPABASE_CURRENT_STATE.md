@@ -216,6 +216,15 @@ Frontend task UI можно выравнивать под новые task column
 
 Frontend должен работать без этой migration: раздел `Локации` показывает friendly disabled state, а существующее создание/обновление задач продолжает использовать старые RPC без routing-полей.
 
+2026-05-10 follow-up:
+
+- Пользователь вручную применил `.migration-backup/supabase/migrations/20260513_locations_task_routing.sql`.
+- Read-only Supabase MCP подтвердил `public.locations`, `public.location_members`, `tasks.location_id`, `tasks.target_role`, `tasks.route_admin_id`, `tasks.created_for_admin`, `task_create_v3` и `task_update_v3`.
+- Текущие роли всё ещё живут в legacy `profiles.role app_role` (`admin`, `manager`, `user`), `location_members.role text` (`owner`, `admin`, `manager`, `staff`) и `chat_members.role`.
+- Dynamic roles tables пока отсутствуют: `public.roles`, `public.permissions`, `public.role_permissions`, `public.user_global_roles` не найдены; `location_members.role_id` ещё отсутствует.
+- Новый SQL не применялся автоматически. Manual proposal: `.migration-backup/supabase/migrations/20260514_dynamic_roles_permissions.sql`.
+- Frontend fallback expectation: `/admin/roles` показывает “Роли и права требуют обновления базы данных.” до применения migration, profile/mini-profile остаются на legacy role labels, locations/tasks продолжают работать.
+
 ## 2026-05-09 Notifications And Group Invites State
 
 Read-only Supabase MCP sync for project `nhogbeojfnbjcfipitrh` confirmed the current production-like schema before the notifications redesign:

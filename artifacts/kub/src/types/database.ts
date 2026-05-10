@@ -9,6 +9,7 @@ export type Json =
 export type AppRole = 'admin' | 'manager' | 'user'
 export type ChatMemberRole = 'owner' | 'admin' | 'member'
 export type LocationRole = 'owner' | 'admin' | 'manager' | 'staff'
+export type RoleScope = 'global' | 'location' | 'chat'
 export type FolderScope = 'personal' | 'shared' | 'system'
 export type TaskStatus =
   | 'new'
@@ -103,6 +104,7 @@ export interface Database {
           location_id: string
           user_id: string
           role: LocationRole
+          role_id: string | null
           primary_admin_id: string | null
           is_primary: boolean
           created_at: string
@@ -128,6 +130,90 @@ export interface Database {
           {
             foreignKeyName: "location_members_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      roles: {
+        Row: {
+          id: string
+          key: string
+          name: string
+          description: string | null
+          scope: RoleScope
+          is_system: boolean
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      permissions: {
+        Row: {
+          key: string
+          name: string
+          description: string | null
+          category: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      role_permissions: {
+        Row: {
+          role_id: string
+          permission_key: string
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "role_permissions_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "role_permissions_permission_key_fkey"
+            columns: ["permission_key"]
+            isOneToOne: false
+            referencedRelation: "permissions"
+            referencedColumns: ["key"]
+          }
+        ]
+      }
+      user_global_roles: {
+        Row: {
+          user_id: string
+          role_id: string
+          assigned_by: string | null
+          assigned_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "user_global_roles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_global_roles_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_global_roles_assigned_by_fkey"
+            columns: ["assigned_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -943,6 +1029,65 @@ export interface Database {
         Args: { p_location_id: string; p_user_id: string; p_admin_id: string }
         Returns: void
       }
+      has_global_role: {
+        Args: { p_user_id: string; p_role_key: string }
+        Returns: boolean
+      }
+      has_permission: {
+        Args: { p_user_id: string; p_permission_key: string }
+        Returns: boolean
+      }
+      has_location_role: {
+        Args: { p_user_id: string; p_location_id: string; p_role_key: string }
+        Returns: boolean
+      }
+      has_location_permission: {
+        Args: { p_user_id: string; p_location_id: string; p_permission_key: string }
+        Returns: boolean
+      }
+      role_create: {
+        Args: {
+          p_key: string
+          p_name: string
+          p_description?: string | null
+          p_scope: RoleScope
+        }
+        Returns: string
+      }
+      role_update: {
+        Args: {
+          p_role_id: string
+          p_name: string
+          p_description?: string | null
+          p_is_active?: boolean
+        }
+        Returns: void
+      }
+      role_set_permissions: {
+        Args: { p_role_id: string; p_permission_keys: string[] }
+        Returns: void
+      }
+      role_delete_or_archive: {
+        Args: { p_role_id: string }
+        Returns: void
+      }
+      user_assign_global_role: {
+        Args: { p_user_id: string; p_role_id: string }
+        Returns: void
+      }
+      user_remove_global_role: {
+        Args: { p_user_id: string; p_role_id: string }
+        Returns: void
+      }
+      location_member_assign_role: {
+        Args: {
+          p_location_id: string
+          p_user_id: string
+          p_role_id: string
+          p_primary_admin_id?: string | null
+        }
+        Returns: void
+      }
       // Mirrors `auth.users.phone_confirmed_at` into
       // `profile_contacts.phone_verified` for the calling user. Server
       // re-checks auth.users so the client cannot fake verification.
@@ -1044,6 +1189,10 @@ export interface Database {
 export type Profile = Database['public']['Tables']['profiles']['Row']
 export type Location = Database['public']['Tables']['locations']['Row']
 export type LocationMember = Database['public']['Tables']['location_members']['Row']
+export type DynamicRole = Database['public']['Tables']['roles']['Row']
+export type Permission = Database['public']['Tables']['permissions']['Row']
+export type RolePermission = Database['public']['Tables']['role_permissions']['Row']
+export type UserGlobalRole = Database['public']['Tables']['user_global_roles']['Row']
 export type Chat = Database['public']['Tables']['chats']['Row']
 export type ChatMember = Database['public']['Tables']['chat_members']['Row']
 export type GroupInvite = Database['public']['Tables']['group_invites']['Row']

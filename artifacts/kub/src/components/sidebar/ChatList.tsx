@@ -12,6 +12,7 @@ import { getChatDisplayInfo, isSavedChat } from "@/lib/chatDisplay";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { cn } from "@/lib/utils";
+import { ProfileRoleSummary } from "@/components/profile/ProfileRoleSummary";
 import type { ChatWithLastMessage } from "@/types/database";
 
 interface ChatListProps {
@@ -625,8 +626,8 @@ function ChatProfilePreviewModal({
             {isPrivate && otherUser && (
               <div className="flex items-center justify-between gap-3 py-1">
                 <span>Роль</span>
-                <span className="font-semibold text-[color:var(--kub-text)]">
-                  {getAppRoleLabel(otherUser.role)}
+                <span className="flex min-w-0 justify-end">
+                  <ProfileRoleSummary user={otherUser} compact />
                 </span>
               </div>
             )}
@@ -868,23 +869,6 @@ function comparePinnedOrder(a: ChatWithLastMessage, b: ChatWithLastMessage): num
   if (aOrder === null) return 1;
   if (bOrder === null) return -1;
   return aOrder - bOrder;
-}
-
-function getAppRoleLabel(role: string | null | undefined): string {
-  switch (role) {
-    case "admin":
-      return "Администратор";
-    case "manager":
-      return "Менеджер";
-    case "staff":
-      return "Персонал";
-    case "technical_admin":
-    case "tech_admin":
-      return "Тех. администратор";
-    case "user":
-    default:
-      return "Пользователь";
-  }
 }
 
 function getChatMemberRoleLabel(role: string | null | undefined): string {

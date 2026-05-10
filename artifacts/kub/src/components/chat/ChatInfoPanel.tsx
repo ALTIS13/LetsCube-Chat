@@ -13,6 +13,7 @@ import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail 
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
 import { GroupInviteModal } from "./GroupInviteModal";
+import { ProfileRoleSummary } from "@/components/profile/ProfileRoleSummary";
 import {
   cancelGroupInvite,
   createGroupInvite,
@@ -691,6 +692,11 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       <div className="flex-1 overflow-y-auto">
         {(tab === "info" || !isGroup) && (
           <div>
+            {!isGroup && otherUser && (
+              <div className="px-4 py-3 border-b border-[color:var(--kub-border-color)]">
+                <ProfileRoleSummary user={otherUser} compact />
+              </div>
+            )}
             {!isGroup && otherUser?.bio && (
               <div className="px-4 py-3 border-b border-[color:var(--kub-border-color)]">
                 <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-cyan)]">О себе</div>

@@ -5,11 +5,13 @@ import { createClient } from "@/lib/supabase/client";
 import { KubBadge, KubButton, KubIcon, KubInput, KubPanel } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useTaskRouting, useTaskRoutingEnabledPreference } from "@/hooks/useTaskRouting";
+import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
 import {
   LOCATION_ROLE_LABEL,
   LOCATION_ROUTING_REQUIRED_MESSAGE,
   mapLocationRoutingError,
 } from "@/lib/locationRouting";
+import { getRoleLabel, mapRolesPermissionsError } from "@/lib/rolePermissions";
 import type { Location, LocationRole, Profile } from "@/types/database";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +20,9 @@ const LOCATION_ROLES: LocationRole[] = ["owner", "admin", "manager", "staff"];
 export function LocationsTab() {
   const supabase = createClient();
   const [routingProbeEnabled, setRoutingProbeEnabled] = useTaskRoutingEnabledPreference();
+  const [rolesEnabled] = useDynamicRolesEnabledPreference();
   const routing = useTaskRouting({ enabled: routingProbeEnabled, includeMembers: true });
+  const dynamicRoles = useDynamicRoles({ enabled: rolesEnabled, includeAssignments: false });
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createName, setCreateName] = useState("");
@@ -30,6 +34,7 @@ export function LocationsTab() {
   const [editActive, setEditActive] = useState(true);
   const [assignUserId, setAssignUserId] = useState("");
   const [assignRole, setAssignRole] = useState<LocationRole>("staff");
+  const [assignRoleId, setAssignRoleId] = useState("");
   const [assignPrimaryAdminId, setAssignPrimaryAdminId] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -86,6 +91,27 @@ export function LocationsTab() {
     [selectedMembers],
   );
 
+  const roleById = useMemo(
+    () => new Map(dynamicRoles.roles.map((role) => [role.id, role])),
+    [dynamicRoles.roles],
+  );
+
+  const dynamicLocationRoles = useMemo(
+    () => dynamicRoles.roles.filter((role) => role.scope === "location" && role.is_active),
+    [dynamicRoles.roles],
+  );
+
+  const selectedDynamicRole = useMemo(
+    () => dynamicLocationRoles.find((role) => role.id === assignRoleId) ?? null,
+    [assignRoleId, dynamicLocationRoles],
+  );
+
+  useEffect(() => {
+    if (!dynamicRoles.available || dynamicLocationRoles.length === 0 || assignRoleId) return;
+    const staffRole = dynamicLocationRoles.find((role) => role.key === "location_staff") ?? dynamicLocationRoles[0];
+    setAssignRoleId(staffRole.id);
+  }, [assignRoleId, dynamicLocationRoles, dynamicRoles.available]);
+
   const availableProfiles = useMemo(() => {
     if (!selectedLocation) return profiles;
     const memberIds = new Set(selectedMembers.map((member) => member.user_id));
@@ -99,7 +125,7 @@ export function LocationsTab() {
     const result = await fn();
     setSaving(null);
     if (result.error) {
-      setError(mapLocationRoutingError(result.error));
+      setError(dynamicRoles.available ? mapRolesPermissionsError(result.error, mapLocationRoutingError(result.error)) : mapLocationRoutingError(result.error));
       return false;
     }
     setNotice(success);
@@ -163,17 +189,28 @@ export function LocationsTab() {
     }
     await runAction(
       "assign-member",
-      () => supabase.rpc("location_member_assign", {
-        p_location_id: selectedLocation.id,
-        p_user_id: assignUserId,
-        p_role: assignRole,
-        p_primary_admin_id: assignRole === "staff" ? assignPrimaryAdminId || null : null,
-      }),
+      () => dynamicRoles.available && selectedDynamicRole
+        ? supabase.rpc("location_member_assign_role", {
+            p_location_id: selectedLocation.id,
+            p_user_id: assignUserId,
+            p_role_id: selectedDynamicRole.id,
+            p_primary_admin_id: selectedDynamicRole.key === "location_staff" ? assignPrimaryAdminId || null : null,
+          })
+        : supabase.rpc("location_member_assign", {
+            p_location_id: selectedLocation.id,
+            p_user_id: assignUserId,
+            p_role: assignRole,
+            p_primary_admin_id: assignRole === "staff" ? assignPrimaryAdminId || null : null,
+          }),
       "Назначение сохранено.",
     );
     setAssignUserId("");
     setAssignPrimaryAdminId("");
     setAssignRole("staff");
+    if (dynamicRoles.available) {
+      const staffRole = dynamicLocationRoles.find((role) => role.key === "location_staff") ?? dynamicLocationRoles[0] ?? null;
+      setAssignRoleId(staffRole?.id ?? "");
+    }
   };
 
   const removeMember = async (userId: string) => {
@@ -401,7 +438,7 @@ export function LocationsTab() {
                     Работнику можно назначить основного администратора клуба.
                   </p>
                 </div>
-                <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_150px_minmax(0,1fr)_auto]">
+                <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_170px_minmax(0,1fr)_auto]">
                   <select
                     value={assignUserId}
                     onChange={(event) => setAssignUserId(event.target.value)}
@@ -412,19 +449,36 @@ export function LocationsTab() {
                       <option key={profile.id} value={profile.id}>{getProfileName(profile)}</option>
                     ))}
                   </select>
-                  <select
-                    value={assignRole}
-                    onChange={(event) => setAssignRole(event.target.value as LocationRole)}
-                    className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
-                  >
-                    {LOCATION_ROLES.map((role) => (
-                      <option key={role} value={role}>{LOCATION_ROLE_LABEL[role]}</option>
-                    ))}
-                  </select>
+                  {dynamicRoles.available && dynamicLocationRoles.length > 0 ? (
+                    <select
+                      value={assignRoleId}
+                      onChange={(event) => setAssignRoleId(event.target.value)}
+                      className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                    >
+                      {dynamicLocationRoles.map((role) => (
+                        <option key={role.id} value={role.id}>{getRoleLabel(role)}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <select
+                      value={assignRole}
+                      onChange={(event) => setAssignRole(event.target.value as LocationRole)}
+                      className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                    >
+                      {LOCATION_ROLES.map((role) => (
+                        <option key={role} value={role}>{LOCATION_ROLE_LABEL[role]}</option>
+                      ))}
+                    </select>
+                  )}
                   <select
                     value={assignPrimaryAdminId}
                     onChange={(event) => setAssignPrimaryAdminId(event.target.value)}
-                    disabled={assignRole !== "staff" || locationAdmins.length === 0}
+                    disabled={
+                      (dynamicRoles.available && selectedDynamicRole
+                        ? selectedDynamicRole.key !== "location_staff"
+                        : assignRole !== "staff")
+                      || locationAdmins.length === 0
+                    }
                     className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] disabled:opacity-50"
                   >
                     <option value="">Основной администратор</option>
@@ -444,7 +498,9 @@ export function LocationsTab() {
                 </div>
 
                 <div className="overflow-hidden rounded-xl border border-[color:var(--kub-border-color)]">
-                  {selectedMembers.map((member) => (
+                  {selectedMembers.map((member) => {
+                    const dynamicRole = member.role_id ? roleById.get(member.role_id) ?? null : null;
+                    return (
                     <div
                       key={`${member.location_id}:${member.user_id}`}
                       className="grid gap-2 border-b border-[color:var(--kub-border-color)] px-3 py-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_180px_minmax(0,1fr)_auto] md:items-center"
@@ -469,7 +525,7 @@ export function LocationsTab() {
                         </span>
                       </div>
                       <KubBadge tone={member.role === "staff" ? "cyan" : "pink"} pill>
-                        {LOCATION_ROLE_LABEL[member.role]}
+                        {dynamicRole ? getRoleLabel(dynamicRole) : LOCATION_ROLE_LABEL[member.role]}
                       </KubBadge>
                       <span className="min-w-0 truncate text-xs text-[color:var(--kub-muted)]">
                         {member.primary_admin
@@ -488,7 +544,7 @@ export function LocationsTab() {
                         Убрать
                       </KubButton>
                     </div>
-                  ))}
+                  );})}
                   {selectedMembers.length === 0 && (
                     <div className="px-3 py-6 text-center text-sm text-[color:var(--kub-muted)]">
                       В этой локации пока нет назначенных пользователей.

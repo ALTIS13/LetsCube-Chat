@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
+import { ProfileRoleSummary } from "@/components/profile/ProfileRoleSummary";
 
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -580,6 +581,7 @@ function ProfilePreviewModal({
           warn={!state?.banned && state?.muted}
         />
       </div>
+      <ProfileRoleSummary user={user} />
       {user.bio && (
         <div>
           <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-cyan)]">

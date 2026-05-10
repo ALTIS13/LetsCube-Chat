@@ -385,3 +385,12 @@ Recurring tasks roadmap note:
 - Frontend fallback expectation: `/admin/locations` must show “Локации требуют обновления базы данных.” until the migration is applied, while existing task create/update flows continue to work through the current task RPC.
 - After applying the migration manually, QA should cover location creation, location member assignment, primary admin routing, owner-to-admin tasks, staff-only visibility, location filters and task notifications.
 - Live QA should use the Codex/QA browser session or QA credentials from secure environment; do not rely on user mouse/manual browser.
+
+2026-05-10 dynamic roles / permissions foundation:
+
+- User manually applied `.migration-backup/supabase/migrations/20260513_locations_task_routing.sql`; read-only Supabase MCP confirmed the locations/task routing schema and RPC are present.
+- Dynamic roles schema is not applied yet: `roles`, `permissions`, `role_permissions`, `user_global_roles` and `location_members.role_id` are absent.
+- New SQL was not applied automatically. Manual proposal: `.migration-backup/supabase/migrations/20260514_dynamic_roles_permissions.sql`.
+- Frontend fallback expectation: `/admin/roles` must show “Роли и права требуют обновления базы данных.” until the migration is applied. Existing profiles, locations and tasks must keep working through legacy `profiles.role` / `location_members.role`.
+- After applying the migration manually, QA should cover custom role create/edit, permission assignment, global role assignment/removal, location dynamic role assignment, profile/mini-profile role display, last owner/tech_admin protection, admin-only task visibility and group invite permissions.
+- Authenticated local Playwright QA covered `/admin/roles` fallback at desktop and mobile widths, `/admin/locations` after the applied routing migration, admin user profile role summary, private chat profile role summary, and the main chat shell. With the dynamic roles probe disabled while migration is absent, normal fallback pages produced no console errors.

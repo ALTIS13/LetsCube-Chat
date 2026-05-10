@@ -10,6 +10,7 @@ import { UsersTab } from "./UsersTab";
 import { BansMutesTab } from "./BansMutesTab";
 import { AuditTab } from "./AuditTab";
 import { LocationsTab } from "./LocationsTab";
+import { RolesPermissionsTab } from "./RolesPermissionsTab";
 
 type TabDef = { id: string; label: string; icon: KubIconName; path: string; adminOnly?: boolean };
 
@@ -17,6 +18,7 @@ const TABS: ReadonlyArray<TabDef> = [
   { id: "dashboard", label: "Сводка",       icon: "dashboard",  path: "/admin" },
   { id: "users",     label: "Пользователи", icon: "users",      path: "/admin/users" },
   { id: "locations", label: "Локации",      icon: "mapPin",     path: "/admin/locations", adminOnly: true },
+  { id: "roles",     label: "Роли и права", icon: "shield",     path: "/admin/roles", adminOnly: true },
   { id: "bans",      label: "Блокировки",   icon: "shieldOff",  path: "/admin/bans" },
   // Audit log is admin-only at the RLS layer (managers see no rows);
   // hide the tab from managers entirely so they don't get sent to a
@@ -93,6 +95,9 @@ export function AdminLayout() {
             <Route path="/admin/users" component={UsersTab} />
             <Route path="/admin/locations">
               {isAdmin ? <LocationsTab /> : <Redirect to="/admin" />}
+            </Route>
+            <Route path="/admin/roles">
+              {isAdmin ? <RolesPermissionsTab /> : <Redirect to="/admin" />}
             </Route>
             <Route path="/admin/bans" component={BansMutesTab} />
             {/* Defence-in-depth: even if a manager hits /admin/audit

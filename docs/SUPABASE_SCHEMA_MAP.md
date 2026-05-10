@@ -346,6 +346,8 @@ Manual/idempotent migrations are stored in `.migration-backup/supabase/migration
 - `20260506_secure_chat_media_access.sql` - applied in production Supabase as of 2026-05-06; adds private `chat-media` bucket, chat-member storage policies and `messages.media_bucket` / `messages.media_path`.
 - `20260506_entity_name_constraints.sql` - applied manually in production Supabase as of 2026-05-06; DB-level max length checks for `chats.name`, `folders.name` and `topics.name` are active.
 - `20260512_group_invite_reinvite_and_policy.sql` - proposal only, not applied automatically. Adds `chats.invite_policy` (`owner_admin_only` / `members_can_invite`) and updates invite RPC behavior so historical accepted/declined/cancelled/expired invites do not block reinviting users who are no longer current `chat_members`.
+- `20260513_locations_task_routing.sql` - applied manually by the user on 2026-05-10. Adds `locations`, `location_members`, task routing fields and `task_create_v3` / `task_update_v3`.
+- `20260514_dynamic_roles_permissions.sql` - proposal only, not applied automatically. Adds dynamic `roles`, `permissions`, `role_permissions`, `user_global_roles`, `location_members.role_id`, permission helper functions, protected role-management RPC and permission-aware routing/invite hooks.
 
 ## Pending Group Invite Policy Proposal
 
@@ -363,6 +365,36 @@ The proposal updates:
   - remains owner/admin only, so ordinary members in common groups can invite but cannot manage invitations.
 
 Supabase MCP migration ledger is empty; do not rely on Supabase CLI migration history for this project.
+
+## Pending Dynamic Roles / Permissions Proposal
+
+`20260514_dynamic_roles_permissions.sql` keeps `profiles.role` as a legacy global fallback while adding a gradual dynamic role system:
+
+- `public.roles`: dynamic role catalog with `key`, `name`, `description`, `scope` (`global`, `location`, `chat`), `is_system`, `is_active`.
+- `public.permissions`: permission catalog grouped by category.
+- `public.role_permissions`: many-to-many role to permission grants.
+- `public.user_global_roles`: global role assignments for users.
+- `public.location_members.role_id`: optional dynamic role link while preserving the existing `location_members.role` text fallback.
+
+Seeded system roles:
+
+- Global: `owner`, `tech_admin`, `admin`, `manager`, `user`.
+- Location: `location_owner`, `location_admin`, `location_manager`, `location_staff`, `location_client`.
+- Chat: `chat_owner`, `chat_admin`, `chat_member`.
+
+Important security proposal:
+
+- `owner` and `tech_admin` receive every permission by default.
+- The first legacy `profiles.role = admin` user is bootstrapped as owner + tech_admin only if there is no critical dynamic assignment yet.
+- RPCs block removing/deactivating the last owner or tech_admin.
+- Dynamic role changes are logged to `audit_logs`.
+- RLS/RPC helpers include `has_global_role`, `has_permission`, `has_location_role`, `has_location_permission`.
+
+Frontend behavior before applying this migration:
+
+- `/admin/roles` shows a friendly disabled state.
+- Profile and mini-profile role display falls back to `profiles.role` and location text roles.
+- Existing locations/task routing and invites remain on their current permissions.
 
 ## Common Schema Checks
 
