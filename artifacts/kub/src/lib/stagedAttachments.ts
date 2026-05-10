@@ -99,7 +99,9 @@ export function getAttachmentKind(file: File): StagedAttachmentKind {
 
 export function chatAttachmentUploadPath(chatId: string, userId: string, attachment: StagedAttachment): string {
   const ext = fileExtension(attachment.file);
-  return `chat-attachments/${chatId}/${userId}/${Date.now()}-${attachment.id}.${ext}`;
+  // Keep the first path segment as userId: existing Storage RLS for the media
+  // bucket allows authenticated users to write inside their own folder.
+  return `${userId}/${Date.now()}-${chatId}-${attachment.id}.${ext}`;
 }
 
 export function revokeAttachmentPreview(attachment: Pick<StagedAttachment, "previewUrl">): void {
