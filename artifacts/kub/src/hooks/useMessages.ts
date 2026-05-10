@@ -736,12 +736,16 @@ export function useMessages(
     content: string | null;
     mediaUrl: string;
     replyToId?: string | null;
+    clientMessageId?: string | null;
+    clientSentAt?: string | null;
   }) => {
     return sendLocalMessage({
       type: input.type,
       content: input.content,
       mediaUrl: input.mediaUrl,
       replyToId: input.replyToId ?? null,
+      clientMessageId: input.clientMessageId ?? null,
+      clientSentAt: input.clientSentAt ?? null,
     });
   }, [sendLocalMessage]);
 

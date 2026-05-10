@@ -1,15 +1,19 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, KeyboardEvent } from "react";
+import { useState, useRef, useCallback, useEffect, KeyboardEvent, ClipboardEvent } from "react";
 import type { MessageWithSender } from "@/types/database";
 import { cn } from "@/lib/utils";
 import { VoiceRecorder } from "./VoiceRecorder";
-import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { useMuteState } from "@/hooks/useMuteState";
 import { KubIcon, type KubIconName } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
+import {
+  formatAttachmentSize,
+  normalizeClipboardFile,
+  type StagedAttachment,
+} from "@/lib/stagedAttachments";
 
 const DRAFT_PREFIX = "kub:draft:";
 const draftKey = (chatId: string) => `${DRAFT_PREFIX}${chatId}`;
@@ -24,15 +28,15 @@ interface MessageInputProps {
   chatId: string;
   replyTo: MessageWithSender | null;
   onCancelReply: () => void;
-  onSend: (content: string) => void | Promise<unknown>;
-  onSendMedia?: (input: {
-    type: "image" | "video" | "file";
-    content: string;
-    mediaUrl: string;
-  }) => void | Promise<unknown>;
+  onSend: (content: string) => void | boolean | Promise<unknown>;
   onEdit?: (messageId: string, newContent: string) => Promise<void>;
   onSendVoice?: (blob: Blob, durationMs: number, mimeType: string) => void | Promise<void>;
   onTyping?: () => void;
+  attachments?: StagedAttachment[];
+  onStageFiles?: (files: File[], source: "picker" | "paste") => void;
+  onRemoveAttachment?: (attachmentId: string) => void;
+  onRetryAttachment?: (attachmentId: string) => void;
+  onCancelAttachment?: (attachmentId: string) => void;
   draftOverride?: { id: string; text: string } | null;
   focusRequestKey?: number;
 }
@@ -42,10 +46,14 @@ export function MessageInput({
   replyTo,
   onCancelReply,
   onSend,
-  onSendMedia,
   onEdit,
   onSendVoice,
   onTyping,
+  attachments = [],
+  onStageFiles,
+  onRemoveAttachment,
+  onRetryAttachment,
+  onCancelAttachment,
   draftOverride,
   focusRequestKey = 0,
 }: MessageInputProps) {
@@ -53,15 +61,14 @@ export function MessageInput({
   const [showEmoji, setShowEmoji] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
   const [showVoice, setShowVoice] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const hasText = text.trim().length > 0;
-  const supabase = createClient();
-  const userId = useAppStore((s) => s.currentUser?.id ?? null);
+  const hasAttachments = attachments.length > 0;
+  const isAttachmentBusy = attachments.some((item) => item.status === "uploading" || item.status === "sending");
   const editingMessage = useAppStore((s) => s.editingMessage);
   const setEditingMessage = useAppStore((s) => s.setEditingMessage);
   const isEditing = editingMessage !== null && editingMessage.chat_id === chatId;
@@ -116,28 +123,11 @@ export function MessageInput({
     preEditTextRef.current = null;
   }, [setEditingMessage]);
 
-  const uploadAndSend = useCallback(async (file: File) => {
-    if (!userId || !onSendMedia) return;
-    setUploading(true);
+  const stagePickedFiles = useCallback((fileList: FileList | null) => {
+    if (!fileList?.length || !onStageFiles) return;
+    onStageFiles(Array.from(fileList), "picker");
     setShowAttach(false);
-    try {
-      const ext = file.name.split(".").pop() ?? "bin";
-      const path = `${userId}/${Date.now()}.${ext}`;
-      const { data, error } = await supabase.storage.from("media").upload(path, file);
-      if (error || !data) {
-        console.error("Upload error:", error);
-        showAppAlert("Не удалось загрузить файл. Проверьте соединение и попробуйте ещё раз.", "Ошибка");
-        return;
-      }
-      const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(data.path);
-      const isImage = file.type.startsWith("image/");
-      const isVideo = file.type.startsWith("video/");
-      const type = isImage ? "image" : isVideo ? "video" : "file";
-      await onSendMedia({ type, mediaUrl: publicUrl, content: file.name });
-    } finally {
-      setUploading(false);
-    }
-  }, [onSendMedia, userId, supabase]);
+  }, [onStageFiles]);
 
   const handleLocation = useCallback(() => {
     setShowAttach(false);
@@ -153,14 +143,19 @@ export function MessageInput({
 
   const handleSend = useCallback(async () => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed && !hasAttachments) return;
     if (isEditing && editingMessage && onEdit) {
+      if (!trimmed) return;
       await onEdit(editingMessage.id, trimmed);
       setEditingMessage(null);
       setText(preEditTextRef.current ?? "");
       preEditTextRef.current = null;
     } else {
-      void onSend(trimmed);
+      const result = await onSend(trimmed);
+      if (result === false) {
+        textareaRef.current?.focus();
+        return;
+      }
       setText("");
       if (typeof window !== "undefined") localStorage.removeItem(draftKey(chatId));
     }
@@ -169,7 +164,7 @@ export function MessageInput({
       textareaRef.current.style.height = "auto";
       textareaRef.current.focus();
     }
-  }, [text, onSend, isEditing, editingMessage, onEdit, setEditingMessage, chatId]);
+  }, [text, hasAttachments, onSend, isEditing, editingMessage, onEdit, setEditingMessage, chatId]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Escape") {
@@ -185,10 +180,26 @@ export function MessageInput({
     }
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !isComposing) {
       e.preventDefault();
-      if (!uploading && hasText) void handleSend();
+      if (!isAttachmentBusy && (hasText || hasAttachments)) void handleSend();
       return;
     }
     onTyping?.();
+  };
+
+  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const data = event.clipboardData;
+    if (!data || !onStageFiles || isEditing) return;
+    const files: File[] = [];
+    for (const item of Array.from(data.items)) {
+      if (item.kind !== "file") continue;
+      const file = item.getAsFile();
+      if (!file) continue;
+      files.push(normalizeClipboardFile(file));
+    }
+    if (!files.length) return;
+    onStageFiles(files, "paste");
+    setShowAttach(false);
+    if (!data.getData("text/plain")) event.preventDefault();
   };
 
   const handleInput = () => {
@@ -270,12 +281,12 @@ export function MessageInput({
         </div>
       )}
 
-      <input ref={photoInputRef} type="file" accept="image/*,video/*" className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAndSend(f); e.target.value = ""; }} />
-      <input ref={fileInputRef} type="file" className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAndSend(f); e.target.value = ""; }} />
+      <input ref={photoInputRef} type="file" accept="image/*,video/*" multiple className="hidden"
+        onChange={(e) => { stagePickedFiles(e.target.files); e.target.value = ""; }} />
+      <input ref={fileInputRef} type="file" multiple className="hidden"
+        onChange={(e) => { stagePickedFiles(e.target.files); e.target.value = ""; }} />
       <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAndSend(f); e.target.value = ""; }} />
+        onChange={(e) => { stagePickedFiles(e.target.files); e.target.value = ""; }} />
 
       {showAttach && (
         <>
@@ -301,12 +312,6 @@ export function MessageInput({
             ))}
           </div>
         </>
-      )}
-
-      {uploading && (
-        <div className="mx-3 mb-1 text-xs px-3 py-1.5 rounded-xl bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]">
-          Загрузка…
-        </div>
       )}
 
       <div className="px-3 pb-3 pt-2">
@@ -346,6 +351,15 @@ export function MessageInput({
           </div>
         )}
 
+        {attachments.length > 0 && (
+          <AttachmentTray
+            attachments={attachments}
+            onRemove={onRemoveAttachment}
+            onRetry={onRetryAttachment}
+            onCancel={onCancelAttachment}
+          />
+        )}
+
         <div className="flex items-end gap-1 rounded-2xl px-2 py-1 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
           <button
             onClick={() => { setShowAttach(!showAttach); setShowEmoji(false); }}
@@ -364,6 +378,7 @@ export function MessageInput({
             onChange={(e) => setText(e.target.value)}
             onInput={handleInput}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             onCompositionStart={() => setIsComposing(true)}
             onCompositionEnd={() => setIsComposing(false)}
             placeholder="Сообщение…"
@@ -383,19 +398,158 @@ export function MessageInput({
           </button>
 
           <button
-            onClick={hasText ? handleSend : () => { setShowVoice(true); setShowEmoji(false); setShowAttach(false); }}
+            onClick={(hasText || hasAttachments) ? handleSend : () => { setShowVoice(true); setShowEmoji(false); setShowAttach(false); }}
+            disabled={isAttachmentBusy}
             className={cn(
               "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all",
-              hasText
+              isAttachmentBusy
+                ? "text-[color:var(--kub-muted)] opacity-60 cursor-not-allowed"
+                : (hasText || hasAttachments)
                 ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan hover:brightness-110"
                 : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-3)]"
             )}
-            aria-label={hasText ? "Отправить" : "Записать голосовое"}
+            aria-label={(hasText || hasAttachments) ? "Отправить" : "Записать голосовое"}
           >
-            {hasText ? <KubIcon name="send" size={18} className="ml-0.5" /> : <KubIcon name="microphone" size={20} />}
+            {isAttachmentBusy ? (
+              <KubIcon name="spinner" size={18} className="animate-spin" />
+            ) : (hasText || hasAttachments) ? (
+              <KubIcon name="send" size={18} className="ml-0.5" />
+            ) : (
+              <KubIcon name="microphone" size={20} />
+            )}
           </button>
         </div>
       </div>
     </div>
   );
+}
+
+function AttachmentTray({
+  attachments,
+  onRemove,
+  onRetry,
+  onCancel,
+}: {
+  attachments: StagedAttachment[];
+  onRemove?: (attachmentId: string) => void;
+  onRetry?: (attachmentId: string) => void;
+  onCancel?: (attachmentId: string) => void;
+}) {
+  return (
+    <div className="mb-2 rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 py-2">
+      <div className="flex max-w-full gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
+        {attachments.map((attachment) => {
+          const busy = attachment.status === "uploading" || attachment.status === "sending";
+          const failed = attachment.status === "failed";
+          return (
+            <div
+              key={attachment.id}
+              className="relative flex min-w-[210px] max-w-[260px] shrink-0 items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-2"
+            >
+              <AttachmentThumb attachment={attachment} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-xs font-medium text-[color:var(--kub-text)]">
+                  {attachment.name}
+                </div>
+                <div className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] text-[color:var(--kub-muted)]">
+                  <span className="shrink-0">{formatAttachmentSize(attachment.size)}</span>
+                  <span className="shrink-0">·</span>
+                  <span className={cn("truncate", failed && "text-[color:var(--kub-danger)]")}>
+                    {attachment.error ?? attachmentStatusLabel(attachment.status)}
+                  </span>
+                </div>
+                {busy && (
+                  <div className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--kub-surface-3)]">
+                    <div className="h-full w-2/3 animate-pulse rounded-full bg-[var(--kub-cyan)]" />
+                  </div>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                {failed && onRetry && (
+                  <button
+                    type="button"
+                    onClick={() => onRetry(attachment.id)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-3)]"
+                    aria-label="Повторить отправку"
+                    title="Повторить"
+                  >
+                    <KubIcon name="rotate" size={15} />
+                  </button>
+                )}
+                {busy && onCancel ? (
+                  <button
+                    type="button"
+                    onClick={() => onCancel(attachment.id)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)]"
+                    aria-label="Отменить загрузку"
+                    title="Отменить"
+                  >
+                    <KubIcon name="close" size={15} />
+                  </button>
+                ) : (
+                  onRemove && (
+                    <button
+                      type="button"
+                      onClick={() => onRemove(attachment.id)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)]"
+                      aria-label="Убрать вложение"
+                      title="Убрать"
+                    >
+                      <KubIcon name="close" size={15} />
+                    </button>
+                  )
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AttachmentThumb({ attachment }: { attachment: StagedAttachment }) {
+  const icon = attachment.kind === "image"
+    ? "image"
+    : attachment.kind === "video"
+    ? "video"
+    : attachment.kind === "audio"
+    ? "voice"
+    : "file";
+
+  if (attachment.kind === "image" && attachment.previewUrl) {
+    return (
+      <img
+        src={attachment.previewUrl}
+        alt=""
+        className="h-12 w-12 shrink-0 rounded-lg object-cover"
+        draggable={false}
+      />
+    );
+  }
+
+  if (attachment.kind === "video" && attachment.previewUrl) {
+    return (
+      <video
+        src={attachment.previewUrl}
+        className="h-12 w-12 shrink-0 rounded-lg object-cover"
+        muted
+        playsInline
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[var(--kub-surface-3)] text-[color:var(--kub-cyan)]">
+      <KubIcon name={icon} size={19} />
+    </div>
+  );
+}
+
+function attachmentStatusLabel(status: StagedAttachment["status"]): string {
+  if (status === "uploading") return "Загрузка…";
+  if (status === "sending") return "Отправка…";
+  if (status === "failed") return "Ошибка";
+  if (status === "cancelled") return "Отменено";
+  return "Готово к отправке";
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, type DragEvent } from "react";
 import { ChatHeader } from "./ChatHeader";
 import { PinnedMessage } from "./PinnedMessage";
 import { MessageList } from "./MessageList";
@@ -18,6 +18,17 @@ import { KubEmptyState, KubIcon } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
 import { isSavedChat } from "@/lib/chatDisplay";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
+import {
+  CHAT_MEDIA_BUCKET,
+  MAX_STAGED_ATTACHMENTS,
+  chatAttachmentUploadPath,
+  createStagedAttachment,
+  getAttachmentKind,
+  revokeAttachmentPreview,
+  validateStagedAttachment,
+  type StagedAttachment,
+  type StagedAttachmentUpload,
+} from "@/lib/stagedAttachments";
 import type { MessageWithSender } from "@/types/database";
 
 interface ChatWindowProps {
@@ -74,6 +85,29 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const messageRefs = useRef<Record<string, HTMLDivElement>>({});
   const pendingJumpRef = useRef<string | null>(null);
   const supabase = createClient();
+  const [stagedAttachments, setStagedAttachments] = useState<StagedAttachment[]>([]);
+  const stagedAttachmentsRef = useRef<StagedAttachment[]>([]);
+  const cancelledAttachmentIdsRef = useRef<Set<string>>(new Set());
+  const dragDepthRef = useRef(0);
+  const [draggingFiles, setDraggingFiles] = useState(false);
+
+  useEffect(() => {
+    stagedAttachmentsRef.current = stagedAttachments;
+  }, [stagedAttachments]);
+
+  useEffect(() => {
+    setStagedAttachments((current) => {
+      current.forEach(revokeAttachmentPreview);
+      return [];
+    });
+    cancelledAttachmentIdsRef.current.clear();
+    setDraggingFiles(false);
+    dragDepthRef.current = 0;
+    return () => {
+      stagedAttachmentsRef.current.forEach(revokeAttachmentPreview);
+      cancelledAttachmentIdsRef.current.clear();
+    };
+  }, [chatId]);
 
   useEffect(() => {
     if (!chatPanelRequest || chatPanelRequest.chatId !== chatId) return;
@@ -86,25 +120,172 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     | "owner" | "admin" | "member" | null;
   const canManageTopics = myRole === "owner" || myRole === "admin";
 
+  const updateStagedAttachment = useCallback((
+    attachmentId: string,
+    updater: (attachment: StagedAttachment) => StagedAttachment,
+  ) => {
+    setStagedAttachments((current) => current.map((attachment) =>
+      attachment.id === attachmentId ? updater(attachment) : attachment
+    ));
+  }, []);
+
+  const removeStagedAttachment = useCallback((attachmentId: string) => {
+    cancelledAttachmentIdsRef.current.add(attachmentId);
+    setStagedAttachments((current) => {
+      const target = current.find((attachment) => attachment.id === attachmentId);
+      if (target) revokeAttachmentPreview(target);
+      return current.filter((attachment) => attachment.id !== attachmentId);
+    });
+  }, []);
+
+  const cancelStagedAttachment = useCallback((attachmentId: string) => {
+    cancelledAttachmentIdsRef.current.add(attachmentId);
+    removeStagedAttachment(attachmentId);
+  }, [removeStagedAttachment]);
+
+  const stageFiles = useCallback((files: File[], _source: "picker" | "paste" | "drop") => {
+    if (!files.length) return;
+    const existingCount = stagedAttachmentsRef.current.length;
+    const availableSlots = Math.max(0, MAX_STAGED_ATTACHMENTS - existingCount);
+    const accepted: StagedAttachment[] = [];
+    const errors: string[] = [];
+
+    if (!availableSlots) {
+      showAppAlert(`Можно подготовить не больше ${MAX_STAGED_ATTACHMENTS} вложений за раз.`, "Вложения");
+      return;
+    }
+
+    for (const file of files.slice(0, availableSlots)) {
+      const error = validateStagedAttachment(file);
+      if (error) {
+        errors.push(`${file.name || "Файл"}: ${error}`);
+        continue;
+      }
+      accepted.push(createStagedAttachment(file));
+    }
+
+    if (files.length > availableSlots) {
+      errors.push(`Добавлено ${availableSlots} из ${files.length}: максимум ${MAX_STAGED_ATTACHMENTS} вложений за раз.`);
+    }
+
+    if (accepted.length) {
+      setStagedAttachments((current) => [...current, ...accepted]);
+    }
+    if (errors.length) {
+      showAppAlert(errors.slice(0, 3).join("\n"), "Вложения");
+    }
+  }, []);
+
+  const uploadStagedAttachment = useCallback(async (attachment: StagedAttachment): Promise<StagedAttachmentUpload> => {
+    if (!userId) throw new Error("auth");
+    const path = chatAttachmentUploadPath(chatId, userId, attachment);
+    const { data, error } = await supabase.storage
+      .from(CHAT_MEDIA_BUCKET)
+      .upload(path, attachment.file, {
+        contentType: attachment.mimeType || attachment.file.type || "application/octet-stream",
+        upsert: false,
+      });
+    if (error || !data) throw error ?? new Error("upload_failed");
+    const { data: publicData } = supabase.storage.from(CHAT_MEDIA_BUCKET).getPublicUrl(data.path);
+    return {
+      bucket: CHAT_MEDIA_BUCKET,
+      path: data.path,
+      publicUrl: publicData.publicUrl,
+    };
+  }, [chatId, supabase, userId]);
+
+  const sendStagedAttachments = useCallback(async (caption: string, onlyAttachmentId?: string): Promise<boolean> => {
+    if (!userId) {
+      showAppAlert("Войдите в аккаунт, чтобы отправлять файлы.", "Вложения");
+      return false;
+    }
+
+    const captionText = caption.trim();
+    const targets = stagedAttachmentsRef.current.filter((attachment) => {
+      if (onlyAttachmentId && attachment.id !== onlyAttachmentId) return false;
+      return attachment.status !== "uploading" && attachment.status !== "sending";
+    });
+    if (!targets.length) return false;
+
+    let sentAny = false;
+    for (const attachment of targets) {
+      if (cancelledAttachmentIdsRef.current.has(attachment.id)) continue;
+      updateStagedAttachment(attachment.id, (current) => ({
+        ...current,
+        status: "uploading",
+        progress: null,
+        error: null,
+      }));
+
+      let uploaded: StagedAttachmentUpload | null = attachment.uploaded;
+      if (!uploaded) {
+        try {
+          uploaded = await uploadStagedAttachment(attachment);
+        } catch (error) {
+          console.warn("[attachments] upload failed:", error);
+          updateStagedAttachment(attachment.id, (current) => ({
+            ...current,
+            status: "failed",
+            error: "Не удалось загрузить файл.",
+          }));
+          return sentAny;
+        }
+      }
+
+      if (cancelledAttachmentIdsRef.current.has(attachment.id)) continue;
+
+      updateStagedAttachment(attachment.id, (current) => ({
+        ...current,
+        status: "sending",
+        uploaded,
+        error: null,
+      }));
+
+      const content = sentAny || !captionText ? attachment.name : captionText;
+      const message = await sendMediaMessage({
+        type: getAttachmentKind(attachment.file),
+        content,
+        mediaUrl: uploaded.publicUrl,
+        replyToId: replyTo?.id ?? null,
+        clientMessageId: attachment.clientMessageId,
+      });
+
+      if (!message) {
+        updateStagedAttachment(attachment.id, (current) => ({
+          ...current,
+          status: "failed",
+          uploaded,
+          error: "Не удалось отправить сообщение.",
+        }));
+        return sentAny;
+      }
+
+      sentAny = true;
+      removeStagedAttachment(attachment.id);
+    }
+
+    if (sentAny) setReplyTo(null);
+    return sentAny;
+  }, [replyTo?.id, removeStagedAttachment, sendMediaMessage, updateStagedAttachment, uploadStagedAttachment, userId]);
+
+  const retryStagedAttachment = useCallback((attachmentId: string) => {
+    void sendStagedAttachments("", attachmentId);
+  }, [sendStagedAttachments]);
+
   const handleSend = async (content: string) => {
+    if (stagedAttachmentsRef.current.length) {
+      return sendStagedAttachments(content);
+    }
     const replyToId = replyTo?.id;
     await sendMessage(content, replyToId);
     setReplyTo(null);
+    return true;
   };
 
   const handleReply = useCallback((msg: MessageWithSender) => {
     setReplyTo(msg);
     setReplyFocusKey((key) => key + 1);
   }, []);
-
-  const handleSendMedia = useCallback(async (input: {
-    type: "image" | "video" | "file";
-    content: string;
-    mediaUrl: string;
-  }) => {
-    await sendMediaMessage({ ...input, replyToId: replyTo?.id ?? null });
-    setReplyTo(null);
-  }, [replyTo?.id, sendMediaMessage]);
 
   const handleSendVoice = useCallback(async (blob: Blob, durationMs: number, mimeType: string) => {
     if (!userId) {
@@ -241,8 +422,52 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     setDraftRestore({ id: `${msg.id}:${Date.now()}`, text: msg.content ?? "" });
   }, [discardLocalMessage]);
 
+  const handleDragEnter = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (!hasDraggedFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    dragDepthRef.current += 1;
+    setDraggingFiles(true);
+  }, []);
+
+  const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (!hasDraggedFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }, []);
+
+  const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (!hasDraggedFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setDraggingFiles(false);
+  }, []);
+
+  const handleDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
+    if (!hasDraggedFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    dragDepthRef.current = 0;
+    setDraggingFiles(false);
+    const files = filesFromDataTransfer(event.dataTransfer);
+    if (files.length) stageFiles(files, "drop");
+  }, [stageFiles]);
+
   return (
-    <div className="flex h-full w-full min-w-0 overflow-hidden bg-[var(--kub-chat-bg)]">
+    <div
+      className="relative flex h-full w-full min-w-0 overflow-hidden bg-[var(--kub-chat-bg)]"
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {draggingFiles && (
+        <div className="pointer-events-none absolute inset-3 z-50 flex items-center justify-center rounded-3xl border-2 border-dashed border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-bg)_76%,var(--kub-cyan)_10%)] shadow-2xl">
+          <div className="flex flex-col items-center gap-2 rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-5 py-4 text-center">
+            <KubIcon name="attach" size={28} tone="accent" />
+            <div className="text-sm font-semibold text-[color:var(--kub-text)]">Отпустите, чтобы добавить вложения</div>
+            <div className="text-xs text-[color:var(--kub-muted)]">Файлы будут загружены только после отправки.</div>
+          </div>
+        </div>
+      )}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <ChatHeader
           chatId={chatId}
@@ -331,10 +556,14 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
           onSend={handleSend}
-          onSendMedia={handleSendMedia}
           onEdit={editMessage}
           onSendVoice={handleSendVoice}
           onTyping={sendTyping}
+          attachments={stagedAttachments}
+          onStageFiles={(files, source) => stageFiles(files, source)}
+          onRemoveAttachment={removeStagedAttachment}
+          onRetryAttachment={retryStagedAttachment}
+          onCancelAttachment={cancelStagedAttachment}
           draftOverride={draftRestore}
           focusRequestKey={replyFocusKey}
         />
@@ -355,4 +584,13 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
     </div>
   );
+}
+
+function hasDraggedFiles(dataTransfer: DataTransfer | null): boolean {
+  if (!dataTransfer) return false;
+  return Array.from(dataTransfer.types ?? []).includes("Files");
+}
+
+function filesFromDataTransfer(dataTransfer: DataTransfer): File[] {
+  return Array.from(dataTransfer.files ?? []).filter((file) => file instanceof File);
 }

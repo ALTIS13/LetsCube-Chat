@@ -365,3 +365,9 @@ Recurring tasks roadmap note:
 - Mic test adds a local-only processing mode selector: "Чистый голос" requests browser echo cancellation, noise suppression, auto gain, mono input and 48 kHz / 16-bit ideals; "Без обработки" requests those processing constraints off.
 - If advanced constraints are not supported, mic test falls back to simpler constraints and then `{ audio: true }`, showing friendly fallback copy instead of raw DOM errors.
 - Self-monitoring has an app-only "Громкость прослушивания" GainNode control with 80% default; it does not change system volume and does not affect voice-message recording.
+
+2026-05-10 staged attachments follow-up:
+
+- The chat composer/send pipeline is split between `artifacts/kub/src/components/chat/MessageInput.tsx`, `artifacts/kub/src/components/chat/ChatWindow.tsx` and `artifacts/kub/src/hooks/useMessages.ts`.
+- Existing media messages use the single-row `messages.media_url` model, so staged multi-file sends are sent sequentially as separate `image` / `video` / `audio` / `file` messages. No multi-attachment schema migration was added.
+- File picker, drag-and-drop and clipboard files now create local staged attachments first. Upload to the existing `media` storage bucket starts only after Send; successful attachments are removed from the tray only after `sendMediaMessage` returns the DB-acknowledged row through the existing `client_message_id` path.
