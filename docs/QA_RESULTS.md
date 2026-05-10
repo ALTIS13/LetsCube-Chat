@@ -353,3 +353,9 @@ Recurring tasks roadmap note:
 - Invite UI uses friendly status/error copy only. Technical RPC names, raw payloads, UUIDs, PostgreSQL codes and stack details remain console-only diagnostics.
 - Group info includes a gated "Кто может приглашать" setting. Until the manual DB proposal is applied, the UI falls back to `owner_admin_only` and shows a friendly migration-required note instead of breaking.
 - No SQL was applied automatically. New manual proposal pending: `.migration-backup/supabase/migrations/20260512_group_invite_reinvite_and_policy.sql`.
+
+2026-05-10 microphone self-monitoring follow-up:
+
+- Mic test lives in `artifacts/kub/src/components/sidebar/AudioSettingsSection.tsx`; voice-message recording remains isolated in `artifacts/kub/src/hooks/useVoiceRecorder.ts` and `artifacts/kub/src/components/chat/VoiceRecorder.tsx`.
+- Mic test now has an explicit "Прослушивать себя" toggle. It is off by default, enabled only while the mic test is active, and creates a local-only `AudioContext -> MediaStreamSource -> GainNode -> destination` monitoring path.
+- Stopping the mic test, closing settings, disabling the toggle, or losing the mic stream disconnects monitoring nodes and closes the owned AudioContext. The mic test stream remains separate from normal voice-message recording and is not sent to chat.

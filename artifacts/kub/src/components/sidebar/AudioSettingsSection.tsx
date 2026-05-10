@@ -8,6 +8,8 @@ import {
   type AudioSettings,
 } from "@/hooks/useAudioSettings";
 
+type AudioContextCtor = typeof AudioContext;
+
 function audioConstraints(settings: AudioSettings): MediaStreamConstraints {
   return {
     audio: {
@@ -24,24 +26,64 @@ export function AudioSettingsSection() {
   const [testing, setTesting] = useState(false);
   const [level, setLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [selfMonitoring, setSelfMonitoring] = useState(false);
+  const [monitorError, setMonitorError] = useState<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const contextRef = useRef<AudioContext | null>(null);
   const frameRef = useRef<number | null>(null);
+  const monitorContextRef = useRef<AudioContext | null>(null);
+  const monitorSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const monitorGainRef = useRef<GainNode | null>(null);
 
-  const stopMicTest = () => {
+  const stopSelfMonitoring = (updateState = true) => {
+    try {
+      monitorSourceRef.current?.disconnect();
+    } catch {
+      /* ignore */
+    }
+    try {
+      monitorGainRef.current?.disconnect();
+    } catch {
+      /* ignore */
+    }
+    monitorSourceRef.current = null;
+    monitorGainRef.current = null;
+    const context = monitorContextRef.current;
+    monitorContextRef.current = null;
+    if (context && context.state !== "closed") {
+      void context.close().catch(() => undefined);
+    }
+    if (updateState) {
+      setSelfMonitoring(false);
+      setMonitorError(null);
+    }
+  };
+
+  const stopMicTest = (updateState = true) => {
+    stopSelfMonitoring(updateState);
     if (frameRef.current !== null) {
       cancelAnimationFrame(frameRef.current);
       frameRef.current = null;
     }
-    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current?.getTracks().forEach((track) => {
+      track.onended = null;
+      track.stop();
+    });
     streamRef.current = null;
     void contextRef.current?.close().catch(() => undefined);
     contextRef.current = null;
-    setTesting(false);
-    setLevel(0);
+    if (updateState) {
+      setTesting(false);
+      setLevel(0);
+    }
   };
 
-  useEffect(() => stopMicTest, []);
+  useEffect(() => {
+    return () => {
+      stopMicTest(false);
+      stopSelfMonitoring(false);
+    };
+  }, []);
 
   const startMicTest = async () => {
     if (testing) {
@@ -49,15 +91,17 @@ export function AudioSettingsSection() {
       return;
     }
 
-    if (!navigator.mediaDevices?.getUserMedia || typeof AudioContext === "undefined") {
+    const AudioContextCtor = getAudioContextCtor();
+    if (!navigator.mediaDevices?.getUserMedia || !AudioContextCtor) {
       setError("Проверка микрофона не поддерживается этим браузером.");
       return;
     }
 
     setError(null);
+    setMonitorError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia(audioConstraints(settings));
-      const context = new AudioContext();
+      const context = new AudioContextCtor();
       const analyser = context.createAnalyser();
       const gain = context.createGain();
       const source = context.createMediaStreamSource(stream);
@@ -65,6 +109,12 @@ export function AudioSettingsSection() {
       gain.gain.value = settings.micInputGain;
       source.connect(gain);
       gain.connect(analyser);
+      stream.getAudioTracks().forEach((track) => {
+        track.onended = () => {
+          setError("Микрофон недоступен.");
+          stopMicTest();
+        };
+      });
       streamRef.current = stream;
       contextRef.current = context;
       setTesting(true);
@@ -79,9 +129,48 @@ export function AudioSettingsSection() {
         frameRef.current = requestAnimationFrame(tick);
       };
       tick();
-    } catch {
-      setError("Не удалось получить доступ к микрофону.");
+    } catch (err) {
+      setError(microphoneErrorMessage(err));
       stopMicTest();
+    }
+  };
+
+  const toggleSelfMonitoring = async () => {
+    if (selfMonitoring) {
+      stopSelfMonitoring();
+      return;
+    }
+    setMonitorError(null);
+    const stream = streamRef.current;
+    if (!testing || !stream || !stream.active || stream.getAudioTracks().every((track) => track.readyState === "ended")) {
+      setMonitorError("Сначала запустите проверку микрофона.");
+      return;
+    }
+    const AudioContextCtor = getAudioContextCtor();
+    if (!AudioContextCtor) {
+      setMonitorError("Прослушивание себя не поддерживается в этом браузере.");
+      return;
+    }
+
+    stopSelfMonitoring(false);
+    try {
+      const context = new AudioContextCtor();
+      if (context.state === "suspended") {
+        await context.resume();
+      }
+      const source = context.createMediaStreamSource(stream);
+      const gain = context.createGain();
+      gain.gain.value = 1;
+      source.connect(gain);
+      gain.connect(context.destination);
+      monitorContextRef.current = context;
+      monitorSourceRef.current = source;
+      monitorGainRef.current = gain;
+      setSelfMonitoring(true);
+    } catch {
+      stopSelfMonitoring(false);
+      setSelfMonitoring(false);
+      setMonitorError("Не удалось включить прослушивание. Попробуйте ещё раз.");
     }
   };
 
@@ -145,9 +234,31 @@ export function AudioSettingsSection() {
               />
             </div>
           </div>
+          <label className="mt-3 flex min-w-0 items-start gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
+            <input
+              type="checkbox"
+              checked={selfMonitoring}
+              disabled={!testing}
+              onChange={() => void toggleSelfMonitoring()}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--kub-cyan)] disabled:opacity-50"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block text-xs font-semibold text-[color:var(--kub-text)]">Прослушивать себя</span>
+              <span className="mt-0.5 block text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                {selfMonitoring
+                  ? "Используйте наушники, чтобы избежать эха."
+                  : "Доступно только во время проверки микрофона."}
+              </span>
+            </span>
+          </label>
           {error && (
             <div className="mt-2 text-xs text-[color:var(--kub-danger)]">
               {error}
+            </div>
+          )}
+          {monitorError && (
+            <div className="mt-2 text-xs text-[color:var(--kub-danger)]">
+              {monitorError}
             </div>
           )}
         </div>
@@ -162,6 +273,22 @@ export function AudioSettingsSection() {
       </div>
     </div>
   );
+}
+
+function getAudioContextCtor(): AudioContextCtor | null {
+  if (typeof window === "undefined") return null;
+  return window.AudioContext ?? (window as Window & { webkitAudioContext?: AudioContextCtor }).webkitAudioContext ?? null;
+}
+
+function microphoneErrorMessage(err: unknown): string {
+  if (!(err instanceof Error)) return "Микрофон недоступен.";
+  if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError" || err.name === "SecurityError") {
+    return "Нет доступа к микрофону.";
+  }
+  if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError" || err.name === "NotReadableError" || err.name === "TrackStartError") {
+    return "Микрофон недоступен.";
+  }
+  return "Не удалось включить микрофон. Попробуйте ещё раз.";
 }
 
 function SliderRow({
