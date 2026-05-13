@@ -32,7 +32,6 @@ import { registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
-const LEGACY_LOCATION_ROLES = ["admin", "manager", "staff"] as const;
 
 const roleLabel: Record<AppRole, string> = {
   admin: "Администратор",
@@ -81,7 +80,6 @@ export function UsersTab() {
   const [bulkGlobalRoleId, setBulkGlobalRoleId] = useState("");
   const [bulkLocationId, setBulkLocationId] = useState("");
   const [bulkLocationRoleId, setBulkLocationRoleId] = useState("");
-  const [bulkLocationRole, setBulkLocationRole] = useState<LocationRole>("staff");
   const [bulkPrimaryAdminId, setBulkPrimaryAdminId] = useState("");
   const [bulkSaving, setBulkSaving] = useState<string | null>(null);
   const [bulkError, setBulkError] = useState<string | null>(null);
@@ -91,6 +89,7 @@ export function UsersTab() {
   const [muteTarget, setMuteTarget] = useState<Profile | null>(null);
   const [profileTarget, setProfileTarget] = useState<Profile | null>(null);
   const realtimeChannelIdRef = useRef(`admin-users:${Math.random().toString(36).slice(2)}`);
+  const rowsLoadedRef = useRef(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -102,8 +101,9 @@ export function UsersTab() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [queryRaw]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (options: { background?: boolean } = {}) => {
+    const background = options.background === true && rowsLoadedRef.current;
+    if (!background) setLoading(true);
     setError(null);
     const from = page * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
@@ -122,11 +122,14 @@ export function UsersTab() {
     const { data, count, error } = await q;
     if (error) {
       setError(mapPgError(error));
-      setRows([]);
-      setTotal(0);
+      if (!background) {
+        setRows([]);
+        setTotal(0);
+      }
     } else {
       setRows((data ?? []) as Profile[]);
       setTotal(count ?? 0);
+      rowsLoadedRef.current = true;
     }
     setLoading(false);
   }, [supabase, query, page]);
@@ -183,15 +186,6 @@ export function UsersTab() {
     });
     return () => { cancelled = true; };
   }, [rows, supabase]);
-
-  const setRole = async (uid: string, role: AppRole) => {
-    const { error } = await supabase
-      .from("profiles")
-      .update({ role, updated_at: new Date().toISOString() })
-      .eq("id", uid);
-    if (error) { showAppAlert(prefixError("Не удалось изменить роль", error), "Ошибка"); return; }
-    setRows((rs) => rs.map((r) => (r.id === uid ? { ...r, role } : r)));
-  };
 
   const unban = async (uid: string) => {
     const { error } = await supabase.from("bans").delete().eq("user_id", uid);
@@ -276,16 +270,13 @@ export function UsersTab() {
         if (!haystack.includes(q)) return false;
       }
       if (globalRoleFilter) {
-        if (globalRoleFilter.startsWith("legacy:")) {
-          if (user.role !== globalRoleFilter.slice("legacy:".length)) return false;
-        } else if (!userGlobalRoles.some((role) => role.id === globalRoleFilter)) {
+        if (!userGlobalRoles.some((role) => role.id === globalRoleFilter)) {
           return false;
         }
       }
       if (locationFilter && !memberships.some((member) => member.location_id === locationFilter)) return false;
       if (locationRoleFilter) {
         const matchesLocationRole = memberships.some((member) => {
-          if (locationRoleFilter.startsWith("legacy:")) return member.role === locationRoleFilter.slice("legacy:".length);
           return member.role_id === locationRoleFilter;
         });
         if (!matchesLocationRole) return false;
@@ -307,26 +298,12 @@ export function UsersTab() {
 
   const allVisibleSelected = filteredRows.length > 0 && filteredRows.every((user) => selectedIds.has(user.id));
 
-  const canSetRole = (target: Profile, newRole: AppRole) => {
-    if (target.id === currentUser?.id) return false;
-    if (target.role === newRole) return false;
-    if (isAdmin) return true;
-    if (target.role === "admin" || newRole === "admin") return false;
-    return true;
-  };
-
   const canSanction = (target: Profile) =>
     target.id !== currentUser?.id && (isAdmin || target.role !== "admin");
 
-  const refreshDynamicRoles = dynamicRoles.refetch;
-  const refreshRouting = routing.refetch;
   const refreshAdminData = useCallback(async () => {
-    await Promise.all([
-      load(),
-      refreshDynamicRoles(),
-      refreshRouting(),
-    ]);
-  }, [load, refreshDynamicRoles, refreshRouting]);
+    await load({ background: true });
+  }, [load]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -345,10 +322,7 @@ export function UsersTab() {
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "user_global_roles" }, (payload: { new?: { user_id?: string }; old?: { user_id?: string } }) => {
         clearRoleAccessCache(payload.new?.user_id ?? payload.old?.user_id);
-        scheduleRefresh();
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "location_members" }, scheduleRefresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "roles" }, scheduleRefresh)
       .subscribe((status: string) => {
         if (import.meta.env.DEV) console.debug("[admin-users:live]", status);
       });
@@ -465,6 +439,10 @@ export function UsersTab() {
       return;
     }
     const selectedDynamicLocationRole = dynamicRoleById.get(bulkLocationRoleId);
+    if (dynamicRoles.available && (!selectedDynamicLocationRole || selectedDynamicLocationRole.scope !== "location")) {
+      setBulkError("Выберите роль в локации.");
+      return;
+    }
     await runBulk(
       "assign-location",
       async (user) => {
@@ -480,7 +458,7 @@ export function UsersTab() {
         return await supabase.rpc("location_member_assign", {
           p_location_id: bulkLocationId,
           p_user_id: user.id,
-          p_role: bulkLocationRole,
+          p_role: "staff" as LocationRole,
           p_primary_admin_id: primaryAdminId,
         });
       },
@@ -541,9 +519,6 @@ export function UsersTab() {
               {globalRoleOptions.map((role) => (
                 <option key={role.id} value={role.id}>{getRoleLabel(role)}</option>
               ))}
-              <option value="legacy:admin">Старая роль: Администратор</option>
-              <option value="legacy:manager">Старая роль: Менеджер</option>
-              <option value="legacy:user">Старая роль: Пользователь</option>
             </SelectField>
             <SelectField label="Локация" value={locationFilter} onChange={setLocationFilter} disabled={!routing.available}>
               <option value="">Все локации</option>
@@ -555,9 +530,6 @@ export function UsersTab() {
               <option value="">Все роли</option>
               {locationRoleOptions.map((role) => (
                 <option key={role.id} value={role.id}>{getRoleLabel(role)}</option>
-              ))}
-              {LEGACY_LOCATION_ROLES.map((role) => (
-                <option key={role} value={`legacy:${role}`}>{LOCATION_ROLE_LABEL[role]}</option>
               ))}
             </SelectField>
             <SelectField label="Основной админ" value={primaryAdminFilter} onChange={setPrimaryAdminFilter} disabled={!routing.available}>
@@ -612,7 +584,7 @@ export function UsersTab() {
               Снять роль
             </KubButton>
           </div>
-          <div className="grid gap-2 lg:grid-cols-5">
+          <div className="grid gap-2 lg:grid-cols-4">
             <SelectField label="Локация" value={bulkLocationId} onChange={setBulkLocationId} disabled={!routing.available}>
               <option value="">Выберите локацию</option>
               {routing.locations.map((location) => (
@@ -620,14 +592,9 @@ export function UsersTab() {
               ))}
             </SelectField>
             <SelectField label="Роль локации" value={bulkLocationRoleId} onChange={setBulkLocationRoleId} disabled={!dynamicRoles.available}>
-              <option value="">Использовать старую роль</option>
+              <option value="">Выберите роль</option>
               {locationRoleOptions.map((role) => (
                 <option key={role.id} value={role.id}>{getRoleLabel(role)}</option>
-              ))}
-            </SelectField>
-            <SelectField label="Старая роль" value={bulkLocationRole} onChange={(value) => setBulkLocationRole(value as LocationRole)}>
-              {LEGACY_LOCATION_ROLES.map((role) => (
-                <option key={role} value={role}>{LOCATION_ROLE_LABEL[role]}</option>
               ))}
             </SelectField>
             <SelectField label="Основной админ" value={bulkPrimaryAdminId} onChange={setBulkPrimaryAdminId} disabled={!bulkLocationId || activeLocationAdmins.length === 0}>
@@ -677,11 +644,7 @@ export function UsersTab() {
               const st = stateById[u.id] ?? { banned: false, muted: false };
               const isSelf = u.id === currentUser?.id;
               const email = emails[u.id];
-              const canMakeAdmin = canSetRole(u, "admin");
-              const canMakeManager = canSetRole(u, "manager");
-              const canMakeUser = canSetRole(u, "user");
               const canManageSanctions = canSanction(u);
-              const hasRoleActions = canMakeAdmin || canMakeManager || canMakeUser;
               const dynamicBadges = dynamicRolesByUser.get(u.id) ?? [];
               const memberships = locationMembersByUser.get(u.id) ?? [];
               const locationBadges = memberships.slice(0, 2).map((member) => {
@@ -795,22 +758,6 @@ export function UsersTab() {
                       <DropdownMenuItem onClick={() => setProfileTarget(u)}>
                         <KubIcon name="eye" size={14} className="mr-2" /> Открыть профиль
                       </DropdownMenuItem>
-                      {hasRoleActions && <DropdownMenuSeparator />}
-                      {canMakeAdmin && (
-                        <DropdownMenuItem onClick={() => setRole(u.id, "admin")}>
-                          <KubIcon name="crown" size={14} className="mr-2" /> Сделать администратором
-                        </DropdownMenuItem>
-                      )}
-                      {canMakeManager && (
-                        <DropdownMenuItem onClick={() => setRole(u.id, "manager")}>
-                          <KubIcon name="admin" size={14} className="mr-2" /> Сделать менеджером
-                        </DropdownMenuItem>
-                      )}
-                      {canMakeUser && (
-                        <DropdownMenuItem onClick={() => setRole(u.id, "user")}>
-                          <KubIcon name="userCog" size={14} className="mr-2" /> Сделать пользователем
-                        </DropdownMenuItem>
-                      )}
                       {canManageSanctions && <DropdownMenuSeparator />}
                       {st.banned && canManageSanctions ? (
                         <DropdownMenuItem onClick={() => unban(u.id)}>
@@ -1074,7 +1021,7 @@ function ProfilePreviewModal({
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3 text-sm">
-        <Field label="Роль" value={roleLabel[user.role]} />
+        <Field label="Базовая роль" value={roleLabel[user.role]} />
         <Field label="Email" value={email ?? "—"} mono copyable />
         <PhoneField phone={contact?.phone ?? null} verified={!!contact?.phone_verified} />
         <Field label="Был в сети" value={fmtAgo(user.online_at)} />

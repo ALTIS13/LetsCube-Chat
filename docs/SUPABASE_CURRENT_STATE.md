@@ -320,3 +320,12 @@ The migration adds `public.group_invites`, scoped RLS, indexes, `group_invite_cr
 - The proposal adds separate recurrence templates and generated task occurrences. Occurrences copy `visibility`, `assignment_scope`, `assignee_id`, `chat_id`, `location_id`, `target_role`, `route_admin_id`, `created_for_admin` and `priority`, so location/admin-only routing is preserved.
 - Production recurring execution still needs a scheduler to call `task_recurrence_run_due()`: Supabase Scheduled Edge Function, `pg_cron`, external cron, or an explicit admin maintenance action.
 - Frontend fallback expectation: until the migration is applied, the task form shows a friendly database-update message in the “Повторение” section while existing task create/update flows keep using the current task RPC.
+
+## 2026-05-14 Recurring Permissions Follow-Up
+
+- The user reported that recurring tasks are working after applying the recurring tasks migration.
+- Read-only Supabase MCP confirmed `public.task_recurrences`, `public.task_recurrence_events`, `task_recurrence_pause`, `task_recurrence_resume`, `task_recurrence_stop`, `task_recurrence_update`, `has_permission` and `has_location_permission` are present on project ref `nhogbeojfnbjcfipitrh`.
+- The applied `_task_recurrence_can_manage(public.tasks)` helper still permits a caller with `tasks.manage` when they are the template creator/assignee or the task has no location. That is too broad for recurring schedule lifecycle control.
+- New SQL was not applied automatically. Manual proposal: `.migration-backup/supabase/migrations/20260519_recurring_permissions_and_legacy_roles.sql`.
+- The proposal redefines `_task_recurrence_can_manage` so pause/resume/stop/update require `system.manage`, `tasks.manage_all_locations`, explicit admin-task management for `created_for_admin`, or location-scoped `tasks.manage`. Creator/assignee status alone is no longer enough.
+- The same proposal idempotently backfills `profiles.role` into `user_global_roles` and `location_members.role` into `location_members.role_id`; legacy fields remain fallback compatibility only.

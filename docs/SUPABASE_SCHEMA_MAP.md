@@ -465,3 +465,21 @@ Security model:
 - Recurrence visibility delegates to the existing location-aware task visibility helper.
 - Management requires task-management permissions, global owner/tech_admin permission, or matching location task permission.
 - Generated occurrences copy task routing fields (`location_id`, `target_role`, `route_admin_id`, `created_for_admin`) and assignment fields, so staff/admin visibility does not broaden during recurrence.
+
+## 2026-05-14 Recurring Permissions Hardening Proposal
+
+Manual proposal: `.migration-backup/supabase/migrations/20260519_recurring_permissions_and_legacy_roles.sql`.
+
+The proposal keeps the current recurring schema and hardens only permission behavior:
+
+- `_task_recurrence_can_manage(public.tasks)` no longer treats `created_by` or `assignee_id` as sufficient recurrence-management authority.
+- Global recurrence management requires `system.manage`, `tasks.manage_all_locations`, or for global/no-location tasks `tasks.manage`.
+- Location recurrence management requires matching `has_location_permission(user, location_id, 'tasks.manage')`.
+- Admin-only recurrence management requires `tasks.manage_admin_tasks` globally or for the task location.
+- Existing `task_recurrence_pause`, `task_recurrence_resume`, `task_recurrence_stop` and `task_recurrence_update` keep using the helper, so redefining it hardens those RPCs without changing their signatures.
+
+The proposal also documents the legacy-role cleanup path:
+
+- `profiles.role` remains a fallback source, not the primary UI model.
+- Existing `profiles.role = admin/manager/user` users are idempotently represented in `user_global_roles`.
+- Existing `location_members.role` values are idempotently represented in `location_members.role_id`.

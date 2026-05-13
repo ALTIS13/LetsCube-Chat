@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useAppStore } from "@/store/app.store";
-import { useIsManagerOrAdmin } from "@/hooks/useRole";
+import { usePermissionAccess } from "@/hooks/useRole";
 import { useTaskRouting, useTaskRoutingEnabledPreference } from "@/hooks/useTaskRouting";
 import { useTasks, type TasksFilter } from "@/hooks/useTasks";
 import {
@@ -67,7 +67,29 @@ const STAFF_TABS: Tab[] = [
 export function TasksPage() {
   const [location, setLocation] = useLocation();
   const currentUser = useAppStore((s) => s.currentUser);
-  const isStaff = useIsManagerOrAdmin();
+  const taskAccess = usePermissionAccess([
+    "tasks.view",
+    "tasks.create",
+    "tasks.assign",
+    "tasks.manage",
+    "tasks.view_admin_tasks",
+    "tasks.manage_admin_tasks",
+    "tasks.view_all_locations",
+    "tasks.manage_all_locations",
+  ]);
+  const canViewTasks = taskAccess.hasAnyPermission([
+    "tasks.view",
+    "tasks.view_admin_tasks",
+    "tasks.view_all_locations",
+    "tasks.manage",
+    "tasks.manage_all_locations",
+  ]);
+  const canCreateTasks = taskAccess.hasAnyPermission([
+    "tasks.create",
+    "tasks.manage",
+    "tasks.manage_admin_tasks",
+    "tasks.manage_all_locations",
+  ]);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<TaskViewMode>(() => {
@@ -79,14 +101,14 @@ export function TasksPage() {
   const [locationFilter, setLocationFilter] = useState<LocationFilter>("all");
   const [recipientFilter, setRecipientFilter] = useState<RecipientFilter>("all");
   const [routingEnabled] = useTaskRoutingEnabledPreference();
-  const routing = useTaskRouting({ enabled: isStaff && routingEnabled, includeMembers: true });
+  const routing = useTaskRouting({ enabled: canViewTasks && routingEnabled, includeMembers: true });
 
   const tabs = STAFF_TABS;
   const [tabId, setTabId] = useState(tabs[0].id);
   const activeTab = tabs.find((t) => t.id === tabId) ?? tabs[0];
 
-  const baseFilter: TasksFilter = isStaff ? { mine: "all" } : { mine: "assigned" };
-  const { tasks, loading } = useTasks(baseFilter, { enabled: isStaff });
+  const baseFilter: TasksFilter = { mine: "all" };
+  const { tasks, loading } = useTasks(baseFilter, { enabled: canViewTasks && !taskAccess.checking });
 
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -166,7 +188,7 @@ export function TasksPage() {
     );
   }, [tasks]);
 
-  // The "Все" tab on staff is intentionally unbounded — show a small hint
+  // The "Все" tab is intentionally unbounded inside the RLS-visible task set.
   // when the visible list is large.
   const summary = useMemo(() => {
     if (loading) return "";
@@ -175,12 +197,36 @@ export function TasksPage() {
 
   if (!currentUser) return null;
 
-  if (!isStaff) {
+  if (taskAccess.checking) {
     return (
       <div className="flex flex-col h-[100dvh] bg-[var(--kub-bg)]">
         <KubHeader
           title="Задачи"
-          subtitle="Раздел для сотрудников клуба"
+          subtitle="Проверяем права доступа"
+          leading={
+            <button
+              type="button"
+              onClick={() => setLocation("/")}
+              className="p-2 rounded-lg hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]"
+              aria-label="Назад"
+            >
+              <KubIcon name="back" size={18} />
+            </button>
+          }
+        />
+        <div className="flex flex-1 items-center justify-center">
+          <KubIcon name="spinner" size={24} tone="accent" label="Загрузка" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!canViewTasks) {
+    return (
+      <div className="flex flex-col h-[100dvh] bg-[var(--kub-bg)]">
+        <KubHeader
+          title="Задачи"
+          subtitle="Раздел доступен по ролям и правам"
           leading={
             <button
               type="button"
@@ -196,7 +242,7 @@ export function TasksPage() {
           <KubEmptyState
             icon={<KubIcon name="shield" size={28} />}
             title="Раздел задач доступен только сотрудникам клуба"
-            description="Если вам нужен доступ к задачам, обратитесь к администратору или управляющему."
+            description="Если вам нужен доступ к задачам, обратитесь к администратору клуба."
             action={
               <KubButton variant="secondary" onClick={() => setLocation("/")}>
                 Вернуться к чатам
@@ -212,7 +258,7 @@ export function TasksPage() {
     <div className="flex flex-col h-[100dvh] bg-[var(--kub-bg)]">
       <KubHeader
         title="Задачи"
-        subtitle={isStaff ? "Управление задачами клуба" : "Ваши задачи"}
+        subtitle={canCreateTasks ? "Управление задачами клуба" : "Ваши задачи"}
         leading={
           <button
             type="button"
@@ -224,7 +270,7 @@ export function TasksPage() {
           </button>
         }
         trailing={
-          isStaff ? (
+          canCreateTasks ? (
             <KubButton
               variant="primary"
               size="sm"
@@ -302,13 +348,14 @@ export function TasksPage() {
             containerClassName="lg:max-w-xl"
           />
 
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div className="flex min-w-0 w-full flex-wrap items-center gap-2 lg:w-auto">
             <label className="sr-only" htmlFor="task-assignee-filter">Исполнитель</label>
             <select
               id="task-assignee-filter"
               value={assigneeFilter}
               onChange={(event) => setAssigneeFilter(event.target.value)}
-              className="h-9 min-w-0 max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+              className="h-9 min-w-0 w-full max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] sm:w-auto sm:max-w-[220px]"
+              style={{ width: "min(100%, 220px)", maxWidth: "100%", minWidth: 0 }}
             >
               <option value="all">Все исполнители</option>
               <option value="me">Я</option>
@@ -325,7 +372,8 @@ export function TasksPage() {
                   id="task-location-filter"
                   value={locationFilter}
                   onChange={(event) => setLocationFilter(event.target.value)}
-                  className="h-9 min-w-0 max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                  className="h-9 min-w-0 w-full max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] sm:w-auto sm:max-w-[220px]"
+                  style={{ width: "min(100%, 220px)", maxWidth: "100%", minWidth: 0 }}
                 >
                   <option value="all">Все локации</option>
                   <option value="my">Мои локации</option>
@@ -339,7 +387,8 @@ export function TasksPage() {
                   id="task-recipient-filter"
                   value={recipientFilter}
                   onChange={(event) => setRecipientFilter(event.target.value as RecipientFilter)}
-                  className="h-9 min-w-0 max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                  className="h-9 min-w-0 w-full max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] sm:w-auto sm:max-w-[220px]"
+                  style={{ width: "min(100%, 220px)", maxWidth: "100%", minWidth: 0 }}
                 >
                   <option value="all">Все получатели</option>
                   <option value="staff">Для работников</option>
@@ -392,9 +441,9 @@ export function TasksPage() {
           <KubEmptyState
             icon={<KubIcon name="tasks" size={26} />}
             title={search.trim() ? "Задачи не найдены" : getEmptyTitle(activeTab.id)}
-            description={getEmptyDescription(activeTab.id, isStaff)}
+            description={getEmptyDescription(activeTab.id, canCreateTasks)}
             action={
-              isStaff && (
+              canCreateTasks && (
                 <KubButton
                   variant="primary"
                   leftIcon={<KubIcon name="create" size={14} />}
@@ -473,7 +522,7 @@ function getEmptyTitle(tabId: string): string {
   }
 }
 
-function getEmptyDescription(tabId: string, isStaff: boolean): string {
+function getEmptyDescription(tabId: string, canCreateTasks: boolean): string {
   switch (tabId) {
     case "new":
       return "Новые назначенные задачи появятся здесь сразу после назначения.";
@@ -494,7 +543,7 @@ function getEmptyDescription(tabId: string, isStaff: boolean): string {
     case "created":
       return "Создайте первую задачу — она появится у выбранного исполнителя.";
     default:
-      return isStaff
+      return canCreateTasks
         ? "Пока нет задач, доступных по текущему фильтру."
         : "Когда вам назначат задачу, она появится здесь.";
   }

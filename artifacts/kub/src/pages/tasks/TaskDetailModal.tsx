@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { KubBadge, KubButton, KubIcon, KubModal } from "@/components/kub";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
 import { useAppStore } from "@/store/app.store";
-import { useIsManagerOrAdmin } from "@/hooks/useRole";
+import { useIsManagerOrAdmin, usePermissionAccess } from "@/hooks/useRole";
 import {
   pauseTaskRecurrence,
   resumeTaskRecurrence,
@@ -39,6 +39,13 @@ interface Props {
 }
 
 type Subdialog = null | "confirm" | "reject" | "cancel" | "assign" | "edit";
+const GLOBAL_RECURRENCE_MANAGE_KEYS = [
+  "system.manage",
+  "tasks.manage_all_locations",
+  "tasks.manage",
+  "tasks.manage_admin_tasks",
+] as const;
+const LOCATION_RECURRENCE_MANAGE_KEYS = ["tasks.manage", "tasks.manage_admin_tasks"] as const;
 
 /**
  * Task detail with full event timeline + comment composer + role-aware
@@ -56,6 +63,14 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
     message: recurrenceMessage,
     refetch: refetchRecurrence,
   } = useTaskRecurrence(task?.recurrence_id);
+  const recurrenceAccess = usePermissionAccess(GLOBAL_RECURRENCE_MANAGE_KEYS, {
+    enabled: Boolean(task?.id && task.recurrence_id && !task.recurrence_template_task_id),
+  });
+  const locationRecurrenceAccess = usePermissionAccess(LOCATION_RECURRENCE_MANAGE_KEYS, {
+    locationId: task?.location_id ?? null,
+    locationOnly: true,
+    enabled: Boolean(task?.id && task.location_id && task.recurrence_id && !task.recurrence_template_task_id),
+  });
 
   const [comment, setComment] = useState("");
   const [posting, setPosting] = useState(false);
@@ -96,6 +111,15 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
   const deadline = getTaskDeadlineState(task, nowMs);
   const isRecurringTemplate = Boolean(task.recurrence_id && !task.recurrence_template_task_id);
   const isRecurringOccurrence = Boolean(task.recurrence_template_task_id);
+  const canManageRecurrence =
+    isRecurringTemplate &&
+    Boolean(recurrence && !recurrence.stopped_at) &&
+    canManageTaskRecurrence({
+      hasGlobal: recurrenceAccess.hasPermission,
+      hasLocationPermission: locationRecurrenceAccess.hasPermission,
+      isAdminTask: task.created_for_admin,
+      hasTaskLocation: Boolean(task.location_id),
+    });
   const linkedChat = task.chat ? getChatDisplayInfo(task.chat, currentUser?.id ?? null) : null;
   const isPoolAvailable = task.assignment_scope !== "user" && !task.assignee_id;
   const isAssignee = currentUser?.id === task.assignee_id;
@@ -157,6 +181,10 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
     fn: () => Promise<{ error: string | null }>,
     successMessage: string,
   ) => {
+    if (!canManageRecurrence) {
+      setActionError("Недостаточно прав для управления повторением.");
+      return;
+    }
     setActionError(null);
     setActionNotice(null);
     setActionLoading(key);
@@ -336,9 +364,9 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
                   </p>
                 )}
               </div>
-              {isRecurringTemplate && recurrence && !recurrence.stopped_at && isStaff && (
+              {canManageRecurrence && (
                 <div className="flex shrink-0 flex-wrap gap-2">
-                  {recurrence.paused_at ? (
+                  {recurrence?.paused_at ? (
                     <KubButton
                       variant="secondary"
                       size="sm"
@@ -740,4 +768,25 @@ function deadlineFillClass(level: ReturnType<typeof getTaskDeadlineState>["urgen
     default:
       return "bg-[color:var(--kub-border-color)]";
   }
+}
+
+function canManageTaskRecurrence({
+  hasGlobal,
+  hasLocationPermission,
+  isAdminTask,
+  hasTaskLocation,
+}: {
+  hasGlobal: (permissionKey: string) => boolean;
+  hasLocationPermission: (permissionKey: string) => boolean;
+  isAdminTask: boolean;
+  hasTaskLocation: boolean;
+}): boolean {
+  if (hasGlobal("system.manage") || hasGlobal("tasks.manage_all_locations")) return true;
+  if (isAdminTask) {
+    return hasGlobal("tasks.manage_admin_tasks") || hasLocationPermission("tasks.manage_admin_tasks");
+  }
+  if (hasTaskLocation) {
+    return hasLocationPermission("tasks.manage");
+  }
+  return hasGlobal("tasks.manage");
 }

@@ -35,38 +35,33 @@ export function BansMutesTab() {
   const [showExpired, setShowExpired] = useState(false);
   const [bansOpen, setBansOpen] = useState(true);
   const [mutesOpen, setMutesOpen] = useState(true);
+  const nowMs = Date.now();
 
   const load = useCallback(async () => {
     setLoading(true);
-    const nowIso = new Date().toISOString();
     const [bansRes, mutesRes] = await Promise.all([
-      (() => {
-        let q = supabase
-          .from("bans")
-          .select("*, user:profiles!bans_user_id_fkey(id,full_name,username,avatar_url), issuer:profiles!bans_issued_by_fkey(full_name,username)")
-          .order("created_at", { ascending: false })
-          .limit(200);
-        if (!showExpired) q = q.or(`expires_at.is.null,expires_at.gt.${nowIso}`);
-        return q;
-      })(),
-      (() => {
-        let q = supabase
-          .from("mutes")
-          .select("*, user:profiles!mutes_user_id_fkey(id,full_name,username,avatar_url), issuer:profiles!mutes_issued_by_fkey(full_name,username), chat:chats!mutes_chat_id_fkey(id,name)")
-          .order("created_at", { ascending: false })
-          .limit(200);
-        if (!showExpired) q = q.or(`expires_at.is.null,expires_at.gt.${nowIso}`);
-        return q;
-      })(),
+      supabase
+        .from("bans")
+        .select("*, user:profiles!bans_user_id_fkey(id,full_name,username,avatar_url), issuer:profiles!bans_issued_by_fkey(full_name,username)")
+        .order("created_at", { ascending: false })
+        .limit(500),
+      supabase
+        .from("mutes")
+        .select("*, user:profiles!mutes_user_id_fkey(id,full_name,username,avatar_url), issuer:profiles!mutes_issued_by_fkey(full_name,username), chat:chats!mutes_chat_id_fkey(id,name)")
+        .order("created_at", { ascending: false })
+        .limit(500),
     ]);
     const bansData = (bansRes.data ?? []) as unknown;
     const mutesData = (mutesRes.data ?? []) as unknown;
     setBans(bansData as BanRow[]);
     setMutes(mutesData as MuteRow[]);
     setLoading(false);
-  }, [supabase, showExpired]);
+  }, [supabase]);
 
   useEffect(() => { load(); }, [load]);
+
+  const visibleBans = showExpired ? bans : bans.filter(isActiveSanction);
+  const visibleMutes = showExpired ? mutes : mutes.filter(isActiveSanction);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -125,18 +120,18 @@ export function BansMutesTab() {
       </div>
 
       <CollapsibleSection
-        title="Активные баны"
+        title={showExpired ? "Баны" : "Активные баны"}
         icon="shieldOff"
         accentVar="--kub-danger"
-        count={bans.length}
+        count={visibleBans.length}
         open={bansOpen}
         setOpen={setBansOpen}
       >
-        {bans.length === 0 ? (
-          <Empty text="Активных банов нет" />
+        {visibleBans.length === 0 ? (
+          <Empty text={showExpired ? "Банов не найдено" : "Активных банов нет"} />
         ) : (
-          bans.map((b) => {
-            const expired = b.expires_at && new Date(b.expires_at).getTime() < Date.now();
+          visibleBans.map((b) => {
+            const expired = isExpiredSanction(b, nowMs);
             return (
               <RowCard
                 key={b.id}
@@ -155,18 +150,18 @@ export function BansMutesTab() {
       <div className="h-3" />
 
       <CollapsibleSection
-        title="Активные мьюты"
+        title={showExpired ? "Мьюты" : "Активные мьюты"}
         icon="muted"
         accentVar="--kub-warn"
-        count={mutes.length}
+        count={visibleMutes.length}
         open={mutesOpen}
         setOpen={setMutesOpen}
       >
-        {mutes.length === 0 ? (
-          <Empty text="Активных мьютов нет" />
+        {visibleMutes.length === 0 ? (
+          <Empty text={showExpired ? "Мьютов не найдено" : "Активных мьютов нет"} />
         ) : (
-          mutes.map((m) => {
-            const expired = m.expires_at && new Date(m.expires_at).getTime() < Date.now();
+          visibleMutes.map((m) => {
+            const expired = isExpiredSanction(m, nowMs);
             return (
               <RowCard
                 key={m.id}
@@ -221,6 +216,14 @@ function CollapsibleSection({
       {open && <div>{children}</div>}
     </KubPanel>
   );
+}
+
+function isActiveSanction(row: Pick<Ban | Mute, "expires_at">): boolean {
+  return !isExpiredSanction(row, Date.now());
+}
+
+function isExpiredSanction(row: Pick<Ban | Mute, "expires_at">, nowMs: number): boolean {
+  return Boolean(row.expires_at && new Date(row.expires_at).getTime() <= nowMs);
 }
 
 function RowCard({
