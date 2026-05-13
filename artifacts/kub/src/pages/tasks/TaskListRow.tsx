@@ -25,6 +25,8 @@ export function TaskListRow({ task, nowMs, onClick }: TaskListRowProps) {
   const visibility = TASK_VISIBILITY_META[task.visibility];
   const assignmentScope = TASK_ASSIGNMENT_SCOPE_META[task.assignment_scope];
   const deadline = getTaskDeadlineState(task, nowMs);
+  const isRecurringTemplate = Boolean(task.recurrence_id && !task.recurrence_template_task_id);
+  const isRecurringOccurrence = Boolean(task.recurrence_template_task_id);
   const assigneeName = getPersonName(task.assignee, "Без исполнителя");
   const creatorName = getPersonName(task.creator, "Неизвестно");
 
@@ -105,6 +107,8 @@ export function TaskListRow({ task, nowMs, onClick }: TaskListRowProps) {
         {task.assignment_scope !== "user" && (
           <KubBadge tone={assignmentScope.tone} pill>{assignmentScope.label}</KubBadge>
         )}
+        {isRecurringTemplate && <KubBadge tone="cyan" pill>Повторяется</KubBadge>}
+        {isRecurringOccurrence && <KubBadge tone="muted" pill>Экземпляр повтора</KubBadge>}
       </div>
 
       <div className="flex items-center justify-end">

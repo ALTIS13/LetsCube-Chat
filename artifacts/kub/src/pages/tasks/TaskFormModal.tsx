@@ -6,6 +6,11 @@ import { KubButton, KubIcon, KubInput, KubModal } from "@/components/kub";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
 import { getChatDisplayInfo, getChatSecondaryLine } from "@/lib/chatDisplay";
 import { useAppStore } from "@/store/app.store";
+import {
+  createTaskRecurrence,
+  useRecurringTasksAvailability,
+  type RecurrenceCreateInput,
+} from "@/hooks/useRecurringTasks";
 import { useTaskRouting, useTaskRoutingEnabledPreference } from "@/hooks/useTaskRouting";
 import type {
   ChatMember,
@@ -13,6 +18,7 @@ import type {
   Profile,
   TaskAssignmentScope,
   TaskPriority,
+  TaskRecurrenceFrequency,
   TaskTargetRole,
   TaskVisibility,
   TaskWithPeople,
@@ -26,6 +32,12 @@ import {
 import { cn } from "@/lib/utils";
 import { mapPgError } from "@/lib/errors";
 import {
+  RECURRENCE_FREQUENCY_LABEL,
+  RECURRING_TASKS_REQUIRED_MESSAGE,
+  WEEKDAY_OPTIONS,
+  formatRecurrenceSummary,
+} from "@/lib/recurringTasks";
+import {
   LOCATION_ROLE_LABEL,
   LOCATION_ROUTING_REQUIRED_MESSAGE,
   TASK_TARGET_ROLE_LABEL,
@@ -33,6 +45,7 @@ import {
 } from "@/lib/locationRouting";
 
 type ChatOption = ChatWithLastMessage;
+type RecurrenceEndMode = "never" | "date" | "count";
 
 interface TaskFormModalProps {
   /**
@@ -56,6 +69,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
   const [routingEnabled] = useTaskRoutingEnabledPreference();
   const routing = useTaskRouting({ enabled: routingEnabled, includeMembers: true });
+  const recurring = useRecurringTasksAvailability(true);
 
   // ── Form state, prefilled in edit mode ─────────────────────────────────
   const [title, setTitle] = useState(task?.title ?? "");
@@ -68,6 +82,17 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
   const [targetRole, setTargetRole] = useState<TaskTargetRole | "">((task?.target_role as TaskTargetRole | null | undefined) ?? "");
   const [routeAdminId, setRouteAdminId] = useState<string>((task?.route_admin_id as string | null | undefined) ?? "");
   const [createdForAdmin, setCreatedForAdmin] = useState(Boolean(task?.created_for_admin));
+  const taskAlreadyRecurring = Boolean(task?.recurrence_id && !task?.recurrence_template_task_id);
+  const isRecurrenceOccurrence = Boolean(task?.recurrence_template_task_id);
+  const [recurringEnabled, setRecurringEnabled] = useState(false);
+  const [recurrenceFrequency, setRecurrenceFrequency] = useState<TaskRecurrenceFrequency>("daily");
+  const [recurrenceInterval, setRecurrenceInterval] = useState(1);
+  const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>([]);
+  const [recurrenceMonthday, setRecurrenceMonthday] = useState(() => new Date().getDate());
+  const [recurrenceStartsAt, setRecurrenceStartsAt] = useState<string>(() => toLocalInput(task?.due_at) || toLocalInput(new Date().toISOString()));
+  const [recurrenceEndMode, setRecurrenceEndMode] = useState<RecurrenceEndMode>("never");
+  const [recurrenceEndAt, setRecurrenceEndAt] = useState("");
+  const [recurrenceMaxOccurrences, setRecurrenceMaxOccurrences] = useState(10);
 
   const [assignee, setAssignee] = useState<Profile | null>(task?.assignee ?? null);
   const [search, setSearch] = useState("");
@@ -82,6 +107,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createdTaskId, setCreatedTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -146,17 +172,49 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
     [routing.locations, locationId],
   );
 
+  const recurrenceSummary = useMemo(
+    () => formatRecurrenceSummary(
+      recurrenceFrequency,
+      recurrenceInterval,
+      recurrenceFrequency === "weekly" ? recurrenceWeekdays : null,
+      recurrenceFrequency === "monthly" ? recurrenceMonthday : null,
+    ),
+    [recurrenceFrequency, recurrenceInterval, recurrenceWeekdays, recurrenceMonthday],
+  );
+
   const handleSubmit = async () => {
+    if (createdTaskId) {
+      onDone(createdTaskId);
+      return;
+    }
     if (!title.trim()) { setError("Укажите название задачи"); return; }
-    setSubmitting(true);
     setError(null);
     const due_iso =
       dueAt && !isNaN(new Date(dueAt).getTime())
         ? new Date(dueAt).toISOString()
         : null;
+    const recurrenceValidation = validateRecurrenceDraft({
+      enabled: recurringEnabled && !taskAlreadyRecurring && !isRecurrenceOccurrence,
+      featureAvailable: recurring.available,
+      frequency: recurrenceFrequency,
+      intervalCount: recurrenceInterval,
+      byWeekday: recurrenceWeekdays,
+      byMonthday: recurrenceMonthday,
+      startsAt: recurrenceStartsAt,
+      endMode: recurrenceEndMode,
+      endAt: recurrenceEndAt,
+      maxOccurrences: recurrenceMaxOccurrences,
+      dueAt: due_iso,
+    });
+    if (recurrenceValidation.error) {
+      setError(recurrenceValidation.error);
+      return;
+    }
+    setSubmitting(true);
 
     const effectiveAssigneeId = assignmentScope === "user" ? assignee?.id ?? null : null;
     const useRoutingRpc = routing.available;
+    const recurrenceInput = recurrenceValidation.input;
 
     if (createdForAdmin && !locationId) {
       setSubmitting(false);
@@ -194,11 +252,23 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
         p_assignee_id: effectiveAssigneeId,
         p_chat_id: chatId,
       });
-      setSubmitting(false);
       if (rpcError) {
+        setSubmitting(false);
         setError(useRoutingRpc ? mapLocationRoutingError(rpcError) : mapPgError(rpcError));
         return;
       }
+      if (recurrenceInput) {
+        const { error: recurrenceError } = await createTaskRecurrence({
+          templateTaskId: task.id,
+          ...recurrenceInput,
+        });
+        if (recurrenceError) {
+          setSubmitting(false);
+          setError(recurrenceError);
+          return;
+        }
+      }
+      setSubmitting(false);
       onDone(task.id);
       return;
     }
@@ -226,12 +296,26 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
           p_due_at: due_iso,
           p_chat_id: chatId,
         });
-    setSubmitting(false);
     if (rpcError) {
+      setSubmitting(false);
       setError(useRoutingRpc ? mapLocationRoutingError(rpcError) : mapPgError(rpcError));
       return;
     }
-    onDone(data as string);
+    const newTaskId = data as string;
+    if (recurrenceInput) {
+      const { error: recurrenceError } = await createTaskRecurrence({
+        templateTaskId: newTaskId,
+        ...recurrenceInput,
+      });
+      if (recurrenceError) {
+        setCreatedTaskId(newTaskId);
+        setSubmitting(false);
+        setError(`Задача создана, но повторение не сохранено. ${recurrenceError}`);
+        return;
+      }
+    }
+    setSubmitting(false);
+    onDone(newTaskId);
   };
 
   return (
@@ -246,7 +330,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
         <>
           <KubButton variant="ghost" onClick={onClose}>Отмена</KubButton>
           <KubButton variant="primary" loading={submitting} onClick={handleSubmit}>
-            {isEdit ? "Сохранить" : "Создать"}
+            {createdTaskId ? "Открыть задачу" : isEdit ? "Сохранить" : "Создать"}
           </KubButton>
         </>
       }
@@ -309,6 +393,187 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
           onChange={(e) => setDueAt(e.target.value)}
           className="w-full rounded-xl px-3 py-2 text-sm outline-none bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)] transition-all"
         />
+      </div>
+
+      <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3">
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-cyan)]">
+              Повторение
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+              Повтор создаёт отдельные задачи с теми же локацией, получателем, видимостью и маршрутом администратора.
+            </p>
+          </div>
+          {recurring.loading && <KubIcon name="spinner" size={14} tone="accent" className="shrink-0" />}
+        </div>
+
+        {taskAlreadyRecurring ? (
+          <div className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+            Для этой задачи уже настроено повторение. Пауза, возобновление и остановка доступны в карточке задачи.
+          </div>
+        ) : isRecurrenceOccurrence ? (
+          <div className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+            Это отдельный экземпляр повторяемой задачи. Повторение настраивается у исходной задачи.
+          </div>
+        ) : recurring.available ? (
+          <div className="grid gap-3">
+            <label className="flex items-start gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-sm text-[color:var(--kub-text)]">
+              <input
+                type="checkbox"
+                checked={recurringEnabled}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  setRecurringEnabled(checked);
+                  if (checked && !recurrenceStartsAt) {
+                    setRecurrenceStartsAt(dueAt || toLocalInput(new Date().toISOString()));
+                  }
+                }}
+                className="mt-0.5 h-4 w-4 accent-[var(--kub-cyan)]"
+              />
+              <span className="min-w-0">
+                <span className="block font-semibold">Повторять задачу</span>
+                <span className="block text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                  Экземпляр будет создан только после наступления рассчитанного срока.
+                </span>
+              </span>
+            </label>
+
+            {recurringEnabled && (
+              <div className="grid gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
+                    <span className="mb-1.5 block uppercase tracking-wide">Частота</span>
+                    <select
+                      value={recurrenceFrequency}
+                      onChange={(event) => setRecurrenceFrequency(event.target.value as TaskRecurrenceFrequency)}
+                      className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                    >
+                      {(Object.keys(RECURRENCE_FREQUENCY_LABEL) as TaskRecurrenceFrequency[]).map((value) => (
+                        <option key={value} value={value}>{RECURRENCE_FREQUENCY_LABEL[value]}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
+                    <span className="mb-1.5 block uppercase tracking-wide">Интервал</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={recurrenceInterval}
+                      onChange={(event) => setRecurrenceInterval(Math.max(1, Number(event.target.value) || 1))}
+                      className="h-10 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                    />
+                  </label>
+                </div>
+
+                {recurrenceFrequency === "weekly" && (
+                  <div>
+                    <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
+                      Дни недели
+                    </div>
+                    <div className="grid grid-cols-7 gap-1">
+                      {WEEKDAY_OPTIONS.map((day) => {
+                        const active = recurrenceWeekdays.includes(day.value);
+                        return (
+                          <button
+                            type="button"
+                            key={day.value}
+                            onClick={() => setRecurrenceWeekdays((prev) =>
+                              active ? prev.filter((value) => value !== day.value) : [...prev, day.value].sort(),
+                            )}
+                            className={cn(
+                              "h-9 rounded-lg border text-xs font-semibold transition-colors",
+                              active
+                                ? "border-[var(--kub-cyan)] bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
+                                : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
+                            )}
+                          >
+                            {day.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {recurrenceFrequency === "monthly" && (
+                  <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
+                    <span className="mb-1.5 block uppercase tracking-wide">День месяца</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={31}
+                      value={recurrenceMonthday}
+                      onChange={(event) => setRecurrenceMonthday(clampNumber(Number(event.target.value) || 1, 1, 31))}
+                      className="h-10 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                    />
+                  </label>
+                )}
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
+                    <span className="mb-1.5 block uppercase tracking-wide">Начало</span>
+                    <input
+                      type="datetime-local"
+                      value={recurrenceStartsAt}
+                      onChange={(event) => setRecurrenceStartsAt(event.target.value)}
+                      className="h-10 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                    />
+                  </label>
+
+                  <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
+                    <span className="mb-1.5 block uppercase tracking-wide">Завершение</span>
+                    <select
+                      value={recurrenceEndMode}
+                      onChange={(event) => setRecurrenceEndMode(event.target.value as RecurrenceEndMode)}
+                      className="h-10 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                    >
+                      <option value="never">Никогда</option>
+                      <option value="date">До даты</option>
+                      <option value="count">После N повторов</option>
+                    </select>
+                  </label>
+                </div>
+
+                {recurrenceEndMode === "date" && (
+                  <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
+                    <span className="mb-1.5 block uppercase tracking-wide">Дата завершения</span>
+                    <input
+                      type="datetime-local"
+                      value={recurrenceEndAt}
+                      onChange={(event) => setRecurrenceEndAt(event.target.value)}
+                      className="h-10 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                    />
+                  </label>
+                )}
+
+                {recurrenceEndMode === "count" && (
+                  <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
+                    <span className="mb-1.5 block uppercase tracking-wide">Количество повторов</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={recurrenceMaxOccurrences}
+                      onChange={(event) => setRecurrenceMaxOccurrences(Math.max(1, Number(event.target.value) || 1))}
+                      className="h-10 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                    />
+                  </label>
+                )}
+
+                <div className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                  {recurrenceSummary}. Следующее выполнение будет рассчитано сервером.
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+            {recurring.message ?? RECURRING_TASKS_REQUIRED_MESSAGE} Существующее создание задач продолжит работать без повторения.
+          </div>
+        )}
       </div>
 
       <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3">
@@ -628,4 +893,96 @@ function formatChatContext(chat: ChatOption, fallback: string): string {
 
 function getPersonName(person: Profile | null | undefined, fallback: string): string {
   return person?.full_name?.trim() || person?.username?.trim() || fallback;
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, value));
+}
+
+interface RecurrenceDraftValidationInput {
+  enabled: boolean;
+  featureAvailable: boolean;
+  frequency: TaskRecurrenceFrequency;
+  intervalCount: number;
+  byWeekday: number[];
+  byMonthday: number;
+  startsAt: string;
+  endMode: RecurrenceEndMode;
+  endAt: string;
+  maxOccurrences: number;
+  dueAt: string | null;
+}
+
+type RecurrencePayload = Omit<RecurrenceCreateInput, "templateTaskId">;
+
+function validateRecurrenceDraft(input: RecurrenceDraftValidationInput): {
+  input: RecurrencePayload | null;
+  error: string | null;
+} {
+  if (!input.enabled) return { input: null, error: null };
+  if (!input.featureAvailable) {
+    return { input: null, error: RECURRING_TASKS_REQUIRED_MESSAGE };
+  }
+
+  const intervalCount = Math.floor(input.intervalCount);
+  if (!Number.isFinite(intervalCount) || intervalCount < 1) {
+    return { input: null, error: "Интервал должен быть больше нуля." };
+  }
+
+  const startsAtIso = toIsoFromLocal(input.startsAt || (input.dueAt ? toLocalInput(input.dueAt) : ""));
+  if (!startsAtIso) {
+    return { input: null, error: "Нужно выбрать дату начала." };
+  }
+
+  const byWeekday =
+    input.frequency === "weekly"
+      ? input.byWeekday.length > 0
+        ? input.byWeekday
+        : [getIsoWeekday(startsAtIso)]
+      : null;
+  const byMonthday =
+    input.frequency === "monthly"
+      ? clampNumber(Math.floor(input.byMonthday), 1, 31)
+      : null;
+
+  let endAt: string | null = null;
+  let maxOccurrences: number | null = null;
+  if (input.endMode === "date") {
+    endAt = toIsoFromLocal(input.endAt);
+    if (!endAt) return { input: null, error: "Нужно выбрать дату завершения." };
+    if (new Date(endAt).getTime() <= new Date(startsAtIso).getTime()) {
+      return { input: null, error: "Дата завершения должна быть позже даты начала." };
+    }
+  } else if (input.endMode === "count") {
+    maxOccurrences = Math.floor(input.maxOccurrences);
+    if (!Number.isFinite(maxOccurrences) || maxOccurrences < 1) {
+      return { input: null, error: "Количество повторов должно быть больше нуля." };
+    }
+  }
+
+  return {
+    input: {
+      frequency: input.frequency,
+      intervalCount,
+      byWeekday,
+      byMonthday,
+      startsAt: startsAtIso,
+      endAt,
+      maxOccurrences,
+    },
+    error: null,
+  };
+}
+
+function toIsoFromLocal(value: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function getIsoWeekday(iso: string): number {
+  const day = new Date(iso).getDay();
+  return day === 0 ? 7 : day;
 }

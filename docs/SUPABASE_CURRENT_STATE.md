@@ -311,3 +311,12 @@ The migration adds `public.group_invites`, scoped RLS, indexes, `group_invite_cr
 - RLS policies protect role/permission data and dangerous management RPCs are authenticated-only. A hardening proposal was added but not applied automatically: `.migration-backup/supabase/migrations/20260515_dynamic_roles_grants_hardening.sql`.
 - The hardening proposal also blocks owner/tech_admin assignment by non-critical callers and blocks self-escalation when a caller only has `users.assign_roles`.
 - Current `group_invite_create` still uses chat membership and `invite_policy`; dynamic permissions such as `chats.invite_any` are seeded but not yet enforced by that RPC.
+
+## 2026-05-13 Recurring Tasks Proposal State
+
+- Read-only Supabase MCP confirmed the current task foundation is present on project ref `nhogbeojfnbjcfipitrh`: `tasks`, `task_events`, task enums, `task_create_v2`, `task_update_v2`, `task_create_v3`, `task_update_v3`, location routing fields (`location_id`, `target_role`, `route_admin_id`, `created_for_admin`) and dynamic permission helpers.
+- Read-only MCP confirmed recurring-task schema is not present yet: no `public.task_recurrences`, no `public.task_recurrence_events`, and no `task_recurrence_*` RPC functions.
+- New SQL was not applied automatically. Manual proposal: `.migration-backup/supabase/migrations/20260518_recurring_tasks.sql`.
+- The proposal adds separate recurrence templates and generated task occurrences. Occurrences copy `visibility`, `assignment_scope`, `assignee_id`, `chat_id`, `location_id`, `target_role`, `route_admin_id`, `created_for_admin` and `priority`, so location/admin-only routing is preserved.
+- Production recurring execution still needs a scheduler to call `task_recurrence_run_due()`: Supabase Scheduled Edge Function, `pg_cron`, external cron, or an explicit admin maintenance action.
+- Frontend fallback expectation: until the migration is applied, the task form shows a friendly database-update message in the “Повторение” section while existing task create/update flows keep using the current task RPC.

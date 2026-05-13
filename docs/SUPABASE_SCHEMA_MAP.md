@@ -440,3 +440,28 @@ order by pt.schemaname, pt.tablename;
 ```
 
 Do not run DDL through MCP. For any schema fix, create a new idempotent migration file and ask the user to apply it manually in Supabase SQL Editor.
+
+## 2026-05-13 Recurring Tasks Extension Proposal
+
+Current live schema still has only ordinary task rows plus location-routing columns. The recurring extension is proposal-only until `.migration-backup/supabase/migrations/20260518_recurring_tasks.sql` is applied manually.
+
+Planned tables:
+
+- `task_recurrences`: recurrence settings tied to a template task, with `frequency`, `interval_count`, optional `by_weekday` / `by_monthday`, `starts_at`, `next_run_at`, `last_run_at`, `end_at`, `max_occurrences`, `occurrences_created`, `paused_at` and `stopped_at`.
+- `task_recurrence_events`: audit/history of recurrence lifecycle events and generated occurrences.
+
+Planned `tasks` columns:
+
+- `recurrence_id`: recurrence that owns a template task or generated occurrence.
+- `recurrence_template_task_id`: source task for generated occurrences.
+- `recurrence_scheduled_for`: scheduled timestamp for the occurrence. A partial unique index on `(recurrence_id, recurrence_scheduled_for)` prevents duplicate generated tasks.
+
+Planned RPC:
+
+- `task_recurrence_create`, `task_recurrence_update`, `task_recurrence_pause`, `task_recurrence_resume`, `task_recurrence_stop`, `task_recurrence_run_due`.
+
+Security model:
+
+- Recurrence visibility delegates to the existing location-aware task visibility helper.
+- Management requires task-management permissions, global owner/tech_admin permission, or matching location task permission.
+- Generated occurrences copy task routing fields (`location_id`, `target_role`, `route_admin_id`, `created_for_admin`) and assignment fields, so staff/admin visibility does not broaden during recurrence.

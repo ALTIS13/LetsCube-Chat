@@ -474,3 +474,13 @@ Recurring tasks roadmap note:
 - Users can be filtered by search, global role, location, location role, primary admin and status. Rows now show friendly dynamic global role labels, location badges and primary-admin labels with legacy role fallback.
 - Read-only Supabase MCP confirmed the live dynamic roles schema is present; `user` already has `tasks.view` and `chats.invite`, and existing legacy `profiles.role = user` profiles have dynamic global role coverage. A default-role trigger for future profiles is not present yet.
 - SQL was not applied automatically. Manual proposal for future default-role/backfill safety: `.migration-backup/supabase/migrations/20260516_dynamic_roles_default_user_baseline.sql`.
+
+2026-05-13 recurring tasks with routing:
+
+- Read-only Supabase MCP confirmed current task infrastructure: `tasks`, `task_events`, task enums, `task_create_v2`, `task_update_v2`, `task_create_v3`, `task_update_v3`, `locations`, `location_members`, dynamic role/permission helpers and routing fields on `tasks`.
+- Read-only Supabase MCP confirmed recurring-task infrastructure is not applied yet: `task_recurrences`, `task_recurrence_events` and `task_recurrence_*` RPC are absent.
+- SQL was not applied automatically. Manual proposal created at `.migration-backup/supabase/migrations/20260518_recurring_tasks.sql`.
+- Frontend task form now contains a “Повторение” section. With the migration missing it shows the friendly database-update state and keeps normal task create/update available.
+- Recurring design copies location routing and visibility fields into generated occurrences: `location_id`, `target_role`, `route_admin_id`, `created_for_admin`, `visibility`, `assignment_scope`, `assignee_id`, `chat_id` and `priority`.
+- Production still needs a scheduler/cron/Edge Function to call `task_recurrence_run_due()`. The frontend does not claim recurring tasks execute automatically while that scheduler is absent.
+- Local authenticated Playwright QA ran against `http://127.0.0.1:5173` with viewports 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915. Screenshots and summary are in `output/playwright/recurring-tasks/` (ignored from git). Result: fallback visible, no raw technical UI, no ErrorBoundary, no horizontal overflow, existing task create/edit smoke passed. App console errors after filtering the expected missing-schema network probe: 0; unexpected failed requests: 0.

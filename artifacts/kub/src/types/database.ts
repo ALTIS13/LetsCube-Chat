@@ -24,6 +24,7 @@ export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent'
 export type TaskVisibility = 'staff' | 'private' | 'chat'
 export type TaskAssignmentScope = 'user' | 'manager_pool' | 'staff_pool'
 export type TaskTargetRole = 'staff' | 'admin' | 'manager' | 'owner'
+export type TaskRecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom'
 export type TaskEventKind =
   | 'create'
   | 'assign'
@@ -779,6 +780,9 @@ export interface Database {
           target_role: TaskTargetRole | null
           route_admin_id: string | null
           created_for_admin: boolean
+          recurrence_id: string | null
+          recurrence_template_task_id: string | null
+          recurrence_scheduled_for: string | null
         }
         Insert: never
         Update: never
@@ -817,6 +821,59 @@ export interface Database {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_recurrence_id_fkey"
+            columns: ["recurrence_id"]
+            isOneToOne: false
+            referencedRelation: "task_recurrences"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_recurrence_template_task_id_fkey"
+            columns: ["recurrence_template_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      task_recurrences: {
+        Row: {
+          id: string
+          template_task_id: string
+          created_by: string | null
+          frequency: TaskRecurrenceFrequency
+          interval_count: number
+          by_weekday: number[] | null
+          by_monthday: number | null
+          starts_at: string
+          next_run_at: string | null
+          last_run_at: string | null
+          end_at: string | null
+          max_occurrences: number | null
+          occurrences_created: number
+          paused_at: string | null
+          stopped_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "task_recurrences_template_task_id_fkey"
+            columns: ["template_task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_recurrences_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
           }
         ]
       }
@@ -841,6 +898,42 @@ export interface Database {
           },
           {
             foreignKeyName: "task_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      task_recurrence_events: {
+        Row: {
+          id: string
+          recurrence_id: string
+          task_id: string | null
+          actor_id: string | null
+          kind: string
+          payload: Json
+          created_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "task_recurrence_events_recurrence_id_fkey"
+            columns: ["recurrence_id"]
+            isOneToOne: false
+            referencedRelation: "task_recurrences"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_recurrence_events_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_recurrence_events_actor_id_fkey"
             columns: ["actor_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -997,6 +1090,48 @@ export interface Database {
           p_created_for_admin?: boolean
         }
         Returns: void
+      }
+      task_recurrence_create: {
+        Args: {
+          p_template_task_id: string
+          p_frequency: TaskRecurrenceFrequency
+          p_interval_count: number
+          p_by_weekday?: number[] | null
+          p_by_monthday?: number | null
+          p_starts_at: string
+          p_end_at?: string | null
+          p_max_occurrences?: number | null
+        }
+        Returns: string
+      }
+      task_recurrence_update: {
+        Args: {
+          p_recurrence_id: string
+          p_frequency: TaskRecurrenceFrequency
+          p_interval_count: number
+          p_by_weekday?: number[] | null
+          p_by_monthday?: number | null
+          p_next_run_at?: string | null
+          p_end_at?: string | null
+          p_max_occurrences?: number | null
+        }
+        Returns: void
+      }
+      task_recurrence_pause: {
+        Args: { p_recurrence_id: string }
+        Returns: void
+      }
+      task_recurrence_resume: {
+        Args: { p_recurrence_id: string }
+        Returns: void
+      }
+      task_recurrence_stop: {
+        Args: { p_recurrence_id: string }
+        Returns: void
+      }
+      task_recurrence_run_due: {
+        Args: { p_limit?: number }
+        Returns: number
       }
       location_create: {
         Args: { p_name: string; p_description?: string | null; p_address?: string | null }
@@ -1209,7 +1344,9 @@ export type Topic = Database['public']['Tables']['topics']['Row']
 export type Ban = Database['public']['Tables']['bans']['Row']
 export type Mute = Database['public']['Tables']['mutes']['Row']
 export type Task = Database['public']['Tables']['tasks']['Row']
+export type TaskRecurrence = Database['public']['Tables']['task_recurrences']['Row']
 export type TaskEvent = Database['public']['Tables']['task_events']['Row']
+export type TaskRecurrenceEvent = Database['public']['Tables']['task_recurrence_events']['Row']
 export type ProfileContact = Database['public']['Tables']['profile_contacts']['Row']
 export type Notification = Database['public']['Tables']['notifications']['Row']
 export type NotificationKind =

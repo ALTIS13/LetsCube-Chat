@@ -6,6 +6,12 @@ import { KubBadge, KubButton, KubIcon, KubModal } from "@/components/kub";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
 import { useAppStore } from "@/store/app.store";
 import { useIsManagerOrAdmin } from "@/hooks/useRole";
+import {
+  pauseTaskRecurrence,
+  resumeTaskRecurrence,
+  stopTaskRecurrence,
+  useTaskRecurrence,
+} from "@/hooks/useRecurringTasks";
 import { getChatDisplayInfo, getChatSecondaryLine } from "@/lib/chatDisplay";
 import { useTask } from "@/hooks/useTask";
 import {
@@ -23,6 +29,7 @@ import { TaskConfirmModal } from "./TaskConfirmModal";
 import { TaskFormModal } from "./TaskFormModal";
 import { TaskRejectModal } from "./TaskRejectModal";
 import { mapPgError } from "@/lib/errors";
+import { formatRecurrenceDate, formatStoredRecurrenceSummary } from "@/lib/recurringTasks";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -43,6 +50,12 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
   const currentUser = useAppStore((s) => s.currentUser);
   const isStaff = useIsManagerOrAdmin();
   const { task, events, loading, refetch } = useTask(taskId);
+  const {
+    recurrence,
+    status: recurrenceStatus,
+    message: recurrenceMessage,
+    refetch: refetchRecurrence,
+  } = useTaskRecurrence(task?.recurrence_id);
 
   const [comment, setComment] = useState("");
   const [posting, setPosting] = useState(false);
@@ -81,6 +94,8 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
   const visibility = TASK_VISIBILITY_META[task.visibility];
   const assignmentScope = TASK_ASSIGNMENT_SCOPE_META[task.assignment_scope];
   const deadline = getTaskDeadlineState(task, nowMs);
+  const isRecurringTemplate = Boolean(task.recurrence_id && !task.recurrence_template_task_id);
+  const isRecurringOccurrence = Boolean(task.recurrence_template_task_id);
   const linkedChat = task.chat ? getChatDisplayInfo(task.chat, currentUser?.id ?? null) : null;
   const isPoolAvailable = task.assignment_scope !== "user" && !task.assignee_id;
   const isAssignee = currentUser?.id === task.assignee_id;
@@ -137,6 +152,30 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
     }
   };
 
+  const runRecurrenceAction = async (
+    key: string,
+    fn: () => Promise<{ error: string | null }>,
+    successMessage: string,
+  ) => {
+    setActionError(null);
+    setActionNotice(null);
+    setActionLoading(key);
+    try {
+      const { error } = await fn();
+      if (error) {
+        setActionError(error);
+        return;
+      }
+      setActionNotice(successMessage);
+      await refetchRecurrence();
+      refetch();
+    } catch (err: unknown) {
+      setActionError(mapPgError(err));
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const onClaim  = () => runRpc("claim",  () =>
     supabase.rpc("task_claim", { p_task_id: task.id }), "Задача назначена вам.");
   const onAccept = () => runRpc("accept", () => supabase.rpc("task_accept", { p_task_id: task.id }));
@@ -145,6 +184,15 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
     supabase.rpc("task_send_for_confirmation", { p_task_id: task.id, p_note: null }));
   const onReturn = () => runRpc("return", () =>
     supabase.rpc("task_return_to_work", { p_task_id: task.id, p_note: null }));
+  const onPauseRecurrence = () => task.recurrence_id
+    ? runRecurrenceAction("recurrence-pause", () => pauseTaskRecurrence(task.recurrence_id!), "Повторение поставлено на паузу.")
+    : undefined;
+  const onResumeRecurrence = () => task.recurrence_id
+    ? runRecurrenceAction("recurrence-resume", () => resumeTaskRecurrence(task.recurrence_id!), "Повторение возобновлено.")
+    : undefined;
+  const onStopRecurrence = () => task.recurrence_id
+    ? runRecurrenceAction("recurrence-stop", () => stopTaskRecurrence(task.recurrence_id!), "Повторение остановлено.")
+    : undefined;
 
   const submitComment = async () => {
     if (!comment.trim()) return;
@@ -204,6 +252,17 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
               Доступна для взятия
             </KubBadge>
           )}
+          {isRecurringTemplate && (
+            <KubBadge tone="cyan" pill>
+              <KubIcon name="clock" size={11} className="mr-1" />
+              Повторяется
+            </KubBadge>
+          )}
+          {isRecurringOccurrence && (
+            <KubBadge tone="muted" pill>
+              Экземпляр повтора
+            </KubBadge>
+          )}
           {task.due_at && (
             <KubBadge tone={deadline.tone} pill>
               <KubIcon name="clock" size={11} className="mr-1" />
@@ -255,6 +314,68 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
             )}
           </div>
         </div>
+
+        {(isRecurringTemplate || isRecurringOccurrence) && (
+          <div className="rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--kub-text)]">
+                  <KubIcon name="clock" size={16} tone="accent" />
+                  <span>{isRecurringTemplate ? "Повторяемая задача" : "Экземпляр повторения"}</span>
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                  {recurrence
+                    ? formatStoredRecurrenceSummary(recurrence)
+                    : recurrenceStatus === "loading"
+                      ? "Загружаем настройки повторения..."
+                      : recurrenceMessage ?? "Настройки повторения недоступны."}
+                </p>
+                {isRecurringOccurrence && task.recurrence_scheduled_for && (
+                  <p className="mt-1 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                    Запланировано на {formatRecurrenceDate(task.recurrence_scheduled_for)}.
+                  </p>
+                )}
+              </div>
+              {isRecurringTemplate && recurrence && !recurrence.stopped_at && isStaff && (
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  {recurrence.paused_at ? (
+                    <KubButton
+                      variant="secondary"
+                      size="sm"
+                      loading={actionLoading === "recurrence-resume"}
+                      disabled={actionLoading !== null}
+                      leftIcon={<KubIcon name="play" size={13} />}
+                      onClick={onResumeRecurrence}
+                    >
+                      Возобновить
+                    </KubButton>
+                  ) : (
+                    <KubButton
+                      variant="secondary"
+                      size="sm"
+                      loading={actionLoading === "recurrence-pause"}
+                      disabled={actionLoading !== null}
+                      leftIcon={<KubIcon name="pause" size={13} />}
+                      onClick={onPauseRecurrence}
+                    >
+                      Пауза
+                    </KubButton>
+                  )}
+                  <KubButton
+                    variant="ghost"
+                    size="sm"
+                    loading={actionLoading === "recurrence-stop"}
+                    disabled={actionLoading !== null}
+                    className="text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)]"
+                    onClick={onStopRecurrence}
+                  >
+                    Остановить
+                  </KubButton>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {task.status === "waiting_confirmation" && (
           <div className="flex items-start gap-2 rounded-xl border border-[color:var(--kub-warn)]/30 bg-[color-mix(in_srgb,var(--kub-warn)_12%,transparent)] px-3 py-2">

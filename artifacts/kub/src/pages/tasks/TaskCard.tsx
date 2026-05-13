@@ -26,6 +26,8 @@ export function TaskCard({ task, nowMs, onClick }: TaskCardProps) {
   const visibility = TASK_VISIBILITY_META[task.visibility];
   const assignmentScope = TASK_ASSIGNMENT_SCOPE_META[task.assignment_scope];
   const isPoolAvailable = task.assignment_scope !== "user" && !task.assignee_id;
+  const isRecurringTemplate = Boolean(task.recurrence_id && !task.recurrence_template_task_id);
+  const isRecurringOccurrence = Boolean(task.recurrence_template_task_id);
   const deadline = getTaskDeadlineState(task, nowMs);
 
   return (
@@ -67,6 +69,17 @@ export function TaskCard({ task, nowMs, onClick }: TaskCardProps) {
           {isPoolAvailable && (
             <KubBadge tone="online" pill>
               Доступна для взятия
+            </KubBadge>
+          )}
+          {isRecurringTemplate && (
+            <KubBadge tone="cyan" pill>
+              <KubIcon name="clock" size={11} className="mr-1" />
+              Повторяется
+            </KubBadge>
+          )}
+          {isRecurringOccurrence && (
+            <KubBadge tone="muted" pill>
+              Экземпляр повтора
             </KubBadge>
           )}
           {deadline.badgeLabel && (
