@@ -152,8 +152,10 @@ export function useUser() {
         supabase.realtime.setAuth(session.access_token);
         const currentProfile = useAppStore.getState().currentUser;
         const isSameLoadedUser = currentProfile?.id === session.user.id;
-        const shouldBlockUiForProfile =
-          !isSameLoadedUser || event === "SIGNED_IN" || event === "INITIAL_SESSION";
+        // Supabase can emit SIGNED_IN again when a hidden tab is focused.
+        // For the same loaded user this is a silent session refresh, not an
+        // app state transition; showing LoadingScreen here remounts chat UI.
+        const shouldBlockUiForProfile = !isSameLoadedUser;
 
         if (shouldBlockUiForProfile) {
           setLoading(true);

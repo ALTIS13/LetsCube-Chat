@@ -63,6 +63,20 @@
 
 Safe QA note: Live QA should use the Codex/QA browser session or QA credentials from a secure environment; never store secrets in the repo and do not depend on the user's mouse/manual browser.
 
+2026-05-13 desktop tab-return refresh/reinit diagnosis:
+
+- Playwright live probe on `https://kub.apollot.ru` before the auth-listener patch classified the reproducible automated tab-switch path as not a browser document reload: document navigation requests `0`, main-frame navigations `0`, `beforeunload/pagehide` `0`, `window.__kubNoReloadMarker` survived, composer draft survived, and staged attachment survived.
+- Code diagnosis found the remaining real-desktop risk in `useUser`: Supabase can emit `SIGNED_IN` again when a hidden tab is focused; the old handler treated every `SIGNED_IN` as a blocking profile load, rendered `LoadingScreen`, and could remount `MainLayout/ChatWindow` even when the same user was already loaded.
+- Patch behavior: same-user auth events refresh the profile/realtime token silently; only a user identity change blocks the UI with the loading screen.
+- Live deploy QA after the updated bundle reached `https://kub.apollot.ru`: the same probe kept `window.__kubNoReloadMarker`, composer value `TAB_RETURN_TEST_*`, and staged attachment count `1` after a second-tab `bringToFront` switch plus supplemental focus/visibility events. Document navigation requests `0`, main-frame navigations `0`, `beforeunload/pagehide` `0`, `LoadingScreen` hits `0`, textarea disappearance hits `0`, console errors `0`, failed requests `0`.
+- Playwright probe artifacts:
+  - `output/playwright/desktop-tab-return/desktop-3840x2160.png`
+  - `output/playwright/desktop-tab-return/desktop-1920x1080.png`
+  - `output/playwright/desktop-tab-return/desktop-1440x900.png`
+  - `output/playwright/desktop-tab-return/mobile-390x844.png`
+  - `output/playwright/desktop-tab-return/mobile-412x915.png`
+  - `output/playwright/desktop-tab-return/summary.json`
+
 2026-05-13 mobile keyboard inset / tab return polish:
 
 - Local Playwright QA used `http://127.0.0.1:5173` production preview with the current local JS bundle. Because the Windows build still emits the known small Tailwind CSS bundle, visual local QA injected the current live production CSS as a stylesheet shim; screenshots below are ignored artifacts under `output/playwright`.
