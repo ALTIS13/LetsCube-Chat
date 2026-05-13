@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, useMemo, type DragEvent } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, type CSSProperties, type DragEvent } from "react";
 import { ChatHeader } from "./ChatHeader";
 import { PinnedMessage } from "./PinnedMessage";
 import { MessageList } from "./MessageList";
@@ -82,10 +82,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const [openMedia, setOpenMedia] = useState<MediaViewerItem | null>(null);
   const [draftRestore, setDraftRestore] = useState<{ id: string; text: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement>>({});
   const pendingJumpRef = useRef<string | null>(null);
   const supabase = createClient();
   const [stagedAttachments, setStagedAttachments] = useState<StagedAttachment[]>([]);
+  const [keyboardInset, setKeyboardInset] = useState(0);
   const stagedAttachmentsRef = useRef<StagedAttachment[]>([]);
   const cancelledAttachmentIdsRef = useRef<Set<string>>(new Set());
   const dragDepthRef = useRef(0);
@@ -94,6 +96,30 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   useEffect(() => {
     stagedAttachmentsRef.current = stagedAttachments;
   }, [stagedAttachments]);
+
+  useEffect(() => {
+    const visualViewport = window.visualViewport;
+    const updateKeyboardInset = () => {
+      if (window.innerWidth >= 768 || !visualViewport) {
+        setKeyboardInset(0);
+        return;
+      }
+      const inset = Math.max(0, Math.round(window.innerHeight - visualViewport.height - visualViewport.offsetTop));
+      setKeyboardInset(inset > 24 ? inset : 0);
+    };
+
+    updateKeyboardInset();
+    visualViewport?.addEventListener("resize", updateKeyboardInset);
+    visualViewport?.addEventListener("scroll", updateKeyboardInset);
+    window.addEventListener("resize", updateKeyboardInset);
+    window.addEventListener("orientationchange", updateKeyboardInset);
+    return () => {
+      visualViewport?.removeEventListener("resize", updateKeyboardInset);
+      visualViewport?.removeEventListener("scroll", updateKeyboardInset);
+      window.removeEventListener("resize", updateKeyboardInset);
+      window.removeEventListener("orientationchange", updateKeyboardInset);
+    };
+  }, []);
 
   useEffect(() => {
     setStagedAttachments((current) => {
@@ -445,6 +471,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   return (
     <div
       className="relative flex h-full w-full min-w-0 overflow-hidden bg-[var(--kub-chat-bg)]"
+      style={{ "--kub-keyboard-inset": `${keyboardInset}px` } as CSSProperties}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -459,7 +486,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           </div>
         </div>
       )}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <ChatHeader
           chatId={chatId}
           chat={chat}
@@ -539,25 +566,32 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             hasMoreOlder={hasMoreOlder}
             loadingOlder={loadingOlder}
             olderError={olderError}
+            bottomInset={keyboardInset}
           />
         )}
 
-        <MessageInput
-          chatId={chatId}
-          replyTo={replyTo}
-          onCancelReply={() => setReplyTo(null)}
-          onSend={handleSend}
-          onEdit={editMessage}
-          onSendVoice={handleSendVoice}
-          onTyping={sendTyping}
-          attachments={stagedAttachments}
-          onStageFiles={(files, source) => stageFiles(files, source)}
-          onRemoveAttachment={removeStagedAttachment}
-          onRetryAttachment={retryStagedAttachment}
-          onCancelAttachment={cancelStagedAttachment}
-          draftOverride={draftRestore}
-          focusRequestKey={replyFocusKey}
-        />
+        <div
+          ref={composerRef}
+          className="shrink-0 transition-[padding-bottom] duration-150 ease-out"
+          style={{ paddingBottom: "calc(var(--kub-keyboard-inset, 0px) + env(safe-area-inset-bottom))" }}
+        >
+          <MessageInput
+            chatId={chatId}
+            replyTo={replyTo}
+            onCancelReply={() => setReplyTo(null)}
+            onSend={handleSend}
+            onEdit={editMessage}
+            onSendVoice={handleSendVoice}
+            onTyping={sendTyping}
+            attachments={stagedAttachments}
+            onStageFiles={(files, source) => stageFiles(files, source)}
+            onRemoveAttachment={removeStagedAttachment}
+            onRetryAttachment={retryStagedAttachment}
+            onCancelAttachment={cancelStagedAttachment}
+            draftOverride={draftRestore}
+            focusRequestKey={replyFocusKey}
+          />
+        </div>
       </div>
       {showInfo && chat && (
         <ChatInfoPanel chat={chat} onClose={() => setShowInfo(false)} onClearForMe={clearChatForMe} />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import type { AppRole, DynamicRole, LocationRole, Profile } from "@/types/database";
 
@@ -28,6 +28,7 @@ import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDy
 import { LOCATION_ROLE_LABEL, mapLocationRoutingError } from "@/lib/locationRouting";
 import { getRoleLabel, isCriticalRoleKey, mapRolesPermissionsError } from "@/lib/rolePermissions";
 import type { LocationMemberWithProfile } from "@/hooks/useTaskRouting";
+import { registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -56,6 +57,7 @@ const fmtAgo = (iso: string | null) => {
 
 export function UsersTab() {
   const supabase = createClient();
+  const rt = getRealtimeClient();
   const currentUser = useAppStore((s) => s.currentUser);
   const isAdmin = useIsAdmin();
   const [dynamicRolesEnabled] = useDynamicRolesEnabledPreference();
@@ -88,6 +90,7 @@ export function UsersTab() {
   const [banTarget, setBanTarget] = useState<Profile | null>(null);
   const [muteTarget, setMuteTarget] = useState<Profile | null>(null);
   const [profileTarget, setProfileTarget] = useState<Profile | null>(null);
+  const realtimeChannelIdRef = useRef(`admin-users:${Math.random().toString(36).slice(2)}`);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -129,12 +132,6 @@ export function UsersTab() {
   }, [supabase, query, page]);
 
   useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
-    const onFocus = () => { void load(); };
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [load]);
 
   useEffect(() => {
     setSelectedIds((current) => {
@@ -321,13 +318,48 @@ export function UsersTab() {
   const canSanction = (target: Profile) =>
     target.id !== currentUser?.id && (isAdmin || target.role !== "admin");
 
-  const refreshAdminData = async () => {
+  const refreshDynamicRoles = dynamicRoles.refetch;
+  const refreshRouting = routing.refetch;
+  const refreshAdminData = useCallback(async () => {
     await Promise.all([
       load(),
-      dynamicRoles.refetch(),
-      routing.refetch(),
+      refreshDynamicRoles(),
+      refreshRouting(),
     ]);
-  };
+  }, [load, refreshDynamicRoles, refreshRouting]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const channelName = `${realtimeChannelIdRef.current}:live`;
+    let refreshTimer: number | null = null;
+    const scheduleRefresh = () => {
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => {
+        refreshTimer = null;
+        void refreshAdminData();
+      }, 250);
+    };
+
+    const channel = rt
+      .channel(channelName)
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_global_roles" }, (payload: { new?: { user_id?: string }; old?: { user_id?: string } }) => {
+        clearRoleAccessCache(payload.new?.user_id ?? payload.old?.user_id);
+        scheduleRefresh();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "location_members" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "roles" }, scheduleRefresh)
+      .subscribe((status: string) => {
+        if (import.meta.env.DEV) console.debug("[admin-users:live]", status);
+      });
+    registerChannel(channelName);
+
+    return () => {
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+      rt.removeChannel(channel);
+      unregisterChannel(channelName);
+    };
+  }, [isAdmin, refreshAdminData, rt]);
 
   const toggleUserSelection = (userId: string) => {
     setSelectedIds((current) => {
@@ -862,7 +894,7 @@ export function UsersTab() {
           email={emails[profileTarget.id]}
           contact={contacts[profileTarget.id]}
           state={stateById[profileTarget.id]}
-          canManageAvatar={isAdmin && profileTarget.role === "user"}
+          canManageAvatar={isAdmin || profileTarget.id === currentUser?.id}
           onAvatarUpdated={(avatarUrl) => {
             setRows((rs) => rs.map((r) => (r.id === profileTarget.id ? { ...r, avatar_url: avatarUrl } : r)));
             setProfileTarget((target) => target ? { ...target, avatar_url: avatarUrl } : target);
@@ -896,17 +928,30 @@ function ProfilePreviewModal({
   const updateAvatarUrl = async (avatarUrl: string | null) => {
     setAvatarSaving(true);
     setAvatarError(null);
-    const { error } = await supabase
-      .from("profiles")
-      .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
-      .eq("id", user.id);
-    setAvatarSaving(false);
-    if (error) {
-      const message = prefixError("Не удалось обновить аватар пользователя", error);
+    try {
+      const rpcResult = await supabase.rpc("admin_update_user_profile", {
+        p_user_id: user.id,
+        p_avatar_url: avatarUrl,
+      });
+      if (rpcResult.error) {
+        if (isAdminProfileRpcMissing(rpcResult.error)) {
+          const { error } = await supabase
+            .from("profiles")
+            .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
+            .eq("id", user.id);
+          if (error) throw error;
+        } else {
+          throw rpcResult.error;
+        }
+      }
+    } catch (error) {
+      const message = mapAdminProfileAvatarError(error, "update");
       setAvatarError(message);
-      showAppAlert(message, "Ошибка");
+      showAppAlert(message, "Аватар не обновлён");
+      setAvatarSaving(false);
       return false;
     }
+    setAvatarSaving(false);
     onAvatarUpdated?.(avatarUrl);
     return true;
   };
@@ -922,19 +967,21 @@ function ProfilePreviewModal({
     setAvatarSaving(true);
     setAvatarError(null);
     const path = avatarUploadPath("user", user.id, file);
-    const { data, error } = await supabase.storage
-      .from("media")
-      .upload(path, file, { contentType: file.type, upsert: false });
-    if (error) {
+    try {
+      const { data, error } = await supabase.storage
+        .from("media")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (error || !data) throw error ?? new Error("avatar_upload_failed");
+      const { data: publicData } = supabase.storage.from("media").getPublicUrl(data.path);
       setAvatarSaving(false);
-      const message = prefixError("Не удалось загрузить аватар пользователя", error);
+      await updateAvatarUrl(publicData.publicUrl);
+    } catch (error) {
+      const message = mapAdminProfileAvatarError(error, "upload");
       setAvatarError(message);
-      showAppAlert(message, "Ошибка");
+      showAppAlert(message, "Аватар не загружен");
+      setAvatarSaving(false);
       return;
     }
-    const { data: publicData } = supabase.storage.from("media").getPublicUrl(data.path);
-    setAvatarSaving(false);
-    await updateAvatarUrl(publicData.publicUrl);
   };
 
   const handleAvatarReset = async () => {
@@ -1050,6 +1097,49 @@ function ProfilePreviewModal({
       )}
     </KubModal>
   );
+}
+
+function mapAdminProfileAvatarError(error: unknown, stage: "upload" | "update"): string {
+  if (isAdminProfileRpcMissing(error)) {
+    return "Редактирование профиля пользователя требует обновления базы данных.";
+  }
+  if (isPermissionLikeError(error)) {
+    return "Недостаточно прав для изменения профиля.";
+  }
+  return stage === "upload" ? "Не удалось загрузить аватар." : "Не удалось обновить профиль.";
+}
+
+function isAdminProfileRpcMissing(error: unknown): boolean {
+  const { text, code } = getErrorFingerprint(error);
+  return code === "PGRST202" ||
+    text.includes("admin_update_user_profile") ||
+    text.includes("could not find the function") ||
+    text.includes("function public.admin_update_user_profile");
+}
+
+function isPermissionLikeError(error: unknown): boolean {
+  const { text, code } = getErrorFingerprint(error);
+  return code === "42501" ||
+    code === "403" ||
+    text.includes("row-level security") ||
+    text.includes("row level security") ||
+    text.includes("permission denied") ||
+    text.includes("not authorized") ||
+    text.includes("not allowed") ||
+    text.includes("unauthorized");
+}
+
+function getErrorFingerprint(error: unknown): { text: string; code: string } {
+  if (!error) return { text: "", code: "" };
+  if (typeof error === "string") return { text: error.toLowerCase(), code: "" };
+  if (typeof error !== "object") return { text: String(error).toLowerCase(), code: "" };
+  const record = error as Record<string, unknown>;
+  const parts = [record.message, record.details, record.hint, record.name]
+    .filter((part): part is string => typeof part === "string");
+  return {
+    text: parts.join(" ").toLowerCase(),
+    code: typeof record.code === "string" ? record.code.toUpperCase() : "",
+  };
 }
 
 function Field({ label, value, mono, danger, warn, copyable }: { label: string; value: string; mono?: boolean; danger?: boolean; warn?: boolean; copyable?: boolean }) {

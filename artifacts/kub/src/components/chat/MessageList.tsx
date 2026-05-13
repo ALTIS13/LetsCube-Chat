@@ -44,6 +44,7 @@ interface MessageListProps {
   hasMoreOlder?: boolean;
   loadingOlder?: boolean;
   olderError?: string | null;
+  bottomInset?: number;
 }
 
 function compareMessagesForRender(a: MessageWithSender, b: MessageWithSender): number {
@@ -116,6 +117,7 @@ export function MessageList({
   hasMoreOlder = false,
   loadingOlder = false,
   olderError = null,
+  bottomInset = 0,
 }: MessageListProps) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -304,13 +306,17 @@ export function MessageList({
     }
   }, [isTyping, sortedMessages.length, scrollToBottom]);
 
+  useEffect(() => {
+    if (isAtBottomRef.current) scrollToBottom(false);
+  }, [bottomInset, scrollToBottom]);
+
   // Initial scroll
   useEffect(() => {
     scrollToBottom(false);
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="relative flex-1 min-w-0 overflow-hidden">
+    <div className="relative flex-1 min-h-0 min-w-0 overflow-hidden">
       {onBulkHideForMe && selectionMode && (
         <div className="fixed bottom-[4.75rem] left-3 right-3 z-[70] flex items-center justify-between gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]/95 p-2 shadow-lg backdrop-blur sm:absolute sm:bottom-auto sm:left-auto sm:right-3 sm:top-2 sm:w-auto sm:justify-start sm:p-1.5">
           <span className="px-2 text-xs font-semibold text-[color:var(--kub-muted)]">
@@ -367,6 +373,7 @@ export function MessageList({
           if (openActionMessageId) setOpenActionMessageId(null);
         }}
         className="chat-bg h-full min-w-0 overflow-y-auto overflow-x-hidden px-3 py-2 pb-6 sm:px-4"
+        style={{ paddingBottom: `calc(1.5rem + ${Math.max(0, bottomInset)}px)` }}
       >
         {(loadingOlder || olderError) && (
           <div className="flex justify-center py-2" data-message-history-status>

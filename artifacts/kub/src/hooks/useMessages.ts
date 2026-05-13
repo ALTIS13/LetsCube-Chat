@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
-import type { MessageWithSender } from "@/types/database";
+import type { MessageWithSender, Profile } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { mapPgError } from "@/lib/errors";
@@ -221,6 +221,40 @@ export function useMessages(
   }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds, shouldMarkDeliveredForPrivateChat]);
 
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
+
+  const refreshMessageById = useCallback(async (messageId: string) => {
+    const activeChatId = chatIdRef.current;
+    if (!activeChatId) return;
+    const current = useAppStore.getState().messages[activeChatId] ?? [];
+    if (!current.some((message) => message.id === messageId)) return;
+
+    const { data } = await supabase
+      .from("messages")
+      .select(MESSAGE_SELECT_WITH_JOINS)
+      .eq("id", messageId)
+      .single();
+    if (!data) return;
+
+    const nextMessage = data as MessageWithSender;
+    if (nextMessage.chat_id !== activeChatId) return;
+    if (
+      topicIdRef.current !== undefined &&
+      !messageBelongsToTopic(nextMessage, topicIdRef.current, generalTopicIdsRef.current)
+    ) return;
+    const localClearedAt = clearedAtRef.current;
+    if (localClearedAt && new Date(nextMessage.created_at).getTime() <= new Date(localClearedAt).getTime()) return;
+
+    const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds([nextMessage]));
+    rememberHiddenMessageIds(fetchedHiddenIds);
+    const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
+    if (effectiveHiddenIds.has(nextMessage.id)) return;
+    const [visibleMessage] = sanitizeHiddenReplies([nextMessage], effectiveHiddenIds);
+    if (!visibleMessage) return;
+
+    setMessages(activeChatId, current.map((message) => (
+      message.id === messageId ? visibleMessage : message
+    )));
+  }, [rememberHiddenMessageIds, setMessages, supabase]);
 
   const loadOlderMessages = useCallback(async () => {
     const activeChatId = chatIdRef.current;
@@ -573,6 +607,80 @@ export function useMessages(
       unregisterChannel(channelName);
     };
   }, [chatId, userId, rt, addMessage, rememberHiddenMessageIds, setMessages, shouldMarkDeliveredForPrivateChat, supabase]);
+
+  useEffect(() => {
+    if (!chatId || !userId) return;
+    const channelName = `reactions:chat:${chatId}`;
+    let fallbackTimer: number | null = null;
+
+    const scheduleFallbackRefetch = () => {
+      if (fallbackTimer) window.clearTimeout(fallbackTimer);
+      fallbackTimer = window.setTimeout(() => {
+        fallbackTimer = null;
+        void fetchMessages();
+      }, 300);
+    };
+
+    const handleReactionChange = (payload: { new?: { message_id?: string | null }; old?: { message_id?: string | null } }) => {
+      const messageId = payload.new?.message_id ?? payload.old?.message_id ?? null;
+      if (!messageId) {
+        scheduleFallbackRefetch();
+        return;
+      }
+      const activeChatId = chatIdRef.current;
+      if (!activeChatId) return;
+      const current = useAppStore.getState().messages[activeChatId] ?? [];
+      if (!current.some((message) => message.id === messageId)) return;
+      void refreshMessageById(messageId);
+    };
+
+    const channel = rt
+      .channel(channelName)
+      .on("postgres_changes", { event: "*", schema: "public", table: "reactions" }, handleReactionChange)
+      .subscribe((status: string) => {
+        if (import.meta.env.DEV) console.debug("[reactions:chat]", chatId, status);
+      });
+    registerChannel(channelName);
+
+    return () => {
+      if (fallbackTimer) window.clearTimeout(fallbackTimer);
+      rt.removeChannel(channel);
+      unregisterChannel(channelName);
+    };
+  }, [chatId, userId, rt, fetchMessages, refreshMessageById]);
+
+  useEffect(() => {
+    if (!chatId || !userId) return;
+    const channelName = `profiles:chat:${chatId}`;
+    const handleProfileUpdate = (payload: { new?: Profile }) => {
+      const profile = payload.new;
+      const activeChatId = chatIdRef.current;
+      if (!profile || !activeChatId) return;
+      const current = useAppStore.getState().messages[activeChatId] ?? [];
+      let changed = false;
+      const next = current.map((message) => {
+        if (message.sender?.id !== profile.id) return message;
+        changed = true;
+        return { ...message, sender: { ...message.sender, ...profile } };
+      });
+      if (changed) setMessages(activeChatId, next);
+    };
+
+    const channel = rt
+      .channel(channelName)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, (payload) => {
+        handleProfileUpdate(payload as unknown as { new?: Profile });
+      })
+      .subscribe((status: string) => {
+        if (import.meta.env.DEV) console.debug("[profiles:chat]", chatId, status);
+      });
+    registerChannel(channelName);
+
+    return () => {
+      rt.removeChannel(channel);
+      unregisterChannel(channelName);
+    };
+  }, [chatId, userId, rt, setMessages]);
 
   useEffect(() => {
     if (!chatId || !userId) return;

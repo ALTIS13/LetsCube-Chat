@@ -858,6 +858,10 @@ export interface Database {
         Args: { uids: string[] }
         Returns: { id: string; email: string }[]
       }
+      admin_update_user_profile: {
+        Args: { p_user_id: string; p_avatar_url: string | null }
+        Returns: Database['public']['Tables']['profiles']['Row']
+      }
       // Atomically returns the existing private chat between caller and
       // target, or creates a new one. SECURITY DEFINER — see
       // `.migration-backup/supabase/migrations/20260504_chats_membership_hardening.sql`.

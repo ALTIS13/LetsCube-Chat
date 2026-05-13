@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import {
@@ -36,6 +36,7 @@ export function useDynamicRoles(options: UseDynamicRolesOptions = {}): DynamicRo
   const includeAssignments = options.includeAssignments ?? false;
   const supabase = useMemo(() => createClient(), []);
   const rt = useMemo(() => getRealtimeClient(), []);
+  const channelIdRef = useRef(`dynamic-roles:${Math.random().toString(36).slice(2)}`);
   const [available, setAvailable] = useState(false);
   const [checked, setChecked] = useState(false);
   const [loading, setLoading] = useState(enabled);
@@ -122,14 +123,14 @@ export function useDynamicRoles(options: UseDynamicRolesOptions = {}): DynamicRo
 
   useEffect(() => {
     if (!enabled || !available) return;
-    let timer: ReturnType<typeof setTimeout> | null = null;
+    let timer: number | null = null;
     const debounced = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
         void load();
       }, 250);
     };
-    const channelName = "dynamic-roles";
+    const channelName = channelIdRef.current;
     const channel = rt
       .channel(channelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "roles" }, debounced)
@@ -141,7 +142,7 @@ export function useDynamicRoles(options: UseDynamicRolesOptions = {}): DynamicRo
       });
     registerChannel(channelName);
     return () => {
-      if (timer) clearTimeout(timer);
+      if (timer) window.clearTimeout(timer);
       rt.removeChannel(channel);
       unregisterChannel(channelName);
     };
