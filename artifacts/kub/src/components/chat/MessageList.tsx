@@ -45,6 +45,7 @@ interface MessageListProps {
   loadingOlder?: boolean;
   olderError?: string | null;
   bottomInset?: number;
+  layoutKey?: string;
 }
 
 function compareMessagesForRender(a: MessageWithSender, b: MessageWithSender): number {
@@ -118,6 +119,7 @@ export function MessageList({
   loadingOlder = false,
   olderError = null,
   bottomInset = 0,
+  layoutKey,
 }: MessageListProps) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -285,14 +287,25 @@ export function MessageList({
   }, [loadOlderAtTop]);
 
   const scrollToBottom = useCallback((smooth = true) => {
-    const el = containerRef.current;
-    if (!el) return;
     requestAnimationFrame(() => {
-      el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "instant" });
+      const el = containerRef.current;
+      if (!el) return;
+      el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
       setNewCount(0);
       setShowScrollBtn(false);
     });
   }, []);
+
+  const scrollToBottomAfterLayout = useCallback((smooth = false) => {
+    let innerFrame = 0;
+    const outerFrame = requestAnimationFrame(() => {
+      innerFrame = requestAnimationFrame(() => scrollToBottom(smooth));
+    });
+    return () => {
+      cancelAnimationFrame(outerFrame);
+      if (innerFrame) cancelAnimationFrame(innerFrame);
+    };
+  }, [scrollToBottom]);
 
   // Keep bottom lock for new messages and typing indicator without pulling
   // users down when they intentionally scrolled up.
@@ -307,13 +320,26 @@ export function MessageList({
   }, [isTyping, sortedMessages.length, scrollToBottom]);
 
   useEffect(() => {
-    if (isAtBottomRef.current) scrollToBottom(false);
-  }, [bottomInset, scrollToBottom]);
+    if (!isAtBottomRef.current) return undefined;
+    return scrollToBottomAfterLayout(false);
+  }, [bottomInset, scrollToBottomAfterLayout]);
 
-  // Initial scroll
+  // Initial chat open and chat switch need to wait for composer/tray layout
+  // before locking the history to the real visual bottom.
   useEffect(() => {
-    scrollToBottom(false);
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+    isAtBottomRef.current = true;
+    prevMessageCountRef.current = sortedMessages.length;
+    setNewCount(0);
+    setShowScrollBtn(false);
+    const cancelFrame = scrollToBottomAfterLayout(false);
+    const timeoutId = window.setTimeout(() => scrollToBottom(false), 180);
+    return () => {
+      cancelFrame();
+      window.clearTimeout(timeoutId);
+    };
+  }, [layoutKey, scrollToBottom, scrollToBottomAfterLayout]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  const resolvedBottomInset = Math.max(0, bottomInset);
 
   return (
     <div className="relative flex-1 min-h-0 min-w-0 overflow-hidden">
@@ -373,7 +399,10 @@ export function MessageList({
           if (openActionMessageId) setOpenActionMessageId(null);
         }}
         className="chat-bg h-full min-w-0 overflow-y-auto overflow-x-hidden px-3 py-2 pb-6 sm:px-4"
-        style={{ paddingBottom: `calc(1.5rem + ${Math.max(0, bottomInset)}px)` }}
+        style={{
+          paddingBottom: `calc(1.5rem + ${resolvedBottomInset}px)`,
+          scrollPaddingBottom: `calc(1.5rem + ${resolvedBottomInset}px)`,
+        }}
       >
         {(loadingOlder || olderError) && (
           <div className="flex justify-center py-2" data-message-history-status>

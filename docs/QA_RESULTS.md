@@ -63,6 +63,26 @@
 
 Safe QA note: Live QA should use the Codex/QA browser session or QA credentials from a secure environment; never store secrets in the repo and do not depend on the user's mouse/manual browser.
 
+2026-05-13 mobile chat bottom overlap polish:
+
+- Local Windows production build currently emits a small Tailwind CSS bundle without generated utility classes, while the live Linux/Coolify bundle contains the expected utilities. For local screenshot QA of the current JS bundle, Playwright used `http://127.0.0.1:5173` production preview with the current live production CSS stylesheet injected as a visual QA shim.
+- Viewports checked with Playwright: `3840x2160`, `1920x1080`, `1440x900`, `390x844`, `412x915`.
+- Screenshot evidence:
+  - `output/playwright/mobile-bottom-overlap-desktop-3840-open-chat.png`
+  - `output/playwright/mobile-bottom-overlap-mobile-390-open-chat.png`
+  - `output/playwright/mobile-bottom-overlap-mobile-390-focused-multiline.png`
+  - `output/playwright/mobile-bottom-overlap-mobile-390-staged-attachment.png`
+- Mobile metrics at `390x844`: composer height tracked `70px` on open, `118px` with multiline draft, and `214px` with staged attachment; MessageList padding-bottom tracked `94px`, `142px`, and `238px`; `scrollGap = 0`; document horizontal overflow was `0`.
+- Mobile metrics at `412x915` with staged attachment: composer height `214px`, MessageList padding-bottom `238px`, `scrollGap = 0`, horizontal overflow `0`.
+- Desktop metrics at `3840x2160`, `1920x1080`, `1440x900`: scroller bottom and composer top aligned; `scrollGap = 0`; horizontal overflow `0`.
+- Headed browser on the physical 4K monitor was not used to avoid interfering with the user's workspace; screenshot QA was done with Playwright-controlled browser viewports.
+- Live deploy QA after Coolify updated the bundle (`https://kub.apollot.ru` contained the new `--kub-composer-height` / `--kub-message-list-bottom-inset` code): Playwright checked `3840x2160`, `1920x1080`, `1440x900`, `390x844`, `412x915`; console errors `0`, failed requests `0`.
+- Live screenshot artifacts:
+  - `output/playwright/mobile-bottom-overlap/desktop-3840-open-chat.png`
+  - `output/playwright/mobile-bottom-overlap/mobile-390-open-chat.png`
+  - `output/playwright/mobile-bottom-overlap/mobile-390-focused-multiline.png`
+  - `output/playwright/mobile-bottom-overlap/mobile-390-staged-attachment.png`
+
 2026-05-10 admin users bulk roles / location QoL note:
 
 - Users panel now has selection, visible-row select/clear, global-role and location bulk actions, and location/global-role/status filters.

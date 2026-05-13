@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, useMemo, type CSSProperties, type DragEvent } from "react";
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, type CSSProperties, type DragEvent } from "react";
 import { ChatHeader } from "./ChatHeader";
 import { PinnedMessage } from "./PinnedMessage";
 import { MessageList } from "./MessageList";
@@ -88,6 +88,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const supabase = createClient();
   const [stagedAttachments, setStagedAttachments] = useState<StagedAttachment[]>([]);
   const [keyboardInset, setKeyboardInset] = useState(0);
+  const [composerHeight, setComposerHeight] = useState(0);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const stagedAttachmentsRef = useRef<StagedAttachment[]>([]);
   const cancelledAttachmentIdsRef = useRef<Set<string>>(new Set());
   const dragDepthRef = useRef(0);
@@ -100,7 +102,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   useEffect(() => {
     const visualViewport = window.visualViewport;
     const updateKeyboardInset = () => {
-      if (window.innerWidth >= 768 || !visualViewport) {
+      const mobile = window.innerWidth < 768;
+      setIsMobileViewport(mobile);
+      if (!mobile || !visualViewport) {
         setKeyboardInset(0);
         return;
       }
@@ -120,6 +124,42 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       window.removeEventListener("orientationchange", updateKeyboardInset);
     };
   }, []);
+
+  const measureComposerHeight = useCallback(() => {
+    const node = composerRef.current;
+    const nextHeight = node ? Math.ceil(node.getBoundingClientRect().height) : 0;
+    setComposerHeight((current) => current === nextHeight ? current : nextHeight);
+  }, []);
+
+  useLayoutEffect(() => {
+    measureComposerHeight();
+    const node = composerRef.current;
+    if (!node) return;
+
+    let frame = window.requestAnimationFrame(measureComposerHeight);
+    const observer = typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(() => {
+        window.cancelAnimationFrame(frame);
+        frame = window.requestAnimationFrame(measureComposerHeight);
+      })
+      : null;
+
+    observer?.observe(node);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
+  }, [measureComposerHeight, chatId]);
+
+  useLayoutEffect(() => {
+    measureComposerHeight();
+  }, [
+    measureComposerHeight,
+    keyboardInset,
+    stagedAttachments.length,
+    replyTo?.id,
+    draftRestore?.id,
+  ]);
 
   useEffect(() => {
     setStagedAttachments((current) => {
@@ -468,10 +508,16 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     if (files.length) stageFiles(files, "drop");
   }, [stageFiles]);
 
+  const messageListBottomInset = isMobileViewport ? composerHeight : 0;
+
   return (
     <div
       className="relative flex h-full w-full min-w-0 overflow-hidden bg-[var(--kub-chat-bg)]"
-      style={{ "--kub-keyboard-inset": `${keyboardInset}px` } as CSSProperties}
+      style={{
+        "--kub-keyboard-inset": `${keyboardInset}px`,
+        "--kub-composer-height": `${composerHeight}px`,
+        "--kub-message-list-bottom-inset": `${messageListBottomInset}px`,
+      } as CSSProperties}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -566,7 +612,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             hasMoreOlder={hasMoreOlder}
             loadingOlder={loadingOlder}
             olderError={olderError}
-            bottomInset={keyboardInset}
+            bottomInset={messageListBottomInset}
+            layoutKey={chatId}
           />
         )}
 
