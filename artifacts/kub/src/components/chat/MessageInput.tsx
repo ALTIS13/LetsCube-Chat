@@ -41,6 +41,7 @@ interface MessageInputProps {
   onCancelAttachment?: (attachmentId: string) => void;
   draftOverride?: { id: string; text: string } | null;
   focusRequestKey?: number;
+  onFocusChange?: (focused: boolean) => void;
 }
 
 export function MessageInput({
@@ -58,6 +59,7 @@ export function MessageInput({
   onCancelAttachment,
   draftOverride,
   focusRequestKey = 0,
+  onFocusChange,
 }: MessageInputProps) {
   const [text, setText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
@@ -93,6 +95,8 @@ export function MessageInput({
     if (text) localStorage.setItem(draftKey(chatId), text);
     else localStorage.removeItem(draftKey(chatId));
   }, [text, chatId, isEditing]);
+
+  useEffect(() => () => onFocusChange?.(false), [onFocusChange]);
 
   useEffect(() => {
     if (!isEditing || !editingMessage) return;
@@ -400,6 +404,8 @@ export function MessageInput({
             onPaste={handlePaste}
             onCompositionStart={() => setIsComposing(true)}
             onCompositionEnd={() => setIsComposing(false)}
+            onFocus={() => onFocusChange?.(true)}
+            onBlur={() => onFocusChange?.(false)}
             placeholder="Сообщение…"
             rows={1}
             className="flex-1 bg-transparent resize-none outline-none text-base sm:text-sm leading-6 py-2 max-h-[140px] overflow-y-auto text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]"

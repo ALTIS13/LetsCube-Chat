@@ -89,7 +89,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const [stagedAttachments, setStagedAttachments] = useState<StagedAttachment[]>([]);
   const [keyboardInset, setKeyboardInset] = useState(0);
   const [composerHeight, setComposerHeight] = useState(0);
-  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [isComposerFocused, setIsComposerFocused] = useState(false);
   const stagedAttachmentsRef = useRef<StagedAttachment[]>([]);
   const cancelledAttachmentIdsRef = useRef<Set<string>>(new Set());
   const dragDepthRef = useRef(0);
@@ -103,13 +103,13 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     const visualViewport = window.visualViewport;
     const updateKeyboardInset = () => {
       const mobile = window.innerWidth < 768;
-      setIsMobileViewport(mobile);
-      if (!mobile || !visualViewport) {
+      const composerHasFocus = Boolean(composerRef.current?.contains(document.activeElement));
+      if (!mobile || !visualViewport || !isComposerFocused || !composerHasFocus) {
         setKeyboardInset(0);
         return;
       }
-      const inset = Math.max(0, Math.round(window.innerHeight - visualViewport.height - visualViewport.offsetTop));
-      setKeyboardInset(inset > 24 ? inset : 0);
+      const rawInset = Math.max(0, Math.round(window.innerHeight - visualViewport.height - visualViewport.offsetTop));
+      setKeyboardInset(rawInset > 80 ? rawInset : 0);
     };
 
     updateKeyboardInset();
@@ -123,7 +123,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       window.removeEventListener("resize", updateKeyboardInset);
       window.removeEventListener("orientationchange", updateKeyboardInset);
     };
-  }, []);
+  }, [isComposerFocused]);
 
   const measureComposerHeight = useCallback(() => {
     const node = composerRef.current;
@@ -508,7 +508,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     if (files.length) stageFiles(files, "drop");
   }, [stageFiles]);
 
-  const messageListBottomInset = isMobileViewport ? composerHeight : 0;
+  const messageListBottomInset = 0;
 
   return (
     <div
@@ -614,6 +614,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             olderError={olderError}
             bottomInset={messageListBottomInset}
             layoutKey={chatId}
+            layoutVersion={composerHeight}
           />
         )}
 
@@ -637,6 +638,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             onCancelAttachment={cancelStagedAttachment}
             draftOverride={draftRestore}
             focusRequestKey={replyFocusKey}
+            onFocusChange={setIsComposerFocused}
           />
         </div>
       </div>

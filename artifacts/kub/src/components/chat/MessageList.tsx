@@ -46,6 +46,7 @@ interface MessageListProps {
   olderError?: string | null;
   bottomInset?: number;
   layoutKey?: string;
+  layoutVersion?: number;
 }
 
 function compareMessagesForRender(a: MessageWithSender, b: MessageWithSender): number {
@@ -120,6 +121,7 @@ export function MessageList({
   olderError = null,
   bottomInset = 0,
   layoutKey,
+  layoutVersion = 0,
 }: MessageListProps) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -322,7 +324,7 @@ export function MessageList({
   useEffect(() => {
     if (!isAtBottomRef.current) return undefined;
     return scrollToBottomAfterLayout(false);
-  }, [bottomInset, scrollToBottomAfterLayout]);
+  }, [bottomInset, layoutVersion, scrollToBottomAfterLayout]);
 
   // Initial chat open and chat switch need to wait for composer/tray layout
   // before locking the history to the real visual bottom.

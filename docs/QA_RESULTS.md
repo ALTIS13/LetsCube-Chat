@@ -63,6 +63,21 @@
 
 Safe QA note: Live QA should use the Codex/QA browser session or QA credentials from a secure environment; never store secrets in the repo and do not depend on the user's mouse/manual browser.
 
+2026-05-13 mobile keyboard inset / tab return polish:
+
+- Local Playwright QA used `http://127.0.0.1:5173` production preview with the current local JS bundle. Because the Windows build still emits the known small Tailwind CSS bundle, visual local QA injected the current live production CSS as a stylesheet shim; screenshots below are ignored artifacts under `output/playwright`.
+- Viewports checked locally with Playwright: `3840x2160`, `1920x1080`, `1440x900`, `390x844`, `412x915`.
+- Screenshot evidence:
+  - `output/playwright/mobile-keyboard-inset/desktop-3840-open-chat.png`
+  - `output/playwright/mobile-keyboard-inset/mobile-390-keyboard-closed.png`
+  - `output/playwright/mobile-keyboard-inset/mobile-390-input-focused.png`
+  - `output/playwright/mobile-keyboard-inset/mobile-390-multiline.png`
+  - `output/playwright/mobile-keyboard-inset/mobile-390-staged-attachment.png`
+- Mobile `390x844` local metrics after staged attachment/tab-return simulation: composer height `166px`, scroller bottom equals composer top, `scrollGap = 0`, MessageList padding-bottom `24px`, `--kub-keyboard-inset = 0px`, `--kub-message-list-bottom-inset = 0px`, visual gap between last message and composer `26px`, horizontal overflow `0`.
+- Tab-return local QA: a draft marker, composer text, and staged attachment survived the simulated tab switch/visibility return; no document reload marker loss was observed.
+- Local console errors `0`, failed requests `0`. Headed browser on the physical 4K monitor was not used to avoid interfering with the user's workspace; screenshots were taken with Playwright-controlled viewports.
+- Live deploy QA after Coolify updated the bundle (`https://kub.apollot.ru` contained `preserveActiveChat` and the focus-gated keyboard threshold code): Playwright checked `3840x2160`, `1920x1080`, `1440x900`, `390x844`, `412x915` without a CSS shim. Live metrics matched the local result: mobile `390x844` staged state had composer height `166px`, MessageList padding-bottom `24px`, `--kub-keyboard-inset = 0px`, `--kub-message-list-bottom-inset = 0px`, visual gap `26px`, horizontal overflow `0`; tab-return marker/text/staged attachment survived. Console errors `0`, failed requests `0`.
+
 2026-05-13 mobile chat bottom overlap polish:
 
 - Local Windows production build currently emits a small Tailwind CSS bundle without generated utility classes, while the live Linux/Coolify bundle contains the expected utilities. For local screenshot QA of the current JS bundle, Playwright used `http://127.0.0.1:5173` production preview with the current live production CSS stylesheet injected as a visual QA shim.

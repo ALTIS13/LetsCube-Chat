@@ -12,6 +12,10 @@ import { scheduleMarkChatDelivered } from "@/lib/deliveryReceipts";
 const VISIBILITY_REFRESH_THROTTLE_MS = 10_000;
 const CHAT_REFETCH_DEBOUNCE_MS = 350;
 
+type FetchChatsOptions = {
+  preserveActiveChat?: boolean;
+};
+
 export function useChats() {
   const [loading, setLoading] = useState(true);
   const chats = useAppStore((s) => s.chats);
@@ -21,6 +25,7 @@ export function useChats() {
   const rt = getRealtimeClient();
   const fetchInFlightRef = useRef(false);
   const fetchQueuedRef = useRef(false);
+  const queuedPreserveActiveChatRef = useRef(false);
   const lastVisibilityFetchAt = useRef(0);
   const unhideInFlightRef = useRef(new Set<string>());
 
@@ -36,7 +41,8 @@ export function useChats() {
     pinned_order: number | null;
   };
 
-  const fetchChats = useCallback(async () => {
+  const fetchChats = useCallback(async (options: FetchChatsOptions = {}) => {
+    const preserveActiveChat = Boolean(options.preserveActiveChat);
     if (!userId) {
       setChats([]);
       setLoading(false);
@@ -45,6 +51,7 @@ export function useChats() {
 
     if (fetchInFlightRef.current) {
       fetchQueuedRef.current = true;
+      queuedPreserveActiveChatRef.current = queuedPreserveActiveChatRef.current || preserveActiveChat;
       return;
     }
 
@@ -58,9 +65,11 @@ export function useChats() {
         .eq("user_id", userId);
 
       if (!memberships?.length) {
-        setChats([]);
-        const selectedChatId = useAppStore.getState().selectedChatId;
-        if (selectedChatId) useAppStore.getState().setSelectedChatId(null);
+        if (!preserveActiveChat) {
+          setChats([]);
+          const selectedChatId = useAppStore.getState().selectedChatId;
+          if (selectedChatId) useAppStore.getState().setSelectedChatId(null);
+        }
         return;
       }
 
@@ -212,7 +221,7 @@ export function useChats() {
       // Reconcile stale active chat after delete/member removal. Only clear
       // after a successful fresh list proves the selected chat is no longer visible.
       const selectedChatId = useAppStore.getState().selectedChatId;
-      if (selectedChatId && !visibleChats.some((chat) => chat.id === selectedChatId)) {
+      if (!preserveActiveChat && selectedChatId && !visibleChats.some((chat) => chat.id === selectedChatId)) {
         useAppStore.getState().setSelectedChatId(null);
       }
 
@@ -222,8 +231,10 @@ export function useChats() {
       fetchInFlightRef.current = false;
       if (fetchQueuedRef.current) {
         fetchQueuedRef.current = false;
+        const preserveQueuedActiveChat = queuedPreserveActiveChatRef.current;
+        queuedPreserveActiveChatRef.current = false;
         window.setTimeout(() => {
-          void fetchChats();
+          void fetchChats({ preserveActiveChat: preserveQueuedActiveChat });
         }, CHAT_REFETCH_DEBOUNCE_MS);
       }
     }
@@ -372,7 +383,7 @@ export function useChats() {
       const now = Date.now();
       if (now - lastVisibilityFetchAt.current < VISIBILITY_REFRESH_THROTTLE_MS) return;
       lastVisibilityFetchAt.current = now;
-      void fetchChats();
+      void fetchChats({ preserveActiveChat: true });
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
