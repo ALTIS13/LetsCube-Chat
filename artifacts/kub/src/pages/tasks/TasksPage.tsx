@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useAppStore } from "@/store/app.store";
-import { usePermissionAccess } from "@/hooks/useRole";
+import { useAnyLocationPermissionAccess, usePermissionAccess } from "@/hooks/useRole";
 import { useTaskRouting, useTaskRoutingEnabledPreference } from "@/hooks/useTaskRouting";
 import { useTasks, type TasksFilter } from "@/hooks/useTasks";
 import {
@@ -38,6 +38,39 @@ type AssigneeFilter = "all" | "me" | "unassigned" | string;
 type LocationFilter = "all" | "my" | string;
 type RecipientFilter = "all" | "admin" | "staff";
 
+const TASK_ACCESS_KEYS = [
+  "tasks.view",
+  "tasks.create",
+  "tasks.assign",
+  "tasks.manage",
+  "tasks.view_admin_tasks",
+  "tasks.manage_admin_tasks",
+  "tasks.view_all_locations",
+  "tasks.manage_all_locations",
+] as const;
+
+const TASK_VIEW_KEYS = [
+  "tasks.view",
+  "tasks.view_admin_tasks",
+  "tasks.view_all_locations",
+  "tasks.manage",
+  "tasks.manage_all_locations",
+] as const;
+
+const TASK_CREATE_KEYS = [
+  "tasks.create",
+  "tasks.manage",
+  "tasks.manage_admin_tasks",
+  "tasks.manage_all_locations",
+] as const;
+
+const TASK_ADMIN_VIEW_KEYS = [
+  "tasks.view_admin_tasks",
+  "tasks.manage_admin_tasks",
+  "tasks.view_all_locations",
+  "tasks.manage_all_locations",
+] as const;
+
 const STAFF_TABS: Tab[] = [
   { id: "mine", label: "Мои", filter: { mine: "assigned" } },
   { id: "available", label: "Доступные",
@@ -58,38 +91,14 @@ const STAFF_TABS: Tab[] = [
 ];
 
 /**
- * /tasks — role-aware tabs page.
- *
- * Current production roles only distinguish admin/manager/user. Until the
- * roles/permissions foundation introduces staff permissions, task UI is
- * intentionally limited to admin/manager users.
+ * /tasks is gated by dynamic global permissions plus location permissions.
+ * Legacy profile roles remain only a fallback while the DB backfill is rolling
+ * out; club staff access comes from location_members.role_id.
  */
 export function TasksPage() {
   const [location, setLocation] = useLocation();
   const currentUser = useAppStore((s) => s.currentUser);
-  const taskAccess = usePermissionAccess([
-    "tasks.view",
-    "tasks.create",
-    "tasks.assign",
-    "tasks.manage",
-    "tasks.view_admin_tasks",
-    "tasks.manage_admin_tasks",
-    "tasks.view_all_locations",
-    "tasks.manage_all_locations",
-  ]);
-  const canViewTasks = taskAccess.hasAnyPermission([
-    "tasks.view",
-    "tasks.view_admin_tasks",
-    "tasks.view_all_locations",
-    "tasks.manage",
-    "tasks.manage_all_locations",
-  ]);
-  const canCreateTasks = taskAccess.hasAnyPermission([
-    "tasks.create",
-    "tasks.manage",
-    "tasks.manage_admin_tasks",
-    "tasks.manage_all_locations",
-  ]);
+  const taskAccess = usePermissionAccess(TASK_ACCESS_KEYS);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<TaskViewMode>(() => {
@@ -101,14 +110,39 @@ export function TasksPage() {
   const [locationFilter, setLocationFilter] = useState<LocationFilter>("all");
   const [recipientFilter, setRecipientFilter] = useState<RecipientFilter>("all");
   const [routingEnabled] = useTaskRoutingEnabledPreference();
-  const routing = useTaskRouting({ enabled: canViewTasks && routingEnabled, includeMembers: true });
+  const routing = useTaskRouting({ enabled: Boolean(currentUser && routingEnabled), includeMembers: true });
+  const myLocationIds = useMemo(
+    () => currentUser?.id ? getMyLocationIds(routing.members, currentUser.id) : new Set<string>(),
+    [currentUser?.id, routing.members],
+  );
+  const myLocationIdList = useMemo(
+    () => Array.from(myLocationIds).sort(),
+    [myLocationIds],
+  );
+  const locationTaskAccess = useAnyLocationPermissionAccess(TASK_ACCESS_KEYS, myLocationIdList, {
+    enabled: routing.available && myLocationIdList.length > 0,
+  });
+  const canViewTasks =
+    taskAccess.hasAnyPermission(TASK_VIEW_KEYS) ||
+    locationTaskAccess.hasAnyPermission(TASK_VIEW_KEYS);
+  const canCreateTasks =
+    taskAccess.hasAnyPermission(TASK_CREATE_KEYS) ||
+    locationTaskAccess.hasAnyPermission(TASK_CREATE_KEYS);
+  const canViewAllLocations = taskAccess.hasAnyPermission(["tasks.view_all_locations", "tasks.manage_all_locations"]);
+  const canFilterAdminTasks =
+    taskAccess.hasAnyPermission(TASK_ADMIN_VIEW_KEYS) ||
+    locationTaskAccess.hasAnyPermission(TASK_ADMIN_VIEW_KEYS);
+  const taskChecking =
+    taskAccess.checking ||
+    (routingEnabled && !routing.checked) ||
+    locationTaskAccess.checking;
 
   const tabs = STAFF_TABS;
   const [tabId, setTabId] = useState(tabs[0].id);
   const activeTab = tabs.find((t) => t.id === tabId) ?? tabs[0];
 
   const baseFilter: TasksFilter = { mine: "all" };
-  const { tasks, loading } = useTasks(baseFilter, { enabled: canViewTasks && !taskAccess.checking });
+  const { tasks, loading } = useTasks(baseFilter, { enabled: canViewTasks && !taskChecking });
 
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -151,13 +185,12 @@ export function TasksPage() {
       assigneeFilter,
       routing.available ? locationFilter : "all",
       routing.available ? recipientFilter : "all",
-      currentUser?.id ? getMyLocationIds(routing.members, currentUser.id) : new Set<string>(),
+      myLocationIds,
     ),
-    [tasks, activeTab.id, search, nowMs, currentUser?.id, assigneeFilter, routing.available, routing.members, locationFilter, recipientFilter],
+    [tasks, activeTab.id, search, nowMs, currentUser?.id, assigneeFilter, routing.available, myLocationIds, locationFilter, recipientFilter],
   );
   const tabCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    const myLocationIds = currentUser?.id ? getMyLocationIds(routing.members, currentUser.id) : new Set<string>();
     for (const tab of tabs) {
       counts[tab.id] = applyClientFilters(
         tasks,
@@ -172,7 +205,7 @@ export function TasksPage() {
       ).length;
     }
     return counts;
-  }, [tabs, tasks, nowMs, currentUser?.id, assigneeFilter, routing.available, routing.members, locationFilter, recipientFilter]);
+  }, [tabs, tasks, nowMs, currentUser?.id, assigneeFilter, routing.available, myLocationIds, locationFilter, recipientFilter]);
 
   const assigneeOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -188,6 +221,26 @@ export function TasksPage() {
     );
   }, [tasks]);
 
+  const visibleLocationOptions = useMemo(() => {
+    if (!routing.available) return [];
+    if (canViewAllLocations) return routing.locations;
+    return routing.locations.filter((location) => myLocationIds.has(location.id));
+  }, [canViewAllLocations, myLocationIds, routing.available, routing.locations]);
+
+  useEffect(() => {
+    if (assigneeFilter === "all" || assigneeFilter === "me" || assigneeFilter === "unassigned") return;
+    if (!assigneeOptions.some((option) => option.id === assigneeFilter)) setAssigneeFilter("all");
+  }, [assigneeFilter, assigneeOptions]);
+
+  useEffect(() => {
+    if (locationFilter === "all" || locationFilter === "my") return;
+    if (!visibleLocationOptions.some((option) => option.id === locationFilter)) setLocationFilter("all");
+  }, [locationFilter, visibleLocationOptions]);
+
+  useEffect(() => {
+    if (recipientFilter === "admin" && !canFilterAdminTasks) setRecipientFilter("all");
+  }, [canFilterAdminTasks, recipientFilter]);
+
   // The "Все" tab is intentionally unbounded inside the RLS-visible task set.
   // when the visible list is large.
   const summary = useMemo(() => {
@@ -197,7 +250,7 @@ export function TasksPage() {
 
   if (!currentUser) return null;
 
-  if (taskAccess.checking) {
+  if (taskChecking) {
     return (
       <div className="flex flex-col h-[100dvh] bg-[var(--kub-bg)]">
         <KubHeader
@@ -375,9 +428,9 @@ export function TasksPage() {
                   className="h-9 min-w-0 w-full max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] sm:w-auto sm:max-w-[220px]"
                   style={{ width: "min(100%, 220px)", maxWidth: "100%", minWidth: 0 }}
                 >
-                  <option value="all">Все локации</option>
+                  <option value="all">Все доступные локации</option>
                   <option value="my">Мои локации</option>
-                  {routing.locations.map((location) => (
+                  {visibleLocationOptions.map((location) => (
                     <option key={location.id} value={location.id}>{location.name}</option>
                   ))}
                 </select>
@@ -392,7 +445,7 @@ export function TasksPage() {
                 >
                   <option value="all">Все получатели</option>
                   <option value="staff">Для работников</option>
-                  <option value="admin">Для админов</option>
+                  {canFilterAdminTasks && <option value="admin">Для админов</option>}
                 </select>
               </>
             )}

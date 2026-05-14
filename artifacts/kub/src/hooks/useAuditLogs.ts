@@ -7,6 +7,7 @@ import type {
   AuditAction,
   AuditLog,
   AuditLogWithActor,
+  Chat,
   Profile,
 } from "@/types/database";
 
@@ -81,22 +82,44 @@ export function useAuditLogs(
       }
       const list = (data ?? []) as AuditLog[];
 
-      // Hydrate actor profiles in one round-trip.
-      const actorIds = Array.from(
-        new Set(list.map((r) => r.actor_id).filter((x): x is string => !!x)),
-      );
-      let actorMap: Record<string, Profile> = {};
-      if (actorIds.length > 0) {
+      const actorIds = list.map((r) => r.actor_id).filter((x): x is string => !!x);
+      const targetProfileIds = list
+        .map((row) => getAuditTargetProfileId(row))
+        .filter((x): x is string => !!x);
+      const chatIds = list
+        .map((row) => getAuditTargetChatId(row))
+        .filter((x): x is string => !!x);
+      const profileIds = Array.from(new Set([...actorIds, ...targetProfileIds]));
+      let profileMap: Record<string, Profile> = {};
+      let chatMap: Record<string, Chat> = {};
+      if (profileIds.length > 0) {
         const { data: profs } = await supabase
           .from("profiles")
           .select("*")
-          .in("id", actorIds);
+          .in("id", profileIds);
         if (cancelled) return;
-        for (const p of (profs ?? []) as Profile[]) actorMap[p.id] = p;
+        for (const p of (profs ?? []) as Profile[]) profileMap[p.id] = p;
+      }
+      if (chatIds.length > 0) {
+        const { data: chats } = await supabase
+          .from("chats")
+          .select("*")
+          .in("id", Array.from(new Set(chatIds)));
+        if (cancelled) return;
+        for (const chat of (chats ?? []) as Chat[]) chatMap[chat.id] = chat;
       }
       if (cancelled) return;
       setTotal(count ?? 0);
-      setRows(list.map((r) => ({ ...r, actor: r.actor_id ? actorMap[r.actor_id] ?? null : null })));
+      setRows(list.map((r) => {
+        const targetProfileId = getAuditTargetProfileId(r);
+        const targetChatId = getAuditTargetChatId(r);
+        return {
+          ...r,
+          actor: r.actor_id ? profileMap[r.actor_id] ?? null : null,
+          targetProfile: targetProfileId ? profileMap[targetProfileId] ?? null : null,
+          targetChat: targetChatId ? chatMap[targetChatId] ?? null : null,
+        };
+      }));
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -123,4 +146,20 @@ export function useAuditLogs(
     setPage,
     refresh,
   };
+}
+
+function getAuditTargetProfileId(row: AuditLog): string | null {
+  if (row.target_kind === "profile" && row.target_id) return row.target_id;
+  return jsonString(row.diff, "target_user_id") ?? jsonString(row.diff, "user_id");
+}
+
+function getAuditTargetChatId(row: AuditLog): string | null {
+  if (row.target_kind === "chat" && row.target_id) return row.target_id;
+  return jsonString(row.diff, "chat_id");
+}
+
+function jsonString(payload: unknown, key: string): string | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  const value = (payload as Record<string, unknown>)[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
 }

@@ -127,8 +127,9 @@ export function UsersTab() {
         setTotal(0);
       }
     } else {
-      setRows((data ?? []) as Profile[]);
-      setTotal(count ?? 0);
+      const nextRows = (data ?? []) as Profile[];
+      setRows((current) => profilesSignature(current) === profilesSignature(nextRows) ? current : nextRows);
+      setTotal((current) => current === (count ?? 0) ? current : (count ?? 0));
       rowsLoadedRef.current = true;
     }
     setLoading(false);
@@ -170,19 +171,19 @@ export function UsersTab() {
       ids.forEach((id) => {
         next[id] = { banned: bannedIds.has(id), muted: mutedIds.has(id) };
       });
-      setStateById(next);
+      setStateById((current) => rowStateRecordSignature(current) === rowStateRecordSignature(next) ? current : next);
       if (Array.isArray(emailsRes.data)) {
         const map: Record<string, string> = {};
         for (const r of emailsRes.data as { id: string; email: string }[]) {
           map[r.id] = r.email;
         }
-        setEmails(map);
+        setEmails((current) => stringRecordSignature(current) === stringRecordSignature(map) ? current : map);
       }
       const cmap: Record<string, ContactRow> = {};
       for (const c of (contactsRes.data ?? []) as { user_id: string; phone: string | null; phone_verified: boolean }[]) {
         cmap[c.user_id] = { phone: c.phone, phone_verified: c.phone_verified };
       }
-      setContacts(cmap);
+      setContacts((current) => contactRecordSignature(current) === contactRecordSignature(cmap) ? current : cmap);
     });
     return () => { cancelled = true; };
   }, [rows, supabase]);
@@ -232,8 +233,8 @@ export function UsersTab() {
   }, [routing.members]);
 
   const locationAdmins = useMemo(
-    () => routing.members.filter((member) => ["owner", "admin", "manager"].includes(member.role)),
-    [routing.members],
+    () => routing.members.filter((member) => isAdminLikeLocationRole(getLocationRoleKey(member, dynamicRoleById))),
+    [dynamicRoleById, routing.members],
   );
 
   const dynamicRolesByUser = useMemo(() => {
@@ -282,14 +283,24 @@ export function UsersTab() {
         if (!matchesLocationRole) return false;
       }
       if (primaryAdminFilter && !memberships.some((member) => member.primary_admin_id === primaryAdminFilter)) return false;
+      const locationRoleKeys = memberships.map((member) => getLocationRoleKey(member, dynamicRoleById));
+      const hasWorkerLocation = locationRoleKeys.some(isWorkerLocationRole);
+      const hasAdminLocation = locationRoleKeys.some(isAdminLikeLocationRole);
+      const hasClientGlobalRole = userGlobalRoles.some((role) => role.key === "user" || role.key === "client");
+      const hasAdminGlobalRole = userGlobalRoles.some((role) => ["owner", "tech_admin", "admin"].includes(role.key));
       if (statusFilter === "no_location" && memberships.length > 0) return false;
       if (statusFilter === "no_dynamic_role" && userGlobalRoles.length > 0) return false;
-      if (statusFilter === "client" && user.role !== "user" && !userGlobalRoles.some((role) => role.key === "user")) return false;
-      if (statusFilter === "admin" && user.role !== "admin" && !userGlobalRoles.some((role) => ["owner", "tech_admin", "admin"].includes(role.key))) return false;
+      if (
+        statusFilter === "client" &&
+        (!(hasClientGlobalRole || (user.role === "user" && userGlobalRoles.length === 0)) || hasWorkerLocation || hasAdminLocation)
+      ) return false;
+      if (statusFilter === "worker" && !hasWorkerLocation) return false;
+      if (statusFilter === "location_admin" && !hasAdminLocation) return false;
+      if (statusFilter === "admin" && user.role !== "admin" && !hasAdminGlobalRole) return false;
       if (statusFilter === "tech_admin" && !userGlobalRoles.some((role) => role.key === "tech_admin")) return false;
       return true;
     });
-  }, [dynamicRolesByUser, emails, globalRoleFilter, locationFilter, locationMembersByUser, locationRoleFilter, primaryAdminFilter, queryRaw, rows, statusFilter]);
+  }, [dynamicRoleById, dynamicRolesByUser, emails, globalRoleFilter, locationFilter, locationMembersByUser, locationRoleFilter, primaryAdminFilter, queryRaw, rows, statusFilter]);
 
   const selectedUsers = useMemo(
     () => rows.filter((user) => selectedIds.has(user.id)),
@@ -543,6 +554,8 @@ export function UsersTab() {
             <SelectField label="Статус" value={statusFilter} onChange={setStatusFilter}>
               <option value="">Любой</option>
               <option value="client">Клиент / пользователь</option>
+              <option value="worker">Работники</option>
+              <option value="location_admin">Администраторы локаций</option>
               <option value="admin">Администраторы</option>
               <option value="tech_admin">Тех. администратор</option>
               <option value="no_location">Без локации</option>
@@ -1181,4 +1194,55 @@ function dynamicRoleRank(key: string): number {
   if (key === "manager") return 3;
   if (key === "user") return 4;
   return 9;
+}
+
+function getLocationRoleKey(member: LocationMemberWithProfile, roleById: Map<string, DynamicRole>): string {
+  const dynamicRole = member.role_id ? roleById.get(member.role_id) : null;
+  if (dynamicRole?.scope === "location") return dynamicRole.key;
+  switch (member.role) {
+    case "owner":
+      return "location_owner";
+    case "admin":
+      return "location_admin";
+    case "manager":
+      return "location_manager";
+    case "staff":
+    default:
+      return "location_staff";
+  }
+}
+
+function isAdminLikeLocationRole(roleKey: string): boolean {
+  return roleKey === "location_owner" || roleKey === "location_admin" || roleKey === "location_manager";
+}
+
+function isWorkerLocationRole(roleKey: string): boolean {
+  return roleKey === "location_staff" || roleKey === "location_manager";
+}
+
+function profilesSignature(rows: Profile[]): string {
+  return rows
+    .map((row) => [row.id, row.full_name ?? "", row.username ?? "", row.avatar_url ?? "", row.role, row.online_at ?? "", row.updated_at ?? ""].join(":"))
+    .join("|");
+}
+
+function rowStateRecordSignature(record: Record<string, RowState>): string {
+  return Object.entries(record)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([id, state]) => `${id}:${state.banned ? 1 : 0}:${state.muted ? 1 : 0}`)
+    .join("|");
+}
+
+function stringRecordSignature(record: Record<string, string>): string {
+  return Object.entries(record)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}:${value}`)
+    .join("|");
+}
+
+function contactRecordSignature(record: Record<string, ContactRow>): string {
+  return Object.entries(record)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([id, contact]) => `${id}:${contact.phone ?? ""}:${contact.phone_verified ? 1 : 0}`)
+    .join("|");
 }

@@ -329,3 +329,14 @@ The migration adds `public.group_invites`, scoped RLS, indexes, `group_invite_cr
 - New SQL was not applied automatically. Manual proposal: `.migration-backup/supabase/migrations/20260519_recurring_permissions_and_legacy_roles.sql`.
 - The proposal redefines `_task_recurrence_can_manage` so pause/resume/stop/update require `system.manage`, `tasks.manage_all_locations`, explicit admin-task management for `created_for_admin`, or location-scoped `tasks.manage`. Creator/assignee status alone is no longer enough.
 - The same proposal idempotently backfills `profiles.role` into `user_global_roles` and `location_members.role` into `location_members.role_id`; legacy fields remain fallback compatibility only.
+
+## 2026-05-14 Role Cleanup / Task Filters / Sanctions Proposal
+
+- New SQL was not applied automatically. Manual proposal: `.migration-backup/supabase/migrations/20260520_role_cleanup_task_filters_sanctions.sql`.
+- The proposal removes default `tasks.*` permissions from the global `user` role. A normal client keeps baseline app/chat access and is not treated as a club worker.
+- `location_staff` keeps scoped `locations.view` and `tasks.view`, so a worker can see allowed tasks in their assigned location without a global manager/admin role.
+- `profiles.role` remains fallback/backfill only; legacy `admin`, `manager` and `user` values are idempotently represented in `user_global_roles`.
+- `location_members.role` is idempotently represented in `location_members.role_id`, and `has_location_permission` resolves both dynamic `role_id` and legacy text roles.
+- Location-aware task visibility is tightened around admin-only tasks, staff-visible location tasks and client/no-location access.
+- `role_delete_or_archive` deletes unused custom roles, archives used custom roles with `is_active=false`, and keeps system roles protected.
+- New ban/mute audit entries include target user, chat, reason, expiry/status and sanction ids for friendlier sanctions history.

@@ -81,6 +81,24 @@ function actorName(p?: Profile | null, fallbackId?: string | null): string {
   return "Система";
 }
 
+function profileName(p?: Profile | null, fallbackId?: string | null): string {
+  if (p) return p.full_name ?? (p.username ? `@${p.username}` : p.id.slice(0, 8));
+  return fallbackId ? `пользователю ${fallbackId.slice(0, 8)}...` : "пользователю";
+}
+
+function targetProfileName(row: AuditLogWithActor): string {
+  const fallbackId = jsonStr(row.diff, "target_user_id")
+    ?? jsonStr(row.diff, "user_id")
+    ?? (row.target_kind === "profile" ? row.target_id : null);
+  return profileName(row.targetProfile, fallbackId);
+}
+
+function targetChatName(row: AuditLogWithActor): string | null {
+  const fallbackId = jsonStr(row.diff, "chat_id") ?? (row.target_kind === "chat" ? row.target_id : null);
+  if (row.targetChat) return row.targetChat.name ?? row.targetChat.id.slice(0, 8);
+  return fallbackId ? fallbackId.slice(0, 8) : null;
+}
+
 function jsonStr(payload: Json | null | undefined, key: string): string | null {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
   const v = (payload as Record<string, unknown>)[key];
@@ -100,20 +118,24 @@ function describe(row: AuditLogWithActor): string {
     }
     case "ban_issued": {
       const reason = jsonStr(row.diff, "reason");
+      const target = targetProfileName(row);
       return reason
-        ? `${actor} выдал бан · «${reason}»`
-        : `${actor} выдал бан`;
+        ? `${actor} выдал бан ${target} · «${reason}»`
+        : `${actor} выдал бан ${target}`;
     }
     case "ban_lifted":
-      return `${actor} снял бан`;
+      return `${actor} снял бан с ${targetProfileName(row)}`;
     case "mute_issued": {
       const reason = jsonStr(row.diff, "reason");
+      const target = targetProfileName(row);
+      const chat = targetChatName(row);
+      const scope = chat ? ` в чате «${chat}»` : "";
       return reason
-        ? `${actor} выдал мьют · «${reason}»`
-        : `${actor} выдал мьют`;
+        ? `${actor} выдал мьют ${target}${scope} · «${reason}»`
+        : `${actor} выдал мьют ${target}${scope}`;
     }
     case "mute_lifted":
-      return `${actor} снял мьют`;
+      return `${actor} снял мьют с ${targetProfileName(row)}`;
     case "chat_member_added":
       return `${actor} добавил участника`;
     case "chat_member_role_changed": {
@@ -456,13 +478,17 @@ export function AuditTab() {
                       <KvRow label="Тип объекта" value={r.target_kind} />
                       <KvRow label="ID объекта" value={r.target_id ?? "—"} mono />
                       <KvRow label="Действующее лицо" value={actorName(r.actor, r.actor_id)} />
+                      {r.targetProfile && (
+                        <KvRow label="Пользователь" value={profileName(r.targetProfile, r.target_id)} />
+                      )}
+                      {r.targetChat && (
+                        <KvRow label="Чат" value={r.targetChat.name ?? r.targetChat.id.slice(0, 8)} />
+                      )}
                       <div>
                         <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-cyan)]">
                           Данные изменения
                         </div>
-                        <pre className="font-mono text-[11px] whitespace-pre-wrap break-words rounded-lg p-2 bg-[var(--kub-surface)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-text)]">
-{JSON.stringify(r.diff, null, 2)}
-                        </pre>
+                        <DiffDetails diff={r.diff} />
                       </div>
                     </div>
                   )}
@@ -516,4 +542,80 @@ function KvRow({ label, value, mono }: { label: string; value: string; mono?: bo
       </div>
     </div>
   );
+}
+
+function DiffDetails({ diff }: { diff: Json | null }) {
+  if (!diff || typeof diff !== "object" || Array.isArray(diff)) {
+    return (
+      <div className="rounded-lg p-2 bg-[var(--kub-surface)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)]">
+        Нет дополнительных данных
+      </div>
+    );
+  }
+  const entries = Object.entries(diff)
+    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .map(([key, value]) => ({
+      key,
+      label: diffLabel(key),
+      value: formatDiffValue(key, value),
+      mono: isTechnicalDiffKey(key),
+    }));
+
+  if (entries.length === 0) {
+    return (
+      <div className="rounded-lg p-2 bg-[var(--kub-surface)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)]">
+        Нет дополнительных данных
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg p-2 bg-[var(--kub-surface)] border border-[color:var(--kub-border-color)] space-y-1.5">
+      {entries.map((entry) => (
+        <KvRow key={entry.key} label={entry.label} value={entry.value} mono={entry.mono} />
+      ))}
+    </div>
+  );
+}
+
+function diffLabel(key: string): string {
+  const labels: Record<string, string> = {
+    action: "Действие",
+    ban_id: "Бан",
+    chat_id: "Чат",
+    count: "Количество",
+    expires_at: "Срок",
+    from: "Было",
+    mute_id: "Мьют",
+    reason: "Причина",
+    role_key: "Роль",
+    status: "Статус",
+    target_user_id: "Пользователь",
+    title: "Название",
+    to: "Стало",
+    user_id: "Пользователь",
+  };
+  return labels[key] ?? key.replace(/_/g, " ");
+}
+
+function formatDiffValue(key: string, value: unknown): string {
+  if (key === "expires_at") {
+    return typeof value === "string" && value.length > 0 ? fmtDateTime(value) : "Бессрочно";
+  }
+  if (typeof value === "string") {
+    if (isLikelyUuid(value)) return value.slice(0, 8) + "...";
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map((item) => formatDiffValue(key, item)).join(", ");
+  if (value && typeof value === "object") return "изменено";
+  return "—";
+}
+
+function isTechnicalDiffKey(key: string): boolean {
+  return key.endsWith("_id") || key === "ban_id" || key === "mute_id";
+}
+
+function isLikelyUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

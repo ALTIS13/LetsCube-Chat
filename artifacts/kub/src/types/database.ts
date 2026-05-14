@@ -1374,6 +1374,8 @@ export type AuditAction =
 
 export interface AuditLogWithActor extends AuditLog {
   actor?: Profile | null
+  targetProfile?: Profile | null
+  targetChat?: Chat | null
 }
 
 export interface TaskWithPeople extends Task {

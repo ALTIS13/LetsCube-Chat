@@ -24,6 +24,7 @@ import {
 } from "@/lib/rolePermissions";
 import type { DynamicRole, Permission, Profile, RoleScope } from "@/types/database";
 import { cn } from "@/lib/utils";
+import { requestAppConfirm } from "@/lib/appDialogs";
 
 const ROLE_SCOPES: RoleScope[] = ["global", "location", "chat"];
 const ROLE_KEY_RE = /^[a-z][a-z0-9_]{1,48}$/;
@@ -35,6 +36,8 @@ export function RolesPermissionsTab() {
   const rolesState = useDynamicRoles({ enabled: rolesProbeEnabled, includeAssignments: true });
   const [autoProbeAttempted, setAutoProbeAttempted] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [locationRoleUsage, setLocationRoleUsage] = useState<Map<string, number>>(new Map());
+  const [locationRoleUsageKnown, setLocationRoleUsageKnown] = useState(false);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [createKey, setCreateKey] = useState("");
   const [createName, setCreateName] = useState("");
@@ -55,6 +58,14 @@ export function RolesPermissionsTab() {
     [rolesState.roles, selectedRoleId],
   );
   const selectedRoleIsCritical = selectedRole ? isCriticalRoleKey(selectedRole.key) : false;
+  const selectedRoleUsageCount = useMemo(() => {
+    if (!selectedRole) return 0;
+    return rolesState.userGlobalRoles.filter((assignment) => assignment.role_id === selectedRole.id).length +
+      (locationRoleUsage.get(selectedRole.id) ?? 0);
+  }, [locationRoleUsage, rolesState.userGlobalRoles, selectedRole]);
+  const selectedRoleUsageKnown = selectedRole?.scope === "location" ? locationRoleUsageKnown : true;
+  const selectedRoleDeleteLabel =
+    selectedRoleUsageKnown && selectedRoleUsageCount === 0 ? "Удалить роль" : "Отключить роль";
 
   const globalRoles = useMemo(
     () => rolesState.roles.filter((role) => role.scope === "global" && role.is_active),
@@ -166,6 +177,35 @@ export function RolesPermissionsTab() {
     };
   }, [rolesState.available, supabase]);
 
+  useEffect(() => {
+    if (!rolesState.available) return;
+    let cancelled = false;
+    supabase
+      .from("location_members")
+      .select("role_id")
+      .not("role_id", "is", null)
+      .limit(5000)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          if (import.meta.env.DEV) console.warn("[roles] location role usage failed", error);
+          setLocationRoleUsage(new Map());
+          setLocationRoleUsageKnown(false);
+          return;
+        }
+        const counts = new Map<string, number>();
+        for (const row of (data ?? []) as { role_id: string | null }[]) {
+          if (!row.role_id) continue;
+          counts.set(row.role_id, (counts.get(row.role_id) ?? 0) + 1);
+        }
+        setLocationRoleUsage(counts);
+        setLocationRoleUsageKnown(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rolesState.available, supabase]);
+
   const runAction = useCallback(async (
     key: string,
     fn: () => PromiseLike<{ error: unknown; data?: unknown }>,
@@ -261,10 +301,21 @@ export function RolesPermissionsTab() {
       setError("Недостаточно прав для управления ролями.");
       return;
     }
+    const willDelete = selectedRoleUsageKnown && selectedRoleUsageCount === 0;
+    const confirmed = await requestAppConfirm({
+      title: willDelete ? "Удалить кастомную роль?" : "Отключить кастомную роль?",
+      description: willDelete
+        ? `Роль «${getRoleLabel(selectedRole)}» не назначена пользователям или локациям. После удаления её нельзя будет назначить заново без создания роли.`
+        : `Роль «${getRoleLabel(selectedRole)}» используется. Она будет отключена и перестанет быть доступной для новых назначений.`,
+      confirmLabel: willDelete ? "Удалить" : "Отключить",
+      tone: "danger",
+      icon: willDelete ? "delete" : "lock",
+    });
+    if (!confirmed) return;
     await runAction(
       "archive-role",
       () => supabase.rpc("role_delete_or_archive", { p_role_id: selectedRole.id }),
-      "Роль отключена.",
+      willDelete ? "Роль удалена." : "Роль отключена.",
     );
   };
 
@@ -543,6 +594,15 @@ export function RolesPermissionsTab() {
                     Это критичная роль. Последний владелец или тех. администратор не может быть снят backend-проверкой.
                   </div>
                 )}
+                {!selectedRole.is_system && (
+                  <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/55 px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                    {selectedRoleUsageKnown
+                      ? selectedRoleUsageCount === 0
+                        ? "Кастомная роль нигде не назначена. После применения migration её можно удалить полностью."
+                        : `Роль используется в назначениях: ${selectedRoleUsageCount}. Её можно отключить, чтобы больше не выдавать новые права.`
+                      : "Не удалось проверить все назначения роли. Безопасное действие: отключить роль."}
+                  </div>
+                )}
                 <div className="grid gap-3 sm:grid-cols-2">
                   <KubInput label="Технический ключ" value={selectedRole.key} readOnly />
                   <KubInput label="Название" value={editName} onChange={(event) => setEditName(event.target.value)} disabled={!canManageRoles} />
@@ -577,14 +637,14 @@ export function RolesPermissionsTab() {
                     Сохранить
                   </KubButton>
                   <KubButton
-                    variant="secondary"
+                    variant={selectedRoleUsageKnown && selectedRoleUsageCount === 0 ? "danger" : "secondary"}
                     size="sm"
                     onClick={() => void archiveRole()}
                     loading={saving === "archive-role"}
                     disabled={selectedRole.is_system || !canManageRoles}
-                    leftIcon={<KubIcon name="lock" size={13} />}
+                    leftIcon={<KubIcon name={selectedRoleUsageKnown && selectedRoleUsageCount === 0 ? "delete" : "lock"} size={13} />}
                   >
-                    Отключить
+                    {selectedRoleDeleteLabel}
                   </KubButton>
                 </div>
               </KubPanel>

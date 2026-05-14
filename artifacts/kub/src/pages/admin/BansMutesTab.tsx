@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { KubIcon, KubPanel, type KubIconName } from "@/components/kub";
-import type { Ban, Mute, Profile, Chat } from "@/types/database";
+import type { AuditAction, AuditLogWithActor, Ban, Mute, Profile, Chat } from "@/types/database";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { prefixError } from "@/lib/errors";
 import { showAppAlert } from "@/lib/appDialogs";
+import { useAuditLogs } from "@/hooks/useAuditLogs";
 
 type BanRow = Ban & {
   user?: Pick<Profile, "id" | "full_name" | "username" | "avatar_url"> | null;
@@ -27,6 +28,13 @@ const fmt = (s: string | null) =>
       })
     : "бессрочно";
 
+const SANCTION_AUDIT_ACTIONS: AuditAction[] = [
+  "ban_issued",
+  "ban_lifted",
+  "mute_issued",
+  "mute_lifted",
+];
+
 export function BansMutesTab() {
   const supabase = createClient();
   const [bans, setBans] = useState<BanRow[]>([]);
@@ -36,6 +44,8 @@ export function BansMutesTab() {
   const [bansOpen, setBansOpen] = useState(true);
   const [mutesOpen, setMutesOpen] = useState(true);
   const nowMs = Date.now();
+  const auditFilters = useMemo(() => ({ actions: SANCTION_AUDIT_ACTIONS }), []);
+  const audit = useAuditLogs(auditFilters, 20);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -176,6 +186,109 @@ export function BansMutesTab() {
           })
         )}
       </CollapsibleSection>
+
+      {showExpired && (
+        <>
+          <div className="h-3" />
+          <SanctionsHistory audit={audit} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function SanctionsHistory({ audit }: { audit: ReturnType<typeof useAuditLogs> }) {
+  const totalPages = Math.max(1, Math.ceil(audit.total / audit.pageSize));
+  return (
+    <KubPanel className="overflow-hidden p-0">
+      <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-[color:var(--kub-border-color)]">
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] border border-[color:var(--kub-cyan)]/30">
+          <KubIcon name="audit" size={13} tone="accent" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-bold text-[color:var(--kub-text)]">Журнал санкций</div>
+          <div className="text-[11px] text-[color:var(--kub-muted)]">
+            Последние действия по банам и мьютам, включая снятые и истёкшие ограничения
+          </div>
+        </div>
+        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]">
+          {audit.total}
+        </span>
+      </div>
+
+      {audit.loading ? (
+        <div className="flex items-center justify-center py-10">
+          <KubIcon name="spinner" size={18} tone="accent" label="Загрузка" />
+        </div>
+      ) : audit.rows.length === 0 ? (
+        <Empty text="История санкций пока пуста" />
+      ) : (
+        <div>
+          {audit.rows.map((row) => (
+            <SanctionHistoryRow key={row.id} row={row} />
+          ))}
+        </div>
+      )}
+
+      {!audit.loading && audit.total > audit.pageSize && (
+        <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-[color:var(--kub-border-color)] text-xs text-[color:var(--kub-muted)]">
+          <span>Стр. {audit.page + 1} из {totalPages}</span>
+          <div className="flex items-center gap-1">
+            <button
+              disabled={audit.page === 0}
+              onClick={() => audit.setPage(Math.max(0, audit.page - 1))}
+              className="p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
+              aria-label="Предыдущая страница"
+            >
+              <KubIcon name="chevronLeft" size={16} />
+            </button>
+            <button
+              disabled={audit.page + 1 >= totalPages}
+              onClick={() => audit.setPage(audit.page + 1)}
+              className="p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
+              aria-label="Следующая страница"
+            >
+              <KubIcon name="chevronRight" size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+    </KubPanel>
+  );
+}
+
+function SanctionHistoryRow({ row }: { row: AuditLogWithActor }) {
+  const target = row.targetProfile;
+  const chat = row.targetChat;
+  const actor = row.actor;
+  const reason = auditString(row, "reason");
+  const expires = auditString(row, "expires_at");
+  return (
+    <div className="flex items-start gap-3 px-4 py-3 border-t border-[color:var(--kub-border-color)]">
+      {target ? (
+        <UserAvatar user={target} size="sm" />
+      ) : (
+        <div className="w-9 h-9 rounded-full flex-shrink-0 bg-[var(--kub-surface-2)]" />
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-[color:var(--kub-text)]">
+            {sanctionActionLabel(row.action as AuditAction)}
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]">
+            {fmt(row.created_at)}
+          </span>
+        </div>
+        <div className="text-xs mt-0.5 break-words text-[color:var(--kub-text)]">
+          К пользователю: {profileLabel(target, auditString(row, "target_user_id") ?? auditString(row, "user_id") ?? row.target_id)}
+        </div>
+        <div className="text-[11px] mt-1 break-words text-[color:var(--kub-muted)]">
+          Назначил: {profileLabel(actor, row.actor_id)}
+          {chat && <> · Чат: {chat.name ?? chat.id.slice(0, 8)}</>}
+          {reason && <> · Причина: {reason}</>}
+          {expires && <> · До: {fmt(expires)}</>}
+        </div>
+      </div>
     </div>
   );
 }
@@ -278,4 +391,31 @@ function Empty({ text }: { text: string }) {
       {text}
     </div>
   );
+}
+
+function sanctionActionLabel(action: AuditAction): string {
+  switch (action) {
+    case "ban_issued":
+      return "Выдан бан";
+    case "ban_lifted":
+      return "Бан снят";
+    case "mute_issued":
+      return "Выдан мьют";
+    case "mute_lifted":
+      return "Мьют снят";
+    default:
+      return "Санкция";
+  }
+}
+
+function profileLabel(profile: Pick<Profile, "id" | "full_name" | "username"> | null | undefined, fallbackId?: string | null): string {
+  if (profile) return profile.full_name ?? (profile.username ? `@${profile.username}` : profile.id.slice(0, 8));
+  return fallbackId ? fallbackId.slice(0, 8) : "не указан";
+}
+
+function auditString(row: AuditLogWithActor, key: string): string | null {
+  const payload = row.diff;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  const value = (payload as Record<string, unknown>)[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
 }

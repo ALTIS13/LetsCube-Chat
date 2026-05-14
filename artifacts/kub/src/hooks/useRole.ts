@@ -6,6 +6,21 @@ import { useAppStore } from "@/store/app.store";
 import type { AppRole } from "@/types/database";
 
 const ACCESS_ROLE_KEYS = ["owner", "tech_admin", "admin", "manager"] as const;
+const ADMIN_ACCESS_PERMISSIONS = [
+  "system.manage",
+  "roles.manage",
+  "users.manage",
+  "locations.manage",
+  "audit.view",
+] as const;
+const STAFF_ACCESS_PERMISSIONS = [
+  "users.view",
+  "location_members.view",
+  "tasks.create",
+  "tasks.assign",
+  "tasks.manage",
+  "chats.moderate",
+] as const;
 const accessCache = new Map<string, { keys: Set<string>; promise?: Promise<Set<string>> }>();
 const permissionCache = new Map<string, { keys: Set<string>; promise?: Promise<Set<string>> }>();
 
@@ -36,14 +51,21 @@ export function useIsManagerOrAdmin(): boolean {
 export function useRoleAccess(): { isAdmin: boolean; isStaff: boolean; checking: boolean } {
   const legacyRole = useRole();
   const dynamic = useCurrentGlobalRoleAccess(true);
+  const adminPermissions = usePermissionAccess(ADMIN_ACCESS_PERMISSIONS);
+  const staffPermissions = usePermissionAccess(STAFF_ACCESS_PERMISSIONS);
   const dynamicRoleKeys = dynamic.keys;
   const dynamicIsAdmin =
     dynamicRoleKeys.has("owner") ||
     dynamicRoleKeys.has("tech_admin") ||
     dynamicRoleKeys.has("admin");
-  const isAdmin = legacyRole === "admin" || dynamicIsAdmin;
-  const isStaff = isAdmin || legacyRole === "manager" || dynamicRoleKeys.has("manager");
-  return { isAdmin, isStaff, checking: dynamic.checking };
+  const dynamicIsStaff = dynamicRoleKeys.has("manager");
+  const isAdmin = legacyRole === "admin" || dynamicIsAdmin || adminPermissions.hasAnyPermission(ADMIN_ACCESS_PERMISSIONS);
+  const isStaff =
+    isAdmin ||
+    legacyRole === "manager" ||
+    dynamicIsStaff ||
+    staffPermissions.hasAnyPermission(STAFF_ACCESS_PERMISSIONS);
+  return { isAdmin, isStaff, checking: dynamic.checking || adminPermissions.checking || staffPermissions.checking };
 }
 
 export function usePermissionAccess(
@@ -151,6 +173,100 @@ export function usePermissionAccess(
       cancelled = true;
     };
   }, [currentUserId, enabled, keySignature, legacyRole, locationId, locationOnly, supabase]);
+
+  return {
+    checking: state.checking,
+    permissionKeys: state.keys,
+    hasPermission: (permissionKey: string) => state.keys.has(permissionKey),
+    hasAnyPermission: (keys: readonly string[]) => keys.some((permissionKey) => state.keys.has(permissionKey)),
+  };
+}
+
+export function useAnyLocationPermissionAccess(
+  permissionKeys: readonly string[],
+  locationIds: readonly string[],
+  options: { enabled?: boolean } = {},
+): {
+  checking: boolean;
+  permissionKeys: Set<string>;
+  hasPermission: (permissionKey: string) => boolean;
+  hasAnyPermission: (keys: readonly string[]) => boolean;
+} {
+  const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
+  const supabase = useMemo(() => createClient(), []);
+  const enabled = options.enabled ?? true;
+  const keySignature = useMemo(
+    () => Array.from(new Set(permissionKeys)).sort().join(","),
+    [permissionKeys],
+  );
+  const locationSignature = useMemo(
+    () => Array.from(new Set(locationIds.filter(Boolean))).sort().join(","),
+    [locationIds],
+  );
+  const [state, setState] = useState<{ keys: Set<string>; checking: boolean }>({
+    keys: new Set<string>(),
+    checking: Boolean(enabled && currentUserId && keySignature && locationSignature),
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    const keys = keySignature ? keySignature.split(",").filter(Boolean) : [];
+    const locations = locationSignature ? locationSignature.split(",").filter(Boolean) : [];
+
+    if (!enabled || !currentUserId || keys.length === 0 || locations.length === 0) {
+      setState({ keys: new Set<string>(), checking: false });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const cacheKey = `${currentUserId}:any-location:${locationSignature}:${keySignature}`;
+    const cached = permissionCache.get(cacheKey);
+    if (cached && !cached.promise) {
+      setState({ keys: new Set(cached.keys), checking: false });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setState((prev) => ({ keys: prev.keys, checking: true }));
+
+    const lookup =
+      cached?.promise ??
+      Promise.all(
+        keys.map(async (permissionKey) => {
+          for (const locationId of locations) {
+            const { data, error } = await supabase.rpc("has_location_permission", {
+              p_user_id: currentUserId,
+              p_location_id: locationId,
+              p_permission_key: permissionKey,
+            });
+            if (error) throw error;
+            if (data) return permissionKey;
+          }
+          return null;
+        }),
+      ).then((results) =>
+        new Set<string>(results.filter((permissionKey): permissionKey is string => Boolean(permissionKey))),
+      );
+
+    permissionCache.set(cacheKey, { keys: cached?.keys ?? new Set<string>(), promise: lookup });
+
+    lookup
+      .then((results) => {
+        permissionCache.set(cacheKey, { keys: results });
+        if (!cancelled) setState({ keys: new Set(results), checking: false });
+      })
+      .catch((error) => {
+        if (import.meta.env.DEV) console.warn("[location-permission-access] lookup failed", error);
+        permissionCache.set(cacheKey, { keys: new Set<string>() });
+        if (!cancelled) setState({ keys: new Set<string>(), checking: false });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId, enabled, keySignature, locationSignature, supabase]);
 
   return {
     checking: state.checking,
@@ -268,5 +384,5 @@ function legacyRoleHasPermission(role: AppRole | null, permissionKey: string): b
       "users.view",
     ].includes(permissionKey);
   }
-  return ["chats.invite", "tasks.view"].includes(permissionKey);
+  return ["chats.invite"].includes(permissionKey);
 }

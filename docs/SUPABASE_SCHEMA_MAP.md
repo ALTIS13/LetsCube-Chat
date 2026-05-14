@@ -483,3 +483,31 @@ The proposal also documents the legacy-role cleanup path:
 - `profiles.role` remains a fallback source, not the primary UI model.
 - Existing `profiles.role = admin/manager/user` users are idempotently represented in `user_global_roles`.
 - Existing `location_members.role` values are idempotently represented in `location_members.role_id`.
+
+## 2026-05-14 Role Cleanup / Task Visibility Proposal
+
+Manual proposal: `.migration-backup/supabase/migrations/20260520_role_cleanup_task_filters_sanctions.sql`.
+
+Proposed permission shape:
+
+- Global `user`: chat/profile baseline only; no default `tasks.*` permissions.
+- `location_staff`: `locations.view` + `tasks.view`, scoped to its `location_members` row.
+- `location_admin` / `location_manager`: retain location-scoped task/member management through `has_location_permission`.
+- `owner` / `tech_admin` / dynamic admin: retain global management through `has_permission`.
+
+Proposed helper changes:
+
+- `_legacy_role_has_permission`: legacy `user` no longer implies `tasks.view`.
+- `has_location_permission`: resolves an active dynamic `location_members.role_id`; if missing, maps legacy text role to the matching dynamic location role key.
+- `_task_visible_to_current_user_v3`: global all-location managers see all; assignee/creator still see their task; admin-only tasks require route-admin/global/location admin-task permission; location staff see only staff-visible tasks in their own location; clients without location task role do not receive location task access.
+- `_task_recurrence_can_manage`: staff/client/assignee cannot pause/resume/stop recurrence without explicit task-management permission.
+
+Proposed role lifecycle:
+
+- `role_delete_or_archive(role_id)` deletes unused custom roles.
+- Used custom roles are archived by setting `is_active=false`.
+- System roles remain protected.
+
+Proposed sanctions audit payload:
+
+- New ban/mute audit rows include `target_user_id`, optional `chat_id`, `reason`, `expires_at`, `status`, and sanction id.
