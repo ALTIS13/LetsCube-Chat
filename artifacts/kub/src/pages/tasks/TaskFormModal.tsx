@@ -11,7 +11,7 @@ import {
   useRecurringTasksAvailability,
   type RecurrenceCreateInput,
 } from "@/hooks/useRecurringTasks";
-import { useTaskRouting, useTaskRoutingEnabledPreference } from "@/hooks/useTaskRouting";
+import { useTaskRouting } from "@/hooks/useTaskRouting";
 import type {
   ChatMember,
   ChatWithLastMessage,
@@ -67,8 +67,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
   const supabase = createClient();
   const isEdit = !!task;
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
-  const [routingEnabled] = useTaskRoutingEnabledPreference();
-  const routing = useTaskRouting({ enabled: routingEnabled, includeMembers: true });
+  const routing = useTaskRouting({ enabled: true, includeMembers: true });
   const recurring = useRecurringTasksAvailability(true);
 
   // ── Form state, prefilled in edit mode ─────────────────────────────────

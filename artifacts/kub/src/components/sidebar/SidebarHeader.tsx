@@ -5,6 +5,7 @@ import { useLocation } from "wouter";
 import { useAppStore } from "@/store/app.store";
 import { useSignOut } from "@/hooks/useUser";
 import { useIsManagerOrAdmin } from "@/hooks/useRole";
+import { useTaskAccessGate } from "@/hooks/useTaskAccess";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { KubIcon, KubLogo, KubTooltip, type KubIconName } from "@/components/kub";
 import { SettingsModal } from "./SettingsModal";
@@ -30,6 +31,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
   // один раз — в `App.tsx`.
   const signOut = useSignOut();
   const isStaff = useIsManagerOrAdmin();
+  const { canAccessTasks } = useTaskAccessGate();
   const [, setLocation] = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -102,7 +104,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
   const menuItems: MenuItem[] = [
     { icon: "group",    label: "Новая группа", action: () => { setMenuOpen(false); setShowNewGroup(true); } },
     { icon: "bookmark", label: "Избранное",    action: openSavedMessages },
-    ...(isStaff
+    ...(canAccessTasks
       ? [{ icon: "tasks" as const, label: "Задачи", accent: true, action: () => { setMenuOpen(false); setLocation("/tasks"); } } satisfies MenuItem]
       : []),
     { icon: "settings", label: "Настройки",    action: () => { setMenuOpen(false); setShowSettings(true); } },

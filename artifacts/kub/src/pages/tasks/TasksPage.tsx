@@ -4,7 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useAppStore } from "@/store/app.store";
 import { useAnyLocationPermissionAccess, usePermissionAccess } from "@/hooks/useRole";
-import { useTaskRouting, useTaskRoutingEnabledPreference } from "@/hooks/useTaskRouting";
+import { useTaskRouting } from "@/hooks/useTaskRouting";
+import {
+  TASK_ACCESS_PERMISSION_KEYS,
+  TASK_ADMIN_VIEW_PERMISSION_KEYS,
+  TASK_CREATE_PERMISSION_KEYS,
+  TASK_VIEW_PERMISSION_KEYS,
+  getUserTaskLocationIds,
+} from "@/hooks/useTaskAccess";
 import { useTasks, type TasksFilter } from "@/hooks/useTasks";
 import {
   KubButton,
@@ -38,39 +45,6 @@ type AssigneeFilter = "all" | "me" | "unassigned" | string;
 type LocationFilter = "all" | "my" | string;
 type RecipientFilter = "all" | "admin" | "staff";
 
-const TASK_ACCESS_KEYS = [
-  "tasks.view",
-  "tasks.create",
-  "tasks.assign",
-  "tasks.manage",
-  "tasks.view_admin_tasks",
-  "tasks.manage_admin_tasks",
-  "tasks.view_all_locations",
-  "tasks.manage_all_locations",
-] as const;
-
-const TASK_VIEW_KEYS = [
-  "tasks.view",
-  "tasks.view_admin_tasks",
-  "tasks.view_all_locations",
-  "tasks.manage",
-  "tasks.manage_all_locations",
-] as const;
-
-const TASK_CREATE_KEYS = [
-  "tasks.create",
-  "tasks.manage",
-  "tasks.manage_admin_tasks",
-  "tasks.manage_all_locations",
-] as const;
-
-const TASK_ADMIN_VIEW_KEYS = [
-  "tasks.view_admin_tasks",
-  "tasks.manage_admin_tasks",
-  "tasks.view_all_locations",
-  "tasks.manage_all_locations",
-] as const;
-
 const STAFF_TABS: Tab[] = [
   { id: "mine", label: "Мои", filter: { mine: "assigned" } },
   { id: "available", label: "Доступные",
@@ -98,7 +72,7 @@ const STAFF_TABS: Tab[] = [
 export function TasksPage() {
   const [location, setLocation] = useLocation();
   const currentUser = useAppStore((s) => s.currentUser);
-  const taskAccess = usePermissionAccess(TASK_ACCESS_KEYS);
+  const taskAccess = usePermissionAccess(TASK_ACCESS_PERMISSION_KEYS);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<TaskViewMode>(() => {
@@ -109,32 +83,31 @@ export function TasksPage() {
   const [assigneeFilter, setAssigneeFilter] = useState<AssigneeFilter>("all");
   const [locationFilter, setLocationFilter] = useState<LocationFilter>("all");
   const [recipientFilter, setRecipientFilter] = useState<RecipientFilter>("all");
-  const [routingEnabled] = useTaskRoutingEnabledPreference();
-  const routing = useTaskRouting({ enabled: Boolean(currentUser && routingEnabled), includeMembers: true });
+  const routing = useTaskRouting({ enabled: Boolean(currentUser), includeMembers: true });
   const myLocationIds = useMemo(
-    () => currentUser?.id ? getMyLocationIds(routing.members, currentUser.id) : new Set<string>(),
+    () => new Set(currentUser?.id ? getUserTaskLocationIds(routing.members, currentUser.id) : []),
     [currentUser?.id, routing.members],
   );
   const myLocationIdList = useMemo(
     () => Array.from(myLocationIds).sort(),
     [myLocationIds],
   );
-  const locationTaskAccess = useAnyLocationPermissionAccess(TASK_ACCESS_KEYS, myLocationIdList, {
+  const locationTaskAccess = useAnyLocationPermissionAccess(TASK_ACCESS_PERMISSION_KEYS, myLocationIdList, {
     enabled: routing.available && myLocationIdList.length > 0,
   });
   const canViewTasks =
-    taskAccess.hasAnyPermission(TASK_VIEW_KEYS) ||
-    locationTaskAccess.hasAnyPermission(TASK_VIEW_KEYS);
+    taskAccess.hasAnyPermission(TASK_VIEW_PERMISSION_KEYS) ||
+    locationTaskAccess.hasAnyPermission(TASK_VIEW_PERMISSION_KEYS);
   const canCreateTasks =
-    taskAccess.hasAnyPermission(TASK_CREATE_KEYS) ||
-    locationTaskAccess.hasAnyPermission(TASK_CREATE_KEYS);
-  const canViewAllLocations = taskAccess.hasAnyPermission(["tasks.view_all_locations", "tasks.manage_all_locations"]);
+    taskAccess.hasAnyPermission(TASK_CREATE_PERMISSION_KEYS) ||
+    locationTaskAccess.hasAnyPermission(TASK_CREATE_PERMISSION_KEYS);
+  const canViewAllLocations = taskAccess.hasAnyPermission(["system.manage", "tasks.view_all_locations", "tasks.manage_all_locations"]);
   const canFilterAdminTasks =
-    taskAccess.hasAnyPermission(TASK_ADMIN_VIEW_KEYS) ||
-    locationTaskAccess.hasAnyPermission(TASK_ADMIN_VIEW_KEYS);
+    taskAccess.hasAnyPermission(TASK_ADMIN_VIEW_PERMISSION_KEYS) ||
+    locationTaskAccess.hasAnyPermission(TASK_ADMIN_VIEW_PERMISSION_KEYS);
   const taskChecking =
     taskAccess.checking ||
-    (routingEnabled && !routing.checked) ||
+    (Boolean(currentUser) && routing.loading && !routing.checked) ||
     locationTaskAccess.checking;
 
   const tabs = STAFF_TABS;
@@ -672,13 +645,6 @@ function applyClientFilters(
 
 function normalizeSearch(value: string): string {
   return value.trim().toLocaleLowerCase("ru-RU");
-}
-
-function getMyLocationIds(
-  members: Array<{ user_id: string; location_id: string }>,
-  userId: string,
-): Set<string> {
-  return new Set(members.filter((member) => member.user_id === userId).map((member) => member.location_id));
 }
 
 function isAdminRoutedTask(task: TaskWithPeople): boolean {

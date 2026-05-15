@@ -64,11 +64,12 @@ export function mapLocationRoutingError(error: unknown): string {
 }
 
 export function getLocationRoutingEnabled(): boolean {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined") return true;
   try {
-    return window.localStorage.getItem(LOCATION_ROUTING_STORAGE_KEY) === "1";
+    const stored = window.localStorage.getItem(LOCATION_ROUTING_STORAGE_KEY);
+    return stored !== "0" && stored !== "false";
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -76,7 +77,7 @@ export function setLocationRoutingEnabled(enabled: boolean): void {
   if (typeof window === "undefined") return;
   try {
     if (enabled) window.localStorage.setItem(LOCATION_ROUTING_STORAGE_KEY, "1");
-    else window.localStorage.removeItem(LOCATION_ROUTING_STORAGE_KEY);
+    else window.localStorage.setItem(LOCATION_ROUTING_STORAGE_KEY, "0");
     window.dispatchEvent(new Event(LOCATION_ROUTING_STORAGE_EVENT));
   } catch {
     // LocalStorage may be unavailable in hardened browser contexts.

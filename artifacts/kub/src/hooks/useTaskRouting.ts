@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
+import { clearRoleAccessCache } from "@/hooks/useRole";
 import {
   LOCATION_ROUTING_REQUIRED_MESSAGE,
   LOCATION_ROUTING_STORAGE_EVENT,
@@ -125,11 +126,15 @@ export function useTaskRouting(options: UseTaskRoutingOptions = {}): TaskRouting
         void load();
       }, 250);
     };
+    const handleMembershipChange = (payload: { new?: { user_id?: string }; old?: { user_id?: string } }) => {
+      clearRoleAccessCache(payload.new?.user_id ?? payload.old?.user_id);
+      debounced();
+    };
     const channelName = `${channelIdRef.current}:locations`;
     const channel = rt
       .channel(channelName)
       .on("postgres_changes", { event: "*", schema: "public", table: "locations" }, debounced)
-      .on("postgres_changes", { event: "*", schema: "public", table: "location_members" }, debounced)
+      .on("postgres_changes", { event: "*", schema: "public", table: "location_members" }, handleMembershipChange)
       .subscribe((status: string) => {
         if (import.meta.env.DEV) console.debug("[task-routing]", status);
       });
