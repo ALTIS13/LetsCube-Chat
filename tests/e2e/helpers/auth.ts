@@ -8,6 +8,8 @@ export type QaCredentials = {
   password: string;
 };
 
+const AUTH_STATE_PATH = path.join(process.cwd(), "output", "e2e-auth-state.json");
+
 export function loadQaCredentials(): QaCredentials | null {
   const envFile = process.env.KUB_QA_ENV_FILE || path.join(os.homedir(), ".kub-messenger-qa.env");
   const values = new Map<string, string>();
@@ -40,13 +42,52 @@ export async function gotoOrSkip(page: Page, pathName: string) {
 }
 
 export async function loginIfNeeded(page: Page, credentials: QaCredentials) {
+  await restoreAuthState(page);
+
   const emailInput = page.locator('input[type="email"]').first();
   if (await emailInput.isVisible().catch(() => false)) {
-    await emailInput.fill(credentials.email);
-    await page.locator('input[type="password"]').first().fill(credentials.password);
-    await page.locator('button[type="submit"]').first().click();
+    const passwordInput = page.locator('input[type="password"]').first();
+    const submit = page.locator('button[type="submit"]').first();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if ((await page.locator('input[type="password"]').count()) === 0) break;
+      await expect(emailInput).toBeEditable();
+      await emailInput.fill(credentials.email);
+      await expect(passwordInput).toBeEditable();
+      await passwordInput.fill(credentials.password);
+      await expect(submit).toBeEnabled();
+      await submit.click();
+      try {
+        await expect(page.locator('input[type="password"]')).toHaveCount(0, { timeout: 10_000 });
+        await page.waitForTimeout(1_000);
+        if ((await page.locator('input[type="password"]').count()) === 0) break;
+      } catch (error) {
+        if (attempt === 2) throw error;
+      }
+    }
   }
 
   await expect(page.locator("body")).toBeVisible();
   await expect(page.locator('input[type="password"]')).toHaveCount(0, { timeout: 20_000 });
+  await saveAuthState(page);
+}
+
+async function restoreAuthState(page: Page) {
+  if (!fs.existsSync(AUTH_STATE_PATH)) return;
+  const origin = new URL(page.url()).origin;
+  const raw = JSON.parse(fs.readFileSync(AUTH_STATE_PATH, "utf8")) as {
+    origins?: { origin: string; localStorage?: { name: string; value: string }[] }[];
+  };
+  const state = raw.origins?.find((item) => item.origin === origin);
+  if (!state?.localStorage?.length) return;
+  await page.evaluate((entries) => {
+    for (const entry of entries) {
+      window.localStorage.setItem(entry.name, entry.value);
+    }
+  }, state.localStorage);
+  await page.reload({ waitUntil: "domcontentloaded" });
+}
+
+async function saveAuthState(page: Page) {
+  fs.mkdirSync(path.dirname(AUTH_STATE_PATH), { recursive: true });
+  await page.context().storageState({ path: AUTH_STATE_PATH });
 }

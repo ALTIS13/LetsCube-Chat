@@ -4,9 +4,10 @@ import { useLocation } from "wouter";
 import { useAppStore } from "@/store/app.store";
 import { KubIcon, type KubIconName } from "@/components/kub";
 import { useIsManagerOrAdmin } from "@/hooks/useRole";
+import { useTaskAccessGate } from "@/hooks/useTaskAccess";
 import { cn } from "@/lib/utils";
 
-type SectionId = "chats" | "search" | "folders" | "profile" | "admin";
+type SectionId = "chats" | "search" | "folders" | "profile" | "tasks" | "admin";
 
 interface Tab {
   id: SectionId;
@@ -17,18 +18,25 @@ interface Tab {
 export function BottomNav() {
   const [location, setLocation] = useLocation();
   const isStaff = useIsManagerOrAdmin();
+  const { canAccessTasks } = useTaskAccessGate();
   const { mobileSection, setMobileSection } = useAppStore();
   const isOnAdminRoute = location.startsWith("/admin");
+  const isOnTasksRoute = location.startsWith("/tasks");
 
   const tabs: Tab[] = [
     { id: "chats",   label: "Чаты",    icon: "chatBubble" },
     { id: "search",  label: "Поиск",   icon: "search" },
     { id: "folders", label: "Папки",   icon: "folderAdd" },
     { id: "profile", label: "Профиль", icon: "user" },
+    ...(canAccessTasks ? [{ id: "tasks" as const, label: "Задачи", icon: "tasks" as KubIconName }] : []),
     ...(isStaff ? [{ id: "admin" as const, label: "Админка", icon: "shield" as KubIconName }] : []),
   ];
 
   const handleTab = (id: SectionId) => {
+    if (id === "tasks") {
+      setLocation("/tasks");
+      return;
+    }
     if (id === "admin") {
       setLocation("/admin");
       return;
@@ -43,7 +51,12 @@ export function BottomNav() {
       style={{ height: "56px" }}
     >
       {tabs.map(({ id, label, icon }) => {
-        const isActive = id === "admin" ? isOnAdminRoute : mobileSection === id;
+        const isActive =
+          id === "admin"
+            ? isOnAdminRoute
+            : id === "tasks"
+              ? isOnTasksRoute
+              : mobileSection === id;
         return (
           <button
             key={id}

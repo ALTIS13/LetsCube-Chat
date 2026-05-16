@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { clearRoleAccessCache } from "@/hooks/useRole";
+import { useAppStore } from "@/store/app.store";
 import {
   LOCATION_ROUTING_REQUIRED_MESSAGE,
   LOCATION_ROUTING_STORAGE_EVENT,
@@ -39,6 +40,7 @@ export function useTaskRouting(options: UseTaskRoutingOptions = {}): TaskRouting
   const includeMembers = options.includeMembers ?? true;
   const supabase = useMemo(() => createClient(), []);
   const rt = useMemo(() => getRealtimeClient(), []);
+  const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
   const channelIdRef = useRef(`task-routing:${Math.random().toString(36).slice(2)}`);
   const [available, setAvailable] = useState(false);
   const [checked, setChecked] = useState(false);
@@ -77,13 +79,21 @@ export function useTaskRouting(options: UseTaskRoutingOptions = {}): TaskRouting
           )
           .order("created_at", { ascending: false })
       : null;
+    const ownMemberQuery = includeMembers && currentUserId
+      ? supabase
+          .from("location_members")
+          .select("*")
+          .eq("user_id", currentUserId)
+      : null;
 
-    const [locationRes, memberRes] = await Promise.all([
+    const [locationRes, memberRes, ownMemberRes] = await Promise.all([
       locationQuery,
       memberQuery ?? Promise.resolve({ data: [], error: null }),
+      ownMemberQuery ?? Promise.resolve({ data: [], error: null }),
     ]);
 
-    const firstError = locationRes.error ?? memberRes.error;
+    const memberError = memberRes.error && ownMemberRes.error ? memberRes.error : null;
+    const firstError = locationRes.error ?? memberError;
     if (firstError) {
       if (isLocationRoutingMissingError(firstError)) {
         setAvailable(false);
@@ -100,10 +110,15 @@ export function useTaskRouting(options: UseTaskRoutingOptions = {}): TaskRouting
       return;
     }
 
+    const mergedMembers = mergeLocationMembers(
+      (memberRes.error ? [] : (memberRes.data ?? [])) as LocationMemberWithProfile[],
+      (ownMemberRes.error ? [] : (ownMemberRes.data ?? [])) as LocationMember[],
+    );
+
     setAvailable(true);
     setLocations((locationRes.data ?? []) as Location[]);
     setMembers(
-      ((memberRes.data ?? []) as LocationMemberWithProfile[]).map((member) => ({
+      mergedMembers.map((member) => ({
         ...member,
         profile: member.profile ?? null,
         primary_admin: member.primary_admin ?? null,
@@ -111,7 +126,7 @@ export function useTaskRouting(options: UseTaskRoutingOptions = {}): TaskRouting
     );
     setChecked(true);
     setLoading(false);
-  }, [enabled, includeMembers, supabase]);
+  }, [currentUserId, enabled, includeMembers, supabase]);
 
   useEffect(() => {
     void load();
@@ -147,6 +162,29 @@ export function useTaskRouting(options: UseTaskRoutingOptions = {}): TaskRouting
   }, [enabled, available, rt, load]);
 
   return { available, checked, loading, error, locations, members, refetch: load };
+}
+
+function mergeLocationMembers(
+  members: LocationMemberWithProfile[],
+  ownMembers: LocationMember[],
+): LocationMemberWithProfile[] {
+  const map = new Map<string, LocationMemberWithProfile>();
+  for (const member of members) {
+    map.set(locationMemberKey(member), member);
+  }
+  for (const member of ownMembers) {
+    const key = locationMemberKey(member);
+    map.set(key, {
+      ...member,
+      profile: map.get(key)?.profile ?? null,
+      primary_admin: map.get(key)?.primary_admin ?? null,
+    });
+  }
+  return Array.from(map.values());
+}
+
+function locationMemberKey(member: Pick<LocationMember, "user_id" | "location_id">): string {
+  return `${member.user_id}:${member.location_id}`;
 }
 
 export function useTaskRoutingEnabledPreference(): [boolean, (enabled: boolean) => void] {
