@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
+import { BulkSelectControl } from "@/components/ui/BulkSelectControl";
 import { clearRoleAccessCache, useIsAdmin } from "@/hooks/useRole";
 import { useTaskRouting } from "@/hooks/useTaskRouting";
 import { KubBadge, KubButton, KubIcon, KubModal, KubPanel } from "@/components/kub";
@@ -574,14 +575,32 @@ export function UsersTab() {
       )}
 
       {isAdmin && selectedUsers.length > 0 && (
-        <KubPanel className="sticky top-2 z-10 space-y-3 border-[color:var(--kub-cyan)]/40 bg-[var(--kub-surface)]/95 backdrop-blur">
+        <KubPanel className="sticky top-2 z-10 space-y-3 border-[color:var(--kub-cyan)]/45 bg-[color-mix(in_srgb,var(--kub-surface)_92%,var(--kub-cyan)_8%)]/95 shadow-lg backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-sm font-semibold text-[color:var(--kub-text)]">
-              Выбрано: {selectedUsers.length}
+            <div className="flex min-w-0 items-center gap-2">
+              <BulkSelectControl
+                checked={allVisibleSelected}
+                onChange={() => toggleVisibleSelection()}
+                label="Выбрать видимых пользователей"
+                className="h-7 w-7 rounded-lg"
+              />
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-[color:var(--kub-text)]">
+                  Выбрано: {selectedUsers.length}
+                </div>
+                <div className="truncate text-[11px] text-[color:var(--kub-muted)]">
+                  Пакетно назначайте роли и локации без сброса фильтров.
+                </div>
+              </div>
             </div>
-            <KubButton type="button" variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
-              Очистить выбор
-            </KubButton>
+            <div className="flex flex-wrap items-center gap-2">
+              <KubButton type="button" variant="secondary" size="sm" onClick={toggleVisibleSelection}>
+                {allVisibleSelected ? "Снять видимые" : "Выбрать видимые"}
+              </KubButton>
+              <KubButton type="button" variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                Очистить
+              </KubButton>
+            </div>
           </div>
           <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
             <SelectField label="Глобальная роль" value={bulkGlobalRoleId} onChange={setBulkGlobalRoleId} disabled={!dynamicRoles.available}>
@@ -656,6 +675,7 @@ export function UsersTab() {
             {filteredRows.map((u, i) => {
               const st = stateById[u.id] ?? { banned: false, muted: false };
               const isSelf = u.id === currentUser?.id;
+              const isSelected = selectedIds.has(u.id);
               const email = emails[u.id];
               const canManageSanctions = canSanction(u);
               const dynamicBadges = dynamicRolesByUser.get(u.id) ?? [];
@@ -701,18 +721,16 @@ export function UsersTab() {
                     "sm:rounded-none sm:bg-transparent sm:border-0 sm:mb-0",
                     i > 0 ? "sm:border-t sm:border-[color:var(--kub-border-color)]" : "",
                     "hover:bg-[var(--kub-surface-3)] sm:hover:bg-[var(--kub-surface-2)]",
+                    isSelected && "border-[color:var(--kub-cyan)]/65 bg-[color-mix(in_srgb,var(--kub-cyan)_8%,var(--kub-surface))] shadow-[0_0_0_1px_color-mix(in_srgb,var(--kub-cyan)_24%,transparent)] sm:bg-[color-mix(in_srgb,var(--kub-cyan)_8%,transparent)]",
                   )}
                 >
                   {isAdmin && (
-                    <label className="mt-1 inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] sm:mt-0">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 accent-[var(--kub-cyan)]"
-                        checked={selectedIds.has(u.id)}
-                        onChange={() => toggleUserSelection(u.id)}
-                        aria-label="Выбрать пользователя"
-                      />
-                    </label>
+                    <BulkSelectControl
+                      checked={isSelected}
+                      onChange={() => toggleUserSelection(u.id)}
+                      label={`Выбрать пользователя: ${u.full_name ?? u.username ?? "без имени"}`}
+                      className="mt-1 sm:mt-0"
+                    />
                   )}
                   <div className="flex-shrink-0 mt-0.5 sm:mt-0">
                     <UserAvatar user={u} size="sm" />

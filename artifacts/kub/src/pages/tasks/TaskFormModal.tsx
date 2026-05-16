@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { KubButton, KubIcon, KubInput, KubModal } from "@/components/kub";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
 import { getChatDisplayInfo, getChatSecondaryLine } from "@/lib/chatDisplay";
+import { usePermissionAccess } from "@/hooks/useRole";
 import { useAppStore } from "@/store/app.store";
 import {
   createTaskRecurrence,
@@ -47,6 +48,12 @@ import {
 type ChatOption = ChatWithLastMessage;
 type RecurrenceEndMode = "never" | "date" | "count";
 
+const ADMIN_TASK_CONTROL_PERMISSION_KEYS = [
+  "system.manage",
+  "tasks.manage_admin_tasks",
+  "tasks.manage_all_locations",
+] as const;
+
 interface TaskFormModalProps {
   /**
    * When provided, the modal renders in EDIT mode and calls `task_update`
@@ -69,6 +76,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
   const routing = useTaskRouting({ enabled: true, includeMembers: true });
   const recurring = useRecurringTasksAvailability(true);
+  const globalAdminTaskAccess = usePermissionAccess(ADMIN_TASK_CONTROL_PERMISSION_KEYS);
 
   // ── Form state, prefilled in edit mode ─────────────────────────────────
   const [title, setTitle] = useState(task?.title ?? "");
@@ -107,6 +115,11 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createdTaskId, setCreatedTaskId] = useState<string | null>(null);
+  const locationAdminTaskAccess = usePermissionAccess(ADMIN_TASK_CONTROL_PERMISSION_KEYS, {
+    locationId: locationId || null,
+    locationOnly: true,
+    enabled: Boolean(locationId),
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -171,6 +184,16 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
     [routing.locations, locationId],
   );
 
+  const canUseAdminTaskControls =
+    Boolean(task?.created_for_admin) ||
+    globalAdminTaskAccess.hasAnyPermission(ADMIN_TASK_CONTROL_PERMISSION_KEYS) ||
+    locationAdminTaskAccess.hasAnyPermission(ADMIN_TASK_CONTROL_PERMISSION_KEYS);
+
+  const targetRoleOptions = useMemo(
+    () => (Object.keys(TASK_TARGET_ROLE_LABEL) as TaskTargetRole[]).filter((role) => canUseAdminTaskControls || role === "staff"),
+    [canUseAdminTaskControls],
+  );
+
   const recurrenceSummary = useMemo(
     () => formatRecurrenceSummary(
       recurrenceFrequency,
@@ -180,6 +203,23 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
     ),
     [recurrenceFrequency, recurrenceInterval, recurrenceWeekdays, recurrenceMonthday],
   );
+
+  useEffect(() => {
+    if (!routeAdminId) return;
+    if (!selectedLocationAdmins.some((member) => member.user_id === routeAdminId)) {
+      setRouteAdminId("");
+    }
+  }, [routeAdminId, selectedLocationAdmins]);
+
+  useEffect(() => {
+    if (!createdForAdmin) return;
+    if (!canUseAdminTaskControls && !isEdit) {
+      setCreatedForAdmin(false);
+      if (targetRole === "admin") setTargetRole("");
+      return;
+    }
+    if (!targetRole) setTargetRole("admin");
+  }, [canUseAdminTaskControls, createdForAdmin, isEdit, targetRole]);
 
   const handleSubmit = async () => {
     if (createdTaskId) {
@@ -209,21 +249,30 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       setError(recurrenceValidation.error);
       return;
     }
-    setSubmitting(true);
-
     const effectiveAssigneeId = assignmentScope === "user" ? assignee?.id ?? null : null;
     const useRoutingRpc = routing.available;
     const recurrenceInput = recurrenceValidation.input;
-
-    if (createdForAdmin && !locationId) {
-      setSubmitting(false);
-      setError("Нужно выбрать локацию для задачи администратору.");
+    const routingError = validateRoutingDraft({
+      routingAvailable: useRoutingRpc,
+      locationId,
+      assignmentScope,
+      targetRole,
+      createdForAdmin,
+      routeAdminId,
+      assigneeId: effectiveAssigneeId,
+      visibility,
+      chatId,
+      canUseAdminTaskControls,
+    });
+    if (routingError) {
+      setError(routingError);
       return;
     }
 
     if (assignmentScope !== "user" && assignee) {
       setAssignee(null);
     }
+    setSubmitting(true);
 
     if (isEdit && task) {
       const { error: rpcError } = useRoutingRpc
@@ -323,8 +372,8 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       onClose={onClose}
       title={isEdit ? "Редактирование задачи" : "Новая задача"}
       icon={<KubIcon name="tasks" size={15} />}
-      size="md"
-      contentClassName="px-5 py-4 space-y-4"
+      size="lg"
+      contentClassName="px-4 sm:px-5 py-4 space-y-4"
       footer={
         <>
           <KubButton variant="ghost" onClick={onClose}>Отмена</KubButton>
@@ -359,7 +408,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
         <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-cyan)]">
           Приоритет
         </label>
-        <div className="grid grid-cols-4 gap-1.5">
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
           {PRIORITIES.map((p) => {
             const meta = TASK_PRIORITY_META[p];
             const active = priority === p;
@@ -403,6 +452,11 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
             <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
               Повтор создаёт отдельные задачи с теми же локацией, получателем, видимостью и маршрутом администратора.
             </p>
+            {canUseAdminTaskControls && (
+              <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+                Автоматическое создание повторов требует настроенный scheduler на стороне Supabase.
+              </p>
+            )}
           </div>
           {recurring.loading && <KubIcon name="spinner" size={14} tone="accent" className="shrink-0" />}
         </div>
@@ -618,7 +672,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                   className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
                 >
                   <option value="">По текущему назначению</option>
-                  {(Object.keys(TASK_TARGET_ROLE_LABEL) as TaskTargetRole[]).map((role) => (
+                  {targetRoleOptions.map((role) => (
                     <option key={role} value={role}>{TASK_TARGET_ROLE_LABEL[role]}</option>
                   ))}
                 </select>
@@ -674,23 +728,25 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
               </select>
             </label>
 
-            <label className="flex items-start gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-sm text-[color:var(--kub-text)]">
-              <input
-                type="checkbox"
-                checked={createdForAdmin}
-                onChange={(event) => {
-                  setCreatedForAdmin(event.target.checked);
-                  if (event.target.checked && !targetRole) setTargetRole("admin");
-                }}
-                className="mt-0.5 h-4 w-4 accent-[var(--kub-cyan)]"
-              />
-              <span className="min-w-0">
-                <span className="block font-semibold">Задача для администратора</span>
-                <span className="block text-xs leading-relaxed text-[color:var(--kub-muted)]">
-                  Обычные работники не увидят эту задачу. {selectedLocationName ? `Локация: ${selectedLocationName}.` : "Выберите локацию."}
+            {canUseAdminTaskControls && (
+              <label className="flex items-start gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-sm text-[color:var(--kub-text)]">
+                <input
+                  type="checkbox"
+                  checked={createdForAdmin}
+                  onChange={(event) => {
+                    setCreatedForAdmin(event.target.checked);
+                    if (event.target.checked) setTargetRole("admin");
+                  }}
+                  className="mt-0.5 h-4 w-4 accent-[var(--kub-cyan)]"
+                />
+                <span className="min-w-0">
+                  <span className="block font-semibold">Задача для администратора</span>
+                  <span className="block text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                    Эту задачу увидит только выбранный администратор и владелец/тех. администратор. {selectedLocationName ? `Локация: ${selectedLocationName}.` : "Выберите локацию."}
+                  </span>
                 </span>
-              </span>
-            </label>
+              </label>
+            )}
           </div>
         ) : (
           <div className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
@@ -704,7 +760,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
           htmlFor="task-chat-select"
           className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-cyan)]"
         >
-          Связанный чат (необязательно)
+          {visibility === "chat" ? "Связанный чат" : "Связанный чат (необязательно)"}
         </label>
         <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-2">
           <button
@@ -776,7 +832,9 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
           </div>
         </div>
         <p className="mt-1.5 text-[11px] text-[color:var(--kub-muted)]">
-          {selectedChat
+          {visibility === "chat" && !selectedChat
+            ? "Для видимости «Чат» нужно выбрать чат."
+            : selectedChat
             ? `Выбрано: ${getChatDisplayInfo(selectedChat, currentUserId).title}`
             : "Только чаты, в которых вы состоите."}
         </p>
@@ -913,7 +971,51 @@ interface RecurrenceDraftValidationInput {
   dueAt: string | null;
 }
 
+interface RoutingDraftValidationInput {
+  routingAvailable: boolean;
+  locationId: string;
+  assignmentScope: TaskAssignmentScope;
+  targetRole: TaskTargetRole | "";
+  createdForAdmin: boolean;
+  routeAdminId: string;
+  assigneeId: string | null;
+  visibility: TaskVisibility;
+  chatId: string | null;
+  canUseAdminTaskControls: boolean;
+}
+
 type RecurrencePayload = Omit<RecurrenceCreateInput, "templateTaskId">;
+
+function validateRoutingDraft(input: RoutingDraftValidationInput): string | null {
+  if (!input.routingAvailable) return null;
+
+  if (input.visibility === "chat" && !input.chatId) {
+    return "Для видимости «Чат» выберите связанный чат.";
+  }
+
+  const needsLocation =
+    input.createdForAdmin ||
+    input.assignmentScope !== "user" ||
+    Boolean(input.targetRole);
+  if (needsLocation && !input.locationId) {
+    return "Нужно выбрать локацию для выбранного маршрута.";
+  }
+
+  if (input.createdForAdmin) {
+    if (!input.canUseAdminTaskControls) {
+      return "Недостаточно прав для задачи администратора.";
+    }
+    if (!input.routeAdminId && !input.assigneeId) {
+      return "Для задачи администратора выберите администратора клуба или конкретного исполнителя.";
+    }
+  }
+
+  if ((input.targetRole === "admin" || input.targetRole === "manager" || input.targetRole === "owner") && !input.routeAdminId && !input.assigneeId) {
+    return "Для маршрута администратору выберите администратора клуба или конкретного исполнителя.";
+  }
+
+  return null;
+}
 
 function validateRecurrenceDraft(input: RecurrenceDraftValidationInput): {
   input: RecurrencePayload | null;

@@ -23,6 +23,7 @@ import {
   KubIcon,
   KubInput,
 } from "@/components/kub";
+import { BulkSelectControl } from "@/components/ui/BulkSelectControl";
 import { TaskCard } from "./TaskCard";
 import { TaskListRow } from "./TaskListRow";
 import { TaskDetailModal } from "./TaskDetailModal";
@@ -549,34 +550,38 @@ export function TasksPage() {
           </div>
         </div>
         {canBulkDeleteTasks && visibleDeletableTaskIds.length > 0 && (
-          <div className="mt-3 flex flex-col gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs sm:flex-row sm:items-center sm:justify-between">
-            <label className="inline-flex min-w-0 items-center gap-2 font-medium text-[color:var(--kub-text)]">
-              <input
-                type="checkbox"
-                checked={allVisibleSelected}
-                onChange={(event) => toggleVisibleSelection(event.target.checked)}
-                className="h-4 w-4 rounded border-[color:var(--kub-border-color)] accent-[var(--kub-cyan)]"
-              />
-              <span className="truncate">Выбрать видимые</span>
-            </label>
-            <div className="flex flex-wrap items-center gap-2">
-              {selectedCount > 0 && (
-                <span className="font-semibold text-[color:var(--kub-cyan)]">
-                  Выбрано: {selectedCount}
-                </span>
-              )}
-              {bulkDeleteNotice && (
-                <span className="text-[color:var(--kub-online)]">{bulkDeleteNotice}</span>
-              )}
-              {selectedCount > 0 && (
-                <>
+          <div className="mt-3 rounded-2xl border border-[color:var(--kub-border-color)] bg-[color-mix(in_srgb,var(--kub-surface)_92%,var(--kub-cyan)_8%)] px-3 py-2.5 text-xs shadow-sm">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-2">
+                <BulkSelectControl
+                  checked={allVisibleSelected}
+                  onChange={toggleVisibleSelection}
+                  label="Выбрать видимые задачи"
+                  className="h-7 w-7 rounded-lg"
+                />
+                <div className="min-w-0">
+                  <div className="font-semibold text-[color:var(--kub-text)]">
+                    {selectedCount > 0 ? `Выбрано: ${selectedCount}` : "Пакетный выбор"}
+                  </div>
+                  <div className="truncate text-[11px] text-[color:var(--kub-muted)]">
+                    Выберите видимые задачи для удаления без перезагрузки списка.
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <KubButton variant="secondary" size="sm" onClick={() => toggleVisibleSelection(!allVisibleSelected)}>
+                  {allVisibleSelected ? "Снять видимые" : "Выбрать видимые"}
+                </KubButton>
+                {selectedCount > 0 && (
                   <KubButton variant="secondary" size="sm" onClick={() => setSelectedTaskIds(new Set())}>
-                    Снять выбор
+                    Очистить
                   </KubButton>
+                )}
+                {selectedCount > 0 && (
                   <KubButton
                     variant="danger"
                     size="sm"
-                    leftIcon={<KubIcon name="ban" size={13} />}
+                    leftIcon={<KubIcon name="delete" size={13} />}
                     onClick={() => {
                       setBulkDeleteError(null);
                       setBulkDeleteOpen(true);
@@ -584,7 +589,12 @@ export function TasksPage() {
                   >
                     Удалить выбранные
                   </KubButton>
-                </>
+                )}
+              </div>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {bulkDeleteNotice && (
+                <span className="text-[color:var(--kub-online)]">{bulkDeleteNotice}</span>
               )}
             </div>
           </div>
@@ -617,31 +627,49 @@ export function TasksPage() {
         ) : (
           viewMode === "list" ? (
             <div className="space-y-2">
-              {visibleTasks.map((t) => (
-                <div key={t.id} className="relative">
-                  {canBulkDeleteTasks && !t.deleted_at && (
-                    <SelectionCheckbox
-                      checked={selectedTaskIds.has(t.id)}
-                      onChange={(checked) => toggleTaskSelection(t.id, checked)}
-                    />
-                  )}
-                  <TaskListRow task={t} nowMs={nowMs} onClick={() => setOpenTaskId(t.id)} />
-                </div>
-              ))}
+              {visibleTasks.map((t) => {
+                const canSelect = canBulkDeleteTasks && !t.deleted_at;
+                const selected = selectedTaskIds.has(t.id);
+                return (
+                  <TaskListRow
+                    key={t.id}
+                    task={t}
+                    nowMs={nowMs}
+                    selected={selected}
+                    selectionControl={canSelect ? (
+                      <BulkSelectControl
+                        checked={selected}
+                        onChange={(checked) => toggleTaskSelection(t.id, checked)}
+                        label={`Выбрать задачу: ${t.title}`}
+                      />
+                    ) : null}
+                    onClick={() => setOpenTaskId(t.id)}
+                  />
+                );
+              })}
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-4 gap-3">
-              {visibleTasks.map((t) => (
-                <div key={t.id} className="relative">
-                  {canBulkDeleteTasks && !t.deleted_at && (
-                    <SelectionCheckbox
-                      checked={selectedTaskIds.has(t.id)}
-                      onChange={(checked) => toggleTaskSelection(t.id, checked)}
-                    />
-                  )}
-                  <TaskCard task={t} nowMs={nowMs} onClick={() => setOpenTaskId(t.id)} />
-                </div>
-              ))}
+              {visibleTasks.map((t) => {
+                const canSelect = canBulkDeleteTasks && !t.deleted_at;
+                const selected = selectedTaskIds.has(t.id);
+                return (
+                  <TaskCard
+                    key={t.id}
+                    task={t}
+                    nowMs={nowMs}
+                    selected={selected}
+                    selectionControl={canSelect ? (
+                      <BulkSelectControl
+                        checked={selected}
+                        onChange={(checked) => toggleTaskSelection(t.id, checked)}
+                        label={`Выбрать задачу: ${t.title}`}
+                      />
+                    ) : null}
+                    onClick={() => setOpenTaskId(t.id)}
+                  />
+                );
+              })}
             </div>
           )
         )}
@@ -679,30 +707,6 @@ export function TasksPage() {
         />
       )}
     </div>
-  );
-}
-
-function SelectionCheckbox({
-  checked,
-  onChange,
-}: {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <label
-      className="absolute left-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]/95 shadow-sm"
-      onClick={(event) => event.stopPropagation()}
-      title="Выбрать задачу"
-    >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="h-4 w-4 rounded border-[color:var(--kub-border-color)] accent-[var(--kub-cyan)]"
-        aria-label="Выбрать задачу"
-      />
-    </label>
   );
 }
 

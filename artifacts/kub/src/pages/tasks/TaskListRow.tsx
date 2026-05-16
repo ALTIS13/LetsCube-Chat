@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { TaskWithPeople } from "@/types/database";
 import { KubBadge, KubIcon } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
@@ -17,9 +18,11 @@ interface TaskListRowProps {
   task: TaskWithPeople;
   nowMs: number;
   onClick: () => void;
+  selected?: boolean;
+  selectionControl?: ReactNode;
 }
 
-export function TaskListRow({ task, nowMs, onClick }: TaskListRowProps) {
+export function TaskListRow({ task, nowMs, onClick, selected = false, selectionControl }: TaskListRowProps) {
   const status = TASK_STATUS_META[task.status];
   const priority = TASK_PRIORITY_META[task.priority];
   const visibility = TASK_VISIBILITY_META[task.visibility];
@@ -32,14 +35,30 @@ export function TaskListRow({ task, nowMs, onClick }: TaskListRowProps) {
   const creatorName = getPersonName(task.creator, "Неизвестно");
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick();
+        }
+      }}
       className={cn(
-        "grid w-full grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2.5 text-left transition-colors hover:border-[color:var(--kub-cyan)]/40 sm:grid-cols-[minmax(180px,1.5fr)_minmax(140px,0.8fr)_minmax(160px,1fr)_minmax(160px,0.8fr)_auto]",
+        "grid w-full gap-3 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2.5 text-left transition-colors hover:border-[color:var(--kub-cyan)]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)]/45",
+        selectionControl
+          ? "grid-cols-[auto_minmax(0,1fr)_auto] sm:grid-cols-[auto_minmax(180px,1.5fr)_minmax(140px,0.8fr)_minmax(160px,1fr)_minmax(160px,0.8fr)_auto]"
+          : "grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(180px,1.5fr)_minmax(140px,0.8fr)_minmax(160px,1fr)_minmax(160px,0.8fr)_auto]",
+        selected && "border-[color:var(--kub-cyan)]/65 bg-[color-mix(in_srgb,var(--kub-cyan)_8%,var(--kub-surface))] shadow-[0_0_0_1px_color-mix(in_srgb,var(--kub-cyan)_28%,transparent)]",
         isDeleted && "opacity-70 border-[color:var(--kub-danger)]/35",
       )}
     >
+      {selectionControl && (
+        <div className="flex items-start justify-center pt-0.5 sm:items-center sm:pt-0">
+          {selectionControl}
+        </div>
+      )}
       <div className="min-w-0">
         <div className="truncate text-sm font-semibold text-[color:var(--kub-text)]">{task.title}</div>
         {task.description && (
@@ -120,7 +139,7 @@ export function TaskListRow({ task, nowMs, onClick }: TaskListRowProps) {
       <div className="flex items-center justify-end">
         <KubIcon name="chevronRight" size={16} className="text-[color:var(--kub-muted)]" />
       </div>
-    </button>
+    </div>
   );
 }
 

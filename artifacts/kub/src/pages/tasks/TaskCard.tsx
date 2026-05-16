@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { TaskWithPeople } from "@/types/database";
 import { KubBadge, KubIcon, KubPanel } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
@@ -18,9 +19,11 @@ interface TaskCardProps {
   task: TaskWithPeople;
   nowMs: number;
   onClick: () => void;
+  selected?: boolean;
+  selectionControl?: ReactNode;
 }
 
-export function TaskCard({ task, nowMs, onClick }: TaskCardProps) {
+export function TaskCard({ task, nowMs, onClick, selected = false, selectionControl }: TaskCardProps) {
   const status = TASK_STATUS_META[task.status];
   const priority = TASK_PRIORITY_META[task.priority];
   const visibility = TASK_VISIBILITY_META[task.visibility];
@@ -32,28 +35,39 @@ export function TaskCard({ task, nowMs, onClick }: TaskCardProps) {
   const deadline = getTaskDeadlineState(task, nowMs);
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className="text-left w-full focus:outline-none"
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick();
+        }
+      }}
+      className="text-left w-full rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)]/45"
     >
       <KubPanel
         padded={false}
         className={cn(
           "p-3 flex flex-col gap-2.5 hover:border-[color:var(--kub-cyan)]/40 transition-colors cursor-pointer",
+          selected && "border-[color:var(--kub-cyan)]/65 bg-[color-mix(in_srgb,var(--kub-cyan)_8%,var(--kub-surface))] shadow-[0_0_0_1px_color-mix(in_srgb,var(--kub-cyan)_28%,transparent)]",
           isDeleted && "opacity-70 border-[color:var(--kub-danger)]/35",
         )}
       >
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-semibold text-[color:var(--kub-text)] truncate">
-              {task.title}
-            </h3>
-            {task.description && (
-              <p className="mt-1 text-xs text-[color:var(--kub-muted)] line-clamp-1">
-                {task.description}
-              </p>
-            )}
+          <div className="flex min-w-0 flex-1 items-start gap-2">
+            {selectionControl}
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-semibold text-[color:var(--kub-text)] truncate">
+                {task.title}
+              </h3>
+              {task.description && (
+                <p className="mt-1 text-xs text-[color:var(--kub-muted)] line-clamp-1">
+                  {task.description}
+                </p>
+              )}
+            </div>
           </div>
           <div className="flex flex-col gap-1 items-end flex-shrink-0">
             <KubBadge tone={status.tone} pill>{status.label}</KubBadge>
@@ -150,7 +164,7 @@ export function TaskCard({ task, nowMs, onClick }: TaskCardProps) {
 
         </div>
       </KubPanel>
-    </button>
+    </div>
   );
 }
 
