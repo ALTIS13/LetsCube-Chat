@@ -1,5 +1,13 @@
 # QA Results
 
+2026-05-16 Supabase generated database types:
+
+- Ran `pnpm.cmd supabase:typegen` with `SUPABASE_PROJECT_REF=nhogbeojfnbjcfipitrh`; generated `artifacts/kub/src/types/database.generated.ts`.
+- Generated types contain the expected public `Database` type, current public tables, functions/RPC, and enums. Key applied areas present: `locations`, `location_members`, `roles`, `permissions`, `role_permissions`, `user_global_roles`, `task_recurrences`, task soft-delete fields/RPC, and group invite RPC.
+- Secret scan on `database.generated.ts` found no `service_role`, Supabase access token, QA email, or QA password strings.
+- The generated file is not wired into app imports yet. Existing `artifacts/kub/src/types/database.ts` remains the active compatibility type file.
+- Comparison against the manual file found one generated-only table, `notifications_push_outbox`, which is intentionally server-side; generated `messages` also includes `media_bucket` and `media_path`, which the manual file does not currently model. Generated RPCs include additional internal helper functions not represented in the manual app-facing type file. Enums matched.
+
 2026-05-16 core QA tooling and Supabase typegen:
 
 - Added root tooling scripts for Supabase typegen, Playwright e2e, RLS/RPC smoke, and scoped Biome lint/format.

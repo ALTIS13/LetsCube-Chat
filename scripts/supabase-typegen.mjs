@@ -81,10 +81,10 @@ function findSupabaseCli() {
 }
 
 function commandExists(command) {
-  const result = spawnSync(command, ["--version"], {
-    stdio: "ignore",
-    shell: process.platform === "win32",
-  });
+  const result =
+    process.platform === "win32"
+      ? spawnSync("where.exe", [command], { stdio: "ignore", shell: false })
+      : spawnSync("command", ["-v", command], { stdio: "ignore", shell: false });
   return result.status === 0;
 }
 
