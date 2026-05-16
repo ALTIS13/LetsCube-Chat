@@ -1,5 +1,18 @@
 # QA Results
 
+2026-05-16 core QA tooling and Supabase typegen:
+
+- Added root tooling scripts for Supabase typegen, Playwright e2e, RLS/RPC smoke, and scoped Biome lint/format.
+- Supabase CLI is installed under the user's Scoop directory (`~/scoop/shims/supabase.exe`) at version `2.98.2`, but the current Codex terminal PATH does not include the Scoop shims path. Typegen script searches the common Scoop paths as a fallback and otherwise prints a friendly setup error.
+- No SQL was applied. No Supabase tokens or QA passwords were printed.
+- Playwright config now defines desktop viewports `3840x2160`, `1920x1080`, `1440x900` and mobile viewports `390x844`, `412x915`, with failure screenshots/video/trace under ignored `output/playwright-test` and `output/playwright-report`.
+- Authenticated smoke tests read QA credentials from env or `~/.kub-messenger-qa.env` without logging the password.
+- RLS/RPC smoke script uses anon + authenticated user session only, probes selected RPCs with safe fake UUIDs where possible, and does not use `service_role`.
+- Validation passed: `git diff --check`, `pnpm.cmd --filter @workspace/kub run typecheck`, `PORT=5173 BASE_PATH=/ pnpm.cmd --filter @workspace/kub run build`, `pnpm.cmd format:check`, and `pnpm.cmd lint`. Build still emits the existing Vite sourcemap/dynamic-import/chunk-size warnings.
+- Playwright smoke ran against `https://kub.apollot.ru` with viewports `1440x900`, `1920x1080`, `3840x2160`, `390x844`, `412x915`; all 5 projects passed with console errors 0.
+- `pnpm.cmd supabase:typegen` was tested without `SUPABASE_PROJECT_REF` and stopped with the intended friendly error; no generated database file was written in this pass.
+- `pnpm.cmd rls:smoke` was tested without Supabase URL/key env and skipped safely.
+
 2026-05-16 owner / tech_admin task soft delete:
 
 - Created proposal-only SQL at `.migration-backup/supabase/migrations/20260521_task_soft_delete_owner_tech_admin.sql`; SQL was not applied automatically.

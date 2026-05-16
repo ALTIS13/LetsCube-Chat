@@ -73,5 +73,6 @@ typings/
 
 .qa-screenshots/
 .playwright-mcp/
-output/playwright/
+output/
+test-results/
 /kub-*.png
