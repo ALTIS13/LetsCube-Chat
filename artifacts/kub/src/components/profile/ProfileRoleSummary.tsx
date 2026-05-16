@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { KubBadge, KubIcon } from "@/components/kub";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
 import { useRoleAccess } from "@/hooks/useRole";
@@ -15,6 +15,7 @@ interface ProfileRoleSummaryProps {
 }
 
 export function ProfileRoleSummary({ user, compact = false }: ProfileRoleSummaryProps) {
+  const [showAllClubs, setShowAllClubs] = useState(false);
   const access = useRoleAccess();
   const [dynamicRolesEnabled] = useDynamicRolesEnabledPreference();
   const canReadDynamicRoles = dynamicRolesEnabled && access.isAdmin;
@@ -62,13 +63,15 @@ export function ProfileRoleSummary({ user, compact = false }: ProfileRoleSummary
   const fallbackRole = LEGACY_APP_ROLE_LABEL[user.role];
   const hasDynamicContent = dynamicRoles.available && globalRoles.length > 0;
   const hasLocationContent = routing.available && memberships.length > 0;
+  const visibleMemberships = showAllClubs ? memberships : memberships.slice(0, 3);
 
   if (compact) {
+    const primaryMembership = memberships[0] ?? null;
     return (
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         {hasDynamicContent ? (
           globalRoles.slice(0, 2).map((role) => (
-            <KubBadge key={role.id} tone={role.key === "tech_admin" || role.key === "owner" ? "pink" : "cyan"} pill>
+            <KubBadge key={role.id} tone={roleTone(role.key)} pill>
               {role.key === "tech_admin" && <KubIcon name="settings" size={10} />}
               {getRoleLabel(role)}
             </KubBadge>
@@ -79,7 +82,12 @@ export function ProfileRoleSummary({ user, compact = false }: ProfileRoleSummary
           </KubBadge>
         )}
         {globalRoles.length > 2 && <KubBadge tone="muted" pill>+{globalRoles.length - 2}</KubBadge>}
-        {hasLocationContent && <KubBadge tone="muted" pill>{memberships.length} клуб.</KubBadge>}
+        {primaryMembership && (
+          <KubBadge tone="muted" pill>
+            {getLocationRoleDisplay(primaryMembership.dynamicRole, primaryMembership.member.role)}
+          </KubBadge>
+        )}
+        {memberships.length > 1 && <KubBadge tone="muted" pill>+{clubCountLabel(memberships.length - 1)}</KubBadge>}
       </div>
     );
   }
@@ -93,7 +101,7 @@ export function ProfileRoleSummary({ user, compact = false }: ProfileRoleSummary
         <div className="flex flex-wrap gap-1.5">
           {hasDynamicContent ? (
             globalRoles.map((role) => (
-              <KubBadge key={role.id} tone={role.key === "tech_admin" || role.key === "owner" ? "pink" : "cyan"} pill>
+              <KubBadge key={role.id} tone={roleTone(role.key)} pill>
                 {role.key === "tech_admin" && <KubIcon name="settings" size={10} />}
                 {getRoleLabel(role)}
               </KubBadge>
@@ -118,7 +126,7 @@ export function ProfileRoleSummary({ user, compact = false }: ProfileRoleSummary
         </div>
         {hasLocationContent ? (
           <div className="space-y-1.5">
-            {memberships.slice(0, 4).map(({ member, location, dynamicRole, primaryAdmin }) => (
+            {visibleMemberships.map(({ member, location, dynamicRole, primaryAdmin }) => (
               <div
                 key={`${member.location_id}:${member.user_id}`}
                 className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/55 px-3 py-2"
@@ -127,19 +135,25 @@ export function ProfileRoleSummary({ user, compact = false }: ProfileRoleSummary
                   <span className="truncate text-sm font-medium text-[color:var(--kub-text)]">
                     {location?.name ?? "Клуб"}
                   </span>
-                  <KubBadge tone={member.role === "staff" ? "cyan" : "pink"} pill>
-                    {dynamicRole ? getRoleLabel(dynamicRole) : LOCATION_ROLE_LABEL[member.role as LocationRole]}
+                  <KubBadge tone={isStaffMembership(member.role, dynamicRole?.key) ? "cyan" : "pink"} pill>
+                    {getLocationRoleDisplay(dynamicRole, member.role)}
                   </KubBadge>
                 </div>
-                {primaryAdmin && member.role === "staff" && (
+                {primaryAdmin && isStaffMembership(member.role, dynamicRole?.key) && (
                   <div className="mt-1 truncate text-xs text-[color:var(--kub-muted)]">
                     Администратор: {primaryAdmin.full_name ?? primaryAdmin.username ?? "Без имени"}
                   </div>
                 )}
               </div>
             ))}
-            {memberships.length > 4 && (
-              <div className="text-xs text-[color:var(--kub-muted)]">+{memberships.length - 4} клубов</div>
+            {memberships.length > 3 && (
+              <button
+                type="button"
+                onClick={() => setShowAllClubs((value) => !value)}
+                className="text-xs font-semibold text-[color:var(--kub-cyan)] hover:underline"
+              >
+                {showAllClubs ? "Свернуть клубы" : `Показать ещё ${clubCountLabel(memberships.length - 3)}`}
+              </button>
             )}
           </div>
         ) : (
@@ -157,4 +171,23 @@ function roleRank(key: string): number {
   if (key === "manager") return 3;
   if (key === "user") return 4;
   return 9;
+}
+
+function roleTone(key: string): "pink" | "cyan" {
+  return key === "tech_admin" || key === "owner" ? "pink" : "cyan";
+}
+
+function getLocationRoleDisplay(role: DynamicRole | null | undefined, legacyRole: LocationRole): string {
+  return role ? getRoleLabel(role) : LOCATION_ROLE_LABEL[legacyRole] ?? "Участник клуба";
+}
+
+function isStaffMembership(legacyRole: LocationRole, dynamicRoleKey?: string): boolean {
+  return legacyRole === "staff" || dynamicRoleKey === "location_staff";
+}
+
+function clubCountLabel(count: number): string {
+  const lastTwo = count % 100;
+  const last = count % 10;
+  const noun = lastTwo >= 11 && lastTwo <= 14 ? "клубов" : last === 1 ? "клуб" : last >= 2 && last <= 4 ? "клуба" : "клубов";
+  return `${count} ${noun}`;
 }

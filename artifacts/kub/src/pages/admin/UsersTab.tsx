@@ -509,7 +509,7 @@ export function UsersTab() {
         <input
           value={queryRaw}
           onChange={(e) => setQueryRaw(e.target.value)}
-          placeholder="Поиск по имени, @username или UUID"
+          placeholder="Поиск по имени, @username или ID"
           className="flex-1 bg-transparent text-sm outline-none text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]"
         />
         {queryRaw && (

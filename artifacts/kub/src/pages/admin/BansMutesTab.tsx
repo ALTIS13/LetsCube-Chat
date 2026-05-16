@@ -409,8 +409,8 @@ function sanctionActionLabel(action: AuditAction): string {
 }
 
 function profileLabel(profile: Pick<Profile, "id" | "full_name" | "username"> | null | undefined, fallbackId?: string | null): string {
-  if (profile) return profile.full_name ?? (profile.username ? `@${profile.username}` : profile.id.slice(0, 8));
-  return fallbackId ? fallbackId.slice(0, 8) : "не указан";
+  if (profile) return profile.full_name ?? (profile.username ? `@${profile.username}` : "Пользователь");
+  return fallbackId ? "Пользователь не найден" : "не указан";
 }
 
 function auditString(row: AuditLogWithActor, key: string): string | null {

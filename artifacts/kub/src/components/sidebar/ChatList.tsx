@@ -570,9 +570,20 @@ function ChatProfilePreviewModal({
   const memberCount = chat.members?.length ?? 0;
   const myRole = chat.members?.find((member) => member.user_id === currentUserId)?.role ?? null;
   const isMuted = mutedChatIds.includes(chat.id);
+  const [copiedUsername, setCopiedUsername] = useState(false);
   const previewActions = actions.filter((action) =>
     ["pin", "mute", "clear", "hide-private", "leave-group", "delete-group"].includes(action.id),
   );
+  const copyUsername = async () => {
+    if (!otherUser?.username) return;
+    try {
+      await navigator.clipboard.writeText(`@${otherUser.username}`);
+      setCopiedUsername(true);
+      window.setTimeout(() => setCopiedUsername(false), 1600);
+    } catch {
+      showAppAlert("Не удалось скопировать username.", "Копирование недоступно");
+    }
+  };
 
   return (
     <KubModal
@@ -613,6 +624,16 @@ function ChatProfilePreviewModal({
             <KubIcon name="chatRect" size={16} />
             Открыть чат
           </button>
+          {isPrivate && otherUser?.username && (
+            <button
+              type="button"
+              onClick={() => void copyUsername()}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-4 text-sm font-semibold text-[color:var(--kub-text)] transition-colors hover:border-[color:var(--kub-cyan)]/45"
+            >
+              <KubIcon name="atSign" size={15} />
+              {copiedUsername ? "Username скопирован" : "Скопировать username"}
+            </button>
+          )}
 
           <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/45 px-3 py-2 text-xs text-[color:var(--kub-muted)]">
             {isPrivate && (

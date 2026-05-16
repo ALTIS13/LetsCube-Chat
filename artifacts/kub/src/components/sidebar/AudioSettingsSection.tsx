@@ -357,71 +357,68 @@ export function AudioSettingsSection() {
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold text-[color:var(--kub-text)]">Звук и голосовые</div>
             <p className="mt-1 text-xs leading-relaxed text-[color:var(--kub-muted)]">
-              Настройки применяются внутри приложения и не меняют системную громкость Windows.
+              Выберите микрофон и наушники, проверьте уровень и настройте обработку голоса. Эти настройки не меняют системную громкость.
             </p>
           </div>
         </div>
 
-        <SliderRow
-          label="Громкость микрофона"
-          value={settings.micInputGain}
-          min={0}
-          max={2}
-          step={0.05}
-          onChange={(micInputGain) => updateSettings({ micInputGain })}
-        />
-        <SliderRow
-          label="Громкость голосовых"
-          value={settings.voicePlaybackVolume}
-          min={0}
-          max={1}
-          step={0.05}
-          onChange={(voicePlaybackVolume) => updateSettings({ voicePlaybackVolume })}
-        />
-
-        <div className="grid gap-2 sm:grid-cols-2">
-          <DeviceSelect
-            label="Микрофон"
-            value={settings.selectedInputDeviceId}
-            defaultLabel="Системный микрофон"
-            devices={inputDevices}
-            disabled={applying}
-            onChange={(deviceId) => void changeInputDevice(deviceId)}
+        <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] px-3 py-3">
+          <SectionHeader
+            title="Устройства"
+            description="Список появится после разрешения доступа к микрофону. Если браузер не умеет выбирать вывод, звук пойдёт в системное устройство."
           />
-          <DeviceSelect
-            label="Устройство вывода"
-            value={settings.selectedOutputDeviceId}
-            defaultLabel="Системное устройство вывода"
-            devices={outputDevices}
-            disabled={applying || !outputSelectionSupported}
-            note={!outputSelectionSupported ? "Выбор устройства вывода не поддерживается этим браузером." : null}
-            onChange={(deviceId) => void changeOutputDevice(deviceId)}
-          />
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <DeviceSelect
+              label="Микрофон"
+              value={settings.selectedInputDeviceId}
+              defaultLabel="Системный микрофон"
+              devices={inputDevices}
+              disabled={applying}
+              onChange={(deviceId) => void changeInputDevice(deviceId)}
+            />
+            <DeviceSelect
+              label="Наушники / динамики"
+              value={settings.selectedOutputDeviceId}
+              defaultLabel="Системный вывод"
+              devices={outputDevices}
+              disabled={applying || !outputSelectionSupported}
+              note={!outputSelectionSupported ? "Браузер не даёт выбрать вывод здесь. Используется системное устройство." : null}
+              onChange={(deviceId) => void changeOutputDevice(deviceId)}
+            />
+          </div>
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-3">
-          <ToggleRow
-            label="Шумоподавление"
-            checked={settings.noiseSuppression}
-            disabled={applying}
-            onChange={(noiseSuppression) => void changeProcessingToggle("noiseSuppression", noiseSuppression)}
+        <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] px-3 py-3">
+          <SectionHeader
+            title="Громкость"
+            description="Микрофон влияет на проверку и голосовые записи. Громкость голосовых применяется только в КУБ."
           />
-          <ToggleRow
-            label="Эхоподавление"
-            checked={settings.echoCancellation}
-            disabled={applying}
-            onChange={(echoCancellation) => void changeProcessingToggle("echoCancellation", echoCancellation)}
-          />
-          <ToggleRow
-            label="Автоусиление"
-            checked={settings.autoGainControl}
-            disabled={applying}
-            onChange={(autoGainControl) => void changeProcessingToggle("autoGainControl", autoGainControl)}
-          />
+          <div className="mt-3 grid gap-3">
+            <SliderRow
+              label="Микрофон"
+              value={settings.micInputGain}
+              min={0}
+              max={2}
+              step={0.05}
+              onChange={(micInputGain) => updateSettings({ micInputGain })}
+            />
+            <SliderRow
+              label="Голосовые сообщения"
+              value={settings.voicePlaybackVolume}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(voicePlaybackVolume) => updateSettings({ voicePlaybackVolume })}
+            />
+          </div>
         </div>
 
         <div className="rounded-xl px-3 py-3 bg-[var(--kub-bg)] border border-[color:var(--kub-border-color)]">
-          <div className="flex items-center gap-3">
+          <SectionHeader
+            title="Проверка и обработка"
+            description="Запустите проверку, чтобы увидеть уровень микрофона и сразу услышать изменения."
+          />
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
             <KubButton size="sm" variant={testing ? "secondary" : "primary"} onClick={startMicTest}>
               {testing ? "Остановить" : "Проверка микрофона"}
             </KubButton>
@@ -435,12 +432,12 @@ export function AudioSettingsSection() {
 
           <div className="mt-3 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
             <div className="mb-2 flex items-center justify-between gap-3">
-              <span className="min-w-0 text-xs font-semibold text-[color:var(--kub-text)]">Обработка микрофона</span>
+              <span className="min-w-0 text-xs font-semibold text-[color:var(--kub-text)]">Как звучит голос</span>
               <span className="shrink-0 text-[10px] text-[color:var(--kub-muted)]">
                 {processingModeLabel(settings.processingMode)}
               </span>
             </div>
-            <div className="grid grid-cols-3 gap-1">
+            <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
               <ModeButton
                 active={settings.processingMode === "clean"}
                 label="Чистый голос"
@@ -458,6 +455,29 @@ export function AudioSettingsSection() {
                 onClick={() => undefined}
               />
             </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <ToggleRow
+                label="Убрать шум"
+                description="Снижает шум вентиляторов и комнаты."
+                checked={settings.noiseSuppression}
+                disabled={applying}
+                onChange={(noiseSuppression) => void changeProcessingToggle("noiseSuppression", noiseSuppression)}
+              />
+              <ToggleRow
+                label="Убрать эхо"
+                description="Полезно без наушников."
+                checked={settings.echoCancellation}
+                disabled={applying}
+                onChange={(echoCancellation) => void changeProcessingToggle("echoCancellation", echoCancellation)}
+              />
+              <ToggleRow
+                label="Выравнивать голос"
+                description="Автоматически держит уровень."
+                checked={settings.autoGainControl}
+                disabled={applying}
+                onChange={(autoGainControl) => void changeProcessingToggle("autoGainControl", autoGainControl)}
+              />
+            </div>
             <p className="mt-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
               Если слышите эхо, используйте наушники. Если голос звучит с артефактами, попробуйте режим «Без обработки».
             </p>
@@ -472,11 +492,11 @@ export function AudioSettingsSection() {
               className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--kub-cyan)] disabled:opacity-50"
             />
             <span className="min-w-0 flex-1">
-              <span className="block text-xs font-semibold text-[color:var(--kub-text)]">Прослушивать себя</span>
+              <span className="block text-xs font-semibold text-[color:var(--kub-text)]">Слышать свой микрофон</span>
               <span className="mt-0.5 block text-xs leading-relaxed text-[color:var(--kub-muted)]">
                 {selfMonitoring
-                  ? "Используйте наушники, чтобы избежать эха."
-                  : "Доступно только во время проверки микрофона."}
+                  ? "Идёт только в выбранные наушники/динамики. Используйте наушники, чтобы избежать эха."
+                  : "Доступно во время проверки микрофона."}
               </span>
             </span>
           </label>
@@ -618,7 +638,7 @@ function ModeButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "h-8 rounded-lg px-2 text-xs font-semibold transition-colors disabled:cursor-default",
+        "min-h-9 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors disabled:cursor-default",
         active
           ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
           : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)]",
@@ -626,6 +646,19 @@ function ModeButton({
     >
       {label}
     </button>
+  );
+}
+
+function SectionHeader({ title, description }: { title: string; description: string }) {
+  return (
+    <div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-cyan)]">
+        {title}
+      </div>
+      <p className="mt-1 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+        {description}
+      </p>
+    </div>
   );
 }
 
@@ -705,25 +738,34 @@ function SliderRow({
 
 function ToggleRow({
   label,
+  description,
   checked,
   disabled = false,
   onChange,
 }: {
   label: string;
+  description?: string;
   checked: boolean;
   disabled?: boolean;
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="flex min-w-0 items-center gap-2 rounded-lg px-3 py-2 bg-[var(--kub-bg)] border border-[color:var(--kub-border-color)]">
+    <label className="flex min-w-0 items-start gap-2 rounded-lg px-3 py-2 bg-[var(--kub-bg)] border border-[color:var(--kub-border-color)]">
       <input
         type="checkbox"
         checked={checked}
         disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
-        className="h-4 w-4 shrink-0 accent-[var(--kub-cyan)] disabled:opacity-60"
+        className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--kub-cyan)] disabled:opacity-60"
       />
-      <span className="min-w-0 truncate text-xs text-[color:var(--kub-text)]">{label}</span>
+      <span className="min-w-0">
+        <span className="block text-xs font-semibold text-[color:var(--kub-text)]">{label}</span>
+        {description && (
+          <span className="mt-0.5 block text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+            {description}
+          </span>
+        )}
+      </span>
     </label>
   );
 }

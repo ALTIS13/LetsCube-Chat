@@ -658,7 +658,7 @@ export function RolesPermissionsTab() {
                 </div>
                 {selectedRoleIsCritical && (
                   <div className="rounded-xl border border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-danger)]">
-                    Owner и tech_admin всегда получают полный доступ. Набор прав здесь информационный и не ограничивает эти роли.
+                    Владелец и тех. администратор всегда получают полный доступ. Набор прав здесь информационный и не ограничивает эти роли.
                   </div>
                 )}
                 <div className="grid gap-3 lg:grid-cols-2">
@@ -737,7 +737,7 @@ export function RolesPermissionsTab() {
               )}
               {canAssignGlobalRoles && !currentAccess.critical && (
                 <p className="mt-1 text-xs leading-relaxed text-[color:var(--kub-muted)]">
-                  Критичные роли owner и tech_admin скрыты: их назначает только владелец или тех. администратор.
+                  Критичные роли владельца и тех. администратора скрыты: их назначает только владелец или тех. администратор.
                 </p>
               )}
             </div>

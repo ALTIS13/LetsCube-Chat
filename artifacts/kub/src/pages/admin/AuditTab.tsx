@@ -603,7 +603,7 @@ function formatDiffValue(key: string, value: unknown): string {
     return typeof value === "string" && value.length > 0 ? fmtDateTime(value) : "Бессрочно";
   }
   if (typeof value === "string") {
-    if (isLikelyUuid(value)) return value.slice(0, 8) + "...";
+    if (isLikelyUuid(value)) return "запись сохранена";
     return value;
   }
   if (typeof value === "number" || typeof value === "boolean") return String(value);
