@@ -37,6 +37,8 @@ export type TaskEventKind =
   | 'comment'
   | 'update'
   | 'return_to_work'
+  | 'soft_delete'
+  | 'restore'
 
 export interface Database {
   public: {
@@ -783,6 +785,9 @@ export interface Database {
           recurrence_id: string | null
           recurrence_template_task_id: string | null
           recurrence_scheduled_for: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          delete_reason: string | null
         }
         Insert: never
         Update: never
@@ -818,6 +823,13 @@ export interface Database {
           {
             foreignKeyName: "tasks_route_admin_id_fkey"
             columns: ["route_admin_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_deleted_by_fkey"
+            columns: ["deleted_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1132,6 +1144,18 @@ export interface Database {
       task_recurrence_run_due: {
         Args: { p_limit?: number }
         Returns: number
+      }
+      task_soft_delete: {
+        Args: { p_task_id: string; p_reason?: string | null }
+        Returns: null
+      }
+      task_restore: {
+        Args: { p_task_id: string }
+        Returns: null
+      }
+      task_bulk_soft_delete: {
+        Args: { p_task_ids: string[]; p_reason?: string | null }
+        Returns: Json
       }
       location_create: {
         Args: { p_name: string; p_description?: string | null; p_address?: string | null }

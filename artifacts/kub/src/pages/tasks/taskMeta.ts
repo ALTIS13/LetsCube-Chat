@@ -68,6 +68,8 @@ export const TASK_EVENT_LABEL: Record<TaskEventKind, string> = {
   comment:               "оставил(а) комментарий",
   update:                "изменил(а) задачу",
   return_to_work:        "вернул(а) задачу в работу",
+  soft_delete:           "удалил(а) задачу",
+  restore:               "восстановил(а) задачу",
 };
 
 export const PRIORITIES: TaskPriority[] = ["low", "normal", "high", "urgent"];

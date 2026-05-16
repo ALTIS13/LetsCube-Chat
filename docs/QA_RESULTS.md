@@ -1,5 +1,16 @@
 # QA Results
 
+2026-05-16 owner / tech_admin task soft delete:
+
+- Created proposal-only SQL at `.migration-backup/supabase/migrations/20260521_task_soft_delete_owner_tech_admin.sql`; SQL was not applied automatically.
+- Proposed model adds `tasks.deleted_at`, `tasks.deleted_by`, `tasks.delete_reason`, `task_soft_delete`, `task_restore`, `task_bulk_soft_delete`, `tasks.delete`, `tasks.restore`, `tasks.bulk_delete`, task-event kinds `soft_delete`/`restore`, audit writes and recurrence generator protection for deleted templates.
+- Frontend uses only RPC calls for task removal. No direct `delete()` against `public.tasks` was added.
+- Normal task lists hide deleted tasks by default; users with global cleanup permissions can enable `Показать удалённые`. Deleted rows show a `Удалена` badge and task actions/comments are disabled.
+- TasksPage adds owner/tech cleanup affordances: visible-task selection, selected count, bulk soft-delete modal with optional reason, and partial-success messaging. Task detail adds a single-task delete action behind the same permission gate.
+- Authenticated Playwright QA ran against local UI `http://127.0.0.1:5173` with viewports 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915. Screenshots and JSON summary are in `output/playwright/task-soft-delete/` (ignored from git): `desktop-3840x2160-tasks.png`, `desktop-1920x1080-tasks.png`, `desktop-1440x900-tasks.png`, `mobile-390x844-tasks.png`, `mobile-412x915-tasks.png`, `qa-result.json`.
+- QA result: `/tasks` loaded on all required desktop/mobile viewports with console errors 0 and unexpected failed requests 0. Safe authenticated API smoke against `task_soft_delete` with a fake UUID returned 404, confirming the new soft-delete migration is not applied yet.
+- QA limitation: the available QA account did not have owner/tech_admin cleanup permissions, so delete buttons and `Показать удалённые` were correctly absent for that account. Owner/tech_admin delete UI and actual soft-delete/restore behavior require manual verification after applying the migration with an owner/tech_admin account.
+
 Снимок аудита: 2026-05-05. Test domain: `https://kub.apollot.ru` временный; домен нельзя хардкодить в source code.
 
 ## Passed

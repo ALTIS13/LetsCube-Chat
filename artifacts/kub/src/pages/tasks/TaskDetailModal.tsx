@@ -6,6 +6,8 @@ import { KubBadge, KubButton, KubIcon, KubModal } from "@/components/kub";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
 import { useAppStore } from "@/store/app.store";
 import { useIsManagerOrAdmin, usePermissionAccess } from "@/hooks/useRole";
+import { TASK_DELETE_PERMISSION_KEYS } from "@/hooks/useTaskAccess";
+import { useTaskSoftDelete } from "@/hooks/useTaskSoftDelete";
 import {
   pauseTaskRecurrence,
   resumeTaskRecurrence,
@@ -26,6 +28,7 @@ import {
 } from "./taskMeta";
 import { TaskAssignModal } from "./TaskAssignModal";
 import { TaskConfirmModal } from "./TaskConfirmModal";
+import { TaskDeleteModal } from "./TaskDeleteModal";
 import { TaskFormModal } from "./TaskFormModal";
 import { TaskRejectModal } from "./TaskRejectModal";
 import { mapPgError } from "@/lib/errors";
@@ -36,9 +39,10 @@ interface Props {
   taskId: string;
   nowMs?: number;
   onClose: () => void;
+  onDeleted?: () => void;
 }
 
-type Subdialog = null | "confirm" | "reject" | "cancel" | "assign" | "edit";
+type Subdialog = null | "confirm" | "reject" | "cancel" | "assign" | "edit" | "delete";
 const GLOBAL_RECURRENCE_MANAGE_KEYS = [
   "system.manage",
   "tasks.manage_all_locations",
@@ -52,10 +56,11 @@ const LOCATION_RECURRENCE_MANAGE_KEYS = ["tasks.manage", "tasks.manage_admin_tas
  * action buttons.  Every state-changing button calls a SECURITY DEFINER RPC
  * — the modal never updates `tasks` directly.
  */
-export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) {
+export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted }: Props) {
   const supabase = createClient();
   const currentUser = useAppStore((s) => s.currentUser);
   const isStaff = useIsManagerOrAdmin();
+  const { softDeleteTask } = useTaskSoftDelete();
   const { task, events, loading, refetch } = useTask(taskId);
   const {
     recurrence,
@@ -70,6 +75,14 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
     locationId: task?.location_id ?? null,
     locationOnly: true,
     enabled: Boolean(task?.id && task.location_id && task.recurrence_id && !task.recurrence_template_task_id),
+  });
+  const deleteAccess = usePermissionAccess(TASK_DELETE_PERMISSION_KEYS, {
+    enabled: Boolean(task?.id),
+  });
+  const locationDeleteAccess = usePermissionAccess(["tasks.delete"], {
+    locationId: task?.location_id ?? null,
+    locationOnly: true,
+    enabled: Boolean(task?.id && task.location_id),
   });
 
   const [comment, setComment] = useState("");
@@ -111,7 +124,9 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
   const deadline = getTaskDeadlineState(task, nowMs);
   const isRecurringTemplate = Boolean(task.recurrence_id && !task.recurrence_template_task_id);
   const isRecurringOccurrence = Boolean(task.recurrence_template_task_id);
+  const taskIsDeleted = Boolean(task.deleted_at);
   const canManageRecurrence =
+    !taskIsDeleted &&
     isRecurringTemplate &&
     Boolean(recurrence && !recurrence.stopped_at) &&
     canManageTaskRecurrence({
@@ -124,14 +139,19 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
   const isPoolAvailable = task.assignment_scope !== "user" && !task.assignee_id;
   const isAssignee = currentUser?.id === task.assignee_id;
   const isCreator  = currentUser?.id === task.created_by;
-  const canConfirmReject = isStaff && task.status === "waiting_confirmation" && !isAssignee;
+  const canDeleteTask =
+    !taskIsDeleted &&
+    (deleteAccess.hasAnyPermission(TASK_DELETE_PERMISSION_KEYS) || locationDeleteAccess.hasPermission("tasks.delete"));
+  const canConfirmReject = !taskIsDeleted && isStaff && task.status === "waiting_confirmation" && !isAssignee;
   const canCancel =
+    !taskIsDeleted &&
     isStaff &&
     !["confirmed", "rejected", "cancelled"].includes(task.status);
   // Staff can (re)assign while the task hasn't been picked up yet. Server
   // RPC `task_assign` enforces both the role and the source-status check.
-  const canAssign = isStaff && (task.status === "new" || task.status === "assigned");
+  const canAssign = !taskIsDeleted && isStaff && (task.status === "new" || task.status === "assigned");
   const canClaim =
+    !taskIsDeleted &&
     isStaff &&
     task.status === "new" &&
     task.assignment_scope !== "user" &&
@@ -140,6 +160,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
   // RPC `task_update` re-checks this and the manager-can't-touch-admin
   // guard if the assignee changes.
   const canEdit =
+    !taskIsDeleted &&
     (isCreator || isStaff) &&
     !["confirmed", "cancelled"].includes(task.status);
   const hasTaskActions =
@@ -149,7 +170,8 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
     canCancel ||
     canConfirmReject ||
     (isAssignee && ["assigned", "accepted", "in_progress", "rejected"].includes(task.status)) ||
-    (isStaff && task.status === "waiting_confirmation" && isAssignee);
+    (isStaff && task.status === "waiting_confirmation" && isAssignee) ||
+    canDeleteTask;
 
   // supabase.rpc(...) returns a thenable PostgrestBuilder, not a real Promise,
   // so we type the callback as `PromiseLike` and await it.
@@ -222,7 +244,27 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
     ? runRecurrenceAction("recurrence-stop", () => stopTaskRecurrence(task.recurrence_id!), "Повторение остановлено.")
     : undefined;
 
+  const onDeleteTask = async (reason: string | null) => {
+    if (!canDeleteTask) {
+      setActionError("Недостаточно прав для удаления задачи.");
+      return;
+    }
+    setActionError(null);
+    setActionNotice(null);
+    setActionLoading("delete");
+    const { error } = await softDeleteTask(task.id, reason);
+    setActionLoading(null);
+    if (error) {
+      setActionError(error);
+      return;
+    }
+    setSub(null);
+    onDeleted?.();
+    onClose();
+  };
+
   const submitComment = async () => {
+    if (taskIsDeleted) return;
     if (!comment.trim()) return;
     setPosting(true); setActionError(null);
     const { error } = await supabase.rpc("task_comment", {
@@ -302,7 +344,19 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
               {deadline.badgeLabel}
             </KubBadge>
           )}
+          {taskIsDeleted && (
+            <KubBadge tone="danger" pill>
+              Удалена
+            </KubBadge>
+          )}
         </div>
+
+        {taskIsDeleted && (
+          <div className="rounded-xl border border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-danger)]">
+            Задача удалена и скрыта из обычных списков.
+            {task.delete_reason ? ` Причина: ${task.delete_reason}` : ""}
+          </div>
+        )}
 
         {task.description && (
           <p className="text-sm text-[color:var(--kub-text)] whitespace-pre-wrap leading-relaxed">
@@ -645,6 +699,15 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
               Отменить задачу
             </KubButton>
           )}
+          {canDeleteTask && (
+            <KubButton
+              variant="danger"
+              leftIcon={<KubIcon name="ban" size={14} />}
+              onClick={() => setSub("delete")}
+            >
+              Удалить задачу
+            </KubButton>
+          )}
           </div>
         )}
 
@@ -694,6 +757,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               rows={2}
+              disabled={taskIsDeleted}
               placeholder="Оставьте комментарий…"
               className="flex-1 rounded-xl px-3 py-2 text-sm outline-none resize-none bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all"
             />
@@ -702,7 +766,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
               size="md"
               aria-label="Отправить комментарий"
               loading={posting}
-              disabled={!comment.trim()}
+              disabled={taskIsDeleted || !comment.trim()}
               onClick={submitComment}
             >
               <KubIcon name="send" size={14} />
@@ -747,6 +811,16 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose }: Props) 
           task={task}
           onClose={() => setSub(null)}
           onDone={() => { setSub(null); refetch(); }}
+        />
+      )}
+      {sub === "delete" && (
+        <TaskDeleteModal
+          open
+          count={1}
+          loading={actionLoading === "delete"}
+          error={actionError}
+          onClose={() => setSub(null)}
+          onConfirm={(reason) => void onDeleteTask(reason)}
         />
       )}
     </>

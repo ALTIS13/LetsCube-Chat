@@ -42,6 +42,25 @@ export const TASK_ADMIN_VIEW_PERMISSION_KEYS = [
   "tasks.manage_all_locations",
 ] as const;
 
+export const TASK_DELETE_PERMISSION_KEYS = [
+  "system.manage",
+  "tasks.manage_all_locations",
+  "tasks.delete",
+] as const;
+
+export const TASK_BULK_DELETE_PERMISSION_KEYS = [
+  "system.manage",
+  "tasks.manage_all_locations",
+  "tasks.bulk_delete",
+  "tasks.delete",
+] as const;
+
+export const TASK_RESTORE_PERMISSION_KEYS = [
+  "system.manage",
+  "tasks.manage_all_locations",
+  "tasks.restore",
+] as const;
+
 type LocationMembership = {
   user_id: string;
   location_id: string;

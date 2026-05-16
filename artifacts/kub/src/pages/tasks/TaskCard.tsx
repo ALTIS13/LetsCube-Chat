@@ -28,6 +28,7 @@ export function TaskCard({ task, nowMs, onClick }: TaskCardProps) {
   const isPoolAvailable = task.assignment_scope !== "user" && !task.assignee_id;
   const isRecurringTemplate = Boolean(task.recurrence_id && !task.recurrence_template_task_id);
   const isRecurringOccurrence = Boolean(task.recurrence_template_task_id);
+  const isDeleted = Boolean(task.deleted_at);
   const deadline = getTaskDeadlineState(task, nowMs);
 
   return (
@@ -38,7 +39,10 @@ export function TaskCard({ task, nowMs, onClick }: TaskCardProps) {
     >
       <KubPanel
         padded={false}
-        className="p-3 flex flex-col gap-2.5 hover:border-[color:var(--kub-cyan)]/40 transition-colors cursor-pointer"
+        className={cn(
+          "p-3 flex flex-col gap-2.5 hover:border-[color:var(--kub-cyan)]/40 transition-colors cursor-pointer",
+          isDeleted && "opacity-70 border-[color:var(--kub-danger)]/35",
+        )}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -56,6 +60,7 @@ export function TaskCard({ task, nowMs, onClick }: TaskCardProps) {
             <KubBadge tone={priority.tone} pill dot>
               {priority.label}
             </KubBadge>
+            {isDeleted && <KubBadge tone="danger" pill>Удалена</KubBadge>}
           </div>
         </div>
 
@@ -85,6 +90,11 @@ export function TaskCard({ task, nowMs, onClick }: TaskCardProps) {
           {deadline.badgeLabel && (
             <KubBadge tone={deadline.tone} pill>
               {deadline.badgeLabel}
+            </KubBadge>
+          )}
+          {isDeleted && (
+            <KubBadge tone="danger" pill>
+              Удалена
             </KubBadge>
           )}
         </div>

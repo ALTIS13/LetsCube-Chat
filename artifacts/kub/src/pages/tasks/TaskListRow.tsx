@@ -27,6 +27,7 @@ export function TaskListRow({ task, nowMs, onClick }: TaskListRowProps) {
   const deadline = getTaskDeadlineState(task, nowMs);
   const isRecurringTemplate = Boolean(task.recurrence_id && !task.recurrence_template_task_id);
   const isRecurringOccurrence = Boolean(task.recurrence_template_task_id);
+  const isDeleted = Boolean(task.deleted_at);
   const assigneeName = getPersonName(task.assignee, "Без исполнителя");
   const creatorName = getPersonName(task.creator, "Неизвестно");
 
@@ -34,7 +35,10 @@ export function TaskListRow({ task, nowMs, onClick }: TaskListRowProps) {
     <button
       type="button"
       onClick={onClick}
-      className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2.5 text-left transition-colors hover:border-[color:var(--kub-cyan)]/40 sm:grid-cols-[minmax(180px,1.5fr)_minmax(140px,0.8fr)_minmax(160px,1fr)_minmax(160px,0.8fr)_auto]"
+      className={cn(
+        "grid w-full grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2.5 text-left transition-colors hover:border-[color:var(--kub-cyan)]/40 sm:grid-cols-[minmax(180px,1.5fr)_minmax(140px,0.8fr)_minmax(160px,1fr)_minmax(160px,0.8fr)_auto]",
+        isDeleted && "opacity-70 border-[color:var(--kub-danger)]/35",
+      )}
     >
       <div className="min-w-0">
         <div className="truncate text-sm font-semibold text-[color:var(--kub-text)]">{task.title}</div>
@@ -43,6 +47,7 @@ export function TaskListRow({ task, nowMs, onClick }: TaskListRowProps) {
         )}
         <div className="mt-1 flex min-w-0 items-center gap-1.5 sm:hidden">
           <KubBadge tone={status.tone} pill>{status.label}</KubBadge>
+          {isDeleted && <KubBadge tone="danger" pill>Удалена</KubBadge>}
           <span
             className={cn(
               "min-w-0 truncate text-[11px] font-medium",
@@ -109,6 +114,7 @@ export function TaskListRow({ task, nowMs, onClick }: TaskListRowProps) {
         )}
         {isRecurringTemplate && <KubBadge tone="cyan" pill>Повторяется</KubBadge>}
         {isRecurringOccurrence && <KubBadge tone="muted" pill>Экземпляр повтора</KubBadge>}
+        {isDeleted && <KubBadge tone="danger" pill>Удалена</KubBadge>}
       </div>
 
       <div className="flex items-center justify-end">

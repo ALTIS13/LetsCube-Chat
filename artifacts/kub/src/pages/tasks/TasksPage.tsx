@@ -8,11 +8,14 @@ import { useTaskRouting } from "@/hooks/useTaskRouting";
 import {
   TASK_ACCESS_PERMISSION_KEYS,
   TASK_ADMIN_VIEW_PERMISSION_KEYS,
+  TASK_BULK_DELETE_PERMISSION_KEYS,
   TASK_CREATE_PERMISSION_KEYS,
+  TASK_RESTORE_PERMISSION_KEYS,
   TASK_VIEW_PERMISSION_KEYS,
   getUserTaskLocationIds,
 } from "@/hooks/useTaskAccess";
 import { useTasks, type TasksFilter } from "@/hooks/useTasks";
+import { useTaskSoftDelete } from "@/hooks/useTaskSoftDelete";
 import {
   KubButton,
   KubEmptyState,
@@ -23,6 +26,7 @@ import {
 import { TaskCard } from "./TaskCard";
 import { TaskListRow } from "./TaskListRow";
 import { TaskDetailModal } from "./TaskDetailModal";
+import { TaskDeleteModal } from "./TaskDeleteModal";
 import { TaskFormModal } from "./TaskFormModal";
 import {
   TASK_ASSIGNMENT_SCOPE_META,
@@ -73,6 +77,7 @@ export function TasksPage() {
   const [location, setLocation] = useLocation();
   const currentUser = useAppStore((s) => s.currentUser);
   const taskAccess = usePermissionAccess(TASK_ACCESS_PERMISSION_KEYS);
+  const { bulkSoftDeleteTasks } = useTaskSoftDelete();
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<TaskViewMode>(() => {
@@ -83,6 +88,12 @@ export function TasksPage() {
   const [assigneeFilter, setAssigneeFilter] = useState<AssigneeFilter>("all");
   const [locationFilter, setLocationFilter] = useState<LocationFilter>("all");
   const [recipientFilter, setRecipientFilter] = useState<RecipientFilter>("all");
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(() => new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
+  const [bulkDeleteNotice, setBulkDeleteNotice] = useState<string | null>(null);
   const routing = useTaskRouting({ enabled: Boolean(currentUser), includeMembers: true });
   const myLocationIds = useMemo(
     () => new Set(currentUser?.id ? getUserTaskLocationIds(routing.members, currentUser.id) : []),
@@ -102,6 +113,8 @@ export function TasksPage() {
     taskAccess.hasAnyPermission(TASK_CREATE_PERMISSION_KEYS) ||
     locationTaskAccess.hasAnyPermission(TASK_CREATE_PERMISSION_KEYS);
   const canViewAllLocations = taskAccess.hasAnyPermission(["system.manage", "tasks.view_all_locations", "tasks.manage_all_locations"]);
+  const canViewDeletedTasks = taskAccess.hasAnyPermission(TASK_RESTORE_PERMISSION_KEYS);
+  const canBulkDeleteTasks = taskAccess.hasAnyPermission(TASK_BULK_DELETE_PERMISSION_KEYS);
   const canFilterAdminTasks =
     taskAccess.hasAnyPermission(TASK_ADMIN_VIEW_PERMISSION_KEYS) ||
     locationTaskAccess.hasAnyPermission(TASK_ADMIN_VIEW_PERMISSION_KEYS);
@@ -115,7 +128,7 @@ export function TasksPage() {
   const activeTab = tabs.find((t) => t.id === tabId) ?? tabs[0];
 
   const baseFilter: TasksFilter = { mine: "all" };
-  const { tasks, loading } = useTasks(baseFilter, { enabled: canViewTasks && !taskChecking });
+  const { tasks, loading, refetch } = useTasks(baseFilter, { enabled: canViewTasks && !taskChecking });
 
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -147,6 +160,47 @@ export function TasksPage() {
     setOpenTaskId(null);
     if (taskIdFromUrl) setLocation("/tasks", { replace: true });
   };
+  const toggleTaskSelection = (taskId: string, checked: boolean) => {
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(taskId);
+      else next.delete(taskId);
+      return next;
+    });
+    setBulkDeleteNotice(null);
+  };
+  const toggleVisibleSelection = (checked: boolean) => {
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        for (const id of visibleDeletableTaskIds) next.add(id);
+      } else {
+        for (const id of visibleDeletableTaskIds) next.delete(id);
+      }
+      return next;
+    });
+    setBulkDeleteNotice(null);
+  };
+  const confirmBulkDelete = async (reason: string | null) => {
+    const ids = Array.from(selectedTaskIds);
+    if (ids.length === 0) return;
+    setBulkDeleteLoading(true);
+    setBulkDeleteError(null);
+    const result = await bulkSoftDeleteTasks(ids, reason);
+    setBulkDeleteLoading(false);
+    if (result.error && result.deletedCount === 0) {
+      setBulkDeleteError(result.error);
+      return;
+    }
+    setBulkDeleteOpen(false);
+    setSelectedTaskIds(new Set());
+    setBulkDeleteNotice(
+      result.failedCount > 0
+        ? `Удалено задач: ${result.deletedCount}. Не удалось удалить: ${result.failedCount}.`
+        : `Удалено задач: ${result.deletedCount}.`,
+    );
+    await refetch();
+  };
 
   const visibleTasks = useMemo(
     () => applyClientFilters(
@@ -159,8 +213,9 @@ export function TasksPage() {
       routing.available ? locationFilter : "all",
       routing.available ? recipientFilter : "all",
       myLocationIds,
+      showDeleted && canViewDeletedTasks,
     ),
-    [tasks, activeTab.id, search, nowMs, currentUser?.id, assigneeFilter, routing.available, myLocationIds, locationFilter, recipientFilter],
+    [tasks, activeTab.id, search, nowMs, currentUser?.id, assigneeFilter, routing.available, myLocationIds, locationFilter, recipientFilter, showDeleted, canViewDeletedTasks],
   );
   const tabCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -175,10 +230,36 @@ export function TasksPage() {
         routing.available ? locationFilter : "all",
         routing.available ? recipientFilter : "all",
         myLocationIds,
+        showDeleted && canViewDeletedTasks,
       ).length;
     }
     return counts;
-  }, [tabs, tasks, nowMs, currentUser?.id, assigneeFilter, routing.available, myLocationIds, locationFilter, recipientFilter]);
+  }, [tabs, tasks, nowMs, currentUser?.id, assigneeFilter, routing.available, myLocationIds, locationFilter, recipientFilter, showDeleted, canViewDeletedTasks]);
+  const visibleDeletableTaskIds = useMemo(
+    () => visibleTasks.filter((task) => !task.deleted_at).map((task) => task.id),
+    [visibleTasks],
+  );
+  const allVisibleSelected =
+    visibleDeletableTaskIds.length > 0 &&
+    visibleDeletableTaskIds.every((id) => selectedTaskIds.has(id));
+  const selectedCount = selectedTaskIds.size;
+
+  useEffect(() => {
+    if (canViewDeletedTasks) return;
+    setShowDeleted(false);
+  }, [canViewDeletedTasks]);
+
+  useEffect(() => {
+    if (!canBulkDeleteTasks && selectedTaskIds.size > 0) {
+      setSelectedTaskIds(new Set());
+      return;
+    }
+    const allowed = new Set(visibleDeletableTaskIds);
+    setSelectedTaskIds((prev) => {
+      const next = new Set(Array.from(prev).filter((id) => allowed.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [canBulkDeleteTasks, selectedTaskIds.size, visibleDeletableTaskIds]);
 
   const assigneeOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -423,6 +504,18 @@ export function TasksPage() {
               </>
             )}
 
+            {canViewDeletedTasks && (
+              <label className="inline-flex h-9 max-w-full items-center gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2.5 text-xs font-medium text-[color:var(--kub-text)]">
+                <input
+                  type="checkbox"
+                  checked={showDeleted}
+                  onChange={(event) => setShowDeleted(event.target.checked)}
+                  className="h-4 w-4 rounded border-[color:var(--kub-border-color)] accent-[var(--kub-cyan)]"
+                />
+                <span className="truncate">Показать удалённые</span>
+              </label>
+            )}
+
             <div className="inline-flex h-9 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-0.5">
               <button
                 type="button"
@@ -455,6 +548,47 @@ export function TasksPage() {
             </div>
           </div>
         </div>
+        {canBulkDeleteTasks && visibleDeletableTaskIds.length > 0 && (
+          <div className="mt-3 flex flex-col gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs sm:flex-row sm:items-center sm:justify-between">
+            <label className="inline-flex min-w-0 items-center gap-2 font-medium text-[color:var(--kub-text)]">
+              <input
+                type="checkbox"
+                checked={allVisibleSelected}
+                onChange={(event) => toggleVisibleSelection(event.target.checked)}
+                className="h-4 w-4 rounded border-[color:var(--kub-border-color)] accent-[var(--kub-cyan)]"
+              />
+              <span className="truncate">Выбрать видимые</span>
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              {selectedCount > 0 && (
+                <span className="font-semibold text-[color:var(--kub-cyan)]">
+                  Выбрано: {selectedCount}
+                </span>
+              )}
+              {bulkDeleteNotice && (
+                <span className="text-[color:var(--kub-online)]">{bulkDeleteNotice}</span>
+              )}
+              {selectedCount > 0 && (
+                <>
+                  <KubButton variant="secondary" size="sm" onClick={() => setSelectedTaskIds(new Set())}>
+                    Снять выбор
+                  </KubButton>
+                  <KubButton
+                    variant="danger"
+                    size="sm"
+                    leftIcon={<KubIcon name="ban" size={13} />}
+                    onClick={() => {
+                      setBulkDeleteError(null);
+                      setBulkDeleteOpen(true);
+                    }}
+                  >
+                    Удалить выбранные
+                  </KubButton>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* List */}
@@ -484,13 +618,29 @@ export function TasksPage() {
           viewMode === "list" ? (
             <div className="space-y-2">
               {visibleTasks.map((t) => (
-                <TaskListRow key={t.id} task={t} nowMs={nowMs} onClick={() => setOpenTaskId(t.id)} />
+                <div key={t.id} className="relative">
+                  {canBulkDeleteTasks && !t.deleted_at && (
+                    <SelectionCheckbox
+                      checked={selectedTaskIds.has(t.id)}
+                      onChange={(checked) => toggleTaskSelection(t.id, checked)}
+                    />
+                  )}
+                  <TaskListRow task={t} nowMs={nowMs} onClick={() => setOpenTaskId(t.id)} />
+                </div>
               ))}
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-4 gap-3">
               {visibleTasks.map((t) => (
-                <TaskCard key={t.id} task={t} nowMs={nowMs} onClick={() => setOpenTaskId(t.id)} />
+                <div key={t.id} className="relative">
+                  {canBulkDeleteTasks && !t.deleted_at && (
+                    <SelectionCheckbox
+                      checked={selectedTaskIds.has(t.id)}
+                      onChange={(checked) => toggleTaskSelection(t.id, checked)}
+                    />
+                  )}
+                  <TaskCard task={t} nowMs={nowMs} onClick={() => setOpenTaskId(t.id)} />
+                </div>
               ))}
             </div>
           )
@@ -503,7 +653,12 @@ export function TasksPage() {
       </div>
 
       {openTaskId && (
-        <TaskDetailModal taskId={openTaskId} nowMs={nowMs} onClose={closeTaskModal} />
+        <TaskDetailModal
+          taskId={openTaskId}
+          nowMs={nowMs}
+          onClose={closeTaskModal}
+          onDeleted={() => { void refetch(); }}
+        />
       )}
       {showCreate && (
         <TaskFormModal
@@ -511,7 +666,43 @@ export function TasksPage() {
           onDone={(id) => { setShowCreate(false); setOpenTaskId(id); }}
         />
       )}
+      {bulkDeleteOpen && (
+        <TaskDeleteModal
+          open
+          count={selectedCount}
+          loading={bulkDeleteLoading}
+          error={bulkDeleteError}
+          onClose={() => {
+            if (!bulkDeleteLoading) setBulkDeleteOpen(false);
+          }}
+          onConfirm={(reason) => void confirmBulkDelete(reason)}
+        />
+      )}
     </div>
+  );
+}
+
+function SelectionCheckbox({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label
+      className="absolute left-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]/95 shadow-sm"
+      onClick={(event) => event.stopPropagation()}
+      title="Выбрать задачу"
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-4 w-4 rounded border-[color:var(--kub-border-color)] accent-[var(--kub-cyan)]"
+        aria-label="Выбрать задачу"
+      />
+    </label>
   );
 }
 
@@ -585,9 +776,11 @@ function applyClientFilters(
   locationFilter: LocationFilter,
   recipientFilter: RecipientFilter,
   myLocationIds: Set<string>,
+  showDeleted: boolean,
 ): TaskWithPeople[] {
   const query = normalizeSearch(search);
   return tasks.filter((task) => {
+    if (!showDeleted && task.deleted_at) return false;
     if (tabId === "mine" && task.assignee_id !== userId) return false;
     if (tabId === "available") {
       if (task.status !== "new" || task.assignment_scope === "user" || task.assignee_id !== null) return false;
