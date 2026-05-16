@@ -17,6 +17,10 @@ const MESSAGE_SELECT_WITH_JOINS =
 
 type SendableMessageType = Extract<MessageWithSender["type"], "text" | "image" | "video" | "audio" | "file">;
 
+type FetchMessagesOptions = {
+  background?: boolean;
+};
+
 interface SendMessageInput {
   type: SendableMessageType;
   content: string | null;
@@ -140,10 +144,11 @@ export function useMessages(
     return Boolean(chat && chat.type === "private" && !isSavedChat(chat, targetUserId));
   }, []);
 
-  const fetchMessages = useCallback(async () => {
+  const fetchMessages = useCallback(async (options: FetchMessagesOptions = {}) => {
     if (!chatId) return;
+    const background = options.background === true;
     bumpFetch("useMessages");
-    setLoading(true);
+    if (!background) setLoading(true);
     let localClearedAt: string | null = null;
     const user = currentUserRef.current;
     if (user) {
@@ -180,7 +185,7 @@ export function useMessages(
       .limit(MESSAGE_PAGE_SIZE + 1);
     if (error) {
       console.error("Messages fetch error:", error);
-      setLoading(false);
+      if (!background) setLoading(false);
       return;
     }
     if (data) {
@@ -217,7 +222,7 @@ export function useMessages(
         }
       }
     }
-    setLoading(false);
+    if (!background) setLoading(false);
   }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds, shouldMarkDeliveredForPrivateChat]);
 
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
@@ -617,7 +622,7 @@ export function useMessages(
       if (fallbackTimer) window.clearTimeout(fallbackTimer);
       fallbackTimer = window.setTimeout(() => {
         fallbackTimer = null;
-        void fetchMessages();
+        void fetchMessages({ background: true });
       }, 300);
     };
 
@@ -648,6 +653,23 @@ export function useMessages(
       unregisterChannel(channelName);
     };
   }, [chatId, userId, rt, fetchMessages, refreshMessageById]);
+
+  useEffect(() => {
+    if (!chatId || !userId) return;
+    let reconnectTimer: number | null = null;
+    const handleOnline = () => {
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        void fetchMessages({ background: true });
+      }, 500);
+    };
+    window.addEventListener("online", handleOnline);
+    return () => {
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [chatId, userId, fetchMessages]);
 
   useEffect(() => {
     if (!chatId || !userId) return;

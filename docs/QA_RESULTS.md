@@ -571,3 +571,25 @@ Recurring tasks roadmap note:
 - Screenshot artifacts are ignored from git and stored in `output/qa-production-ui-polish/`. Key paths: `tech-desktop-3840-chat-main-loaded.png`, `tech-desktop-1440-mini-profile-context.png`, `tech-desktop-1440-audio-settings.png`, `tech-mobile-390-audio-settings-sound-section.png`, `tech-mobile-390-admin-users.png`, `client-mobile-390-mini-profile.png`, `client-desktop-1440-tasks-page.png`, `qa-summary.json`.
 - Screenshot QA result: 48 screenshots recorded, console errors 0, unexpected request failures 0. Existing QA database content still contains test chat names/messages; those are live data, not source-code labels.
 - Validation completed: `git diff --check`, `pnpm.cmd --filter @workspace/kub run typecheck`, `PORT=5173 BASE_PATH=/ pnpm.cmd --filter @workspace/kub run build`, and `pnpm.cmd e2e:smoke` passed. Build still emits the existing Vite sourcemap/chunk-size warnings.
+
+2026-05-17 long-session realtime/background sync hardening:
+
+- Frontend-only hardening; SQL was not changed or applied. Added `tests/e2e/long-session.spec.ts` and `pnpm.cmd e2e:long-session` for a dedicated long-session browser proof outside the default smoke suite.
+- Realtime/focus map reviewed:
+  - `useChats`: `chats:user:{userId}`, `chat-members:receipts:{userId}`, `chat-members:user:{userId}`, `visibilitychange`, app refresh event, now also `online` reconnect refetch.
+  - `useMessages`: `messages:chat:{chatId}:typing`, `messages:chat:{chatId}`, `reactions:chat:{chatId}`, `profiles:chat:{chatId}`, `visibilitychange`, now also `online` background message refetch.
+  - `useUser`: ref-counted `profile-self:{userId}` channel and Supabase auth listener; same-user `SIGNED_IN` / token refresh stays silent.
+  - `useNotifications`, `useTasks`, `useTask`, `useRecurringTasks`, `useFolders`, `useTopics`, bans/mutes/admin panels: channel cleanup exists on unmount/change; refetches are debounced.
+  - `useDynamicRoles` and `useTaskRouting`: random per-hook channel names remain stable for each mount and cleanup on unmount; realtime refresh now runs as background refresh and state arrays are replaced only when signatures change.
+- Dev-only instrumentation now exposes `window.__kubDevInstrumentation` with metadata-only counters: cumulative fetches, active realtime channels, duplicate channel counts, active mounts and heartbeat counters. No tokens, payloads, messages, profile data or secrets are captured.
+- Background refresh state preservation:
+  - Dynamic roles and task routing no longer set full `loading=true` during realtime refresh, and background errors keep the current data instead of clearing UI.
+  - Chats refetch on tab return/online with `preserveActiveChat: true`.
+  - Active message history refetches on reconnect in background so composer draft/staged state is not touched.
+  - Reaction fallback refetch is now background-only, avoiding visible loading flicker.
+- Network hardening: unread counters in `useChats` no longer use Supabase `head: true` requests. They keep exact counts with a tiny `GET ... limit(1)` query, which removed Chromium/Playwright `net::ERR_ABORTED` artifacts during background transitions.
+- Local Playwright QA ran against `http://127.0.0.1:5173`. Dev server was started from the local workspace with public Supabase config extracted from the live bundle without printing values; QA credentials stayed in the local env file.
+- `pnpm.cmd e2e:long-session` result: 1/1 passed on 1440x900. The test kept the app open for about 2.4 minutes, typed a draft marker, set a window reload marker, switched to a second Playwright page and back, simulated offline/online, and verified: draft marker preserved, window marker preserved, no main-frame reload, no password/login screen, no ErrorBoundary, duplicate realtime channels `{}`, request count below threshold, failed requests 0, console/page errors 0.
+- `pnpm.cmd e2e:smoke` result: 5/5 passed on 1440x900, 1920x1080, 3840x2160, 390x844 and 412x915. Smoke opened the shell, notifications and tasks route without console errors.
+- Guard scans completed: no credentials matches, no `service_role` frontend matches, no `window.confirm/alert/prompt`, no `pnpm.ps1`. Reload scan still finds only existing explicit/manual paths: ErrorBoundary refresh button, app-update button, iframe open-current-page action and safe link formatting.
+- Validation completed: `git diff --check`, `pnpm.cmd --filter @workspace/kub run typecheck`, `PORT=5173 BASE_PATH=/ pnpm.cmd --filter @workspace/kub run build`, `pnpm.cmd e2e:smoke`, and `pnpm.cmd e2e:long-session` passed. Build still emits the existing Vite sourcemap/chunk-size warnings.

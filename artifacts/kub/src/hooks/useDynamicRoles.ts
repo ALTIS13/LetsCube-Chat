@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createClient, getRealtimeClient } from "@/lib/supabase/client";
-import { registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
+import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import {
   ROLES_PERMISSIONS_REQUIRED_MESSAGE,
   ROLES_PERMISSIONS_STORAGE_EVENT,
@@ -12,12 +11,17 @@ import {
   mapRolesPermissionsError,
   setRolesPermissionsEnabled,
 } from "@/lib/rolePermissions";
+import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import type { DynamicRole, Permission, RolePermission, UserGlobalRole } from "@/types/database";
 
 interface UseDynamicRolesOptions {
   enabled?: boolean;
   includeAssignments?: boolean;
 }
+
+type LoadOptions = {
+  background?: boolean;
+};
 
 export interface DynamicRolesState {
   available: boolean;
@@ -46,76 +50,88 @@ export function useDynamicRoles(options: UseDynamicRolesOptions = {}): DynamicRo
   const [rolePermissions, setRolePermissions] = useState<RolePermission[]>([]);
   const [userGlobalRoles, setUserGlobalRoles] = useState<UserGlobalRole[]>([]);
 
-  const load = useCallback(async () => {
-    if (!enabled) {
-      setAvailable(false);
-      setChecked(true);
-      setLoading(false);
-      setError(null);
-      setRoles([]);
-      setPermissions([]);
-      setRolePermissions([]);
-      setUserGlobalRoles([]);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    const rolesQuery = supabase
-      .from("roles")
-      .select("*")
-      .order("scope", { ascending: true })
-      .order("is_system", { ascending: false })
-      .order("name", { ascending: true });
-    const permissionsQuery = supabase
-      .from("permissions")
-      .select("*")
-      .order("category", { ascending: true, nullsFirst: false })
-      .order("key", { ascending: true });
-    const rolePermissionsQuery = supabase
-      .from("role_permissions")
-      .select("*");
-    const userRolesQuery = includeAssignments
-      ? supabase.from("user_global_roles").select("*")
-      : null;
-
-    const [rolesRes, permissionsRes, rolePermissionsRes, userRolesRes] = await Promise.all([
-      rolesQuery,
-      permissionsQuery,
-      rolePermissionsQuery,
-      userRolesQuery ?? Promise.resolve({ data: [], error: null }),
-    ]);
-
-    const firstError = rolesRes.error ?? permissionsRes.error ?? rolePermissionsRes.error ?? userRolesRes.error;
-    if (firstError) {
-      if (isRolesPermissionsMissingError(firstError)) {
-        setError(ROLES_PERMISSIONS_REQUIRED_MESSAGE);
-        setRolesPermissionsEnabled(false);
-      } else if (isRolesPermissionsPermissionError(firstError)) {
-        setError("Недостаточно прав для управления ролями.");
-      } else {
-        setError(mapRolesPermissionsError(firstError));
-        if (import.meta.env.DEV) console.warn("[dynamic-roles] load failed", firstError);
+  const load = useCallback(
+    async (options: LoadOptions = {}) => {
+      const background = options.background === true;
+      if (!enabled) {
+        setAvailable(false);
+        setChecked(true);
+        setLoading(false);
+        setError(null);
+        setRoles([]);
+        setPermissions([]);
+        setRolePermissions([]);
+        setUserGlobalRoles([]);
+        return;
       }
-      setAvailable(false);
-      setRoles([]);
-      setPermissions([]);
-      setRolePermissions([]);
-      setUserGlobalRoles([]);
+
+      bumpFetch("useDynamicRoles");
+      if (!background) setLoading(true);
+      setError(null);
+
+      const rolesQuery = supabase
+        .from("roles")
+        .select("*")
+        .order("scope", { ascending: true })
+        .order("is_system", { ascending: false })
+        .order("name", { ascending: true });
+      const permissionsQuery = supabase
+        .from("permissions")
+        .select("*")
+        .order("category", { ascending: true, nullsFirst: false })
+        .order("key", { ascending: true });
+      const rolePermissionsQuery = supabase.from("role_permissions").select("*");
+      const userRolesQuery = includeAssignments ? supabase.from("user_global_roles").select("*") : null;
+
+      const [rolesRes, permissionsRes, rolePermissionsRes, userRolesRes] = await Promise.all([
+        rolesQuery,
+        permissionsQuery,
+        rolePermissionsQuery,
+        userRolesQuery ?? Promise.resolve({ data: [], error: null }),
+      ]);
+
+      const firstError = rolesRes.error ?? permissionsRes.error ?? rolePermissionsRes.error ?? userRolesRes.error;
+      if (firstError) {
+        const friendlyError = isRolesPermissionsMissingError(firstError)
+          ? ROLES_PERMISSIONS_REQUIRED_MESSAGE
+          : isRolesPermissionsPermissionError(firstError)
+            ? "Недостаточно прав для управления ролями."
+            : mapRolesPermissionsError(firstError);
+        setError(friendlyError);
+        if (isRolesPermissionsMissingError(firstError)) {
+          setRolesPermissionsEnabled(false);
+        }
+        if (!isRolesPermissionsMissingError(firstError) && !isRolesPermissionsPermissionError(firstError)) {
+          if (import.meta.env.DEV) console.warn("[dynamic-roles] load failed", firstError);
+        }
+        if (background) {
+          setLoading(false);
+          return;
+        }
+        setAvailable(false);
+        setRoles([]);
+        setPermissions([]);
+        setRolePermissions([]);
+        setUserGlobalRoles([]);
+        setChecked(true);
+        setLoading(false);
+        return;
+      }
+
+      setAvailable(true);
+      setRoles((current) => updateIfChanged(current, (rolesRes.data ?? []) as DynamicRole[], roleSignature));
+      setPermissions((current) => updateIfChanged(current, (permissionsRes.data ?? []) as Permission[], permissionSignature));
+      setRolePermissions((current) =>
+        updateIfChanged(current, (rolePermissionsRes.data ?? []) as RolePermission[], rolePermissionSignature),
+      );
+      setUserGlobalRoles((current) =>
+        updateIfChanged(current, (userRolesRes.data ?? []) as UserGlobalRole[], userGlobalRoleSignature),
+      );
       setChecked(true);
       setLoading(false);
-      return;
-    }
-
-    setAvailable(true);
-    setRoles((rolesRes.data ?? []) as DynamicRole[]);
-    setPermissions((permissionsRes.data ?? []) as Permission[]);
-    setRolePermissions((rolePermissionsRes.data ?? []) as RolePermission[]);
-    setUserGlobalRoles((userRolesRes.data ?? []) as UserGlobalRole[]);
-    setChecked(true);
-    setLoading(false);
-  }, [enabled, includeAssignments, supabase]);
+    },
+    [enabled, includeAssignments, supabase],
+  );
 
   useEffect(() => {
     void load();
@@ -127,7 +143,7 @@ export function useDynamicRoles(options: UseDynamicRolesOptions = {}): DynamicRo
     const debounced = () => {
       if (timer) window.clearTimeout(timer);
       timer = window.setTimeout(() => {
-        void load();
+        void load({ background: true });
       }, 250);
     };
     const channelName = channelIdRef.current;
@@ -149,6 +165,38 @@ export function useDynamicRoles(options: UseDynamicRolesOptions = {}): DynamicRo
   }, [available, enabled, load, rt]);
 
   return { available, checked, loading, error, roles, permissions, rolePermissions, userGlobalRoles, refetch: load };
+}
+
+function updateIfChanged<T>(current: T[], next: T[], signature: (item: T) => string): T[] {
+  return collectionSignature(current, signature) === collectionSignature(next, signature) ? current : next;
+}
+
+function collectionSignature<T>(items: T[], signature: (item: T) => string): string {
+  return items.map(signature).sort().join("|");
+}
+
+function roleSignature(role: DynamicRole): string {
+  return [
+    role.id,
+    role.key,
+    role.name,
+    role.scope,
+    role.is_active ? "1" : "0",
+    role.is_system ? "1" : "0",
+    role.updated_at,
+  ].join(":");
+}
+
+function permissionSignature(permission: Permission): string {
+  return [permission.key, permission.name, permission.category ?? "", permission.description ?? ""].join(":");
+}
+
+function rolePermissionSignature(permission: RolePermission): string {
+  return `${permission.role_id}:${permission.permission_key}`;
+}
+
+function userGlobalRoleSignature(role: UserGlobalRole): string {
+  return [role.user_id, role.role_id, role.assigned_by ?? "", role.assigned_at].join(":");
 }
 
 export function useDynamicRolesEnabledPreference(): [boolean, (enabled: boolean) => void] {

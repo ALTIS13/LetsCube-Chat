@@ -113,20 +113,22 @@ export function useChats() {
           if (effectiveReadAt) {
             let unreadQuery = supabase
               .from("messages")
-              .select("id", { count: "exact", head: true })
+              .select("id", { count: "exact" })
               .eq("chat_id", chat.id)
               .neq("user_id", userId)
               .gt("created_at", effectiveReadAt)
-              .is("deleted_at", null);
+              .is("deleted_at", null)
+              .limit(1);
             const { count } = await unreadQuery;
             unreadCount = count ?? 0;
           } else {
             let unreadQuery = supabase
               .from("messages")
-              .select("id", { count: "exact", head: true })
+              .select("id", { count: "exact" })
               .eq("chat_id", chat.id)
               .neq("user_id", userId)
-              .is("deleted_at", null);
+              .is("deleted_at", null)
+              .limit(1);
             if (myMembership?.cleared_at) {
               unreadQuery = unreadQuery.gt("created_at", myMembership.cleared_at);
             }
@@ -378,16 +380,24 @@ export function useChats() {
   }, [chats]);
 
   useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState !== "visible") return;
+    const refreshAfterBackground = () => {
       const now = Date.now();
       if (now - lastVisibilityFetchAt.current < VISIBILITY_REFRESH_THROTTLE_MS) return;
       lastVisibilityFetchAt.current = now;
       void fetchChats({ preserveActiveChat: true });
     };
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      refreshAfterBackground();
+    };
+    const onOnline = () => {
+      refreshAfterBackground();
+    };
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
     };
   }, [fetchChats]);
 

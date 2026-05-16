@@ -1,57 +1,93 @@
 /**
- * Dev-only диагностика для Task #48 (storm-петля fetch'ей).
+ * Development-only counters for long-session QA.
  *
- * Под `import.meta.env.DEV` собирает счётчики:
- *   – fetch'и по хуку (`bumpFetch("useChats")` и т. п.);
- *   – активные realtime-каналы (`registerChannel`/`unregisterChannel`);
- * и раз в 10 с выводит сводку через `console.debug`.
- *
- * В production все функции — no-op (ранний return по `import.meta.env.DEV`),
- * так что обвязка не влияет на runtime.
- *
- * Никаких токенов, содержимого сообщений, телефонов или ключей не логируем —
- * только имена хуков и стабильные имена каналов.
+ * The counters are intentionally metadata-only: hook names, channel names and
+ * heartbeat counts. They do not capture tokens, message text, profile data or
+ * request payloads. Production builds return early through import.meta.env.DEV.
  */
 
 const isDev = import.meta.env.DEV;
 const REPORT_INTERVAL_MS = 10_000;
 
+export interface KubDevInstrumentationSnapshot {
+  fetchesLastWindow: Record<string, number>;
+  cumulativeFetches: Record<string, number>;
+  activeRealtimeChannels: Record<string, number>;
+  duplicateRealtimeChannels: Record<string, number>;
+  activeMounts: Record<string, number>;
+  heartbeat: {
+    pingsLastWindow: number;
+    cumulativePings: number;
+    activeRunners: number;
+  };
+}
+
+declare global {
+  interface Window {
+    __kubDevInstrumentation?: KubDevInstrumentationSnapshot;
+  }
+}
+
 const fetchCounts = new Map<string, number>();
+const cumulativeFetchCounts = new Map<string, number>();
 const channelCounts = new Map<string, number>();
 const mountCounts = new Map<string, number>();
 let reportTimer: ReturnType<typeof setTimeout> | null = null;
+let heartbeatPings = 0;
+let cumulativeHeartbeatPings = 0;
+let heartbeatActive = 0;
+
+function mapToObject(map: Map<string, number>): Record<string, number> {
+  return Object.fromEntries(map);
+}
+
+function duplicateChannelsSnapshot(): Record<string, number> {
+  return Object.fromEntries(Array.from(channelCounts).filter(([, count]) => count > 1));
+}
+
+function currentSnapshot(): KubDevInstrumentationSnapshot {
+  return {
+    fetchesLastWindow: mapToObject(fetchCounts),
+    cumulativeFetches: mapToObject(cumulativeFetchCounts),
+    activeRealtimeChannels: mapToObject(channelCounts),
+    duplicateRealtimeChannels: duplicateChannelsSnapshot(),
+    activeMounts: mapToObject(mountCounts),
+    heartbeat: {
+      pingsLastWindow: heartbeatPings,
+      cumulativePings: cumulativeHeartbeatPings,
+      activeRunners: heartbeatActive,
+    },
+  };
+}
+
+function publishSnapshot() {
+  if (!isDev || typeof window === "undefined") return;
+  window.__kubDevInstrumentation = currentSnapshot();
+}
 
 function scheduleReport() {
   if (!isDev) return;
+  publishSnapshot();
   if (reportTimer) return;
   reportTimer = setTimeout(() => {
     reportTimer = null;
+    const snapshot = currentSnapshot();
     if (fetchCounts.size > 0) {
-      console.debug("[kub:dev] fetches/10s", Object.fromEntries(fetchCounts));
+      console.debug("[kub:dev] fetches/10s", snapshot.fetchesLastWindow);
       fetchCounts.clear();
     }
     if (channelCounts.size > 0) {
-      console.debug("[kub:dev] active realtime channels", Object.fromEntries(channelCounts));
+      console.debug("[kub:dev] active realtime channels", snapshot.activeRealtimeChannels);
     }
     if (mountCounts.size > 0) {
-      console.debug("[kub:dev] active mounts", Object.fromEntries(mountCounts));
+      console.debug("[kub:dev] active mounts", snapshot.activeMounts);
     }
     if (heartbeatPings > 0 || heartbeatActive > 0) {
-      console.debug("[kub:dev] heartbeat", {
-        pingsLast10s: heartbeatPings,
-        activeRunners: heartbeatActive,
-      });
+      console.debug("[kub:dev] heartbeat", snapshot.heartbeat);
       heartbeatPings = 0;
     }
-    // Self-reschedule: пока есть активные каналы / монтированные тяжёлые
-    // компоненты / живой heartbeat — отчёт продолжает выходить каждые 10s
-    // даже без новых событий. Это даёт «every-10s while active» гарантию
-    // (без paint-storm в idle-вкладке, потому что условие закрытое).
-    if (
-      channelCounts.size > 0 ||
-      mountCounts.size > 0 ||
-      heartbeatActive > 0
-    ) {
+    publishSnapshot();
+    if (channelCounts.size > 0 || mountCounts.size > 0 || heartbeatActive > 0) {
       scheduleReport();
     }
   }, REPORT_INTERVAL_MS);
@@ -60,6 +96,7 @@ function scheduleReport() {
 export function bumpFetch(hook: string): void {
   if (!isDev) return;
   fetchCounts.set(hook, (fetchCounts.get(hook) ?? 0) + 1);
+  cumulativeFetchCounts.set(hook, (cumulativeFetchCounts.get(hook) ?? 0) + 1);
   scheduleReport();
 }
 
@@ -71,18 +108,12 @@ export function registerChannel(name: string): void {
 
 export function unregisterChannel(name: string): void {
   if (!isDev) return;
-  const cur = channelCounts.get(name) ?? 0;
-  if (cur <= 1) channelCounts.delete(name);
-  else channelCounts.set(name, cur - 1);
+  const current = channelCounts.get(name) ?? 0;
+  if (current <= 1) channelCounts.delete(name);
+  else channelCounts.set(name, current - 1);
   scheduleReport();
 }
 
-/**
- * Mount/unmount счётчики для тяжёлых компонентов (ChatList, Sidebar,
- * ChatWindow). Используются под `import.meta.env.DEV`, чтобы убедиться,
- * что компоненты не ремаунтятся при каждом heartbeat-эхо или при
- * раскрытии модалок (Task #48).
- */
 export function bumpMount(component: string): void {
   if (!isDev) return;
   mountCounts.set(component, (mountCounts.get(component) ?? 0) + 1);
@@ -91,28 +122,21 @@ export function bumpMount(component: string): void {
 
 export function bumpUnmount(component: string): void {
   if (!isDev) return;
-  const cur = mountCounts.get(component) ?? 0;
-  if (cur <= 1) mountCounts.delete(component);
-  else mountCounts.set(component, cur - 1);
+  const current = mountCounts.get(component) ?? 0;
+  if (current <= 1) mountCounts.delete(component);
+  else mountCounts.set(component, current - 1);
   scheduleReport();
 }
-
-/**
- * Heartbeat-метрики (Task #48): сколько реальных PATCH-пингов
- * улетело за окно отчёта и сколько активных runner-ов сейчас живёт
- * (должен быть ровно 0 или 1; если выше — ref-counting сломан).
- */
-let heartbeatPings = 0;
-let heartbeatActive = 0;
 
 export function bumpHeartbeat(): void {
   if (!isDev) return;
   heartbeatPings += 1;
+  cumulativeHeartbeatPings += 1;
   scheduleReport();
 }
 
-export function setHeartbeatActive(n: number): void {
+export function setHeartbeatActive(count: number): void {
   if (!isDev) return;
-  heartbeatActive = n;
+  heartbeatActive = count;
   scheduleReport();
 }

@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { clearRoleAccessCache } from "@/hooks/useRole";
-import { useAppStore } from "@/store/app.store";
+import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import {
   LOCATION_ROUTING_REQUIRED_MESSAGE,
   LOCATION_ROUTING_STORAGE_EVENT,
@@ -12,7 +11,8 @@ import {
   mapLocationRoutingError,
   setLocationRoutingEnabled,
 } from "@/lib/locationRouting";
-import { registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
+import { createClient, getRealtimeClient } from "@/lib/supabase/client";
+import { useAppStore } from "@/store/app.store";
 import type { Location, LocationMember, Profile } from "@/types/database";
 
 export type LocationMemberWithProfile = LocationMember & {
@@ -24,6 +24,10 @@ interface UseTaskRoutingOptions {
   enabled?: boolean;
   includeMembers?: boolean;
 }
+
+type LoadOptions = {
+  background?: boolean;
+};
 
 interface TaskRoutingState {
   available: boolean;
@@ -49,84 +53,89 @@ export function useTaskRouting(options: UseTaskRoutingOptions = {}): TaskRouting
   const [locations, setLocations] = useState<Location[]>([]);
   const [members, setMembers] = useState<LocationMemberWithProfile[]>([]);
 
-  const load = useCallback(async () => {
-    if (!enabled) {
-      setAvailable(false);
-      setChecked(true);
-      setLoading(false);
+  const load = useCallback(
+    async (options: LoadOptions = {}) => {
+      const background = options.background === true;
+      if (!enabled) {
+        setAvailable(false);
+        setChecked(true);
+        setLoading(false);
+        setError(null);
+        setLocations([]);
+        setMembers([]);
+        return;
+      }
+
+      bumpFetch("useTaskRouting");
+      if (!background) setLoading(true);
       setError(null);
-      setLocations([]);
-      setMembers([]);
-      return;
-    }
 
-    setLoading(true);
-    setError(null);
+      const locationQuery = supabase
+        .from("locations")
+        .select("*")
+        .order("is_active", { ascending: false })
+        .order("name", { ascending: true });
 
-    const locationQuery = supabase
-      .from("locations")
-      .select("*")
-      .order("is_active", { ascending: false })
-      .order("name", { ascending: true });
-
-    const memberQuery = includeMembers
-      ? supabase
-          .from("location_members")
-          .select(
-            `*,
+      const memberQuery = includeMembers
+        ? supabase
+            .from("location_members")
+            .select(
+              `*,
              profile:profiles!location_members_user_id_fkey(*),
              primary_admin:profiles!location_members_primary_admin_id_fkey(*)`,
-          )
-          .order("created_at", { ascending: false })
-      : null;
-    const ownMemberQuery = includeMembers && currentUserId
-      ? supabase
-          .from("location_members")
-          .select("*")
-          .eq("user_id", currentUserId)
-      : null;
+            )
+            .order("created_at", { ascending: false })
+        : null;
+      const ownMemberQuery =
+        includeMembers && currentUserId
+          ? supabase.from("location_members").select("*").eq("user_id", currentUserId)
+          : null;
 
-    const [locationRes, memberRes, ownMemberRes] = await Promise.all([
-      locationQuery,
-      memberQuery ?? Promise.resolve({ data: [], error: null }),
-      ownMemberQuery ?? Promise.resolve({ data: [], error: null }),
-    ]);
+      const [locationRes, memberRes, ownMemberRes] = await Promise.all([
+        locationQuery,
+        memberQuery ?? Promise.resolve({ data: [], error: null }),
+        ownMemberQuery ?? Promise.resolve({ data: [], error: null }),
+      ]);
 
-    const memberError = memberRes.error && ownMemberRes.error ? memberRes.error : null;
-    const firstError = locationRes.error ?? memberError;
-    if (firstError) {
-      if (isLocationRoutingMissingError(firstError)) {
+      const memberError = memberRes.error && ownMemberRes.error ? memberRes.error : null;
+      const firstError = locationRes.error ?? memberError;
+      if (firstError) {
+        const friendlyError = isLocationRoutingMissingError(firstError)
+          ? LOCATION_ROUTING_REQUIRED_MESSAGE
+          : mapLocationRoutingError(firstError);
+        setError(friendlyError);
+        if (!isLocationRoutingMissingError(firstError)) {
+          if (import.meta.env.DEV) console.warn("[task-routing] load failed", firstError);
+        }
+        if (background) {
+          setLoading(false);
+          return;
+        }
         setAvailable(false);
-        setError(LOCATION_ROUTING_REQUIRED_MESSAGE);
-      } else {
-        setAvailable(false);
-        setError(mapLocationRoutingError(firstError));
-        if (import.meta.env.DEV) console.warn("[task-routing] load failed", firstError);
+        setLocations([]);
+        setMembers([]);
+        setChecked(true);
+        setLoading(false);
+        return;
       }
-      setLocations([]);
-      setMembers([]);
-      setChecked(true);
-      setLoading(false);
-      return;
-    }
 
-    const mergedMembers = mergeLocationMembers(
-      (memberRes.error ? [] : (memberRes.data ?? [])) as LocationMemberWithProfile[],
-      (ownMemberRes.error ? [] : (ownMemberRes.data ?? [])) as LocationMember[],
-    );
-
-    setAvailable(true);
-    setLocations((locationRes.data ?? []) as Location[]);
-    setMembers(
-      mergedMembers.map((member) => ({
+      const mergedMembers = mergeLocationMembers(
+        (memberRes.error ? [] : (memberRes.data ?? [])) as LocationMemberWithProfile[],
+        (ownMemberRes.error ? [] : (ownMemberRes.data ?? [])) as LocationMember[],
+      ).map((member) => ({
         ...member,
         profile: member.profile ?? null,
         primary_admin: member.primary_admin ?? null,
-      })),
-    );
-    setChecked(true);
-    setLoading(false);
-  }, [currentUserId, enabled, includeMembers, supabase]);
+      }));
+
+      setAvailable(true);
+      setLocations((current) => updateIfChanged(current, (locationRes.data ?? []) as Location[], locationSignature));
+      setMembers((current) => updateIfChanged(current, mergedMembers, locationMemberSignature));
+      setChecked(true);
+      setLoading(false);
+    },
+    [currentUserId, enabled, includeMembers, supabase],
+  );
 
   useEffect(() => {
     void load();
@@ -138,7 +147,7 @@ export function useTaskRouting(options: UseTaskRoutingOptions = {}): TaskRouting
     const debounced = () => {
       if (timer) window.clearTimeout(timer);
       timer = window.setTimeout(() => {
-        void load();
+        void load({ background: true });
       }, 250);
     };
     const handleMembershipChange = (payload: { new?: { user_id?: string }; old?: { user_id?: string } }) => {
@@ -185,6 +194,43 @@ function mergeLocationMembers(
 
 function locationMemberKey(member: Pick<LocationMember, "user_id" | "location_id">): string {
   return `${member.user_id}:${member.location_id}`;
+}
+
+function updateIfChanged<T>(current: T[], next: T[], signature: (item: T) => string): T[] {
+  return collectionSignature(current, signature) === collectionSignature(next, signature) ? current : next;
+}
+
+function collectionSignature<T>(items: T[], signature: (item: T) => string): string {
+  return items.map(signature).sort().join("|");
+}
+
+function locationSignature(location: Location): string {
+  return [
+    location.id,
+    location.name,
+    location.address ?? "",
+    location.is_active ? "1" : "0",
+    location.updated_at,
+  ].join(":");
+}
+
+function locationMemberSignature(member: LocationMemberWithProfile): string {
+  const profile = member.profile;
+  const primaryAdmin = member.primary_admin;
+  return [
+    member.user_id,
+    member.location_id,
+    member.role,
+    member.role_id ?? "",
+    member.primary_admin_id ?? "",
+    member.is_primary ? "1" : "0",
+    member.updated_at,
+    profile?.full_name ?? "",
+    profile?.username ?? "",
+    profile?.avatar_url ?? "",
+    primaryAdmin?.full_name ?? "",
+    primaryAdmin?.username ?? "",
+  ].join(":");
 }
 
 export function useTaskRoutingEnabledPreference(): [boolean, (enabled: boolean) => void] {
