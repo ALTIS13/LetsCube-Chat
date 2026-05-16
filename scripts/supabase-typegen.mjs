@@ -12,7 +12,7 @@ const outputFile =
 
 if (!projectRef) {
   console.error(
-    "SUPABASE_PROJECT_REF is required. Example: set SUPABASE_PROJECT_REF=<project-ref> && pnpm.cmd supabase:typegen",
+    'SUPABASE_PROJECT_REF is required. PowerShell: $env:SUPABASE_PROJECT_REF="<project-ref>"; pnpm.cmd supabase:typegen. Cmd: cmd /c "set SUPABASE_PROJECT_REF=<project-ref>&& pnpm.cmd supabase:typegen"',
   );
   process.exit(1);
 }

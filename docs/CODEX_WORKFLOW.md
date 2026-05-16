@@ -43,13 +43,32 @@ Do not commit that file, copy its values into docs, or echo its values.
 Generate types with a project ref supplied by environment:
 
 ```powershell
-set SUPABASE_PROJECT_REF=<project-ref>
+$env:SUPABASE_PROJECT_REF = "<project-ref>"
 pnpm.cmd supabase:typegen
 ```
+
+For a one-line Windows command prompt invocation, use:
+
+```powershell
+cmd /c "set SUPABASE_PROJECT_REF=<project-ref>&& pnpm.cmd supabase:typegen"
+```
+
+Do not use Bash-style inline env assignment in PowerShell:
+`SUPABASE_PROJECT_REF=<project-ref> pnpm.cmd supabase:typegen` will not work there.
+Do not print or commit `SUPABASE_ACCESS_TOKEN`; the CLI should use the user's local
+authenticated session.
 
 The generated output is `artifacts/kub/src/types/database.generated.ts`. The current
 `artifacts/kub/src/types/database.ts` remains the compatibility type file until generated types
 are wired through the app deliberately.
+
+Generated type integration plan:
+
+1. Generate `database.generated.ts`.
+2. Compare generated tables/RPC/enums with the manual `database.ts`.
+3. Keep internal/helper RPC types as reference only unless app code needs them.
+4. Move app-facing aliases gradually to the generated file, one surface at a time.
+5. Keep `database.ts` as the compatibility layer until typecheck/build/e2e are stable.
 
 ## Debugging Policy
 
