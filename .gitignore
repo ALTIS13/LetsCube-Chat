@@ -74,5 +74,7 @@ typings/
 .qa-screenshots/
 .playwright-mcp/
 output/
+output/playwright-auth/
+*.auth.json
 test-results/
 /kub-*.png

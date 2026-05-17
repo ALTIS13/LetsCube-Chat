@@ -8,9 +8,21 @@ export type QaCredentials = {
   password: string;
 };
 
-const AUTH_STATE_PATH = path.join(process.cwd(), "output", "e2e-auth-state.json");
+export type QaRole = "owner" | "tech_admin" | "location_admin" | "location_staff" | "client";
+export type QaAuthStateName = QaRole | "default";
 
-export function loadQaCredentials(): QaCredentials | null {
+export const QA_ROLES: QaRole[] = [
+  "owner",
+  "tech_admin",
+  "location_admin",
+  "location_staff",
+  "client",
+];
+
+const AUTH_STATE_PATH = path.join(process.cwd(), "output", "e2e-auth-state.json");
+const AUTH_STATE_DIR = path.join(process.cwd(), "output", "playwright-auth");
+
+export function loadQaEnvValues(): Map<string, string> {
   const envFile = process.env.KUB_QA_ENV_FILE || path.join(os.homedir(), ".kub-messenger-qa.env");
   const values = new Map<string, string>();
 
@@ -29,11 +41,43 @@ export function loadQaCredentials(): QaCredentials | null {
     }
   }
 
-  const passwordKey = ["KUB", "QA", "PASSWORD"].join("_");
-  const email = process.env.KUB_QA_EMAIL || values.get("KUB_QA_EMAIL");
-  const password = process.env[passwordKey] || values.get(passwordKey);
+  return values;
+}
+
+export function loadQaCredentials(role: QaRole | "default" = "default"): QaCredentials | null {
+  const values = loadQaEnvValues();
+  const keys =
+    role === "default"
+      ? { email: "KUB_QA_EMAIL", password: ["KUB", "QA", "PASSWORD"].join("_") }
+      : {
+          email: ["KUB", "QA", role.toUpperCase(), "EMAIL"].join("_"),
+          password: ["KUB", "QA", role.toUpperCase(), "PASSWORD"].join("_"),
+        };
+  const email = process.env[keys.email] || values.get(keys.email);
+  const password = process.env[keys.password] || values.get(keys.password);
   if (!email || !password) return null;
   return { email, password };
+}
+
+export function findFirstAvailableQaRole(
+  roles: QaRole[],
+  options?: { includeDefault?: boolean },
+): QaAuthStateName | null {
+  for (const role of roles) {
+    if (loadQaCredentials(role) || hasSavedAuthState(role)) return role;
+  }
+  if (options?.includeDefault && (loadQaCredentials("default") || hasSavedAuthState("default")))
+    return "default";
+  return null;
+}
+
+export function getAuthStatePath(name: QaAuthStateName = "default"): string {
+  if (name === "default") return AUTH_STATE_PATH;
+  return path.join(AUTH_STATE_DIR, `${name}.json`);
+}
+
+export function hasSavedAuthState(name: QaAuthStateName = "default"): boolean {
+  return fs.existsSync(getAuthStatePath(name));
 }
 
 export async function gotoOrSkip(page: Page, pathName: string) {
@@ -41,8 +85,13 @@ export async function gotoOrSkip(page: Page, pathName: string) {
   test.skip(!response, `KUB_BASE_URL is not reachable: ${test.info().project.use.baseURL}`);
 }
 
-export async function loginIfNeeded(page: Page, credentials: QaCredentials) {
-  await restoreAuthState(page);
+export async function loginIfNeeded(
+  page: Page,
+  credentials: QaCredentials,
+  options: { authStateName?: QaAuthStateName } = {},
+) {
+  const authStateName = options.authStateName ?? "default";
+  await restoreAuthState(page, authStateName);
 
   const emailInput = page.locator('input[type="email"]').first();
   await emailInput.waitFor({ state: "visible", timeout: 5_000 }).catch(() => null);
@@ -69,13 +118,37 @@ export async function loginIfNeeded(page: Page, credentials: QaCredentials) {
 
   await expect(page.locator("body")).toBeVisible();
   await expect(page.locator('input[type="password"]')).toHaveCount(0, { timeout: 20_000 });
-  await saveAuthState(page);
+  await saveAuthState(page, authStateName);
 }
 
-async function restoreAuthState(page: Page) {
-  if (!fs.existsSync(AUTH_STATE_PATH)) return;
+export async function loginAsRoleOrSkip(page: Page, role: QaAuthStateName) {
+  const credentials = loadQaCredentials(role);
+  const hasState = hasSavedAuthState(role);
+  test.skip(
+    !credentials && !hasState,
+    `QA auth state or credentials for '${role}' are not configured`,
+  );
+
+  if (credentials) {
+    await loginIfNeeded(page, credentials, { authStateName: role });
+    return;
+  }
+
+  await restoreAuthState(page, role);
+  const emailInput = page.locator('input[type="email"]').first();
+  await emailInput.waitFor({ state: "visible", timeout: 3_000 }).catch(() => null);
+  test.skip(
+    await emailInput.isVisible().catch(() => false),
+    `Saved auth state for '${role}' is expired and credentials are not configured`,
+  );
+  await expect(page.locator('input[type="password"]')).toHaveCount(0, { timeout: 10_000 });
+}
+
+async function restoreAuthState(page: Page, name: QaAuthStateName = "default") {
+  const statePath = getAuthStatePath(name);
+  if (!fs.existsSync(statePath)) return;
   const origin = new URL(page.url()).origin;
-  const raw = JSON.parse(fs.readFileSync(AUTH_STATE_PATH, "utf8")) as {
+  const raw = JSON.parse(fs.readFileSync(statePath, "utf8")) as {
     origins?: { origin: string; localStorage?: { name: string; value: string }[] }[];
   };
   const state = raw.origins?.find((item) => item.origin === origin);
@@ -88,7 +161,8 @@ async function restoreAuthState(page: Page) {
   await page.reload({ waitUntil: "domcontentloaded" });
 }
 
-async function saveAuthState(page: Page) {
-  fs.mkdirSync(path.dirname(AUTH_STATE_PATH), { recursive: true });
-  await page.context().storageState({ path: AUTH_STATE_PATH });
+async function saveAuthState(page: Page, name: QaAuthStateName = "default") {
+  const statePath = getAuthStatePath(name);
+  fs.mkdirSync(path.dirname(statePath), { recursive: true });
+  await page.context().storageState({ path: statePath });
 }

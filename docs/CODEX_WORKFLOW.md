@@ -38,6 +38,19 @@ pnpm.cmd e2e
 Authenticated tests read the QA email/password from env or `~/.kub-messenger-qa.env`.
 Do not commit that file, copy its values into docs, or echo its values.
 
+Multi-account role QA is documented in `docs/QA_ACCOUNTS.md`. Role-specific tests read
+local-only variables such as `KUB_QA_OWNER_EMAIL`, `KUB_QA_LOCATION_STAFF_EMAIL`, and the
+matching password variables from the same env file. Missing role accounts skip only the
+tests for that role.
+
+Generate ignored local Playwright auth states with:
+
+```powershell
+pnpm.cmd e2e:auth-states
+```
+
+The generated files live under `output/playwright-auth/` and must stay out of git.
+
 ## Supabase Typegen
 
 Generate types with a project ref supplied by environment:

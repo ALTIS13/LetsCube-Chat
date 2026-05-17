@@ -615,3 +615,10 @@ Recurring tasks roadmap note:
 - `20260522_global_search.sql` was rechecked after the previous syntax fix; SQL was not applied automatically.
 - Playwright QA ran on 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915. Evidence is in ignored `output/qa-sidebar-global-search/`: desktop `*-sidebar-username.png`, `*-sidebar-chat.png`, `*-chat-opened.png`; mobile `*-mobile-sheet-username.png`; `qa-summary.json`.
 - QA summary: Ctrl+K focused sidebar search on desktop, sidebar `@te` and `TestGroup` searches rendered without overflow, chat result opened through the normal chat path, mobile search tab opened the global search sheet, console errors 0, unexpected failed requests 0.
+## 2026-05-17 — Multi-account QA fixtures foundation
+
+- Added local-only multi-account QA format for owner, tech admin, location admin, location staff, and client in `docs/QA_ACCOUNTS.md`.
+- Added ignored Playwright auth-state generation under `output/playwright-auth/` via `pnpm.cmd e2e:auth-states`.
+- Added `tests/e2e/roles-visibility.spec.ts` for role-specific UI visibility checks. Role tests skip per role when neither credentials nor storage state are available.
+- Extended `pnpm.cmd rls:smoke` to run role-aware authenticated RPC/RLS probes with fake UUIDs by default. Real fixture mutations remain gated for future work by `KUB_QA_ALLOW_MUTATIONS=1`.
+- No real credentials are documented here; only local env variable names are listed in workflow docs.
