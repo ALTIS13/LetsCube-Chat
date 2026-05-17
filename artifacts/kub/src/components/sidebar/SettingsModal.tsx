@@ -207,7 +207,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           label="Имя пользователя"
           value={username}
           onChange={(v) => setUsername(normalizeUsername(v))}
-          placeholder="username (буквы, цифры, ., _)"
+          placeholder="никнейм (буквы, цифры, ., _)"
           hint={`${username.length}/${PROFILE_LIMITS.usernameMax}`}
           maxLength={PROFILE_LIMITS.usernameMax}
         />

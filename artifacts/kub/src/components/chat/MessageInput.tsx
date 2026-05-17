@@ -1011,15 +1011,56 @@ function VideoMessageAttachmentPreview({
   busy: boolean;
   failed: boolean;
 }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onPause = () => setPlaying(false);
+    const onPlay = () => setPlaying(true);
+    const finish = () => {
+      setPlaying(false);
+      video.currentTime = 0;
+    };
+    video.addEventListener("pause", onPause);
+    video.addEventListener("play", onPlay);
+    video.addEventListener("ended", finish);
+    return () => {
+      video.pause();
+      video.removeEventListener("pause", onPause);
+      video.removeEventListener("play", onPlay);
+      video.removeEventListener("ended", finish);
+    };
+  }, [attachment.previewUrl]);
+
+  const toggle = () => {
+    const video = videoRef.current;
+    if (!video || !attachment.previewUrl) return;
+    if (playing) {
+      video.pause();
+      return;
+    }
+    void video.play().catch(() => setPlaying(false));
+  };
+
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
-      <div data-testid="staged-video-message-preview" className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-black">
+      <button
+        type="button"
+        data-testid="staged-video-message-playback-toggle"
+        onClick={toggle}
+        disabled={!attachment.previewUrl || busy}
+        className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-black focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)] disabled:cursor-not-allowed disabled:opacity-70"
+        aria-label={playing ? "Пауза предпросмотра" : "Просмотреть видеосообщение"}
+      >
+        <span data-testid="staged-video-message-preview" className="absolute inset-0">
         {attachment.previewUrl ? (
           <video
+            ref={videoRef}
             src={attachment.previewUrl}
             className="h-full w-full object-cover"
             playsInline
-            muted
             preload="metadata"
           />
         ) : (
@@ -1027,10 +1068,11 @@ function VideoMessageAttachmentPreview({
             <KubIcon name="video" size={18} />
           </div>
         )}
-        <span className="absolute inset-0 flex items-center justify-center bg-black/20 text-white">
-          <KubIcon name="play" size={14} />
         </span>
-      </div>
+        <span className="absolute inset-0 flex items-center justify-center bg-black/20 text-white">
+          <KubIcon name={playing ? "pause" : "play"} size={14} />
+        </span>
+      </button>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate text-xs font-medium text-[color:var(--kub-text)]">Видео-сообщение</span>

@@ -298,7 +298,7 @@ export function AuditTab() {
                 <input
                   value={actorQueryRaw}
                   onChange={(e) => setActorQueryRaw(e.target.value)}
-                  placeholder="Имя или @username"
+                  placeholder="Имя или @никнейм"
                   className="flex-1 bg-transparent text-sm outline-none text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]"
                 />
               </div>

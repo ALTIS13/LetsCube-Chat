@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KubButton, KubIcon, KubModal } from "@/components/kub";
+import { showAppAlert } from "@/lib/appDialogs";
 import { cn } from "@/lib/utils";
 
 const MAX_DURATION_MS = 60_000;
+const MIN_DURATION_MS = 700;
 const TIMER_TICK_MS = 250;
 const PREFERRED_MIME_TYPES = ["video/webm;codecs=vp8,opus", "video/webm;codecs=vp9,opus", "video/webm"] as const;
 
@@ -61,6 +63,7 @@ export function VideoMessageRecorderModal({
   const [videoInputCount, setVideoInputCount] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
   const [recorded, setRecorded] = useState<RecordedVideo | null>(null);
+  const [switchingCamera, setSwitchingCamera] = useState(false);
 
   useEffect(() => {
     autoAddOnStopRef.current = autoAddOnStop;
@@ -254,6 +257,13 @@ export function VideoMessageRecorderModal({
         return;
       }
       const finalMimeType = blob.type || mimeType;
+      if (finalDurationMs < MIN_DURATION_MS) {
+        showAppAlert("Слишком короткая запись.", isRoundLabel(variant));
+        chunksRef.current = [];
+        setDurationMs(0);
+        void startPreview(selectedFacingModeRef.current);
+        return;
+      }
       if (autoAddOnStopRef.current) {
         void Promise.resolve(onAddVideo(blob, finalDurationMs, finalMimeType)).catch(() => setStatus("error"));
         return;
@@ -286,7 +296,7 @@ export function VideoMessageRecorderModal({
       setDurationMs(Date.now() - startedAtRef.current);
     }, TIMER_TICK_MS);
     maxTimerRef.current = setTimeout(finishRecording, MAX_DURATION_MS);
-  }, [cleanupRecorder, clearRecorded, finishRecording, onAddVideo, status, stopStream, variant]);
+  }, [cleanupRecorder, clearRecorded, finishRecording, onAddVideo, startPreview, status, stopStream, variant]);
 
   useEffect(() => {
     if (!open || !autoStart || status !== "ready") return;
@@ -333,11 +343,13 @@ export function VideoMessageRecorderModal({
   const switchCamera = useCallback(() => {
     const currentFacingMode = selectedFacingModeRef.current;
     const nextFacingMode: FacingMode = currentFacingMode === "user" ? "environment" : "user";
+    if (switchingCamera) return;
 
     if (status === "recording" && variant === "round") {
       const currentStream = streamRef.current;
       const devices = navigator.mediaDevices;
       if (!currentStream || !devices?.getUserMedia) return;
+      setSwitchingCamera(true);
       void devices.getUserMedia({
         audio: false,
         video: videoConstraints(nextFacingMode, true),
@@ -357,6 +369,8 @@ export function VideoMessageRecorderModal({
       }).catch(() => {
         selectedFacingModeRef.current = currentFacingMode;
         setFacingMode(currentFacingMode);
+      }).finally(() => {
+        setSwitchingCamera(false);
       });
       return;
     }
@@ -364,6 +378,7 @@ export function VideoMessageRecorderModal({
     if (status === "ready") {
       const devices = navigator.mediaDevices;
       if (!devices?.getUserMedia) return;
+      setSwitchingCamera(true);
       void devices.getUserMedia({
         audio: true,
         video: videoConstraints(nextFacingMode, variant === "round"),
@@ -383,168 +398,222 @@ export function VideoMessageRecorderModal({
       }).catch(() => {
         selectedFacingModeRef.current = currentFacingMode;
         setFacingMode(currentFacingMode);
+      }).finally(() => {
+        setSwitchingCamera(false);
       });
     }
-  }, [attachPreviewStream, cleanupRecorder, clearRecorded, status, variant]);
+  }, [attachPreviewStream, cleanupRecorder, clearRecorded, status, switchingCamera, variant]);
 
   const isRound = variant === "round";
   const statusCopy = getStatusCopy(status, variant);
   const canAttemptFacingModeSwitch = isRound || videoInputCount > 1;
   const canSwitchCamera = (status === "ready" || (isRound && status === "recording" && supportsCanvasCapture())) && canAttemptFacingModeSwitch;
   const displayDuration = status === "recorded" ? recorded?.durationMs ?? durationMs : durationMs;
+  const switchCameraButton = canSwitchCamera ? (
+    <button
+      type="button"
+      data-testid="video-recorder-switch-camera"
+      data-switch-placement={isRound ? "outside-preview" : "inside-preview"}
+      onClick={switchCamera}
+      disabled={switchingCamera}
+      className={cn(
+        "flex h-10 w-10 items-center justify-center rounded-full border text-white shadow-lg backdrop-blur transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:cursor-wait disabled:opacity-70",
+        isRound
+          ? "border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] hover:bg-[var(--kub-surface-3)]"
+          : "border-white/15 bg-black/60 hover:bg-black/75"
+      )}
+      aria-label="Сменить камеру"
+      title="Сменить камеру"
+    >
+      <KubIcon name={switchingCamera ? "spinner" : "rotate"} size={17} className={switchingCamera ? "animate-spin" : undefined} />
+    </button>
+  ) : null;
+
+  const preview = (
+    <div className={cn("relative flex items-start justify-center", isRound ? "overflow-visible px-8 pt-1" : "w-full")}>
+      <div
+        className={cn(
+          "relative flex items-center justify-center overflow-hidden border border-[color:var(--kub-border-color)] bg-black shadow-2xl",
+          isRound
+            ? "h-[min(56vw,214px)] w-[min(56vw,214px)] max-h-[220px] max-w-[220px] rounded-full"
+            : "aspect-video w-full max-w-[560px] rounded-2xl"
+        )}
+      >
+        {recorded ? (
+          <video
+            src={recorded.previewUrl}
+            className={cn("h-full w-full", isRound ? "object-cover" : "object-contain")}
+            controls
+            playsInline
+            preload="metadata"
+            data-testid={isRound ? "round-video-recorded-preview" : "regular-video-recorded-preview"}
+          />
+        ) : (
+          <video
+            ref={videoRef}
+            className={cn("h-full w-full", isRound ? "object-cover" : "object-contain", status !== "ready" && status !== "recording" && "opacity-30")}
+            muted
+            playsInline
+            autoPlay
+            data-testid={isRound ? "round-video-live-preview" : "regular-video-live-preview"}
+          />
+        )}
+        {status === "recording" && (
+          <div className="absolute left-1/2 top-4 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/65 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
+            <span className="h-2 w-2 rounded-full bg-[var(--kub-danger)] animate-pulse" />
+            {formatDuration(displayDuration)}
+          </div>
+        )}
+        {!isRound && switchCameraButton && (
+          <div className="absolute right-3 top-3">{switchCameraButton}</div>
+        )}
+        {status !== "ready" && status !== "recording" && status !== "recorded" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-5 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white">
+              <KubIcon name={status === "loading" ? "spinner" : "video"} size={22} className={status === "loading" ? "animate-spin" : undefined} />
+            </span>
+            <div>
+              <div className="text-sm font-semibold text-white">{statusCopy.title}</div>
+              <div className="mt-1 text-xs leading-5 text-white/70">{statusCopy.body}</div>
+            </div>
+          </div>
+        )}
+      </div>
+      {isRound && switchCameraButton && (
+        <div className="absolute right-3 top-0 z-10">{switchCameraButton}</div>
+      )}
+    </div>
+  );
+
+  const statusPanel = (
+    <div className={cn(
+      "w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs leading-5 text-[color:var(--kub-muted)]",
+      isRound && "bg-[var(--kub-surface)]"
+    )}>
+      <div className="flex items-center gap-2 font-semibold text-[color:var(--kub-text)]">
+        <KubIcon
+          name={status === "recorded" ? "check" : status === "recording" ? "video" : "camera"}
+          size={14}
+          tone={status === "recorded" ? "accent" : "muted"}
+        />
+        {statusCopy.title}
+        {(status === "recording" || status === "recorded") && (
+          <span className="ml-auto tabular-nums text-[color:var(--kub-cyan)]">{formatDuration(displayDuration)}</span>
+        )}
+      </div>
+      <div className="mt-1">{statusCopy.body}</div>
+    </div>
+  );
+
+  const controls = autoAddOnStop ? (
+    locked && status === "recording" ? (
+      <div className="flex w-full justify-end">
+        <KubButton
+          type="button"
+          variant="danger"
+          onClick={onLockedStop ?? finishRecording}
+          leftIcon={<KubIcon name="pause" size={14} />}
+          data-testid="composer-locked-recording-stop"
+        >
+          Остановить
+        </KubButton>
+      </div>
+    ) : null
+  ) : (
+    <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
+      {status === "recorded" ? (
+        <>
+          <KubButton type="button" variant="secondary" onClick={retake} leftIcon={<KubIcon name="rotate" size={14} />}>
+            Перезаписать
+          </KubButton>
+          <KubButton type="button" variant="danger" onClick={close} leftIcon={<KubIcon name="delete" size={14} />}>
+            Удалить
+          </KubButton>
+          <KubButton type="button" onClick={addVideo} leftIcon={<KubIcon name="check" size={14} />}>
+            Добавить
+          </KubButton>
+        </>
+      ) : status === "recording" ? (
+        <KubButton
+          type="button"
+          variant="danger"
+          onClick={finishRecording}
+          leftIcon={<KubIcon name="pause" size={14} />}
+          data-testid="video-message-record-stop"
+        >
+          Остановить
+        </KubButton>
+      ) : (
+        <KubButton
+          type="button"
+          onClick={startRecording}
+          disabled={status !== "ready"}
+          leftIcon={<KubIcon name="video" size={14} />}
+          data-testid="video-message-record-start"
+        >
+          Начать запись
+        </KubButton>
+      )}
+    </div>
+  );
+
+  if (isRound) {
+    if (!open) return null;
+    return (
+      <div
+        data-testid="video-message-recorder-modal"
+        data-recorder-layout="compact-round"
+        data-recorder-shell="composer-attached"
+        data-facing-mode={facingMode}
+        className="mx-3 mb-2 rounded-3xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3 shadow-2xl kub-glow-soft"
+      >
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-[color:var(--kub-text)]">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--kub-pink)_18%,transparent)] text-[color:var(--kub-pink)]">
+              <KubIcon name="video" size={15} />
+            </span>
+            <span className="truncate">Видеосообщение</span>
+            {(status === "recording" || status === "recorded") && (
+              <span className="shrink-0 tabular-nums text-[color:var(--kub-cyan)]">{formatDuration(displayDuration)}</span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={close}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]"
+            aria-label="Закрыть видеосообщение"
+          >
+            <KubIcon name="close" size={15} />
+          </button>
+        </div>
+        <div className="flex flex-col items-center gap-3">
+          {preview}
+          {statusPanel}
+          {controls}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <KubModal
       open={open}
       onClose={close}
-      title={isRound ? "Видеосообщение" : "Записать видео"}
-      description={
-        isRound
-          ? "Запись попадёт во вложения как круглый видеоролик и отправится только по кнопке отправки."
-          : "Запись попадёт во вложения как обычное видео и отправится только по кнопке отправки."
-      }
+      title="Записать видео"
+      description="Запись попадёт во вложения как обычное видео и отправится только по кнопке отправки."
       icon={<KubIcon name="video" size={18} />}
-      size={isRound ? "sm" : "lg"}
-      mobileSheet={!isRound}
-      className={isRound ? "mb-[calc(env(safe-area-inset-bottom)+88px)] max-w-[min(92vw,380px)] self-end rounded-3xl border sm:mb-0 sm:self-auto" : undefined}
+      size="lg"
       contentClassName="p-0"
-      footer={
-        autoAddOnStop ? (
-          locked && status === "recording" ? (
-            <div className="flex w-full justify-end">
-              <KubButton
-                type="button"
-                variant="danger"
-                onClick={onLockedStop ?? finishRecording}
-                leftIcon={<KubIcon name="pause" size={14} />}
-                data-testid="composer-locked-recording-stop"
-              >
-                Остановить
-              </KubButton>
-            </div>
-          ) : null
-        ) : (
-          <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
-            {status === "recorded" ? (
-              <>
-                <KubButton type="button" variant="secondary" onClick={retake} leftIcon={<KubIcon name="rotate" size={14} />}>
-                  Перезаписать
-                </KubButton>
-                <KubButton type="button" variant="danger" onClick={close} leftIcon={<KubIcon name="delete" size={14} />}>
-                  Удалить
-                </KubButton>
-                <KubButton type="button" onClick={addVideo} leftIcon={<KubIcon name="check" size={14} />}>
-                  Добавить
-                </KubButton>
-              </>
-            ) : status === "recording" ? (
-              <KubButton
-                type="button"
-                variant="danger"
-                onClick={finishRecording}
-                leftIcon={<KubIcon name="pause" size={14} />}
-                data-testid="video-message-record-stop"
-              >
-                Остановить
-              </KubButton>
-            ) : (
-              <>
-                <KubButton
-                  type="button"
-                  onClick={startRecording}
-                  disabled={status !== "ready"}
-                  leftIcon={<KubIcon name="video" size={14} />}
-                  data-testid="video-message-record-start"
-                >
-                  Начать запись
-                </KubButton>
-              </>
-            )}
-          </div>
-        )
-      }
+      footer={controls}
     >
       <div
-        data-testid={isRound ? "video-message-recorder-modal" : "regular-video-recorder-modal"}
-        data-recorder-layout={isRound ? "compact-round" : "regular-modal"}
+        data-testid="regular-video-recorder-modal"
+        data-recorder-layout="regular-modal"
         data-facing-mode={facingMode}
-        className={cn(
-          "flex min-h-0 flex-col items-center px-4 py-4 sm:px-5",
-          isRound ? "gap-3" : "gap-4"
-        )}
+        className="flex min-h-0 flex-col items-center gap-4 px-4 py-4 sm:px-5"
       >
-        <div
-          className={cn(
-            "relative flex items-center justify-center overflow-hidden border border-[color:var(--kub-border-color)] bg-black shadow-2xl",
-            isRound
-              ? "h-[min(58vw,220px)] w-[min(58vw,220px)] max-h-[240px] max-w-[240px] rounded-full"
-              : "aspect-video w-full max-w-[560px] rounded-2xl"
-          )}
-        >
-          {recorded ? (
-            <video
-              src={recorded.previewUrl}
-              className={cn("h-full w-full", isRound ? "object-cover" : "object-contain")}
-              controls
-              playsInline
-              preload="metadata"
-              data-testid={isRound ? "round-video-recorded-preview" : "regular-video-recorded-preview"}
-            />
-          ) : (
-            <video
-              ref={videoRef}
-              className={cn("h-full w-full", isRound ? "object-cover" : "object-contain", status !== "ready" && status !== "recording" && "opacity-30")}
-              muted
-              playsInline
-              autoPlay
-              data-testid={isRound ? "round-video-live-preview" : "regular-video-live-preview"}
-            />
-          )}
-          {status === "recording" && (
-            <div className="absolute left-1/2 top-4 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/65 px-3 py-1 text-xs font-semibold text-white backdrop-blur">
-              <span className="h-2 w-2 rounded-full bg-[var(--kub-danger)] animate-pulse" />
-              {formatDuration(displayDuration)}
-            </div>
-          )}
-          {canSwitchCamera && (
-            <button
-              type="button"
-              data-testid="video-recorder-switch-camera"
-              onClick={switchCamera}
-              className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white shadow-lg backdrop-blur transition hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-              aria-label="Сменить камеру"
-              title="Сменить камеру"
-            >
-              <KubIcon name="rotate" size={17} />
-            </button>
-          )}
-          {status !== "ready" && status !== "recording" && status !== "recorded" && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-5 text-center">
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white">
-                <KubIcon name={status === "loading" ? "spinner" : "video"} size={22} className={status === "loading" ? "animate-spin" : undefined} />
-              </span>
-              <div>
-                <div className="text-sm font-semibold text-white">{statusCopy.title}</div>
-                <div className="mt-1 text-xs leading-5 text-white/70">{statusCopy.body}</div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs leading-5 text-[color:var(--kub-muted)]">
-          <div className="flex items-center gap-2 font-semibold text-[color:var(--kub-text)]">
-            <KubIcon
-              name={status === "recorded" ? "check" : status === "recording" ? "video" : "camera"}
-              size={14}
-              tone={status === "recorded" ? "accent" : "muted"}
-            />
-            {statusCopy.title}
-            {(status === "recording" || status === "recorded") && (
-              <span className="ml-auto tabular-nums text-[color:var(--kub-cyan)]">{formatDuration(displayDuration)}</span>
-            )}
-          </div>
-          <div className="mt-1">{statusCopy.body}</div>
-        </div>
+        {preview}
+        {statusPanel}
       </div>
     </KubModal>
   );
@@ -657,6 +726,10 @@ function getStatusCopy(status: RecorderStatus, variant: VideoRecorderVariant): {
         body: "Попробуйте ещё раз.",
       };
   }
+}
+
+function isRoundLabel(variant: VideoRecorderVariant): string {
+  return variant === "round" ? "Видеосообщение" : "Видео";
 }
 
 function formatDuration(durationMs: number): string {

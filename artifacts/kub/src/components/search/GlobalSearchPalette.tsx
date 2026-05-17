@@ -217,7 +217,7 @@ export function GlobalSearchPalette() {
               <div className="rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-4">
                 <div className="text-sm font-semibold text-[color:var(--kub-text)]">Быстрый поиск</div>
                 <div className="mt-1 text-xs leading-relaxed text-[color:var(--kub-muted)]">
-                  Начните вводить имя, @username, чат, сообщение, задачу или локацию. Для фильтра можно набрать `type:user`, `type:message` или выбрать чип сверху.
+                  Начните вводить имя, @никнейм, чат, сообщение, задачу или локацию. Для фильтра можно набрать `type:user`, `type:message` или выбрать чип сверху.
                 </div>
               </div>
               <SearchResultsList

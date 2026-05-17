@@ -89,6 +89,8 @@ test.describe("KUB video recorders", () => {
     const modal = page.getByTestId("video-message-recorder-modal");
     await expect(modal).toBeVisible();
     await expect(modal).toHaveAttribute("data-recorder-layout", "compact-round");
+    await expect(modal).toHaveAttribute("data-recorder-shell", "composer-attached");
+    await expect(page.getByRole("dialog", { name: "Видеосообщение" })).toHaveCount(0);
     await expect(modal.getByText("Идёт запись")).toBeVisible();
     await page.waitForTimeout(1_200);
     await page.mouse.up();
@@ -96,6 +98,13 @@ test.describe("KUB video recorders", () => {
     await expect(modal).toHaveCount(0);
     await expect(page.getByTestId("staged-attachment-tray")).toBeVisible();
     await expect(page.getByTestId("staged-video-message-preview")).toBeVisible();
+    const previewToggle = page.getByTestId("staged-video-message-playback-toggle");
+    await expect(previewToggle).toBeVisible();
+    await expect(previewToggle).toHaveAttribute("aria-label", "Просмотреть видеосообщение");
+    await previewToggle.click();
+    await expect(previewToggle).toHaveAttribute("aria-label", "Пауза предпросмотра");
+    await previewToggle.click();
+    await expect(previewToggle).toHaveAttribute("aria-label", "Просмотреть видеосообщение");
     await expect(page.getByTestId("staged-regular-video-preview")).toHaveCount(0);
 
     await page.getByRole("button", { name: "Убрать вложение" }).first().click();
@@ -162,12 +171,15 @@ test.describe("KUB video recorders", () => {
     const modal = page.getByTestId("video-message-recorder-modal");
     await expect(modal).toBeVisible();
     await expect(modal).toHaveAttribute("data-recorder-layout", "compact-round");
+    await expect(modal).toHaveAttribute("data-recorder-shell", "composer-attached");
     await expect(modal).toHaveAttribute("data-facing-mode", "user");
     await page.mouse.move(box!.x + box!.width / 2, box!.y - 96, { steps: 4 });
     await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Запись зафиксирована");
     await page.mouse.up();
 
-    await page.getByTestId("video-recorder-switch-camera").click();
+    const switchCamera = page.getByTestId("video-recorder-switch-camera");
+    await expect(switchCamera).toHaveAttribute("data-switch-placement", "outside-preview");
+    await switchCamera.click();
     await expect(modal).toHaveAttribute("data-facing-mode", "environment");
     await page.waitForTimeout(1_200);
     await page.getByTestId("composer-locked-recording-stop").click();

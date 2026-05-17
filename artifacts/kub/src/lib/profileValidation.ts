@@ -27,10 +27,10 @@ export function validateUsername(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
   if (trimmed.length > PROFILE_LIMITS.usernameMax) {
-    return `Username не должен быть длиннее ${PROFILE_LIMITS.usernameMax} символов`;
+    return `Никнейм не должен быть длиннее ${PROFILE_LIMITS.usernameMax} символов`;
   }
   if (!USERNAME_RE.test(trimmed)) {
-    return "Username может содержать только латинские буквы, цифры, точку и подчёркивание";
+    return "Никнейм может содержать только латинские буквы, цифры, точку и подчёркивание";
   }
   return null;
 }

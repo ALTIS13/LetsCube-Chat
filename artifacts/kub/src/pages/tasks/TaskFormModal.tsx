@@ -876,7 +876,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
               <KubIcon name="search" size={14} className="text-[color:var(--kub-muted)]" />
               <input
                 type="text"
-                placeholder="Поиск по имени или @username…"
+                placeholder="Поиск по имени или @никнейму…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="flex-1 bg-transparent text-sm outline-none text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]"

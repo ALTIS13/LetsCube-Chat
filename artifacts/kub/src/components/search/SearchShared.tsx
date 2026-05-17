@@ -145,7 +145,7 @@ export function SearchSection({
 
 export function SearchEmptyState({
   title = "Ничего не найдено",
-  description = "Попробуйте имя, @username, название чата, фразу из сообщения или фильтр по типу.",
+  description = "Попробуйте имя, @никнейм, название чата, фразу из сообщения или фильтр по типу.",
   compact = false,
 }: {
   title?: string;
