@@ -670,3 +670,12 @@ Recurring tasks roadmap note:
 - Proposal-only SQL created at `.migration-backup/supabase/migrations/20260526_global_search_filters.sql`. SQL was not applied automatically. The proposal adds `global_search_v2(p_query, p_filters, p_limit)` and `search_chat_messages(...)` with authenticated RLS-safe table access.
 - Manual Playwright QA used local dev server `http://127.0.0.1:5173` with refreshed multi-account auth states. Checked global/sidebar/mobile search and in-chat search on 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915. In-chat QA opened Saved Messages, opened search inside chat, verified `has:link` and `after:2026-05-01` chips, no horizontal overflow and no unexpected console errors.
 - Validation completed: `git diff --check`, `pnpm.cmd --filter @workspace/kub run typecheck`, `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"`, `pnpm.cmd e2e:smoke`, and `pnpm.cmd exec playwright test tests/e2e/global-search.spec.ts` passed. Build still emits existing sourcemap/chunk-size warnings.
+
+## 2026-05-18 - Search v2 applied migration verification
+
+- After the required search migrations were applied in Supabase, local Playwright QA confirmed the new RPC path is active rather than the fallback path.
+- Refreshed multi-account auth states with `pnpm.cmd e2e:auth-states`; owner, tech admin, location admin, location staff and client states were saved under ignored `output/playwright-auth/`.
+- Applied-flow browser check ran against `http://127.0.0.1:5173` on 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915. One browser was used sequentially with closed contexts.
+- `global_search_v2` returned HTTP 200 on all five viewports for `type:message has:link after:2026-05-01`; the "database update required" fallback copy was absent.
+- `search_chat_messages` returned HTTP 200 on desktop 3840x2160, 1920x1080 and 1440x900 from the real in-chat search UI; the loaded-messages fallback copy was absent.
+- Validation completed after the applied-flow check: `pnpm.cmd e2e:smoke`, `pnpm.cmd exec playwright test tests/e2e/global-search.spec.ts`, `pnpm.cmd --filter @workspace/kub run typecheck`, and `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"` passed. Build still emits existing Vite sourcemap/chunk-size warnings.
