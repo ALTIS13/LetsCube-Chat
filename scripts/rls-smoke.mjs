@@ -5,13 +5,12 @@ import os from "node:os";
 import path from "node:path";
 
 const fakeUuid = "00000000-0000-4000-8000-000000000001";
-const strict = process.env.RLS_SMOKE_STRICT === "1";
-const allowMutations = process.env.KUB_QA_ALLOW_MUTATIONS === "1";
-const roles = ["owner", "tech_admin", "location_admin", "location_staff", "client"];
-
 const env = loadEnvFile(
   process.env.KUB_QA_ENV_FILE || path.join(os.homedir(), ".kub-messenger-qa.env"),
 );
+const strict = readEnv("RLS_SMOKE_STRICT") === "1";
+const allowMutations = readEnv("KUB_QA_ALLOW_MUTATIONS") === "1";
+const roles = ["owner", "tech_admin", "location_admin", "location_staff", "client"];
 const supabaseUrl = readEnv("SUPABASE_URL") || readEnv("VITE_SUPABASE_URL");
 const supabaseKey =
   readEnv("SUPABASE_PUBLISHABLE_KEY") ||
@@ -48,6 +47,13 @@ if (!allowMutations) {
   );
 }
 
+const taskClaimPermissionPresent = await permissionExists(accounts[0], "tasks.claim");
+if (!taskClaimPermissionPresent) {
+  console.log(
+    "RLS smoke: tasks.claim permission is not present yet; claim checks are advisory until migration is applied.",
+  );
+}
+
 const allResults = [];
 const expectationFailures = [];
 
@@ -79,6 +85,12 @@ for (const account of accounts) {
       p_permission_key: "system.manage",
     }),
   );
+  results.push(
+    await rpcProbe(account.role, session, "has_permission:tasks.claim", "has_permission", {
+      p_user_id: session.user.id,
+      p_permission_key: "tasks.claim",
+    }),
+  );
 
   if (testLocationId) {
     results.push(
@@ -104,6 +116,19 @@ for (const account of accounts) {
           p_user_id: session.user.id,
           p_location_id: testLocationId,
           p_permission_key: "tasks.manage",
+        },
+      ),
+    );
+    results.push(
+      await rpcProbe(
+        account.role,
+        session,
+        "has_location_permission:tasks.claim",
+        "has_location_permission",
+        {
+          p_user_id: session.user.id,
+          p_location_id: testLocationId,
+          p_permission_key: "tasks.claim",
         },
       ),
     );
@@ -137,7 +162,9 @@ for (const account of accounts) {
   );
 
   allResults.push(...results);
-  expectationFailures.push(...checkRoleExpectations(account.role, results));
+  expectationFailures.push(
+    ...checkRoleExpectations(account.role, results, taskClaimPermissionPresent),
+  );
 }
 
 console.table(
@@ -256,11 +283,30 @@ async function resolveLocationIdByName(accounts, locationName) {
   return null;
 }
 
-function checkRoleExpectations(role, results) {
+async function permissionExists(account, permissionKey) {
+  const session = await signIn(account);
+  const query = new URLSearchParams({
+    select: "key",
+    key: `eq.${permissionKey}`,
+    limit: "1",
+  });
+  const response = await fetch(`${supabaseUrl}/rest/v1/permissions?${query.toString()}`, {
+    method: "GET",
+    headers: authHeaders(session.access_token),
+  });
+  if (!response.ok) return false;
+
+  const parsed = parseJson(await response.text());
+  return Array.isArray(parsed) && parsed.length > 0;
+}
+
+function checkRoleExpectations(role, results, taskClaimPermissionPresent) {
   const failures = [];
   const byProbe = new Map(results.map((result) => [result.probe, result]));
   const tasksView = byProbe.get("has_permission:tasks.view");
   const locationTasksView = byProbe.get("has_location_permission:tasks.view");
+  const tasksClaim = byProbe.get("has_permission:tasks.claim");
+  const locationTasksClaim = byProbe.get("has_location_permission:tasks.claim");
   const systemManage = byProbe.get("has_permission:system.manage");
   const manageAllTasks = byProbe.get("has_permission:tasks.manage_all_locations");
   const runDue = byProbe.get("task_recurrence_run_due");
@@ -269,12 +315,31 @@ function checkRoleExpectations(role, results) {
     failures.push("client should not have global tasks.view by default");
   }
   if (
+    role === "client" &&
+    taskClaimPermissionPresent &&
+    tasksClaim?.ok &&
+    tasksClaim.value !== false
+  ) {
+    failures.push("client should not have global tasks.claim by default");
+  }
+  if (
     role === "location_staff" &&
     testLocationId &&
     locationTasksView?.ok &&
     locationTasksView.value !== true
   ) {
     failures.push("location_staff should have tasks.view for KUB_QA_TEST_LOCATION_ID");
+  }
+  if (
+    role === "location_staff" &&
+    testLocationId &&
+    taskClaimPermissionPresent &&
+    locationTasksClaim?.ok &&
+    locationTasksClaim.value !== true
+  ) {
+    failures.push(
+      "location_staff should have tasks.claim for KUB_QA_TEST_LOCATION_ID after claim migration",
+    );
   }
   if (
     (role === "owner" || role === "tech_admin") &&

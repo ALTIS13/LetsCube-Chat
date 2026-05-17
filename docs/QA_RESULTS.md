@@ -649,3 +649,15 @@ Recurring tasks roadmap note:
 - Added `tests/e2e/roles-visibility.spec.ts` for role-specific UI visibility checks. Role tests skip per role when neither credentials nor storage state are available.
 - Extended `pnpm.cmd rls:smoke` to run role-aware authenticated RPC/RLS probes with fake UUIDs by default. Real fixture mutations remain gated for future work by `KUB_QA_ALLOW_MUTATIONS=1`.
 - No real credentials are documented here; only local env variable names are listed in workflow docs.
+
+## 2026-05-17 — location_staff staff_pool task claim investigation
+
+- Reproduced with local-only multi-account QA credentials and `KUB_QA_ALLOW_MUTATIONS=1`: owner created a temporary `staff_pool` task in `TestLocationCodex`; `location_staff` could read the task but `task_claim` returned HTTP 403 with `only_staff_can_claim_pool_tasks`.
+- Confirmed task fields during reproduction: `status=new`, `assignment_scope=staff_pool`, `assignee_id=null`, `created_for_admin=false`, `target_role=staff`, `location_id=TestLocationCodex`, `deleted_at=null`, `recurrence_id=null`.
+- Read-only schema/function inspection found the root cause in backend RPC: live `public.task_claim` still checks legacy `public.is_manager_or_admin(v_caller)` before looking at task location membership. That blocks pure `location_staff` even though task visibility now correctly uses location-scoped permissions.
+- Frontend also had a legacy gate: `TaskDetailModal` showed the claim action only through global `useIsManagerOrAdmin()`. It now uses a separate claim permission gate (`tasks.claim`/task-management permissions) with location-scoped checks.
+- Created proposal-only migration `.migration-backup/supabase/migrations/20260525_task_claim_location_staff.sql`. SQL was not applied automatically. The proposal adds `tasks.claim`, grants it to owner/tech/admin/manager plus location owner/admin/manager/staff, and replaces `task_claim` so staff can claim only visible, undeleted, unassigned, non-admin `staff_pool` tasks in their own location.
+- Updated `scripts/rls-smoke.mjs` with adaptive `tasks.claim` checks. Until the migration is applied, the smoke prints an advisory skip for missing `tasks.claim`; after applying it, `location_staff` must have location `tasks.claim` and `client` must not have global claim permission.
+- Temporary QA task from reproduction was soft-deleted through authenticated RPC; no direct DB hacks or service-role access were used.
+- Local Playwright QA ran against `http://127.0.0.1:5173` with the required 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915 projects: `pnpm.cmd e2e:smoke` passed 5/5 and `pnpm.cmd exec playwright test tests/e2e/roles-visibility.spec.ts` passed 20/20.
+- Validation completed: `git diff --check`, `node --check scripts/rls-smoke.mjs`, `pnpm.cmd exec biome check scripts/rls-smoke.mjs`, `pnpm.cmd --filter @workspace/kub run typecheck`, `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"`, local Playwright smoke/roles visibility, and `pnpm.cmd rls:smoke` with public Supabase config passed. Build still emits the existing Vite sourcemap/chunk-size warnings.

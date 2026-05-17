@@ -6,7 +6,7 @@ import { KubBadge, KubButton, KubIcon, KubModal } from "@/components/kub";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
 import { useAppStore } from "@/store/app.store";
 import { useIsManagerOrAdmin, usePermissionAccess } from "@/hooks/useRole";
-import { TASK_DELETE_PERMISSION_KEYS } from "@/hooks/useTaskAccess";
+import { TASK_CLAIM_PERMISSION_KEYS, TASK_DELETE_PERMISSION_KEYS } from "@/hooks/useTaskAccess";
 import { useTaskSoftDelete } from "@/hooks/useTaskSoftDelete";
 import {
   pauseTaskRecurrence,
@@ -84,6 +84,14 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
     locationOnly: true,
     enabled: Boolean(task?.id && task.location_id),
   });
+  const claimAccess = usePermissionAccess(TASK_CLAIM_PERMISSION_KEYS, {
+    enabled: Boolean(task?.id),
+  });
+  const locationClaimAccess = usePermissionAccess(TASK_CLAIM_PERMISSION_KEYS, {
+    locationId: task?.location_id ?? null,
+    locationOnly: true,
+    enabled: Boolean(task?.id && task.location_id),
+  });
 
   const [comment, setComment] = useState("");
   const [posting, setPosting] = useState(false);
@@ -150,12 +158,20 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
   // Staff can (re)assign while the task hasn't been picked up yet. Server
   // RPC `task_assign` enforces both the role and the source-status check.
   const canAssign = !taskIsDeleted && isStaff && (task.status === "new" || task.status === "assigned");
+  const canClaimGlobal = claimAccess.hasAnyPermission(TASK_CLAIM_PERMISSION_KEYS);
+  const canClaimLocation = locationClaimAccess.hasAnyPermission(TASK_CLAIM_PERMISSION_KEYS);
+  const canClaimManagerPool =
+    task.assignment_scope !== "manager_pool" ||
+    canClaimGlobal ||
+    locationClaimAccess.hasAnyPermission(["tasks.assign", "tasks.create", "tasks.manage"]);
   const canClaim =
     !taskIsDeleted &&
-    isStaff &&
     task.status === "new" &&
     task.assignment_scope !== "user" &&
-    !task.assignee_id;
+    !task.assignee_id &&
+    !task.created_for_admin &&
+    (canClaimGlobal || canClaimLocation) &&
+    canClaimManagerPool;
   // Creator OR staff can edit a task that hasn't been finalised. Server
   // RPC `task_update` re-checks this and the manager-can't-touch-admin
   // guard if the assignee changes.

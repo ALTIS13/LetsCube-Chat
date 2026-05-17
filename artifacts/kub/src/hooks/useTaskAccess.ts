@@ -34,6 +34,15 @@ export const TASK_CREATE_PERMISSION_KEYS = [
   "tasks.manage_all_locations",
 ] as const;
 
+export const TASK_CLAIM_PERMISSION_KEYS = [
+  "system.manage",
+  "tasks.claim",
+  "tasks.assign",
+  "tasks.create",
+  "tasks.manage",
+  "tasks.manage_all_locations",
+] as const;
+
 export const TASK_ADMIN_VIEW_PERMISSION_KEYS = [
   "system.manage",
   "tasks.view_admin_tasks",

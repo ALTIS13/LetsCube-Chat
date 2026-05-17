@@ -44,6 +44,26 @@ function asRecord(e: AnyErr): { message?: string; code?: string } {
  */
 export function mapPgError(err: AnyErr): string {
   const { message, code } = asRecord(err);
+  const lowerMessage = message?.toLowerCase();
+
+  if (lowerMessage) {
+    if (lowerMessage.includes("only_staff_can_claim_pool_tasks"))
+      return "Недостаточно прав, чтобы принять задачу.";
+    if (lowerMessage.includes("task_already_assigned"))
+      return "Задача уже назначена.";
+    if (lowerMessage.includes("task_is_not_pool_assigned"))
+      return "Задача уже назначена или недоступна для принятия.";
+    if (lowerMessage.includes("only_new_pool_tasks_can_be_claimed"))
+      return "Эту задачу уже нельзя принять.";
+    if (lowerMessage.includes("task_admin_only"))
+      return "Эта задача только для администраторов.";
+    if (lowerMessage.includes("task_other_location"))
+      return "Эта задача предназначена для другой локации.";
+    if (lowerMessage.includes("task_unavailable") || lowerMessage.includes("task_not_found"))
+      return "Задача недоступна.";
+    if (lowerMessage.includes("task_deleted"))
+      return "Задача удалена.";
+  }
 
   // 1. Известные SQLSTATE коды Postgres / PostgREST.
   if (code) {
@@ -72,7 +92,7 @@ export function mapPgError(err: AnyErr): string {
 
   // 2. Текстовые шаблоны.
   if (message) {
-    const m = message.toLowerCase();
+    const m = lowerMessage ?? message.toLowerCase();
 
     // Сеть.
     if (
