@@ -601,6 +601,15 @@ Recurring tasks roadmap note:
 - Multi-account applied-flow QA remains non-mutating by default. Routing-field copy and notification delivery for generated occurrences still require fixture-backed mutation QA after the scheduler is deployed.
 - Validation completed: `git diff --check`, `node --check scripts/rls-smoke.mjs`, `pnpm.cmd exec biome check scripts/rls-smoke.mjs supabase/functions/recurring-tasks-run-due/index.ts`, `pnpm.cmd --filter @workspace/kub run typecheck`, `PORT=5173 BASE_PATH=/ pnpm.cmd --filter @workspace/kub run build`, `pnpm.cmd e2e:smoke`, `pnpm.cmd exec playwright test tests/e2e/roles-visibility.spec.ts`, and `pnpm.cmd rls:smoke` passed. Build still emits the existing Vite sourcemap/chunk-size warnings.
 
+2026-05-17 deployed recurring scheduler read-only verification:
+- Supabase MCP read-only SQL confirmed `cron.job` has active job `kub-recurring-tasks-run-due` with schedule `*/5 * * * *`.
+- Supabase Edge Function list confirmed `recurring-tasks-run-due` is `ACTIVE`.
+- Latest `net._http_response` rows showed HTTP `200` at `2026-05-17 18:25`, `18:30` and `18:35` UTC. Earlier `401` rows were from before the scheduler token was fixed.
+- `public.task_recurrences` due count was `0`, so there was no due recurrence available for creation during the read-only check.
+- Local `KUB_QA_ALLOW_MUTATIONS` was not enabled and no local scheduler token was present, so no QA tasks were created, no occurrences were generated, duplicate prevention was not exercised and cleanup was not needed.
+- Applied-flow instructions were added to `docs/RECURRING_SCHEDULER.md` for the next pass with `KUB_QA_ALLOW_MUTATIONS=1`.
+- Validation completed: `git diff --check`, credential/service-role/pnpm.ps1 guard scans, `pnpm.cmd rls:smoke` with deployed public Supabase config, `pnpm.cmd --filter @workspace/kub run typecheck`, `PORT=5173 BASE_PATH=/ pnpm.cmd --filter @workspace/kub run build`, `KUB_BASE_URL=https://kub.apollot.ru pnpm.cmd e2e:smoke`, and `KUB_BASE_URL=https://kub.apollot.ru pnpm.cmd exec playwright test tests/e2e/roles-visibility.spec.ts` passed. Build still emits the existing Vite sourcemap/chunk-size warnings.
+
 2026-05-17 global search and command palette:
 
 - Frontend added a global search palette opened by Ctrl+K/Cmd+K and by the mobile search tab. Existing sidebar chat-list search remains local and unchanged.
