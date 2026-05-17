@@ -41,8 +41,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
   const iconButtonClass =
     "h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)] inline-flex items-center justify-center";
 
-  // BottomNav's "Поиск" tab is a one-shot: when mobileSection becomes 'search',
-  // focus the search input and immediately reset the section back to 'chats'.
+  // Search commands use `mobileSection='search'` as a one-shot focus signal.
   useEffect(() => {
     if (mobileSection !== "search") return;
     searchInputRef.current?.focus();
@@ -217,12 +216,19 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
           <KubIcon name="search" size={14} className="shrink-0 text-[color:var(--kub-muted)]" />
           <input
             ref={searchInputRef}
+            data-testid="sidebar-search-input"
             type="text"
-            placeholder="Поиск чатов…"
+            placeholder="Поиск людей, чатов, сообщений…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setIsSearchFocused(true)}
             onBlur={() => !searchQuery && setIsSearchFocused(false)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && searchQuery) {
+                event.preventDefault();
+                setSearchQuery("");
+              }
+            }}
             className="min-w-0 flex-1 truncate bg-transparent text-sm outline-none text-[color:var(--kub-text)]"
           />
           {searchQuery && (

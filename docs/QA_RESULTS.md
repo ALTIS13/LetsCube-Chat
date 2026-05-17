@@ -605,3 +605,13 @@ Recurring tasks roadmap note:
 - Local Playwright QA ran against `http://127.0.0.1:5173` with viewports 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915. Screenshots and summary are in `output/qa-global-search/` (ignored from git): `*-palette-open.png`, `*-username-query.png`, `*-mini-profile.png`, `*-chat-list-search.png`, `*-chat-result-opened.png`, `qa-summary.json`.
 - QA result: Ctrl+K opened the palette on desktop, the mobile search tab opened the sheet on 390/412 widths, `@te` username query rendered, `Maxim` returned a user result and mini-profile, `TestGroup` returned a chat result and opened via `safeOpenChat`, local chat-list search still accepted `QA`, and all five viewport overflow checks were false.
 - Because the SQL proposal is not applied, each fresh browser context can produce one expected missing-RPC `404` probe before fallback is cached in that page. There were no repeated probes/request storm, no unexpected failed requests after filtering that expected probe, and no raw technical error in visible UI.
+
+2026-05-17 sidebar-integrated global search:
+
+- Sidebar search is now the primary desktop global-search entry. Empty query keeps the regular folder tabs and chat list; non-empty query replaces the list area with grouped global results while local chat matches remain immediate and deduped against RPC/fallback chat results.
+- Ctrl+K/Cmd+K focuses the existing sidebar search input on desktop when the sidebar is visible. Mobile search still opens the same global-search sheet, now backed by the same shared result renderer and result actions.
+- Shared search UI/action layer added for sidebar and palette: result sections/items, empty state, mini-profile preview, command results and navigation actions.
+- Existing in-chat search remains separate in `ChatWindow`/`ChatSearchBar`.
+- `20260522_global_search.sql` was rechecked after the previous syntax fix; SQL was not applied automatically.
+- Playwright QA ran on 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915. Evidence is in ignored `output/qa-sidebar-global-search/`: desktop `*-sidebar-username.png`, `*-sidebar-chat.png`, `*-chat-opened.png`; mobile `*-mobile-sheet-username.png`; `qa-summary.json`.
+- QA summary: Ctrl+K focused sidebar search on desktop, sidebar `@te` and `TestGroup` searches rendered without overflow, chat result opened through the normal chat path, mobile search tab opened the global search sheet, console errors 0, unexpected failed requests 0.

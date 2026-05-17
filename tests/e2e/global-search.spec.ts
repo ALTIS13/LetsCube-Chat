@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { gotoOrSkip, loadQaCredentials, loginIfNeeded } from "./helpers/auth";
 
 test.describe("KUB global search", () => {
-  test("opens with Ctrl+K and accepts username queries", async ({ page }) => {
+  test("uses the sidebar search on desktop and the sheet on mobile", async ({ page }, testInfo) => {
     const consoleErrors: string[] = [];
     page.on("console", (message) => {
       if (message.type() === "error") consoleErrors.push(message.text());
@@ -18,18 +18,30 @@ test.describe("KUB global search", () => {
     await loginIfNeeded(page, credentials);
     await page.waitForTimeout(750);
 
-    await page.keyboard.press("Control+K");
-    const palette = page.getByTestId("global-search-palette");
-    await expect(palette).toBeVisible();
+    const isMobile = testInfo.project.name.includes("mobile");
 
-    const input = page.getByTestId("global-search-input");
-    await expect(input).toBeFocused();
-    await input.fill("@te");
-    await expect(input).toHaveValue("@te");
+    if (isMobile) {
+      await page.getByRole("button", { name: /^Поиск$/i }).click();
+      const palette = page.getByTestId("global-search-palette");
+      await expect(palette).toBeVisible();
+      const input = page.getByTestId("global-search-input");
+      await expect(input).toBeFocused();
+      await input.fill("@te");
+      await expect(input).toHaveValue("@te");
+      await page.keyboard.press("Escape");
+      await expect(palette).toHaveCount(0);
+    } else {
+      await page.keyboard.press("Control+K");
+      const input = page.getByTestId("sidebar-search-input");
+      await expect(input).toBeFocused();
+      await input.fill("@te");
+      await expect(page.getByTestId("sidebar-global-search-results")).toBeVisible();
+      await expect(page.getByTestId("sidebar-global-search-results").getByText(/Люди|Чаты|Сообщения|Задачи|Локации/i).first()).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(input).toHaveValue("");
+    }
+
     await expect(page.getByText("Произошла ошибка интерфейса")).toHaveCount(0);
-
-    await page.keyboard.press("Escape");
-    await expect(palette).toHaveCount(0);
     expect(consoleErrors, `Unexpected console errors:\n${consoleErrors.join("\n")}`).toEqual([]);
   });
 });

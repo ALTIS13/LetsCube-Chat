@@ -260,25 +260,7 @@ function buildLocalResults({
   const results: GlobalSearchResult[] = [];
 
   if (includeType("chat")) {
-    for (const chat of chats) {
-      const info = getChatDisplayInfo(chat, currentUserId);
-      const username = chat.other_user?.username ? `@${chat.other_user.username}` : "";
-      const haystack = [info.title, info.subtitle, chat.description, username, chat.last_message?.content].filter(Boolean).join(" ");
-      const rank = scoreText(haystack, needle, query.startsWith("@") ? username : "");
-      if (rank <= 0) continue;
-      results.push({
-        resultType: "chat",
-        id: chat.id,
-        title: info.title,
-        subtitle: info.subtitle,
-        snippet: chat.last_message?.content ?? chat.description ?? null,
-        avatarUrl: chat.avatar_url,
-        chatId: chat.id,
-        createdAt: chat.updated_at,
-        rank,
-        source: "fallback",
-      });
-    }
+    results.push(...getLocalChatSearchResults({ query, currentUserId, chats, limit }));
   }
 
   if (includeType("message")) {
@@ -307,6 +289,42 @@ function buildLocalResults({
     }
   }
 
+  return results.sort(compareResults).slice(0, limit);
+}
+
+export function getLocalChatSearchResults({
+  query,
+  currentUserId,
+  chats,
+  limit,
+}: {
+  query: string;
+  currentUserId: string | null;
+  chats: ChatWithLastMessage[];
+  limit: number;
+}): GlobalSearchResult[] {
+  const needle = searchableNeedle(query);
+  const isHandleQuery = query.trim().startsWith("@");
+  const results: GlobalSearchResult[] = [];
+  for (const chat of chats) {
+    const info = getChatDisplayInfo(chat, currentUserId);
+    const username = chat.other_user?.username ? `@${chat.other_user.username}` : "";
+    const haystack = [info.title, info.subtitle, chat.description, username, chat.last_message?.content].filter(Boolean).join(" ");
+    const rank = scoreText(haystack, needle, isHandleQuery ? username : "");
+    if (rank <= 0) continue;
+    results.push({
+      resultType: "chat",
+      id: chat.id,
+      title: info.title,
+      subtitle: info.subtitle,
+      snippet: chat.last_message?.content ?? chat.description ?? null,
+      avatarUrl: chat.avatar_url,
+      chatId: chat.id,
+      createdAt: chat.updated_at,
+      rank,
+      source: "fallback",
+    });
+  }
   return results.sort(compareResults).slice(0, limit);
 }
 

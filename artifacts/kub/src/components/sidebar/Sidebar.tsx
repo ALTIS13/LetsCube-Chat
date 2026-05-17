@@ -9,6 +9,7 @@ import { NewChatModal } from "./NewChatModal";
 import { FolderEditModal } from "./FolderEditModal";
 import { FolderListModal } from "./FolderListModal";
 import { SettingsModal } from "./SettingsModal";
+import { SidebarSearchResults } from "@/components/search/SidebarSearchResults";
 import { useAppStore } from "@/store/app.store";
 import { useChats } from "@/hooks/useChats";
 import { useFolders } from "@/hooks/useFolders";
@@ -58,17 +59,11 @@ export function Sidebar() {
     if (mobileSection === "profile") setMobileSection("chats");
   };
 
+  const hasSearchQuery = searchQuery.trim().length > 0;
   const filtered = useMemo(() => chats.filter((chat) => {
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      return (
-        chat.name?.toLowerCase().includes(q) ||
-        chat.last_message?.content?.toLowerCase().includes(q)
-      );
-    }
     if (activeFolder === null) return true;
     return folderChats[activeFolder]?.has(chat.id) ?? false;
-  }), [chats, searchQuery, activeFolder, folderChats]);
+  }), [chats, activeFolder, folderChats]);
 
   const tabs = useMemo<{ id: string | null; name: string; emoji: string | null; unread: number; shared: boolean }[]>(() => [
     {
@@ -96,18 +91,22 @@ export function Sidebar() {
   return (
     <div className="flex flex-col h-full w-full bg-[var(--kub-surface)]">
       <SidebarHeader onNewChat={() => setShowNewChat(true)} onRefetch={refetch} />
-      <FolderTabs
-        folders={tabs}
-        activeFolder={activeFolder}
-        onFolderChange={setActiveFolder}
-        onCreate={() => setEditingFolder("new")}
-        onEdit={(id) => {
-          const target = folders.find((f) => f.id === id);
-          if (target) setEditingFolder(target);
-        }}
-      />
+      {!hasSearchQuery && (
+        <FolderTabs
+          folders={tabs}
+          activeFolder={activeFolder}
+          onFolderChange={setActiveFolder}
+          onCreate={() => setEditingFolder("new")}
+          onEdit={(id) => {
+            const target = folders.find((f) => f.id === id);
+            if (target) setEditingFolder(target);
+          }}
+        />
+      )}
 
-      {loading ? (
+      {hasSearchQuery ? (
+        <SidebarSearchResults query={searchQuery} />
+      ) : loading ? (
         <div className="flex-1 flex items-center justify-center">
           <KubIcon name="spinner" size={22} className="text-[color:var(--kub-cyan)]" />
         </div>
