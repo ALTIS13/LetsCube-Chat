@@ -610,6 +610,17 @@ Recurring tasks roadmap note:
 - Applied-flow instructions were added to `docs/RECURRING_SCHEDULER.md` for the next pass with `KUB_QA_ALLOW_MUTATIONS=1`.
 - Validation completed: `git diff --check`, credential/service-role/pnpm.ps1 guard scans, `pnpm.cmd rls:smoke` with deployed public Supabase config, `pnpm.cmd --filter @workspace/kub run typecheck`, `PORT=5173 BASE_PATH=/ pnpm.cmd --filter @workspace/kub run build`, `KUB_BASE_URL=https://kub.apollot.ru pnpm.cmd e2e:smoke`, and `KUB_BASE_URL=https://kub.apollot.ru pnpm.cmd exec playwright test tests/e2e/roles-visibility.spec.ts` passed. Build still emits the existing Vite sourcemap/chunk-size warnings.
 
+2026-05-17 deployed recurring scheduler applied-flow verification:
+- Local mutation guard was enabled with `KUB_QA_ALLOW_MUTATIONS=1`; passwords/tokens were read only from the local QA env and were not printed.
+- Created two temporary authenticated owner QA fixtures in `TestLocationCodex`: one staff-visible staff-pool recurrence and one admin-only recurrence routed to the location-admin QA account.
+- Waited for deployed cron/Edge scheduler rather than calling the scheduler token locally. Cron created both due occurrences during the `2026-05-17 19:15:00` UTC run; `net._http_response` latest rows remained HTTP `200`.
+- Generated occurrences copied all checked routing/security fields from their templates: `location_id`, `target_role`, `route_admin_id`, `created_for_admin`, `visibility`, `assignment_scope`, `assignee_id`, `chat_id` and `priority`.
+- Duplicate prevention was verified by forcing the staff recurrence back to the same `recurrence_scheduled_for` and calling authenticated `task_recurrence_run_due`: return value was `0`, and occurrence count stayed `1 -> 1`.
+- Role visibility was verified through authenticated role sessions: location staff saw the staff-visible occurrence, client did not; staff did not see the admin-only occurrence, while location-admin and owner did.
+- Notification delivery was verified for the safe QA fixtures: staff-visible occurrence notification was visible to the location-staff QA account and admin-only occurrence notification was visible to the location-admin QA account.
+- Cleanup completed through authenticated RPCs: two QA recurrences were stopped and four QA task rows were soft-deleted. Read-only post-check confirmed `open_codex_qa_tasks=0` and `open_codex_qa_recurrences=0`.
+- Validation completed: `git diff --check`, credential/service-role/pnpm.ps1 guard scans, deployed `pnpm.cmd rls:smoke` with `KUB_QA_ALLOW_MUTATIONS=1` in process env, `pnpm.cmd --filter @workspace/kub run typecheck`, `PORT=5173 BASE_PATH=/ pnpm.cmd --filter @workspace/kub run build`, `KUB_BASE_URL=https://kub.apollot.ru pnpm.cmd e2e:smoke`, and `KUB_BASE_URL=https://kub.apollot.ru pnpm.cmd exec playwright test tests/e2e/roles-visibility.spec.ts` passed. Build still emits the existing Vite sourcemap/chunk-size warnings.
+
 2026-05-17 global search and command palette:
 
 - Frontend added a global search palette opened by Ctrl+K/Cmd+K and by the mobile search tab. Existing sidebar chat-list search remains local and unchanged.

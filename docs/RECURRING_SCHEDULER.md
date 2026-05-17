@@ -128,3 +128,22 @@ Manual applied-flow checklist:
 - `due_count` was `0`, so there was no due recurrence to generate during the read-only check.
 - Local `KUB_QA_ALLOW_MUTATIONS` was not enabled, so occurrence creation, duplicate prevention,
   notification delivery and cleanup were not executed in this pass.
+
+2026-05-17 applied-flow deployed check:
+
+- `KUB_QA_ALLOW_MUTATIONS=1` was enabled locally; credentials and tokens stayed outside the repo.
+- Two temporary owner-created QA recurrences were created in `TestLocationCodex`: one staff-visible
+  staff-pool recurrence and one admin-only recurrence routed to the location-admin QA account.
+- The deployed cron/Edge scheduler created both due occurrences during the `2026-05-17 19:15:00`
+  UTC run. The latest `net._http_response` rows were HTTP `200`.
+- Occurrences copied all checked routing/security fields from their templates:
+  `location_id`, `target_role`, `route_admin_id`, `created_for_admin`, `visibility`,
+  `assignment_scope`, `assignee_id`, `chat_id` and `priority`.
+- Duplicate prevention was verified by forcing the staff recurrence back to the same
+  `recurrence_scheduled_for` and calling authenticated `task_recurrence_run_due`; the RPC returned
+  `0` and occurrence count stayed `1 -> 1`.
+- Role visibility matched the expected model: location staff saw the staff-visible occurrence,
+  client did not; staff did not see the admin-only occurrence, while location-admin and owner did.
+- Notification delivery was verified for the safe QA fixtures for location-staff and location-admin.
+- Cleanup stopped both QA recurrences and soft-deleted four QA task rows. Read-only post-check
+  confirmed no open Codex QA recurring tasks or recurrences remained.
