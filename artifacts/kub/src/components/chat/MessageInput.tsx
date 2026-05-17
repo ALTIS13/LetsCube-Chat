@@ -32,7 +32,8 @@ import {
 
 const DRAFT_PREFIX = "kub:draft:";
 const draftKey = (chatId: string) => `${DRAFT_PREFIX}${chatId}`;
-const MOBILE_RECORDER_LONG_PRESS_MS = 420;
+const MOBILE_RECORDER_LONG_PRESS_MS = 320;
+const RECORDER_TAP_MOVE_PX = 10;
 const RECORDER_LOCK_DRAG_PX = 72;
 
 const EMOJI_PANEL = [
@@ -95,6 +96,7 @@ export function MessageInput({
     mode: "voice" | "video";
     locked: boolean;
   } | null>(null);
+  const [lockDragProgress, setLockDragProgress] = useState(0);
   const voiceHold = useVoiceRecorder();
   const [isComposing, setIsComposing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -103,10 +105,13 @@ export function MessageInput({
   const modeFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchRecordingStartedRef = useRef(false);
+  const touchLongPressTriggeredRef = useRef(false);
+  const touchPointerMovedRef = useRef(false);
   const voiceHoldActiveRef = useRef(false);
   const videoHoldActiveRef = useRef(false);
   const holdRecorderStateRef = useRef<typeof holdRecorderState>(null);
   const recorderPointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  const recorderPointerDownAtRef = useRef(0);
   const hasText = text.trim().length > 0;
   const hasAttachments = attachments.length > 0;
   const hasStagedVoice = attachments.some((item) => item.kind === "voice");
@@ -247,6 +252,8 @@ export function MessageInput({
     holdRecorderStateRef.current = null;
     setHoldRecorderState(null);
     recorderPointerStartRef.current = null;
+    recorderPointerDownAtRef.current = 0;
+    setLockDragProgress(0);
   }, []);
 
   const lockActiveRecording = useCallback(() => {
@@ -255,6 +262,7 @@ export function MessageInput({
     const next = { ...current, locked: true };
     holdRecorderStateRef.current = next;
     setHoldRecorderState(next);
+    setLockDragProgress(1);
   }, []);
 
   const startVideoHoldRecording = useCallback(() => {
@@ -337,6 +345,10 @@ export function MessageInput({
     if (event.button !== 0 || isAttachmentBusy) return;
     event.preventDefault();
     recorderPointerStartRef.current = { x: event.clientX, y: event.clientY };
+    recorderPointerDownAtRef.current = Date.now();
+    touchPointerMovedRef.current = false;
+    touchLongPressTriggeredRef.current = false;
+    setLockDragProgress(0);
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
     } catch {
@@ -346,6 +358,7 @@ export function MessageInput({
       touchRecordingStartedRef.current = false;
       if (touchHoldTimerRef.current) clearTimeout(touchHoldTimerRef.current);
       touchHoldTimerRef.current = setTimeout(() => {
+        touchLongPressTriggeredRef.current = true;
         touchRecordingStartedRef.current = true;
         startRecorderHold(recorderMode);
       }, MOBILE_RECORDER_LONG_PRESS_MS);
@@ -357,8 +370,15 @@ export function MessageInput({
   const handleRecorderPointerMove = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     const startPoint = recorderPointerStartRef.current;
     if (!startPoint) return;
-    if (!voiceHoldActiveRef.current && !videoHoldActiveRef.current) return;
+    const dx = event.clientX - startPoint.x;
+    const dy = event.clientY - startPoint.y;
+    const distance = Math.hypot(dx, dy);
+    if (event.pointerType === "touch" && distance > RECORDER_TAP_MOVE_PX) {
+      touchPointerMovedRef.current = true;
+    }
     const draggedUp = startPoint.y - event.clientY;
+    setLockDragProgress(Math.max(0, Math.min(1, draggedUp / RECORDER_LOCK_DRAG_PX)));
+    if (!voiceHoldActiveRef.current && !videoHoldActiveRef.current) return;
     if (draggedUp >= RECORDER_LOCK_DRAG_PX) lockActiveRecording();
   }, [lockActiveRecording]);
 
@@ -367,24 +387,42 @@ export function MessageInput({
     if (event.pointerType === "touch") {
       if (touchHoldTimerRef.current) clearTimeout(touchHoldTimerRef.current);
       touchHoldTimerRef.current = null;
-      if (touchRecordingStartedRef.current) {
+      const recordingGesture =
+        touchRecordingStartedRef.current ||
+        touchLongPressTriggeredRef.current ||
+        voiceHoldActiveRef.current ||
+        videoHoldActiveRef.current;
+      if (recordingGesture) {
         touchRecordingStartedRef.current = false;
+        touchLongPressTriggeredRef.current = false;
+        touchPointerMovedRef.current = false;
         if (!locked) stopRecorderHold();
         recorderPointerStartRef.current = null;
+        recorderPointerDownAtRef.current = 0;
         return;
       }
+      const elapsedMs = Date.now() - recorderPointerDownAtRef.current;
+      const shouldToggleMode = elapsedMs < MOBILE_RECORDER_LONG_PRESS_MS && !touchPointerMovedRef.current;
       recorderPointerStartRef.current = null;
-      toggleRecorderMode();
+      recorderPointerDownAtRef.current = 0;
+      touchPointerMovedRef.current = false;
+      touchLongPressTriggeredRef.current = false;
+      setLockDragProgress(0);
+      if (shouldToggleMode) toggleRecorderMode();
       return;
     }
     if (!locked) stopRecorderHold();
     recorderPointerStartRef.current = null;
+    recorderPointerDownAtRef.current = 0;
   }, [stopRecorderHold, toggleRecorderMode]);
 
   const handleRecorderPointerCancel = useCallback(() => {
     if (touchHoldTimerRef.current) clearTimeout(touchHoldTimerRef.current);
     touchHoldTimerRef.current = null;
     touchRecordingStartedRef.current = false;
+    touchLongPressTriggeredRef.current = false;
+    touchPointerMovedRef.current = false;
+    recorderPointerDownAtRef.current = 0;
     if (holdRecorderStateRef.current?.locked !== true) stopRecorderHold();
   }, [stopRecorderHold]);
 
@@ -686,8 +724,33 @@ export function MessageInput({
         {(modeFeedback || holdRecorderState) && (
           <div
             data-testid={holdRecorderState ? "composer-recording-lock-indicator" : "recorder-mode-feedback"}
-            className="mb-2 flex items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs text-[color:var(--kub-muted)]"
+            className="relative mb-2 flex items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs text-[color:var(--kub-muted)]"
           >
+            {holdRecorderState && (
+              <div
+                data-testid="composer-recording-lock-rail"
+                className="pointer-events-none absolute bottom-full right-2 mb-2 flex flex-col items-center gap-1"
+              >
+                <div
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-full border shadow-lg backdrop-blur transition",
+                    holdRecorderState.locked
+                      ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_24%,var(--kub-surface))] text-[color:var(--kub-cyan)]"
+                      : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] text-[color:var(--kub-muted)]"
+                  )}
+                >
+                  <KubIcon name={holdRecorderState.locked ? "check" : "lock"} size={14} />
+                </div>
+                <div className="relative h-16 w-1.5 overflow-hidden rounded-full bg-[var(--kub-surface-3)]">
+                  <span
+                    data-testid="composer-recording-lock-progress"
+                    data-lock-progress={lockDragProgress.toFixed(2)}
+                    className="absolute bottom-0 left-0 w-full rounded-full bg-[var(--kub-cyan)] transition-[height]"
+                    style={{ height: `${Math.max(8, lockDragProgress * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
             <span className={cn("h-2 w-2 rounded-full", holdRecorderState ? "animate-pulse bg-[var(--kub-danger)]" : "bg-[var(--kub-cyan)]")} />
             <span className="font-medium text-[color:var(--kub-text)]">
               {holdRecorderState

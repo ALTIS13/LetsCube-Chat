@@ -333,8 +333,6 @@ export function VideoMessageRecorderModal({
   const switchCamera = useCallback(() => {
     const currentFacingMode = selectedFacingModeRef.current;
     const nextFacingMode: FacingMode = currentFacingMode === "user" ? "environment" : "user";
-    selectedFacingModeRef.current = nextFacingMode;
-    setFacingMode(nextFacingMode);
 
     if (status === "recording" && variant === "round") {
       const currentStream = streamRef.current;
@@ -353,6 +351,8 @@ export function VideoMessageRecorderModal({
         }
         currentStream.getVideoTracks().forEach((track) => track.stop());
         const audioTracks = currentStream.getAudioTracks();
+        selectedFacingModeRef.current = nextFacingMode;
+        setFacingMode(nextFacingMode);
         await attachPreviewStream(new MediaStream([...nextVideoTracks, ...audioTracks]));
       }).catch(() => {
         selectedFacingModeRef.current = currentFacingMode;
@@ -362,13 +362,35 @@ export function VideoMessageRecorderModal({
     }
 
     if (status === "ready") {
-      void startPreview(nextFacingMode);
+      const devices = navigator.mediaDevices;
+      if (!devices?.getUserMedia) return;
+      void devices.getUserMedia({
+        audio: true,
+        video: videoConstraints(nextFacingMode, variant === "round"),
+      }).then(async (nextStream) => {
+        if (!nextStream.getVideoTracks().length || !nextStream.getAudioTracks().length) {
+          nextStream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        cleanupRecorder();
+        clearRecorded();
+        streamRef.current?.getTracks().forEach((track) => track.stop());
+        selectedFacingModeRef.current = nextFacingMode;
+        setFacingMode(nextFacingMode);
+        setDurationMs(0);
+        await attachPreviewStream(nextStream);
+        setStatus("ready");
+      }).catch(() => {
+        selectedFacingModeRef.current = currentFacingMode;
+        setFacingMode(currentFacingMode);
+      });
     }
-  }, [attachPreviewStream, startPreview, status, variant]);
+  }, [attachPreviewStream, cleanupRecorder, clearRecorded, status, variant]);
 
   const isRound = variant === "round";
   const statusCopy = getStatusCopy(status, variant);
-  const canSwitchCamera = (status === "ready" || (isRound && status === "recording" && supportsCanvasCapture())) && videoInputCount > 1;
+  const canAttemptFacingModeSwitch = isRound || videoInputCount > 1;
+  const canSwitchCamera = (status === "ready" || (isRound && status === "recording" && supportsCanvasCapture())) && canAttemptFacingModeSwitch;
   const displayDuration = status === "recorded" ? recorded?.durationMs ?? durationMs : durationMs;
 
   return (
@@ -382,7 +404,9 @@ export function VideoMessageRecorderModal({
           : "Запись попадёт во вложения как обычное видео и отправится только по кнопке отправки."
       }
       icon={<KubIcon name="video" size={18} />}
-      size="lg"
+      size={isRound ? "sm" : "lg"}
+      mobileSheet={!isRound}
+      className={isRound ? "mb-[calc(env(safe-area-inset-bottom)+88px)] max-w-[min(92vw,380px)] self-end rounded-3xl border sm:mb-0 sm:self-auto" : undefined}
       contentClassName="p-0"
       footer={
         autoAddOnStop ? (
@@ -442,14 +466,18 @@ export function VideoMessageRecorderModal({
     >
       <div
         data-testid={isRound ? "video-message-recorder-modal" : "regular-video-recorder-modal"}
+        data-recorder-layout={isRound ? "compact-round" : "regular-modal"}
         data-facing-mode={facingMode}
-        className="flex min-h-0 flex-col items-center gap-4 px-4 py-4 sm:px-5"
+        className={cn(
+          "flex min-h-0 flex-col items-center px-4 py-4 sm:px-5",
+          isRound ? "gap-3" : "gap-4"
+        )}
       >
         <div
           className={cn(
             "relative flex items-center justify-center overflow-hidden border border-[color:var(--kub-border-color)] bg-black shadow-2xl",
             isRound
-              ? "h-[min(70vw,260px)] w-[min(70vw,260px)] max-h-[320px] max-w-[320px] rounded-full"
+              ? "h-[min(58vw,220px)] w-[min(58vw,220px)] max-h-[240px] max-w-[240px] rounded-full"
               : "aspect-video w-full max-w-[560px] rounded-2xl"
           )}
         >

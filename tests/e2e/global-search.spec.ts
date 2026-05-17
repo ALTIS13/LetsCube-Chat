@@ -41,7 +41,10 @@ test.describe("KUB global search", () => {
       await userResult.waitFor({ state: "visible", timeout: 5_000 }).catch(() => null);
       if (await userResult.isVisible().catch(() => false)) {
         await userResult.click();
-        await expect(page.getByTestId("search-profile-copy-username")).toBeVisible();
+        const copyUsername = page.getByTestId("search-profile-copy-username");
+        await expect(copyUsername).toBeVisible();
+        await expect(copyUsername).toHaveAttribute("aria-label", "Скопировать никнейм");
+        await expect(copyUsername).toHaveAttribute("title", "Скопировать никнейм");
         await expect(page.getByRole("button", { name: /^Скопировать$/ })).toHaveCount(0);
         await page.getByTestId("global-search-profile-back").click();
       }

@@ -581,7 +581,7 @@ function ChatProfilePreviewModal({
       setCopiedUsername(true);
       window.setTimeout(() => setCopiedUsername(false), 1600);
     } catch {
-      showAppAlert("Не удалось скопировать username.", "Копирование недоступно");
+      showAppAlert("Не удалось скопировать никнейм.", "Копирование недоступно");
     }
   };
 
@@ -609,8 +609,8 @@ function ChatProfilePreviewModal({
                   data-testid="mini-profile-copy-username"
                   onClick={() => void copyUsername()}
                   className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-cyan)]"
-                  aria-label="Скопировать username"
-                  title={copiedUsername ? "Username скопирован" : "Скопировать username"}
+                  aria-label="Скопировать никнейм"
+                  title={copiedUsername ? "Никнейм скопирован" : "Скопировать никнейм"}
                 >
                   <KubIcon name={copiedUsername ? "check" : "copy"} size={14} />
                 </button>

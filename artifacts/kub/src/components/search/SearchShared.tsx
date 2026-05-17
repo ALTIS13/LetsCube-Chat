@@ -178,7 +178,7 @@ export function SearchProfilePreview({
   onOpenChat: () => void | Promise<void>;
   compact?: boolean;
 }) {
-  const username = profile.username ? `@${profile.username}` : "Без username";
+  const username = profile.username ? `@${profile.username}` : "Без никнейма";
   const [copiedUsername, setCopiedUsername] = useState(false);
   const copyUsername = useCallback(async () => {
     if (!profile.username) return;
@@ -187,7 +187,7 @@ export function SearchProfilePreview({
       setCopiedUsername(true);
       window.setTimeout(() => setCopiedUsername(false), 1600);
     } catch {
-      showAppAlert("Не удалось скопировать username.", "Копирование недоступно");
+      showAppAlert("Не удалось скопировать никнейм.", "Копирование недоступно");
     }
   }, [profile.username]);
   return (
@@ -217,8 +217,8 @@ export function SearchProfilePreview({
               data-testid="search-profile-copy-username"
               onClick={() => void copyUsername()}
               className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-cyan)]"
-              aria-label="Скопировать username"
-              title={copiedUsername ? "Username скопирован" : "Скопировать username"}
+              aria-label="Скопировать никнейм"
+              title={copiedUsername ? "Никнейм скопирован" : "Скопировать никнейм"}
             >
               <KubIcon name={copiedUsername ? "check" : "copy"} size={14} />
             </button>

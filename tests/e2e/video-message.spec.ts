@@ -88,6 +88,7 @@ test.describe("KUB video recorders", () => {
     await page.mouse.down();
     const modal = page.getByTestId("video-message-recorder-modal");
     await expect(modal).toBeVisible();
+    await expect(modal).toHaveAttribute("data-recorder-layout", "compact-round");
     await expect(modal.getByText("Идёт запись")).toBeVisible();
     await page.waitForTimeout(1_200);
     await page.mouse.up();
@@ -117,6 +118,8 @@ test.describe("KUB video recorders", () => {
     await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
     await page.mouse.down();
     await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Проведите вверх");
+    await expect(page.getByTestId("composer-recording-lock-rail")).toBeVisible();
+    await expect(page.getByTestId("composer-recording-lock-progress")).toHaveAttribute("data-lock-progress", /0\.\d+|1/);
     await page.mouse.move(box!.x + box!.width / 2, box!.y - 96, { steps: 4 });
     await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Запись зафиксирована");
     await page.mouse.up();
@@ -158,6 +161,7 @@ test.describe("KUB video recorders", () => {
     await page.mouse.down();
     const modal = page.getByTestId("video-message-recorder-modal");
     await expect(modal).toBeVisible();
+    await expect(modal).toHaveAttribute("data-recorder-layout", "compact-round");
     await expect(modal).toHaveAttribute("data-facing-mode", "user");
     await page.mouse.move(box!.x + box!.width / 2, box!.y - 96, { steps: 4 });
     await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Запись зафиксирована");
@@ -230,6 +234,79 @@ test.describe("KUB video recorders", () => {
 
     await page.waitForTimeout(1_200);
     await page.getByTestId("composer-locked-recording-stop").click();
+    await expect(page.getByTestId("staged-attachment-tray").getByText("Голосовое")).toBeVisible();
+
+    await page.getByRole("button", { name: "Убрать вложение" }).first().click();
+    await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
+  });
+
+  test("does not toggle mode on mobile long press or moved tap", async ({ page }, testInfo) => {
+    test.skip(!testInfo.project.name.includes("mobile"), "Touch recorder gestures are covered in mobile projects");
+    const credentials = loadQaCredentials();
+    test.skip(!credentials, "QA credentials are not configured in env or ~/.kub-messenger-qa.env");
+
+    await gotoOrSkip(page, "/");
+    await loginIfNeeded(page, credentials);
+    await openAnyChat(page);
+
+    const recorder = page.getByTestId("composer-recorder-button");
+    await expect(recorder).toHaveAttribute("data-recorder-mode", "voice");
+    const box = await recorder.boundingBox();
+    expect(box).not.toBeNull();
+    const x = box!.x + box!.width / 2;
+    const y = box!.y + box!.height / 2;
+
+    await recorder.dispatchEvent("pointerdown", {
+      pointerId: 51,
+      pointerType: "touch",
+      isPrimary: true,
+      button: 0,
+      buttons: 1,
+      clientX: x,
+      clientY: y,
+    });
+    await recorder.dispatchEvent("pointermove", {
+      pointerId: 51,
+      pointerType: "touch",
+      isPrimary: true,
+      button: 0,
+      buttons: 1,
+      clientX: x + 24,
+      clientY: y + 2,
+    });
+    await recorder.dispatchEvent("pointerup", {
+      pointerId: 51,
+      pointerType: "touch",
+      isPrimary: true,
+      button: 0,
+      buttons: 0,
+      clientX: x + 24,
+      clientY: y + 2,
+    });
+    await expect(recorder).toHaveAttribute("data-recorder-mode", "voice");
+
+    await recorder.dispatchEvent("pointerdown", {
+      pointerId: 52,
+      pointerType: "touch",
+      isPrimary: true,
+      button: 0,
+      buttons: 1,
+      clientX: x,
+      clientY: y,
+    });
+    await page.waitForTimeout(360);
+    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Проведите вверх");
+    await expect(recorder).toHaveAttribute("data-recorder-mode", "voice");
+    await page.waitForTimeout(1_100);
+    await recorder.dispatchEvent("pointerup", {
+      pointerId: 52,
+      pointerType: "touch",
+      isPrimary: true,
+      button: 0,
+      buttons: 0,
+      clientX: x,
+      clientY: y,
+    });
     await expect(page.getByTestId("staged-attachment-tray").getByText("Голосовое")).toBeVisible();
 
     await page.getByRole("button", { name: "Убрать вложение" }).first().click();
