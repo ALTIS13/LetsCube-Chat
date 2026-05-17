@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect, KeyboardEvent, ClipboardEvent
 import type { MessageWithSender } from "@/types/database";
 import { cn } from "@/lib/utils";
 import { VoiceRecorder } from "./VoiceRecorder";
+import { CameraCaptureModal } from "./CameraCaptureModal";
 import { useAppStore } from "@/store/app.store";
 import { useMuteState } from "@/hooks/useMuteState";
 import { KubIcon, type KubIconName } from "@/components/kub";
@@ -35,7 +36,7 @@ interface MessageInputProps {
   onSendVoice?: (blob: Blob, durationMs: number, mimeType: string) => void | Promise<void>;
   onTyping?: () => void;
   attachments?: StagedAttachment[];
-  onStageFiles?: (files: File[], source: "picker" | "paste") => void;
+  onStageFiles?: (files: File[], source: "picker" | "paste" | "camera") => void;
   onRemoveAttachment?: (attachmentId: string) => void;
   onRetryAttachment?: (attachmentId: string) => void;
   onCancelAttachment?: (attachmentId: string) => void;
@@ -65,11 +66,11 @@ export function MessageInput({
   const [showEmoji, setShowEmoji] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
   const [showVoice, setShowVoice] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
   const hasText = text.trim().length > 0;
   const hasAttachments = attachments.length > 0;
   const hasStagedVoice = attachments.some((item) => item.kind === "voice");
@@ -133,6 +134,12 @@ export function MessageInput({
   const stagePickedFiles = useCallback((fileList: FileList | null) => {
     if (!fileList?.length || !onStageFiles) return;
     onStageFiles(Array.from(fileList), "picker");
+    setShowAttach(false);
+  }, [onStageFiles]);
+
+  const stageCameraFile = useCallback((file: File) => {
+    if (!onStageFiles) return;
+    onStageFiles([file], "camera");
     setShowAttach(false);
   }, [onStageFiles]);
 
@@ -269,7 +276,11 @@ export function MessageInput({
   const attachItems: Array<{ icon: KubIconName; label: string; tone: string; action: () => void }> = [
     { icon: "image",   label: "Фото или видео", tone: "var(--kub-cyan)",   action: () => photoInputRef.current?.click() },
     { icon: "file",    label: "Файл",            tone: "var(--kub-pink)",   action: () => fileInputRef.current?.click() },
-    { icon: "camera",  label: "Камера",          tone: "var(--kub-danger)", action: () => cameraInputRef.current?.click() },
+    { icon: "camera",  label: "Сделать фото",    tone: "var(--kub-danger)", action: () => {
+      setShowCamera(true);
+      setShowAttach(false);
+      setShowEmoji(false);
+    } },
     { icon: "voice",   label: "Голосовое",       tone: "var(--kub-cyan)",   action: () => {
       if (hasStagedVoice) {
         showAppAlert("Удалите текущую запись или используйте «Перезаписать».", "Голосовое сообщение");
@@ -302,8 +313,12 @@ export function MessageInput({
         onChange={(e) => { stagePickedFiles(e.target.files); e.target.value = ""; }} />
       <input ref={fileInputRef} type="file" multiple className="hidden"
         onChange={(e) => { stagePickedFiles(e.target.files); e.target.value = ""; }} />
-      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
-        onChange={(e) => { stagePickedFiles(e.target.files); e.target.value = ""; }} />
+
+      <CameraCaptureModal
+        open={showCamera}
+        onClose={() => setShowCamera(false)}
+        onAddFile={stageCameraFile}
+      />
 
       {showAttach && (
         <>
@@ -313,6 +328,7 @@ export function MessageInput({
               <button
                 key={label}
                 onClick={action}
+                type="button"
                 className="flex items-center gap-3 w-full px-4 py-3 text-sm transition-colors hover:bg-[var(--kub-surface-3)] text-[color:var(--kub-text)]"
               >
                 <div
@@ -463,7 +479,7 @@ function AttachmentTray({
   onRerecord?: (attachmentId: string) => void;
 }) {
   return (
-    <div className="mb-2 rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 py-2">
+    <div data-testid="staged-attachment-tray" className="mb-2 rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 py-2">
       <div className="flex max-w-full gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
         {attachments.map((attachment) => {
           const busy = attachment.status === "uploading" || attachment.status === "sending";
@@ -472,6 +488,7 @@ function AttachmentTray({
           return (
             <div
               key={attachment.id}
+              data-testid="staged-attachment-item"
               className={cn(
                 "relative flex min-w-[210px] shrink-0 items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-2",
                 isVoice ? "max-w-[320px]" : "max-w-[260px]"

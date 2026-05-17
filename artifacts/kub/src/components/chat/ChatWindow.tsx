@@ -210,7 +210,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     removeStagedAttachment(attachmentId);
   }, [removeStagedAttachment]);
 
-  const stageFiles = useCallback((files: File[], _source: "picker" | "paste" | "drop") => {
+  const stageFiles = useCallback((files: File[], _source: "picker" | "paste" | "drop" | "camera") => {
     if (!files.length) return;
     const existingCount = stagedAttachmentsRef.current.length;
     const availableSlots = Math.max(0, MAX_STAGED_ATTACHMENTS - existingCount);
