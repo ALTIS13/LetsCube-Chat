@@ -70,18 +70,29 @@ export function useTaskAccessGate(): {
   canAccessTasks: boolean;
   checking: boolean;
   locationIds: string[];
+};
+export function useTaskAccessGate(options: { enabled?: boolean }): {
+  canAccessTasks: boolean;
+  checking: boolean;
+  locationIds: string[];
+};
+export function useTaskAccessGate(options?: { enabled?: boolean }): {
+  canAccessTasks: boolean;
+  checking: boolean;
+  locationIds: string[];
 } {
   const currentUser = useAppStore((s) => s.currentUser);
+  const enabled = options?.enabled ?? true;
   const globalTaskAccess = usePermissionAccess(TASK_ACCESS_PERMISSION_KEYS, {
-    enabled: Boolean(currentUser),
+    enabled: Boolean(currentUser) && enabled,
   });
-  const routing = useTaskRouting({ enabled: Boolean(currentUser), includeMembers: true });
+  const routing = useTaskRouting({ enabled: Boolean(currentUser) && enabled, includeMembers: true });
   const locationIds = useMemo(
     () => (currentUser ? getUserTaskLocationIds(routing.members, currentUser.id) : []),
     [currentUser, routing.members],
   );
   const locationTaskAccess = useAnyLocationPermissionAccess(TASK_ACCESS_PERMISSION_KEYS, locationIds, {
-    enabled: routing.available && locationIds.length > 0,
+    enabled: enabled && routing.available && locationIds.length > 0,
   });
 
   const canAccessTasks =

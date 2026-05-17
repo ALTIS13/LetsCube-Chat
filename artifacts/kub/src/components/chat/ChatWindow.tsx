@@ -16,6 +16,7 @@ import { useAppStore } from "@/store/app.store";
 import { createClient } from "@/lib/supabase/client";
 import { KubEmptyState, KubIcon } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
+import { KUB_CHAT_MESSAGE_JUMP_EVENT, type ChatMessageJumpDetail } from "@/lib/chatJumpEvents";
 import { isSavedChat } from "@/lib/chatDisplay";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import {
@@ -426,6 +427,17 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       if (scrollToMessage(messageId)) pendingJumpRef.current = null;
     });
   }, [ensureMessageLoaded, messages, scrollToMessage, showJumpNotice]);
+
+  useEffect(() => {
+    const handleGlobalJump = (event: Event) => {
+      const detail = (event as CustomEvent<ChatMessageJumpDetail>).detail;
+      if (!detail || detail.chatId !== chatId) return;
+      void handleJumpToReply(detail.messageId);
+    };
+
+    window.addEventListener(KUB_CHAT_MESSAGE_JUMP_EVENT, handleGlobalJump);
+    return () => window.removeEventListener(KUB_CHAT_MESSAGE_JUMP_EVENT, handleGlobalJump);
+  }, [chatId, handleJumpToReply]);
 
   useEffect(() => {
     const pendingId = pendingJumpRef.current;

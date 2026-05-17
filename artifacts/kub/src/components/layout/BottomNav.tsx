@@ -5,6 +5,7 @@ import { useAppStore } from "@/store/app.store";
 import { KubIcon, type KubIconName } from "@/components/kub";
 import { useIsManagerOrAdmin } from "@/hooks/useRole";
 import { useTaskAccessGate } from "@/hooks/useTaskAccess";
+import { openGlobalSearch } from "@/lib/globalSearchEvents";
 import { cn } from "@/lib/utils";
 
 type SectionId = "chats" | "search" | "folders" | "profile" | "tasks" | "admin";
@@ -39,6 +40,10 @@ export function BottomNav() {
     }
     if (id === "admin") {
       setLocation("/admin");
+      return;
+    }
+    if (id === "search") {
+      openGlobalSearch();
       return;
     }
     setMobileSection(id);

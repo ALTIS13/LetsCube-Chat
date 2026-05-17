@@ -45,6 +45,7 @@ export async function loginIfNeeded(page: Page, credentials: QaCredentials) {
   await restoreAuthState(page);
 
   const emailInput = page.locator('input[type="email"]').first();
+  await emailInput.waitFor({ state: "visible", timeout: 5_000 }).catch(() => null);
   if (await emailInput.isVisible().catch(() => false)) {
     const passwordInput = page.locator('input[type="password"]').first();
     const submit = page.locator('button[type="submit"]').first();

@@ -22,7 +22,6 @@ export function MainLayout() {
   const selectedChatId = useAppStore((s) => s.selectedChatId);
   const setSelectedChatId = useAppStore((s) => s.setSelectedChatId);
   const setShowSidebar = useAppStore((s) => s.setShowSidebar);
-  const setMobileSection = useAppStore((s) => s.setMobileSection);
   const isMobileChatOpen = !!selectedChatId;
 
   useEffect(() => {
@@ -49,13 +48,6 @@ export function MainLayout() {
         ),
       );
 
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        if (window.innerWidth < 768) setSelectedChatId(null);
-        setMobileSection("search");
-        return;
-      }
-
       if (event.key === "Escape" && !isEditable && !hasBlockingOverlay && selectedChatId) {
         event.preventDefault();
         setSelectedChatId(null);
@@ -64,7 +56,7 @@ export function MainLayout() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedChatId, setMobileSection, setSelectedChatId]);
+  }, [selectedChatId, setSelectedChatId]);
 
   return (
     <div className="flex flex-col h-[100dvh] w-screen overflow-hidden bg-[var(--kub-bg)]">

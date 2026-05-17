@@ -55,7 +55,7 @@ cmd /c "set SUPABASE_PROJECT_REF=<project-ref>&& pnpm.cmd supabase:typegen"
 
 Do not use Bash-style inline env assignment in PowerShell:
 `SUPABASE_PROJECT_REF=<project-ref> pnpm.cmd supabase:typegen` will not work there.
-Do not print or commit `SUPABASE_ACCESS_TOKEN`; the CLI should use the user's local
+Do not print or commit Supabase CLI access tokens; the CLI should use the user's local
 authenticated session.
 
 The generated output is `artifacts/kub/src/types/database.generated.ts`. The current

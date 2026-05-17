@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 import { IframeAuthBanner } from "@/components/IframeAuthBanner";
 import { AppUpdateBanner } from "@/components/AppUpdateBanner";
 import { AppDialogs } from "@/components/AppDialogs";
+import { GlobalSearchPalette } from "@/components/search/GlobalSearchPalette";
 import { BannedScreen } from "@/components/BannedScreen";
 import { AdminLayout } from "@/pages/admin/AdminLayout";
 import { TasksPage } from "@/pages/tasks/TasksPage";
@@ -320,15 +321,18 @@ function AppRoutes() {
   }
 
   return (
-    <Switch>
-      <Route path="/login" component={LoginForm} />
-      <Route path="/register" component={RegisterForm} />
-      <Route path="/admin/:rest*" component={AdminLayout} />
-      <Route path="/admin" component={AdminLayout} />
-      <Route path="/tasks" component={TasksPage} />
-      <Route path="/" component={MainLayout} />
-      <Route component={NotFound} />
-    </Switch>
+    <>
+      {user && <GlobalSearchPalette />}
+      <Switch>
+        <Route path="/login" component={LoginForm} />
+        <Route path="/register" component={RegisterForm} />
+        <Route path="/admin/:rest*" component={AdminLayout} />
+        <Route path="/admin" component={AdminLayout} />
+        <Route path="/tasks" component={TasksPage} />
+        <Route path="/" component={MainLayout} />
+        <Route component={NotFound} />
+      </Switch>
+    </>
   );
 }
 

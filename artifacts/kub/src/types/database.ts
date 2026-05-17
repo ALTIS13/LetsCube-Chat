@@ -967,6 +967,27 @@ export interface Database {
         Args: { p_user_id: string; p_avatar_url: string | null }
         Returns: Database['public']['Tables']['profiles']['Row']
       }
+      global_search: {
+        Args: {
+          p_query: string
+          p_limit?: number
+          p_types?: string[] | null
+        }
+        Returns: {
+          result_type: string
+          id: string
+          title: string
+          subtitle: string | null
+          snippet: string | null
+          avatar_url: string | null
+          chat_id: string | null
+          message_id: string | null
+          task_id: string | null
+          location_id: string | null
+          created_at: string | null
+          rank: number | null
+        }[]
+      }
       // Atomically returns the existing private chat between caller and
       // target, or creates a new one. SECURITY DEFINER — see
       // `.migration-backup/supabase/migrations/20260504_chats_membership_hardening.sql`.
