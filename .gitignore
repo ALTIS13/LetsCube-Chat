@@ -73,6 +73,7 @@ typings/
 
 .qa-screenshots/
 .playwright-mcp/
+supabase/.temp/
 output/
 output/playwright-auth/
 *.auth.json

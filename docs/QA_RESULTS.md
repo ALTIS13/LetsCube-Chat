@@ -592,7 +592,14 @@ Recurring tasks roadmap note:
 - `pnpm.cmd e2e:long-session` result: 1/1 passed on 1440x900. The test kept the app open for about 2.4 minutes, typed a draft marker, set a window reload marker, switched to a second Playwright page and back, simulated offline/online, and verified: draft marker preserved, window marker preserved, no main-frame reload, no password/login screen, no ErrorBoundary, duplicate realtime channels `{}`, request count below threshold, failed requests 0, console/page errors 0.
 - `pnpm.cmd e2e:smoke` result: 5/5 passed on 1440x900, 1920x1080, 3840x2160, 390x844 and 412x915. Smoke opened the shell, notifications and tasks route without console errors.
 - Guard scans completed: no credentials matches, no `service_role` frontend matches, no `window.confirm/alert/prompt`, no `pnpm.ps1`. Reload scan still finds only existing explicit/manual paths: ErrorBoundary refresh button, app-update button, iframe open-current-page action and safe link formatting.
-- Validation completed: `git diff --check`, `pnpm.cmd --filter @workspace/kub run typecheck`, `PORT=5173 BASE_PATH=/ pnpm.cmd --filter @workspace/kub run build`, `pnpm.cmd e2e:smoke`, and `pnpm.cmd e2e:long-session` passed. Build still emits the existing Vite sourcemap/chunk-size warnings.
+
+2026-05-17 recurring scheduler setup:
+- Production scheduler strategy is now documented as Supabase Edge Function + Supabase Cron. Function source: `supabase/functions/recurring-tasks-run-due/index.ts`.
+- Manual scheduler SQL proposal created at `.migration-backup/supabase/migrations/20260524_recurring_scheduler_edge_function.sql`. SQL was not applied automatically and the function was not deployed automatically.
+- The Edge Function requires a scheduler token and backend-only Supabase secret key in Supabase Edge runtime. No secret values were committed.
+- `rls:smoke` now probes `task_recurrence_run_due`: owner/tech_admin execution is skipped by default unless `KUB_QA_ALLOW_MUTATIONS=1`; `location_admin`, `location_staff`, and `client` are expected to be denied.
+- Multi-account applied-flow QA remains non-mutating by default. Routing-field copy and notification delivery for generated occurrences still require fixture-backed mutation QA after the scheduler is deployed.
+- Validation completed: `git diff --check`, `node --check scripts/rls-smoke.mjs`, `pnpm.cmd exec biome check scripts/rls-smoke.mjs supabase/functions/recurring-tasks-run-due/index.ts`, `pnpm.cmd --filter @workspace/kub run typecheck`, `PORT=5173 BASE_PATH=/ pnpm.cmd --filter @workspace/kub run build`, `pnpm.cmd e2e:smoke`, `pnpm.cmd exec playwright test tests/e2e/roles-visibility.spec.ts`, and `pnpm.cmd rls:smoke` passed. Build still emits the existing Vite sourcemap/chunk-size warnings.
 
 2026-05-17 global search and command palette:
 

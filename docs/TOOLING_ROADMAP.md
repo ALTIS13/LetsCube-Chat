@@ -23,7 +23,8 @@
 
 - Add RLS/RPC smoke scenarios with safe fixtures.
 - Add pgTAP or equivalent DB tests if the Supabase workflow supports it.
-- Add recurring-task scheduler test harness before changing production scheduling.
+- Add fixture-backed recurring-task mutation QA after production scheduler is deployed. Default
+  `rls:smoke` now verifies run-due permissions without mutating production data.
 
 ## Later
 

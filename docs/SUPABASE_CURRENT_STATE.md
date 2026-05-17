@@ -340,3 +340,13 @@ The migration adds `public.group_invites`, scoped RLS, indexes, `group_invite_cr
 - Location-aware task visibility is tightened around admin-only tasks, staff-visible location tasks and client/no-location access.
 - `role_delete_or_archive` deletes unused custom roles, archives used custom roles with `is_active=false`, and keeps system roles protected.
 - New ban/mute audit entries include target user, chat, reason, expiry/status and sanction ids for friendlier sanctions history.
+
+## 2026-05-17 Recurring Scheduler Setup Proposal
+
+- Recurring schema/RPC is applied, but automatic production execution still needs a scheduler.
+- Selected strategy: Supabase Edge Function `recurring-tasks-run-due` invoked by Supabase Cron every 5 minutes.
+- Function source: `supabase/functions/recurring-tasks-run-due/index.ts`.
+- Manual schedule proposal: `.migration-backup/supabase/migrations/20260524_recurring_scheduler_edge_function.sql`.
+- SQL and function deploy were not applied automatically.
+- The Edge Function requires `KUB_RECURRING_SCHEDULER_TOKEN` and reads backend-only Supabase secret keys from Edge runtime. No scheduler secret belongs in frontend, Vite env, docs, tests, screenshots, or committed files.
+- Operational setup and QA commands are documented in `docs/RECURRING_SCHEDULER.md`.

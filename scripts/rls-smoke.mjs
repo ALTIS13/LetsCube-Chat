@@ -128,6 +128,7 @@ for (const account of accounts) {
       p_recurrence_id: fakeUuid,
     }),
   );
+  results.push(await runDueProbe(account.role, session));
   results.push(
     await rpcProbe(account.role, session, "group_invite_create:fake", "group_invite_create", {
       p_chat_id: fakeUuid,
@@ -209,6 +210,29 @@ async function restProbe(role, session, probe, pathAndQuery) {
   };
 }
 
+async function runDueProbe(role, session) {
+  const elevatedRole = role === "default" || role === "owner" || role === "tech_admin";
+  if (elevatedRole && !allowMutations) {
+    return skippedProbe(role, "task_recurrence_run_due", "skipped unless KUB_QA_ALLOW_MUTATIONS=1");
+  }
+
+  return rpcProbe(role, session, "task_recurrence_run_due", "task_recurrence_run_due", {
+    p_limit: allowMutations ? 50 : 1,
+  });
+}
+
+function skippedProbe(role, probe, message) {
+  return {
+    role,
+    probe,
+    status: "skip",
+    ok: true,
+    missing: false,
+    value: null,
+    message,
+  };
+}
+
 async function resolveLocationIdByName(accounts, locationName) {
   const query = new URLSearchParams({
     select: "id,name",
@@ -239,6 +263,7 @@ function checkRoleExpectations(role, results) {
   const locationTasksView = byProbe.get("has_location_permission:tasks.view");
   const systemManage = byProbe.get("has_permission:system.manage");
   const manageAllTasks = byProbe.get("has_permission:tasks.manage_all_locations");
+  const runDue = byProbe.get("task_recurrence_run_due");
 
   if (role === "client" && tasksView?.ok && tasksView.value !== false) {
     failures.push("client should not have global tasks.view by default");
@@ -259,6 +284,9 @@ function checkRoleExpectations(role, results) {
     !manageAllTasks.value
   ) {
     failures.push(`${role} should have system.manage or tasks.manage_all_locations`);
+  }
+  if ((role === "location_admin" || role === "location_staff" || role === "client") && runDue?.ok) {
+    failures.push(`${role} should not be allowed to run due recurrences`);
   }
   return failures;
 }
