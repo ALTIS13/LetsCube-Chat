@@ -4,7 +4,7 @@
 -- Goals:
 -- - Search users by full_name and username/@username.
 -- - Search only RLS-visible chats, messages, tasks and locations.
--- - Avoid service_role usage from the frontend.
+-- - Avoid privileged backend keys in the frontend.
 -- - Keep commands local to the frontend command palette.
 
 create extension if not exists pg_trgm with schema extensions;
@@ -60,7 +60,7 @@ declare
 begin
   v_plain := regexp_replace(v_query, '^@+', '');
 
-  if length(v_plain) < case when v_query like '@%' then 1 else 2 end then
+  if length(v_plain) < (case when v_query like '@%' then 1 else 2 end) then
     return;
   end if;
 
