@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { gotoOrSkip, loadQaCredentials, loginIfNeeded } from "./helpers/auth";
+import { findFirstAvailableQaRole, gotoOrSkip, loginAsRoleOrSkip } from "./helpers/auth";
 
 test.describe("KUB authenticated smoke", () => {
   test("opens shell, notifications and tasks without console errors", async ({ page }) => {
@@ -11,11 +11,16 @@ test.describe("KUB authenticated smoke", () => {
       consoleErrors.push(error.message);
     });
 
-    const credentials = loadQaCredentials();
-    test.skip(!credentials, "QA credentials are not configured in env or ~/.kub-messenger-qa.env");
+    const role = findFirstAvailableQaRole(
+      ["owner", "tech_admin", "location_admin", "location_staff"],
+      {
+        includeDefault: true,
+      },
+    );
+    test.skip(!role, "QA credentials or auth state for a task-capable role are not configured");
 
     await gotoOrSkip(page, "/");
-    await loginIfNeeded(page, credentials);
+    await loginAsRoleOrSkip(page, role);
 
     await expect(page.locator("body")).toBeVisible();
 
