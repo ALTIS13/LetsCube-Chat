@@ -99,6 +99,8 @@ test.describe("KUB video recorders", () => {
     await expect(page.getByTestId("staged-attachment-tray")).toBeVisible();
     await expect(page.getByTestId("staged-video-message-preview")).toBeVisible();
     await expect(page.getByTestId("staged-video-message-large-preview")).toBeVisible();
+    const stagedPreviewBox = await page.getByTestId("staged-video-message-large-preview").boundingBox();
+    expect(stagedPreviewBox?.width ?? 0).toBeGreaterThanOrEqual(150);
     await expect(page.getByTestId("staged-video-message-progress-ring")).toBeVisible();
     const previewToggle = page.getByTestId("staged-video-message-playback-toggle");
     await expect(previewToggle).toBeVisible();
@@ -107,9 +109,27 @@ test.describe("KUB video recorders", () => {
     await expect(previewToggle).toHaveAttribute("aria-label", "Пауза предпросмотра");
     const playbackBar = page.getByTestId("chat-media-playback-bar");
     await expect(playbackBar).toBeVisible();
+    await expect(page.getByTestId("chat-header-media-playback")).toBeVisible();
+    await expect(playbackBar).toHaveAttribute("data-placement", "header");
     await expect(playbackBar).toHaveAttribute("data-current-kind", "video_message");
     await expect(page.getByTestId("chat-media-playback-progress")).toBeVisible();
     await expect(page.getByTestId("chat-media-playback-speed")).toBeVisible();
+    await expect(page.getByTestId("chat-media-playback-volume")).toBeVisible();
+    await page.getByTestId("chat-media-playback-speed").selectOption("1.5");
+    await expect(page.getByTestId("chat-media-playback-speed")).toHaveValue("1.5");
+    await page.getByTestId("chat-media-playback-volume").evaluate((node) => {
+      const input = node as HTMLInputElement;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(input, "0.6");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const playbackSettings = await page.evaluate(() => {
+      const raw = window.localStorage.getItem("kub.mediaPlayback.v1");
+      return raw ? JSON.parse(raw) as { playbackRate?: number; volume?: number } : {};
+    });
+    expect(playbackSettings.playbackRate).toBe(1.5);
+    expect(playbackSettings.volume).toBeCloseTo(0.6, 1);
     await page.getByTestId("chat-media-playback-close").click();
     await expect(playbackBar).toHaveCount(0);
     await previewToggle.click();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar } from "@/components/ui/ChatAvatar";
 import { KubModal, KubIcon, type KubIconName } from "@/components/kub";
@@ -18,9 +18,10 @@ interface ChatHeaderProps {
   onSearchOpen?: () => void;
   onInfoOpen?: () => void;
   onClearForMe?: () => Promise<{ ok: boolean; error: string | null }>;
+  mediaPlayback?: ReactNode;
 }
 
-export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForMe }: ChatHeaderProps) {
+export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForMe, mediaPlayback }: ChatHeaderProps) {
   const { chats, setChats, setSelectedChatId, setMessages, mutedChatIds, toggleMutedChat, currentUser } = useAppStore();
   const supabase = createClient();
   const [showMenu, setShowMenu] = useState(false);
@@ -202,7 +203,8 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
 
   return (
     <>
-    <div className="flex items-center gap-1 px-2 h-14 flex-shrink-0 bg-[var(--kub-surface)] border-b border-[color:var(--kub-border-color)]">
+    <div className="flex flex-shrink-0 flex-col bg-[var(--kub-surface)] border-b border-[color:var(--kub-border-color)]">
+    <div className="flex h-14 items-center gap-1 px-2">
       <button
         onClick={() => setSelectedChatId(null)}
         className="md:hidden p-2 rounded-lg hover:bg-[var(--kub-surface-2)] transition-colors flex-shrink-0 text-[color:var(--kub-cyan)]"
@@ -279,6 +281,12 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
           )}
         </div>
       </div>
+    </div>
+    {mediaPlayback && (
+      <div data-testid="chat-header-media-playback" className="min-w-0">
+        {mediaPlayback}
+      </div>
+    )}
     </div>
     <KubModal
       open={deleteGroupOpen}

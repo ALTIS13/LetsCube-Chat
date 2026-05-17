@@ -588,8 +588,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           onSearchOpen={() => setShowSearch(true)}
           onInfoOpen={() => setShowInfo(true)}
           onClearForMe={clearChatForMe}
+          mediaPlayback={<ChatMediaPlaybackBar compact />}
         />
-        <ChatMediaPlaybackBar />
 
         {isForum && (
           <TopicStrip

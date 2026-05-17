@@ -1447,6 +1447,7 @@ function RoundVideoMessage({
   };
   const activeProgress = playbackItem && mediaPlayback.isCurrent(playbackItem.id) ? mediaPlayback.progress : progress;
   const isActivePlaying = playbackItem && mediaPlayback.isCurrent(playbackItem.id) ? mediaPlayback.isPlaying : playing;
+  const isActiveMedia = Boolean(playbackItem && mediaPlayback.isCurrent(playbackItem.id));
 
   if (failed) {
     return (
@@ -1461,14 +1462,28 @@ function RoundVideoMessage({
   }
 
   return (
-    <div className="relative w-fit max-w-full">
+    <div
+      data-testid="sent-video-message-circle"
+      data-active-media={isActiveMedia ? "true" : "false"}
+      className={cn(
+        "relative h-48 w-48 max-w-full sm:h-52 sm:w-52",
+        isActiveMedia && "drop-shadow-[0_0_18px_color-mix(in_srgb,var(--kub-cyan)_28%,transparent)]"
+      )}
+    >
+      <VideoCircleProgressRing
+        progress={activeProgress}
+        testId="video-message-progress-ring"
+        className={cn(isActiveMedia ? "opacity-100" : "opacity-80")}
+      />
       <button
         type="button"
         onClick={togglePlayback}
-        className="group relative block h-44 w-44 overflow-hidden rounded-full bg-black shadow-lg focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)] sm:h-48 sm:w-48"
+        className={cn(
+          "group relative z-10 block h-full w-full overflow-hidden rounded-full bg-black shadow-lg focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)]",
+          isActiveMedia && "ring-2 ring-[color:var(--kub-cyan)]"
+        )}
         aria-label={isActivePlaying ? "Пауза видео-сообщения" : "Воспроизвести видео-сообщение"}
       >
-        <VideoCircleProgressRing progress={activeProgress} testId="video-message-progress-ring" />
         <video
           ref={videoRef}
           src={url}
@@ -1479,8 +1494,8 @@ function RoundVideoMessage({
         />
         {!isActivePlaying && (
           <span className="absolute inset-0 flex items-center justify-center bg-black/20 text-white transition-colors group-hover:bg-black/30">
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/55 backdrop-blur">
-              <KubIcon name="play" size={22} />
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/55 backdrop-blur">
+              <KubIcon name="play" size={19} />
             </span>
           </span>
         )}
@@ -1493,7 +1508,7 @@ function RoundVideoMessage({
       <button
         type="button"
         onClick={onOpen}
-        className="absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-white backdrop-blur transition-colors hover:bg-black/80"
+        className="absolute right-1 top-1 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-white backdrop-blur transition-colors hover:bg-black/80"
         aria-label="Открыть видео в просмотрщике"
       >
         <KubIcon name="externalLink" size={14} />

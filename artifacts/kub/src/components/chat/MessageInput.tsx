@@ -898,7 +898,7 @@ function AttachmentTray({
               data-testid="staged-attachment-item"
               className={cn(
                 "relative flex min-w-[210px] shrink-0 items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-2",
-                isVideoMessage ? "min-w-[300px] max-w-[min(340px,calc(100vw-2rem))]" : isVoice ? "max-w-[320px]" : "max-w-[260px]"
+                isVideoMessage ? "min-w-[min(390px,calc(100vw-2rem))] max-w-[min(430px,calc(100vw-2rem))]" : isVoice ? "max-w-[320px]" : "max-w-[260px]"
               )}
             >
               {isVoice ? (
@@ -1091,7 +1091,7 @@ function VideoMessageAttachmentPreview({
         data-testid="staged-video-message-playback-toggle"
         onClick={toggle}
         disabled={!attachment.previewUrl || busy}
-        className="relative h-24 w-24 shrink-0 overflow-visible rounded-full bg-black focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)] disabled:cursor-not-allowed disabled:opacity-70"
+        className="relative h-40 w-40 shrink-0 overflow-visible rounded-full bg-black focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)] disabled:cursor-not-allowed disabled:opacity-70 sm:h-48 sm:w-48"
         aria-label={activePlaying ? "Пауза предпросмотра" : "Просмотреть видеосообщение"}
       >
         <VideoCircleProgressRing progress={mediaPlayback.isCurrent(attachment.id) ? mediaPlayback.progress : progress} testId="staged-video-message-progress-ring" />
@@ -1112,9 +1112,9 @@ function VideoMessageAttachmentPreview({
             )}
           </span>
         </span>
-        <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/20 text-white">
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/55 backdrop-blur">
-            <KubIcon name={activePlaying ? "pause" : "play"} size={18} />
+        <span className="absolute bottom-2 right-2 flex items-center justify-center rounded-full text-white">
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/65 backdrop-blur">
+            <KubIcon name={activePlaying ? "pause" : "play"} size={16} />
           </span>
         </span>
         <span className="absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-black/65 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-white backdrop-blur">

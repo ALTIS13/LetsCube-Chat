@@ -4,6 +4,7 @@ import { type ChangeEvent, type PointerEvent, useCallback, useEffect, useMemo, u
 import { KubIcon } from "@/components/kub";
 import { clampAudioElementVolume, useAudioSettings } from "@/hooks/useAudioSettings";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
+import { cn } from "@/lib/utils";
 import { useChatMediaPlayback, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 
 interface AudioMessageProps {
@@ -232,16 +233,27 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
     `${Math.floor(s / 60).toString().padStart(2, "0")}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
 
   const srcReady = Boolean(url);
+  const isCurrentPlayback = Boolean(playbackItem && mediaPlayback.isCurrent(playbackItem.id));
+  const displayPlaying = isCurrentPlayback ? mediaPlayback.isPlaying : playing;
+  const displayDuration = isCurrentPlayback && mediaPlayback.duration > 0 ? mediaPlayback.duration : durationSeconds;
+  const displayCurrentTime = isCurrentPlayback ? mediaPlayback.currentTime : currentTime;
   const canSeek = srcReady && metadataReady && durationSeconds > 0 && !loadError;
   const canPlayAudio = srcReady && !loadError && (metadataReady || metadataWarmupElapsed);
   const progressRatio = useMemo(() => {
-    if (durationSeconds <= 0) return 0;
-    return Math.min(1, Math.max(0, currentTime / durationSeconds));
-  }, [currentTime, durationSeconds]);
+    if (displayDuration <= 0) return 0;
+    return Math.min(1, Math.max(0, displayCurrentTime / displayDuration));
+  }, [displayCurrentTime, displayDuration]);
   const trackColor = isMe ? "var(--kub-border-color)" : "var(--kub-surface-3)";
 
   return (
-    <div className="flex w-[min(230px,calc(100vw-7.5rem))] max-w-full min-w-0 items-center gap-2.5" data-voice-message="true">
+    <div
+      className={cn(
+        "flex w-[min(230px,calc(100vw-7.5rem))] max-w-full min-w-0 items-center gap-2.5 rounded-xl",
+        isCurrentPlayback && "ring-1 ring-[color:var(--kub-cyan)]/70"
+      )}
+      data-voice-message="true"
+      data-active-media={isCurrentPlayback ? "true" : "false"}
+    >
       {url && (
         <audio
           ref={audioRef}
@@ -271,7 +283,7 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
         aria-label={playing ? "Пауза" : "Воспроизвести"}
         className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all hover:brightness-110 bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:brightness-100"
       >
-        {playing ? <KubIcon name="pause" size={16} /> : <KubIcon name="play" size={16} className="ml-0.5" />}
+        {displayPlaying ? <KubIcon name="pause" size={16} /> : <KubIcon name="play" size={16} className="ml-0.5" />}
       </button>
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -279,9 +291,9 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
           aria-label="Перемотка голосового сообщения"
           type="range"
           min={0}
-          max={durationSeconds > 0 ? durationSeconds : 0}
+          max={displayDuration > 0 ? displayDuration : 0}
           step="0.01"
-          value={durationSeconds > 0 ? Math.min(currentTime, durationSeconds) : 0}
+          value={displayDuration > 0 ? Math.min(displayCurrentTime, displayDuration) : 0}
           disabled={!canSeek}
           data-voice-progress="track"
           data-audio-src-ready={srcReady ? "true" : "false"}

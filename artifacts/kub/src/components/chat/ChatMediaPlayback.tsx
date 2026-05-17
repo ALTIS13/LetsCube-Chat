@@ -36,6 +36,7 @@ interface ChatMediaPlaybackContextValue {
   duration: number;
   progress: number;
   playbackRate: number;
+  volume: number;
   error: string | null;
   isCurrent: (itemId: string) => boolean;
   activate: (item: ChatMediaPlaybackItem, element: HTMLMediaElement) => void;
@@ -44,6 +45,7 @@ interface ChatMediaPlaybackContextValue {
   pause: () => void;
   seek: (time: number) => void;
   setRate: (rate: number) => void;
+  setVolume: (volume: number) => void;
   next: () => void;
   previous: () => void;
   close: () => void;
@@ -55,6 +57,12 @@ interface ChatMediaPlaybackContextValue {
 const ChatMediaPlaybackContext = createContext<ChatMediaPlaybackContextValue | null>(null);
 
 const PLAYBACK_RATES = [0.5, 1, 1.5, 2];
+const PLAYBACK_SETTINGS_KEY = "kub.mediaPlayback.v1";
+
+interface PlaybackSettings {
+  playbackRate: number;
+  volume: number;
+}
 
 export function ChatMediaPlaybackProvider({
   chatId,
@@ -68,16 +76,20 @@ export function ChatMediaPlaybackProvider({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hideTimerRef = useRef<number | null>(null);
+  const progressFrameRef = useRef<number | null>(null);
+  const lastProgressSyncRef = useRef(0);
   const activeElementRef = useRef<HTMLMediaElement | null>(null);
   const [activeElement, setActiveElement] = useState<HTMLMediaElement | null>(null);
   const [currentItem, setCurrentItem] = useState<ChatMediaPlaybackItem | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [playbackRate, setPlaybackRate] = useState(1);
+  const [playbackSettings, setPlaybackSettings] = useState<PlaybackSettings>(() => readPlaybackSettings());
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { settings } = useAudioSettings();
+  const playbackRate = playbackSettings.playbackRate;
+  const volume = playbackSettings.volume;
 
   const playlistIndex = useMemo(() => {
     if (!currentItem || currentItem.isStaged) return -1;
@@ -87,13 +99,49 @@ export function ChatMediaPlaybackProvider({
   const canNext = playlistIndex >= 0 && playlistIndex < playlist.length - 1;
   const progress = duration > 0 ? Math.min(1, Math.max(0, currentTime / duration)) : 0;
 
+  const stopProgressLoop = useCallback(() => {
+    if (progressFrameRef.current !== null) {
+      window.cancelAnimationFrame(progressFrameRef.current);
+      progressFrameRef.current = null;
+    }
+  }, []);
+
+  const syncFromElement = useCallback((element: HTMLMediaElement) => {
+    const nextDuration = readMediaDuration(element);
+    setDuration(nextDuration);
+    setCurrentTime(finiteTime(element.currentTime));
+    setIsPlaying(!element.paused && !element.ended);
+  }, []);
+
+  const startProgressLoop = useCallback((element: HTMLMediaElement) => {
+    stopProgressLoop();
+    lastProgressSyncRef.current = 0;
+    const tick = (timestamp: number) => {
+      if (timestamp - lastProgressSyncRef.current >= 50) {
+        lastProgressSyncRef.current = timestamp;
+        syncFromElement(element);
+      }
+      if (!element.paused && !element.ended) {
+        progressFrameRef.current = window.requestAnimationFrame(tick);
+      } else {
+        progressFrameRef.current = null;
+      }
+    };
+    progressFrameRef.current = window.requestAnimationFrame(tick);
+  }, [stopProgressLoop, syncFromElement]);
+
   useEffect(() => {
     void applyAudioOutputDevice(audioRef.current, settings.selectedOutputDeviceId);
   }, [settings.selectedOutputDeviceId]);
 
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = clampAudioElementVolume(settings.voicePlaybackVolume);
-  }, [settings.voicePlaybackVolume]);
+    if (audioRef.current) audioRef.current.volume = volume;
+    if (videoRef.current) videoRef.current.volume = volume;
+  }, [volume]);
+
+  useEffect(() => {
+    writePlaybackSettings(playbackSettings);
+  }, [playbackSettings]);
 
   useEffect(() => {
     if (!currentItem || currentItem.chatId === chatId || currentItem.isStaged) return;
@@ -108,18 +156,16 @@ export function ChatMediaPlaybackProvider({
   useEffect(() => {
     return () => {
       if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
+      stopProgressLoop();
       activeElementRef.current?.pause();
     };
-  }, []);
+  }, [stopProgressLoop]);
 
   useEffect(() => {
     if (!activeElement) return;
 
     const sync = () => {
-      const nextDuration = readMediaDuration(activeElement);
-      setDuration(nextDuration);
-      setCurrentTime(finiteTime(activeElement.currentTime));
-      setIsPlaying(!activeElement.paused && !activeElement.ended);
+      syncFromElement(activeElement);
     };
     const handlePlay = () => {
       if (hideTimerRef.current !== null) {
@@ -129,17 +175,21 @@ export function ChatMediaPlaybackProvider({
       setVisible(true);
       setIsPlaying(true);
       sync();
+      startProgressLoop(activeElement);
     };
     const handlePause = () => {
+      stopProgressLoop();
       setIsPlaying(false);
       sync();
     };
     const handleEnded = () => {
+      stopProgressLoop();
       sync();
       setIsPlaying(false);
       hideTimerRef.current = window.setTimeout(() => setVisible(false), 2200);
     };
     const handleError = () => {
+      stopProgressLoop();
       setIsPlaying(false);
       setError("Не удалось воспроизвести медиа.");
       setVisible(true);
@@ -155,6 +205,7 @@ export function ChatMediaPlaybackProvider({
     sync();
 
     return () => {
+      stopProgressLoop();
       activeElement.removeEventListener("timeupdate", sync);
       activeElement.removeEventListener("loadedmetadata", sync);
       activeElement.removeEventListener("durationchange", sync);
@@ -163,7 +214,7 @@ export function ChatMediaPlaybackProvider({
       activeElement.removeEventListener("ended", handleEnded);
       activeElement.removeEventListener("error", handleError);
     };
-  }, [activeElement]);
+  }, [activeElement, startProgressLoop, stopProgressLoop, syncFromElement]);
 
   const mediaElementForItem = useCallback((item: ChatMediaPlaybackItem) => {
     return item.kind === "voice" || item.kind === "audio" ? audioRef.current : videoRef.current;
@@ -182,11 +233,11 @@ export function ChatMediaPlaybackProvider({
       return element;
     });
     element.playbackRate = playbackRate;
+    element.volume = volume;
     if (element instanceof HTMLAudioElement) {
-      element.volume = clampAudioElementVolume(settings.voicePlaybackVolume);
       void applyAudioOutputDevice(element, settings.selectedOutputDeviceId);
     }
-  }, [playbackRate, settings.selectedOutputDeviceId, settings.voicePlaybackVolume]);
+  }, [playbackRate, settings.selectedOutputDeviceId, volume]);
 
   const play = useCallback((item: ChatMediaPlaybackItem, element?: HTMLMediaElement | null) => {
     const media = element ?? mediaElementForItem(item);
@@ -197,13 +248,14 @@ export function ChatMediaPlaybackProvider({
       media.load();
     }
     media.playbackRate = playbackRate;
+    media.volume = volume;
     setIsPlaying(true);
     void media.play().catch(() => {
       setIsPlaying(false);
       setError("Не удалось воспроизвести медиа.");
       setVisible(true);
     });
-  }, [activate, mediaElementForItem, playbackRate]);
+  }, [activate, mediaElementForItem, playbackRate, volume]);
 
   const pause = useCallback(() => {
     activeElement?.pause();
@@ -233,9 +285,15 @@ export function ChatMediaPlaybackProvider({
   }, [activeElement, duration]);
 
   const setRate = useCallback((rate: number) => {
-    const nextRate = PLAYBACK_RATES.includes(rate) ? rate : 1;
-    setPlaybackRate(nextRate);
+    const nextRate = normalizePlaybackRate(rate);
+    setPlaybackSettings((previousSettings) => ({ ...previousSettings, playbackRate: nextRate }));
     if (activeElement) activeElement.playbackRate = nextRate;
+  }, [activeElement]);
+
+  const setVolume = useCallback((nextVolume: number) => {
+    const safeVolume = normalizeVolume(nextVolume);
+    setPlaybackSettings((previousSettings) => ({ ...previousSettings, volume: safeVolume }));
+    if (activeElement) activeElement.volume = safeVolume;
   }, [activeElement]);
 
   const previous = useCallback(() => {
@@ -253,6 +311,7 @@ export function ChatMediaPlaybackProvider({
       window.clearTimeout(hideTimerRef.current);
       hideTimerRef.current = null;
     }
+    stopProgressLoop();
     activeElement?.pause();
     setVisible(false);
     setCurrentItem(null);
@@ -261,7 +320,7 @@ export function ChatMediaPlaybackProvider({
     setCurrentTime(0);
     setDuration(0);
     setError(null);
-  }, [activeElement]);
+  }, [activeElement, stopProgressLoop]);
 
   const closeIfCurrent = useCallback((itemId: string) => {
     if (currentItem?.id === itemId) close();
@@ -274,6 +333,7 @@ export function ChatMediaPlaybackProvider({
     duration,
     progress,
     playbackRate,
+    volume,
     error,
     isCurrent: (itemId) => visible && currentItem?.id === itemId,
     activate,
@@ -282,6 +342,7 @@ export function ChatMediaPlaybackProvider({
     pause,
     seek,
     setRate,
+    setVolume,
     next,
     previous,
     close,
@@ -307,8 +368,10 @@ export function ChatMediaPlaybackProvider({
     progress,
     seek,
     setRate,
+    setVolume,
     toggle,
     visible,
+    volume,
   ]);
 
   return (
@@ -331,6 +394,7 @@ export function useChatMediaPlayback() {
       duration: 0,
       progress: 0,
       playbackRate: 1,
+      volume: 1,
       error: null,
       isCurrent: () => false,
       activate: noop,
@@ -339,6 +403,7 @@ export function useChatMediaPlayback() {
       pause: noop,
       seek: noop,
       setRate: noop,
+      setVolume: noop,
       next: noop,
       previous: noop,
       close: noop,
@@ -350,7 +415,7 @@ export function useChatMediaPlayback() {
   return context;
 }
 
-export function ChatMediaPlaybackBar() {
+export function ChatMediaPlaybackBar({ compact = false }: { compact?: boolean } = {}) {
   const playback = useChatMediaPlayback();
   const item = playback.currentItem;
   if (!item) return null;
@@ -362,10 +427,17 @@ export function ChatMediaPlaybackBar() {
   return (
     <div
       data-testid="chat-media-playback-bar"
+      data-placement={compact ? "header" : "standalone"}
       data-current-kind={item.kind}
-      className="mx-2 mt-2 overflow-hidden rounded-2xl border border-[color:var(--kub-border-color)] bg-[color-mix(in_srgb,var(--kub-surface)_92%,var(--kub-cyan)_8%)] shadow-lg transition-all sm:mx-3"
+      className={cn(
+        "overflow-hidden border border-[color:var(--kub-border-color)] bg-[color-mix(in_srgb,var(--kub-surface)_92%,var(--kub-cyan)_8%)] shadow-lg transition-all",
+        compact ? "mx-2 mb-2 rounded-xl sm:mx-3" : "mx-2 mt-2 rounded-2xl sm:mx-3"
+      )}
     >
-      <div className="flex min-w-0 flex-col gap-2 px-2.5 py-2 sm:flex-row sm:items-center sm:gap-3 sm:px-3">
+      <div className={cn(
+        "flex min-w-0 flex-col gap-2 px-2.5 py-2 sm:flex-row sm:items-center sm:gap-3 sm:px-3",
+        compact && "py-1.5"
+      )}>
         <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
           <div className={cn(
             "flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden bg-black/80 text-white",
@@ -441,6 +513,24 @@ export function ChatMediaPlaybackBar() {
               <option key={rate} value={rate}>{rate}x</option>
             ))}
           </select>
+          <label
+            className="flex h-8 items-center gap-1 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-1.5 text-[color:var(--kub-muted)]"
+            title="Р“СЂРѕРјРєРѕСЃС‚СЊ"
+          >
+            <KubIcon name="volume" size={14} />
+            <input
+              data-testid="chat-media-playback-volume"
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={playback.volume}
+              onInput={(event) => playback.setVolume(Number(event.currentTarget.value))}
+              onChange={(event) => playback.setVolume(Number(event.currentTarget.value))}
+              className="h-1.5 w-14 cursor-pointer appearance-none rounded-full bg-[var(--kub-surface-3)] accent-[var(--kub-cyan)] sm:w-16"
+              aria-label="Р“СЂРѕРјРєРѕСЃС‚СЊ РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёСЏ"
+            />
+          </label>
           <button
             type="button"
             data-testid="chat-media-playback-close"
@@ -483,6 +573,41 @@ export function VideoCircleProgressRing({
       <span className="block h-full w-full rounded-full border border-black/35" />
     </span>
   );
+}
+
+function readPlaybackSettings(): PlaybackSettings {
+  if (typeof window === "undefined") return { playbackRate: 1, volume: 1 };
+  try {
+    const raw = window.localStorage.getItem(PLAYBACK_SETTINGS_KEY);
+    if (!raw) return { playbackRate: 1, volume: 1 };
+    const parsed = JSON.parse(raw) as Partial<PlaybackSettings>;
+    return {
+      playbackRate: normalizePlaybackRate(Number(parsed.playbackRate)),
+      volume: normalizeVolume(Number(parsed.volume)),
+    };
+  } catch {
+    return { playbackRate: 1, volume: 1 };
+  }
+}
+
+function writePlaybackSettings(settings: PlaybackSettings) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PLAYBACK_SETTINGS_KEY, JSON.stringify({
+      playbackRate: normalizePlaybackRate(settings.playbackRate),
+      volume: normalizeVolume(settings.volume),
+    }));
+  } catch {
+    // Local storage can be unavailable in private mode; playback still works.
+  }
+}
+
+function normalizePlaybackRate(rate: number): number {
+  return PLAYBACK_RATES.includes(rate) ? rate : 1;
+}
+
+function normalizeVolume(volume: number): number {
+  return clampAudioElementVolume(Number.isFinite(volume) ? volume : 1);
 }
 
 function readMediaDuration(element: HTMLMediaElement): number {
