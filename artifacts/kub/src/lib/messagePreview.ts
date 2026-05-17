@@ -4,6 +4,7 @@ export function formatChatMessagePreview(message: Pick<Message, "type" | "conten
   if (!message) return "";
   if (message.deleted_at) return "Сообщение удалено";
   if (isGifMessage(message)) return "GIF";
+  if (isRoundVideoMessage(message)) return "Видео-сообщение";
   if (message.type === "image") return "Фото";
   if (message.type === "video") return "Видео";
   if (message.type === "audio") return "Голосовое";
@@ -16,6 +17,10 @@ export function formatReplyMessagePreview(message: Pick<Message, "type" | "conte
   if (!message || message.deleted_at) return "Сообщение недоступно";
   if (isLocationMessage(message.content)) return "Местоположение";
   return formatChatMessagePreview(message) || "Сообщение";
+}
+
+function isRoundVideoMessage(message: Pick<Message, "type" | "content">): boolean {
+  return message.type === "video" && /^Видео-сообщение(?:\s|\(|$)/i.test(message.content?.trim() ?? "");
 }
 
 function isGifMessage(message: Pick<Message, "type" | "content" | "media_url">): boolean {

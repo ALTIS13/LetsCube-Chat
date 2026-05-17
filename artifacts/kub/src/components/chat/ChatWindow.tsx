@@ -24,6 +24,7 @@ import {
   MAX_STAGED_ATTACHMENTS,
   chatAttachmentUploadPath,
   createStagedAttachment,
+  createStagedVideoMessageAttachment,
   createStagedVoiceAttachment,
   revokeAttachmentPreview,
   validateStagedAttachment,
@@ -258,6 +259,21 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     setStagedAttachments((current) => [...current, createStagedVoiceAttachment(blob, durationMs, mimeType)]);
   }, [removeStagedAttachment]);
 
+  const stageVideoMessageRecording = useCallback((blob: Blob, durationMs: number, mimeType: string) => {
+    const error = validateStagedAttachment(new File([blob], "video-message.webm", { type: mimeType || blob.type || "video/webm" }));
+    if (error) {
+      showAppAlert(error, "Видео-сообщение");
+      return;
+    }
+    const currentVideoMessage = stagedAttachmentsRef.current.find((attachment) => attachment.kind === "video_message");
+    if (currentVideoMessage) removeStagedAttachment(currentVideoMessage.id);
+    if (!currentVideoMessage && stagedAttachmentsRef.current.length >= MAX_STAGED_ATTACHMENTS) {
+      showAppAlert(`Можно подготовить не больше ${MAX_STAGED_ATTACHMENTS} вложений за раз.`, "Видео-сообщение");
+      return;
+    }
+    setStagedAttachments((current) => [...current, createStagedVideoMessageAttachment(blob, durationMs, mimeType)]);
+  }, [removeStagedAttachment]);
+
   const uploadStagedAttachment = useCallback(async (attachment: StagedAttachment): Promise<StagedAttachmentUpload> => {
     if (!userId) throw new Error("auth");
     const path = chatAttachmentUploadPath(chatId, userId, attachment);
@@ -291,7 +307,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
     let sentAny = false;
     const firstTarget = targets[0];
-    if (captionText && firstTarget?.kind === "voice") {
+    if (captionText && (firstTarget?.kind === "voice" || firstTarget?.kind === "video_message")) {
       const textMessage = await sendMessage(captionText, replyTo?.id ?? undefined);
       if (!textMessage) return false;
       sentAny = true;
@@ -387,6 +403,18 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     }
     stageVoiceRecording(blob, durationMs, mimeType);
   }, [stageVoiceRecording, userId]);
+
+  const handleSendVideoMessage = useCallback(async (blob: Blob, durationMs: number, mimeType: string) => {
+    if (!userId) {
+      showAppAlert("Войдите в аккаунт, чтобы отправлять видео-сообщения.", "Видео-сообщение");
+      return;
+    }
+    if (!blob || blob.size === 0 || durationMs < 500) {
+      showAppAlert("Запись слишком короткая или пустая.", "Видео-сообщение");
+      return;
+    }
+    stageVideoMessageRecording(blob, durationMs, mimeType);
+  }, [stageVideoMessageRecording, userId]);
 
   const showJumpNotice = useCallback((message: string) => {
     setPinError(message);
@@ -642,6 +670,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             onSend={handleSend}
             onEdit={editMessage}
             onSendVoice={handleSendVoice}
+            onSendVideoMessage={handleSendVideoMessage}
             onTyping={sendTyping}
             attachments={stagedAttachments}
             onStageFiles={(files, source) => stageFiles(files, source)}
@@ -683,6 +712,7 @@ function filesFromDataTransfer(dataTransfer: DataTransfer): File[] {
 
 function getStagedAttachmentMessageType(attachment: StagedAttachment): "image" | "video" | "audio" | "file" {
   if (attachment.kind === "voice") return "audio";
+  if (attachment.kind === "video_message") return "video";
   if (attachment.kind === "image" || attachment.kind === "video" || attachment.kind === "audio") return attachment.kind;
   return "file";
 }
@@ -690,6 +720,9 @@ function getStagedAttachmentMessageType(attachment: StagedAttachment): "image" |
 function getStagedAttachmentMessageContent(attachment: StagedAttachment, caption: string | null): string {
   if (attachment.kind === "voice") {
     return `🎤 Голосовое сообщение (${formatVoiceDurationLabel(attachment.durationMs ?? 0)})`;
+  }
+  if (attachment.kind === "video_message") {
+    return `Видео-сообщение (${formatVoiceDurationLabel(attachment.durationMs ?? 0)})`;
   }
   return caption?.trim() || attachment.name;
 }

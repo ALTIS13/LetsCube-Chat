@@ -1136,13 +1136,22 @@ export function MessageBubble({
                 />
               </MediaWithCaption>
             ) : message.type === "video" && message.media_url ? (
-              <MediaWithCaption caption={mediaCaption}>
-                <MediaVideo
+              isRoundVideoMessage(message) ? (
+                <RoundVideoMessage
                   url={message.media_url}
-                  title={message.content ?? "Видео"}
-                  onOpen={() => onOpenMedia?.({ type: "video", url: message.media_url!, title: message.content ?? "Видео" })}
+                  title={message.content ?? "Видео-сообщение"}
+                  durationLabel={parseVideoMessageDuration(message.content)}
+                  onOpen={() => onOpenMedia?.({ type: "video", url: message.media_url!, title: message.content ?? "Видео-сообщение" })}
                 />
-              </MediaWithCaption>
+              ) : (
+                <MediaWithCaption caption={mediaCaption}>
+                  <MediaVideo
+                    url={message.media_url}
+                    title={message.content ?? "Видео"}
+                    onOpen={() => onOpenMedia?.({ type: "video", url: message.media_url!, title: message.content ?? "Видео" })}
+                  />
+                </MediaWithCaption>
+              )
             ) : message.type === "file" && message.media_url ? (
               <a
                 href={message.media_url}
@@ -1351,6 +1360,100 @@ function MediaVideo({ url, title, onOpen }: { url: string; title: string; onOpen
   );
 }
 
+function RoundVideoMessage({
+  url,
+  title,
+  durationLabel,
+  onOpen,
+}: {
+  url: string;
+  title: string;
+  durationLabel: string | null;
+  onOpen: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onPlay = () => setPlaying(true);
+    const onPause = () => setPlaying(false);
+    const onEnded = () => setPlaying(false);
+    video.addEventListener("play", onPlay);
+    video.addEventListener("pause", onPause);
+    video.addEventListener("ended", onEnded);
+    return () => {
+      video.removeEventListener("play", onPlay);
+      video.removeEventListener("pause", onPause);
+      video.removeEventListener("ended", onEnded);
+    };
+  }, [url]);
+
+  const togglePlayback = () => {
+    const video = videoRef.current;
+    if (!video || failed) return;
+    if (video.paused) {
+      void video.play().catch(() => setPlaying(false));
+      return;
+    }
+    video.pause();
+  };
+
+  if (failed) {
+    return (
+      <div className="flex max-w-[240px] items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
+        <KubIcon name="warning" size={16} />
+        <span className="min-w-0 flex-1">Не удалось загрузить видео.</span>
+        <button type="button" onClick={onOpen} className="text-[color:var(--kub-cyan)] hover:underline">
+          Открыть
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative w-fit max-w-full">
+      <button
+        type="button"
+        onClick={togglePlayback}
+        className="group relative block h-44 w-44 overflow-hidden rounded-full bg-black shadow-lg focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)] sm:h-48 sm:w-48"
+        aria-label={playing ? "Пауза видео-сообщения" : "Воспроизвести видео-сообщение"}
+      >
+        <video
+          ref={videoRef}
+          src={url}
+          preload="metadata"
+          playsInline
+          className="h-full w-full object-cover"
+          onError={() => setFailed(true)}
+        />
+        {!playing && (
+          <span className="absolute inset-0 flex items-center justify-center bg-black/20 text-white transition-colors group-hover:bg-black/30">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/55 backdrop-blur">
+              <KubIcon name="play" size={22} />
+            </span>
+          </span>
+        )}
+        {durationLabel && (
+          <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/65 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-white backdrop-blur">
+            {durationLabel}
+          </span>
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-white backdrop-blur transition-colors hover:bg-black/80"
+        aria-label="Открыть видео в просмотрщике"
+      >
+        <KubIcon name="externalLink" size={14} />
+      </button>
+    </div>
+  );
+}
+
 function parseAudioDuration(content: string | null | undefined): number {
   const match = content?.match(/(\d{1,2}):(\d{2})/);
   if (!match) return 0;
@@ -1360,8 +1463,17 @@ function parseAudioDuration(content: string | null | undefined): number {
   return minutes * 60 + seconds;
 }
 
+function parseVideoMessageDuration(content: string | null | undefined): string | null {
+  return content?.match(/(\d{1,2}:\d{2})/)?.[1] ?? null;
+}
+
+function isRoundVideoMessage(message: MessageWithSender): boolean {
+  return message.type === "video" && /^Видео-сообщение(?:\s|\(|$)/i.test(message.content?.trim() ?? "");
+}
+
 function isVoiceMessage(message: MessageWithSender): boolean {
   if (message.type === "audio") return true;
+  if (message.type === "video") return false;
   const mediaUrl = message.media_url?.toLowerCase() ?? "";
   if (/\.(webm|ogg|oga|mp3|wav|m4a|aac)(\?|#|$)/.test(mediaUrl)) return true;
   const content = message.content?.toLowerCase() ?? "";
@@ -1372,6 +1484,7 @@ function getVisibleMediaCaption(message: MessageWithSender): string | null {
   if (message.type !== "image" && message.type !== "video") return null;
   const content = message.content?.trim();
   if (!content) return null;
+  if (/^Видео-сообщение(?:\s|\(|$)/i.test(content)) return null;
   if (looksLikeMediaFileName(content)) return null;
   if (/^(фото|видео|image|video)$/i.test(content)) return null;
   return content;

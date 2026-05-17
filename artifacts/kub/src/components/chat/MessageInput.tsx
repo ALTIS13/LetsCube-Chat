@@ -5,6 +5,7 @@ import type { MessageWithSender } from "@/types/database";
 import { cn } from "@/lib/utils";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { CameraCaptureModal } from "./CameraCaptureModal";
+import { VideoMessageRecorderModal } from "./VideoMessageRecorderModal";
 import { useAppStore } from "@/store/app.store";
 import { useMuteState } from "@/hooks/useMuteState";
 import { KubIcon, type KubIconName } from "@/components/kub";
@@ -34,6 +35,7 @@ interface MessageInputProps {
   onSend: (content: string) => void | boolean | Promise<unknown>;
   onEdit?: (messageId: string, newContent: string) => Promise<void>;
   onSendVoice?: (blob: Blob, durationMs: number, mimeType: string) => void | Promise<void>;
+  onSendVideoMessage?: (blob: Blob, durationMs: number, mimeType: string) => void | Promise<void>;
   onTyping?: () => void;
   attachments?: StagedAttachment[];
   onStageFiles?: (files: File[], source: "picker" | "paste" | "camera") => void;
@@ -52,6 +54,7 @@ export function MessageInput({
   onSend,
   onEdit,
   onSendVoice,
+  onSendVideoMessage,
   onTyping,
   attachments = [],
   onStageFiles,
@@ -67,6 +70,7 @@ export function MessageInput({
   const [showAttach, setShowAttach] = useState(false);
   const [showVoice, setShowVoice] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
+  const [showVideoMessage, setShowVideoMessage] = useState(false);
   const [isComposing, setIsComposing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -74,6 +78,7 @@ export function MessageInput({
   const hasText = text.trim().length > 0;
   const hasAttachments = attachments.length > 0;
   const hasStagedVoice = attachments.some((item) => item.kind === "voice");
+  const hasStagedVideoMessage = attachments.some((item) => item.kind === "video_message");
   const isAttachmentBusy = attachments.some((item) => item.status === "uploading" || item.status === "sending");
   const editingMessage = useAppStore((s) => s.editingMessage);
   const setEditingMessage = useAppStore((s) => s.setEditingMessage);
@@ -290,6 +295,15 @@ export function MessageInput({
       setShowAttach(false);
       setShowEmoji(false);
     } },
+    { icon: "video",   label: "Записать видео",   tone: "var(--kub-pink)",   action: () => {
+      if (hasStagedVideoMessage) {
+        showAppAlert("Удалите текущее видео-сообщение или используйте «Перезаписать».", "Видео-сообщение");
+        return;
+      }
+      setShowVideoMessage(true);
+      setShowAttach(false);
+      setShowEmoji(false);
+    } },
     { icon: "mapPin",  label: "Местоположение",  tone: "var(--kub-online)", action: handleLocation },
   ];
 
@@ -318,6 +332,14 @@ export function MessageInput({
         open={showCamera}
         onClose={() => setShowCamera(false)}
         onAddFile={stageCameraFile}
+      />
+      <VideoMessageRecorderModal
+        open={showVideoMessage}
+        onClose={() => setShowVideoMessage(false)}
+        onAddVideo={async (blob, durationMs, mimeType) => {
+          await onSendVideoMessage?.(blob, durationMs, mimeType);
+          setShowVideoMessage(false);
+        }}
       />
 
       {showAttach && (
@@ -391,8 +413,10 @@ export function MessageInput({
             onRetry={onRetryAttachment}
             onCancel={onCancelAttachment}
             onRerecord={(attachmentId) => {
+              const target = attachments.find((attachment) => attachment.id === attachmentId);
               onRemoveAttachment?.(attachmentId);
-              setShowVoice(true);
+              if (target?.kind === "video_message") setShowVideoMessage(true);
+              else setShowVoice(true);
               setShowAttach(false);
               setShowEmoji(false);
             }}
@@ -485,6 +509,7 @@ function AttachmentTray({
           const busy = attachment.status === "uploading" || attachment.status === "sending";
           const failed = attachment.status === "failed";
           const isVoice = attachment.kind === "voice";
+          const isVideoMessage = attachment.kind === "video_message";
           return (
             <div
               key={attachment.id}
@@ -496,6 +521,8 @@ function AttachmentTray({
             >
               {isVoice ? (
                 <VoiceAttachmentPreview attachment={attachment} busy={busy} failed={failed} />
+              ) : isVideoMessage ? (
+                <VideoMessageAttachmentPreview attachment={attachment} busy={busy} failed={failed} />
               ) : (
                 <>
                   <AttachmentThumb attachment={attachment} />
@@ -505,15 +532,15 @@ function AttachmentTray({
                 </>
               )}
               <div className="flex shrink-0 items-center gap-1">
-                {isVoice && !busy && onRerecord && (
+                {(isVoice || isVideoMessage) && !busy && onRerecord && (
                   <button
                     type="button"
                     onClick={() => onRerecord(attachment.id)}
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-3)]"
-                    aria-label="Перезаписать голосовое"
+                    aria-label={isVideoMessage ? "Перезаписать видео-сообщение" : "Перезаписать голосовое"}
                     title="Перезаписать"
                   >
-                    <KubIcon name="microphone" size={15} />
+                    <KubIcon name={isVideoMessage ? "video" : "microphone"} size={15} />
                   </button>
                 )}
                 {failed && onRetry && (
@@ -593,6 +620,55 @@ function AttachmentThumb({ attachment }: { attachment: StagedAttachment }) {
   return (
     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[var(--kub-surface-3)] text-[color:var(--kub-cyan)]">
       <KubIcon name={icon} size={19} />
+    </div>
+  );
+}
+
+function VideoMessageAttachmentPreview({
+  attachment,
+  busy,
+  failed,
+}: {
+  attachment: StagedAttachment;
+  busy: boolean;
+  failed: boolean;
+}) {
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-2">
+      <div data-testid="staged-video-message-preview" className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-black">
+        {attachment.previewUrl ? (
+          <video
+            src={attachment.previewUrl}
+            className="h-full w-full object-cover"
+            playsInline
+            muted
+            preload="metadata"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-white">
+            <KubIcon name="video" size={18} />
+          </div>
+        )}
+        <span className="absolute inset-0 flex items-center justify-center bg-black/20 text-white">
+          <KubIcon name="play" size={14} />
+        </span>
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-xs font-medium text-[color:var(--kub-text)]">Видео-сообщение</span>
+          <span className="shrink-0 text-[11px] tabular-nums text-[color:var(--kub-muted)]">
+            {formatDurationLabel(attachment.durationMs ?? 0)}
+          </span>
+        </div>
+        <div className={cn("mt-1 truncate text-[11px] text-[color:var(--kub-muted)]", failed && "text-[color:var(--kub-danger)]")}>
+          {attachment.error ?? attachmentStatusLabel(attachment.status)}
+        </div>
+        {busy && (
+          <div className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--kub-surface-3)]">
+            <div className="h-full w-2/3 animate-pulse rounded-full bg-[var(--kub-cyan)]" />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

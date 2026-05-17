@@ -1,4 +1,4 @@
-export type StagedAttachmentKind = "image" | "video" | "audio" | "voice" | "file";
+export type StagedAttachmentKind = "image" | "video" | "audio" | "voice" | "video_message" | "file";
 
 export type StagedAttachmentStatus =
   | "staged"
@@ -97,6 +97,31 @@ export function createStagedVoiceAttachment(blob: Blob, durationMs: number, mime
     name: "Голосовое сообщение",
     size: file.size,
     mimeType: file.type || "audio/webm",
+    status: "staged",
+    progress: null,
+    error: null,
+    clientMessageId: safeUuid(),
+    uploaded: null,
+    durationMs,
+  };
+}
+
+export function createStagedVideoMessageAttachment(blob: Blob, durationMs: number, mimeType: string): StagedAttachment {
+  const ext = MIME_EXTENSIONS[mimeType] ?? (mimeType.includes("mp4") ? "mp4" : "webm");
+  const file = new File([blob], `video-message-${timestampLabel()}.${ext}`, {
+    type: mimeType || blob.type || "video/webm",
+    lastModified: Date.now(),
+  });
+  const id = safeUuid();
+
+  return {
+    id,
+    file,
+    kind: "video_message",
+    previewUrl: URL.createObjectURL(file),
+    name: "Видео-сообщение",
+    size: file.size,
+    mimeType: file.type || "video/webm",
     status: "staged",
     progress: null,
     error: null,
