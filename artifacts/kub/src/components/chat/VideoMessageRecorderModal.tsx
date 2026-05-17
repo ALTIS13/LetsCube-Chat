@@ -27,6 +27,8 @@ interface VideoMessageRecorderModalProps {
   autoStart?: boolean;
   autoAddOnStop?: boolean;
   stopSignal?: number;
+  locked?: boolean;
+  onLockedStop?: () => void;
 }
 
 export function VideoMessageRecorderModal({
@@ -37,10 +39,15 @@ export function VideoMessageRecorderModal({
   autoStart = false,
   autoAddOnStop = false,
   stopSignal = 0,
+  locked = false,
+  onLockedStop,
 }: VideoMessageRecorderModalProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const frameRef = useRef<number | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const startedAtRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -48,6 +55,7 @@ export function VideoMessageRecorderModal({
   const recordedRef = useRef<RecordedVideo | null>(null);
   const autoAddOnStopRef = useRef(autoAddOnStop);
   const lastStopSignalRef = useRef(stopSignal);
+  const selectedFacingModeRef = useRef<FacingMode>(variant === "regular" ? "environment" : "user");
   const [status, setStatus] = useState<RecorderStatus>("loading");
   const [facingMode, setFacingMode] = useState<FacingMode>(variant === "regular" ? "environment" : "user");
   const [videoInputCount, setVideoInputCount] = useState(0);
@@ -58,11 +66,6 @@ export function VideoMessageRecorderModal({
     autoAddOnStopRef.current = autoAddOnStop;
   }, [autoAddOnStop]);
 
-  useEffect(() => {
-    if (!open) return;
-    setFacingMode(variant === "regular" ? "environment" : "user");
-  }, [open, variant]);
-
   const clearTimers = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     if (maxTimerRef.current) clearTimeout(maxTimerRef.current);
@@ -70,11 +73,23 @@ export function VideoMessageRecorderModal({
     maxTimerRef.current = null;
   }, []);
 
+  const stopRecordingPipeline = useCallback(() => {
+    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+    frameRef.current = null;
+    const sourceTracks = new Set(streamRef.current?.getTracks() ?? []);
+    recordingStreamRef.current?.getTracks().forEach((track) => {
+      if (!sourceTracks.has(track)) track.stop();
+    });
+    recordingStreamRef.current = null;
+    canvasRef.current = null;
+  }, []);
+
   const stopStream = useCallback(() => {
+    stopRecordingPipeline();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
-  }, []);
+  }, [stopRecordingPipeline]);
 
   const clearRecorded = useCallback(() => {
     const current = recordedRef.current;
@@ -97,14 +112,26 @@ export function VideoMessageRecorderModal({
         // cleanup path
       }
     }
+    stopRecordingPipeline();
     chunksRef.current = [];
     startedAtRef.current = 0;
-  }, [clearTimers]);
+  }, [clearTimers, stopRecordingPipeline]);
+
+  const attachPreviewStream = useCallback(async (stream: MediaStream) => {
+    streamRef.current = stream;
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.muted = true;
+      await videoRef.current.play().catch(() => undefined);
+    }
+  }, []);
 
   const startPreview = useCallback(async (nextFacingMode: FacingMode) => {
     cleanupRecorder();
     stopStream();
     clearRecorded();
+    selectedFacingModeRef.current = nextFacingMode;
+    setFacingMode(nextFacingMode);
     setDurationMs(0);
     setStatus("loading");
 
@@ -123,11 +150,7 @@ export function VideoMessageRecorderModal({
       const square = variant === "round";
       const stream = await devices.getUserMedia({
         audio: true,
-        video: {
-          facingMode: { ideal: nextFacingMode },
-          width: { ideal: square ? 720 : 1280 },
-          height: { ideal: square ? 720 : 720 },
-        },
+        video: videoConstraints(nextFacingMode, square),
       });
 
       if (!stream.getVideoTracks().length || !stream.getAudioTracks().length) {
@@ -136,12 +159,7 @@ export function VideoMessageRecorderModal({
         return;
       }
 
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.muted = true;
-        await videoRef.current.play().catch(() => undefined);
-      }
+      await attachPreviewStream(stream);
       setStatus("ready");
 
       if (devices.enumerateDevices) {
@@ -159,17 +177,19 @@ export function VideoMessageRecorderModal({
         setStatus("error");
       }
     }
-  }, [cleanupRecorder, clearRecorded, stopStream, variant]);
+  }, [attachPreviewStream, cleanupRecorder, clearRecorded, stopStream, variant]);
 
   useEffect(() => {
     if (!open) return;
-    void startPreview(facingMode);
+    const initialFacingMode = variant === "regular" ? "environment" : "user";
+    selectedFacingModeRef.current = initialFacingMode;
+    void startPreview(initialFacingMode);
     return () => {
       cleanupRecorder();
       stopStream();
       clearRecorded();
     };
-  }, [cleanupRecorder, clearRecorded, facingMode, open, startPreview, stopStream]);
+  }, [cleanupRecorder, clearRecorded, open, startPreview, stopStream, variant]);
 
   const finishRecording = useCallback(() => {
     clearTimers();
@@ -192,9 +212,20 @@ export function VideoMessageRecorderModal({
     startedAtRef.current = Date.now();
     setDurationMs(0);
 
+    let recordingStream = stream;
+    if (variant === "round") {
+      recordingStream = createRoundRecordingStream(
+        videoRef.current,
+        stream,
+        (frameId) => { frameRef.current = frameId; },
+        (canvas) => { canvasRef.current = canvas; },
+      );
+      recordingStreamRef.current = recordingStream;
+    }
+
     let recorder: MediaRecorder;
     try {
-      recorder = new MediaRecorder(stream, { mimeType });
+      recorder = new MediaRecorder(recordingStream, { mimeType });
     } catch {
       setStatus("unsupported");
       stopStream();
@@ -255,7 +286,7 @@ export function VideoMessageRecorderModal({
       setDurationMs(Date.now() - startedAtRef.current);
     }, TIMER_TICK_MS);
     maxTimerRef.current = setTimeout(finishRecording, MAX_DURATION_MS);
-  }, [cleanupRecorder, clearRecorded, finishRecording, onAddVideo, status, stopStream]);
+  }, [cleanupRecorder, clearRecorded, finishRecording, onAddVideo, status, stopStream, variant]);
 
   useEffect(() => {
     if (!open || !autoStart || status !== "ready") return;
@@ -291,8 +322,8 @@ export function VideoMessageRecorderModal({
   }, [cleanupRecorder, clearRecorded, onClose, stopStream]);
 
   const retake = useCallback(() => {
-    void startPreview(facingMode);
-  }, [facingMode, startPreview]);
+    void startPreview(selectedFacingModeRef.current);
+  }, [startPreview]);
 
   const addVideo = useCallback(() => {
     if (!recorded) return;
@@ -300,12 +331,44 @@ export function VideoMessageRecorderModal({
   }, [close, onAddVideo, recorded]);
 
   const switchCamera = useCallback(() => {
-    setFacingMode((current) => (current === "user" ? "environment" : "user"));
-  }, []);
+    const currentFacingMode = selectedFacingModeRef.current;
+    const nextFacingMode: FacingMode = currentFacingMode === "user" ? "environment" : "user";
+    selectedFacingModeRef.current = nextFacingMode;
+    setFacingMode(nextFacingMode);
+
+    if (status === "recording" && variant === "round") {
+      const currentStream = streamRef.current;
+      const devices = navigator.mediaDevices;
+      if (!currentStream || !devices?.getUserMedia) return;
+      void devices.getUserMedia({
+        audio: false,
+        video: videoConstraints(nextFacingMode, true),
+      }).then(async (nextVideoStream) => {
+        const nextVideoTracks = nextVideoStream.getVideoTracks();
+        if (!nextVideoTracks.length) {
+          nextVideoStream.getTracks().forEach((track) => track.stop());
+          selectedFacingModeRef.current = currentFacingMode;
+          setFacingMode(currentFacingMode);
+          return;
+        }
+        currentStream.getVideoTracks().forEach((track) => track.stop());
+        const audioTracks = currentStream.getAudioTracks();
+        await attachPreviewStream(new MediaStream([...nextVideoTracks, ...audioTracks]));
+      }).catch(() => {
+        selectedFacingModeRef.current = currentFacingMode;
+        setFacingMode(currentFacingMode);
+      });
+      return;
+    }
+
+    if (status === "ready") {
+      void startPreview(nextFacingMode);
+    }
+  }, [attachPreviewStream, startPreview, status, variant]);
 
   const isRound = variant === "round";
   const statusCopy = getStatusCopy(status, variant);
-  const canSwitchCamera = (status === "ready" || status === "recording") && videoInputCount > 1;
+  const canSwitchCamera = (status === "ready" || (isRound && status === "recording" && supportsCanvasCapture())) && videoInputCount > 1;
   const displayDuration = status === "recorded" ? recorded?.durationMs ?? durationMs : durationMs;
 
   return (
@@ -322,7 +385,21 @@ export function VideoMessageRecorderModal({
       size="lg"
       contentClassName="p-0"
       footer={
-        autoAddOnStop ? null : (
+        autoAddOnStop ? (
+          locked && status === "recording" ? (
+            <div className="flex w-full justify-end">
+              <KubButton
+                type="button"
+                variant="danger"
+                onClick={onLockedStop ?? finishRecording}
+                leftIcon={<KubIcon name="pause" size={14} />}
+                data-testid="composer-locked-recording-stop"
+              >
+                Остановить
+              </KubButton>
+            </div>
+          ) : null
+        ) : (
           <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
             {status === "recorded" ? (
               <>
@@ -348,11 +425,6 @@ export function VideoMessageRecorderModal({
               </KubButton>
             ) : (
               <>
-                {canSwitchCamera && (
-                  <KubButton type="button" variant="secondary" onClick={switchCamera} leftIcon={<KubIcon name="rotate" size={14} />}>
-                    Сменить камеру
-                  </KubButton>
-                )}
                 <KubButton
                   type="button"
                   onClick={startRecording}
@@ -370,6 +442,7 @@ export function VideoMessageRecorderModal({
     >
       <div
         data-testid={isRound ? "video-message-recorder-modal" : "regular-video-recorder-modal"}
+        data-facing-mode={facingMode}
         className="flex min-h-0 flex-col items-center gap-4 px-4 py-4 sm:px-5"
       >
         <div
@@ -405,6 +478,18 @@ export function VideoMessageRecorderModal({
               {formatDuration(displayDuration)}
             </div>
           )}
+          {canSwitchCamera && (
+            <button
+              type="button"
+              data-testid="video-recorder-switch-camera"
+              onClick={switchCamera}
+              className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white shadow-lg backdrop-blur transition hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              aria-label="Сменить камеру"
+              title="Сменить камеру"
+            >
+              <KubIcon name="rotate" size={17} />
+            </button>
+          )}
           {status !== "ready" && status !== "recording" && status !== "recorded" && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-5 text-center">
               <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white">
@@ -435,6 +520,54 @@ export function VideoMessageRecorderModal({
       </div>
     </KubModal>
   );
+}
+
+function videoConstraints(facingMode: FacingMode, square: boolean): MediaTrackConstraints {
+  return {
+    facingMode: { ideal: facingMode },
+    width: { ideal: square ? 720 : 1280 },
+    height: { ideal: square ? 720 : 720 },
+  };
+}
+
+function supportsCanvasCapture(): boolean {
+  return typeof HTMLCanvasElement !== "undefined"
+    && typeof HTMLCanvasElement.prototype.captureStream === "function";
+}
+
+function createRoundRecordingStream(
+  video: HTMLVideoElement | null,
+  sourceStream: MediaStream,
+  setFrameId: (frameId: number) => void,
+  setCanvas: (canvas: HTMLCanvasElement) => void,
+): MediaStream {
+  if (!video || !supportsCanvasCapture()) return sourceStream;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 720;
+  canvas.height = 720;
+  setCanvas(canvas);
+  const context = canvas.getContext("2d");
+  if (!context) return sourceStream;
+
+  const draw = () => {
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
+      const sourceWidth = video.videoWidth;
+      const sourceHeight = video.videoHeight;
+      const size = Math.min(sourceWidth, sourceHeight);
+      const sx = Math.max(0, (sourceWidth - size) / 2);
+      const sy = Math.max(0, (sourceHeight - size) / 2);
+      context.drawImage(video, sx, sy, size, size, 0, 0, canvas.width, canvas.height);
+    }
+    setFrameId(requestAnimationFrame(draw));
+  };
+  draw();
+
+  const canvasStream = canvas.captureStream(30);
+  return new MediaStream([
+    ...canvasStream.getVideoTracks(),
+    ...sourceStream.getAudioTracks(),
+  ]);
 }
 
 function pickMimeType(): string | null {

@@ -33,6 +33,7 @@ import {
 const DRAFT_PREFIX = "kub:draft:";
 const draftKey = (chatId: string) => `${DRAFT_PREFIX}${chatId}`;
 const MOBILE_RECORDER_LONG_PRESS_MS = 420;
+const RECORDER_LOCK_DRAG_PX = 72;
 
 const EMOJI_PANEL = [
   "😀","😂","🥰","😎","🤔","😭","🔥","❤️","👍","👏",
@@ -90,6 +91,10 @@ export function MessageInput({
   const [recorderMode, setRecorderMode] = useState<"voice" | "video">("voice");
   const [modeFeedback, setModeFeedback] = useState<string | null>(null);
   const [voiceHoldActive, setVoiceHoldActive] = useState(false);
+  const [holdRecorderState, setHoldRecorderState] = useState<{
+    mode: "voice" | "video";
+    locked: boolean;
+  } | null>(null);
   const voiceHold = useVoiceRecorder();
   const [isComposing, setIsComposing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -100,6 +105,8 @@ export function MessageInput({
   const touchRecordingStartedRef = useRef(false);
   const voiceHoldActiveRef = useRef(false);
   const videoHoldActiveRef = useRef(false);
+  const holdRecorderStateRef = useRef<typeof holdRecorderState>(null);
+  const recorderPointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const hasText = text.trim().length > 0;
   const hasAttachments = attachments.length > 0;
   const hasStagedVoice = attachments.some((item) => item.kind === "voice");
@@ -142,9 +149,15 @@ export function MessageInput({
   }, [voiceHoldActive]);
 
   useEffect(() => {
+    holdRecorderStateRef.current = holdRecorderState;
+  }, [holdRecorderState]);
+
+  useEffect(() => {
     if (!voiceHold.error) return;
     voiceHoldActiveRef.current = false;
     setVoiceHoldActive(false);
+    holdRecorderStateRef.current = null;
+    setHoldRecorderState(null);
     const message =
       voiceHold.error === "permission_denied" ? "Нет доступа к микрофону."
       : voiceHold.error === "no_device" ? "Микрофон недоступен."
@@ -224,24 +237,46 @@ export function MessageInput({
     });
   }, [showRecorderModeFeedback]);
 
+  const setActiveHoldRecorder = useCallback((mode: "voice" | "video") => {
+    const next = { mode, locked: false };
+    holdRecorderStateRef.current = next;
+    setHoldRecorderState(next);
+  }, []);
+
+  const clearActiveHoldRecorder = useCallback(() => {
+    holdRecorderStateRef.current = null;
+    setHoldRecorderState(null);
+    recorderPointerStartRef.current = null;
+  }, []);
+
+  const lockActiveRecording = useCallback(() => {
+    const current = holdRecorderStateRef.current;
+    if (!current || current.locked) return;
+    const next = { ...current, locked: true };
+    holdRecorderStateRef.current = next;
+    setHoldRecorderState(next);
+  }, []);
+
   const startVideoHoldRecording = useCallback(() => {
     if (hasStagedVideoMessage) {
       showAppAlert("Сначала отправьте или удалите текущее видеосообщение.", "Видеосообщение");
       return;
     }
     videoHoldActiveRef.current = true;
+    setActiveHoldRecorder("video");
     setVideoRecorderVariant("round");
     setVideoAutoStart(true);
     setVideoAutoAddOnStop(true);
     setShowVideoMessage(true);
     setShowAttach(false);
     setShowEmoji(false);
-  }, [hasStagedVideoMessage]);
+  }, [hasStagedVideoMessage, setActiveHoldRecorder]);
 
   const stopVideoHoldRecording = useCallback(() => {
     if (!videoHoldActiveRef.current) return;
     setVideoStopSignal((value) => value + 1);
-  }, []);
+    clearActiveHoldRecorder();
+  }, [clearActiveHoldRecorder]);
 
   const startVoiceHoldRecording = useCallback(async () => {
     if (hasStagedVoice) {
@@ -250,19 +285,22 @@ export function MessageInput({
     }
     voiceHoldActiveRef.current = true;
     setVoiceHoldActive(true);
+    setActiveHoldRecorder("voice");
     setShowAttach(false);
     setShowEmoji(false);
     const started = await voiceHold.start();
     if (!started) {
       voiceHoldActiveRef.current = false;
       setVoiceHoldActive(false);
+      clearActiveHoldRecorder();
     }
-  }, [hasStagedVoice, voiceHold.start]);
+  }, [clearActiveHoldRecorder, hasStagedVoice, setActiveHoldRecorder, voiceHold.start]);
 
   const stopVoiceHoldRecording = useCallback(async () => {
     if (!voiceHoldActiveRef.current) return;
     voiceHoldActiveRef.current = false;
     setVoiceHoldActive(false);
+    clearActiveHoldRecorder();
     const result = await voiceHold.stop();
     if (!result || result.blob.size === 0 || result.durationMs < 1000) {
       if (!result) voiceHold.cancel();
@@ -270,7 +308,7 @@ export function MessageInput({
       return;
     }
     await onSendVoice?.(result.blob, result.durationMs, result.mimeType);
-  }, [onSendVoice, voiceHold.cancel, voiceHold.stop]);
+  }, [clearActiveHoldRecorder, onSendVoice, voiceHold.cancel, voiceHold.stop]);
 
   const startRecorderHold = useCallback((mode: "voice" | "video") => {
     if (mode === "video") {
@@ -285,6 +323,10 @@ export function MessageInput({
     if (voiceHoldActiveRef.current) void stopVoiceHoldRecording();
   }, [stopVideoHoldRecording, stopVoiceHoldRecording]);
 
+  const stopLockedRecording = useCallback(() => {
+    stopRecorderHold();
+  }, [stopRecorderHold]);
+
   const handleRecorderContextMenu = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -294,6 +336,7 @@ export function MessageInput({
   const handleRecorderPointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0 || isAttachmentBusy) return;
     event.preventDefault();
+    recorderPointerStartRef.current = { x: event.clientX, y: event.clientY };
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
     } catch {
@@ -311,26 +354,38 @@ export function MessageInput({
     startRecorderHold(recorderMode);
   }, [isAttachmentBusy, recorderMode, startRecorderHold]);
 
+  const handleRecorderPointerMove = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    const startPoint = recorderPointerStartRef.current;
+    if (!startPoint) return;
+    if (!voiceHoldActiveRef.current && !videoHoldActiveRef.current) return;
+    const draggedUp = startPoint.y - event.clientY;
+    if (draggedUp >= RECORDER_LOCK_DRAG_PX) lockActiveRecording();
+  }, [lockActiveRecording]);
+
   const handleRecorderPointerUp = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    const locked = holdRecorderStateRef.current?.locked === true;
     if (event.pointerType === "touch") {
       if (touchHoldTimerRef.current) clearTimeout(touchHoldTimerRef.current);
       touchHoldTimerRef.current = null;
       if (touchRecordingStartedRef.current) {
         touchRecordingStartedRef.current = false;
-        stopRecorderHold();
+        if (!locked) stopRecorderHold();
+        recorderPointerStartRef.current = null;
         return;
       }
+      recorderPointerStartRef.current = null;
       toggleRecorderMode();
       return;
     }
-    stopRecorderHold();
+    if (!locked) stopRecorderHold();
+    recorderPointerStartRef.current = null;
   }, [stopRecorderHold, toggleRecorderMode]);
 
   const handleRecorderPointerCancel = useCallback(() => {
     if (touchHoldTimerRef.current) clearTimeout(touchHoldTimerRef.current);
     touchHoldTimerRef.current = null;
     touchRecordingStartedRef.current = false;
-    stopRecorderHold();
+    if (holdRecorderStateRef.current?.locked !== true) stopRecorderHold();
   }, [stopRecorderHold]);
 
   const handleLocation = useCallback(() => {
@@ -523,9 +578,12 @@ export function MessageInput({
         autoStart={videoAutoStart}
         autoAddOnStop={videoAutoAddOnStop}
         stopSignal={videoStopSignal}
+        locked={holdRecorderState?.mode === "video" && holdRecorderState.locked}
+        onLockedStop={stopLockedRecording}
         onClose={() => {
           setShowVideoMessage(false);
           resetVideoRecorderFlags();
+          if (holdRecorderStateRef.current?.mode === "video") clearActiveHoldRecorder();
         }}
         onAddVideo={async (blob, durationMs, mimeType) => {
           if (videoRecorderVariant === "regular") {
@@ -625,19 +683,34 @@ export function MessageInput({
           />
         )}
 
-        {(modeFeedback || voiceHoldActive) && (
+        {(modeFeedback || holdRecorderState) && (
           <div
-            data-testid={voiceHoldActive ? "composer-hold-voice-recorder" : "recorder-mode-feedback"}
+            data-testid={holdRecorderState ? "composer-recording-lock-indicator" : "recorder-mode-feedback"}
             className="mb-2 flex items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs text-[color:var(--kub-muted)]"
           >
-            <span className={cn("h-2 w-2 rounded-full", voiceHoldActive ? "animate-pulse bg-[var(--kub-danger)]" : "bg-[var(--kub-cyan)]")} />
+            <span className={cn("h-2 w-2 rounded-full", holdRecorderState ? "animate-pulse bg-[var(--kub-danger)]" : "bg-[var(--kub-cyan)]")} />
             <span className="font-medium text-[color:var(--kub-text)]">
-              {voiceHoldActive ? "Запись голосового" : modeFeedback}
+              {holdRecorderState
+                ? holdRecorderState.locked
+                  ? "Запись зафиксирована"
+                  : "Проведите вверх, чтобы зафиксировать"
+                : modeFeedback}
             </span>
-            {voiceHoldActive && (
+            {holdRecorderState?.mode === "voice" && (
               <span className="ml-auto tabular-nums text-[color:var(--kub-cyan)]">
                 {formatRecorderDuration(voiceHold.durationMs)}
               </span>
+            )}
+            {holdRecorderState?.mode === "voice" && holdRecorderState.locked && (
+              <button
+                type="button"
+                data-testid="composer-locked-recording-stop"
+                onClick={stopLockedRecording}
+                className="ml-2 inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--kub-danger)] px-2.5 text-[11px] font-semibold text-white transition hover:brightness-110"
+              >
+                <KubIcon name="pause" size={13} />
+                Остановить
+              </button>
             )}
           </div>
         )}
@@ -706,6 +779,7 @@ export function MessageInput({
               data-recorder-mode={recorderMode}
               onContextMenu={handleRecorderContextMenu}
               onPointerDown={handleRecorderPointerDown}
+              onPointerMove={handleRecorderPointerMove}
               onPointerUp={handleRecorderPointerUp}
               onPointerCancel={handleRecorderPointerCancel}
               disabled={isAttachmentBusy}
@@ -1000,7 +1074,7 @@ function VoiceAttachmentPreview({
   };
 
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-2">
+    <div data-testid="staged-voice-preview" className="flex min-w-0 flex-1 items-center gap-2">
       <audio ref={audioRef} src={attachment.previewUrl ?? undefined} preload="metadata" />
       <button
         type="button"

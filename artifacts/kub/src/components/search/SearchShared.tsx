@@ -179,6 +179,17 @@ export function SearchProfilePreview({
   compact?: boolean;
 }) {
   const username = profile.username ? `@${profile.username}` : "Без username";
+  const [copiedUsername, setCopiedUsername] = useState(false);
+  const copyUsername = useCallback(async () => {
+    if (!profile.username) return;
+    try {
+      await navigator.clipboard?.writeText(`@${profile.username}`);
+      setCopiedUsername(true);
+      window.setTimeout(() => setCopiedUsername(false), 1600);
+    } catch {
+      showAppAlert("Не удалось скопировать username.", "Копирование недоступно");
+    }
+  }, [profile.username]);
   return (
     <div className="absolute inset-0 z-10 flex flex-col bg-[var(--kub-surface)]">
       <div className="flex items-center gap-2 border-b border-[color:var(--kub-border-color)] px-4 py-3">
@@ -198,7 +209,21 @@ export function SearchProfilePreview({
         <div className={cn("mt-4 max-w-full truncate font-bold text-[color:var(--kub-text)]", compact ? "text-lg" : "text-xl")}>
           {profile.full_name?.trim() || username}
         </div>
-        <div className="mt-1 text-sm text-[color:var(--kub-muted)]">{username}</div>
+        <div className="mt-1 inline-flex max-w-full items-center justify-center gap-1.5 text-sm text-[color:var(--kub-muted)]">
+          <span className="truncate">{username}</span>
+          {profile.username && (
+            <button
+              type="button"
+              data-testid="search-profile-copy-username"
+              onClick={() => void copyUsername()}
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-cyan)]"
+              aria-label="Скопировать username"
+              title={copiedUsername ? "Username скопирован" : "Скопировать username"}
+            >
+              <KubIcon name={copiedUsername ? "check" : "copy"} size={14} />
+            </button>
+          )}
+        </div>
         {profile.bio && (
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-[color:var(--kub-muted)]">{profile.bio}</p>
         )}
@@ -213,16 +238,6 @@ export function SearchProfilePreview({
           >
             Открыть чат
           </KubButton>
-          {profile.username && (
-            <KubButton
-              variant="secondary"
-              fullWidth
-              leftIcon={<KubIcon name="copy" size={14} />}
-              onClick={() => void navigator.clipboard?.writeText(`@${profile.username}`)}
-            >
-              Скопировать
-            </KubButton>
-          )}
         </div>
       </div>
     </div>

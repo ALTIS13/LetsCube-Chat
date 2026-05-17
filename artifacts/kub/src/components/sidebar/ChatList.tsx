@@ -601,17 +601,32 @@ function ChatProfilePreviewModal({
             <div className="max-w-full truncate text-lg font-semibold text-[color:var(--kub-text)]">
               {display.title}
             </div>
-            <div className="mt-1 text-sm text-[color:var(--kub-muted)]">
-              {isPrivate
-                ? isOnline
-                  ? "онлайн"
-                  : otherUser?.username
-                    ? `@${otherUser.username}`
-                    : display.typeLabel
-                : display.isSaved
-                  ? "Личное пространство для сохранённых сообщений"
-                  : `${display.typeLabel}${memberCount > 0 ? ` · ${memberCount} участников` : ""}`}
-            </div>
+            {isPrivate && otherUser?.username ? (
+              <div className="mt-1 inline-flex max-w-full items-center justify-center gap-1.5 text-sm text-[color:var(--kub-muted)]">
+                <span className="truncate">@{otherUser.username}</span>
+                <button
+                  type="button"
+                  data-testid="mini-profile-copy-username"
+                  onClick={() => void copyUsername()}
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-cyan)]"
+                  aria-label="Скопировать username"
+                  title={copiedUsername ? "Username скопирован" : "Скопировать username"}
+                >
+                  <KubIcon name={copiedUsername ? "check" : "copy"} size={14} />
+                </button>
+              </div>
+            ) : (
+              <div className="mt-1 text-sm text-[color:var(--kub-muted)]">
+                {isPrivate
+                  ? display.typeLabel
+                  : display.isSaved
+                    ? "Личное пространство для сохранённых сообщений"
+                    : `${display.typeLabel}${memberCount > 0 ? ` · ${memberCount} участников` : ""}`}
+              </div>
+            )}
+            {isPrivate && isOnline && (
+              <div className="mt-0.5 text-xs text-[color:var(--kub-cyan)]">онлайн</div>
+            )}
           </div>
         </div>
 
@@ -624,17 +639,6 @@ function ChatProfilePreviewModal({
             <KubIcon name="chatRect" size={16} />
             Открыть чат
           </button>
-          {isPrivate && otherUser?.username && (
-            <button
-              type="button"
-              onClick={() => void copyUsername()}
-              className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-4 text-sm font-semibold text-[color:var(--kub-text)] transition-colors hover:border-[color:var(--kub-cyan)]/45"
-            >
-              <KubIcon name="atSign" size={15} />
-              {copiedUsername ? "Username скопирован" : "Скопировать username"}
-            </button>
-          )}
-
           <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/45 px-3 py-2 text-xs text-[color:var(--kub-muted)]">
             {isPrivate && (
               <div className="flex items-center justify-between gap-3 py-1">

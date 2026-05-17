@@ -37,6 +37,15 @@ test.describe("KUB global search", () => {
       await input.fill("@te");
       await expect(page.getByTestId("sidebar-global-search-results")).toBeVisible();
       await expect(page.getByTestId("sidebar-global-search-results").getByText(/Люди|Чаты|Сообщения|Задачи|Локации/i).first()).toBeVisible();
+      const userResult = page.getByTestId("sidebar-search-result-user").first();
+      await userResult.waitFor({ state: "visible", timeout: 5_000 }).catch(() => null);
+      if (await userResult.isVisible().catch(() => false)) {
+        await userResult.click();
+        await expect(page.getByTestId("search-profile-copy-username")).toBeVisible();
+        await expect(page.getByRole("button", { name: /^Скопировать$/ })).toHaveCount(0);
+        await page.getByTestId("global-search-profile-back").click();
+      }
+      await input.click();
       await page.keyboard.press("Escape");
       await expect(input).toHaveValue("");
     }
