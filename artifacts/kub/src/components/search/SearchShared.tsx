@@ -5,16 +5,22 @@ import { useLocation } from "wouter";
 import { KubButton, KubIcon } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useCreateChat } from "@/hooks/useCreateChat";
-import type { GlobalSearchDataType, GlobalSearchResult, GlobalSearchResultType } from "@/hooks/useGlobalSearch";
+import type { GlobalSearchResult, GlobalSearchResultType } from "@/hooks/useGlobalSearch";
 import { useRoleAccess } from "@/hooks/useRole";
 import { showAppAlert } from "@/lib/appDialogs";
 import { requestChatMessageJump } from "@/lib/chatJumpEvents";
 import { safeOpenChat } from "@/lib/safeOpenChat";
+import {
+  parseAdvancedSearchQuery,
+  removeSearchChip,
+  type ParsedSearchQuery,
+  type SearchEntityFilter,
+} from "@/lib/searchQuery";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app.store";
 import type { Profile } from "@/types/database";
 
-export type SearchTypeFilter = GlobalSearchDataType | "command" | "all";
+export type SearchTypeFilter = SearchEntityFilter;
 export type PreviewProfile = Pick<Profile, "id" | "full_name" | "username" | "avatar_url" | "role" | "bio" | "online_at">;
 
 export const SEARCH_FILTERS: { id: SearchTypeFilter; label: string }[] = [
@@ -24,6 +30,7 @@ export const SEARCH_FILTERS: { id: SearchTypeFilter; label: string }[] = [
   { id: "message", label: "Сообщения" },
   { id: "task", label: "Задачи" },
   { id: "location", label: "Локации" },
+  { id: "media", label: "Медиа" },
   { id: "command", label: "Команды" },
 ];
 
@@ -159,6 +166,41 @@ export function SearchEmptyState({
       </span>
       <div className="text-sm font-semibold text-[color:var(--kub-text)]">{title}</div>
       <div className="mt-1 max-w-sm text-xs leading-relaxed text-[color:var(--kub-muted)]">{description}</div>
+    </div>
+  );
+}
+
+export function SearchFilterChips({
+  parsed,
+  query,
+  onChangeQuery,
+  compact = false,
+}: {
+  parsed: ParsedSearchQuery;
+  query: string;
+  onChangeQuery: (nextQuery: string) => void;
+  compact?: boolean;
+}) {
+  if (parsed.chips.length === 0) return null;
+  return (
+    <div className={cn("flex gap-1.5 overflow-x-auto", compact ? "px-3 py-2" : "mt-2 pb-0.5")}>
+      {parsed.chips.map((chip) => (
+        <button
+          key={chip.id}
+          type="button"
+          data-testid={`search-filter-chip-${chip.key}`}
+          onClick={() => onChangeQuery(removeSearchChip(query, chip))}
+          className={cn(
+            "inline-flex shrink-0 items-center gap-1 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] font-semibold text-[color:var(--kub-muted)] transition hover:border-[color:var(--kub-cyan)] hover:text-[color:var(--kub-cyan)]",
+            compact ? "h-7 px-2 text-[11px]" : "h-8 px-2.5 text-xs",
+          )}
+          title="Убрать фильтр"
+          aria-label={`Убрать фильтр: ${chip.label}`}
+        >
+          <span>{chip.label}</span>
+          <KubIcon name="close" size={compact ? 11 : 12} />
+        </button>
+      ))}
     </div>
   );
 }
@@ -434,13 +476,8 @@ export function buildCommandResults({
   return commands.filter((command) => `${command.title} ${command.subtitle ?? ""}`.toLocaleLowerCase("ru-RU").includes(needle));
 }
 
-export function parseSearchTypeSyntax(query: string, selected: SearchTypeFilter): { query: string; type: SearchTypeFilter } {
-  const match = query.match(/(?:^|\s)type:(user|chat|message|task|location|command)\b/i);
-  if (!match) return { query, type: selected };
-  return {
-    query: query.replace(match[0], " ").trim(),
-    type: match[1].toLowerCase() as SearchTypeFilter,
-  };
+export function parseSearchTypeSyntax(query: string, selected: SearchTypeFilter): ParsedSearchQuery {
+  return parseAdvancedSearchQuery(query, selected);
 }
 
 export function groupSearchResults(results: GlobalSearchResult[]): { type: GlobalSearchResultType; results: GlobalSearchResult[]; startIndex: number }[] {

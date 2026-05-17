@@ -3,6 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
+import {
+  hasLink,
+  mediaLabelForMessage,
+  messageIsMediaSearchTarget,
+  messageMatchesHasFilter,
+  searchFiltersToRpc,
+  type ParsedSearchFilters,
+} from "@/lib/searchQuery";
 import { useAppStore } from "@/store/app.store";
 import type { ChatWithLastMessage, Location, MessageWithSender, Profile, TaskStatus } from "@/types/database";
 
@@ -61,6 +69,7 @@ interface UseGlobalSearchOptions {
   query: string;
   type: GlobalSearchDataType | "all";
   enabled: boolean;
+  filters?: ParsedSearchFilters;
   limit?: number;
 }
 
@@ -69,11 +78,13 @@ interface UseGlobalSearchResult {
   results: GlobalSearchResult[];
   loading: boolean;
   migrationMissing: boolean;
+  filtersLimited: boolean;
   usedFallback: boolean;
   error: string | null;
 }
 
 let rpcAvailability: "unknown" | "available" | "missing" = "unknown";
+let rpcV2Availability: "unknown" | "available" | "missing" = "unknown";
 
 const DATA_TYPES: GlobalSearchDataType[] = ["user", "chat", "message", "task", "location"];
 
@@ -81,6 +92,7 @@ export function useGlobalSearch({
   query,
   type,
   enabled,
+  filters,
   limit = 20,
 }: UseGlobalSearchOptions): UseGlobalSearchResult {
   const supabase = useMemo(() => createClient(), []);
@@ -91,6 +103,7 @@ export function useGlobalSearch({
   const [results, setResults] = useState<GlobalSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [migrationMissing, setMigrationMissing] = useState(rpcAvailability === "missing");
+  const [filtersLimited, setFiltersLimited] = useState(false);
   const [usedFallback, setUsedFallback] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
@@ -109,33 +122,36 @@ export function useGlobalSearch({
       const local = buildLocalResults({
         query: searchQuery,
         type: activeType,
+        filters,
         currentUserId,
         chats,
         messagesByChat,
         limit,
       });
 
-  const remote = await fetchFallbackRemoteResults({
+      const remote = await fetchFallbackRemoteResults({
         supabase,
         query: searchQuery,
         type: activeType,
+        filters,
         currentUserId,
         limit,
       });
 
       if (requestIdRef.current !== currentRequestId) return;
-      setResults(mergeResults([...local, ...remote], limit));
+      setResults(applyResultFilters(mergeResults([...local, ...remote], limit), filters).slice(0, limit));
       setUsedFallback(true);
       setMigrationMissing(rpcAvailability === "missing");
+      setFiltersLimited(hasAdvancedSearchFilters(filters));
       setError(null);
       setLoading(false);
     },
-    [chats, currentUserId, limit, messagesByChat, supabase],
+    [chats, currentUserId, filters, limit, messagesByChat, supabase],
   );
 
   useEffect(() => {
     const searchQuery = normalizeQuery(debouncedQuery);
-    const canSearch = enabled && shouldSearch(searchQuery);
+    const canSearch = enabled && (shouldSearch(searchQuery) || hasSearchableFilters(filters));
     const currentRequestId = requestIdRef.current + 1;
     requestIdRef.current = currentRequestId;
 
@@ -143,6 +159,7 @@ export function useGlobalSearch({
       setResults([]);
       setLoading(false);
       setUsedFallback(false);
+      setFiltersLimited(false);
       setError(null);
       setMigrationMissing(rpcAvailability === "missing");
       return;
@@ -152,14 +169,57 @@ export function useGlobalSearch({
     setError(null);
 
     const activeTypes = type === "all" ? DATA_TYPES : [type];
+    const hasAdvanced = hasAdvancedSearchFilters(filters);
 
-    if (rpcAvailability === "missing") {
+    if (rpcAvailability === "missing" && (!hasAdvanced || rpcV2Availability === "missing")) {
       void runFallback(searchQuery, type, currentRequestId);
       return;
     }
 
     void (async () => {
       try {
+        if (hasAdvanced || rpcV2Availability !== "missing") {
+          const { data, error } = await supabase.rpc("global_search_v2" as never, {
+            p_query: searchQuery,
+            p_filters: searchFiltersToRpc(filters ?? emptyFilters(type)),
+            p_limit: limit,
+          } as never);
+          if (requestIdRef.current !== currentRequestId) return;
+
+          if (!error) {
+            rpcV2Availability = "available";
+            setMigrationMissing(false);
+            setFiltersLimited(false);
+            setUsedFallback(false);
+            setResults(
+              ((data ?? []) as RpcGlobalSearchRow[])
+                .map(mapRpcRow)
+                .filter((result) => type === "all" || result.resultType === type || filters?.type === "media")
+                .slice(0, limit),
+            );
+            setLoading(false);
+            return;
+          }
+
+          if (isMissingSearchFunctionError(error, "global_search_v2")) {
+            rpcV2Availability = "missing";
+            if (hasAdvanced) {
+              await runFallback(searchQuery, type, currentRequestId);
+              return;
+            }
+          } else {
+            if (import.meta.env.DEV) console.warn("[global-search] v2 rpc failed", error);
+            setError("Расширенный поиск временно недоступен.");
+            await runFallback(searchQuery, type, currentRequestId);
+            return;
+          }
+        }
+
+        if (rpcAvailability === "missing") {
+          await runFallback(searchQuery, type, currentRequestId);
+          return;
+        }
+
         const { data, error } = await supabase.rpc("global_search", {
           p_query: searchQuery,
           p_limit: limit,
@@ -168,7 +228,7 @@ export function useGlobalSearch({
         if (requestIdRef.current !== currentRequestId) return;
 
         if (error) {
-          if (isMissingGlobalSearchError(error)) {
+          if (isMissingSearchFunctionError(error, "global_search")) {
             rpcAvailability = "missing";
             setMigrationMissing(true);
             await runFallback(searchQuery, type, currentRequestId);
@@ -182,12 +242,15 @@ export function useGlobalSearch({
 
         rpcAvailability = "available";
         setMigrationMissing(false);
+        setFiltersLimited(hasAdvanced);
         setUsedFallback(false);
         setResults(
-          ((data ?? []) as RpcGlobalSearchRow[])
-            .map(mapRpcRow)
-            .filter((result) => type === "all" || result.resultType === type)
-            .slice(0, limit),
+          applyResultFilters(
+            ((data ?? []) as RpcGlobalSearchRow[])
+              .map(mapRpcRow)
+              .filter((result) => type === "all" || result.resultType === type),
+            filters,
+          ).slice(0, limit),
         );
         setLoading(false);
       } catch (error) {
@@ -197,13 +260,14 @@ export function useGlobalSearch({
         await runFallback(searchQuery, type, currentRequestId);
       }
     })();
-  }, [debouncedQuery, enabled, limit, runFallback, supabase, type]);
+  }, [debouncedQuery, enabled, filters, limit, runFallback, supabase, type]);
 
   return {
     query: debouncedQuery,
     results,
     loading,
     migrationMissing,
+    filtersLimited,
     usedFallback,
     error,
   };
@@ -243,6 +307,7 @@ function normalizeQuery(value: string): string {
 function buildLocalResults({
   query,
   type,
+  filters,
   currentUserId,
   chats,
   messagesByChat,
@@ -250,6 +315,7 @@ function buildLocalResults({
 }: {
   query: string;
   type: GlobalSearchDataType | "all";
+  filters?: ParsedSearchFilters;
   currentUserId: string | null;
   chats: ChatWithLastMessage[];
   messagesByChat: Record<string, MessageWithSender[]>;
@@ -268,16 +334,23 @@ function buildLocalResults({
       const chat = chats.find((item) => item.id === chatId);
       const info = chat ? getChatDisplayInfo(chat, currentUserId) : null;
       for (const message of messages) {
-        if (message.deleted_at || !message.content) continue;
+        if (message.deleted_at) continue;
+        if (filters?.type === "media" && !messageIsMediaSearchTarget(message)) continue;
+        if (!messageMatchesHasFilter(message, filters?.has ?? [])) continue;
+        const mediaLabel = mediaLabelForMessage(message.type, message.content);
+        const content = message.content?.trim() || mediaLabel || "";
+        if (!content) continue;
         const senderName = message.sender?.full_name ?? message.sender?.username ?? "";
-        const rank = scoreText([message.content, senderName, info?.title].filter(Boolean).join(" "), needle);
+        const rank = needle
+          ? scoreText([content, senderName, info?.title, mediaLabel].filter(Boolean).join(" "), needle)
+          : filterOnlyRank(filters);
         if (rank <= 0) continue;
         results.push({
           resultType: "message",
           id: message.id,
           title: info?.title ?? "Сообщение",
           subtitle: senderName || "Сообщение",
-          snippet: message.content,
+          snippet: mediaLabel ? `${mediaLabel}${message.content ? ` · ${message.content}` : ""}` : message.content,
           avatarUrl: message.sender?.avatar_url ?? null,
           chatId,
           messageId: message.id,
@@ -332,19 +405,22 @@ async function fetchFallbackRemoteResults({
   supabase,
   query,
   type,
+  filters,
   currentUserId,
   limit,
 }: {
   supabase: ReturnType<typeof createClient>;
   query: string;
   type: GlobalSearchDataType | "all";
+  filters?: ParsedSearchFilters;
   currentUserId: string | null;
   limit: number;
 }): Promise<GlobalSearchResult[]> {
   const safe = sanitizePostgrestSearch(query);
   if (!safe) return [];
   const isHandleQuery = query.trim().startsWith("@");
-  const includeType = (target: GlobalSearchDataType) => type === "all" || type === target;
+  const includeType = (target: GlobalSearchDataType) =>
+    (type === "all" || type === target) && !(filters?.type === "media" && target !== "message");
   const promises: Promise<GlobalSearchResult[]>[] = [];
 
   if (includeType("user")) {
@@ -467,6 +543,67 @@ function sanitizePostgrestSearch(value: string): string {
     .slice(0, 80);
 }
 
+function hasAdvancedSearchFilters(filters?: ParsedSearchFilters): boolean {
+  if (!filters) return false;
+  return Boolean(
+    filters.type === "media" ||
+      filters.from ||
+      filters.in ||
+      filters.has.length > 0 ||
+      filters.before ||
+      filters.after,
+  );
+}
+
+function hasSearchableFilters(filters?: ParsedSearchFilters): boolean {
+  if (!filters) return false;
+  return Boolean(
+    filters.type === "media" ||
+      filters.from ||
+      filters.in ||
+      filters.has.length > 0 ||
+      filters.before ||
+      filters.after,
+  );
+}
+
+function filterOnlyRank(filters?: ParsedSearchFilters): number {
+  return hasSearchableFilters(filters) ? 20 : 0;
+}
+
+function emptyFilters(type: GlobalSearchDataType | "all"): ParsedSearchFilters {
+  return { type, from: null, in: null, has: [], before: null, after: null };
+}
+
+function applyResultFilters(results: GlobalSearchResult[], filters?: ParsedSearchFilters): GlobalSearchResult[] {
+  if (!filters) return results;
+  return results.filter((result) => {
+    if (filters.type === "media" && result.resultType !== "message") return false;
+    if (filters.has.length > 0 && result.resultType !== "message") return false;
+    if (filters.from && result.resultType !== "message") return false;
+    if (filters.before && result.createdAt && new Date(result.createdAt).getTime() >= Date.parse(`${filters.before}T23:59:59.999Z`)) {
+      return false;
+    }
+    if (filters.after && result.createdAt && new Date(result.createdAt).getTime() < Date.parse(`${filters.after}T00:00:00Z`)) {
+      return false;
+    }
+    if (filters.in) {
+      const target = filters.in.toLocaleLowerCase("ru-RU");
+      const haystack = [result.title, result.subtitle, result.snippet].filter(Boolean).join(" ").toLocaleLowerCase("ru-RU");
+      if (!haystack.includes(target)) return false;
+    }
+    if (filters.from && result.resultType === "message") {
+      const target = filters.from.toLocaleLowerCase("ru-RU").replace(/^@+/, "");
+      const haystack = [result.subtitle, result.snippet].filter(Boolean).join(" ").toLocaleLowerCase("ru-RU").replace(/^@+/, "");
+      if (!haystack.includes(target)) return false;
+    }
+    if (filters.has.includes("link") && result.resultType === "message") {
+      return hasLink(result.snippet ?? "");
+    }
+    return true;
+  });
+}
+
 function searchableNeedle(value: string): string {
   return value.trim().replace(/^@+/, "").toLocaleLowerCase("ru-RU");
 }
@@ -503,9 +640,9 @@ function compareResults(a: GlobalSearchResult, b: GlobalSearchResult): number {
   return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
 }
 
-function isMissingGlobalSearchError(error: { code?: string; message?: string; details?: string | null }): boolean {
+function isMissingSearchFunctionError(error: { code?: string; message?: string; details?: string | null }, functionName: string): boolean {
   const text = `${error.code ?? ""} ${error.message ?? ""} ${error.details ?? ""}`;
-  return /global_search|function .* does not exist|Could not find the function|PGRST202|PGRST204/i.test(text);
+  return new RegExp(`${functionName}|function .* does not exist|Could not find the function|PGRST202|PGRST204`, "i").test(text);
 }
 
 function taskStatusLabel(status: TaskStatus): string {

@@ -17,7 +17,7 @@ import { useAppStore } from "@/store/app.store";
 import { createClient } from "@/lib/supabase/client";
 import { KubEmptyState, KubIcon } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
-import { KUB_CHAT_MESSAGE_JUMP_EVENT, type ChatMessageJumpDetail } from "@/lib/chatJumpEvents";
+import { KUB_CHAT_MESSAGE_JUMP_EVENT, requestChatMessageJump, type ChatMessageJumpDetail } from "@/lib/chatJumpEvents";
 import { isSavedChat } from "@/lib/chatDisplay";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import {
@@ -54,6 +54,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const setForwardingMessage = useAppStore((s) => s.setForwardingMessage);
   const forwardingMessage = useAppStore((s) => s.forwardingMessage);
   const selectedTopicId = useAppStore((s) => s.selectedTopicId);
+  const setSelectedTopicId = useAppStore((s) => s.setSelectedTopicId);
   const chatPanelRequest = useAppStore((s) => s.chatPanelRequest);
   const clearChatPanelRequest = useAppStore((s) => s.clearChatPanelRequest);
   const chat = chats.find((c) => c.id === chatId);
@@ -458,6 +459,16 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     });
   }, [ensureMessageLoaded, messages, scrollToMessage, showJumpNotice]);
 
+  const handleSearchJump = useCallback((messageId: string, topicId?: string | null) => {
+    if (isForum && topicId !== undefined && (topicId ?? null) !== (selectedTopicId ?? null)) {
+      setSelectedTopicId(topicId ?? null);
+      pendingJumpRef.current = messageId;
+      window.setTimeout(() => requestChatMessageJump(chatId, messageId), 250);
+      return;
+    }
+    void handleJumpToReply(messageId);
+  }, [chatId, handleJumpToReply, isForum, selectedTopicId, setSelectedTopicId]);
+
   useEffect(() => {
     const handleGlobalJump = (event: Event) => {
       const detail = (event as CustomEvent<ChatMessageJumpDetail>).detail;
@@ -601,9 +612,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
         {showSearch && (
           <ChatSearchBar
+            chatId={chatId}
+            currentTopicId={messageTopicId}
+            isForum={isForum}
             messages={messages}
             onClose={() => setShowSearch(false)}
-            onJumpTo={jumpToMessage}
+            onJumpTo={handleSearchJump}
           />
         )}
 

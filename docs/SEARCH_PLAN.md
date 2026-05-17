@@ -49,6 +49,19 @@
   - profiles username/full_name.
 - Не включать private messages/tasks в выдачу без проверки RLS.
 
+## Phase 5: search v2 filters and full-history chat search
+
+- Frontend parser supports advanced syntax without forcing it on regular users:
+  - `type:user/chat/message/task/location/media`;
+  - `from:@username`;
+  - `in:"chat or location"`;
+  - `has:image/video/audio/file/link`;
+  - `before:YYYY-MM-DD` and `after:YYYY-MM-DD`.
+- Sidebar search and Ctrl+K palette share the same parsed filters and removable chips.
+- In-chat search should prefer `search_chat_messages(...)` for full visible history. If the RPC is missing, the UI falls back to loaded messages and shows a friendly note.
+- Forum/topic chats default to the current topic and can opt into all topics.
+- Proposal-only SQL lives in `.migration-backup/supabase/migrations/20260526_global_search_filters.sql`; apply manually after review.
+
 ## Safety Rules
 
 - Search не должен обходить RLS.

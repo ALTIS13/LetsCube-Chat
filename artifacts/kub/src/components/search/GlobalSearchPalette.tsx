@@ -8,6 +8,7 @@ import {
   parseSearchTypeSyntax,
   SEARCH_FILTERS,
   SearchEmptyState,
+  SearchFilterChips,
   SearchProfilePreview,
   SearchResultsList,
   type SearchTypeFilter,
@@ -17,6 +18,7 @@ import { type GlobalSearchDataType, useGlobalSearch } from "@/hooks/useGlobalSea
 import { useRoleAccess } from "@/hooks/useRole";
 import { useTaskAccessGate } from "@/hooks/useTaskAccess";
 import { KUB_GLOBAL_SEARCH_OPEN_EVENT, type GlobalSearchOpenDetail } from "@/lib/globalSearchEvents";
+import { typeFilterToDataType } from "@/lib/searchQuery";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app.store";
 
@@ -44,28 +46,29 @@ export function GlobalSearchPalette() {
   } = useSearchResultActions({ onAfterOpen: closePalette });
 
   const parsed = useMemo(() => parseSearchTypeSyntax(query, typeFilter), [query, typeFilter]);
-  const dataType: GlobalSearchDataType | "all" = parsed.type === "command" ? "all" : parsed.type;
+  const dataType: GlobalSearchDataType | "all" = typeFilterToDataType(parsed.filters.type);
   const search = useGlobalSearch({
     query: parsed.query,
     type: dataType,
-    enabled: open && parsed.type !== "command",
+    filters: parsed.filters,
+    enabled: open && parsed.filters.type !== "command" && (parsed.query.length > 0 || parsed.hasAdvancedFilters),
     limit: 24,
   });
 
   const commandResults = useMemo(
-    () => buildCommandResults({ query: parsed.query, type: parsed.type, canAccessTasks, isStaff }),
-    [canAccessTasks, isStaff, parsed.query, parsed.type],
+    () => buildCommandResults({ query: parsed.query, type: parsed.filters.type, canAccessTasks, isStaff }),
+    [canAccessTasks, isStaff, parsed.query, parsed.filters.type],
   );
 
   const results = useMemo(() => {
     const items =
-      parsed.type === "command"
+      parsed.filters.type === "command"
         ? commandResults
-        : parsed.type === "all"
+        : parsed.filters.type === "all"
           ? [...commandResults, ...search.results]
           : search.results;
     return items.slice(0, 32);
-  }, [commandResults, parsed.type, search.results]);
+  }, [commandResults, parsed.filters.type, search.results]);
 
   const grouped = useMemo(() => groupSearchResults(results), [results]);
 
@@ -112,7 +115,7 @@ export function GlobalSearchPalette() {
 
   useEffect(() => {
     setActiveIndex(0);
-  }, [parsed.query, parsed.type, results.length]);
+  }, [parsed.query, parsed.filters.type, results.length]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown") {
@@ -180,7 +183,7 @@ export function GlobalSearchPalette() {
 
           <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5">
             {SEARCH_FILTERS.map((filter) => {
-              const active = parsed.type === filter.id || (!query.match(/\btype:/i) && typeFilter === filter.id);
+              const active = parsed.filters.type === filter.id || (!query.match(/\btype:/i) && typeFilter === filter.id);
               return (
                 <button
                   key={filter.id}
@@ -199,9 +202,16 @@ export function GlobalSearchPalette() {
             })}
           </div>
 
-          {search.migrationMissing && parsed.type !== "command" && (
+          <SearchFilterChips parsed={parsed} query={query} onChangeQuery={setQuery} />
+
+          {search.migrationMissing && parsed.filters.type !== "command" && (
             <div className="mt-3 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
               Поиск по всей истории требует обновления базы данных. Сейчас доступны видимые чаты, загруженные сообщения, пользователи, задачи и локации по RLS.
+            </div>
+          )}
+          {search.filtersLimited && (
+            <div className="mt-3 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+              Расширенные фильтры по всей истории требуют обновления базы данных. Сейчас поиск применяет доступные локальные фильтры.
             </div>
           )}
           {search.error && (
