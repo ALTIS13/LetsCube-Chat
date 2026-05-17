@@ -490,6 +490,7 @@ export interface Database {
           content: string | null
           type: 'text' | 'image' | 'video' | 'audio' | 'file' | 'sticker' | 'system'
           media_url: string | null
+          media_metadata: Json | null
           reply_to_id: string | null
           forwarded_from_id: string | null
           edited_at: string | null
@@ -507,6 +508,7 @@ export interface Database {
           content?: string | null
           type?: 'text' | 'image' | 'video' | 'audio' | 'file' | 'sticker' | 'system'
           media_url?: string | null
+          media_metadata?: Json | null
           reply_to_id?: string | null
           forwarded_from_id?: string | null
           edited_at?: string | null
@@ -519,6 +521,7 @@ export interface Database {
         Update: {
           content?: string | null
           edited_at?: string | null
+          media_metadata?: Json | null
           deleted_at?: string | null
           pinned?: boolean
           client_message_id?: string | null

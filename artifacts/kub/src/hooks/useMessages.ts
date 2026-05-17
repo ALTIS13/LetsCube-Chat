@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
-import type { MessageWithSender, Profile } from "@/types/database";
+import type { Json, MessageWithSender, Profile } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { mapPgError } from "@/lib/errors";
@@ -31,6 +31,7 @@ interface SendMessageInput {
   targetChatId?: string;
   clientMessageId?: string | null;
   clientSentAt?: string | null;
+  mediaMetadata?: Json | null;
   tempId?: string;
 }
 
@@ -729,28 +730,46 @@ export function useMessages(
       forwardedFromId: string | null;
       clientMessageId: string;
       clientSentAt: string;
+      mediaMetadata?: Json | null;
     },
   ): Promise<SendMessageAck> => {
-    const insertPromise = supabase
+    const basePayload = {
+      chat_id: input.targetChatId,
+      topic_id: input.topicId,
+      user_id: input.userId,
+      content: input.content,
+      type: input.type,
+      media_url: input.mediaUrl,
+      reply_to_id: input.replyToId,
+      forwarded_from_id: input.forwardedFromId,
+      client_message_id: input.clientMessageId,
+      client_sent_at: input.clientSentAt,
+    };
+    const payload = input.mediaMetadata === undefined
+      ? basePayload
+      : { ...basePayload, media_metadata: input.mediaMetadata };
+
+    let insertPromise = supabase
       .from("messages")
-      .insert({
-        chat_id: input.targetChatId,
-        topic_id: input.topicId,
-        user_id: input.userId,
-        content: input.content,
-        type: input.type,
-        media_url: input.mediaUrl,
-        reply_to_id: input.replyToId,
-        forwarded_from_id: input.forwardedFromId,
-        client_message_id: input.clientMessageId,
-        client_sent_at: input.clientSentAt,
-      })
+      .insert(payload)
       .select(MESSAGE_SELECT_WITH_JOINS)
       .single();
 
-    const result = await withTimeout(insertPromise, SEND_ACK_TIMEOUT_MS);
+    let result = await withTimeout(insertPromise, SEND_ACK_TIMEOUT_MS);
     if (isTimeoutResult(result)) {
       return { data: null, error: null, timedOut: true };
+    }
+
+    if (result.error && input.mediaMetadata !== undefined && isMissingMediaMetadataError(result.error)) {
+      insertPromise = supabase
+        .from("messages")
+        .insert(basePayload)
+        .select(MESSAGE_SELECT_WITH_JOINS)
+        .single();
+      result = await withTimeout(insertPromise, SEND_ACK_TIMEOUT_MS);
+      if (isTimeoutResult(result)) {
+        return { data: null, error: null, timedOut: true };
+      }
     }
 
     if (result.data) {
@@ -787,6 +806,7 @@ export function useMessages(
       created_at: clientSentAt,
       client_message_id: clientMessageId,
       client_sent_at: clientSentAt,
+      media_metadata: input.mediaMetadata ?? null,
       sender: user,
       reactions: [],
       pending: true,
@@ -809,6 +829,7 @@ export function useMessages(
       topicId: messageTopicId,
       clientMessageId,
       clientSentAt,
+      mediaMetadata: input.mediaMetadata,
     });
 
     if (ack.data) {
@@ -868,6 +889,7 @@ export function useMessages(
     replyToId?: string | null;
     clientMessageId?: string | null;
     clientSentAt?: string | null;
+    mediaMetadata?: Json | null;
   }) => {
     return sendLocalMessage({
       type: input.type,
@@ -876,6 +898,7 @@ export function useMessages(
       replyToId: input.replyToId ?? null,
       clientMessageId: input.clientMessageId ?? null,
       clientSentAt: input.clientSentAt ?? null,
+      mediaMetadata: input.mediaMetadata,
     });
   }, [sendLocalMessage]);
 
@@ -890,6 +913,7 @@ export function useMessages(
       topicId: message.topic_id,
       clientMessageId: message.client_message_id ?? crypto.randomUUID(),
       clientSentAt: message.client_sent_at ?? message.created_at,
+      mediaMetadata: message.media_metadata ?? undefined,
       tempId: message.id,
       targetChatId: message.chat_id,
     });
@@ -1149,6 +1173,12 @@ function buildRealtimeMessage(row: MessageWithSender): MessageWithSender {
 
 function isTimeoutResult<T>(value: T | TimeoutResult): value is TimeoutResult {
   return Boolean(value && typeof value === "object" && "timedOut" in value);
+}
+
+function isMissingMediaMetadataError(error: unknown): boolean {
+  const record = error as { code?: unknown; message?: unknown; details?: unknown } | null;
+  const text = `${String(record?.code ?? "")} ${String(record?.message ?? "")} ${String(record?.details ?? "")}`.toLowerCase();
+  return text.includes("media_metadata") && (text.includes("column") || text.includes("schema cache") || text.includes("pgrst204") || text.includes("42703"));
 }
 
 function delay(ms: number): Promise<void> {

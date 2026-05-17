@@ -1,6 +1,10 @@
 import type { Message } from "@/types/database";
 
-export function formatChatMessagePreview(message: Pick<Message, "type" | "content" | "media_url" | "deleted_at"> | null | undefined): string {
+type PreviewMessage = Pick<Message, "type" | "content" | "media_url" | "deleted_at"> & {
+  media_metadata?: Message["media_metadata"];
+};
+
+export function formatChatMessagePreview(message: PreviewMessage | null | undefined): string {
   if (!message) return "";
   if (message.deleted_at) return "Сообщение удалено";
   if (isGifMessage(message)) return "GIF";
@@ -13,14 +17,25 @@ export function formatChatMessagePreview(message: Pick<Message, "type" | "conten
   return message.content ?? "";
 }
 
-export function formatReplyMessagePreview(message: Pick<Message, "type" | "content" | "media_url" | "deleted_at"> | null | undefined): string {
+export function formatReplyMessagePreview(message: PreviewMessage | null | undefined): string {
   if (!message || message.deleted_at) return "Сообщение недоступно";
   if (isLocationMessage(message.content)) return "Местоположение";
   return formatChatMessagePreview(message) || "Сообщение";
 }
 
-function isRoundVideoMessage(message: Pick<Message, "type" | "content">): boolean {
-  return message.type === "video" && /^Видео-сообщение(?:\s|\(|$)/i.test(message.content?.trim() ?? "");
+function isRoundVideoMessage(message: Pick<Message, "type" | "content"> & { media_metadata?: Message["media_metadata"] }): boolean {
+  return message.type === "video" && (
+    getMediaMetadataString(message, "kind") === "video_message" ||
+    getMediaMetadataString(message, "shape") === "round" ||
+    /^Видео-сообщение(?:\s|\(|$)/i.test(message.content?.trim() ?? "")
+  );
+}
+
+function getMediaMetadataString(message: { media_metadata?: Message["media_metadata"] }, key: string): string | null {
+  const metadata = message.media_metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : null;
 }
 
 function isGifMessage(message: Pick<Message, "type" | "content" | "media_url">): boolean {

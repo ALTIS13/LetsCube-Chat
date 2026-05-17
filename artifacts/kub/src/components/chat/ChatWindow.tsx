@@ -31,7 +31,7 @@ import {
   type StagedAttachment,
   type StagedAttachmentUpload,
 } from "@/lib/stagedAttachments";
-import type { MessageWithSender } from "@/types/database";
+import type { Json, MessageWithSender } from "@/types/database";
 
 interface ChatWindowProps {
   chatId: string;
@@ -353,6 +353,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         mediaUrl: uploaded.publicUrl,
         replyToId: replyTo?.id ?? null,
         clientMessageId: attachment.clientMessageId,
+        mediaMetadata: getStagedAttachmentMediaMetadata(attachment),
       });
 
       if (!message) {
@@ -725,6 +726,18 @@ function getStagedAttachmentMessageContent(attachment: StagedAttachment, caption
     return `Видео-сообщение (${formatVoiceDurationLabel(attachment.durationMs ?? 0)})`;
   }
   return caption?.trim() || attachment.name;
+}
+
+function getStagedAttachmentMediaMetadata(attachment: StagedAttachment): Json | null | undefined {
+  if (attachment.kind === "video_message") {
+    return {
+      kind: "video_message",
+      shape: "round",
+      duration_ms: attachment.durationMs ?? null,
+      mime_type: attachment.mimeType,
+    };
+  }
+  return undefined;
 }
 
 function formatVoiceDurationLabel(durationMs: number): string {

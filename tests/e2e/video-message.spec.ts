@@ -7,10 +7,29 @@ test.use({
   },
 });
 
-test.describe("KUB round video messages", () => {
-  test("records a video message into staged attachments without sending immediately", async ({
-    page,
-  }) => {
+test.describe("KUB video recorders", () => {
+  test("switches the composer recorder mode with desktop context click", async ({ page }) => {
+    const credentials = loadQaCredentials();
+    test.skip(!credentials, "QA credentials are not configured in env or ~/.kub-messenger-qa.env");
+
+    await gotoOrSkip(page, "/");
+    await loginIfNeeded(page, credentials);
+    await openAnyChat(page);
+
+    const recorder = page.getByTestId("composer-recorder-button");
+    await expect(recorder).toBeVisible();
+    await expect(recorder).toHaveAttribute("data-recorder-mode", "voice");
+
+    await recorder.click({ button: "right" });
+    await expect(recorder).toHaveAttribute("data-recorder-mode", "video");
+    await expect(page.getByText("Режим: видеосообщение")).toBeVisible();
+
+    await recorder.click({ button: "right" });
+    await expect(recorder).toHaveAttribute("data-recorder-mode", "voice");
+    await expect(page.getByText("Режим: голосовое")).toBeVisible();
+  });
+
+  test("records a regular video from the attachment menu into rectangular staged attachments", async ({ page }) => {
     const consoleErrors: string[] = [];
     page.on("console", (message) => {
       if (message.type() === "error") consoleErrors.push(message.text());
@@ -29,7 +48,7 @@ test.describe("KUB round video messages", () => {
     await page.getByRole("button", { name: "Прикрепить" }).click();
     await page.getByRole("button", { name: "Записать видео" }).click();
 
-    const modal = page.getByTestId("video-message-recorder-modal");
+    const modal = page.getByTestId("regular-video-recorder-modal");
     await expect(modal).toBeVisible();
     await expect(modal.getByText("Камера готова")).toBeVisible();
 
@@ -42,10 +61,8 @@ test.describe("KUB round video messages", () => {
     await page.getByRole("button", { name: "Добавить" }).click();
     await expect(modal).toHaveCount(0);
     await expect(page.getByTestId("staged-attachment-tray")).toBeVisible();
-    await expect(page.getByTestId("staged-attachment-item").first()).toContainText(
-      "Видео-сообщение",
-    );
-    await expect(page.getByTestId("staged-video-message-preview")).toBeVisible();
+    await expect(page.getByTestId("staged-regular-video-preview")).toBeVisible();
+    await expect(page.getByTestId("staged-video-message-preview")).toHaveCount(0);
 
     await page.getByRole("button", { name: "Убрать вложение" }).first().click();
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
@@ -53,7 +70,38 @@ test.describe("KUB round video messages", () => {
     expect(consoleErrors, `Unexpected console errors:\n${consoleErrors.join("\n")}`).toEqual([]);
   });
 
-  test("shows a friendly state when video recording is unavailable", async ({ page }) => {
+  test("records a round video message through the composer recorder mode", async ({ page }) => {
+    const credentials = loadQaCredentials();
+    test.skip(!credentials, "QA credentials are not configured in env or ~/.kub-messenger-qa.env");
+
+    await gotoOrSkip(page, "/");
+    await loginIfNeeded(page, credentials);
+    await openAnyChat(page);
+
+    const recorder = page.getByTestId("composer-recorder-button");
+    await recorder.click({ button: "right" });
+    await expect(recorder).toHaveAttribute("data-recorder-mode", "video");
+
+    const box = await recorder.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await page.mouse.down();
+    const modal = page.getByTestId("video-message-recorder-modal");
+    await expect(modal).toBeVisible();
+    await expect(modal.getByText("Идёт запись")).toBeVisible();
+    await page.waitForTimeout(1_200);
+    await page.mouse.up();
+
+    await expect(modal).toHaveCount(0);
+    await expect(page.getByTestId("staged-attachment-tray")).toBeVisible();
+    await expect(page.getByTestId("staged-video-message-preview")).toBeVisible();
+    await expect(page.getByTestId("staged-regular-video-preview")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Убрать вложение" }).first().click();
+    await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
+  });
+
+  test("shows a friendly state when regular video recording is unavailable", async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(window, "MediaRecorder", {
         configurable: true,
@@ -71,11 +119,9 @@ test.describe("KUB round video messages", () => {
     await page.getByRole("button", { name: "Прикрепить" }).click();
     await page.getByRole("button", { name: "Записать видео" }).click();
 
-    const modal = page.getByTestId("video-message-recorder-modal");
+    const modal = page.getByTestId("regular-video-recorder-modal");
     await expect(modal).toBeVisible();
-    await expect(
-      modal.getByText("Видео-сообщения не поддерживаются этим браузером.").first(),
-    ).toBeVisible();
+    await expect(modal.getByText("Видео не поддерживается этим браузером.").first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Начать запись" })).toBeDisabled();
   });
 });

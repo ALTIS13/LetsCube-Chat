@@ -131,6 +131,15 @@ export function createStagedVideoMessageAttachment(blob: Blob, durationMs: numbe
   };
 }
 
+export function createRecordedVideoFile(blob: Blob, mimeType: string): File {
+  const normalizedMimeType = mimeType || blob.type || "video/webm";
+  const ext = MIME_EXTENSIONS[normalizedMimeType] ?? (normalizedMimeType.includes("mp4") ? "mp4" : "webm");
+  return new File([blob], `recorded-video-${timestampLabel()}.${ext}`, {
+    type: normalizedMimeType,
+    lastModified: Date.now(),
+  });
+}
+
 export function normalizeClipboardFile(file: File): File {
   if (!file.type.startsWith("image/")) return file;
   const genericImageName = /^image\.(png|jpe?g|webp|gif)$/i.test(file.name);

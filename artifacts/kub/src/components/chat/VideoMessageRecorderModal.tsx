@@ -10,6 +10,7 @@ const PREFERRED_MIME_TYPES = ["video/webm;codecs=vp8,opus", "video/webm;codecs=v
 
 type RecorderStatus = "loading" | "ready" | "recording" | "recorded" | "denied" | "unavailable" | "unsupported" | "error";
 type FacingMode = "user" | "environment";
+type VideoRecorderVariant = "round" | "regular";
 
 interface RecordedVideo {
   blob: Blob;
@@ -21,10 +22,22 @@ interface RecordedVideo {
 interface VideoMessageRecorderModalProps {
   open: boolean;
   onClose: () => void;
-  onAddVideo: (blob: Blob, durationMs: number, mimeType: string) => void;
+  onAddVideo: (blob: Blob, durationMs: number, mimeType: string) => void | Promise<void>;
+  variant?: VideoRecorderVariant;
+  autoStart?: boolean;
+  autoAddOnStop?: boolean;
+  stopSignal?: number;
 }
 
-export function VideoMessageRecorderModal({ open, onClose, onAddVideo }: VideoMessageRecorderModalProps) {
+export function VideoMessageRecorderModal({
+  open,
+  onClose,
+  onAddVideo,
+  variant = "round",
+  autoStart = false,
+  autoAddOnStop = false,
+  stopSignal = 0,
+}: VideoMessageRecorderModalProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -33,11 +46,22 @@ export function VideoMessageRecorderModal({ open, onClose, onAddVideo }: VideoMe
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordedRef = useRef<RecordedVideo | null>(null);
+  const autoAddOnStopRef = useRef(autoAddOnStop);
+  const lastStopSignalRef = useRef(stopSignal);
   const [status, setStatus] = useState<RecorderStatus>("loading");
-  const [facingMode, setFacingMode] = useState<FacingMode>("user");
+  const [facingMode, setFacingMode] = useState<FacingMode>(variant === "regular" ? "environment" : "user");
   const [videoInputCount, setVideoInputCount] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
   const [recorded, setRecorded] = useState<RecordedVideo | null>(null);
+
+  useEffect(() => {
+    autoAddOnStopRef.current = autoAddOnStop;
+  }, [autoAddOnStop]);
+
+  useEffect(() => {
+    if (!open) return;
+    setFacingMode(variant === "regular" ? "environment" : "user");
+  }, [open, variant]);
 
   const clearTimers = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -70,7 +94,7 @@ export function VideoMessageRecorderModal({ open, onClose, onAddVideo }: VideoMe
       try {
         recorder.stop();
       } catch {
-        // ignored during cleanup
+        // cleanup path
       }
     }
     chunksRef.current = [];
@@ -96,12 +120,13 @@ export function VideoMessageRecorderModal({ open, onClose, onAddVideo }: VideoMe
     }
 
     try {
+      const square = variant === "round";
       const stream = await devices.getUserMedia({
         audio: true,
         video: {
           facingMode: { ideal: nextFacingMode },
-          width: { ideal: 720 },
-          height: { ideal: 720 },
+          width: { ideal: square ? 720 : 1280 },
+          height: { ideal: square ? 720 : 720 },
         },
       });
 
@@ -134,7 +159,7 @@ export function VideoMessageRecorderModal({ open, onClose, onAddVideo }: VideoMe
         setStatus("error");
       }
     }
-  }, [cleanupRecorder, clearRecorded, stopStream]);
+  }, [cleanupRecorder, clearRecorded, stopStream, variant]);
 
   useEffect(() => {
     if (!open) return;
@@ -197,10 +222,15 @@ export function VideoMessageRecorderModal({ open, onClose, onAddVideo }: VideoMe
         setStatus("error");
         return;
       }
+      const finalMimeType = blob.type || mimeType;
+      if (autoAddOnStopRef.current) {
+        void Promise.resolve(onAddVideo(blob, finalDurationMs, finalMimeType)).catch(() => setStatus("error"));
+        return;
+      }
       const previewUrl = URL.createObjectURL(blob);
       const nextRecorded = {
         blob,
-        mimeType: blob.type || mimeType,
+        mimeType: finalMimeType,
         previewUrl,
         durationMs: finalDurationMs,
       };
@@ -225,9 +255,35 @@ export function VideoMessageRecorderModal({ open, onClose, onAddVideo }: VideoMe
       setDurationMs(Date.now() - startedAtRef.current);
     }, TIMER_TICK_MS);
     maxTimerRef.current = setTimeout(finishRecording, MAX_DURATION_MS);
-  }, [cleanupRecorder, clearRecorded, finishRecording, status, stopStream]);
+  }, [cleanupRecorder, clearRecorded, finishRecording, onAddVideo, status, stopStream]);
+
+  useEffect(() => {
+    if (!open || !autoStart || status !== "ready") return;
+    startRecording();
+  }, [autoStart, open, startRecording, status]);
+
+  useEffect(() => {
+    if (stopSignal === lastStopSignalRef.current) return;
+    lastStopSignalRef.current = stopSignal;
+    if (!open || !autoAddOnStop) return;
+    if (status === "recording") {
+      finishRecording();
+      return;
+    }
+    if (autoStart) closeWithoutCallback();
+  // closeWithoutCallback is intentionally not a dependency: this effect handles
+  // the hold-release edge while camera permission is still resolving.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAddOnStop, autoStart, finishRecording, open, status, stopSignal]);
 
   const close = useCallback(() => {
+    cleanupRecorder();
+    stopStream();
+    clearRecorded();
+    onClose();
+  }, [cleanupRecorder, clearRecorded, onClose, stopStream]);
+
+  const closeWithoutCallback = useCallback(() => {
     cleanupRecorder();
     stopStream();
     clearRecorded();
@@ -240,15 +296,15 @@ export function VideoMessageRecorderModal({ open, onClose, onAddVideo }: VideoMe
 
   const addVideo = useCallback(() => {
     if (!recorded) return;
-    onAddVideo(recorded.blob, recorded.durationMs, recorded.mimeType);
-    close();
+    void Promise.resolve(onAddVideo(recorded.blob, recorded.durationMs, recorded.mimeType)).then(close, () => setStatus("error"));
   }, [close, onAddVideo, recorded]);
 
   const switchCamera = useCallback(() => {
     setFacingMode((current) => (current === "user" ? "environment" : "user"));
   }, []);
 
-  const statusCopy = getStatusCopy(status);
+  const isRound = variant === "round";
+  const statusCopy = getStatusCopy(status, variant);
   const canSwitchCamera = (status === "ready" || status === "recording") && videoInputCount > 1;
   const displayDuration = status === "recorded" ? recorded?.durationMs ?? durationMs : durationMs;
 
@@ -256,73 +312,91 @@ export function VideoMessageRecorderModal({ open, onClose, onAddVideo }: VideoMe
     <KubModal
       open={open}
       onClose={close}
-      title="Видео-сообщение"
-      description="Запись попадёт во вложения и отправится только после кнопки отправки."
+      title={isRound ? "Видеосообщение" : "Записать видео"}
+      description={
+        isRound
+          ? "Запись попадёт во вложения как круглый видеоролик и отправится только по кнопке отправки."
+          : "Запись попадёт во вложения как обычное видео и отправится только по кнопке отправки."
+      }
       icon={<KubIcon name="video" size={18} />}
       size="lg"
       contentClassName="p-0"
       footer={
-        <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
-          {status === "recorded" ? (
-            <>
-              <KubButton type="button" variant="secondary" onClick={retake} leftIcon={<KubIcon name="rotate" size={14} />}>
-                Перезаписать
-              </KubButton>
-              <KubButton type="button" variant="danger" onClick={close} leftIcon={<KubIcon name="delete" size={14} />}>
-                Удалить
-              </KubButton>
-              <KubButton type="button" onClick={addVideo} leftIcon={<KubIcon name="check" size={14} />}>
-                Добавить
-              </KubButton>
-            </>
-          ) : status === "recording" ? (
-            <KubButton
-              type="button"
-              variant="danger"
-              onClick={finishRecording}
-              leftIcon={<KubIcon name="pause" size={14} />}
-              data-testid="video-message-record-stop"
-            >
-              Остановить
-            </KubButton>
-          ) : (
-            <>
-              {canSwitchCamera && (
-                <KubButton type="button" variant="secondary" onClick={switchCamera} leftIcon={<KubIcon name="rotate" size={14} />}>
-                  Сменить камеру
+        autoAddOnStop ? null : (
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
+            {status === "recorded" ? (
+              <>
+                <KubButton type="button" variant="secondary" onClick={retake} leftIcon={<KubIcon name="rotate" size={14} />}>
+                  Перезаписать
                 </KubButton>
-              )}
+                <KubButton type="button" variant="danger" onClick={close} leftIcon={<KubIcon name="delete" size={14} />}>
+                  Удалить
+                </KubButton>
+                <KubButton type="button" onClick={addVideo} leftIcon={<KubIcon name="check" size={14} />}>
+                  Добавить
+                </KubButton>
+              </>
+            ) : status === "recording" ? (
               <KubButton
                 type="button"
-                onClick={startRecording}
-                disabled={status !== "ready"}
-                leftIcon={<KubIcon name="video" size={14} />}
-                data-testid="video-message-record-start"
+                variant="danger"
+                onClick={finishRecording}
+                leftIcon={<KubIcon name="pause" size={14} />}
+                data-testid="video-message-record-stop"
               >
-                Начать запись
+                Остановить
               </KubButton>
-            </>
-          )}
-        </div>
+            ) : (
+              <>
+                {canSwitchCamera && (
+                  <KubButton type="button" variant="secondary" onClick={switchCamera} leftIcon={<KubIcon name="rotate" size={14} />}>
+                    Сменить камеру
+                  </KubButton>
+                )}
+                <KubButton
+                  type="button"
+                  onClick={startRecording}
+                  disabled={status !== "ready"}
+                  leftIcon={<KubIcon name="video" size={14} />}
+                  data-testid="video-message-record-start"
+                >
+                  Начать запись
+                </KubButton>
+              </>
+            )}
+          </div>
+        )
       }
     >
-      <div data-testid="video-message-recorder-modal" className="flex min-h-0 flex-col items-center gap-4 px-4 py-4 sm:px-5">
-        <div className="relative flex h-[min(70vw,260px)] w-[min(70vw,260px)] max-h-[320px] max-w-[320px] items-center justify-center overflow-hidden rounded-full border border-[color:var(--kub-border-color)] bg-black shadow-2xl">
+      <div
+        data-testid={isRound ? "video-message-recorder-modal" : "regular-video-recorder-modal"}
+        className="flex min-h-0 flex-col items-center gap-4 px-4 py-4 sm:px-5"
+      >
+        <div
+          className={cn(
+            "relative flex items-center justify-center overflow-hidden border border-[color:var(--kub-border-color)] bg-black shadow-2xl",
+            isRound
+              ? "h-[min(70vw,260px)] w-[min(70vw,260px)] max-h-[320px] max-w-[320px] rounded-full"
+              : "aspect-video w-full max-w-[560px] rounded-2xl"
+          )}
+        >
           {recorded ? (
             <video
               src={recorded.previewUrl}
-              className="h-full w-full object-cover"
+              className={cn("h-full w-full", isRound ? "object-cover" : "object-contain")}
               controls
               playsInline
               preload="metadata"
+              data-testid={isRound ? "round-video-recorded-preview" : "regular-video-recorded-preview"}
             />
           ) : (
             <video
               ref={videoRef}
-              className={cn("h-full w-full object-cover", status !== "ready" && status !== "recording" && "opacity-30")}
+              className={cn("h-full w-full", isRound ? "object-cover" : "object-contain", status !== "ready" && status !== "recording" && "opacity-30")}
               muted
               playsInline
               autoPlay
+              data-testid={isRound ? "round-video-live-preview" : "regular-video-live-preview"}
             />
           )}
           {status === "recording" && (
@@ -375,7 +449,8 @@ function pickMimeType(): string | null {
   return null;
 }
 
-function getStatusCopy(status: RecorderStatus): { title: string; body: string } {
+function getStatusCopy(status: RecorderStatus, variant: VideoRecorderVariant): { title: string; body: string } {
+  const isRound = variant === "round";
   switch (status) {
     case "loading":
       return {
@@ -385,7 +460,9 @@ function getStatusCopy(status: RecorderStatus): { title: string; body: string } 
     case "ready":
       return {
         title: "Камера готова",
-        body: "Нажмите «Начать запись», чтобы записать короткое видео-сообщение.",
+        body: isRound
+          ? "Нажмите и удерживайте кнопку записи или начните запись здесь, чтобы подготовить видеосообщение."
+          : "Нажмите «Начать запись», чтобы подготовить обычное видео.",
       };
     case "recording":
       return {
@@ -409,8 +486,8 @@ function getStatusCopy(status: RecorderStatus): { title: string; body: string } 
       };
     case "unsupported":
       return {
-        title: "Видео-сообщения не поддерживаются этим браузером.",
-        body: "Попробуйте обновить браузер или отправьте обычное видео файлом.",
+        title: isRound ? "Видеосообщения не поддерживаются этим браузером." : "Видео не поддерживается этим браузером.",
+        body: "Попробуйте обновить браузер или отправьте видео файлом.",
       };
     case "error":
     default:

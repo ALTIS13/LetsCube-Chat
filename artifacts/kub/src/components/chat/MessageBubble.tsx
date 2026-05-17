@@ -1140,7 +1140,7 @@ export function MessageBubble({
                 <RoundVideoMessage
                   url={message.media_url}
                   title={message.content ?? "Видео-сообщение"}
-                  durationLabel={parseVideoMessageDuration(message.content)}
+                  durationLabel={parseVideoMessageDuration(message.content, message)}
                   onOpen={() => onOpenMedia?.({ type: "video", url: message.media_url!, title: message.content ?? "Видео-сообщение" })}
                 />
               ) : (
@@ -1463,12 +1463,18 @@ function parseAudioDuration(content: string | null | undefined): number {
   return minutes * 60 + seconds;
 }
 
-function parseVideoMessageDuration(content: string | null | undefined): string | null {
+function parseVideoMessageDuration(content: string | null | undefined, message?: MessageWithSender): string | null {
+  const durationMs = getMediaMetadataNumber(message, "duration_ms");
+  if (durationMs && durationMs > 0) return formatMetadataDuration(durationMs);
   return content?.match(/(\d{1,2}:\d{2})/)?.[1] ?? null;
 }
 
 function isRoundVideoMessage(message: MessageWithSender): boolean {
-  return message.type === "video" && /^Видео-сообщение(?:\s|\(|$)/i.test(message.content?.trim() ?? "");
+  return message.type === "video" && (
+    getMediaMetadataString(message, "kind") === "video_message" ||
+    getMediaMetadataString(message, "shape") === "round" ||
+    /^Видео-сообщение(?:\s|\(|$)/i.test(message.content?.trim() ?? "")
+  );
 }
 
 function isVoiceMessage(message: MessageWithSender): boolean {
@@ -1484,10 +1490,31 @@ function getVisibleMediaCaption(message: MessageWithSender): string | null {
   if (message.type !== "image" && message.type !== "video") return null;
   const content = message.content?.trim();
   if (!content) return null;
-  if (/^Видео-сообщение(?:\s|\(|$)/i.test(content)) return null;
+  if (isRoundVideoMessage(message)) return null;
   if (looksLikeMediaFileName(content)) return null;
   if (/^(фото|видео|image|video)$/i.test(content)) return null;
   return content;
+}
+
+function getMediaMetadataString(message: MessageWithSender | undefined, key: string): string | null {
+  const metadata = message?.media_metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : null;
+}
+
+function getMediaMetadataNumber(message: MessageWithSender | undefined, key: string): number | null {
+  const metadata = message?.media_metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function formatMetadataDuration(durationMs: number): string {
+  const totalSec = Math.max(0, Math.round(durationMs / 1000));
+  const minutes = Math.floor(totalSec / 60).toString();
+  const seconds = (totalSec % 60).toString().padStart(2, "0");
+  return `${minutes}:${seconds}`;
 }
 
 function looksLikeMediaFileName(value: string): boolean {

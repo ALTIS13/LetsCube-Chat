@@ -1,6 +1,15 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, KeyboardEvent, ClipboardEvent } from "react";
+import {
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+  KeyboardEvent,
+  ClipboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import type { MessageWithSender } from "@/types/database";
 import { cn } from "@/lib/utils";
 import { VoiceRecorder } from "./VoiceRecorder";
@@ -13,7 +22,9 @@ import { showAppAlert } from "@/lib/appDialogs";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
+import { useVoiceRecorder, formatVoiceDuration as formatRecorderDuration } from "@/hooks/useVoiceRecorder";
 import {
+  createRecordedVideoFile,
   formatAttachmentSize,
   normalizeClipboardFile,
   type StagedAttachment,
@@ -21,6 +32,7 @@ import {
 
 const DRAFT_PREFIX = "kub:draft:";
 const draftKey = (chatId: string) => `${DRAFT_PREFIX}${chatId}`;
+const MOBILE_RECORDER_LONG_PRESS_MS = 420;
 
 const EMOJI_PANEL = [
   "😀","😂","🥰","😎","🤔","😭","🔥","❤️","👍","👏",
@@ -71,10 +83,23 @@ export function MessageInput({
   const [showVoice, setShowVoice] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [showVideoMessage, setShowVideoMessage] = useState(false);
+  const [videoRecorderVariant, setVideoRecorderVariant] = useState<"round" | "regular">("round");
+  const [videoAutoStart, setVideoAutoStart] = useState(false);
+  const [videoAutoAddOnStop, setVideoAutoAddOnStop] = useState(false);
+  const [videoStopSignal, setVideoStopSignal] = useState(0);
+  const [recorderMode, setRecorderMode] = useState<"voice" | "video">("voice");
+  const [modeFeedback, setModeFeedback] = useState<string | null>(null);
+  const [voiceHoldActive, setVoiceHoldActive] = useState(false);
+  const voiceHold = useVoiceRecorder();
   const [isComposing, setIsComposing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const modeFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchRecordingStartedRef = useRef(false);
+  const voiceHoldActiveRef = useRef(false);
+  const videoHoldActiveRef = useRef(false);
   const hasText = text.trim().length > 0;
   const hasAttachments = attachments.length > 0;
   const hasStagedVoice = attachments.some((item) => item.kind === "voice");
@@ -103,6 +128,30 @@ export function MessageInput({
   }, [text, chatId, isEditing]);
 
   useEffect(() => () => onFocusChange?.(false), [onFocusChange]);
+
+  useEffect(() => {
+    return () => {
+      if (modeFeedbackTimerRef.current) clearTimeout(modeFeedbackTimerRef.current);
+      if (touchHoldTimerRef.current) clearTimeout(touchHoldTimerRef.current);
+      voiceHold.cancel();
+    };
+  }, [voiceHold.cancel]);
+
+  useEffect(() => {
+    voiceHoldActiveRef.current = voiceHoldActive;
+  }, [voiceHoldActive]);
+
+  useEffect(() => {
+    if (!voiceHold.error) return;
+    voiceHoldActiveRef.current = false;
+    setVoiceHoldActive(false);
+    const message =
+      voiceHold.error === "permission_denied" ? "Нет доступа к микрофону."
+      : voiceHold.error === "no_device" ? "Микрофон недоступен."
+      : voiceHold.error === "unsupported" ? "Голосовые сообщения не поддерживаются этим браузером."
+      : "Не удалось записать голосовое сообщение.";
+    showAppAlert(message, "Голосовое сообщение");
+  }, [voiceHold.error]);
 
   useEffect(() => {
     if (!isEditing || !editingMessage) return;
@@ -147,6 +196,142 @@ export function MessageInput({
     onStageFiles([file], "camera");
     setShowAttach(false);
   }, [onStageFiles]);
+
+  const stageRecordedVideo = useCallback((blob: Blob, mimeType: string) => {
+    if (!onStageFiles) return;
+    onStageFiles([createRecordedVideoFile(blob, mimeType)], "camera");
+    setShowAttach(false);
+  }, [onStageFiles]);
+
+  const resetVideoRecorderFlags = useCallback(() => {
+    videoHoldActiveRef.current = false;
+    setVideoAutoStart(false);
+    setVideoAutoAddOnStop(false);
+  }, []);
+
+  const showRecorderModeFeedback = useCallback((mode: "voice" | "video") => {
+    if (modeFeedbackTimerRef.current) clearTimeout(modeFeedbackTimerRef.current);
+    setModeFeedback(mode === "voice" ? "Режим: голосовое" : "Режим: видеосообщение");
+    modeFeedbackTimerRef.current = setTimeout(() => setModeFeedback(null), 1600);
+  }, []);
+
+  const toggleRecorderMode = useCallback(() => {
+    if (voiceHoldActiveRef.current || videoHoldActiveRef.current) return;
+    setRecorderMode((current) => {
+      const next = current === "voice" ? "video" : "voice";
+      showRecorderModeFeedback(next);
+      return next;
+    });
+  }, [showRecorderModeFeedback]);
+
+  const startVideoHoldRecording = useCallback(() => {
+    if (hasStagedVideoMessage) {
+      showAppAlert("Сначала отправьте или удалите текущее видеосообщение.", "Видеосообщение");
+      return;
+    }
+    videoHoldActiveRef.current = true;
+    setVideoRecorderVariant("round");
+    setVideoAutoStart(true);
+    setVideoAutoAddOnStop(true);
+    setShowVideoMessage(true);
+    setShowAttach(false);
+    setShowEmoji(false);
+  }, [hasStagedVideoMessage]);
+
+  const stopVideoHoldRecording = useCallback(() => {
+    if (!videoHoldActiveRef.current) return;
+    setVideoStopSignal((value) => value + 1);
+  }, []);
+
+  const startVoiceHoldRecording = useCallback(async () => {
+    if (hasStagedVoice) {
+      showAppAlert("Сначала отправьте или удалите текущее голосовое сообщение.", "Голосовое сообщение");
+      return;
+    }
+    voiceHoldActiveRef.current = true;
+    setVoiceHoldActive(true);
+    setShowAttach(false);
+    setShowEmoji(false);
+    const started = await voiceHold.start();
+    if (!started) {
+      voiceHoldActiveRef.current = false;
+      setVoiceHoldActive(false);
+    }
+  }, [hasStagedVoice, voiceHold.start]);
+
+  const stopVoiceHoldRecording = useCallback(async () => {
+    if (!voiceHoldActiveRef.current) return;
+    voiceHoldActiveRef.current = false;
+    setVoiceHoldActive(false);
+    const result = await voiceHold.stop();
+    if (!result || result.blob.size === 0 || result.durationMs < 1000) {
+      if (!result) voiceHold.cancel();
+      showAppAlert("Запись слишком короткая или пустая.", "Голосовое сообщение");
+      return;
+    }
+    await onSendVoice?.(result.blob, result.durationMs, result.mimeType);
+  }, [onSendVoice, voiceHold.cancel, voiceHold.stop]);
+
+  const startRecorderHold = useCallback((mode: "voice" | "video") => {
+    if (mode === "video") {
+      startVideoHoldRecording();
+      return;
+    }
+    void startVoiceHoldRecording();
+  }, [startVideoHoldRecording, startVoiceHoldRecording]);
+
+  const stopRecorderHold = useCallback(() => {
+    if (videoHoldActiveRef.current) stopVideoHoldRecording();
+    if (voiceHoldActiveRef.current) void stopVoiceHoldRecording();
+  }, [stopVideoHoldRecording, stopVoiceHoldRecording]);
+
+  const handleRecorderContextMenu = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleRecorderMode();
+  }, [toggleRecorderMode]);
+
+  const handleRecorderPointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0 || isAttachmentBusy) return;
+    event.preventDefault();
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture is best-effort; recording still works through pointerup.
+    }
+    if (event.pointerType === "touch") {
+      touchRecordingStartedRef.current = false;
+      if (touchHoldTimerRef.current) clearTimeout(touchHoldTimerRef.current);
+      touchHoldTimerRef.current = setTimeout(() => {
+        touchRecordingStartedRef.current = true;
+        startRecorderHold(recorderMode);
+      }, MOBILE_RECORDER_LONG_PRESS_MS);
+      return;
+    }
+    startRecorderHold(recorderMode);
+  }, [isAttachmentBusy, recorderMode, startRecorderHold]);
+
+  const handleRecorderPointerUp = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType === "touch") {
+      if (touchHoldTimerRef.current) clearTimeout(touchHoldTimerRef.current);
+      touchHoldTimerRef.current = null;
+      if (touchRecordingStartedRef.current) {
+        touchRecordingStartedRef.current = false;
+        stopRecorderHold();
+        return;
+      }
+      toggleRecorderMode();
+      return;
+    }
+    stopRecorderHold();
+  }, [stopRecorderHold, toggleRecorderMode]);
+
+  const handleRecorderPointerCancel = useCallback(() => {
+    if (touchHoldTimerRef.current) clearTimeout(touchHoldTimerRef.current);
+    touchHoldTimerRef.current = null;
+    touchRecordingStartedRef.current = false;
+    stopRecorderHold();
+  }, [stopRecorderHold]);
 
   const handleLocation = useCallback(() => {
     setShowAttach(false);
@@ -296,10 +481,9 @@ export function MessageInput({
       setShowEmoji(false);
     } },
     { icon: "video",   label: "Записать видео",   tone: "var(--kub-pink)",   action: () => {
-      if (hasStagedVideoMessage) {
-        showAppAlert("Удалите текущее видео-сообщение или используйте «Перезаписать».", "Видео-сообщение");
-        return;
-      }
+      setVideoRecorderVariant("regular");
+      setVideoAutoStart(false);
+      setVideoAutoAddOnStop(false);
       setShowVideoMessage(true);
       setShowAttach(false);
       setShowEmoji(false);
@@ -335,10 +519,22 @@ export function MessageInput({
       />
       <VideoMessageRecorderModal
         open={showVideoMessage}
-        onClose={() => setShowVideoMessage(false)}
-        onAddVideo={async (blob, durationMs, mimeType) => {
-          await onSendVideoMessage?.(blob, durationMs, mimeType);
+        variant={videoRecorderVariant}
+        autoStart={videoAutoStart}
+        autoAddOnStop={videoAutoAddOnStop}
+        stopSignal={videoStopSignal}
+        onClose={() => {
           setShowVideoMessage(false);
+          resetVideoRecorderFlags();
+        }}
+        onAddVideo={async (blob, durationMs, mimeType) => {
+          if (videoRecorderVariant === "regular") {
+            stageRecordedVideo(blob, mimeType);
+          } else {
+            await onSendVideoMessage?.(blob, durationMs, mimeType);
+          }
+          setShowVideoMessage(false);
+          resetVideoRecorderFlags();
         }}
       />
 
@@ -415,12 +611,35 @@ export function MessageInput({
             onRerecord={(attachmentId) => {
               const target = attachments.find((attachment) => attachment.id === attachmentId);
               onRemoveAttachment?.(attachmentId);
-              if (target?.kind === "video_message") setShowVideoMessage(true);
-              else setShowVoice(true);
+              if (target?.kind === "video_message") {
+                setVideoRecorderVariant("round");
+                setVideoAutoStart(false);
+                setVideoAutoAddOnStop(false);
+                setShowVideoMessage(true);
+              } else {
+                setShowVoice(true);
+              }
               setShowAttach(false);
               setShowEmoji(false);
             }}
           />
+        )}
+
+        {(modeFeedback || voiceHoldActive) && (
+          <div
+            data-testid={voiceHoldActive ? "composer-hold-voice-recorder" : "recorder-mode-feedback"}
+            className="mb-2 flex items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs text-[color:var(--kub-muted)]"
+          >
+            <span className={cn("h-2 w-2 rounded-full", voiceHoldActive ? "animate-pulse bg-[var(--kub-danger)]" : "bg-[var(--kub-cyan)]")} />
+            <span className="font-medium text-[color:var(--kub-text)]">
+              {voiceHoldActive ? "Запись голосового" : modeFeedback}
+            </span>
+            {voiceHoldActive && (
+              <span className="ml-auto tabular-nums text-[color:var(--kub-cyan)]">
+                {formatRecorderDuration(voiceHold.durationMs)}
+              </span>
+            )}
+          </div>
         )}
 
         <div className="flex items-end gap-1 rounded-2xl px-2 py-1 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
@@ -462,27 +681,48 @@ export function MessageInput({
             <KubIcon name="smile" size={20} />
           </button>
 
-          <button
-            onClick={(hasText || hasAttachments) ? handleSend : () => { setShowVoice(true); setShowEmoji(false); setShowAttach(false); }}
-            disabled={isAttachmentBusy}
-            className={cn(
-              "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all",
-              isAttachmentBusy
-                ? "text-[color:var(--kub-muted)] opacity-60 cursor-not-allowed"
-                : (hasText || hasAttachments)
-                ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan hover:brightness-110"
-                : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-3)]"
-            )}
-            aria-label={(hasText || hasAttachments) ? "Отправить" : "Записать голосовое"}
-          >
-            {isAttachmentBusy ? (
-              <KubIcon name="spinner" size={18} className="animate-spin" />
-            ) : (hasText || hasAttachments) ? (
-              <KubIcon name="send" size={18} className="ml-0.5" />
-            ) : (
-              <KubIcon name="microphone" size={20} />
-            )}
-          </button>
+          {hasText || hasAttachments ? (
+            <button
+              onClick={handleSend}
+              disabled={isAttachmentBusy}
+              className={cn(
+                "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all",
+                isAttachmentBusy
+                  ? "text-[color:var(--kub-muted)] opacity-60 cursor-not-allowed"
+                  : "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan hover:brightness-110"
+              )}
+              aria-label="Отправить"
+            >
+              {isAttachmentBusy ? (
+                <KubIcon name="spinner" size={18} className="animate-spin" />
+              ) : (
+                <KubIcon name="send" size={18} className="ml-0.5" />
+              )}
+            </button>
+          ) : (
+            <button
+              type="button"
+              data-testid="composer-recorder-button"
+              data-recorder-mode={recorderMode}
+              onContextMenu={handleRecorderContextMenu}
+              onPointerDown={handleRecorderPointerDown}
+              onPointerUp={handleRecorderPointerUp}
+              onPointerCancel={handleRecorderPointerCancel}
+              disabled={isAttachmentBusy}
+              className={cn(
+                "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all select-none touch-none",
+                isAttachmentBusy
+                  ? "text-[color:var(--kub-muted)] opacity-60 cursor-not-allowed"
+                  : recorderMode === "video"
+                  ? "bg-[color-mix(in_srgb,var(--kub-pink)_18%,transparent)] text-[color:var(--kub-pink)] hover:bg-[color-mix(in_srgb,var(--kub-pink)_26%,transparent)]"
+                  : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-3)]"
+              )}
+              aria-label={recorderMode === "video" ? "Видеосообщение" : "Голосовое"}
+              title={recorderMode === "video" ? "Видеосообщение" : "Голосовое"}
+            >
+              <KubIcon name={recorderMode === "video" ? "video" : "microphone"} size={20} />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -610,6 +850,7 @@ function AttachmentThumb({ attachment }: { attachment: StagedAttachment }) {
     return (
       <video
         src={attachment.previewUrl}
+        data-testid="staged-regular-video-preview"
         className="h-12 w-12 shrink-0 rounded-lg object-cover"
         muted
         playsInline
