@@ -17,7 +17,9 @@ Supported accounts:
 - `client`
 
 Set `KUB_QA_TEST_LOCATION_ID` to verify role-specific `has_location_permission` checks for
-location staff/admin fixtures.
+location staff/admin fixtures. `KUB_QA_TEST_LOCATION_NAME` is also supported for local QA; it is
+resolved to an id through normal authenticated API access. For compatibility, a non-UUID value in
+`KUB_QA_TEST_LOCATION_ID` is treated as an exact location name.
 
 Use `RLS_SMOKE_STRICT=1` only when the target migrations are expected to be applied and missing
 RPCs or role expectation mismatches should fail the run.

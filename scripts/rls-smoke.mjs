@@ -18,7 +18,9 @@ const supabaseKey =
   readEnv("VITE_SUPABASE_PUBLISHABLE_KEY") ||
   readEnv("SUPABASE_ANON_KEY") ||
   readEnv("VITE_SUPABASE_ANON_KEY");
-const testLocationId = readEnv("KUB_QA_TEST_LOCATION_ID");
+const testLocationConfig =
+  readEnv("KUB_QA_TEST_LOCATION_ID") || readEnv("KUB_QA_TEST_LOCATION_NAME");
+let testLocationId = testLocationConfig && isUuid(testLocationConfig) ? testLocationConfig : null;
 
 if (!supabaseUrl || !supabaseKey) {
   console.log("RLS smoke skipped: Supabase URL/key are not configured.");
@@ -29,6 +31,15 @@ const accounts = collectAccounts();
 if (accounts.length === 0) {
   console.log("RLS smoke skipped: QA credentials are not configured.");
   process.exit(0);
+}
+
+if (testLocationConfig && !testLocationId) {
+  testLocationId = await resolveLocationIdByName(accounts, testLocationConfig);
+  if (testLocationId) {
+    console.log("RLS smoke: resolved configured test location name to an id.");
+  } else {
+    console.log("RLS smoke: configured test location name was not visible to configured QA users.");
+  }
 }
 
 if (!allowMutations) {
@@ -198,6 +209,29 @@ async function restProbe(role, session, probe, pathAndQuery) {
   };
 }
 
+async function resolveLocationIdByName(accounts, locationName) {
+  const query = new URLSearchParams({
+    select: "id,name",
+    name: `eq.${locationName}`,
+    limit: "1",
+  });
+
+  for (const account of accounts) {
+    const session = await signIn(account);
+    const response = await fetch(`${supabaseUrl}/rest/v1/locations?${query.toString()}`, {
+      method: "GET",
+      headers: authHeaders(session.access_token),
+    });
+    if (!response.ok) continue;
+
+    const parsed = parseJson(await response.text());
+    const locationId = Array.isArray(parsed) ? parsed[0]?.id : null;
+    if (isUuid(locationId)) return locationId;
+  }
+
+  return null;
+}
+
 function checkRoleExpectations(role, results) {
   const failures = [];
   const byProbe = new Map(results.map((result) => [result.probe, result]));
@@ -266,6 +300,13 @@ function readCredentials(role) {
 
 function readEnv(key) {
   return process.env[key] || env[key];
+}
+
+function isUuid(value) {
+  return (
+    typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  );
 }
 
 function loadEnvFile(filePath) {

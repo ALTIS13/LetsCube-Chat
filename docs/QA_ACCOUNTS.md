@@ -33,6 +33,7 @@ KUB_QA_CLIENT_PASSWORD=<local password only>
 
 KUB_QA_BASE_URL=http://127.0.0.1:5173
 KUB_QA_TEST_LOCATION_ID=00000000-0000-0000-0000-000000000000
+KUB_QA_TEST_LOCATION_NAME=<exact local QA location name>
 KUB_QA_TEST_GROUP_ID=00000000-0000-0000-0000-000000000000
 KUB_QA_TEST_CHAT_ID=00000000-0000-0000-0000-000000000000
 ```
@@ -51,7 +52,10 @@ create/update QA data. Current RLS smoke probes use fake IDs by default and do n
 
 For `location_staff` and `location_admin`, assign both accounts to the same stable test location.
 Set `KUB_QA_TEST_LOCATION_ID` to that location id so RLS smoke can verify
-`has_location_permission(..., 'tasks.view')`.
+`has_location_permission(..., 'tasks.view')`. If the id is inconvenient to copy locally, set
+`KUB_QA_TEST_LOCATION_NAME` to an exact location name instead. The smoke script resolves the name
+through normal authenticated API access. For compatibility, a non-UUID value in
+`KUB_QA_TEST_LOCATION_ID` is also treated as an exact location name.
 
 ## Auth States
 
