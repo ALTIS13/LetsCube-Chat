@@ -11,6 +11,7 @@ import { useAppStore } from "@/store/app.store";
 import { FormattedText, isLocationPreviewMessage } from "@/lib/formatText";
 import { KubIcon, type KubIconName } from "@/components/kub";
 import type { MediaViewerItem } from "./MediaViewer";
+import { useChatMediaPlayback, VideoCircleProgressRing, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 import { requestAppConfirm } from "@/lib/appDialogs";
 import type { MessageDeliveryState } from "@/lib/messageDelivery";
 import {
@@ -1126,7 +1127,12 @@ export function MessageBubble({
             })()}
 
             {isVoiceMessage(message) ? (
-              <AudioMessage url={message.media_url} duration={parseAudioDuration(message.content)} isMe={isMe} />
+              <AudioMessage
+                url={message.media_url}
+                duration={parseAudioDuration(message.content)}
+                isMe={isMe}
+                playbackItem={createPlaybackItemFromMessage(message, isMe)}
+              />
             ) : message.type === "image" && message.media_url ? (
               <MediaWithCaption caption={mediaCaption}>
                 <MediaImage
@@ -1141,6 +1147,7 @@ export function MessageBubble({
                   url={message.media_url}
                   title={message.content ?? "Видео-сообщение"}
                   durationLabel={parseVideoMessageDuration(message.content, message)}
+                  playbackItem={createPlaybackItemFromMessage(message, isMe)}
                   onOpen={() => onOpenMedia?.({ type: "video", url: message.media_url!, title: message.content ?? "Видео-сообщение" })}
                 />
               ) : (
@@ -1148,6 +1155,7 @@ export function MessageBubble({
                   <MediaVideo
                     url={message.media_url}
                     title={message.content ?? "Видео"}
+                    playbackItem={createPlaybackItemFromMessage(message, isMe)}
                     onOpen={() => onOpenMedia?.({ type: "video", url: message.media_url!, title: message.content ?? "Видео" })}
                   />
                 </MediaWithCaption>
@@ -1322,8 +1330,20 @@ function MediaWithCaption({ children, caption }: { children: ReactNode; caption:
   );
 }
 
-function MediaVideo({ url, title, onOpen }: { url: string; title: string; onOpen: () => void }) {
+function MediaVideo({
+  url,
+  title,
+  playbackItem,
+  onOpen,
+}: {
+  url: string;
+  title: string;
+  playbackItem: ChatMediaPlaybackItem | null;
+  onOpen: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const [failed, setFailed] = useState(false);
+  const mediaPlayback = useChatMediaPlayback();
 
   if (failed) {
     return (
@@ -1340,11 +1360,15 @@ function MediaVideo({ url, title, onOpen }: { url: string; title: string; onOpen
   return (
     <div className="relative w-[min(360px,calc(100vw-7.5rem))] max-w-full overflow-hidden rounded-xl bg-black sm:w-[min(420px,70vw)]">
       <video
+        ref={videoRef}
         src={url}
         preload="metadata"
         controls
         playsInline
         className="block aspect-video w-full max-h-[320px] bg-black object-contain"
+        onPlay={(event) => {
+          if (playbackItem) mediaPlayback.activate(playbackItem, event.currentTarget);
+        }}
         onError={() => setFailed(true)}
       />
       <button
@@ -1364,42 +1388,65 @@ function RoundVideoMessage({
   url,
   title,
   durationLabel,
+  playbackItem,
   onOpen,
 }: {
   url: string;
   title: string;
   durationLabel: string | null;
+  playbackItem: ChatMediaPlaybackItem | null;
   onOpen: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [failed, setFailed] = useState(false);
+  const mediaPlayback = useChatMediaPlayback();
+  const activateMediaPlayback = mediaPlayback.activate;
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const onPlay = () => setPlaying(true);
+    const sync = () => {
+      const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : getMediaMetadataNumberFromItem(playbackItem) / 1000;
+      setProgress(duration > 0 ? Math.min(1, Math.max(0, video.currentTime / duration)) : 0);
+    };
+    const onPlay = () => {
+      setPlaying(true);
+      if (playbackItem) activateMediaPlayback(playbackItem, video);
+      sync();
+    };
     const onPause = () => setPlaying(false);
-    const onEnded = () => setPlaying(false);
+    const onEnded = () => {
+      setPlaying(false);
+      setProgress(0);
+    };
+    video.addEventListener("timeupdate", sync);
+    video.addEventListener("loadedmetadata", sync);
     video.addEventListener("play", onPlay);
     video.addEventListener("pause", onPause);
     video.addEventListener("ended", onEnded);
     return () => {
+      video.removeEventListener("timeupdate", sync);
+      video.removeEventListener("loadedmetadata", sync);
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
       video.removeEventListener("ended", onEnded);
     };
-  }, [url]);
+  }, [activateMediaPlayback, playbackItem, url]);
 
   const togglePlayback = () => {
     const video = videoRef.current;
     if (!video || failed) return;
-    if (video.paused) {
-      void video.play().catch(() => setPlaying(false));
+    if (playbackItem) {
+      mediaPlayback.toggle(playbackItem, video);
       return;
     }
-    video.pause();
+    if (video.paused) void video.play().catch(() => setPlaying(false));
+    else video.pause();
   };
+  const activeProgress = playbackItem && mediaPlayback.isCurrent(playbackItem.id) ? mediaPlayback.progress : progress;
+  const isActivePlaying = playbackItem && mediaPlayback.isCurrent(playbackItem.id) ? mediaPlayback.isPlaying : playing;
 
   if (failed) {
     return (
@@ -1419,8 +1466,9 @@ function RoundVideoMessage({
         type="button"
         onClick={togglePlayback}
         className="group relative block h-44 w-44 overflow-hidden rounded-full bg-black shadow-lg focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)] sm:h-48 sm:w-48"
-        aria-label={playing ? "Пауза видео-сообщения" : "Воспроизвести видео-сообщение"}
+        aria-label={isActivePlaying ? "Пауза видео-сообщения" : "Воспроизвести видео-сообщение"}
       >
+        <VideoCircleProgressRing progress={activeProgress} testId="video-message-progress-ring" />
         <video
           ref={videoRef}
           src={url}
@@ -1429,7 +1477,7 @@ function RoundVideoMessage({
           className="h-full w-full object-cover"
           onError={() => setFailed(true)}
         />
-        {!playing && (
+        {!isActivePlaying && (
           <span className="absolute inset-0 flex items-center justify-center bg-black/20 text-white transition-colors group-hover:bg-black/30">
             <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/55 backdrop-blur">
               <KubIcon name="play" size={22} />
@@ -1467,6 +1515,47 @@ function parseVideoMessageDuration(content: string | null | undefined, message?:
   const durationMs = getMediaMetadataNumber(message, "duration_ms");
   if (durationMs && durationMs > 0) return formatMetadataDuration(durationMs);
   return content?.match(/(\d{1,2}:\d{2})/)?.[1] ?? null;
+}
+
+function createPlaybackItemFromMessage(message: MessageWithSender, isMe: boolean): ChatMediaPlaybackItem | null {
+  if (!message.media_url || message.deleted_at) return null;
+  if (message.type !== "audio" && message.type !== "video") return null;
+  const kind: ChatMediaPlaybackItem["kind"] = message.type === "video"
+    ? isRoundVideoMessage(message)
+      ? "video_message"
+      : "video"
+    : isVoiceMessage(message)
+      ? "voice"
+      : "audio";
+  const durationMs = getMediaMetadataNumber(message, "duration_ms") ?? durationStringToMs(message.content);
+  return {
+    id: message.id,
+    chatId: message.chat_id,
+    kind,
+    url: message.media_url,
+    title: kind === "video_message"
+      ? "Видеосообщение"
+      : kind === "voice"
+        ? "Голосовое сообщение"
+        : kind === "audio"
+          ? "Аудио"
+          : "Видео",
+    subtitle: isMe ? "Вы" : message.sender?.full_name ?? message.sender?.username ?? "Участник",
+    durationMs,
+  };
+}
+
+function durationStringToMs(content: string | null | undefined): number | null {
+  const match = content?.match(/(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const minutes = Number(match[1]);
+  const seconds = Number(match[2]);
+  if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) return null;
+  return (minutes * 60 + seconds) * 1000;
+}
+
+function getMediaMetadataNumberFromItem(item: ChatMediaPlaybackItem | null): number {
+  return item?.durationMs && item.durationMs > 0 ? item.durationMs : 0;
 }
 
 function isRoundVideoMessage(message: MessageWithSender): boolean {

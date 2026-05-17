@@ -4,14 +4,16 @@ import { type ChangeEvent, type PointerEvent, useCallback, useEffect, useMemo, u
 import { KubIcon } from "@/components/kub";
 import { clampAudioElementVolume, useAudioSettings } from "@/hooks/useAudioSettings";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
+import { useChatMediaPlayback, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 
 interface AudioMessageProps {
   url?: string | null;
   duration?: number;
   isMe: boolean;
+  playbackItem?: ChatMediaPlaybackItem | null;
 }
 
-export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
+export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMessageProps) {
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [durationSeconds, setDurationSeconds] = useState(0);
@@ -23,6 +25,7 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
   const rafRef = useRef<number | null>(null);
   const durationPrimingRef = useRef(false);
   const { settings } = useAudioSettings();
+  const mediaPlayback = useChatMediaPlayback();
 
   const stopProgressLoop = useCallback(() => {
     if (rafRef.current !== null) {
@@ -158,6 +161,10 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
         audio.currentTime = 0;
         setCurrentTime(0);
       }
+      if (playbackItem) {
+        mediaPlayback.play(playbackItem, audio);
+        return;
+      }
       void audio.play().then(() => setPlaying(true)).catch((err) => {
         console.error("[voice] playback failed:", err);
         setPlaying(false);
@@ -167,6 +174,7 @@ export function AudioMessage({ url, duration = 0, isMe }: AudioMessageProps) {
 
   const handlePlay = () => {
     setPlaying(true);
+    if (playbackItem && audioRef.current) mediaPlayback.activate(playbackItem, audioRef.current);
     startProgressLoop();
   };
 

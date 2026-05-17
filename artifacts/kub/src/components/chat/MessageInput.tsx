@@ -5,6 +5,7 @@ import {
   useRef,
   useCallback,
   useEffect,
+  useMemo,
   KeyboardEvent,
   ClipboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -15,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { CameraCaptureModal } from "./CameraCaptureModal";
 import { VideoMessageRecorderModal } from "./VideoMessageRecorderModal";
+import { useChatMediaPlayback, VideoCircleProgressRing, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 import { useAppStore } from "@/store/app.store";
 import { useMuteState } from "@/hooks/useMuteState";
 import { KubIcon, type KubIconName } from "@/components/kub";
@@ -700,6 +702,7 @@ export function MessageInput({
 
         {attachments.length > 0 && (
           <AttachmentTray
+            chatId={chatId}
             attachments={attachments}
             onRemove={onRemoveAttachment}
             onRetry={onRetryAttachment}
@@ -867,12 +870,14 @@ export function MessageInput({
 }
 
 function AttachmentTray({
+  chatId,
   attachments,
   onRemove,
   onRetry,
   onCancel,
   onRerecord,
 }: {
+  chatId: string;
   attachments: StagedAttachment[];
   onRemove?: (attachmentId: string) => void;
   onRetry?: (attachmentId: string) => void;
@@ -893,13 +898,13 @@ function AttachmentTray({
               data-testid="staged-attachment-item"
               className={cn(
                 "relative flex min-w-[210px] shrink-0 items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-2",
-                isVoice ? "max-w-[320px]" : "max-w-[260px]"
+                isVideoMessage ? "min-w-[300px] max-w-[min(340px,calc(100vw-2rem))]" : isVoice ? "max-w-[320px]" : "max-w-[260px]"
               )}
             >
               {isVoice ? (
                 <VoiceAttachmentPreview attachment={attachment} busy={busy} failed={failed} />
               ) : isVideoMessage ? (
-                <VideoMessageAttachmentPreview attachment={attachment} busy={busy} failed={failed} />
+                <VideoMessageAttachmentPreview chatId={chatId} attachment={attachment} busy={busy} failed={failed} />
               ) : (
                 <>
                   <AttachmentThumb attachment={attachment} />
@@ -1003,82 +1008,128 @@ function AttachmentThumb({ attachment }: { attachment: StagedAttachment }) {
 }
 
 function VideoMessageAttachmentPreview({
+  chatId,
   attachment,
   busy,
   failed,
 }: {
+  chatId: string;
   attachment: StagedAttachment;
   busy: boolean;
   failed: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const mediaPlayback = useChatMediaPlayback();
+  const mediaPlaybackRef = useRef(mediaPlayback);
+  const durationMs = attachment.durationMs ?? 0;
+  const playbackItem = useMemo<ChatMediaPlaybackItem | null>(() => {
+    if (!attachment.previewUrl) return null;
+    return {
+      id: attachment.id,
+      chatId,
+      kind: "video_message",
+      url: attachment.previewUrl,
+      title: "Видеосообщение",
+      subtitle: "Предпросмотр перед отправкой",
+      durationMs,
+      isStaged: true,
+    };
+  }, [attachment.id, attachment.previewUrl, chatId, durationMs]);
+
+  useEffect(() => {
+    mediaPlaybackRef.current = mediaPlayback;
+  }, [mediaPlayback]);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     const onPause = () => setPlaying(false);
-    const onPlay = () => setPlaying(true);
+    const sync = () => {
+      const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : durationMs / 1000;
+      setProgress(duration > 0 ? Math.min(1, Math.max(0, video.currentTime / duration)) : 0);
+    };
+    const onPlay = () => {
+      setPlaying(true);
+      if (playbackItem) mediaPlaybackRef.current.activate(playbackItem, video);
+      sync();
+    };
     const finish = () => {
       setPlaying(false);
       video.currentTime = 0;
+      setProgress(0);
     };
+    video.addEventListener("timeupdate", sync);
+    video.addEventListener("loadedmetadata", sync);
     video.addEventListener("pause", onPause);
     video.addEventListener("play", onPlay);
     video.addEventListener("ended", finish);
     return () => {
       video.pause();
+      mediaPlaybackRef.current.closeIfCurrent(attachment.id);
+      video.removeEventListener("timeupdate", sync);
+      video.removeEventListener("loadedmetadata", sync);
       video.removeEventListener("pause", onPause);
       video.removeEventListener("play", onPlay);
       video.removeEventListener("ended", finish);
     };
-  }, [attachment.previewUrl]);
+  }, [attachment.id, attachment.previewUrl, durationMs, playbackItem]);
 
   const toggle = () => {
     const video = videoRef.current;
-    if (!video || !attachment.previewUrl) return;
-    if (playing) {
-      video.pause();
-      return;
-    }
-    void video.play().catch(() => setPlaying(false));
+    if (!video || !playbackItem) return;
+    if (!playing) setPlaying(true);
+    mediaPlayback.toggle(playbackItem, video);
   };
+  const activePlaying = mediaPlayback.isCurrent(attachment.id) ? mediaPlayback.isPlaying : playing;
 
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-2">
+    <div className="flex min-w-0 flex-1 items-center gap-3">
       <button
         type="button"
         data-testid="staged-video-message-playback-toggle"
         onClick={toggle}
         disabled={!attachment.previewUrl || busy}
-        className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-black focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)] disabled:cursor-not-allowed disabled:opacity-70"
-        aria-label={playing ? "Пауза предпросмотра" : "Просмотреть видеосообщение"}
+        className="relative h-24 w-24 shrink-0 overflow-visible rounded-full bg-black focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)] disabled:cursor-not-allowed disabled:opacity-70"
+        aria-label={activePlaying ? "Пауза предпросмотра" : "Просмотреть видеосообщение"}
       >
-        <span data-testid="staged-video-message-preview" className="absolute inset-0">
-        {attachment.previewUrl ? (
-          <video
-            ref={videoRef}
-            src={attachment.previewUrl}
-            className="h-full w-full object-cover"
-            playsInline
-            preload="metadata"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-white">
-            <KubIcon name="video" size={18} />
-          </div>
-        )}
+        <VideoCircleProgressRing progress={mediaPlayback.isCurrent(attachment.id) ? mediaPlayback.progress : progress} testId="staged-video-message-progress-ring" />
+        <span data-testid="staged-video-message-large-preview" className="absolute inset-0 overflow-hidden rounded-full">
+          <span data-testid="staged-video-message-preview" className="absolute inset-0">
+            {attachment.previewUrl ? (
+              <video
+                ref={videoRef}
+                src={attachment.previewUrl}
+                className="h-full w-full object-cover"
+                playsInline
+                preload="metadata"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-white">
+                <KubIcon name="video" size={18} />
+              </div>
+            )}
+          </span>
         </span>
-        <span className="absolute inset-0 flex items-center justify-center bg-black/20 text-white">
-          <KubIcon name={playing ? "pause" : "play"} size={14} />
+        <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/20 text-white">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/55 backdrop-blur">
+            <KubIcon name={activePlaying ? "pause" : "play"} size={18} />
+          </span>
+        </span>
+        <span className="absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-black/65 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-white backdrop-blur">
+          {formatDurationLabel(durationMs)}
         </span>
       </button>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate text-xs font-medium text-[color:var(--kub-text)]">Видео-сообщение</span>
           <span className="shrink-0 text-[11px] tabular-nums text-[color:var(--kub-muted)]">
-            {formatDurationLabel(attachment.durationMs ?? 0)}
+            {formatDurationLabel(durationMs)}
           </span>
+        </div>
+        <div className="mt-1 text-[11px] leading-snug text-[color:var(--kub-muted)]">
+          Нажмите на круг, чтобы просмотреть перед отправкой.
         </div>
         <div className={cn("mt-1 truncate text-[11px] text-[color:var(--kub-muted)]", failed && "text-[color:var(--kub-danger)]")}>
           {attachment.error ?? attachmentStatusLabel(attachment.status)}

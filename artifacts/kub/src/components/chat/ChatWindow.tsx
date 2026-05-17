@@ -9,6 +9,7 @@ import { ChatSearchBar } from "./ChatSearchBar";
 import { ChatInfoPanel } from "./ChatInfoPanel";
 import { ForwardModal } from "./ForwardModal";
 import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
+import { ChatMediaPlaybackBar, ChatMediaPlaybackProvider, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 import { TopicStrip } from "./TopicStrip";
 import { useTopics } from "@/hooks/useTopics";
 import { useMessages } from "@/hooks/useMessages";
@@ -550,20 +551,27 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   }, [stageFiles]);
 
   const messageListBottomInset = 0;
+  const mediaPlaylist = useMemo(
+    () => messages
+      .map((message) => createMediaPlaybackItem(message, chatId, userId))
+      .filter((item): item is ChatMediaPlaybackItem => Boolean(item)),
+    [chatId, messages, userId],
+  );
 
   return (
-    <div
-      className="relative flex h-full w-full min-w-0 overflow-hidden bg-[var(--kub-chat-bg)]"
-      style={{
-        "--kub-keyboard-inset": `${keyboardInset}px`,
-        "--kub-composer-height": `${composerHeight}px`,
-        "--kub-message-list-bottom-inset": `${messageListBottomInset}px`,
-      } as CSSProperties}
-      onDragEnter={handleDragEnter}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
+    <ChatMediaPlaybackProvider chatId={chatId} playlist={mediaPlaylist}>
+      <div
+        className="relative flex h-full w-full min-w-0 overflow-hidden bg-[var(--kub-chat-bg)]"
+        style={{
+          "--kub-keyboard-inset": `${keyboardInset}px`,
+          "--kub-composer-height": `${composerHeight}px`,
+          "--kub-message-list-bottom-inset": `${messageListBottomInset}px`,
+        } as CSSProperties}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
       {draggingFiles && (
         <div className="pointer-events-none absolute inset-3 z-50 flex items-center justify-center rounded-3xl border-2 border-dashed border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-bg)_76%,var(--kub-cyan)_10%)] shadow-2xl">
           <div className="flex flex-col items-center gap-2 rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-5 py-4 text-center">
@@ -581,6 +589,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           onInfoOpen={() => setShowInfo(true)}
           onClearForMe={clearChatForMe}
         />
+        <ChatMediaPlaybackBar />
 
         {isForum && (
           <TopicStrip
@@ -697,8 +706,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           }}
         />
       )}
-      <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
-    </div>
+        <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
+      </div>
+    </ChatMediaPlaybackProvider>
   );
 }
 
@@ -745,4 +755,71 @@ function formatVoiceDurationLabel(durationMs: number): string {
   const minutes = Math.floor(totalSec / 60).toString().padStart(2, "0");
   const seconds = (totalSec % 60).toString().padStart(2, "0");
   return `${minutes}:${seconds}`;
+}
+
+function createMediaPlaybackItem(message: MessageWithSender, chatId: string, currentUserId: string | null): ChatMediaPlaybackItem | null {
+  if (!message.media_url || message.deleted_at) return null;
+  if (message.type !== "audio" && message.type !== "video") return null;
+  const kind: ChatMediaPlaybackItem["kind"] = message.type === "video"
+    ? isRoundVideoMessageContent(message)
+      ? "video_message"
+      : "video"
+    : isVoiceMessageContent(message)
+      ? "voice"
+      : "audio";
+  const senderName = message.user_id === currentUserId
+    ? "Вы"
+    : message.sender?.full_name ?? message.sender?.username ?? "Участник";
+  return {
+    id: message.id,
+    chatId,
+    kind,
+    url: message.media_url,
+    title: kind === "video_message"
+      ? "Видеосообщение"
+      : kind === "voice"
+        ? "Голосовое сообщение"
+        : kind === "audio"
+          ? "Аудио"
+          : "Видео",
+    subtitle: senderName,
+    durationMs: getMessageMediaMetadataNumber(message, "duration_ms") ?? parseMessageDurationMs(message.content),
+  };
+}
+
+function isRoundVideoMessageContent(message: MessageWithSender): boolean {
+  return (
+    getMessageMediaMetadataString(message, "kind") === "video_message" ||
+    getMessageMediaMetadataString(message, "shape") === "round" ||
+    /^Видео-сообщение(?:\s|\(|$)/i.test(message.content?.trim() ?? "")
+  );
+}
+
+function isVoiceMessageContent(message: MessageWithSender): boolean {
+  const mediaUrl = message.media_url?.toLowerCase() ?? "";
+  const content = message.content?.toLowerCase() ?? "";
+  return /\.(webm|ogg|oga|mp3|wav|m4a|aac)(\?|#|$)/.test(mediaUrl) || content.includes("голосовое") || content.includes("voice");
+}
+
+function getMessageMediaMetadataString(message: MessageWithSender, key: string): string | null {
+  const metadata = message.media_metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : null;
+}
+
+function getMessageMediaMetadataNumber(message: MessageWithSender, key: string): number | null {
+  const metadata = message.media_metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const value = (metadata as Record<string, unknown>)[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function parseMessageDurationMs(content: string | null | undefined): number | null {
+  const match = content?.match(/(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const minutes = Number(match[1]);
+  const seconds = Number(match[2]);
+  if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) return null;
+  return (minutes * 60 + seconds) * 1000;
 }
