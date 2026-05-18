@@ -7,6 +7,7 @@ import { useAppStore } from "@/store/app.store";
 import { createClient } from "@/lib/supabase/client";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useTheme } from "@/hooks/useTheme";
+import { usePwaInstall } from "@/hooks/usePwa";
 import { usePush } from "@/hooks/usePush";
 import { useIsManagerOrAdmin } from "@/hooks/useRole";
 import { KubButton, KubIcon, KubModal, type KubIconName } from "@/components/kub";
@@ -33,6 +34,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const { currentUser, setCurrentUser } = useAppStore();
   const supabase = createClient();
   const { theme, resolvedTheme, setTheme } = useTheme();
+  const { canInstall, installed, promptInstall } = usePwaInstall();
   const { status: pushStatus, enable: enablePush, disable: disablePush } = usePush();
   const isStaff = useIsManagerOrAdmin();
   const [, setLocation] = useLocation();
@@ -285,6 +287,32 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 );
               })}
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-4 py-4 border-t border-[color:var(--kub-border-color)]">
+        <SectionLabel>Приложение</SectionLabel>
+        <div className="rounded-xl overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
+          <div className="flex items-center gap-3 px-4 py-3">
+            <KubIcon name="cloud" size={16} className="text-[color:var(--kub-cyan)]" />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm text-[color:var(--kub-text)]">
+                {installed ? "KUB установлен" : "Установить KUB"}
+              </div>
+              <div className="text-xs text-[color:var(--kub-muted)]">
+                {canInstall
+                  ? "Откройте KUB как отдельное приложение без вкладки браузера."
+                  : installed
+                    ? "Приложение уже открывается в standalone-режиме."
+                    : "Если кнопка недоступна, установите приложение через меню браузера."}
+              </div>
+            </div>
+            {canInstall && (
+              <KubButton size="sm" onClick={() => void promptInstall()}>
+                Установить
+              </KubButton>
+            )}
           </div>
         </div>
       </div>

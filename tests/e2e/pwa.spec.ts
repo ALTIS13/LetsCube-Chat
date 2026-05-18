@@ -1,0 +1,98 @@
+import { expect, test } from "@playwright/test";
+import { gotoOrSkip } from "./helpers/auth";
+
+test.describe("KUB PWA baseline", () => {
+  test("exposes installable manifest, safe service worker and offline banner", async ({
+    page,
+    context,
+  }) => {
+    const consoleErrors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") consoleErrors.push(message.text());
+    });
+    page.on("pageerror", (error) => {
+      consoleErrors.push(error.message);
+    });
+
+    await gotoOrSkip(page, "/");
+
+    const manifest = await page.evaluate(async () => {
+      const response = await fetch("/manifest.json", { cache: "no-store" });
+      return {
+        ok: response.ok,
+        contentType: response.headers.get("content-type") ?? "",
+        body: await response.json(),
+      };
+    });
+
+    expect(manifest.ok).toBe(true);
+    expect(manifest.contentType).toContain("json");
+    expect(manifest.body).toMatchObject({
+      name: "KUB Messenger",
+      short_name: "KUB",
+      start_url: "/",
+      scope: "/",
+      display: "standalone",
+      orientation: "any",
+    });
+    expect(manifest.body.icons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sizes: "192x192", type: "image/png" }),
+        expect.objectContaining({ sizes: "512x512", type: "image/png" }),
+        expect.objectContaining({ sizes: "512x512", purpose: expect.stringContaining("maskable") }),
+      ]),
+    );
+
+    for (const icon of manifest.body.icons as Array<{ src: string }>) {
+      const status = await page.evaluate(async (src) => {
+        const response = await fetch(src, { cache: "no-store" });
+        return response.status;
+      }, icon.src);
+      expect(status, `manifest icon should be fetchable: ${icon.src}`).toBe(200);
+    }
+
+    const swSource = await page.evaluate(async () => {
+      const response = await fetch("/sw.js", { cache: "no-store" });
+      return response.ok ? response.text() : "";
+    });
+    const beforeMessageHandler = swSource.split('self.addEventListener("message"')[0] ?? swSource;
+    expect(beforeMessageHandler).not.toMatch(/skipWaiting/);
+    expect(swSource).toContain("KUB_SKIP_WAITING");
+    expect(swSource).not.toMatch(/clients\.claim\(\)/);
+
+    await expect
+      .poll(
+        () =>
+          page.evaluate(async () => {
+            if (!("serviceWorker" in navigator)) return "unsupported";
+            const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+            return registration ? "registered" : "missing";
+          }),
+        { timeout: 10_000 },
+      )
+      .toBe("registered");
+
+    await context.setOffline(true);
+    await page.evaluate(() => window.dispatchEvent(new Event("offline")));
+    const banner = page.getByTestId("connection-status-banner");
+    await expect(banner).toBeVisible();
+    await expect(banner).toHaveAttribute("data-state", "offline");
+
+    await context.setOffline(false);
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect(banner).toHaveAttribute("data-state", "online");
+
+    for (const route of ["/tasks", "/admin"]) {
+      const directResponse = await page.goto(route, { waitUntil: "domcontentloaded" });
+      expect(directResponse?.status(), `direct route should serve app shell: ${route}`).toBeLessThan(400);
+      await expect(page.locator("body")).toBeVisible();
+    }
+
+    const unexpectedConsoleErrors = consoleErrors.filter(
+      (message) =>
+        !message.includes("Failed to load resource") &&
+        !message.includes("Missing Supabase environment variables"),
+    );
+    expect(unexpectedConsoleErrors, `Unexpected console errors:\n${unexpectedConsoleErrors.join("\n")}`).toEqual([]);
+  });
+});

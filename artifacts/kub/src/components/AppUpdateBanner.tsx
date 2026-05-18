@@ -1,4 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  KUB_SW_CONTROLLER_CHANGED_EVENT,
+  KUB_SW_UPDATE_READY_EVENT,
+  requestPwaServiceWorkerUpdate,
+} from "@/hooks/usePwa";
 
 const CHECK_INTERVAL_MS = 5 * 60_000;
 const SNOOZE_MS = 15 * 60_000;
@@ -6,10 +11,23 @@ const SNOOZE_MS = 15 * 60_000;
 export function AppUpdateBanner() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [snoozedUntil, setSnoozedUntil] = useState(0);
+  const [waitingRegistration, setWaitingRegistration] = useState<ServiceWorkerRegistration | null>(null);
+  const reloadAfterControllerChangeRef = useRef(false);
   const currentBundle = useMemo(() => getCurrentBundlePath(), []);
   const handleUserRequestedReload = useCallback(() => {
+    if (waitingRegistration?.waiting) {
+      reloadAfterControllerChangeRef.current = true;
+      requestPwaServiceWorkerUpdate(waitingRegistration);
+      window.setTimeout(() => {
+        if (reloadAfterControllerChangeRef.current) {
+          reloadAfterControllerChangeRef.current = false;
+          window.location.reload();
+        }
+      }, 1500);
+      return;
+    }
     window.location.reload();
-  }, []);
+  }, [waitingRegistration]);
 
   const checkForUpdate = useCallback(async () => {
     if (!currentBundle) return;
@@ -41,6 +59,27 @@ export function AppUpdateBanner() {
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [checkForUpdate]);
+
+  useEffect(() => {
+    const handleUpdateReady = (event: Event) => {
+      const registration = (event as CustomEvent<{ registration?: ServiceWorkerRegistration }>).detail
+        ?.registration;
+      if (registration) setWaitingRegistration(registration);
+      setUpdateAvailable(true);
+    };
+    const handleControllerChanged = () => {
+      if (!reloadAfterControllerChangeRef.current) return;
+      reloadAfterControllerChangeRef.current = false;
+      window.location.reload();
+    };
+
+    window.addEventListener(KUB_SW_UPDATE_READY_EVENT, handleUpdateReady);
+    window.addEventListener(KUB_SW_CONTROLLER_CHANGED_EVENT, handleControllerChanged);
+    return () => {
+      window.removeEventListener(KUB_SW_UPDATE_READY_EVENT, handleUpdateReady);
+      window.removeEventListener(KUB_SW_CONTROLLER_CHANGED_EVENT, handleControllerChanged);
+    };
+  }, []);
 
   const updateSnoozed = Date.now() < snoozedUntil;
   const showUpdate = updateAvailable && !updateSnoozed;

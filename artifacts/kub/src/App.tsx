@@ -12,6 +12,7 @@ import { usePushNotificationNavigation } from "@/hooks/usePush";
 import { createClient } from "@/lib/supabase/client";
 import { IframeAuthBanner } from "@/components/IframeAuthBanner";
 import { AppUpdateBanner } from "@/components/AppUpdateBanner";
+import { PwaRuntime } from "@/components/PwaRuntime";
 import { AppDialogs } from "@/components/AppDialogs";
 import { GlobalSearchPalette } from "@/components/search/GlobalSearchPalette";
 import { BannedScreen } from "@/components/BannedScreen";
@@ -341,6 +342,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <ThemeSync />
+        <PwaRuntime />
         <IframeAuthBanner />
         <AppUpdateBanner />
         <AppDialogs />

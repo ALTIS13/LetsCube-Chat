@@ -688,3 +688,14 @@ Recurring tasks roadmap note:
 - Added advisory `pnpm.cmd db:types:check`. Current drift: generated-only `messages.media_bucket/media_path`, generated-only app RPC types `global_search_v2` and `search_chat_messages`, and server-side-only `notifications_push_outbox`.
 - No UI code was changed. Deployed Playwright smoke ran on the standard five viewports and passed 5/5.
 - Validation completed: `git diff --check`, `node --check scripts/check-database-type-drift.mjs`, `pnpm.cmd db:types:check`, `pnpm.cmd --filter @workspace/kub run typecheck`, `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"`, deployed `KUB_BASE_URL=https://kub.apollot.ru pnpm.cmd e2e:smoke`, and `pnpm.cmd rls:smoke` with public deployed Supabase config passed. Build still emits existing Vite sourcemap/chunk-size warnings.
+
+## 2026-05-18 - PWA baseline and offline shell
+
+- Existing manifest/service worker were hardened for installability and authenticated-app safety. Manifest now uses `KUB Messenger`, `display: standalone`, `orientation: any`, `scope: /`, and 192/512/maskable icon entries.
+- Service worker now caches only the app shell, icons, manifest, offline shell and same-origin static assets. Supabase Auth/REST/Realtime/Storage requests, non-GET requests, cross-origin requests and authenticated API responses are not cached.
+- Service worker updates are surfaced through the existing app update banner. `skipWaiting` is sent only after explicit user click; `clients.claim()` is not used and focus/visibility does not force reload.
+- Added runtime offline/reconnect banner: offline shows `Нет подключения`, online recovery shows `Подключение восстановлено` and hides automatically.
+- Settings now expose a browser install action when `beforeinstallprompt` is available, with browser-menu fallback copy when the browser does not emit the prompt.
+- Added `docs/PWA_NATIVE_READINESS.md` with installability, caching, update, offline, native packaging and permission/deep-link notes.
+- Playwright PWA QA ran locally on 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915. It verified manifest fetch, icon fetches, service worker registration, no auto `skipWaiting`, no `clients.claim`, offline/reconnect banner state, and direct `/tasks`/`/admin` app-shell routes.
+- Validation completed: `git diff --check`, `pnpm.cmd --filter @workspace/kub run typecheck`, `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"`, `pnpm.cmd e2e:smoke`, `pnpm.cmd rls:smoke` with public Supabase config, `pnpm.cmd db:types:check`, and `pnpm.cmd exec playwright test tests/e2e/pwa.spec.ts` passed. Build still emits existing Vite sourcemap/chunk-size warnings.

@@ -10,7 +10,7 @@ Keep the existing single-account fallback when only one QA account is available:
 
 ```env
 KUB_QA_EMAIL=tech-admin@example.test
-KUB_QA_PASSWORD=<local password only>
+# single-account fallback password variable: keep the value local only
 ```
 
 For role-specific QA, add any accounts that are available:

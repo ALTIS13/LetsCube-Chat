@@ -10,6 +10,7 @@
 - Playwright config and smoke suite: `pnpm.cmd e2e:smoke`.
 - RLS/RPC smoke foundation: `pnpm.cmd rls:smoke`.
 - Biome staged rollout over tooling files: `pnpm.cmd lint`, `pnpm.cmd format:check`.
+- PWA baseline: manifest, conservative service worker, install prompt, offline/reconnect banner and update UX are documented in `docs/PWA_NATIVE_READINESS.md`.
 
 ## Next
 
@@ -32,7 +33,7 @@
 - Storybook or Ladle after the main UI surfaces stabilize.
 - MSW only if frontend component tests need API mocks.
 - Sentry or equivalent frontend error monitoring after privacy/error taxonomy review.
-- Electron/Tauri/Capacitor packaging only after the web app stabilizes.
+- Electron/Tauri/Capacitor packaging only after the web PWA baseline and permission/deep-link checks stabilize.
 
 ## Not Now
 
