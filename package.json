@@ -12,6 +12,7 @@
     "e2e:long-session": "playwright test tests/e2e/long-session.spec.ts --project=chromium-desktop-1440",
     "e2e:smoke": "playwright test tests/e2e/smoke.spec.ts",
     "e2e:ui": "playwright test --ui",
+    "db:types:check": "node scripts/check-database-type-drift.mjs",
     "format": "biome format --write package.json biome.json playwright.config.ts tests/e2e tests/rls scripts/supabase-typegen.mjs scripts/rls-smoke.mjs scripts/e2e-auth-states.mjs",
     "format:check": "biome format package.json biome.json playwright.config.ts tests/e2e tests/rls scripts/supabase-typegen.mjs scripts/rls-smoke.mjs scripts/e2e-auth-states.mjs",
     "lint": "biome check package.json biome.json playwright.config.ts tests/e2e tests/rls scripts/supabase-typegen.mjs scripts/rls-smoke.mjs scripts/e2e-auth-states.mjs",

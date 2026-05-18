@@ -472,6 +472,7 @@ export type Database = {
           forwarded_from_id: string | null
           id: string
           media_bucket: string | null
+          media_metadata: Json | null
           media_path: string | null
           media_url: string | null
           pinned: boolean | null
@@ -491,6 +492,7 @@ export type Database = {
           forwarded_from_id?: string | null
           id?: string
           media_bucket?: string | null
+          media_metadata?: Json | null
           media_path?: string | null
           media_url?: string | null
           pinned?: boolean | null
@@ -510,6 +512,7 @@ export type Database = {
           forwarded_from_id?: string | null
           id?: string
           media_bucket?: string | null
+          media_metadata?: Json | null
           media_path?: string | null
           media_url?: string | null
           pinned?: boolean | null
@@ -1511,6 +1514,40 @@ export type Database = {
       }
       clear_chat_for_me: { Args: { p_chat_id: string }; Returns: undefined }
       get_my_chat_ids: { Args: never; Returns: string[] }
+      global_search: {
+        Args: { p_limit?: number; p_query: string; p_types?: string[] }
+        Returns: {
+          avatar_url: string
+          chat_id: string
+          created_at: string
+          id: string
+          location_id: string
+          message_id: string
+          rank: number
+          result_type: string
+          snippet: string
+          subtitle: string
+          task_id: string
+          title: string
+        }[]
+      }
+      global_search_v2: {
+        Args: { p_filters?: Json; p_limit?: number; p_query: string }
+        Returns: {
+          avatar_url: string
+          chat_id: string
+          created_at: string
+          id: string
+          location_id: string
+          message_id: string
+          rank: number
+          result_type: string
+          snippet: string
+          subtitle: string
+          task_id: string
+          title: string
+        }[]
+      }
       group_invite_accept: { Args: { p_invite_id: string }; Returns: string }
       group_invite_cancel: {
         Args: { p_invite_id: string }
@@ -1672,6 +1709,7 @@ export type Database = {
           forwarded_from_id: string | null
           id: string
           media_bucket: string | null
+          media_metadata: Json | null
           media_path: string | null
           media_url: string | null
           pinned: boolean | null
@@ -1713,6 +1751,28 @@ export type Database = {
           p_role_id: string
         }
         Returns: undefined
+      }
+      search_chat_messages: {
+        Args: {
+          p_all_topics?: boolean
+          p_chat_id: string
+          p_filters?: Json
+          p_limit?: number
+          p_query: string
+          p_topic_id?: string
+        }
+        Returns: {
+          chat_id: string
+          created_at: string
+          media_url: string
+          message_id: string
+          message_type: string
+          mime_type: string
+          rank: number
+          sender_name: string
+          snippet: string
+          topic_id: string
+        }[]
       }
       set_pinned_chat_order: {
         Args: { p_chat_ids: string[] }
@@ -1905,6 +1965,7 @@ export type Database = {
           forwarded_from_id: string | null
           id: string
           media_bucket: string | null
+          media_metadata: Json | null
           media_path: string | null
           media_url: string | null
           pinned: boolean | null

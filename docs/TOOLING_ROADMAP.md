@@ -6,13 +6,14 @@
 - Windows-safe typegen command:
   - PowerShell: `$env:SUPABASE_PROJECT_REF = "<project-ref>"; pnpm.cmd supabase:typegen`
   - cmd: `cmd /c "set SUPABASE_PROJECT_REF=<project-ref>&& pnpm.cmd supabase:typegen"`
+- Advisory database type drift check: `pnpm.cmd db:types:check`.
 - Playwright config and smoke suite: `pnpm.cmd e2e:smoke`.
 - RLS/RPC smoke foundation: `pnpm.cmd rls:smoke`.
 - Biome staged rollout over tooling files: `pnpm.cmd lint`, `pnpm.cmd format:check`.
 
 ## Next
 
-- Compare `artifacts/kub/src/types/database.generated.ts` against the manual `database.ts` after each Supabase migration.
+- Review `pnpm.cmd db:types:check` output after each Supabase migration and decide which app-facing aliases move through `database.app.ts`.
 - Wire generated app-facing types into the app behind a small compatibility layer. Do not replace the manual file in one broad rewrite.
 - Avoid importing internal/helper RPC types into app code unless there is a concrete frontend use.
 - Add CI job for `pnpm.cmd e2e:smoke` against a deployed preview or a seeded test environment.

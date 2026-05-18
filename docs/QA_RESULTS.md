@@ -679,3 +679,12 @@ Recurring tasks roadmap note:
 - `global_search_v2` returned HTTP 200 on all five viewports for `type:message has:link after:2026-05-01`; the "database update required" fallback copy was absent.
 - `search_chat_messages` returned HTTP 200 on desktop 3840x2160, 1920x1080 and 1440x900 from the real in-chat search UI; the loaded-messages fallback copy was absent.
 - Validation completed after the applied-flow check: `pnpm.cmd e2e:smoke`, `pnpm.cmd exec playwright test tests/e2e/global-search.spec.ts`, `pnpm.cmd --filter @workspace/kub run typecheck`, and `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"` passed. Build still emits existing Vite sourcemap/chunk-size warnings.
+
+## 2026-05-18 - Generated database types bridge and drift check
+
+- Fresh typegen ran with `SUPABASE_PROJECT_REF=nhogbeojfnbjcfipitrh`; `artifacts/kub/src/types/database.generated.ts` was updated from the live public schema.
+- Secret scan on `database.generated.ts` found no `service_role`, Supabase access token, QA password, or real QA email.
+- Added `artifacts/kub/src/types/database.app.ts` as the app-facing bridge between manual `database.ts` and generated `database.generated.ts`; existing imports remain unchanged.
+- Added advisory `pnpm.cmd db:types:check`. Current drift: generated-only `messages.media_bucket/media_path`, generated-only app RPC types `global_search_v2` and `search_chat_messages`, and server-side-only `notifications_push_outbox`.
+- No UI code was changed. Deployed Playwright smoke ran on the standard five viewports and passed 5/5.
+- Validation completed: `git diff --check`, `node --check scripts/check-database-type-drift.mjs`, `pnpm.cmd db:types:check`, `pnpm.cmd --filter @workspace/kub run typecheck`, `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"`, deployed `KUB_BASE_URL=https://kub.apollot.ru pnpm.cmd e2e:smoke`, and `pnpm.cmd rls:smoke` with public deployed Supabase config passed. Build still emits existing Vite sourcemap/chunk-size warnings.

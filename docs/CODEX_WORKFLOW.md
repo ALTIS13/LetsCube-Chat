@@ -75,13 +75,20 @@ The generated output is `artifacts/kub/src/types/database.generated.ts`. The cur
 `artifacts/kub/src/types/database.ts` remains the compatibility type file until generated types
 are wired through the app deliberately.
 
+After typegen, run the advisory drift check:
+
+```powershell
+pnpm.cmd db:types:check
+```
+
 Generated type integration plan:
 
 1. Generate `database.generated.ts`.
-2. Compare generated tables/RPC/enums with the manual `database.ts`.
-3. Keep internal/helper RPC types as reference only unless app code needs them.
-4. Move app-facing aliases gradually to the generated file, one surface at a time.
-5. Keep `database.ts` as the compatibility layer until typecheck/build/e2e are stable.
+2. Run `pnpm.cmd db:types:check`.
+3. Compare generated tables/RPC/enums with the manual `database.ts`.
+4. Keep internal/helper RPC types as reference only unless app code needs them.
+5. Move app-facing aliases gradually through `artifacts/kub/src/types/database.app.ts`, one surface at a time.
+6. Keep `database.ts` as the compatibility layer until typecheck/build/e2e are stable.
 
 ## Debugging Policy
 

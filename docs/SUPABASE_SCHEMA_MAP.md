@@ -511,3 +511,21 @@ Proposed role lifecycle:
 Proposed sanctions audit payload:
 
 - New ban/mute audit rows include `target_user_id`, optional `chat_id`, `reason`, `expires_at`, `status`, and sanction id.
+
+## 2026-05-18 Generated Type Drift Status
+
+Fresh typegen was run with `SUPABASE_PROJECT_REF=nhogbeojfnbjcfipitrh`.
+
+`artifacts/kub/src/types/database.generated.ts` now reflects the applied search and media metadata migrations:
+
+- `messages.media_metadata` is present in generated types and already exists in the manual compatibility layer.
+- `global_search` and `global_search_v2` are present in generated RPC types.
+- `search_chat_messages` is present in generated RPC types.
+
+Current intentional manual/generated drift:
+
+- `messages.media_bucket` and `messages.media_path` exist in generated types but are not yet in manual `database.ts`.
+- `global_search_v2` and `search_chat_messages` exist in generated types but are not yet in manual `database.ts`; frontend call sites still use compatibility casts until migration is done deliberately.
+- `notifications_push_outbox` exists only in generated types and is server-side infrastructure, not an app-facing frontend table.
+
+Use `pnpm.cmd db:types:check` after each applied migration. The check is advisory by default: it reports drift without forcing a broad refactor.
