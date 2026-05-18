@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { reportError } from "@/lib/monitoring";
 
 interface AppErrorBoundaryProps {
   children: ReactNode;
@@ -16,11 +17,20 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
     window.location.reload();
   };
 
+  private handleUserRequestedRetry = () => {
+    this.setState({ hasError: false, isChunkLoadError: false });
+  };
+
   static getDerivedStateFromError(error: unknown): AppErrorBoundaryState {
     return { hasError: true, isChunkLoadError: isChunkLoadError(error) };
   }
 
   componentDidCatch(error: unknown, errorInfo: ErrorInfo) {
+    reportError(error, {
+      category: "react_error_boundary",
+      componentStack: errorInfo.componentStack,
+      chunkLoad: isChunkLoadError(error),
+    });
     if (import.meta.env.DEV) {
       console.error("[ui] app render failed:", error, errorInfo);
     }
@@ -38,15 +48,24 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
           <p className="mt-2 text-sm text-[color:var(--kub-muted)]">
             {this.state.isChunkLoadError
               ? "Приложение обновилось. Нужно перезагрузить страницу."
-              : "Обновите страницу. Если ошибка повторится, сообщите администратору."}
+              : "Попробуйте восстановить интерфейс. Если ошибка повторится, сообщите администратору."}
           </p>
-          <button
-            type="button"
-            onClick={this.handleUserRequestedReload}
-            className="mt-5 inline-flex h-10 items-center justify-center rounded-lg bg-[var(--kub-cyan)] px-5 text-sm font-semibold text-[color:var(--kub-bg)] transition hover:brightness-110"
-          >
-            Обновить
-          </button>
+          <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={this.handleUserRequestedRetry}
+              className="inline-flex h-10 items-center justify-center rounded-lg bg-[var(--kub-cyan)] px-5 text-sm font-semibold text-[color:var(--kub-bg)] transition hover:brightness-110"
+            >
+              Попробовать снова
+            </button>
+            <button
+              type="button"
+              onClick={this.handleUserRequestedReload}
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-[color:var(--kub-border-color)] px-5 text-sm font-semibold text-[color:var(--kub-text)] transition hover:bg-[var(--kub-surface-2)]"
+            >
+              Обновить страницу
+            </button>
+          </div>
         </div>
       </main>
     );

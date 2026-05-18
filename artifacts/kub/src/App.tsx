@@ -21,6 +21,7 @@ import { TasksPage } from "@/pages/tasks/TasksPage";
 import NotFound from "@/pages/not-found";
 import { ThemeSync } from "@/hooks/useTheme";
 import { KubLogo } from "@/components/kub";
+import { clearMonitoringUser, reportError, setMonitoringUser } from "@/lib/monitoring";
 import { getAuthCallbackErrorMessage, getAuthCallbackExceptionMessage } from "@/lib/authRedirect";
 import {
   PASSWORD_RECOVERY_LINK_INVALID_MESSAGE,
@@ -102,6 +103,11 @@ function AuthCallback() {
 
         setLocation("/login?confirmed=1");
       } catch (err: unknown) {
+        reportError(err, {
+          category: "auth_callback",
+          recovery: isRecovery,
+          hasCode: Boolean(code),
+        });
         setError(getAuthCallbackExceptionMessage(err));
       }
     };
@@ -128,6 +134,7 @@ function AuthCallback() {
       await supabase.auth.signOut();
       setLocation("/login?password_reset=1");
     } catch (err: unknown) {
+      reportError(err, { category: "password_recovery_update" });
       setError(getAuthCallbackExceptionMessage(err));
     } finally {
       setSavingPassword(false);
@@ -272,6 +279,15 @@ function AppRoutes() {
   // Keep the user's online_at fresh while a session exists.
   useHeartbeat();
   usePushNotificationNavigation();
+
+  useEffect(() => {
+    if (userId) {
+      setMonitoringUser({ id: userId });
+      return () => clearMonitoringUser();
+    }
+    clearMonitoringUser();
+    return undefined;
+  }, [userId]);
 
   // Browser notification permission prompt — once on first authenticated load.
   useEffect(() => {

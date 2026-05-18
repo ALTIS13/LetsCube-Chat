@@ -19,6 +19,7 @@ import { KubEmptyState, KubIcon } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
 import { KUB_CHAT_MESSAGE_JUMP_EVENT, requestChatMessageJump, type ChatMessageJumpDetail } from "@/lib/chatJumpEvents";
 import { isSavedChat } from "@/lib/chatDisplay";
+import { reportError } from "@/lib/monitoring";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import {
   CHAT_MEDIA_BUCKET,
@@ -330,6 +331,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           uploaded = await uploadStagedAttachment(attachment);
         } catch (error) {
           console.warn("[attachments] upload failed:", error);
+          reportError(error, {
+            category: "attachment_upload_failed",
+            attachmentKind: attachment.kind,
+            mimeType: attachment.mimeType,
+            fileSize: attachment.file.size,
+          });
           updateStagedAttachment(attachment.id, (current) => ({
             ...current,
             status: "failed",
@@ -359,6 +366,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       });
 
       if (!message) {
+        reportError(new Error("staged_attachment_send_failed"), {
+          category: "attachment_send_failed",
+          attachmentKind: attachment.kind,
+          mimeType: attachment.mimeType,
+          fileSize: attachment.file.size,
+        });
         updateStagedAttachment(attachment.id, (current) => ({
           ...current,
           status: "failed",

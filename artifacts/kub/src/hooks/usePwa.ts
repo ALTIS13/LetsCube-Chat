@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { reportError } from "@/lib/monitoring";
 
 export const KUB_SW_UPDATE_READY_EVENT = "kub:sw-update-ready";
 export const KUB_SW_CONTROLLER_CHANGED_EVENT = "kub:sw-controller-changed";
@@ -46,9 +47,12 @@ export function usePwaServiceWorker() {
           });
         });
 
-        void registration.update().catch(() => undefined);
+        void registration.update().catch((error) => {
+          reportError(error, { category: "pwa_update_check" });
+        });
       })
       .catch((error) => {
+        reportError(error, { category: "pwa_service_worker_registration" });
         if (import.meta.env.DEV) console.warn("[pwa] service worker registration failed", error);
       });
 

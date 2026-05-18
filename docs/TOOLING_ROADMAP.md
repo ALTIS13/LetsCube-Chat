@@ -11,6 +11,7 @@
 - RLS/RPC smoke foundation: `pnpm.cmd rls:smoke`.
 - Biome staged rollout over tooling files: `pnpm.cmd lint`, `pnpm.cmd format:check`.
 - PWA baseline: manifest, conservative service worker, install prompt, offline/reconnect banner and update UX are documented in `docs/PWA_NATIVE_READINESS.md`.
+- Production frontend monitoring foundation: optional Sentry browser reporting is documented in `docs/PRODUCTION_MONITORING.md`.
 
 ## Next
 

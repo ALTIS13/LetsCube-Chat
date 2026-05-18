@@ -6,6 +6,7 @@ import type { Json, MessageWithSender, Profile } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { mapPgError } from "@/lib/errors";
+import { reportError } from "@/lib/monitoring";
 import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 import { isSavedChat } from "@/lib/chatDisplay";
 import { scheduleMarkChatDelivered, scheduleMarkChatRead } from "@/lib/deliveryReceipts";
@@ -839,6 +840,12 @@ export function useMessages(
     }
 
     if (ack.timedOut) {
+      reportError(new Error("message_send_ack_timeout"), {
+        category: "message_send_timeout",
+        chatId: activeChatId,
+        type: input.type,
+        hasMedia: Boolean(input.mediaUrl),
+      });
       replaceMessage(activeChatId, tempId, {
         ...optimistic,
         pending: false,
@@ -864,6 +871,12 @@ export function useMessages(
     }
 
     console.error("Send error:", ack.error);
+    reportError(ack.error, {
+      category: "message_send_failed",
+      chatId: activeChatId,
+      type: input.type,
+      hasMedia: Boolean(input.mediaUrl),
+    });
     replaceMessage(activeChatId, tempId, {
       ...optimistic,
       pending: false,

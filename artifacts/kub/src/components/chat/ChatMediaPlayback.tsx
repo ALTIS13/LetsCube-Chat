@@ -13,6 +13,7 @@ import {
 } from "react";
 import { KubIcon } from "@/components/kub";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
+import { reportError } from "@/lib/monitoring";
 import { clampAudioElementVolume, useAudioSettings } from "@/hooks/useAudioSettings";
 import { cn } from "@/lib/utils";
 
@@ -192,6 +193,11 @@ export function ChatMediaPlaybackProvider({
       stopProgressLoop();
       setIsPlaying(false);
       setError("Не удалось воспроизвести медиа.");
+      reportError(new Error("media_element_error"), {
+        category: "media_playback_failed",
+        mediaKind: currentItem?.kind,
+        staged: currentItem?.isStaged,
+      });
       setVisible(true);
     };
 
@@ -214,7 +220,7 @@ export function ChatMediaPlaybackProvider({
       activeElement.removeEventListener("ended", handleEnded);
       activeElement.removeEventListener("error", handleError);
     };
-  }, [activeElement, startProgressLoop, stopProgressLoop, syncFromElement]);
+  }, [activeElement, currentItem?.isStaged, currentItem?.kind, startProgressLoop, stopProgressLoop, syncFromElement]);
 
   const mediaElementForItem = useCallback((item: ChatMediaPlaybackItem) => {
     return item.kind === "voice" || item.kind === "audio" ? audioRef.current : videoRef.current;
@@ -250,9 +256,14 @@ export function ChatMediaPlaybackProvider({
     media.playbackRate = playbackRate;
     media.volume = volume;
     setIsPlaying(true);
-    void media.play().catch(() => {
+    void media.play().catch((error) => {
       setIsPlaying(false);
       setError("Не удалось воспроизвести медиа.");
+      reportError(error, {
+        category: "media_playback_failed",
+        mediaKind: item.kind,
+        staged: item.isStaged,
+      });
       setVisible(true);
     });
   }, [activate, mediaElementForItem, playbackRate, volume]);

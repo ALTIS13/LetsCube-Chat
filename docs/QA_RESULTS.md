@@ -699,3 +699,14 @@ Recurring tasks roadmap note:
 - Added `docs/PWA_NATIVE_READINESS.md` with installability, caching, update, offline, native packaging and permission/deep-link notes.
 - Playwright PWA QA ran locally on 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915. It verified manifest fetch, icon fetches, service worker registration, no auto `skipWaiting`, no `clients.claim`, offline/reconnect banner state, and direct `/tasks`/`/admin` app-shell routes.
 - Validation completed: `git diff --check`, `pnpm.cmd --filter @workspace/kub run typecheck`, `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"`, `pnpm.cmd e2e:smoke`, `pnpm.cmd rls:smoke` with public Supabase config, `pnpm.cmd db:types:check`, and `pnpm.cmd exec playwright test tests/e2e/pwa.spec.ts` passed. Build still emits existing Vite sourcemap/chunk-size warnings.
+
+## 2026-05-18 - Production frontend monitoring foundation
+
+- Added optional Sentry browser monitoring through `@sentry/react`. The SDK initializes only when `VITE_SENTRY_DSN` exists; without it, reporting functions are no-op and the app sends no monitoring network requests.
+- Added `artifacts/kub/src/lib/monitoring.ts` with `initMonitoring`, `reportError`, `reportMessage`, user id scoping, breadcrumbs, build metadata, and shared redaction.
+- Redaction removes passwords, access/refresh/id tokens, authorization headers, Supabase key shaped values, service-role shaped keys, email addresses, raw message/content/body/text fields, media/signed/public URLs and URL query secrets.
+- `AppErrorBoundary` now reports sanitized errors while keeping friendly UI and explicit user actions: `Попробовать снова` and `Обновить страницу`.
+- Global `window.error` and `unhandledrejection` reporting is installed at app boot. App-level categories were added for auth callback/password recovery failures, message send failures/timeouts, staged attachment upload/send failures, media playback failures, and PWA registration/update-check failures.
+- Settings now show safe build metadata: app version and optional commit short SHA.
+- Added `tests/e2e/monitoring.spec.ts`; Playwright QA ran locally on 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915 and verified disabled-by-default behavior plus redaction.
+- Validation completed: `git diff --check`, `pnpm.cmd --filter @workspace/kub run typecheck`, `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"`, `pnpm.cmd e2e:smoke`, `pnpm.cmd exec playwright test tests/e2e/pwa.spec.ts`, `pnpm.cmd exec playwright test tests/e2e/monitoring.spec.ts`, `pnpm.cmd rls:smoke` with public Supabase config, and `pnpm.cmd db:types:check` passed. Build still emits existing Vite sourcemap/chunk-size warnings.

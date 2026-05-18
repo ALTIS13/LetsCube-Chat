@@ -1,7 +1,10 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
+import { initMonitoring } from "@/lib/monitoring";
 import "./index.css";
+
+initMonitoring();
 
 const rootElement = document.getElementById("root")!;
 rootElement.dataset.kubBootId = createBootId();

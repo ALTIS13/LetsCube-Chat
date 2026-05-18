@@ -15,6 +15,7 @@ import { PhoneSection } from "./PhoneSection";
 import { AudioSettingsSection } from "./AudioSettingsSection";
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
+import { getBuildMetadata } from "@/lib/monitoring";
 import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
 import {
   PROFILE_LIMITS,
@@ -35,6 +36,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const supabase = createClient();
   const { theme, resolvedTheme, setTheme } = useTheme();
   const { canInstall, installed, promptInstall } = usePwaInstall();
+  const buildMetadata = getBuildMetadata();
   const { status: pushStatus, enable: enablePush, disable: disablePush } = usePush();
   const isStaff = useIsManagerOrAdmin();
   const [, setLocation] = useLocation();
@@ -313,6 +315,10 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 Установить
               </KubButton>
             )}
+          </div>
+          <div className="border-t border-[color:var(--kub-border-color)] px-4 py-2 text-xs text-[color:var(--kub-muted)]">
+            Версия: {buildMetadata.version}
+            {buildMetadata.commit !== "unknown" ? ` · ${buildMetadata.commit.slice(0, 7)}` : ""}
           </div>
         </div>
       </div>

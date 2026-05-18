@@ -43,6 +43,7 @@ Navigation requests use network-first behavior with an offline shell fallback. S
 - `skipWaiting` is sent only after the user clicks the update button.
 - `clients.claim()` is not used.
 - The app reloads only after explicit user update action; focus/visibility checks never force a reload.
+- Frontend monitoring does not alter PWA update or offline behavior; Sentry is initialized only when `VITE_SENTRY_DSN` is configured.
 
 ## Offline and reconnect UI
 

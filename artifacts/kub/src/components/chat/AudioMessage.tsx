@@ -4,6 +4,7 @@ import { type ChangeEvent, type PointerEvent, useCallback, useEffect, useMemo, u
 import { KubIcon } from "@/components/kub";
 import { clampAudioElementVolume, useAudioSettings } from "@/hooks/useAudioSettings";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
+import { reportError } from "@/lib/monitoring";
 import { cn } from "@/lib/utils";
 import { useChatMediaPlayback, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 
@@ -168,6 +169,7 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
       }
       void audio.play().then(() => setPlaying(true)).catch((err) => {
         console.error("[voice] playback failed:", err);
+        reportError(err, { category: "media_playback_failed", mediaKind: "audio" });
         setPlaying(false);
       });
     }
