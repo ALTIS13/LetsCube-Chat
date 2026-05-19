@@ -47,7 +47,7 @@
 ## Failed
 
 - Auth logs за последние 24 часа все еще показывают `referer=tg.letscube.ru`. Это не доказывает hardcode в source code, но означает, что Supabase Auth URL/settings нужно держать под контролем при смене домена.
-- Supabase Auth logs показывают ошибки `missing Twilio account SID` на `/user` при phone update. Это отдельный Supabase Auth/SMS configuration вопрос, не frontend service_role проблема.
+- Supabase Auth logs показывали SMS-provider setup error на `/user` при phone update. Это отдельный Supabase Auth/SMS configuration вопрос, не frontend secret/frontend privilege проблема.
 
 ## Applied In Production Supabase
 
@@ -710,3 +710,15 @@ Recurring tasks roadmap note:
 - Settings now show safe build metadata: app version and optional commit short SHA.
 - Added `tests/e2e/monitoring.spec.ts`; Playwright QA ran locally on 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915 and verified disabled-by-default behavior plus redaction.
 - Validation completed: `git diff --check`, `pnpm.cmd --filter @workspace/kub run typecheck`, `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"`, `pnpm.cmd e2e:smoke`, `pnpm.cmd exec playwright test tests/e2e/pwa.spec.ts`, `pnpm.cmd exec playwright test tests/e2e/monitoring.spec.ts`, `pnpm.cmd rls:smoke` with public Supabase config, and `pnpm.cmd db:types:check` passed. Build still emits existing Vite sourcemap/chunk-size warnings.
+
+## 2026-05-19 - Push notifications and phone verification foundation
+
+- Added proposal-only push migration `.migration-backup/supabase/migrations/20260527_push_notifications_foundation.sql` for `push_subscriptions`, `notification_preferences`, `chat_notification_preferences`, outbox enqueue hardening, and preference-aware delivery.
+- Added proposal-only phone migration `.migration-backup/supabase/migrations/20260528_phone_verification.sql` to add `phone_verified_at` and keep verified state mirrored only after Supabase Auth OTP success.
+- Settings now expose push type toggles for messages, tasks and invites, with friendly states for unsupported browsers, blocked permission, missing VAPID public key and missing DB migration.
+- Phone settings no longer offer “save without verification”; a changed phone can be persisted only after the OTP verify path succeeds.
+- Service worker push handling now sanitizes payloads, uses `Новое уведомление` fallback copy, rejects unsafe notification click URLs, and keeps the existing PWA update/offline behavior.
+- Added Edge Function source `supabase/functions/send-push-notifications/index.ts` for outbox delivery; deployment and secrets are manual.
+- Added docs `docs/PUSH_NOTIFICATIONS.md` and `docs/PHONE_VERIFICATION.md`.
+- Playwright QA ran locally on 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915: `tests/e2e/push-phone-foundation.spec.ts` passed 10/10, `tests/e2e/pwa.spec.ts` passed 5/5, smoke passed 5/5, and roles visibility passed 20/20.
+- Validation completed: `git diff --check`, `pnpm.cmd --filter @workspace/kub run typecheck`, `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"`, `pnpm.cmd e2e:smoke`, `pnpm.cmd rls:smoke` with public Supabase config and mutation probes disabled, `pnpm.cmd db:types:check`, `pnpm.cmd exec playwright test tests/e2e/pwa.spec.ts`, and `pnpm.cmd exec playwright test tests/e2e/push-phone-foundation.spec.ts` passed. Build still emits existing Vite sourcemap/chunk-size warnings.

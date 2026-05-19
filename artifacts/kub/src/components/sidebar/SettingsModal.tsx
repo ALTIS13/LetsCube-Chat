@@ -37,7 +37,15 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const { canInstall, installed, promptInstall } = usePwaInstall();
   const buildMetadata = getBuildMetadata();
-  const { status: pushStatus, enable: enablePush, disable: disablePush } = usePush();
+  const {
+    status: pushStatus,
+    preferences: pushPreferences,
+    loadingPreferences,
+    message: pushMessage,
+    enable: enablePush,
+    disable: disablePush,
+    setPreference: setPushPreference,
+  } = usePush();
   const isStaff = useIsManagerOrAdmin();
   const [, setLocation] = useLocation();
 
@@ -64,7 +72,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     setError(null);
     // Phone is intentionally NOT updated here — it lives in the
     // RLS-protected `profile_contacts` table and is managed by
-    // `<PhoneSection />` below (OTP / unverified-save flow).
+    // `<PhoneSection />` below after OTP verification.
     const { data, error: err } = await supabase
       .from("profiles")
       .update({
@@ -358,6 +366,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               <div className="text-xs text-[color:var(--kub-muted)]">
                 {pushStatus === "unsupported" && "Браузер не поддерживает"}
                 {pushStatus === "denied" && "Заблокировано в настройках браузера"}
+                {pushStatus === "missing_vapid" && "Нужен VAPID public key в конфигурации"}
+                {pushStatus === "migration_missing" && "Нужно обновление базы данных"}
                 {pushStatus === "inactive" && "Получать уведомления, даже когда вкладка закрыта"}
                 {pushStatus === "active" && "Включены"}
               </div>
@@ -371,6 +381,31 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 Включить
               </KubButton>
             ) : null}
+          </div>
+          <div className="border-t border-[color:var(--kub-border-color)] px-4 py-3 space-y-2">
+            <PreferenceSwitch
+              label="Сообщения"
+              checked={pushPreferences.message_push_enabled}
+              disabled={loadingPreferences || pushStatus !== "active"}
+              onChange={(value) => void setPushPreference("message_push_enabled", value)}
+            />
+            <PreferenceSwitch
+              label="Задачи"
+              checked={pushPreferences.task_push_enabled}
+              disabled={loadingPreferences || pushStatus !== "active"}
+              onChange={(value) => void setPushPreference("task_push_enabled", value)}
+            />
+            <PreferenceSwitch
+              label="Приглашения"
+              checked={pushPreferences.invite_push_enabled}
+              disabled={loadingPreferences || pushStatus !== "active"}
+              onChange={(value) => void setPushPreference("invite_push_enabled", value)}
+            />
+            {pushMessage && (
+              <div className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
+                {pushMessage}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -426,6 +461,45 @@ function Field({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function PreferenceSwitch({
+  label,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm text-[color:var(--kub-text)]">{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-label={`Push: ${label}`}
+        aria-checked={checked}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          "relative h-6 w-11 rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+          checked
+            ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_35%,transparent)]"
+            : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]"
+        )}
+      >
+        <span
+          className={cn(
+            "absolute top-0.5 h-5 w-5 rounded-full bg-[var(--kub-text)] transition-transform",
+            checked ? "translate-x-5" : "translate-x-0.5"
+          )}
+        />
+      </button>
     </div>
   );
 }

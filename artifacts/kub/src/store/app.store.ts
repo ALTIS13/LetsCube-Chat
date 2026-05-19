@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { createClient } from '@/lib/supabase/client'
 import type { Profile, ChatWithLastMessage, MessageWithSender } from '@/types/database'
 
 interface AppState {
@@ -246,10 +247,12 @@ export const useAppStore = create<AppState>((set) => ({
     : [],
   toggleMutedChat: (chatId) =>
     set((state) => {
-      const next = state.mutedChatIds.includes(chatId)
+      const wasMuted = state.mutedChatIds.includes(chatId);
+      const next = wasMuted
         ? state.mutedChatIds.filter((id) => id !== chatId)
         : [...state.mutedChatIds, chatId];
       if (typeof window !== 'undefined') localStorage.setItem('ng_muted', JSON.stringify(next));
+      void persistChatPushPreference(state.currentUser?.id ?? null, chatId, !wasMuted);
       return { mutedChatIds: next };
     }),
 
@@ -272,3 +275,25 @@ export const useAppStore = create<AppState>((set) => ({
       state.chatPanelRequest?.key === key ? { chatPanelRequest: null } : state
     )),
 }))
+
+async function persistChatPushPreference(userId: string | null, chatId: string, muted: boolean) {
+  if (!userId) return;
+  try {
+    const supabase = createClient();
+    await supabase
+      .from("chat_notification_preferences")
+      .upsert(
+        {
+          chat_id: chatId,
+          user_id: userId,
+          push_enabled: !muted,
+          muted_until: null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "chat_id,user_id" },
+      );
+  } catch {
+    // Local mute remains effective for the current device. DB-backed push mute
+    // starts working as soon as the push preference migration is applied.
+  }
+}

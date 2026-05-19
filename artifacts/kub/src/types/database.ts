@@ -285,12 +285,14 @@ export interface Database {
           user_id: string
           phone: string | null
           phone_verified: boolean
+          phone_verified_at: string | null
           updated_at: string
         }
         Insert: {
           user_id: string
           phone?: string | null
           phone_verified?: boolean
+          phone_verified_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -665,6 +667,9 @@ export interface Database {
           p256dh: string
           auth: string
           user_agent: string | null
+          platform: string | null
+          is_active: boolean
+          last_seen_at: string
           created_at: string
           updated_at: string
         }
@@ -675,6 +680,9 @@ export interface Database {
           p256dh: string
           auth: string
           user_agent?: string | null
+          platform?: string | null
+          is_active?: boolean
+          last_seen_at?: string
           created_at?: string
           updated_at?: string
         }
@@ -683,6 +691,9 @@ export interface Database {
           p256dh?: string
           auth?: string
           user_agent?: string | null
+          platform?: string | null
+          is_active?: boolean
+          last_seen_at?: string
           updated_at?: string
         }
         Relationships: [
@@ -691,6 +702,81 @@ export interface Database {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      notification_preferences: {
+        Row: {
+          user_id: string
+          push_enabled: boolean
+          message_push_enabled: boolean
+          task_push_enabled: boolean
+          invite_push_enabled: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          push_enabled?: boolean
+          message_push_enabled?: boolean
+          task_push_enabled?: boolean
+          invite_push_enabled?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          push_enabled?: boolean
+          message_push_enabled?: boolean
+          task_push_enabled?: boolean
+          invite_push_enabled?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      chat_notification_preferences: {
+        Row: {
+          chat_id: string
+          user_id: string
+          push_enabled: boolean
+          muted_until: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          chat_id: string
+          user_id: string
+          push_enabled?: boolean
+          muted_until?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          push_enabled?: boolean
+          muted_until?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_notification_preferences_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_notification_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           }
         ]
@@ -1397,6 +1483,8 @@ export type TaskEvent = Database['public']['Tables']['task_events']['Row']
 export type TaskRecurrenceEvent = Database['public']['Tables']['task_recurrence_events']['Row']
 export type ProfileContact = Database['public']['Tables']['profile_contacts']['Row']
 export type Notification = Database['public']['Tables']['notifications']['Row']
+export type NotificationPreferences = Database['public']['Tables']['notification_preferences']['Row']
+export type ChatNotificationPreferences = Database['public']['Tables']['chat_notification_preferences']['Row']
 export type NotificationKind =
   | 'task_assigned'
   | 'task_waiting_confirmation'

@@ -12,6 +12,8 @@
 - Biome staged rollout over tooling files: `pnpm.cmd lint`, `pnpm.cmd format:check`.
 - PWA baseline: manifest, conservative service worker, install prompt, offline/reconnect banner and update UX are documented in `docs/PWA_NATIVE_READINESS.md`.
 - Production frontend monitoring foundation: optional Sentry browser reporting is documented in `docs/PRODUCTION_MONITORING.md`.
+- Push notification setup is documented in `docs/PUSH_NOTIFICATIONS.md`; real delivery requires manual DB migration, VAPID secrets and Edge Function/scheduler deployment.
+- Phone verification setup is documented in `docs/PHONE_VERIFICATION.md`; real OTP requires Supabase Auth SMS provider configuration.
 
 ## Next
 
@@ -33,7 +35,7 @@
 
 - Storybook or Ladle after the main UI surfaces stabilize.
 - MSW only if frontend component tests need API mocks.
-- Sentry or equivalent frontend error monitoring after privacy/error taxonomy review.
+- Sentry/self-hosted monitoring rollout remains optional and can wait until pre-packaging privacy review.
 - Electron/Tauri/Capacitor packaging only after the web PWA baseline and permission/deep-link checks stabilize.
 
 ## Not Now

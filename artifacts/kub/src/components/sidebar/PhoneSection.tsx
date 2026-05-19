@@ -16,18 +16,15 @@ import { mapPgError } from "@/lib/errors";
  * numbers at the data-access layer. This component manages the
  * caller's own row.
  *
- * Two save paths:
- *   1. Verified — `auth.updateUser({phone})` triggers a 6-digit SMS
- *      OTP; the user enters the code, we call `verifyOtp`, then the
- *      SECURITY DEFINER RPC `profile_phone_mark_verified()` mirrors
- *      the verified state into `profile_contacts`. The RPC re-checks
- *      `auth.users.phone_confirmed_at`, so the client cannot lie.
- *   2. Unverified — direct UPDATE on `profile_contacts`. The DB
- *      trigger normalises to E.164 and clamps `phone_verified=false`.
+ * Verified-only flow: `auth.updateUser({phone})` triggers a 6-digit
+ * SMS OTP; the user enters the code, we call `verifyOtp`, then the
+ * SECURITY DEFINER RPC `profile_phone_mark_verified()` mirrors the
+ * verified state into `profile_contacts`. The RPC re-checks
+ * `auth.users.phone_confirmed_at`, so the client cannot lie.
  *
  * If the project's SMS provider is not configured, `auth.updateUser`
- * fails with a recognisable error; we surface a friendly message and
- * leave only the unverified-save button available.
+ * fails with a recognisable error. We surface a friendly setup message
+ * and do not persist a new phone number as verified or unverified.
  */
 export function PhoneSection() {
   const supabase = createClient();
@@ -111,7 +108,7 @@ export function PhoneSection() {
     if (err) {
       if (looksLikeProviderUnavailable(err.message)) {
         setStage("unsupported");
-        setInfo("Подтверждение по SMS пока недоступно. Можно сохранить номер без проверки.");
+        setInfo("SMS-провайдер не настроен. Обратитесь к администратору.");
       } else {
         setError(humanise(err.message));
       }
@@ -151,35 +148,6 @@ export function PhoneSection() {
     setCode("");
     editingRef.current = false;
     setInfo("Телефон подтверждён.");
-  };
-
-  const saveUnverified = async () => {
-    reset();
-    if (!isValid || !normalised) {
-      setError("Введите номер в формате +7 999 123 45 67");
-      return;
-    }
-    setBusy("save");
-    // The auto-create trigger guarantees a row exists, so UPDATE is
-    // sufficient. The DB trigger normalises and clamps verified=false.
-    const { error: upErr } = await supabase
-      .from("profile_contacts")
-      .update({ phone: normalised, updated_at: new Date().toISOString() })
-      .eq("user_id", currentUser.id);
-    if (upErr) {
-      setBusy(null);
-      if (upErr.code === "23505") {
-        setError("Этот номер уже привязан к другому аккаунту.");
-        return;
-      }
-      setError(humanise(upErr.message));
-      return;
-    }
-    await refreshSelf();
-    setBusy(null);
-    setStage("idle");
-    editingRef.current = false;
-    setInfo("Номер сохранён без подтверждения.");
   };
 
   const removePhone = async () => {
@@ -300,13 +268,13 @@ export function PhoneSection() {
           </>
         ) : stage === "unsupported" ? (
           <KubButton
-            variant="primary"
+            variant="secondary"
             size="sm"
-            onClick={saveUnverified}
-            loading={busy === "save"}
+            onClick={sendCode}
+            loading={busy === "send"}
             disabled={!dirty || !isValid}
           >
-            Сохранить без подтверждения
+            Повторить отправку
           </KubButton>
         ) : (
           <>
@@ -318,16 +286,7 @@ export function PhoneSection() {
               loading={busy === "send"}
               disabled={!dirty || !isValid}
             >
-              Отправить код
-            </KubButton>
-            <KubButton
-              variant="secondary"
-              size="sm"
-              onClick={saveUnverified}
-              loading={busy === "save"}
-              disabled={!dirty || !isValid}
-            >
-              Сохранить без проверки
+              {storedPhone ? "Изменить номер" : "Подтвердить номер"}
             </KubButton>
           </>
         )}
@@ -374,7 +333,9 @@ function looksLikeProviderUnavailable(msg: string): boolean {
     m.includes("phone_provider_disabled") ||
     m.includes("provider is not enabled") ||
     m.includes("not enabled") ||
-    m.includes("not configured")
+    m.includes("not configured") ||
+    m.includes("twilio") ||
+    m.includes("account sid")
   );
 }
 

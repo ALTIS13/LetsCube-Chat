@@ -13,6 +13,7 @@
 - `artifacts/kub/index.html` links the manifest, favicon, apple touch icon, theme color, and mobile web app meta tags.
 - `artifacts/kub/src/hooks/usePwa.ts` registers the service worker from the app runtime and exposes browser install prompt state.
 - Settings show an install action when the browser exposes `beforeinstallprompt`; otherwise they show browser-menu install guidance.
+- Browser push setup is documented in [PUSH_NOTIFICATIONS.md](./PUSH_NOTIFICATIONS.md). Real delivery requires manual VAPID, DB migration, and Edge Function/scheduler setup.
 
 ## Service worker strategy
 
@@ -63,6 +64,7 @@ Future Android/iOS work:
 - camera and microphone permission mapping;
 - file/media picker permissions;
 - push notification registration and deep links;
+- phone verification SMS provider setup, documented in [PHONE_VERIFICATION.md](./PHONE_VERIFICATION.md);
 - Supabase Auth callback/deep-link configuration;
 - offline mutation queue if product requires it.
 

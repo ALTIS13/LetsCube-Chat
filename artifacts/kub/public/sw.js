@@ -10,6 +10,7 @@ const APP_SHELL = [
   "/icons/icon-maskable-512.png",
 ];
 const APP_NAME = "KUB";
+const DEFAULT_PUSH_BODY = "Новое уведомление";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -94,33 +95,30 @@ function isCacheableStaticAsset(url) {
 }
 
 self.addEventListener("push", (event) => {
-  let data = {};
+  let raw = {};
   try {
-    data = event.data ? event.data.json() : {};
+    raw = event.data ? event.data.json() : {};
   } catch {
-    data = { title: APP_NAME, body: event.data ? event.data.text() : "" };
+    raw = { body: event.data ? event.data.text() : "" };
   }
 
-  const title = data.title || APP_NAME;
-  const body = data.body || "";
-  const tag = data.tag || data.chatId || "kub-message";
-  const url = data.url || (data.chatId ? `/?chat=${data.chatId}` : "/");
+  const data = normalizePushPayload(raw);
 
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      tag,
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      tag: data.tag,
       renotify: true,
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
-      data: { url },
+      data: { url: data.url },
     }),
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || "/";
+  const targetUrl = ensureRelativeUrl(event.notification.data?.url || "/");
 
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
@@ -131,6 +129,64 @@ self.addEventListener("notificationclick", (event) => {
         return;
       }
     }
-    if (self.clients.openWindow) await self.clients.openWindow(targetUrl);
+    if (self.clients.openWindow) {
+      await self.clients.openWindow(new URL(targetUrl, self.location.origin).href);
+    }
   })());
 });
+
+function normalizePushPayload(raw) {
+  const data = raw && typeof raw === "object" ? raw : {};
+  const chatId = safeId(data.chatId || data.chat_id);
+  const taskId = safeId(data.taskId || data.task_id);
+  const inviteId = safeId(data.inviteId || data.invite_id);
+  return {
+    title: safeText(data.title, APP_NAME, 80),
+    body: safeText(data.body || data.message || data.text, DEFAULT_PUSH_BODY, 180),
+    tag: safeText(data.tag, chatId || taskId || inviteId || "kub-notification", 80),
+    url: routeForPush(data, { chatId, taskId, inviteId }),
+  };
+}
+
+function routeForPush(data, ids) {
+  const explicit = ensureRelativeUrl(data.url || data.route);
+  if (explicit !== "/") return explicit;
+  if (ids.chatId) return `/?chat=${encodeURIComponent(ids.chatId)}`;
+  if (ids.taskId) return `/tasks?task=${encodeURIComponent(ids.taskId)}`;
+  if (ids.inviteId) return `/?notifications=1`;
+  return "/";
+}
+
+function safeText(value, fallback, maxLength) {
+  if (typeof value !== "string") return fallback;
+  const text = value.trim();
+  if (!text || looksSensitive(text)) return fallback;
+  return text.slice(0, maxLength);
+}
+
+function safeId(value) {
+  if (typeof value !== "string") return "";
+  return /^[a-zA-Z0-9_-]{1,80}$/.test(value) ? value : "";
+}
+
+function ensureRelativeUrl(value) {
+  if (typeof value !== "string" || looksSensitive(value)) return "/";
+  try {
+    const url = new URL(value, self.location.origin);
+    if (url.origin !== self.location.origin) return "/";
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return "/";
+  }
+}
+
+function looksSensitive(value) {
+  const lower = value.toLowerCase();
+  return (
+    lower.includes("/storage/v1/") ||
+    lower.includes(".supabase.co/storage") ||
+    lower.includes("token=") ||
+    lower.includes("password=") ||
+    lower.includes("authorization=")
+  );
+}

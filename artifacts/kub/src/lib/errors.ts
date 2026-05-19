@@ -137,7 +137,10 @@ export function mapPgError(err: AnyErr): string {
       m.includes("phone provider") ||
       m.includes("phone signups are disabled") ||
       m.includes("phone_provider_disabled") ||
-      m.includes("provider is not enabled")
+      m.includes("provider is not enabled") ||
+      m.includes("provider is not configured") ||
+      m.includes("twilio") ||
+      m.includes("account sid")
     )
       return "Подтверждение по SMS пока недоступно.";
 
