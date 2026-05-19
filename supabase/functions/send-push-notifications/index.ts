@@ -199,7 +199,13 @@ function safeRelativeUrl(value: unknown) {
 
 function looksSensitive(value: string) {
   const lower = value.toLowerCase();
-  return lower.includes("/storage/v1/") || lower.includes("token=") || lower.includes("password=");
+  return (
+    lower.includes("/storage/v1/") ||
+    lower.includes(".supabase.co/storage") ||
+    lower.includes("token=") ||
+    lower.includes("password=") ||
+    lower.includes("authorization=")
+  );
 }
 
 async function markOutbox(supabaseUrl: string, secretKey: string, id: string, patch: Record<string, unknown>) {

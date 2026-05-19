@@ -108,10 +108,10 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(data.title, {
       body: data.body,
       tag: data.tag,
-      renotify: true,
+      renotify: !data.isMessagePush,
       icon: "/icons/icon-192.png",
       badge: "/icons/icon-192.png",
-      data: { url: data.url },
+      data: { url: data.url, kind: data.kind },
     }),
   );
 });
@@ -141,10 +141,23 @@ function normalizePushPayload(raw) {
   const messageId = safeId(data.messageId || data.message_id);
   const taskId = safeId(data.taskId || data.task_id);
   const inviteId = safeId(data.inviteId || data.invite_id);
+  const kind = safeText(data.kind, "notification", 60);
+  const isMessagePush = kind.includes("message") || Boolean(chatId && messageId);
+  const fallbackTag = isMessagePush && chatId
+    ? `message:chat:${chatId}`
+    : taskId
+      ? `task:${taskId}`
+      : inviteId
+        ? `invite:${inviteId}`
+        : chatId
+          ? `chat:${chatId}`
+          : "kub-notification";
   return {
     title: safeText(data.title, APP_NAME, 80),
     body: safeText(data.body || data.message || data.text, DEFAULT_PUSH_BODY, 180),
-    tag: safeText(data.tag, chatId || taskId || inviteId || "kub-notification", 80),
+    tag: safeText(data.tag, fallbackTag, 100),
+    kind,
+    isMessagePush,
     url: routeForPush(data, { chatId, messageId, taskId, inviteId }),
   };
 }

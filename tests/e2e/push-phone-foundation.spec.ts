@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { findFirstAvailableQaRole, gotoOrSkip, loginAsRoleOrSkip } from "./helpers/auth";
 
 test.describe("KUB push and phone production foundation", () => {
@@ -30,20 +32,17 @@ test.describe("KUB push and phone production foundation", () => {
     await expect(page.getByRole("button", { name: /Сохранить без/ })).toHaveCount(0);
   });
 
-  test("service worker contains safe push and click routing handlers", async ({ page }) => {
-    await gotoOrSkip(page, "/");
-
-    const swSource = await page.evaluate(async () => {
-      const response = await fetch("/sw.js", { cache: "no-store" });
-      return response.ok ? response.text() : "";
-    });
-
+  test("service worker contains safe push and click routing handlers", async () => {
+    const swSource = readFileSync(resolve("artifacts/kub/public/sw.js"), "utf8");
     expect(swSource).toContain('self.addEventListener("push"');
     expect(swSource).toContain('self.addEventListener("notificationclick"');
     expect(swSource).toContain("Новое уведомление");
     expect(swSource).toContain("kub-open");
     expect(swSource).toContain("messageId");
     expect(swSource).toContain("message_id");
+    expect(swSource).toContain("message:chat:");
+    expect(swSource).toContain("isMessagePush");
+    expect(swSource).toContain("renotify: !data.isMessagePush");
     expect(swSource).not.toMatch(/media_url|signedUrl|access_token|refresh_token/i);
   });
 });

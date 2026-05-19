@@ -9,7 +9,9 @@ import { createClient } from "@/lib/supabase/client";
 import { prefixError } from "@/lib/errors";
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
+import { getUserPresenceState } from "@/lib/presence";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
+import { usePresenceNow } from "@/hooks/usePresenceNow";
 import type { ChatWithLastMessage } from "@/types/database";
 
 interface ChatHeaderProps {
@@ -29,6 +31,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
   const [deleteGroupOpen, setDeleteGroupOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const isMuted = mutedChatIds.includes(chatId);
+  const presenceNow = usePresenceNow();
 
   const display = chat
     ? getChatDisplayInfo(chat, currentUser?.id ?? null)
@@ -160,21 +163,11 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
     if (display.isSaved) return display.subtitle;
     if (type === "channel") return `${(chat.members?.length ?? 0) || "?"} подписчиков`;
     if (type === "group") return `${chat.members?.length ?? 0} участников`;
-    const other = chat.other_user as { online_at?: string } | undefined;
-    if (other?.online_at) {
-      const diff = Date.now() - new Date(other.online_at).getTime();
-      if (diff < 3 * 60_000) return "в сети";
-      const mins = Math.floor(diff / 60_000);
-      if (mins < 60) return `был(а) ${mins} мин назад`;
-      const hours = Math.floor(mins / 60);
-      if (hours < 24) return `был(а) ${hours} ч назад`;
-      return "был(а) недавно";
-    }
-    return "";
+    return getUserPresenceState(chat.other_user, presenceNow).label;
   };
 
   const subtitle = getSubtitle();
-  const isOnline = subtitle === "в сети";
+  const isOnline = type === "private" && getUserPresenceState(chat?.other_user, presenceNow).isOnline;
 
   const menuItems: Array<{ icon: KubIconName; label: string; danger?: boolean; disabled?: boolean; action: () => void }> = [
     { icon: "search", label: "Поиск в чате", action: () => { setShowMenu(false); onSearchOpen?.(); } },

@@ -13,6 +13,8 @@ import { mapPgError, prefixError } from "@/lib/errors";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { cn } from "@/lib/utils";
 import { ProfileRoleSummary } from "@/components/profile/ProfileRoleSummary";
+import { isUserOnline } from "@/lib/presence";
+import { usePresenceNow } from "@/hooks/usePresenceNow";
 import type { ChatWithLastMessage } from "@/types/database";
 
 interface ChatListProps {
@@ -51,6 +53,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
   const [busyActionId, setBusyActionId] = useState<string | null>(null);
   const [draggedPinnedChatId, setDraggedPinnedChatId] = useState<string | null>(null);
   const [dragOverPinnedChatId, setDragOverPinnedChatId] = useState<string | null>(null);
+  const presenceNow = usePresenceNow();
 
   // Dev-only mount/unmount счетчик для проверки стабильности (Task #48).
   useEffect(() => {
@@ -501,6 +504,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
             onPinnedDragOver={handlePinnedDragOver}
             onPinnedDrop={() => handlePinnedDrop(chat.id)}
             onPinnedDragEnd={handlePinnedDragEnd}
+            presenceNow={presenceNow}
           />
           );
         })}
@@ -537,6 +541,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
           onClose={() => setPreviewChatId(null)}
           onOpenChat={() => openPreviewChat(previewChat.id)}
           onRun={runPreviewAction}
+          presenceNow={presenceNow}
         />
       )}
     </>
@@ -550,6 +555,7 @@ function ChatProfilePreviewModal({
   onClose,
   onOpenChat,
   onRun,
+  presenceNow,
 }: {
   chat: ChatWithLastMessage;
   actions: ChatAction[];
@@ -557,6 +563,7 @@ function ChatProfilePreviewModal({
   onClose: () => void;
   onOpenChat: () => void;
   onRun: (action: ChatAction) => void | Promise<void>;
+  presenceNow: number;
 }) {
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
   const mutedChatIds = useAppStore((s) => s.mutedChatIds);
@@ -564,9 +571,7 @@ function ChatProfilePreviewModal({
   const otherUser = chat.other_user ?? chat.members?.find((member) => member.user_id !== currentUserId)?.profile ?? null;
   const isPrivate = chat.type === "private" && !display.isSaved;
   const isGroupLike = !display.isSaved && (chat.type === "group" || chat.type === "channel");
-  const isOnline = isPrivate
-    && Boolean(otherUser?.online_at)
-    && Date.now() - new Date(otherUser!.online_at!).getTime() < 90_000;
+  const isOnline = isPrivate && isUserOnline(otherUser, presenceNow);
   const memberCount = chat.members?.length ?? 0;
   const myRole = chat.members?.find((member) => member.user_id === currentUserId)?.role ?? null;
   const isMuted = mutedChatIds.includes(chat.id);

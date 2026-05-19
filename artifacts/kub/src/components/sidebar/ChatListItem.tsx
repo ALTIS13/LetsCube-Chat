@@ -10,6 +10,7 @@ import { useAppStore } from "@/store/app.store";
 import { cn } from "@/lib/utils";
 import { formatChatMessagePreview } from "@/lib/messagePreview";
 import { getMessageDeliveryState } from "@/lib/messageDelivery";
+import { isUserOnline } from "@/lib/presence";
 import {
   getGroupReadReceiptAriaLabel,
   getGroupReadReceiptCompactLabel,
@@ -34,6 +35,7 @@ interface ChatListItemProps {
   onPinnedDragOver?: (event: DragEvent<HTMLButtonElement>) => void;
   onPinnedDrop?: () => void;
   onPinnedDragEnd?: () => void;
+  presenceNow?: number;
 }
 
 export function ChatListItem({
@@ -50,6 +52,7 @@ export function ChatListItem({
   onPinnedDragOver,
   onPinnedDrop,
   onPinnedDragEnd,
+  presenceNow = Date.now(),
 }: ChatListItemProps) {
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
   const longPressTimerRef = useRef<number | null>(null);
@@ -74,9 +77,7 @@ export function ChatListItem({
   const hasUnread = (chat.unread_count ?? 0) > 0;
   const isMuted = chat.is_muted;
   const isPinned = chat.is_pinned;
-  const isOtherOnline = chat.type === "private"
-    && !!chat.other_user?.online_at
-    && Date.now() - new Date(chat.other_user.online_at).getTime() < 90_000;
+  const isOtherOnline = chat.type === "private" && isUserOnline(chat.other_user, presenceNow);
 
   const clearLongPressTimer = () => {
     touchStartRef.current = null;

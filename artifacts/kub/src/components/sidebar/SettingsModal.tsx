@@ -355,7 +355,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       <div className="px-4 py-4 border-t border-[color:var(--kub-border-color)]">
         <SectionLabel>Уведомления</SectionLabel>
         <div className="rounded-xl overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
-          <div className="flex items-center gap-3 px-4 py-3">
+          <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
             {pushStatus === "active" ? (
               <KubIcon name="notifications" size={16} className="text-[color:var(--kub-cyan)]" />
             ) : (
@@ -373,16 +373,20 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               </div>
             </div>
             {pushStatus === "active" ? (
-              <KubButton size="sm" variant="secondary" onClick={disablePush}>
-                Выключить
-              </KubButton>
+              <div className="col-span-2 min-w-0 sm:col-span-1 sm:justify-self-end">
+                <KubButton size="sm" variant="secondary" onClick={disablePush} className="w-full sm:w-auto">
+                  Выключить
+                </KubButton>
+              </div>
             ) : pushStatus === "inactive" ? (
-              <KubButton size="sm" onClick={enablePush}>
-                Включить
-              </KubButton>
+              <div className="col-span-2 min-w-0 sm:col-span-1 sm:justify-self-end">
+                <KubButton size="sm" onClick={enablePush} className="w-full sm:w-auto">
+                  Включить
+                </KubButton>
+              </div>
             ) : null}
           </div>
-          <div className="border-t border-[color:var(--kub-border-color)] px-4 py-3 space-y-2">
+          <div className="min-w-0 border-t border-[color:var(--kub-border-color)] px-4 py-3 space-y-2">
             <PreferenceSwitch
               label="Сообщения"
               checked={pushPreferences.message_push_enabled}
@@ -477,7 +481,7 @@ function PreferenceSwitch({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+    <div className="grid min-w-0 w-full max-w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg px-2 py-1">
       <span className="min-w-0 truncate pr-1 text-sm text-[color:var(--kub-text)]">{label}</span>
       <button
         type="button"
@@ -487,7 +491,7 @@ function PreferenceSwitch({
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cn(
-          "relative h-6 w-11 shrink-0 rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+          "relative h-6 w-11 shrink-0 justify-self-end rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50",
           checked
             ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_35%,transparent)]"
             : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]"

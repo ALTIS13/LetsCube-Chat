@@ -444,6 +444,7 @@ function formatNotification(item: Notification, inviteStatus?: GroupInviteStatus
   const reason = payloadString(item.payload, "reason");
   const actor = payloadString(item.payload, "actor_name") ?? payloadString(item.payload, "inviter_name");
   const sender = payloadString(item.payload, "sender_name");
+  const chatType = payloadString(item.payload, "chat_type");
   const preview = payloadString(item.payload, "preview");
   const body = sanitizeBody(
     preview ??
@@ -515,13 +516,20 @@ function formatNotification(item: Notification, inviteStatus?: GroupInviteStatus
       };
     default:
       if (item.kind.includes("message")) {
+        const isPrivateMessage = chatType === "private" || (!!sender && !!chatName && sender === chatName);
+        const fallbackBody = "Откройте чат, чтобы посмотреть сообщение.";
+        const safeBody = body || fallbackBody;
         return {
           icon: "chatBubble",
           typeLabel: "Сообщение",
-          title: sender ? truncateText(sender) : "Новое сообщение",
-          body: chatName && body
-            ? `${truncateText(chatName, 54)}: ${truncateText(body)}`
-            : body || "Откройте чат, чтобы посмотреть сообщение.",
+          title: isPrivateMessage
+            ? (sender ? truncateText(sender) : "Новое сообщение")
+            : (chatName ? truncateText(chatName) : "Новое сообщение"),
+          body: isPrivateMessage
+            ? truncateText(safeBody)
+            : sender && body
+              ? `${truncateText(sender, 54)}: ${truncateText(body)}`
+              : truncateText(safeBody),
         };
       }
       if (item.kind.includes("task")) {
