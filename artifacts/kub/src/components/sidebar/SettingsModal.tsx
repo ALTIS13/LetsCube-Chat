@@ -477,8 +477,8 @@ function PreferenceSwitch({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-sm text-[color:var(--kub-text)]">{label}</span>
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+      <span className="min-w-0 truncate pr-1 text-sm text-[color:var(--kub-text)]">{label}</span>
       <button
         type="button"
         role="switch"
@@ -487,7 +487,7 @@ function PreferenceSwitch({
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cn(
-          "relative h-6 w-11 rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+          "relative h-6 w-11 shrink-0 rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50",
           checked
             ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_35%,transparent)]"
             : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]"

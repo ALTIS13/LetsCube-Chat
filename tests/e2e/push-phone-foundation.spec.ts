@@ -20,6 +20,13 @@ test.describe("KUB push and phone production foundation", () => {
     await expect(page.getByRole("switch", { name: "Push: Сообщения" })).toBeVisible();
     await expect(page.getByRole("switch", { name: "Push: Задачи" })).toBeVisible();
     await expect(page.getByRole("switch", { name: "Push: Приглашения" })).toBeVisible();
+    const dialogBox = await page.getByRole("dialog").boundingBox();
+    expect(dialogBox).not.toBeNull();
+    for (const name of ["Push: Сообщения", "Push: Задачи", "Push: Приглашения"]) {
+      const box = await page.getByRole("switch", { name }).boundingBox();
+      expect(box).not.toBeNull();
+      expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual((dialogBox?.x ?? 0) + (dialogBox?.width ?? 0) + 1);
+    }
     await expect(page.getByRole("button", { name: /Сохранить без/ })).toHaveCount(0);
   });
 
@@ -35,6 +42,8 @@ test.describe("KUB push and phone production foundation", () => {
     expect(swSource).toContain('self.addEventListener("notificationclick"');
     expect(swSource).toContain("Новое уведомление");
     expect(swSource).toContain("kub-open");
+    expect(swSource).toContain("messageId");
+    expect(swSource).toContain("message_id");
     expect(swSource).not.toMatch(/media_url|signedUrl|access_token|refresh_token/i);
   });
 });

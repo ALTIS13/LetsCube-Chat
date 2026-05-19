@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { mapPgError } from "@/lib/errors";
+import { requestChatMessageJump } from "@/lib/chatJumpEvents";
 import { safeOpenChat } from "@/lib/safeOpenChat";
 import { useAppStore } from "@/store/app.store";
 
@@ -276,6 +277,8 @@ export function usePush() {
 }
 
 export function usePushNotificationNavigation() {
+  const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
+
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
     const onMsg = (e: MessageEvent) => {
@@ -287,6 +290,14 @@ export function usePushNotificationNavigation() {
     navigator.serviceWorker.addEventListener("message", onMsg);
     return () => navigator.serviceWorker.removeEventListener("message", onMsg);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!currentUserId) return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.get("chat")) return;
+    openPushTargetInApp(`${url.pathname}${url.search}${url.hash}`);
+  }, [currentUserId]);
 }
 
 function openPushTargetInApp(rawUrl: string): void {
@@ -300,11 +311,15 @@ function openPushTargetInApp(rawUrl: string): void {
   if (target.origin !== window.location.origin) return;
 
   const chatId = target.searchParams.get("chat");
+  const messageId = target.searchParams.get("message");
   if (chatId) {
     void safeOpenChat(chatId).then((opened) => {
       if (opened) {
         window.history.pushState(null, "", `${target.pathname}${target.hash}`);
         window.dispatchEvent(new PopStateEvent("popstate"));
+        if (messageId) {
+          window.setTimeout(() => requestChatMessageJump(chatId, messageId), 150);
+        }
       }
     });
     return;

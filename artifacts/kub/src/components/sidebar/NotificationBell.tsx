@@ -7,6 +7,7 @@ import { KubIcon, KubTooltip, type KubIconName } from "@/components/kub";
 import { useNotifications } from "@/hooks/useNotifications";
 import { createClient } from "@/lib/supabase/client";
 import { safeOpenChat } from "@/lib/safeOpenChat";
+import { requestChatMessageJump } from "@/lib/chatJumpEvents";
 import { showAppAlert } from "@/lib/appDialogs";
 import { cn } from "@/lib/utils";
 import { acceptGroupInvite, declineGroupInvite, parseGroupInvitePayload } from "@/lib/groupInvites";
@@ -16,6 +17,7 @@ import type { Notification } from "@/types/database";
 
 type NotificationTarget =
   | { kind: "chat"; chatId: string }
+  | { kind: "message"; chatId: string; messageId: string }
   | { kind: "tasks"; taskId?: string }
   | { kind: "admin" }
   | { kind: "group_invite"; status: GroupInviteStatus; chatId?: string }
@@ -135,9 +137,12 @@ export function NotificationBell() {
     if (!item.read_at) await markRead(item.id);
     const target = navigateTarget(item, inviteStatuses);
 
-    if (target?.kind === "chat") {
+    if (target?.kind === "chat" || target?.kind === "message") {
       setOpen(false);
       const opened = await safeOpenChat(target.chatId);
+      if (opened && target.kind === "message") {
+        window.setTimeout(() => requestChatMessageJump(target.chatId, target.messageId), 150);
+      }
       if (opened) setLocation("/");
       return;
     }
@@ -438,7 +443,10 @@ function formatNotification(item: Notification, inviteStatus?: GroupInviteStatus
   const chatName = payloadString(item.payload, "chat_name");
   const reason = payloadString(item.payload, "reason");
   const actor = payloadString(item.payload, "actor_name") ?? payloadString(item.payload, "inviter_name");
+  const sender = payloadString(item.payload, "sender_name");
+  const preview = payloadString(item.payload, "preview");
   const body = sanitizeBody(
+    preview ??
     payloadString(item.payload, "body") ??
     payloadString(item.payload, "message") ??
     payloadString(item.payload, "content") ??
@@ -510,8 +518,10 @@ function formatNotification(item: Notification, inviteStatus?: GroupInviteStatus
         return {
           icon: "chatBubble",
           typeLabel: "Сообщение",
-          title: chatName ? truncateText(chatName) : "Новое сообщение",
-          body: body || "Откройте чат, чтобы посмотреть сообщение.",
+          title: sender ? truncateText(sender) : "Новое сообщение",
+          body: chatName && body
+            ? `${truncateText(chatName, 54)}: ${truncateText(body)}`
+            : body || "Откройте чат, чтобы посмотреть сообщение.",
         };
       }
       if (item.kind.includes("task")) {
@@ -562,6 +572,8 @@ function navigateTarget(item: Notification, localStatuses: Record<string, GroupI
       return { kind: "admin" };
     default: {
       const chatId = payloadString(item.payload, "chat_id");
+      const messageId = payloadString(item.payload, "message_id");
+      if (chatId && messageId && item.kind.includes("message")) return { kind: "message", chatId, messageId };
       if (chatId) return { kind: "chat", chatId };
       const taskId = payloadString(item.payload, "task_id");
       if (taskId || item.kind.includes("task")) return { kind: "tasks", taskId };

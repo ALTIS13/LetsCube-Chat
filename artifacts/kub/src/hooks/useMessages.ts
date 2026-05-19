@@ -22,6 +22,9 @@ type FetchMessagesOptions = {
   background?: boolean;
 };
 
+const ACTIVE_CHAT_RECONCILE_DELAY_MS = 600;
+const ACTIVE_CHAT_RECONNECT_DELAY_MS = 900;
+
 interface SendMessageInput {
   type: SendableMessageType;
   content: string | null;
@@ -391,15 +394,30 @@ export function useMessages(
   useEffect(() => {
     if (!chatId) return;
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
+    let reconcileTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleReconcile = (delay = ACTIVE_CHAT_RECONCILE_DELAY_MS) => {
+      if (reconcileTimer) clearTimeout(reconcileTimer);
+      reconcileTimer = setTimeout(() => {
+        reconcileTimer = null;
+        if (!chatIdRef.current) return;
+        void fetchMessages({ background: true });
+      }, delay);
+    };
     const handleRefresh = (event: Event) => {
       const detail = (event as CustomEvent<ChatsRefreshDetail>).detail;
-      if (detail?.reason !== "message-realtime" || detail.chatId !== chatIdRef.current || !detail.messageId) return;
+      if (detail?.reason !== "message-realtime" || detail.chatId !== chatIdRef.current) return;
+      if (!detail.messageId) {
+        scheduleReconcile();
+        return;
+      }
       if (timers.has(detail.messageId)) return;
       const timer = setTimeout(() => {
         timers.delete(detail.messageId!);
         const current = useAppStore.getState().messages[chatIdRef.current ?? ""] ?? [];
         if (current.some((message) => message.id === detail.messageId)) return;
-        void fetchMessageById(detail.messageId!);
+        void fetchMessageById(detail.messageId!).then((result) => {
+          if (!result.ok && result.reason === "not-found") scheduleReconcile(ACTIVE_CHAT_RECONNECT_DELAY_MS);
+        });
       }, 900);
       timers.set(detail.messageId, timer);
     };
@@ -407,9 +425,33 @@ export function useMessages(
     return () => {
       timers.forEach((timer) => clearTimeout(timer));
       timers.clear();
+      if (reconcileTimer) clearTimeout(reconcileTimer);
       window.removeEventListener(KUB_CHATS_REFRESH_EVENT, handleRefresh);
     };
-  }, [chatId, fetchMessageById]);
+  }, [chatId, fetchMessageById, fetchMessages]);
+
+  useEffect(() => {
+    if (!chatId) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleReconcile = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        if (!chatIdRef.current) return;
+        void fetchMessages({ background: true });
+      }, ACTIVE_CHAT_RECONNECT_DELAY_MS);
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") scheduleReconcile();
+    };
+    window.addEventListener("online", scheduleReconcile);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener("online", scheduleReconcile);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [chatId, fetchMessages]);
 
   const fetchPinnedMessages = useCallback(async () => {
     if (!chatId) {
@@ -606,6 +648,16 @@ export function useMessages(
       )
       .subscribe((status: string) => {
         if (import.meta.env.DEV) console.debug("[messages:chat]", chatId, status);
+        if (status === "SUBSCRIBED") {
+          window.setTimeout(() => {
+            if (chatIdRef.current === chatId) void fetchMessages({ background: true });
+          }, ACTIVE_CHAT_RECONCILE_DELAY_MS);
+        }
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          window.setTimeout(() => {
+            if (chatIdRef.current === chatId) void fetchMessages({ background: true });
+          }, ACTIVE_CHAT_RECONNECT_DELAY_MS);
+        }
       });
     registerChannel(channelName);
 
@@ -613,7 +665,7 @@ export function useMessages(
       rt.removeChannel(channel);
       unregisterChannel(channelName);
     };
-  }, [chatId, userId, rt, addMessage, rememberHiddenMessageIds, setMessages, shouldMarkDeliveredForPrivateChat, supabase]);
+  }, [chatId, userId, rt, addMessage, fetchMessages, rememberHiddenMessageIds, setMessages, shouldMarkDeliveredForPrivateChat, supabase]);
 
   useEffect(() => {
     if (!chatId || !userId) return;

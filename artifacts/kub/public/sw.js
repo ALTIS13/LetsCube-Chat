@@ -138,19 +138,23 @@ self.addEventListener("notificationclick", (event) => {
 function normalizePushPayload(raw) {
   const data = raw && typeof raw === "object" ? raw : {};
   const chatId = safeId(data.chatId || data.chat_id);
+  const messageId = safeId(data.messageId || data.message_id);
   const taskId = safeId(data.taskId || data.task_id);
   const inviteId = safeId(data.inviteId || data.invite_id);
   return {
     title: safeText(data.title, APP_NAME, 80),
     body: safeText(data.body || data.message || data.text, DEFAULT_PUSH_BODY, 180),
     tag: safeText(data.tag, chatId || taskId || inviteId || "kub-notification", 80),
-    url: routeForPush(data, { chatId, taskId, inviteId }),
+    url: routeForPush(data, { chatId, messageId, taskId, inviteId }),
   };
 }
 
 function routeForPush(data, ids) {
   const explicit = ensureRelativeUrl(data.url || data.route);
   if (explicit !== "/") return explicit;
+  if (ids.chatId && ids.messageId) {
+    return `/?chat=${encodeURIComponent(ids.chatId)}&message=${encodeURIComponent(ids.messageId)}`;
+  }
   if (ids.chatId) return `/?chat=${encodeURIComponent(ids.chatId)}`;
   if (ids.taskId) return `/tasks?task=${encodeURIComponent(ids.taskId)}`;
   if (ids.inviteId) return `/?notifications=1`;

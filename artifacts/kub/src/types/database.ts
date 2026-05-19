@@ -1490,6 +1490,7 @@ export type NotificationKind =
   | 'task_waiting_confirmation'
   | 'task_confirmed'
   | 'task_rejected'
+  | 'message'
   | 'chat_added'
   | 'group_invite'
   | 'mute_issued'

@@ -14,6 +14,7 @@ Status: production foundation is in the repo, but database SQL and Edge Function
 - Chat-level push mute is proposed in `public.chat_notification_preferences`.
 - Pending delivery uses `public.notifications_push_outbox`.
 - `supabase/functions/send-push-notifications` is an Edge Function source for draining the outbox.
+- Message notifications require the additional proposal `20260529_message_notifications_for_push.sql`, which creates `message` notification rows from `public.messages` inserts.
 
 ## Manual Supabase setup
 
@@ -21,6 +22,7 @@ Status: production foundation is in the repo, but database SQL and Edge Function
 
 ```sql
 .migration-backup/supabase/migrations/20260527_push_notifications_foundation.sql
+.migration-backup/supabase/migrations/20260529_message_notifications_for_push.sql
 ```
 
 2. Generate VAPID keys locally with a trusted tool, for example:
@@ -57,8 +59,8 @@ Schedule it from Supabase Cron or an external scheduler with `POST` and either `
 
 ## Privacy and routing
 
-- Message pushes use safe summaries, not raw message text or media URLs.
-- Push payload routes only to app paths such as `/?chat=<id>`, `/tasks`, or `/?notifications=1`.
+- Message pushes use safe truncated text previews or media labels such as `Фото`, `Видео`, `Голосовое`, `Файл`; raw media URLs are not included.
+- Push payload routes only to app paths such as `/?chat=<id>&message=<id>`, `/tasks`, or `/?notifications=1`.
 - The service worker rejects cross-origin notification click URLs.
 - Sender echo is blocked when notification payload includes `sender_id`.
 - User push settings and chat mute settings are enforced in the enqueue function before outbox rows are created.

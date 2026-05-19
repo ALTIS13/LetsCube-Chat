@@ -176,6 +176,7 @@ function safePayload(payload: Record<string, unknown>) {
     tag: safeText(payload.tag, "kub-notification", 80),
     kind: safeText(payload.kind, "notification", 60),
     chatId: safeText(payload.chatId, "", 80),
+    messageId: safeText(payload.messageId, "", 80),
   };
 }
 

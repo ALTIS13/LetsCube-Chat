@@ -1,0 +1,129 @@
+import { expect, test, type Page } from "@playwright/test";
+import {
+  gotoOrSkip,
+  hasSavedAuthState,
+  loadQaCredentials,
+  loadQaEnvValues,
+  loginAsRoleOrSkip,
+} from "./helpers/auth";
+
+test.describe("realtime incoming messages", () => {
+  test("reconciles a missed incoming private message after reconnect without page refresh", async ({ browser }) => {
+    const env = loadQaEnvValues();
+    const allowMutations = process.env.KUB_QA_ALLOW_MUTATIONS || env.get("KUB_QA_ALLOW_MUTATIONS");
+    test.skip(allowMutations !== "1", "KUB_QA_ALLOW_MUTATIONS=1 is required for realtime message mutation QA");
+    test.skip(!hasRoleAuth("owner") || !hasRoleAuth("client"), "owner and client QA auth are required");
+
+    const ownerContext = await browser.newContext();
+    const clientContext = await browser.newContext();
+    const ownerPage = await ownerContext.newPage();
+    const clientPage = await clientContext.newPage();
+
+    try {
+      await gotoOrSkip(ownerPage, "/");
+      await loginAsRoleOrSkip(ownerPage, "owner");
+      await gotoOrSkip(clientPage, "/");
+      await loginAsRoleOrSkip(clientPage, "client");
+
+      const clientUserId = await getCurrentUserId(clientPage);
+      const chatId = await openPrivateChatWith(ownerPage, clientUserId);
+      await openChat(ownerPage, chatId);
+
+      const incomingText = `codex incoming ${Date.now()} ${Math.random().toString(36).slice(2)}`;
+      await ownerContext.setOffline(true);
+      await insertTextMessage(clientPage, chatId, incomingText);
+      await expect(messageText(ownerPage, incomingText)).toHaveCount(0, { timeout: 1_000 });
+
+      await ownerContext.setOffline(false);
+      await ownerPage.evaluate((targetChatId) => {
+        window.dispatchEvent(
+          new CustomEvent("kub:chats-refresh", {
+            detail: { reason: "message-realtime", chatId: targetChatId },
+          }),
+        );
+      }, chatId);
+
+      await expect(messageText(ownerPage, incomingText).first()).toBeVisible({ timeout: 15_000 });
+      await ownerPage.evaluate((targetChatId) => {
+        window.dispatchEvent(
+          new CustomEvent("kub:chats-refresh", {
+            detail: { reason: "message-realtime", chatId: targetChatId },
+          }),
+        );
+      }, chatId);
+      await ownerPage.waitForTimeout(1_200);
+      await expect(messageText(ownerPage, incomingText)).toHaveCount(1);
+
+      const ownText = `codex own ${Date.now()} ${Math.random().toString(36).slice(2)}`;
+      await insertTextMessage(ownerPage, chatId, ownText);
+      await expect(messageText(ownerPage, ownText).first()).toBeVisible({ timeout: 15_000 });
+
+      const incomingBox = await messageText(ownerPage, incomingText).first().boundingBox();
+      const ownBox = await messageText(ownerPage, ownText).first().boundingBox();
+      expect(incomingBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(ownBox?.y ?? 0);
+    } finally {
+      await ownerContext.setOffline(false).catch(() => null);
+      await clientContext.close().catch(() => null);
+      await ownerContext.close().catch(() => null);
+    }
+  });
+});
+
+function hasRoleAuth(role: "owner" | "client") {
+  return Boolean(loadQaCredentials(role) || hasSavedAuthState(role));
+}
+
+function messageText(page: Page, text: string) {
+  return page.locator('[data-message-text-content="true"]').filter({ hasText: text });
+}
+
+async function getCurrentUserId(page: Page): Promise<string> {
+  return page.evaluate(async () => {
+    const { createClient } = await import("/src/lib/supabase/client.ts");
+    const { data, error } = await createClient().auth.getUser();
+    if (error || !data.user?.id) throw new Error("qa_user_not_available");
+    return data.user.id;
+  });
+}
+
+async function openPrivateChatWith(page: Page, targetUserId: string): Promise<string> {
+  return page.evaluate(async (userId) => {
+    const { createClient } = await import("/src/lib/supabase/client.ts");
+    const { data, error } = await createClient().rpc("open_or_create_private_chat", {
+      target_user_id: userId,
+    });
+    if (error || !data) throw new Error("qa_private_chat_not_available");
+    return String(data);
+  }, targetUserId);
+}
+
+async function openChat(page: Page, chatId: string) {
+  await page.evaluate(async (targetChatId) => {
+    const { safeOpenChat } = await import("/src/lib/safeOpenChat.ts");
+    const opened = await safeOpenChat(targetChatId);
+    if (!opened) throw new Error("qa_chat_not_opened");
+  }, chatId);
+}
+
+async function insertTextMessage(page: Page, chatId: string, content: string) {
+  return page.evaluate(async ({ targetChatId, text }) => {
+    const { createClient } = await import("/src/lib/supabase/client.ts");
+    const supabase = createClient();
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData.user?.id) throw new Error("qa_user_not_available");
+    const { data, error } = await supabase
+      .from("messages")
+      .insert({
+        chat_id: targetChatId,
+        user_id: userData.user.id,
+        type: "text",
+        content: text,
+        client_message_id: crypto.randomUUID(),
+        client_sent_at: new Date().toISOString(),
+      })
+      .select("id,created_at")
+      .single();
+    if (error || !data) throw new Error("qa_message_insert_failed");
+    return data;
+  }, { targetChatId: chatId, text: content });
+}
