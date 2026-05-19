@@ -67,7 +67,7 @@ Schedule it from Supabase Cron or an external scheduler with `POST` and either `
 - Sender echo is blocked when notification payload includes `sender_id`.
 - User push settings and chat mute settings are enforced in the enqueue function before outbox rows are created.
 - Private chat message pushes render as sender + preview. Group message pushes render as chat + `sender: preview`.
-- Browser/PWA grouping uses `NotificationOptions.tag`; exact OS-level grouping behavior still depends on the browser and operating system.
+- Browser/PWA grouping uses a stable `NotificationOptions.tag`; before showing a replacement notification, the service worker closes existing notifications with the same tag. Exact OS-level notification history behavior still depends on the browser and operating system.
 
 ## Manual QA
 
@@ -76,3 +76,4 @@ Schedule it from Supabase Cron or an external scheduler with `POST` and either `
 - Send a message/task/invite to the user from another account.
 - Verify notification delivery in a normal browser tab and installed PWA.
 - Click the notification and confirm it focuses an existing KUB tab or opens the correct route.
+- Send 2-3 messages in the same chat and confirm the browser replaces/updates the same chat notification where tag replacement is supported; send from another chat and confirm it stays separate.

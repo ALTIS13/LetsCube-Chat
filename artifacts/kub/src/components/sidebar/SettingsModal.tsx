@@ -10,7 +10,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { usePwaInstall } from "@/hooks/usePwa";
 import { usePush } from "@/hooks/usePush";
 import { useIsManagerOrAdmin } from "@/hooks/useRole";
-import { KubButton, KubIcon, KubModal, type KubIconName } from "@/components/kub";
+import { KubButton, KubIcon, KubModal, KubSwitch, type KubIconName } from "@/components/kub";
 import { PhoneSection } from "./PhoneSection";
 import { AudioSettingsSection } from "./AudioSettingsSection";
 import { cn } from "@/lib/utils";
@@ -483,27 +483,13 @@ function PreferenceSwitch({
   return (
     <div className="grid min-w-0 w-full max-w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg px-2 py-1">
       <span className="min-w-0 truncate pr-1 text-sm text-[color:var(--kub-text)]">{label}</span>
-      <button
-        type="button"
-        role="switch"
+      <KubSwitch
         aria-label={`Push: ${label}`}
-        aria-checked={checked}
+        checked={checked}
         disabled={disabled}
-        onClick={() => onChange(!checked)}
-        className={cn(
-          "relative h-6 w-11 shrink-0 justify-self-end rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-          checked
-            ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_35%,transparent)]"
-            : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]"
-        )}
-      >
-        <span
-          className={cn(
-            "absolute top-0.5 h-5 w-5 rounded-full bg-[var(--kub-text)] transition-transform",
-            checked ? "translate-x-5" : "translate-x-0.5"
-          )}
-        />
-      </button>
+        onCheckedChange={onChange}
+        className="justify-self-end"
+      />
     </div>
   );
 }

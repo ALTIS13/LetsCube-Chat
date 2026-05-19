@@ -104,17 +104,22 @@ self.addEventListener("push", (event) => {
 
   const data = normalizePushPayload(raw);
 
-  event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      tag: data.tag,
-      renotify: !data.isMessagePush,
-      icon: "/icons/icon-192.png",
-      badge: "/icons/icon-192.png",
-      data: { url: data.url, kind: data.kind },
-    }),
-  );
+  event.waitUntil(showPushNotification(data));
 });
+
+async function showPushNotification(data) {
+  const existing = await self.registration.getNotifications({ tag: data.tag });
+  existing.forEach((notification) => notification.close());
+  return self.registration.showNotification(data.title, {
+    body: data.body,
+    tag: data.tag,
+    renotify: !data.isMessagePush,
+    timestamp: data.timestamp,
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    data: { url: data.url, kind: data.kind, tag: data.tag },
+  });
+}
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
@@ -158,6 +163,7 @@ function normalizePushPayload(raw) {
     tag: safeText(data.tag, fallbackTag, 100),
     kind,
     isMessagePush,
+    timestamp: safeTimestamp(data.timestamp || data.createdAt || data.created_at),
     url: routeForPush(data, { chatId, messageId, taskId, inviteId }),
   };
 }
@@ -184,6 +190,15 @@ function safeText(value, fallback, maxLength) {
 function safeId(value) {
   if (typeof value !== "string") return "";
   return /^[a-zA-Z0-9_-]{1,80}$/.test(value) ? value : "";
+}
+
+function safeTimestamp(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return Date.now();
 }
 
 function ensureRelativeUrl(value) {

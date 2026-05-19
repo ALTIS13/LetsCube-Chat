@@ -25,9 +25,14 @@ test.describe("KUB push and phone production foundation", () => {
     const dialogBox = await page.getByRole("dialog").boundingBox();
     expect(dialogBox).not.toBeNull();
     for (const name of ["Push: Сообщения", "Push: Задачи", "Push: Приглашения"]) {
-      const box = await page.getByRole("switch", { name }).boundingBox();
+      const switchControl = page.getByRole("switch", { name });
+      const box = await switchControl.boundingBox();
       expect(box).not.toBeNull();
       expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual((dialogBox?.x ?? 0) + (dialogBox?.width ?? 0) + 1);
+      const thumbBox = await switchControl.locator('[data-testid="kub-switch-thumb"]').boundingBox();
+      expect(thumbBox).not.toBeNull();
+      expect(thumbBox?.x ?? 0).toBeGreaterThanOrEqual((box?.x ?? 0) - 1);
+      expect((thumbBox?.x ?? 0) + (thumbBox?.width ?? 0)).toBeLessThanOrEqual((box?.x ?? 0) + (box?.width ?? 0) + 1);
     }
     await expect(page.getByRole("button", { name: /Сохранить без/ })).toHaveCount(0);
   });
@@ -42,7 +47,10 @@ test.describe("KUB push and phone production foundation", () => {
     expect(swSource).toContain("message_id");
     expect(swSource).toContain("message:chat:");
     expect(swSource).toContain("isMessagePush");
+    expect(swSource).toContain("getNotifications({ tag: data.tag })");
+    expect(swSource).toContain("notification.close()");
     expect(swSource).toContain("renotify: !data.isMessagePush");
+    expect(swSource).toContain("timestamp: data.timestamp");
     expect(swSource).not.toMatch(/media_url|signedUrl|access_token|refresh_token/i);
   });
 });

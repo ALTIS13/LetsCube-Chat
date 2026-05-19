@@ -1,5 +1,12 @@
 # QA Results
 
+2026-05-19 push notification grouping and switch layout:
+
+- Hardened `artifacts/kub/public/sw.js` so push messages derive stable tags by media type and chat/task/invite id, close existing same-tag notifications with `registration.getNotifications({ tag })`, then call `showNotification` with the same tag and `renotify` disabled for message pushes.
+- No new SQL was applied and no new DB migration proposal was needed; `20260530_push_message_notification_polish.sql` already provides stable `message:chat:<chat_id>` payload tags.
+- Added reusable `KubSwitch` and wired Push preference rows to it so the thumb is constrained inside a 44x24 track and the switch stays inside the settings card on mobile.
+- Regression test coverage was extended in `tests/e2e/push-phone-foundation.spec.ts` to assert same-tag notification replacement code and switch-thumb bounds.
+
 2026-05-16 Supabase generated database types:
 
 - Ran `pnpm.cmd supabase:typegen` with `SUPABASE_PROJECT_REF=nhogbeojfnbjcfipitrh`; generated `artifacts/kub/src/types/database.generated.ts`.
