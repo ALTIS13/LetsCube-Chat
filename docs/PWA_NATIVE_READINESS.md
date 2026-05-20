@@ -64,7 +64,7 @@ Future Android/iOS work:
 - camera and microphone permission mapping;
 - file/media picker permissions;
 - push notification registration and deep links;
-- phone verification SMS provider setup, documented in [PHONE_VERIFICATION.md](./PHONE_VERIFICATION.md);
+- phone verification SMS provider setup, documented in [PHONE_VERIFICATION.md](./PHONE_VERIFICATION.md); until then, the UI shows a friendly provider-missing state and never marks a phone verified without OTP success;
 - Supabase Auth callback/deep-link configuration;
 - offline mutation queue if product requires it.
 

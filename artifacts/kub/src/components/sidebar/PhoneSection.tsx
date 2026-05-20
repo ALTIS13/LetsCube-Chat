@@ -8,6 +8,10 @@ import { cn } from "@/lib/utils";
 import type { ProfileContact } from "@/types/database";
 import { mapPgError } from "@/lib/errors";
 
+const RESEND_WAIT_MS = 45_000;
+const PHONE_FORMAT_HINT = "Введите номер в международном формате, например +79991234567.";
+const SMS_PROVIDER_MISSING_MESSAGE = "SMS-провайдер не настроен. Обратитесь к администратору.";
+
 /**
  * Settings → Phone section.
  *
@@ -37,6 +41,8 @@ export function PhoneSection() {
   const [busy, setBusy] = useState<null | "send" | "verify" | "save">(null);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [resendAvailableAt, setResendAvailableAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const userId = currentUser?.id;
   const editingRef = useRef(false);
@@ -76,6 +82,12 @@ export function PhoneSection() {
     };
   }, [userId, supabase]);
 
+  useEffect(() => {
+    if (stage !== "code-sent" || !resendAvailableAt) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [resendAvailableAt, stage]);
+
   if (!currentUser) return null;
 
   const storedPhone = contact?.phone ?? null;
@@ -84,6 +96,13 @@ export function PhoneSection() {
   const isValid = normalised !== null;
   const dirty = (storedPhone ?? "") !== (normalised ?? "");
   const otpValid = /^\d{6}$/.test(code);
+  const resendSeconds =
+    stage === "code-sent" && resendAvailableAt
+      ? Math.max(0, Math.ceil((resendAvailableAt - now) / 1_000))
+      : 0;
+  const verifiedAtLabel = verified && contact?.phone_verified_at
+    ? formatVerifiedAt(contact.phone_verified_at)
+    : null;
 
   const reset = () => { setError(null); setInfo(null); };
 
@@ -99,7 +118,7 @@ export function PhoneSection() {
   const sendCode = async () => {
     reset();
     if (!isValid || !normalised) {
-      setError("Введите номер в формате +7 999 123 45 67");
+      setError(PHONE_FORMAT_HINT);
       return;
     }
     setBusy("send");
@@ -108,13 +127,19 @@ export function PhoneSection() {
     if (err) {
       if (looksLikeProviderUnavailable(err.message)) {
         setStage("unsupported");
-        setInfo("SMS-провайдер не настроен. Обратитесь к администратору.");
+        setCode("");
+        setResendAvailableAt(null);
+        setInfo(SMS_PROVIDER_MISSING_MESSAGE);
       } else {
+        setStage("idle");
         setError(humanise(err.message));
       }
       return;
     }
+    const nextResendAt = Date.now() + RESEND_WAIT_MS;
     setStage("code-sent");
+    setNow(Date.now());
+    setResendAvailableAt(nextResendAt);
     setInfo(`Код из 6 цифр отправлен на ${normalised}`);
   };
 
@@ -133,7 +158,7 @@ export function PhoneSection() {
     });
     if (vErr) {
       setBusy(null);
-      setError(humanise(vErr.message));
+      setError(looksLikeProviderUnavailable(vErr.message) ? SMS_PROVIDER_MISSING_MESSAGE : humanise(vErr.message));
       return;
     }
     const { error: rpcErr } = await supabase.rpc("profile_phone_mark_verified");
@@ -146,6 +171,7 @@ export function PhoneSection() {
     setBusy(null);
     setStage("idle");
     setCode("");
+    setResendAvailableAt(null);
     editingRef.current = false;
     setInfo("Телефон подтверждён.");
   };
@@ -166,6 +192,7 @@ export function PhoneSection() {
     setBusy(null);
     setPhoneInput("");
     setStage("idle");
+    setResendAvailableAt(null);
     editingRef.current = false;
     setInfo("Номер удалён.");
   };
@@ -194,6 +221,7 @@ export function PhoneSection() {
               editingRef.current = true;
               setPhoneInput(e.target.value);
               setStage("idle");
+              setResendAvailableAt(null);
               reset();
             }}
             placeholder="+7 999 123 45 67"
@@ -201,12 +229,13 @@ export function PhoneSection() {
           />
           {phoneInput && !isValid && (
             <div className="text-[11px] mt-1 text-[color:var(--kub-warn)]">
-              Формат: + и 7-15 цифр (например, +79991234567)
+              {PHONE_FORMAT_HINT}
             </div>
           )}
           {storedPhone && !dirty && (
             <div className="text-[11px] mt-1 text-[color:var(--kub-muted)]">
               Сохранённый номер: {storedPhone}
+              {verifiedAtLabel ? ` · подтверждён ${verifiedAtLabel}` : ""}
             </div>
           )}
         </div>
@@ -261,9 +290,18 @@ export function PhoneSection() {
             <KubButton
               variant="ghost"
               size="sm"
-              onClick={() => { setStage("idle"); setCode(""); reset(); }}
+              onClick={() => { setStage("idle"); setCode(""); setResendAvailableAt(null); reset(); }}
             >
               Отмена
+            </KubButton>
+            <KubButton
+              variant="secondary"
+              size="sm"
+              onClick={sendCode}
+              loading={busy === "send"}
+              disabled={resendSeconds > 0 || !dirty || !isValid}
+            >
+              {resendSeconds > 0 ? `Повторно через ${resendSeconds}с` : "Отправить код повторно"}
             </KubButton>
           </>
         ) : stage === "unsupported" ? (
@@ -307,21 +345,26 @@ export function PhoneSection() {
   );
 }
 
-// Mirror of the DB-side `_normalize_phone_e164`.
+// Strict E.164 client-side check. The DB-side `_normalize_phone_e164`
+// remains the final guard, but the UI should not silently convert local
+// numbers without an explicit country code.
 function normaliseE164(p: string): string | null {
-  if (!p) return null;
-  let v = p.replace(/[^0-9+]/g, "");
-  if (!v || v === "+") return null;
-  if (v.startsWith("+")) {
-    v = "+" + v.slice(1).replace(/\D/g, "");
-  } else if (v.length === 11 && v.startsWith("8")) {
-    v = "+7" + v.slice(1);
-  } else if (v.length === 10) {
-    v = "+7" + v;
-  } else {
-    v = "+" + v;
-  }
+  const v = p.trim().replace(/[\s().-]/g, "");
+  if (!v || !v.startsWith("+")) return null;
+  if (!/^\+\d+$/.test(v)) return null;
   return /^\+[1-9]\d{6,14}$/.test(v) ? v : null;
+}
+
+function formatVerifiedAt(value: string): string | null {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function looksLikeProviderUnavailable(msg: string): boolean {

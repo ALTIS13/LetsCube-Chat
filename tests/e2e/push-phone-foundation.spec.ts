@@ -37,6 +37,44 @@ test.describe("KUB push and phone production foundation", () => {
     await expect(page.getByRole("button", { name: /Сохранить без/ })).toHaveCount(0);
   });
 
+  test("phone verification requires international format and hides SMS provider details", async ({ page }) => {
+    const role = findFirstAvailableQaRole(["owner", "tech_admin", "location_admin", "location_staff", "client"], {
+      includeDefault: true,
+    });
+    test.skip(!role, "QA credentials or auth state are not configured");
+
+    await page.route("**/auth/v1/user", async (route) => {
+      if (route.request().method() !== "PUT") {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "missing Twilio account SID" }),
+      });
+    });
+
+    await gotoOrSkip(page, "/");
+    await loginAsRoleOrSkip(page, role);
+
+    await page.getByRole("button", { name: "Меню" }).click();
+    await page.getByRole("button", { name: "Настройки" }).click();
+    await expect(page.getByText("Редактировать профиль").first()).toBeVisible();
+
+    const phoneInput = page.getByPlaceholder("+7 999 123 45 67");
+    await phoneInput.scrollIntoViewIfNeeded();
+    await phoneInput.fill("89991234567");
+    await expect(page.getByText("Введите номер в международном формате, например +79991234567.")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Подтвердить номер|Изменить номер/ })).toBeDisabled();
+
+    await phoneInput.fill("+1 (555) 123-45-67");
+    await page.getByRole("button", { name: /Подтвердить номер|Изменить номер/ }).click();
+    await expect(page.getByText("SMS-провайдер не настроен. Обратитесь к администратору.")).toBeVisible();
+    await expect(page.getByText(/Twilio|account SID|missing Twilio/i)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Сохранить без/ })).toHaveCount(0);
+  });
+
   test("service worker contains safe push and click routing handlers", async () => {
     const swSource = readFileSync(resolve("artifacts/kub/public/sw.js"), "utf8");
     expect(swSource).toContain('self.addEventListener("push"');

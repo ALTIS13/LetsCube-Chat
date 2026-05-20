@@ -1,5 +1,13 @@
 # QA Results
 
+2026-05-20 phone verification without SMS provider:
+
+- Phone settings now require explicit international `+` E.164-style input; local numbers such as `89991234567` are rejected instead of being silently converted.
+- The phone flow still has no “save without verification” path. A changed phone reaches `profile_contacts` only after Supabase Auth `verifyOtp` succeeds and `profile_phone_mark_verified()` mirrors the confirmed Auth phone.
+- Missing SMS provider errors are mapped to `SMS-провайдер не настроен. Обратитесь к администратору.`; raw provider/Twilio details are not shown in the UI.
+- The OTP state includes a resend countdown, and verified phones can show the DB-backed `phone_verified_at` timestamp when migration `20260528_phone_verification.sql` is applied.
+- Regression coverage in `tests/e2e/push-phone-foundation.spec.ts` verifies strict phone input, missing-provider friendly fallback, absence of raw provider text, absence of “save without verification”, push switch bounds, and SW push routing checks.
+
 2026-05-19 push notification grouping and switch layout:
 
 - Hardened `artifacts/kub/public/sw.js` so push messages derive stable tags by media type and chat/task/invite id, close existing same-tag notifications with `registration.getNotifications({ tag })`, then call `showNotification` with the same tag and `renotify` disabled for message pushes.
