@@ -11,6 +11,7 @@ submission.
 - Camera switching works.
 - Permission denied state is friendly.
 - Permission is requested only when starting camera functionality.
+- Android manifest includes `CAMERA`.
 
 ## Microphone
 
@@ -18,6 +19,7 @@ submission.
 - Video-circle audio works.
 - Permission denied state is friendly.
 - System volume is not modified by the app.
+- Android manifest includes `RECORD_AUDIO`.
 
 ## Notifications
 
@@ -26,6 +28,8 @@ submission.
 - Message, task, and invite toggles work.
 - Muted chats suppress message push.
 - Click routing opens the right chat/task/invite.
+- Android manifest includes `POST_NOTIFICATIONS`; native FCM delivery is a
+  separate future stage.
 
 ## Files and media
 
@@ -33,6 +37,8 @@ submission.
 - Media upload uses existing storage paths.
 - Media viewer works.
 - Raw storage URLs are not exposed in notifications.
+- Android manifest includes scoped media read permissions for images, video,
+  and audio plus legacy `READ_EXTERNAL_STORAGE` for older devices.
 
 ## Auth and deep links
 
@@ -52,3 +58,4 @@ submission.
 - Offline banner appears.
 - Reconnect state recovers without page reload.
 - Draft and staged media state are not lost by reconnect UI.
+- Android manifest includes `INTERNET` and `ACCESS_NETWORK_STATE`.

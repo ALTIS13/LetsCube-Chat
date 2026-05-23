@@ -10,25 +10,34 @@ without changing KUB web behavior.
   - `PORT=5173 BASE_PATH=/ pnpm.cmd --filter @workspace/kub run build`
   - `pnpm.cmd e2e:smoke`
 - Android Studio installed on a packaging workstation.
-- Supported JDK and Android SDK installed.
+- Supported JDK and Android SDK installed. `JAVA_HOME` must point to a JDK
+  with `javac`, not a JRE-only install.
 - Production-like HTTPS domain, for example `https://kub.example.com`.
 - Supabase Auth redirect URLs configured for web and future Android deep links.
 - Real app icons and splash assets prepared.
 
-## Phase 1: add wrapper, later
+## Phase 1: current MVP groundwork
 
-Future commands, not for this stage:
+Current repository groundwork:
+
+- Capacitor config: `capacitor.config.ts`
+- Android project: `android/`
+- App id: `com.kub.messenger`
+- App name: `KUB Messenger`
+- Web assets directory: `artifacts/kub/dist/public`
+- Android sync script: `pnpm.cmd android:sync`
+- Android Studio open script: `pnpm.cmd android:open`
+- Debug build script: `pnpm.cmd android:build:debug`
+
+The sync flow is:
 
 ```powershell
-pnpm.cmd --filter @workspace/kub run build
-npm install @capacitor/core @capacitor/cli @capacitor/android
-npx cap init KUB com.example.kub
-npx cap add android
-npx cap sync android
+cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"
+pnpm.cmd android:sync
 ```
 
-Use the actual package id chosen for production. Do not use
-`com.example.kub` in a release build.
+Use Android Studio for emulator/device runs and debug APK inspection. Release
+signing is intentionally not configured in this stage.
 
 ## Web asset model
 
@@ -51,11 +60,14 @@ hardcode a temporary domain.
 
 Map existing web permissions to Android:
 
+- `android.permission.INTERNET` for Supabase/API/web asset runtime access;
+- `android.permission.ACCESS_NETWORK_STATE` for network-aware WebView behavior;
 - camera for photos, regular video, and video-circle recording;
 - microphone for voice and video-circle audio;
 - notification runtime permission on Android 13+;
-- file/media picker permissions according to Android version;
-- network access.
+- media read permissions for image/video/audio selection on Android versions
+  where the WebView/file picker path requires them;
+- legacy read external storage with `maxSdkVersion=32` for older compatibility.
 
 Permission copy must be user-facing and product-specific. Do not request
 permissions on app launch; request them when the user starts the feature.
@@ -64,7 +76,9 @@ permissions on app launch; request them when the user starts the feature.
 
 Browser Web Push does not become native Android push automatically. Native
 Android push should use FCM through a native plugin or Capacitor-compatible
-push bridge. See [Native push plan](./NATIVE_PUSH_PLAN.md).
+push bridge. FCM, `google-services.json`, and production push token handling
+are intentionally excluded from this MVP groundwork. See
+[Native push plan](./NATIVE_PUSH_PLAN.md).
 
 ## Release signing
 
@@ -73,6 +87,36 @@ push bridge. See [Native push plan](./NATIVE_PUSH_PLAN.md).
 - Build an internal release before any Play Store submission.
 - Document the app id, signing owner, keystore backup location, and rotation
   plan without committing values.
+- The repo-level Android ignore rules exclude local keystore and
+  `google-services.json` files from accidental commits.
+
+## Manual Android Studio steps
+
+1. Install Android Studio and the Android SDK on the packaging machine.
+2. Install a JDK supported by the selected Android Gradle plugin and point
+   `JAVA_HOME` to the JDK directory.
+3. From the repo root run:
+
+```powershell
+cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"
+pnpm.cmd android:sync
+pnpm.cmd android:open
+```
+
+4. In Android Studio, let Gradle sync.
+5. Select an emulator or USB device.
+6. Run the `app` debug configuration.
+7. For a debug APK, run `pnpm.cmd android:build:debug` from the repo root or
+   `gradlew.bat assembleDebug` from `android/`.
+8. Test camera, microphone, file picker, auth, Realtime, and media playback on
+   a real device before considering release work.
+
+## Known MVP limitations
+
+- Native push/FCM is not implemented.
+- Android app links/custom scheme are not finalized.
+- Release signing/AAB is not configured.
+- Final app icon/splash/club visual branding is still pending.
 
 ## Android QA
 

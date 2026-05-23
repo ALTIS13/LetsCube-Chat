@@ -1,5 +1,13 @@
 # QA Results
 
+2026-05-23 Android Capacitor MVP groundwork:
+
+- Added Capacitor at repo root with `capacitor.config.ts`, app id `com.kub.messenger`, app name `KUB Messenger`, and `webDir` pointing at `artifacts/kub/dist/public`.
+- Added Android project under `android/` and root scripts for sync/open/debug build.
+- Android manifest includes network, camera, microphone, media read, legacy external read, and Android 13+ notification permissions. Native FCM push, release signing, deep links, and final branding are intentionally deferred.
+- Android gitignore now excludes local keystores and `google-services.json`; no signing or FCM secret files are committed.
+- `pnpm.cmd android:sync` completed after the Vite build. `pnpm.cmd android:build:debug` reached Gradle but did not produce an APK in the current local environment because `JAVA_HOME` points to a JRE-only Eclipse Adoptium install without `javac`; Android Studio/JDK setup is required on the packaging machine.
+
 2026-05-20 phone verification without SMS provider:
 
 - Phone settings now require explicit international `+` E.164-style input; local numbers such as `89991234567` are rejected instead of being silently converted.

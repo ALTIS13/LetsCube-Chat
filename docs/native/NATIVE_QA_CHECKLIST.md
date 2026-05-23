@@ -1,12 +1,14 @@
 # Native QA Checklist
 
-Run this after a native wrapper is introduced. For now it is a planning
-checklist only.
+Run this after a native wrapper is introduced. Android MVP groundwork exists in
+`android/`; iOS and Windows are still planning-only.
 
 ## Baseline
 
 - Fresh install.
 - Upgrade from previous build.
+- Android Gradle sync succeeds.
+- Android debug APK builds.
 - Logout/login.
 - Session restore after app kill.
 - App resumes after long background period.
@@ -49,7 +51,8 @@ checklist only.
 
 ## Platform release
 
-- Android signed internal build.
+- Android debug build first.
+- Android signed internal build later.
 - iOS TestFlight build.
 - Windows signed installer.
 - Store metadata, privacy labels, and screenshots reviewed.
