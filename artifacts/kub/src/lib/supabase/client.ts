@@ -14,18 +14,19 @@ const SUPABASE_URL = env.VITE_SUPABASE_URL
 const SUPABASE_KEY =
   env.VITE_SUPABASE_PUBLISHABLE_KEY || env.VITE_SUPABASE_ANON_KEY
 
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  // eslint-disable-next-line no-console
-  console.error(
-    "Missing Supabase environment variables. " +
-      "Set VITE_SUPABASE_URL and either VITE_SUPABASE_PUBLISHABLE_KEY " +
-      "(preferred) or VITE_SUPABASE_ANON_KEY in Replit Secrets."
-  )
+const MISSING_SUPABASE_CONFIG_ERROR =
+  "Supabase runtime configuration is missing. Build the app with the public Supabase URL and publishable key."
+
+export function isSupabaseConfigured(): boolean {
+  return Boolean(SUPABASE_URL && SUPABASE_KEY)
 }
 
 let instance: SupabaseClient<Database> | null = null
 
 export function createClient(): SupabaseClient<Database> {
+  if (!isSupabaseConfigured()) {
+    throw new Error(MISSING_SUPABASE_CONFIG_ERROR)
+  }
   if (!instance) {
     // Use the standard supabase-js browser client.
     //

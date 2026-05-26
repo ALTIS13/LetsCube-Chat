@@ -9,7 +9,7 @@ import { useUser } from "@/hooks/useUser";
 import { useHeartbeat } from "@/hooks/useHeartbeat";
 import { useBanState } from "@/hooks/useBanState";
 import { usePushNotificationNavigation } from "@/hooks/usePush";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { IframeAuthBanner } from "@/components/IframeAuthBanner";
 import { AppUpdateBanner } from "@/components/AppUpdateBanner";
 import { PwaRuntime } from "@/components/PwaRuntime";
@@ -270,6 +270,24 @@ function LoadingScreen({
   );
 }
 
+function RuntimeConfigurationScreen() {
+  return (
+    <main className="min-h-screen flex items-center justify-center kub-grid-bg px-5">
+      <section className="w-full max-w-sm rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-5 text-center shadow-2xl">
+        <div className="mb-4 flex justify-center">
+          <KubLogo size={56} withGlow />
+        </div>
+        <h1 className="text-lg font-semibold text-[color:var(--kub-text)]">
+          Подключение к серверу не настроено
+        </h1>
+        <p className="mt-2 text-sm leading-relaxed text-[color:var(--kub-muted)]">
+          Эта сборка приложения создана без публичных параметров подключения. Соберите APK заново с настройками Supabase или обратитесь к администратору.
+        </p>
+      </section>
+    </main>
+  );
+}
+
 function AppRoutes() {
   const { user, loading, loadingError, retry, signOut } = useUser();
   const userId = user?.id ?? null;
@@ -354,6 +372,8 @@ function AppRoutes() {
 }
 
 function App() {
+  const supabaseConfigured = isSupabaseConfigured();
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
@@ -362,9 +382,13 @@ function App() {
         <IframeAuthBanner />
         <AppUpdateBanner />
         <AppDialogs />
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <AppRoutes />
-        </WouterRouter>
+        {supabaseConfigured ? (
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <AppRoutes />
+          </WouterRouter>
+        ) : (
+          <RuntimeConfigurationScreen />
+        )}
       </TooltipProvider>
     </QueryClientProvider>
   );
