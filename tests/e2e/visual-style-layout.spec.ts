@@ -15,10 +15,10 @@ test.describe("KUB visual style and layout", () => {
     const viewport = testInfo.project.use.viewport;
     const viewportWidth = viewport && typeof viewport === "object" && "width" in viewport ? viewport.width : 0;
     const mascot = page.locator('img[src*="letscube-mascot-primary"]').first();
-    if (viewportWidth >= 1024) {
-      await expect(mascot).toBeVisible();
-    } else {
-      await expect(mascot).toBeHidden();
+    await expect(mascot).toBeVisible();
+    if (viewportWidth < 1024) {
+      const opacity = Number(await mascot.evaluate((node) => getComputedStyle(node).opacity));
+      expect(opacity).toBeLessThanOrEqual(0.2);
     }
 
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);

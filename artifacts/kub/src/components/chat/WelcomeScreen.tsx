@@ -16,7 +16,7 @@ export function WelcomeScreen() {
         <KubLogo size={88} withGlow />
 
         <div>
-          <h2 className="text-3xl font-extrabold mb-2 kub-text-gradient">КУБ</h2>
+          <h2 className="text-3xl font-extrabold mb-2 kub-text-gradient">LETSCUBE</h2>
           <p className="text-sm leading-relaxed text-[color:var(--kub-muted)]">
             Выберите чат из списка слева, чтобы начать общение.
             Сообщения приходят быстро, защищённо и всегда синхронизированы.

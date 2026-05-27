@@ -45,7 +45,7 @@ export function BannedScreen({ ban }: Props) {
           Доступ ограничен
         </h1>
         <p className="text-[10px] uppercase tracking-[0.18em] mb-6 text-[color:var(--kub-danger)]">
-          КУБ · Cyber Arena
+          LETSCUBE · Кибер-арена
         </p>
 
         <div className="rounded-xl p-4 text-left text-sm space-y-3 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">

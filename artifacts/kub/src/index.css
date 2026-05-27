@@ -468,9 +468,9 @@ textarea::placeholder, input::placeholder {
 .transition-bg { transition: background 0.15s ease; }
 
 /* ───────────────────────────────────────────────────────────────────────────
- * КУБ brand utilities
- * cyan #00AEEF / pink #FF007A on deep navy. Used for hero backdrops, panel
- * surfaces, neon focus rings, and the geometric cube/К logomark.
+ * LETSCUBE brand utilities
+ * Blue #427fc2 / magenta #ed1e7a on deep navy. Used for hero backdrops,
+ * panel surfaces, neon focus rings, and the Letscube mark.
  * ─────────────────────────────────────────────────────────────────────────── */
 
 /* Layered cyber grid + radial glow; sized for full-bleed auth/welcome screens. */
@@ -569,12 +569,14 @@ textarea::placeholder, input::placeholder {
 .kub-auth-shell {
   position: relative;
   overflow: hidden;
+  isolation: isolate;
 }
 
 .kub-auth-shell::after {
   content: "";
   position: absolute;
   inset: auto -12% -18% 40%;
+  z-index: 0;
   height: min(44rem, 70vh);
   pointer-events: none;
   background: radial-gradient(ellipse at center, color-mix(in srgb, var(--kub-pink) 18%, transparent), transparent 68%);
@@ -584,9 +586,10 @@ textarea::placeholder, input::placeholder {
 .kub-auth-mascot {
   pointer-events: none;
   position: absolute;
-  right: max(1.5rem, 7vw);
+  z-index: 0;
+  right: max(1rem, 3vw);
   bottom: -1.5rem;
-  width: min(36vw, 30rem);
+  width: min(30vw, 26rem);
   max-height: 78vh;
   object-fit: contain;
   object-position: bottom right;
@@ -596,7 +599,14 @@ textarea::placeholder, input::placeholder {
 
 @media (max-width: 1023px) {
   .kub-auth-mascot {
-    display: none;
+    right: 50%;
+    bottom: -3rem;
+    width: min(86vw, 26rem);
+    max-height: 48vh;
+    object-position: bottom center;
+    opacity: 0.16;
+    transform: translateX(50%);
+    filter: blur(0.4px) saturate(1.05) drop-shadow(0 18px 38px rgba(0, 0, 0, 0.5));
   }
 }
 

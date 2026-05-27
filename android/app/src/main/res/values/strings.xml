@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">KUB Messenger</string>
-    <string name="title_activity_main">KUB Messenger</string>
+    <string name="app_name">LETSCUBE</string>
+    <string name="title_activity_main">LETSCUBE</string>
     <string name="package_name">com.kub.messenger</string>
     <string name="custom_url_scheme">com.kub.messenger</string>
 </resources>

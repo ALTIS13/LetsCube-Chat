@@ -120,20 +120,19 @@ export function LoginForm() {
         decoding="async"
         className="kub-auth-mascot"
       />
-      <div className="relative z-10 w-full max-w-sm lg:mr-[38vw]">
+      <div className="relative z-10 w-full max-w-sm" data-testid="auth-form-shell">
         <div className="flex flex-col items-center gap-4 mb-8">
-          <KubBrandLogo
-            variant="vertical"
-            tone="light"
-            className="h-24 w-56 justify-center"
-            imgClassName="max-h-24"
-            alt="Letscube"
-          />
+          <div data-testid="auth-brand-lockup">
+            <KubBrandLogo
+              variant="vertical"
+              tone="light"
+              className="h-24 w-56 justify-center"
+              imgClassName="max-h-24"
+              alt="Letscube"
+            />
+          </div>
           <div className="text-center">
-            <h1 className="text-3xl font-extrabold tracking-tight kub-text-gradient">
-              КУБ
-            </h1>
-            <p className="text-sm mt-1 text-[color:var(--kub-muted)]">
+            <p className="text-sm text-[color:var(--kub-muted)]">
               Панель связи киберарены
             </p>
           </div>

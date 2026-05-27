@@ -76,7 +76,7 @@ function ConnectionStatusBanner() {
           <div className="mt-0.5 text-xs leading-relaxed text-[color:var(--kub-muted)]">
             {offline
               ? "Проверьте сеть. Черновики и подготовленные вложения останутся на месте."
-              : "KUB снова синхронизируется с сервером."}
+              : "LETSCUBE снова синхронизируется с сервером."}
           </div>
         </div>
       </div>

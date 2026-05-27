@@ -376,7 +376,7 @@ export function useChats() {
 
   useEffect(() => {
     const total = chats.reduce((sum, chat) => sum + (chat.unread_count ?? 0), 0);
-    document.title = total > 0 ? `(${total}) KUB` : "KUB";
+    document.title = total > 0 ? `(${total}) LETSCUBE` : "LETSCUBE";
   }, [chats]);
 
   useEffect(() => {

@@ -2,7 +2,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
   appId: "com.kub.messenger",
-  appName: "KUB Messenger",
+  appName: "LETSCUBE",
   webDir: "artifacts/kub/dist/public",
 };
 

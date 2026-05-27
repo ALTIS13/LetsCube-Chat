@@ -310,13 +310,13 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             <KubIcon name="cloud" size={16} className="text-[color:var(--kub-cyan)]" />
             <div className="min-w-0 flex-1">
               <div className="text-sm text-[color:var(--kub-text)]">
-                {nativeApp ? "Android-приложение KUB" : installed ? "KUB установлен" : "Установить KUB"}
+                {nativeApp ? "Android-приложение LETSCUBE" : installed ? "LETSCUBE установлен" : "Установить LETSCUBE"}
               </div>
               <div className="text-xs text-[color:var(--kub-muted)]">
                 {nativeApp
                   ? "Приложение уже запущено как Android APK. Установка через браузер здесь не нужна."
                   : canInstall
-                  ? "Откройте KUB как отдельное приложение без вкладки браузера."
+                  ? "Откройте LETSCUBE как отдельное приложение без вкладки браузера."
                   : installed
                     ? "Приложение уже открывается в standalone-режиме."
                     : "Если кнопка недоступна, установите приложение через меню браузера."}

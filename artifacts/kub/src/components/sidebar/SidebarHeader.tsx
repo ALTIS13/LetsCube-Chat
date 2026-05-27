@@ -130,8 +130,8 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
           alt="Letscube"
         />
         <div className="min-w-0 flex-1 sm:hidden">
-          <div className="text-sm font-bold tracking-wide text-[color:var(--kub-text)]">КУБ</div>
-          <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--kub-cyan)]/80">Cyber Arena</div>
+          <div className="text-sm font-bold tracking-wide text-[color:var(--kub-text)]">LETSCUBE</div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--kub-cyan)]/80">Кибер-арена</div>
         </div>
       </div>
 

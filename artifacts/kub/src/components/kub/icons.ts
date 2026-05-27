@@ -186,7 +186,7 @@ interface IconEntry {
 }
 
 /**
- * Single source of truth for КУБ icons.
+ * Single source of truth for LETSCUBE UI icons.
  * Use semantic names so screens never reach for low-level Phosphor names.
  */
 export const KUB_ICONS: Record<KubIconName, IconEntry> = {
@@ -280,4 +280,3 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   warning: { Icon: Warning },
   zap: { Icon: Lightning, weight: "fill" },
 };
-

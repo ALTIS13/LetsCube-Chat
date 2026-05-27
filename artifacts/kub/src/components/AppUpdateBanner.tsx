@@ -99,7 +99,7 @@ export function AppUpdateBanner() {
           <div className="text-xs text-[color:var(--kub-muted)]">
             {showUpdate
               ? "Обновите приложение, чтобы получить последние исправления."
-              : "KUB попробует восстановить соединение автоматически."}
+              : "LETSCUBE попробует восстановить соединение автоматически."}
           </div>
         </div>
         </div>

@@ -9,7 +9,7 @@ const APP_SHELL = [
   "/icons/icon-512.png",
   "/icons/icon-maskable-512.png",
 ];
-const APP_NAME = "KUB";
+const APP_NAME = "LETSCUBE";
 const DEFAULT_PUSH_BODY = "Новое уведомление";
 
 self.addEventListener("install", (event) => {

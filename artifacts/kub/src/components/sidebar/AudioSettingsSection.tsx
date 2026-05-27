@@ -391,7 +391,7 @@ export function AudioSettingsSection() {
         <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] px-3 py-3">
           <SectionHeader
             title="Громкость"
-            description="Микрофон влияет на проверку и голосовые записи. Громкость голосовых применяется только в КУБ."
+            description="Микрофон влияет на проверку и голосовые записи. Громкость голосовых применяется только в LETSCUBE."
           />
           <div className="mt-3 grid gap-3">
             <SliderRow
