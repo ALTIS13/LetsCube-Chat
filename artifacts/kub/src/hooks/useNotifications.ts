@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { mapPgError } from "@/lib/errors";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
+import { KUB_CHAT_NOTIFICATIONS_READ_EVENT, type ChatNotificationsReadDetail } from "@/lib/notificationEvents";
 import type { Notification } from "@/types/database";
 
 const PAGE_SIZE = 30;
@@ -47,6 +48,53 @@ export function useNotifications() {
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const autoMarkingReadRef = useRef<Set<string>>(new Set());
+
+  const markReadIds = useCallback(async (ids: string[], options: { silent?: boolean } = {}) => {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (!uniqueIds.length) return;
+
+    const idsToMark = uniqueIds.filter((id) => !autoMarkingReadRef.current.has(id));
+    if (!idsToMark.length) return;
+    for (const id of idsToMark) autoMarkingReadRef.current.add(id);
+
+    const snapshot = new Map<string, string | null>();
+    const nowIso = new Date().toISOString();
+    setItems((prev) =>
+      prev.map((n) => {
+        if (!idsToMark.includes(n.id)) return n;
+        snapshot.set(n.id, n.read_at);
+        return n.read_at ? n : { ...n, read_at: nowIso };
+      }),
+    );
+
+    let failed = false;
+    for (const id of idsToMark) {
+      const { error: rpcErr } = await supabase.rpc("notifications_mark_read", { p_id: id });
+      if (rpcErr) {
+        failed = true;
+        if (!options.silent) setError(mapPgError(rpcErr));
+      }
+      autoMarkingReadRef.current.delete(id);
+    }
+
+    if (failed) {
+      setItems((prev) =>
+        prev.map((n) => {
+          if (!snapshot.has(n.id)) return n;
+          return { ...n, read_at: snapshot.get(n.id) ?? null };
+        }),
+      );
+    }
+  }, [supabase]);
+
+  const normalizeRowsForDisplay = useCallback((rows: Notification[]) => {
+    const ownUnreadIds = rows
+      .filter((row) => !row.read_at && isOwnMessageNotification(row, userId))
+      .map((row) => row.id);
+    if (ownUnreadIds.length) void markReadIds(ownUnreadIds, { silent: true });
+    return filterRowsForDisplay(rows, userId, mutedChatIds);
+  }, [markReadIds, mutedChatIds, userId]);
 
   const refresh = useCallback(async () => {
     if (!userId) {
@@ -67,8 +115,9 @@ export function useNotifications() {
       return;
     }
     setError(null);
-    setItems((prev) => mergeRows(prev, filterMutedNotifications((data ?? []) as Notification[], mutedChatIds)));
-  }, [userId, supabase, mutedChatIds]);
+    const nextRows = normalizeRowsForDisplay((data ?? []) as Notification[]);
+    setItems((prev) => filterRowsForDisplay(mergeRows(prev, nextRows), userId, mutedChatIds));
+  }, [userId, supabase, normalizeRowsForDisplay, mutedChatIds]);
 
   useEffect(() => {
     if (!userId) {
@@ -97,6 +146,10 @@ export function useNotifications() {
               chatId: payloadString(row.payload, "chat_id"),
             });
           }
+          if (isOwnMessageNotification(row, userId)) {
+            if (!row.read_at) void markReadIds([row.id], { silent: true });
+            return;
+          }
           if (isMutedNotification(row, mutedChatIds)) return;
           setItems((prev) => mergeRows(prev, [row]));
         },
@@ -119,34 +172,47 @@ export function useNotifications() {
   }, [userId, supabase, mutedChatIds, refresh]);
 
   useEffect(() => {
-    setItems((prev) => filterMutedNotifications(prev, mutedChatIds));
-  }, [mutedChatIds]);
+    setItems((prev) => normalizeRowsForDisplay(prev));
+  }, [normalizeRowsForDisplay]);
 
   const unreadCount = items.reduce((acc, n) => (n.read_at ? acc : acc + 1), 0);
 
   const markRead = useCallback(
     async (id: string) => {
-      // Optimistic; on RPC failure we restore the prior `read_at`
-      // for that row so the UI doesn't lie.
-      let prevReadAt: string | null | undefined;
-      const nowIso = new Date().toISOString();
-      setItems((prev) =>
-        prev.map((n) => {
-          if (n.id !== id) return n;
-          prevReadAt = n.read_at;
-          return n.read_at ? n : { ...n, read_at: nowIso };
-        }),
-      );
-      const { error: rpcErr } = await supabase.rpc("notifications_mark_read", { p_id: id });
-      if (rpcErr) {
-        setError(mapPgError(rpcErr));
-        setItems((prev) =>
-          prev.map((n) => (n.id === id ? { ...n, read_at: prevReadAt ?? null } : n)),
-        );
-      }
+      await markReadIds([id]);
     },
-    [supabase],
+    [markReadIds],
   );
+
+  const markMessageNotificationsForChatRead = useCallback(async (chatId: string) => {
+    const matchingIds = items
+      .filter((item) => !item.read_at && isMessageNotification(item) && payloadString(item.payload, "chat_id") === chatId)
+      .map((item) => item.id);
+    if (!matchingIds.length) return;
+    await markReadIds(matchingIds, { silent: true });
+  }, [items, markReadIds]);
+
+  useEffect(() => {
+    const handleChatNotificationsRead = (event: Event) => {
+      const detail = (event as CustomEvent<ChatNotificationsReadDetail>).detail;
+      if (!detail?.chatId) return;
+      void markMessageNotificationsForChatRead(detail.chatId);
+    };
+    const handleFocus = () => {
+      void refresh();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    window.addEventListener(KUB_CHAT_NOTIFICATIONS_READ_EVENT, handleChatNotificationsRead);
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener(KUB_CHAT_NOTIFICATIONS_READ_EVENT, handleChatNotificationsRead);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [markMessageNotificationsForChatRead, refresh]);
 
   const markAllRead = useCallback(async () => {
     // Snapshot per-row read_at so we can roll back precisely on RPC
@@ -171,7 +237,7 @@ export function useNotifications() {
     }
   }, [supabase]);
 
-  return { items, unreadCount, loading, error, markRead, markAllRead, refresh };
+  return { items, unreadCount, loading, error, markRead, markReadIds, markMessageNotificationsForChatRead, markAllRead, refresh };
 }
 
 // Merge two unordered notification lists by id, keep the newest copy
@@ -193,7 +259,27 @@ function filterMutedNotifications(items: Notification[], mutedChatIds: string[])
   return items.filter((item) => !isMutedNotification(item, mutedChatIds));
 }
 
+function filterRowsForDisplay(
+  items: Notification[],
+  userId: string | null,
+  mutedChatIds: string[],
+): Notification[] {
+  return filterMutedNotifications(
+    items.filter((row) => !isOwnMessageNotification(row, userId)),
+    mutedChatIds,
+  );
+}
+
 function isMutedNotification(item: Notification, mutedChatIds: string[]): boolean {
   const chatId = payloadString(item.payload, "chat_id");
   return Boolean(chatId && mutedChatIds.includes(chatId));
+}
+
+function isMessageNotification(item: Notification): boolean {
+  return item.kind.includes("message");
+}
+
+function isOwnMessageNotification(item: Notification, userId: string | null): boolean {
+  if (!userId || !isMessageNotification(item)) return false;
+  return payloadString(item.payload, "sender_id") === userId;
 }

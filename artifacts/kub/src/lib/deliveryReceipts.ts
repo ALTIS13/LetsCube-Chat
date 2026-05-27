@@ -1,3 +1,5 @@
+import { dispatchChatNotificationsRead } from "@/lib/notificationEvents";
+
 const DELIVERED_DEBOUNCE_MS = 2500;
 const READ_DEBOUNCE_MS = 700;
 
@@ -67,6 +69,9 @@ function scheduleReceiptRpc(
       }
       maps.confirmed.set(chatId, Math.max(maps.confirmed.get(chatId) ?? 0, targetMs));
       if (maps.scheduled.get(chatId) === targetMs) maps.scheduled.delete(chatId);
+      if (rpcName === "mark_chat_read") {
+        dispatchChatNotificationsRead({ chatId, readUntil: watermark ?? null });
+      }
     });
   }, delayMs);
 

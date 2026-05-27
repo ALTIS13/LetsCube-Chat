@@ -30,6 +30,21 @@ type NotificationDisplay = {
   typeLabel: string;
 };
 
+type NotificationCategory = "all" | "tasks" | "messages" | "system";
+
+type NotificationEntry =
+  | { kind: "single"; category: Exclude<NotificationCategory, "all">; item: Notification }
+  | {
+      kind: "message_group";
+      category: "messages";
+      id: string;
+      chatId: string;
+      latest: Notification;
+      items: Notification[];
+      unreadItems: Notification[];
+      latestMessageId?: string;
+    };
+
 const TEXT_LIMIT = 140;
 const PANEL_MARGIN = 8;
 const DESKTOP_PANEL_WIDTH = 430;
@@ -37,13 +52,21 @@ const MIN_PANEL_WIDTH = 280;
 const MIN_PANEL_HEIGHT = 180;
 const MAX_PANEL_HEIGHT = 520;
 
+const NOTIFICATION_TABS: Array<{ id: NotificationCategory; label: string }> = [
+  { id: "all", label: "Все" },
+  { id: "tasks", label: "Задачи" },
+  { id: "messages", label: "Сообщения" },
+  { id: "system", label: "Системные" },
+];
+
 type NotificationPanelStyle = Pick<CSSProperties, "left" | "top" | "width" | "maxHeight">;
 
 export function NotificationBell() {
   const [, setLocation] = useLocation();
-  const { items, unreadCount, loading, error, markRead, markAllRead, refresh } = useNotifications();
+  const { items, loading, error, markRead, markReadIds, markMessageNotificationsForChatRead, markAllRead, refresh } = useNotifications();
   const supabase = useMemo(() => createClient(), []);
   const [open, setOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<NotificationCategory>("all");
   const [busyInviteId, setBusyInviteId] = useState<string | null>(null);
   const [inviteStatuses, setInviteStatuses] = useState<Record<string, GroupInviteStatus>>({});
   const [panelStyle, setPanelStyle] = useState<NotificationPanelStyle | null>(null);
@@ -133,6 +156,20 @@ export function NotificationBell() {
     };
   }, [open, updatePanelPosition]);
 
+  useEffect(() => {
+    if (!open) return;
+    void refresh();
+  }, [open, refresh]);
+
+  const entries = useMemo(() => buildNotificationEntries(items), [items]);
+  const visibleEntries = useMemo(
+    () => entries.filter((entry) => activeTab === "all" || entry.category === activeTab),
+    [activeTab, entries],
+  );
+  const unreadCount = useMemo(() => countUnreadEntries(entries), [entries]);
+  const activeUnreadCount = useMemo(() => countUnreadEntries(visibleEntries), [visibleEntries]);
+  const activeUnreadIds = useMemo(() => collectUnreadIds(visibleEntries), [visibleEntries]);
+
   const handleNotificationClick = async (item: Notification) => {
     if (!item.read_at) await markRead(item.id);
     const target = navigateTarget(item, inviteStatuses);
@@ -168,6 +205,24 @@ export function NotificationBell() {
       }
       showInviteStatusNotice(target.status);
     }
+  };
+
+  const handleMessageGroupClick = async (entry: Extract<NotificationEntry, { kind: "message_group" }>) => {
+    await markMessageNotificationsForChatRead(entry.chatId);
+    setOpen(false);
+    const opened = await safeOpenChat(entry.chatId);
+    if (opened && entry.latestMessageId) {
+      window.setTimeout(() => requestChatMessageJump(entry.chatId, entry.latestMessageId!), 150);
+    }
+    if (opened) setLocation("/");
+  };
+
+  const handleMarkVisibleRead = async () => {
+    if (activeTab === "all") {
+      await markAllRead();
+      return;
+    }
+    await markReadIds(activeUnreadIds);
   };
 
   const handleAcceptInvite = async (item: Notification) => {
@@ -234,6 +289,7 @@ export function NotificationBell() {
           )}
           aria-label="Уведомления"
           aria-expanded={open}
+          data-testid="notification-bell-button"
         >
           <KubIcon name="notifications" size={17} />
           {unreadCount > 0 && (
@@ -259,21 +315,51 @@ export function NotificationBell() {
             "bg-[var(--kub-surface)] shadow-2xl kub-glow-soft",
           )}
           data-kub-popover="true"
+          data-testid="notification-panel"
         >
           <div className="flex items-center justify-between gap-3 border-b border-[color:var(--kub-border-color)] px-4 py-3">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-[color:var(--kub-text)]">Уведомления</div>
               <div className="text-[11px] text-[color:var(--kub-muted)]">
-                {unreadCount > 0 ? `${unreadCount} непрочит.` : "Все прочитаны"}
+                {activeUnreadCount > 0 ? `${activeUnreadCount} непрочит.` : "Все прочитаны"}
               </div>
             </div>
             <button
-              onClick={() => void markAllRead()}
-              disabled={unreadCount === 0}
+              onClick={() => void handleMarkVisibleRead()}
+              disabled={activeUnreadCount === 0}
               className="h-8 shrink-0 rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-cyan)] transition-colors hover:bg-[var(--kub-surface-2)] disabled:cursor-not-allowed disabled:text-[color:var(--kub-muted)]"
             >
-              Прочитать все
+              Прочитать
             </button>
+          </div>
+
+          <div className="flex gap-1 overflow-x-auto border-b border-[color:var(--kub-border-color)] px-2 py-2">
+            {NOTIFICATION_TABS.map((tab) => {
+              const tabEntries = entries.filter((entry) => tab.id === "all" || entry.category === tab.id);
+              const tabUnread = countUnreadEntries(tabEntries);
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  data-state={activeTab === tab.id ? "active" : "inactive"}
+                  data-testid={`notification-tab-${tab.id}`}
+                  className={cn(
+                    "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors",
+                    activeTab === tab.id
+                      ? "bg-[color-mix(in_srgb,var(--kub-cyan)_16%,transparent)] text-[color:var(--kub-cyan)]"
+                      : "text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)]",
+                  )}
+                >
+                  <span>{tab.label}</span>
+                  {tabUnread > 0 && (
+                    <span className="rounded-full bg-[color:var(--kub-cyan)] px-1.5 text-[10px] leading-4 text-[color:var(--kub-bg)]">
+                      {tabUnread > 99 ? "99+" : tabUnread}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {error && (
@@ -283,13 +369,23 @@ export function NotificationBell() {
           )}
 
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
-            {loading && items.length === 0 ? (
+            {loading && visibleEntries.length === 0 ? (
               <NotificationState icon="spinner" title="Загрузка уведомлений" body="Обновляем последние события." />
-            ) : items.length === 0 ? (
+            ) : visibleEntries.length === 0 ? (
               <NotificationState icon="notifications" title="Уведомлений пока нет" body="Новые события появятся здесь." />
             ) : (
               <div className="space-y-1.5">
-                {items.map((item) => {
+                {visibleEntries.map((entry) => {
+                  if (entry.kind === "message_group") {
+                    return (
+                      <MessageGroupItem
+                        key={entry.id}
+                        entry={entry}
+                        onClick={() => void handleMessageGroupClick(entry)}
+                      />
+                    );
+                  }
+                  const item = entry.item;
                   const payload = parseGroupInvitePayload(item.payload);
                   const effectiveStatus = payload.invite_id
                     ? inviteStatuses[payload.invite_id] ?? payload.status
@@ -341,6 +437,7 @@ function NotificationItem({
     <div
       role="button"
       tabIndex={0}
+      data-testid="notification-item"
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key !== "Enter" && e.key !== " ") return;
@@ -420,6 +517,92 @@ function NotificationItem({
   );
 }
 
+function MessageGroupItem({
+  entry,
+  onClick,
+}: {
+  entry: Extract<NotificationEntry, { kind: "message_group" }>;
+  onClick: () => void;
+}) {
+  const latest = entry.latest;
+  const unread = entry.unreadItems.length > 0;
+  const chatName = payloadString(latest.payload, "chat_name");
+  const sender = payloadString(latest.payload, "sender_name");
+  const chatType = payloadString(latest.payload, "chat_type");
+  const preview = sanitizeBody(payloadString(latest.payload, "preview"));
+  const title = chatType === "private"
+    ? sender ?? chatName ?? "Новые сообщения"
+    : chatName ?? "Новые сообщения";
+  const latestLine = chatType === "private" || !sender
+    ? preview || "Откройте чат, чтобы посмотреть сообщения."
+    : `${truncateText(sender, 54)}: ${preview || "Новое сообщение"}`;
+  const body = entry.unreadItems.length > 1
+    ? `${entry.unreadItems.length} новых сообщений. ${latestLine}`
+    : latestLine;
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      data-testid="notification-message-group"
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        onClick();
+      }}
+      className={cn(
+        "group max-w-full rounded-xl border px-3 py-3 text-left transition-colors",
+        "border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] hover:bg-[var(--kub-surface-3)]",
+        unread && "border-[color-mix(in_srgb,var(--kub-cyan)_45%,var(--kub-border-color))] bg-[color-mix(in_srgb,var(--kub-cyan)_7%,var(--kub-surface-2))]",
+      )}
+    >
+      <div className="flex min-w-0 items-start gap-3">
+        <div className={cn(
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+          unread
+            ? "bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] text-[color:var(--kub-cyan)]"
+            : "bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)]",
+        )}>
+          <KubIcon name="chatBubble" size={17} />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-[color:var(--kub-text)] [overflow-wrap:anywhere]">
+                {truncateText(title)}
+              </div>
+              <div className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-[color:var(--kub-muted)] [overflow-wrap:anywhere]">
+                {truncateText(body)}
+              </div>
+            </div>
+            {unread && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[color:var(--kub-cyan)]" />}
+          </div>
+
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[color:var(--kub-muted)]">
+            <span>Сообщения</span>
+            <span aria-hidden="true">·</span>
+            <span>{formatRelative(latest.created_at)}</span>
+            {entry.items.length > 1 && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{entry.items.length} всего</span>
+              </>
+            )}
+            {!unread && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>Прочитано</span>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function NotificationState({ icon, title, body }: { icon: KubIconName; title: string; body: string }) {
   return (
     <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
@@ -430,6 +613,86 @@ function NotificationState({ icon, title, body }: { icon: KubIconName; title: st
       <div className="mt-1 max-w-64 text-xs leading-snug text-[color:var(--kub-muted)]">{body}</div>
     </div>
   );
+}
+
+function buildNotificationEntries(items: Notification[]): NotificationEntry[] {
+  const messageGroups = new Map<string, Extract<NotificationEntry, { kind: "message_group" }>>();
+  const singles: NotificationEntry[] = [];
+
+  for (const item of items) {
+    if (isMessageNotification(item)) {
+      const chatId = payloadString(item.payload, "chat_id");
+      if (chatId) {
+        const existing = messageGroups.get(chatId);
+        if (existing) {
+          existing.items.push(item);
+          if (!item.read_at) existing.unreadItems.push(item);
+          if (compareNotificationDate(item, existing.latest) < 0) {
+            existing.latest = item;
+            existing.latestMessageId = payloadString(item.payload, "message_id");
+          }
+        } else {
+          messageGroups.set(chatId, {
+            kind: "message_group",
+            category: "messages",
+            id: `message:${chatId}`,
+            chatId,
+            latest: item,
+            items: [item],
+            unreadItems: item.read_at ? [] : [item],
+            latestMessageId: payloadString(item.payload, "message_id"),
+          });
+        }
+        continue;
+      }
+    }
+    singles.push({ kind: "single", category: notificationCategory(item), item });
+  }
+
+  return [...singles, ...messageGroups.values()].sort(compareNotificationEntries);
+}
+
+function notificationCategory(item: Notification): Exclude<NotificationCategory, "all"> {
+  if (isMessageNotification(item)) return "messages";
+  if (item.kind.includes("task")) return "tasks";
+  if (item.kind === "group_invite") return "system";
+  if (item.kind.includes("chat") || item.kind.includes("mute") || item.kind.includes("ban")) return "system";
+  return "system";
+}
+
+function isMessageNotification(item: Notification): boolean {
+  return item.kind.includes("message");
+}
+
+function entryLatestCreatedAt(entry: NotificationEntry): string {
+  return entry.kind === "message_group" ? entry.latest.created_at : entry.item.created_at;
+}
+
+function entryUnreadIds(entry: NotificationEntry): string[] {
+  if (entry.kind === "message_group") return entry.unreadItems.map((item) => item.id);
+  return entry.item.read_at ? [] : [entry.item.id];
+}
+
+function countUnreadEntries(entries: NotificationEntry[]): number {
+  return entries.reduce((count, entry) => count + (entryUnreadIds(entry).length > 0 ? 1 : 0), 0);
+}
+
+function collectUnreadIds(entries: NotificationEntry[]): string[] {
+  return entries.flatMap(entryUnreadIds);
+}
+
+function compareNotificationEntries(a: NotificationEntry, b: NotificationEntry): number {
+  const aCreated = entryLatestCreatedAt(a);
+  const bCreated = entryLatestCreatedAt(b);
+  if (aCreated < bCreated) return 1;
+  if (aCreated > bCreated) return -1;
+  return 0;
+}
+
+function compareNotificationDate(a: Notification, b: Notification): number {
+  if (a.created_at < b.created_at) return 1;
+  if (a.created_at > b.created_at) return -1;
+  return 0;
 }
 
 function payloadString(p: unknown, key: string): string | undefined {

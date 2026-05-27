@@ -1,5 +1,15 @@
 # QA Results
 
+2026-05-27 notification center read-sync/native push foundation:
+
+- Notification Center now separates events into tabs: `Все`, `Задачи`, `Сообщения`, `Системные`.
+- Message notifications are compacted into one row per chat/dialog in the bell; the grouped unread badge counts a chat with unread messages once, not once per message row.
+- Reading an open chat now dispatches a notification read-sync event after `mark_chat_read`; the frontend marks the loaded unread message notifications for that chat read through the existing `notifications_mark_read` RPC, so the update propagates through realtime to other clients.
+- Sender/self message notification rows are filtered from the bell and marked read defensively if old rows exist.
+- Proposal-only SQL `20260531_notification_center_read_sync_native_push.sql` adds the server-side `notifications_mark_chat_messages_read` RPC and a future `user_push_devices` model for native FCM/APNS tokens. SQL was not applied automatically.
+- Native Android push remains pending because `android/app/google-services.json` is not present locally. Browser/PWA Web Push remains the active push path.
+- Validation: `git diff --check`, KUB typecheck/build, local Playwright `notification-center.spec.ts`, `e2e:smoke`, `pwa.spec.ts`, `push-phone-foundation.spec.ts`, `db:types:check`, `rls:smoke`, `android:sync`, and `android:build:debug` passed. Build keeps the existing Vite sourcemap/chunk warnings. ADB listed no connected device, so physical native-push delivery QA remains pending.
+
 2026-05-23 Android Capacitor MVP groundwork:
 
 - Added Capacitor at repo root with `capacitor.config.ts`, app id `com.kub.messenger`, app name `KUB Messenger`, and `webDir` pointing at `artifacts/kub/dist/public`.
