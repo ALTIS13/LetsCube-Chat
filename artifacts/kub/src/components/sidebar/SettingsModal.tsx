@@ -16,6 +16,7 @@ import { AudioSettingsSection } from "./AudioSettingsSection";
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { getBuildMetadata } from "@/lib/monitoring";
+import { isNativeApp } from "@/lib/platform/capabilities";
 import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
 import {
   PROFILE_LIMITS,
@@ -36,6 +37,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const supabase = createClient();
   const { theme, resolvedTheme, setTheme } = useTheme();
   const { canInstall, installed, promptInstall } = usePwaInstall();
+  const nativeApp = isNativeApp();
   const buildMetadata = getBuildMetadata();
   const {
     status: pushStatus,
@@ -308,10 +310,12 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             <KubIcon name="cloud" size={16} className="text-[color:var(--kub-cyan)]" />
             <div className="min-w-0 flex-1">
               <div className="text-sm text-[color:var(--kub-text)]">
-                {installed ? "KUB установлен" : "Установить KUB"}
+                {nativeApp ? "Android-приложение KUB" : installed ? "KUB установлен" : "Установить KUB"}
               </div>
               <div className="text-xs text-[color:var(--kub-muted)]">
-                {canInstall
+                {nativeApp
+                  ? "Приложение уже запущено как Android APK. Установка через браузер здесь не нужна."
+                  : canInstall
                   ? "Откройте KUB как отдельное приложение без вкладки браузера."
                   : installed
                     ? "Приложение уже открывается в standalone-режиме."
@@ -365,6 +369,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               <div className="text-sm text-[color:var(--kub-text)]">Push-уведомления</div>
               <div className="text-xs text-[color:var(--kub-muted)]">
                 {pushStatus === "unsupported" && "Браузер не поддерживает"}
+                {pushStatus === "native_unavailable" && "Native push для Android будет подключён на следующем этапе"}
                 {pushStatus === "denied" && "Заблокировано в настройках браузера"}
                 {pushStatus === "missing_vapid" && "Нужен VAPID public key в конфигурации"}
                 {pushStatus === "migration_missing" && "Нужно обновление базы данных"}
@@ -387,24 +392,28 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             ) : null}
           </div>
           <div className="min-w-0 border-t border-[color:var(--kub-border-color)] px-4 py-3 space-y-2">
-            <PreferenceSwitch
-              label="Сообщения"
-              checked={pushPreferences.message_push_enabled}
-              disabled={loadingPreferences || pushStatus !== "active"}
-              onChange={(value) => void setPushPreference("message_push_enabled", value)}
-            />
-            <PreferenceSwitch
-              label="Задачи"
-              checked={pushPreferences.task_push_enabled}
-              disabled={loadingPreferences || pushStatus !== "active"}
-              onChange={(value) => void setPushPreference("task_push_enabled", value)}
-            />
-            <PreferenceSwitch
-              label="Приглашения"
-              checked={pushPreferences.invite_push_enabled}
-              disabled={loadingPreferences || pushStatus !== "active"}
-              onChange={(value) => void setPushPreference("invite_push_enabled", value)}
-            />
+            {pushStatus !== "native_unavailable" && (
+              <>
+                <PreferenceSwitch
+                  label="Сообщения"
+                  checked={pushPreferences.message_push_enabled}
+                  disabled={loadingPreferences || pushStatus !== "active"}
+                  onChange={(value) => void setPushPreference("message_push_enabled", value)}
+                />
+                <PreferenceSwitch
+                  label="Задачи"
+                  checked={pushPreferences.task_push_enabled}
+                  disabled={loadingPreferences || pushStatus !== "active"}
+                  onChange={(value) => void setPushPreference("task_push_enabled", value)}
+                />
+                <PreferenceSwitch
+                  label="Приглашения"
+                  checked={pushPreferences.invite_push_enabled}
+                  disabled={loadingPreferences || pushStatus !== "active"}
+                  onChange={(value) => void setPushPreference("invite_push_enabled", value)}
+                />
+              </>
+            )}
             {pushMessage && (
               <div className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
                 {pushMessage}

@@ -23,6 +23,8 @@ import { KubIcon, type KubIconName } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
+import { isNativeApp, microphonePermissionHelp } from "@/lib/platform/capabilities";
+import { getMessengerLocationErrorMessage, getMessengerPosition } from "@/lib/platform/geolocation";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { useVoiceRecorder, formatVoiceDuration as formatRecorderDuration } from "@/hooks/useVoiceRecorder";
 import {
@@ -114,6 +116,7 @@ export function MessageInput({
   const holdRecorderStateRef = useRef<typeof holdRecorderState>(null);
   const recorderPointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const recorderPointerDownAtRef = useRef(0);
+  const recorderPointerIdRef = useRef<number | null>(null);
   const hasText = text.trim().length > 0;
   const hasAttachments = attachments.length > 0;
   const hasStagedVoice = attachments.some((item) => item.kind === "voice");
@@ -166,9 +169,12 @@ export function MessageInput({
     holdRecorderStateRef.current = null;
     setHoldRecorderState(null);
     const message =
-      voiceHold.error === "permission_denied" ? "Нет доступа к микрофону."
+      voiceHold.error === "permission_denied" ? microphonePermissionHelp()
       : voiceHold.error === "no_device" ? "Микрофон недоступен."
-      : voiceHold.error === "unsupported" ? "Голосовые сообщения не поддерживаются этим браузером."
+      : voiceHold.error === "unsupported"
+        ? isNativeApp()
+          ? "Запись голосовых сообщений недоступна на этом устройстве."
+          : "Голосовые сообщения не поддерживаются этим браузером."
       : "Не удалось записать голосовое сообщение.";
     showAppAlert(message, "Голосовое сообщение");
   }, [voiceHold.error]);
@@ -337,6 +343,40 @@ export function MessageInput({
     stopRecorderHold();
   }, [stopRecorderHold]);
 
+  const finishRecorderPointerGesture = useCallback((shouldStop: boolean) => {
+    const locked = holdRecorderStateRef.current?.locked === true;
+    if (touchHoldTimerRef.current) clearTimeout(touchHoldTimerRef.current);
+    touchHoldTimerRef.current = null;
+    touchRecordingStartedRef.current = false;
+    touchLongPressTriggeredRef.current = false;
+    touchPointerMovedRef.current = false;
+    recorderPointerStartRef.current = null;
+    recorderPointerDownAtRef.current = 0;
+    recorderPointerIdRef.current = null;
+    if (shouldStop && !locked) stopRecorderHold();
+    if (!locked) setLockDragProgress(0);
+  }, [stopRecorderHold]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stopActiveTouchRecording = () => {
+      if (recorderPointerIdRef.current === null) return;
+      const hasActiveRecording =
+        voiceHoldActiveRef.current ||
+        videoHoldActiveRef.current ||
+        touchRecordingStartedRef.current ||
+        touchLongPressTriggeredRef.current;
+      if (!hasActiveRecording) return;
+      finishRecorderPointerGesture(true);
+    };
+    window.addEventListener("pointerup", stopActiveTouchRecording, true);
+    window.addEventListener("touchend", stopActiveTouchRecording, true);
+    return () => {
+      window.removeEventListener("pointerup", stopActiveTouchRecording, true);
+      window.removeEventListener("touchend", stopActiveTouchRecording, true);
+    };
+  }, [finishRecorderPointerGesture]);
+
   const handleRecorderContextMenu = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -348,6 +388,7 @@ export function MessageInput({
     event.preventDefault();
     recorderPointerStartRef.current = { x: event.clientX, y: event.clientY };
     recorderPointerDownAtRef.current = Date.now();
+    recorderPointerIdRef.current = event.pointerId;
     touchPointerMovedRef.current = false;
     touchLongPressTriggeredRef.current = false;
     setLockDragProgress(0);
@@ -395,18 +436,14 @@ export function MessageInput({
         voiceHoldActiveRef.current ||
         videoHoldActiveRef.current;
       if (recordingGesture) {
-        touchRecordingStartedRef.current = false;
-        touchLongPressTriggeredRef.current = false;
-        touchPointerMovedRef.current = false;
-        if (!locked) stopRecorderHold();
-        recorderPointerStartRef.current = null;
-        recorderPointerDownAtRef.current = 0;
+        finishRecorderPointerGesture(!locked);
         return;
       }
       const elapsedMs = Date.now() - recorderPointerDownAtRef.current;
       const shouldToggleMode = elapsedMs < MOBILE_RECORDER_LONG_PRESS_MS && !touchPointerMovedRef.current;
       recorderPointerStartRef.current = null;
       recorderPointerDownAtRef.current = 0;
+      recorderPointerIdRef.current = null;
       touchPointerMovedRef.current = false;
       touchLongPressTriggeredRef.current = false;
       setLockDragProgress(0);
@@ -416,28 +453,41 @@ export function MessageInput({
     if (!locked) stopRecorderHold();
     recorderPointerStartRef.current = null;
     recorderPointerDownAtRef.current = 0;
-  }, [stopRecorderHold, toggleRecorderMode]);
+    recorderPointerIdRef.current = null;
+  }, [finishRecorderPointerGesture, stopRecorderHold, toggleRecorderMode]);
 
-  const handleRecorderPointerCancel = useCallback(() => {
+  const handleRecorderPointerCancel = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    const nativeActiveTouch =
+      isNativeApp() &&
+      event.pointerType === "touch" &&
+      (voiceHoldActiveRef.current ||
+        videoHoldActiveRef.current ||
+        touchRecordingStartedRef.current ||
+        touchLongPressTriggeredRef.current);
+    if (nativeActiveTouch) {
+      if (touchHoldTimerRef.current) clearTimeout(touchHoldTimerRef.current);
+      touchHoldTimerRef.current = null;
+      return;
+    }
     if (touchHoldTimerRef.current) clearTimeout(touchHoldTimerRef.current);
     touchHoldTimerRef.current = null;
     touchRecordingStartedRef.current = false;
     touchLongPressTriggeredRef.current = false;
     touchPointerMovedRef.current = false;
     recorderPointerDownAtRef.current = 0;
+    recorderPointerIdRef.current = null;
     if (holdRecorderStateRef.current?.locked !== true) stopRecorderHold();
   }, [stopRecorderHold]);
 
   const handleLocation = useCallback(() => {
     setShowAttach(false);
-    if (!navigator.geolocation) { showAppAlert("Геолокация не поддерживается", "Геолокация"); return; }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
+    void getMessengerPosition()
+      .then(({ latitude, longitude }) => {
         void onSend(`📍 Местоположение: https://maps.google.com/?q=${latitude},${longitude}`);
-      },
-      () => showAppAlert("Не удалось определить местоположение", "Геолокация")
-    );
+      })
+      .catch((error) => {
+        showAppAlert(getMessengerLocationErrorMessage(error), "Геолокация");
+      });
   }, [onSend]);
 
   const handleSend = useCallback(async () => {

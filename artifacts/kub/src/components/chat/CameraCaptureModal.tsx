@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { KubButton, KubIcon, KubModal } from "@/components/kub";
+import { cameraPermissionHelp } from "@/lib/platform/capabilities";
 import { cn } from "@/lib/utils";
 
 const MAX_CAPTURE_DIMENSION = 1920;
@@ -297,7 +298,7 @@ function getStatusCopy(status: CameraStatus): { title: string; body: string } {
     case "denied":
       return {
         title: "Нет доступа к камере.",
-        body: "Разрешите доступ в браузере или выберите изображение файлом.",
+        body: `${cameraPermissionHelp()} Или выберите изображение файлом.`,
       };
     case "unavailable":
       return {

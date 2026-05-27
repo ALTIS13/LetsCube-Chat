@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { KubIcon } from "@/components/kub";
 import { useVoiceRecorder, formatVoiceDuration, type VoiceErrorCode } from "@/hooks/useVoiceRecorder";
+import { isNativeApp, microphonePermissionHelp } from "@/lib/platform/capabilities";
 
 interface VoiceRecorderProps {
   onSend: (blob: Blob, durationMs: number, mimeType: string) => void | Promise<void>;
@@ -11,10 +12,18 @@ interface VoiceRecorderProps {
 
 const BAR_COUNT = 20;
 
-const ERROR_TEXT: Record<VoiceErrorCode, string> = {
-  permission_denied: "Доступ к микрофону запрещён. Разрешите его в настройках браузера.",
+function getVoiceErrorText(code: VoiceErrorCode): string {
+  if (code === "permission_denied") return `Доступ к микрофону запрещён. ${microphonePermissionHelp()}`;
+  if (code === "unsupported") {
+    return isNativeApp()
+      ? "Запись голосовых сообщений недоступна на этом устройстве."
+      : "Браузер не поддерживает запись голосовых сообщений.";
+  }
+  return ERROR_TEXT[code];
+}
+
+const ERROR_TEXT: Record<Exclude<VoiceErrorCode, "permission_denied" | "unsupported">, string> = {
   no_device: "Микрофон не найден или занят другим приложением.",
-  unsupported: "Браузер не поддерживает запись голосовых сообщений.",
   unknown: "Не удалось начать запись. Попробуйте ещё раз.",
 };
 
@@ -70,7 +79,7 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
     return (
       <div className="flex items-center gap-3 rounded-2xl px-4 py-2.5 bg-[var(--kub-surface-2)] border border-[color:var(--kub-danger)]/30">
         <div className="flex-1 text-sm text-[color:var(--kub-danger)]">
-          {localError ?? (error ? ERROR_TEXT[error] : "Не удалось отправить голосовое сообщение.")}
+          {localError ?? (error ? getVoiceErrorText(error) : "Не удалось отправить голосовое сообщение.")}
         </div>
         <button
           onClick={onCancel}

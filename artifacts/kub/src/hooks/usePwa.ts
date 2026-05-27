@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { reportError } from "@/lib/monitoring";
+import { isNativeApp, supportsPwaInstall } from "@/lib/platform/capabilities";
 
 export const KUB_SW_UPDATE_READY_EVENT = "kub:sw-update-ready";
 export const KUB_SW_CONTROLLER_CHANGED_EVENT = "kub:sw-controller-changed";
@@ -17,6 +18,16 @@ let registrationStarted = false;
 export function usePwaServiceWorker() {
   useEffect(() => {
     if (registrationStarted) return;
+    if (isNativeApp()) {
+      if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+        void navigator.serviceWorker.getRegistrations()
+          .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+          .catch((error) => {
+            reportError(error, { category: "native_service_worker_cleanup" });
+          });
+      }
+      return;
+    }
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
     if (!window.isSecureContext && window.location.hostname !== "localhost") return;
 
@@ -64,9 +75,10 @@ export function usePwaServiceWorker() {
 
 export function usePwaInstall() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [installed, setInstalled] = useState(() => isStandaloneDisplay());
+  const [installed, setInstalled] = useState(() => isNativeApp() || isStandaloneDisplay());
 
   useEffect(() => {
+    if (!supportsPwaInstall()) return;
     if (typeof window === "undefined") return;
 
     const handleBeforeInstallPrompt = (event: Event) => {
@@ -95,7 +107,7 @@ export function usePwaInstall() {
   }, [installPrompt]);
 
   return {
-    canInstall: Boolean(installPrompt) && !installed,
+    canInstall: supportsPwaInstall() && Boolean(installPrompt) && !installed,
     installed,
     promptInstall,
   };

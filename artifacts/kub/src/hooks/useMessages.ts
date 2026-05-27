@@ -10,6 +10,7 @@ import { reportError } from "@/lib/monitoring";
 import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 import { isSavedChat } from "@/lib/chatDisplay";
 import { scheduleMarkChatDelivered, scheduleMarkChatRead } from "@/lib/deliveryReceipts";
+import { isNativeApp } from "@/lib/platform/capabilities";
 
 const MESSAGE_PAGE_SIZE = 100;
 const SEND_ACK_TIMEOUT_MS = 12_000;
@@ -596,7 +597,8 @@ export function useMessages(
           if (!messageBelongsToTopic(nextMessage, topicIdRef.current, generalTopicIdsRef.current)) return;
           addMessage(payload.new.chat_id, sanitizeHiddenReply(nextMessage, effectiveHiddenIds));
           const user = currentUserRef.current;
-          if (user && data.user_id !== user.id && document.hidden &&
+          if (user && data.user_id !== user.id && !isNativeApp() && document.hidden &&
+              typeof window !== "undefined" && "Notification" in window &&
               Notification.permission === "granted" && !mutedRef.current.includes(payload.new.chat_id)) {
             const senderName = (data as unknown as MessageWithSender).sender?.full_name ?? "Новое сообщение";
             const body = data.type === "text" ? (data.content ?? "")

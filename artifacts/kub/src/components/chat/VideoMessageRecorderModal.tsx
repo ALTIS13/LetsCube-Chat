@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KubButton, KubIcon, KubModal } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
+import { cameraAndMicPermissionHelp, isNativeApp } from "@/lib/platform/capabilities";
 import { cn } from "@/lib/utils";
 
 const MAX_DURATION_MS = 60_000;
@@ -311,7 +312,7 @@ export function VideoMessageRecorderModal({
       finishRecording();
       return;
     }
-    if (autoStart) closeWithoutCallback();
+    if (autoStart && !isNativeApp()) closeWithoutCallback();
   // closeWithoutCallback is intentionally not a dependency: this effect handles
   // the hold-release edge while camera permission is still resolving.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -506,7 +507,7 @@ export function VideoMessageRecorderModal({
   );
 
   const controls = autoAddOnStop ? (
-    locked && status === "recording" ? (
+    (locked || isNativeApp()) && status === "recording" ? (
       <div className="flex w-full justify-end">
         <KubButton
           type="button"
@@ -707,7 +708,7 @@ function getStatusCopy(status: RecorderStatus, variant: VideoRecorderVariant): {
     case "denied":
       return {
         title: "Нет доступа к камере или микрофону.",
-        body: "Разрешите доступ в браузере и попробуйте ещё раз.",
+        body: cameraAndMicPermissionHelp(),
       };
     case "unavailable":
       return {
@@ -716,8 +717,12 @@ function getStatusCopy(status: RecorderStatus, variant: VideoRecorderVariant): {
       };
     case "unsupported":
       return {
-        title: isRound ? "Видеосообщения не поддерживаются этим браузером." : "Видео не поддерживается этим браузером.",
-        body: "Попробуйте обновить браузер или отправьте видео файлом.",
+        title: isNativeApp()
+          ? isRound ? "Видеосообщения недоступны на этом устройстве." : "Запись видео недоступна на этом устройстве."
+          : isRound ? "Видеосообщения не поддерживаются этим браузером." : "Видео не поддерживается этим браузером.",
+        body: isNativeApp()
+          ? "Выберите готовое видео из галереи или попробуйте другое устройство."
+          : "Попробуйте обновить браузер или отправьте видео файлом.",
       };
     case "error":
     default:

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { mapPgError } from "@/lib/errors";
 import { requestChatMessageJump } from "@/lib/chatJumpEvents";
 import { safeOpenChat } from "@/lib/safeOpenChat";
+import { isNativeApp, nativePushPendingMessage, supportsBrowserPush } from "@/lib/platform/capabilities";
 import { useAppStore } from "@/store/app.store";
 
 /**
@@ -23,7 +24,7 @@ import { useAppStore } from "@/store/app.store";
  * the `web-push` library using a VAPID keypair.  The public half is exposed
  * to the client through `VITE_VAPID_PUBLIC_KEY`.
  */
-export type PushStatus = "unsupported" | "denied" | "missing_vapid" | "migration_missing" | "inactive" | "active";
+export type PushStatus = "unsupported" | "native_unavailable" | "denied" | "missing_vapid" | "migration_missing" | "inactive" | "active";
 
 export type PushPreferences = {
   push_enabled: boolean;
@@ -65,7 +66,7 @@ export function usePush() {
   }, []);
 
   const loadPreferences = useCallback(async () => {
-    if (!userId) return;
+    if (!userId || isNativeApp()) return;
     setLoadingPreferences(true);
     const { data, error } = await supabase
       .from("notification_preferences")
@@ -93,7 +94,12 @@ export function usePush() {
   // Detect browser support and starting state.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    if (isNativeApp()) {
+      setStatus("native_unavailable");
+      setMessage(nativePushPendingMessage());
+      return;
+    }
+    if (!supportsBrowserPush()) {
       setStatus("unsupported");
       return;
     }
@@ -120,6 +126,11 @@ export function usePush() {
 
   const enable = useCallback(async () => {
     if (!userId) return;
+    if (isNativeApp()) {
+      setStatus("native_unavailable");
+      setMessage(nativePushPendingMessage());
+      return;
+    }
     if (!VAPID_PUBLIC) {
       setStatus("missing_vapid");
       setMessage("VAPID public key не настроен.");
@@ -206,6 +217,11 @@ export function usePush() {
 
   const disable = useCallback(async () => {
     try {
+      if (isNativeApp()) {
+        setStatus("native_unavailable");
+        setMessage(nativePushPendingMessage());
+        return;
+      }
       const reg = await navigator.serviceWorker.getRegistration("/sw.js");
       const sub = reg ? await reg.pushManager.getSubscription() : null;
       if (sub) {
@@ -244,6 +260,11 @@ export function usePush() {
 
   const setPreference = useCallback(async (key: PushPreferenceKey, value: boolean) => {
     if (!userId) return;
+    if (isNativeApp()) {
+      setStatus("native_unavailable");
+      setMessage(nativePushPendingMessage());
+      return;
+    }
     const previous = preferences;
     const next = { ...preferences, [key]: value };
     setPreferences(next);
@@ -280,6 +301,7 @@ export function usePushNotificationNavigation() {
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
 
   useEffect(() => {
+    if (isNativeApp()) return;
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
     const onMsg = (e: MessageEvent) => {
       if (e.data?.type === "kub-open" && typeof e.data.url === "string") {
