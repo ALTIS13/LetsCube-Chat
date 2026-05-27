@@ -35,6 +35,8 @@ test.describe("KUB visual style and layout", () => {
     await gotoOrSkip(page, "/");
     await loginAsRoleOrSkip(page, role);
 
+    await expect(page.getByTestId("sidebar-brand-strip").locator("img")).toHaveCount(1);
+
     await page.getByTestId("notification-bell-button").click();
     const panel = page.getByTestId("notification-panel");
     const tabs = page.getByTestId("notification-tabs");
