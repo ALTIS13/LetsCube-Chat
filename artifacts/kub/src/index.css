@@ -91,17 +91,28 @@
 }
 
 .dark {
+  --brand-blue: #427fc2;
+  --brand-magenta: #ed1e7a;
+  --brand-bg: #04070f;
+  --brand-surface: #07111f;
+  --brand-surface-elevated: #0b1a2e;
+  --brand-border: rgba(66, 127, 194, 0.32);
+  --brand-text: #f7fbff;
+  --brand-text-muted: #9ab0c8;
+  --brand-danger: #ef4444;
+  --brand-success: #4dcd5e;
+  --brand-warning: #f5b50a;
   --kub-bg: #050B18;
   --kub-surface: #081629;
   --kub-surface-2: #0B213A;
   --kub-surface-3: #112B47;
   --kub-text: #F5F7FB;
   --kub-muted: #8FA9C4;
-  --kub-border-color: rgba(0, 174, 239, 0.25);
-  --kub-cyan: #00AEEF;
-  --kub-cyan-hover: #33C2F4;
-  --kub-blue: #008CFF;
-  --kub-pink: #FF007A;
+  --kub-border-color: var(--brand-border);
+  --kub-cyan: var(--brand-blue);
+  --kub-cyan-hover: #5b96d4;
+  --kub-blue: var(--brand-blue);
+  --kub-pink: var(--brand-magenta);
   --kub-online: #4DCD5E;
   --kub-danger: #EF4444;
   --kub-warn: #F5B50A;
@@ -210,17 +221,28 @@
 }
 
 .light {
+  --brand-blue: #427fc2;
+  --brand-magenta: #ed1e7a;
+  --brand-bg: #f4f8fc;
+  --brand-surface: #ffffff;
+  --brand-surface-elevated: #eaf3fa;
+  --brand-border: rgba(66, 127, 194, 0.24);
+  --brand-text: #07111f;
+  --brand-text-muted: #52677d;
+  --brand-danger: #dc2626;
+  --brand-success: #4fae4e;
+  --brand-warning: #c2870a;
   --kub-bg: #F4F8FC;
   --kub-surface: #FFFFFF;
   --kub-surface-2: #EAF3FA;
   --kub-surface-3: #DCEBF7;
   --kub-text: #07111F;
   --kub-muted: #52677D;
-  --kub-border-color: rgba(0, 92, 160, 0.18);
-  --kub-cyan: #008FCC;
-  --kub-cyan-hover: #006FA6;
-  --kub-blue: #006FE6;
-  --kub-pink: #D6006E;
+  --kub-border-color: var(--brand-border);
+  --kub-cyan: var(--brand-blue);
+  --kub-cyan-hover: #2d6fac;
+  --kub-blue: var(--brand-blue);
+  --kub-pink: var(--brand-magenta);
   --kub-online: #4FAE4E;
   --kub-danger: #DC2626;
   --kub-warn: #C2870A;
@@ -502,12 +524,13 @@ textarea::placeholder, input::placeholder {
   );
 }
 
-/* Animated cube logomark — cyan front face, pink top face, navy side. */
+/* Letscube mark container used by app chrome and auth surfaces. */
 .kub-cube-logo {
   display: inline-grid;
   place-items: center;
   position: relative;
   isolation: isolate;
+  overflow: hidden;
 }
 .kub-cube-logo::before,
 .kub-cube-logo::after {
@@ -518,22 +541,21 @@ textarea::placeholder, input::placeholder {
   pointer-events: none;
 }
 .kub-cube-logo::before {
-  background: linear-gradient(135deg, var(--kub-cyan) 0%, var(--kub-blue) 55%, color-mix(in srgb, var(--kub-pink) 70%, var(--kub-blue)) 100%);
+  background:
+    radial-gradient(circle at 26% 22%, color-mix(in srgb, #fff 18%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--kub-bg) 74%, var(--kub-cyan)) 0%, var(--kub-surface-2) 58%, color-mix(in srgb, var(--kub-pink) 28%, var(--kub-surface-2)) 100%);
   z-index: -2;
 }
 .kub-cube-logo::after {
   background:
-    linear-gradient(135deg, transparent 48%, color-mix(in srgb, #fff 22%, transparent) 50%, transparent 52%),
-    linear-gradient(45deg, transparent 48%, color-mix(in srgb, #fff 14%, transparent) 50%, transparent 52%);
+    linear-gradient(135deg, transparent 48%, color-mix(in srgb, var(--kub-cyan) 22%, transparent) 50%, transparent 52%),
+    linear-gradient(45deg, transparent 48%, color-mix(in srgb, var(--kub-pink) 18%, transparent) 50%, transparent 52%);
   z-index: -1;
   mix-blend-mode: screen;
 }
-.kub-cube-logo > span {
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  color: #fff;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
-  font-family: var(--app-font-sans);
+.kub-cube-logo > img {
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.28));
+  transform: translateZ(0);
 }
 
 /* Brand gradient text for headings on auth/welcome. */
@@ -542,6 +564,40 @@ textarea::placeholder, input::placeholder {
   -webkit-background-clip: text;
           background-clip: text;
   color: transparent;
+}
+
+.kub-auth-shell {
+  position: relative;
+  overflow: hidden;
+}
+
+.kub-auth-shell::after {
+  content: "";
+  position: absolute;
+  inset: auto -12% -18% 40%;
+  height: min(44rem, 70vh);
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, color-mix(in srgb, var(--kub-pink) 18%, transparent), transparent 68%);
+  opacity: 0.55;
+}
+
+.kub-auth-mascot {
+  pointer-events: none;
+  position: absolute;
+  right: max(1.5rem, 7vw);
+  bottom: -1.5rem;
+  width: min(36vw, 30rem);
+  max-height: 78vh;
+  object-fit: contain;
+  object-position: bottom right;
+  opacity: 0.78;
+  filter: drop-shadow(0 22px 42px rgba(0, 0, 0, 0.45));
+}
+
+@media (max-width: 1023px) {
+  .kub-auth-mascot {
+    display: none;
+  }
 }
 
 /* Gentle pulsing glow used on online dots / live indicators. */

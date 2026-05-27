@@ -90,6 +90,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const composerRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement>>({});
   const pendingJumpRef = useRef<string | null>(null);
+  const initialUnreadRef = useRef<{ chatId: string; count: number; since: string | null } | null>(null);
   const supabase = createClient();
   const [stagedAttachments, setStagedAttachments] = useState<StagedAttachment[]>([]);
   const [keyboardInset, setKeyboardInset] = useState(0);
@@ -190,6 +191,14 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const myRole = (chat?.members?.find((m) => m.user_id === userId)?.role ?? null) as
     | "owner" | "admin" | "member" | null;
   const canManageTopics = myRole === "owner" || myRole === "admin";
+  if (chat && initialUnreadRef.current?.chatId !== chatId) {
+    const myMembership = chat.members?.find((member) => member.user_id === userId) ?? null;
+    initialUnreadRef.current = {
+      chatId,
+      count: chat.unread_count ?? 0,
+      since: latestTimestamp(myMembership?.last_read_at, myMembership?.joined_at, myMembership?.cleared_at),
+    };
+  }
 
   const updateStagedAttachment = useCallback((
     attachmentId: string,
@@ -692,6 +701,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             bottomInset={messageListBottomInset}
             layoutKey={chatId}
             layoutVersion={composerHeight}
+            initialUnreadCount={initialUnreadRef.current?.chatId === chatId ? initialUnreadRef.current.count : 0}
+            initialUnreadSince={initialUnreadRef.current?.chatId === chatId ? initialUnreadRef.current.since : null}
           />
         )}
 
@@ -849,4 +860,17 @@ function parseMessageDurationMs(content: string | null | undefined): number | nu
   const seconds = Number(match[2]);
   if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) return null;
   return (minutes * 60 + seconds) * 1000;
+}
+
+function latestTimestamp(...values: Array<string | null | undefined>): string | null {
+  let latest: string | null = null;
+  let latestTime = Number.NEGATIVE_INFINITY;
+  for (const value of values) {
+    if (!value) continue;
+    const time = new Date(value).getTime();
+    if (!Number.isFinite(time) || time <= latestTime) continue;
+    latest = value;
+    latestTime = time;
+  }
+  return latest;
 }

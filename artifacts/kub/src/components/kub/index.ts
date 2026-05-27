@@ -8,6 +8,7 @@ export { KubHeader } from "./KubHeader";
 export { KubEmptyState } from "./KubEmptyState";
 export { KubTooltip } from "./KubTooltip";
 export { KubLogo } from "./KubLogo";
+export { KubBrandLogo } from "./KubBrandLogo";
 export { KubSwitch } from "./KubSwitch";
 export { KubIcon, type KubIconProps, type KubIconTone } from "./KubIcon";
 export { KUB_ICONS, type KubIconName } from "./icons";

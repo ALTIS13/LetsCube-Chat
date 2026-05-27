@@ -558,8 +558,8 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     "inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 transition-colors text-left text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:cursor-not-allowed disabled:opacity-60";
 
   return (
-    <div className="flex flex-col h-full w-full md:w-80 flex-shrink-0 border-l bg-[var(--kub-surface)] border-[color:var(--kub-border-color)]">
-      <div className="grid h-14 flex-shrink-0 grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-2 border-b border-[color:var(--kub-border-color)] px-3">
+    <div className="flex min-h-0 flex-col h-full w-full md:w-80 flex-shrink-0 border-l bg-[var(--kub-surface)] border-[color:var(--kub-border-color)]" data-testid="chat-info-panel">
+      <div className="sticky top-0 z-20 grid h-14 flex-shrink-0 grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3" data-testid="chat-info-header">
         <button
           onClick={onClose}
           className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)]"
@@ -593,7 +593,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         </div>
       </div>
 
-      <div className="flex flex-col items-center py-6 px-4 gap-3 flex-shrink-0 border-b border-[color:var(--kub-border-color)] kub-grid-subtle">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 py-4 px-4 flex-shrink-0 border-b border-[color:var(--kub-border-color)] kub-grid-subtle" data-testid="chat-info-summary">
         <div className="relative">
           <ChatAvatar
             chat={{ id: chat.id, name: display.title, avatar_url: chat.avatar_url ?? null, type: chat.type }}
@@ -619,7 +619,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         </div>
 
         {editing ? (
-          <div className="w-full space-y-2">
+          <div className="col-start-2 row-span-2 w-full min-w-0 space-y-2">
             <input
               value={name}
               onChange={(e) => setName(limitText(e.target.value, CHAT_NAME_MAX_LENGTH))}
@@ -637,26 +637,26 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         ) : (
           <>
             <div
-              className="w-full max-w-full px-2 text-center text-base font-semibold leading-snug text-[color:var(--kub-text)] line-clamp-2 [overflow-wrap:anywhere]"
+              className="col-start-2 row-start-1 w-full max-w-full text-left text-base font-semibold leading-snug text-[color:var(--kub-text)] line-clamp-2 [overflow-wrap:anywhere]"
               title={display.title}
             >
               {display.title}
             </div>
             {isSaved ? (
-              <div className="text-xs text-[color:var(--kub-muted)]">
+              <div className="col-start-2 row-start-2 text-left text-xs text-[color:var(--kub-muted)]">
                 Личное пространство для сохранённых сообщений
               </div>
             ) : isGroup ? (
-              <div className="text-xs text-[color:var(--kub-muted)]">
+              <div className="col-start-2 row-start-2 text-left text-xs text-[color:var(--kub-muted)]">
                 {members.length || chat.members?.length || 0} участников
               </div>
             ) : (
-              <div className="text-xs text-[color:var(--kub-muted)]">
+              <div className="col-start-2 row-start-2 text-left text-xs text-[color:var(--kub-muted)]">
                 {otherUser?.username ? `@${otherUser.username}` : "Без имени пользователя"}
               </div>
             )}
             {chat.description && (
-              <p className="max-w-full text-center text-xs text-[color:var(--kub-muted)] line-clamp-3 [overflow-wrap:anywhere]">
+              <p className="col-span-2 mt-2 max-w-full text-left text-xs text-[color:var(--kub-muted)] line-clamp-3 [overflow-wrap:anywhere]">
                 {chat.description}
               </p>
             )}
@@ -689,7 +689,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {(tab === "info" || !isGroup) && (
           <div>
             {!isGroup && otherUser && (

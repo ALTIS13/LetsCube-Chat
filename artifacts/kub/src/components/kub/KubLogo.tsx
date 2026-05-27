@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { kubBrandAsset } from "./brandAssets";
 
 interface KubLogoProps {
   size?: number;
@@ -17,7 +18,12 @@ export function KubLogo({ size = 56, className, withGlow = false }: KubLogoProps
       }}
       aria-hidden="true"
     >
-      <span style={{ fontSize: `${size * 0.5}px`, lineHeight: 1 }}>К</span>
+      <img
+        src={kubBrandAsset("letscube-mark.svg")}
+        alt=""
+        draggable={false}
+        className="h-[72%] w-[72%] object-contain"
+      />
     </span>
   );
 }

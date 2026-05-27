@@ -47,6 +47,8 @@ interface MessageListProps {
   bottomInset?: number;
   layoutKey?: string;
   layoutVersion?: number;
+  initialUnreadSince?: string | null;
+  initialUnreadCount?: number;
 }
 
 function compareMessagesForRender(a: MessageWithSender, b: MessageWithSender): number {
@@ -122,6 +124,8 @@ export function MessageList({
   bottomInset = 0,
   layoutKey,
   layoutVersion = 0,
+  initialUnreadSince = null,
+  initialUnreadCount = 0,
 }: MessageListProps) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -161,6 +165,17 @@ export function MessageList({
   const hasMoreOlderRef = useRef(hasMoreOlder);
   useEffect(() => { hasMoreOlderRef.current = hasMoreOlder; }, [hasMoreOlder]);
   const preservingOlderScrollRef = useRef(false);
+  const initialScrollAppliedRef = useRef<string | null>(null);
+  const firstUnreadMessageId = React.useMemo(() => {
+    if (!initialUnreadCount) return null;
+    const boundaryTime = initialUnreadSince ? new Date(initialUnreadSince).getTime() : null;
+    const first = sortedMessages.find((message) => {
+      if (message.deleted_at || message.user_id === userId) return false;
+      if (!boundaryTime || Number.isNaN(boundaryTime)) return true;
+      return new Date(message.created_at).getTime() > boundaryTime;
+    });
+    return first?.id ?? null;
+  }, [initialUnreadCount, initialUnreadSince, sortedMessages, userId]);
 
   const selectableMessages = React.useMemo(
     () => sortedMessages.filter((message) => !message.deleted_at),
@@ -309,6 +324,29 @@ export function MessageList({
     };
   }, [scrollToBottom]);
 
+  const scrollToMessageAfterLayout = useCallback((messageId: string) => {
+    let innerFrame = 0;
+    const outerFrame = requestAnimationFrame(() => {
+      innerFrame = requestAnimationFrame(() => {
+        const target = messageRefs?.current[messageId];
+        if (!target) return;
+        target.scrollIntoView({ behavior: "auto", block: "start" });
+        const el = containerRef.current;
+        if (el) {
+          el.scrollTop = Math.max(0, el.scrollTop - 56);
+          const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+          isAtBottomRef.current = atBottom;
+          setShowScrollBtn(!atBottom);
+          if (atBottom) setNewCount(0);
+        }
+      });
+    });
+    return () => {
+      cancelAnimationFrame(outerFrame);
+      if (innerFrame) cancelAnimationFrame(innerFrame);
+    };
+  }, [messageRefs]);
+
   // Keep bottom lock for new messages and typing indicator without pulling
   // users down when they intentionally scrolled up.
   useEffect(() => {
@@ -329,17 +367,26 @@ export function MessageList({
   // Initial chat open and chat switch need to wait for composer/tray layout
   // before locking the history to the real visual bottom.
   useEffect(() => {
+    if (sortedMessages.length === 0) return undefined;
+    const initialScrollKey = `${layoutKey ?? "chat"}:${initialUnreadCount}:${initialUnreadSince ?? "none"}`;
+    if (initialScrollAppliedRef.current === initialScrollKey) return undefined;
+    initialScrollAppliedRef.current = initialScrollKey;
     isAtBottomRef.current = true;
     prevMessageCountRef.current = sortedMessages.length;
     setNewCount(0);
     setShowScrollBtn(false);
+    if (firstUnreadMessageId) {
+      isAtBottomRef.current = false;
+      const cancelUnreadFrame = scrollToMessageAfterLayout(firstUnreadMessageId);
+      return () => cancelUnreadFrame();
+    }
     const cancelFrame = scrollToBottomAfterLayout(false);
     const timeoutId = window.setTimeout(() => scrollToBottom(false), 180);
     return () => {
       cancelFrame();
       window.clearTimeout(timeoutId);
     };
-  }, [layoutKey, scrollToBottom, scrollToBottomAfterLayout]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [layoutKey, initialUnreadCount, initialUnreadSince, firstUnreadMessageId, sortedMessages.length, scrollToBottom, scrollToBottomAfterLayout, scrollToMessageAfterLayout]);
 
   const resolvedBottomInset = Math.max(0, bottomInset);
 
@@ -453,6 +500,13 @@ export function MessageList({
                 <div className="flex justify-center my-3" data-message-date-separator={getMessageDayKey(msg.created_at)}>
                   <span className="px-3 py-1 rounded-full text-xs select-none backdrop-blur-sm bg-[color-mix(in_srgb,var(--kub-bg)_75%,transparent)] text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]">
                     {getMessageDayLabel(msg.created_at)}
+                  </span>
+                </div>
+              )}
+              {msg.id === firstUnreadMessageId && (
+                <div className="unread-separator my-3 flex items-center justify-center" data-testid="first-unread-separator">
+                  <span className="rounded-full border border-[color-mix(in_srgb,var(--kub-pink)_35%,var(--kub-border-color))] bg-[color-mix(in_srgb,var(--kub-bg)_82%,var(--kub-pink)_8%)] px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--kub-pink)] backdrop-blur-sm">
+                    Новые сообщения
                   </span>
                 </div>
               )}

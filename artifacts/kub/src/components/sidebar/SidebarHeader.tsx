@@ -7,7 +7,7 @@ import { useSignOut } from "@/hooks/useUser";
 import { useIsManagerOrAdmin } from "@/hooks/useRole";
 import { useTaskAccessGate } from "@/hooks/useTaskAccess";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
-import { KubIcon, KubLogo, KubTooltip, type KubIconName } from "@/components/kub";
+import { KubBrandLogo, KubIcon, KubLogo, KubTooltip, type KubIconName } from "@/components/kub";
 import { SettingsModal } from "./SettingsModal";
 import { NewGroupModal } from "./NewGroupModal";
 import { NotificationBell } from "./NotificationBell";
@@ -121,8 +121,15 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
 
       {/* Brand strip */}
       <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5">
-        <KubLogo size={26} />
-        <div className="flex-1 min-w-0">
+        <KubLogo size={28} className="sm:hidden" />
+        <KubBrandLogo
+          variant="horizontal"
+          tone="light"
+          className="hidden h-8 min-w-0 flex-1 sm:inline-flex"
+          imgClassName="max-h-8 w-auto"
+          alt="Letscube"
+        />
+        <div className="min-w-0 flex-1 sm:hidden">
           <div className="text-sm font-bold tracking-wide text-[color:var(--kub-text)]">КУБ</div>
           <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--kub-cyan)]/80">Cyber Arena</div>
         </div>

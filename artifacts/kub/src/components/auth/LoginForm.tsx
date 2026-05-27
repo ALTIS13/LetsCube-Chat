@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useLocation, Link } from "wouter";
 import { createClient } from "@/lib/supabase/client";
-import { KubButton, KubIcon, KubInput, KubLogo, KubPanel } from "@/components/kub";
+import { KubBrandLogo, KubButton, KubIcon, KubInput, KubPanel } from "@/components/kub";
+import { kubBrandAsset } from "@/components/kub/brandAssets";
 import { mapPgError } from "@/lib/errors";
 import { CONFIRMATION_LINK_INVALID_MESSAGE, getAuthCallbackUrl } from "@/lib/authRedirect";
 
@@ -110,10 +111,24 @@ export function LoginForm() {
     });
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 kub-grid-bg">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen flex items-center justify-center px-4 kub-grid-bg kub-auth-shell">
+      <img
+        src={kubBrandAsset("letscube-mascot-primary.png")}
+        alt=""
+        aria-hidden="true"
+        loading="eager"
+        decoding="async"
+        className="kub-auth-mascot"
+      />
+      <div className="relative z-10 w-full max-w-sm lg:mr-[38vw]">
         <div className="flex flex-col items-center gap-4 mb-8">
-          <KubLogo size={72} withGlow />
+          <KubBrandLogo
+            variant="vertical"
+            tone="light"
+            className="h-24 w-56 justify-center"
+            imgClassName="max-h-24"
+            alt="Letscube"
+          />
           <div className="text-center">
             <h1 className="text-3xl font-extrabold tracking-tight kub-text-gradient">
               КУБ

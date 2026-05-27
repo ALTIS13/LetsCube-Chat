@@ -208,6 +208,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
 
       <button
         onClick={onInfoOpen}
+        data-testid="chat-header-info-button"
         className="flex items-center gap-2.5 flex-1 min-w-0 rounded-lg px-1.5 py-1 hover:bg-[var(--kub-surface-2)] transition-colors"
       >
         <ChatAvatar

@@ -59,7 +59,7 @@ const NOTIFICATION_TABS: Array<{ id: NotificationCategory; label: string }> = [
   { id: "system", label: "Системные" },
 ];
 
-type NotificationPanelStyle = Pick<CSSProperties, "left" | "top" | "width" | "maxHeight">;
+type NotificationPanelStyle = Pick<CSSProperties, "left" | "top" | "width" | "height" | "maxHeight">;
 
 export function NotificationBell() {
   const [, setLocation] = useLocation();
@@ -113,11 +113,13 @@ export function NotificationBell() {
       maxHeight = Math.min(desiredMaxHeight, viewportHeight - PANEL_MARGIN * 2);
     }
 
+    const resolvedHeight = Math.max(MIN_PANEL_HEIGHT, maxHeight);
     setPanelStyle({
       left,
       top: Math.max(viewportTop + PANEL_MARGIN, top),
       width,
-      maxHeight: Math.max(MIN_PANEL_HEIGHT, maxHeight),
+      height: resolvedHeight,
+      maxHeight: resolvedHeight,
     });
   }, []);
 
@@ -317,7 +319,7 @@ export function NotificationBell() {
           data-kub-popover="true"
           data-testid="notification-panel"
         >
-          <div className="flex items-center justify-between gap-3 border-b border-[color:var(--kub-border-color)] px-4 py-3">
+          <div className="shrink-0 bg-[var(--kub-surface)] flex items-center justify-between gap-3 border-b border-[color:var(--kub-border-color)] px-4 py-3">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-[color:var(--kub-text)]">Уведомления</div>
               <div className="text-[11px] text-[color:var(--kub-muted)]">
@@ -333,7 +335,10 @@ export function NotificationBell() {
             </button>
           </div>
 
-          <div className="flex gap-1 overflow-x-auto border-b border-[color:var(--kub-border-color)] px-2 py-2">
+          <div
+            className="relative z-10 flex shrink-0 gap-1 overflow-x-auto border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-2"
+            data-testid="notification-tabs"
+          >
             {NOTIFICATION_TABS.map((tab) => {
               const tabEntries = entries.filter((entry) => tab.id === "all" || entry.category === tab.id);
               const tabUnread = countUnreadEntries(tabEntries);
@@ -363,18 +368,18 @@ export function NotificationBell() {
           </div>
 
           {error && (
-            <div className="mx-3 mt-3 rounded-xl border border-[color:var(--kub-danger)]/35 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-danger)]">
+            <div className="mx-3 mt-3 shrink-0 rounded-xl border border-[color:var(--kub-danger)]/35 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-danger)]">
               {error}
             </div>
           )}
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-2">
+          <div className="relative z-0 min-h-0 flex-1 overflow-y-auto overscroll-contain p-2" data-testid="notification-list">
             {loading && visibleEntries.length === 0 ? (
               <NotificationState icon="spinner" title="Загрузка уведомлений" body="Обновляем последние события." />
             ) : visibleEntries.length === 0 ? (
               <NotificationState icon="notifications" title="Уведомлений пока нет" body="Новые события появятся здесь." />
             ) : (
-              <div className="space-y-1.5">
+              <div className="grid gap-1.5">
                 {visibleEntries.map((entry) => {
                   if (entry.kind === "message_group") {
                     return (
