@@ -129,6 +129,7 @@ export function MessageList({
 }: MessageListProps) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const sortedMessages = React.useMemo(
     () => [...messages].sort(compareMessagesForRender),
     [messages],
@@ -166,6 +167,8 @@ export function MessageList({
   useEffect(() => { hasMoreOlderRef.current = hasMoreOlder; }, [hasMoreOlder]);
   const preservingOlderScrollRef = useRef(false);
   const initialScrollAppliedRef = useRef<string | null>(null);
+  const initialScrollPendingRef = useRef(false);
+  const initialScrollPendingKeyRef = useRef<string | null>(null);
   const firstUnreadMessageId = React.useMemo(() => {
     if (!initialUnreadCount) return null;
     const boundaryTime = initialUnreadSince ? new Date(initialUnreadSince).getTime() : null;
@@ -278,7 +281,13 @@ export function MessageList({
 
   const loadOlderAtTop = useCallback(async () => {
     const el = containerRef.current;
-    if (!el || !onLoadOlder || loadingOlderRef.current || !hasMoreOlderRef.current) return;
+    if (
+      !el ||
+      !onLoadOlder ||
+      loadingOlderRef.current ||
+      !hasMoreOlderRef.current ||
+      initialScrollPendingRef.current
+    ) return;
     const beforeHeight = el.scrollHeight;
     const beforeTop = el.scrollTop;
     preservingOlderScrollRef.current = true;
@@ -300,7 +309,7 @@ export function MessageList({
     isAtBottomRef.current = atBottom;
     setShowScrollBtn(!atBottom);
     if (atBottom) setNewCount(0);
-    if (el.scrollTop < 160) void loadOlderAtTop();
+    if (!initialScrollPendingRef.current && el.scrollTop < 160) void loadOlderAtTop();
   }, [loadOlderAtTop]);
 
   const scrollToBottom = useCallback((smooth = true) => {
@@ -347,6 +356,14 @@ export function MessageList({
     };
   }, [messageRefs]);
 
+  const releaseInitialScrollGuard = useCallback((scrollKey: string, delayMs: number) => {
+    window.setTimeout(() => {
+      if (initialScrollPendingKeyRef.current !== scrollKey) return;
+      initialScrollPendingRef.current = false;
+      initialScrollPendingKeyRef.current = null;
+    }, delayMs);
+  }, []);
+
   // Keep bottom lock for new messages and typing indicator without pulling
   // users down when they intentionally scrolled up.
   useEffect(() => {
@@ -364,29 +381,50 @@ export function MessageList({
     return scrollToBottomAfterLayout(false);
   }, [bottomInset, layoutVersion, scrollToBottomAfterLayout]);
 
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || typeof ResizeObserver === "undefined") return undefined;
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      if (!isAtBottomRef.current || preservingOlderScrollRef.current || loadingOlderRef.current) return;
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => scrollToBottom(false));
+    });
+    observer.observe(content);
+    return () => {
+      observer.disconnect();
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [scrollToBottom]);
+
   // Initial chat open and chat switch need to wait for composer/tray layout
   // before locking the history to the real visual bottom.
   useEffect(() => {
-    if (sortedMessages.length === 0) return undefined;
+    const hasMessages = sortedMessages.length > 0;
+    if (!hasMessages) return undefined;
     const initialScrollKey = `${layoutKey ?? "chat"}:${initialUnreadCount}:${initialUnreadSince ?? "none"}`;
     if (initialScrollAppliedRef.current === initialScrollKey) return undefined;
     initialScrollAppliedRef.current = initialScrollKey;
+    initialScrollPendingRef.current = true;
+    initialScrollPendingKeyRef.current = initialScrollKey;
     isAtBottomRef.current = true;
     prevMessageCountRef.current = sortedMessages.length;
     setNewCount(0);
     setShowScrollBtn(false);
     if (firstUnreadMessageId) {
       isAtBottomRef.current = false;
+      releaseInitialScrollGuard(initialScrollKey, 520);
       const cancelUnreadFrame = scrollToMessageAfterLayout(firstUnreadMessageId);
       return () => cancelUnreadFrame();
     }
     const cancelFrame = scrollToBottomAfterLayout(false);
-    const timeoutId = window.setTimeout(() => scrollToBottom(false), 180);
+    const timeoutIds = [180, 420].map((delay) => window.setTimeout(() => scrollToBottom(false), delay));
+    releaseInitialScrollGuard(initialScrollKey, 680);
     return () => {
       cancelFrame();
-      window.clearTimeout(timeoutId);
+      timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
     };
-  }, [layoutKey, initialUnreadCount, initialUnreadSince, firstUnreadMessageId, sortedMessages.length, scrollToBottom, scrollToBottomAfterLayout, scrollToMessageAfterLayout]);
+  }, [layoutKey, initialUnreadCount, initialUnreadSince, firstUnreadMessageId, sortedMessages.length, scrollToBottom, scrollToBottomAfterLayout, scrollToMessageAfterLayout, releaseInitialScrollGuard]);
 
   const resolvedBottomInset = Math.max(0, bottomInset);
 
@@ -439,6 +477,7 @@ export function MessageList({
       )}
       <div
         ref={containerRef}
+        data-testid="message-scroll-container"
         onScroll={handleScroll}
         onClickCapture={(event) => {
           const target = event.target as HTMLElement | null;
@@ -453,16 +492,17 @@ export function MessageList({
           scrollPaddingBottom: `calc(1.5rem + ${resolvedBottomInset}px)`,
         }}
       >
-        {(loadingOlder || olderError) && (
-          <div className="flex justify-center py-2" data-message-history-status>
-            <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--kub-border-color)] bg-[color-mix(in_srgb,var(--kub-bg)_78%,transparent)] px-3 py-1 text-xs text-[color:var(--kub-muted)] backdrop-blur-sm">
-              {loadingOlder && <KubIcon name="spinner" size={12} />}
-              {olderError ?? "Загружаем историю..."}
-            </span>
-          </div>
-        )}
+        <div ref={contentRef}>
+          {(loadingOlder || olderError) && (
+            <div className="flex justify-center py-2" data-message-history-status>
+              <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--kub-border-color)] bg-[color-mix(in_srgb,var(--kub-bg)_78%,transparent)] px-3 py-1 text-xs text-[color:var(--kub-muted)] backdrop-blur-sm">
+                {loadingOlder && <KubIcon name="spinner" size={12} />}
+                {olderError ?? "Загружаем историю..."}
+              </span>
+            </div>
+          )}
 
-        {sortedMessages.map((msg, idx) => {
+          {sortedMessages.map((msg, idx) => {
           const prev = idx > 0 ? sortedMessages[idx - 1] : null;
           const next = idx < sortedMessages.length - 1 ? sortedMessages[idx + 1] : null;
           const showDate = shouldShowDateSeparator(prev, msg);
@@ -611,16 +651,17 @@ export function MessageList({
               )}
             </div>
           );
-        })}
+          })}
 
-        {/* Typing indicator */}
-        {isTyping && (
-          <div className="flex justify-start mt-1 mb-3">
-            <TypingIndicator name={typingUser} />
-          </div>
-        )}
+          {/* Typing indicator */}
+          {isTyping && (
+            <div className="flex justify-start mt-1 mb-3">
+              <TypingIndicator name={typingUser} />
+            </div>
+          )}
 
-        <div ref={bottomRef} />
+          <div ref={bottomRef} />
+        </div>
       </div>
 
       {showScrollBtn && (

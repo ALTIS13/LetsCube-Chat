@@ -145,6 +145,8 @@ export function ChatListItem({
         onPinnedDrop?.();
       }}
       data-testid="chat-list-item"
+      data-unread-count={chat.unread_count ?? 0}
+      data-has-messages={lastMsg ? "true" : "false"}
       className={cn(
         "w-full flex items-center gap-3 px-3 py-2.5 transition-colors relative group",
         "hover:bg-[var(--kub-surface-2)]",

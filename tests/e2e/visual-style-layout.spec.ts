@@ -97,6 +97,41 @@ test.describe("KUB visual style and layout", () => {
 
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
+
+  test("fully read chat opens anchored to latest messages", async ({ page }) => {
+    const consoleErrors = collectConsoleErrors(page);
+    const role = findFirstAvailableQaRole(
+      ["owner", "tech_admin", "location_admin", "location_staff", "client"],
+      { includeDefault: true },
+    );
+    test.skip(!role, "QA credentials or auth state are not configured");
+
+    await gotoOrSkip(page, "/");
+    await loginAsRoleOrSkip(page, role);
+
+    const readChat = page.locator('[data-testid="chat-list-item"][data-unread-count="0"][data-has-messages="true"]').first();
+    test.skip((await readChat.count()) === 0, "QA account has no fully read visible chats with messages");
+    await readChat.click();
+
+    const scrollContainer = page.getByTestId("message-scroll-container");
+    await expect(scrollContainer).toBeVisible();
+    await page.waitForTimeout(900);
+
+    const firstUnread = page.getByTestId("first-unread-separator");
+    test.skip(await firstUnread.isVisible().catch(() => false), "Selected chat has an unread boundary");
+
+    const metrics = await scrollContainer.evaluate((node) => {
+      const el = node as HTMLElement;
+      return {
+        distanceFromBottom: el.scrollHeight - el.scrollTop - el.clientHeight,
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+      };
+    });
+    expect(metrics.distanceFromBottom).toBeLessThanOrEqual(32);
+
+    expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
+  });
 });
 
 function collectConsoleErrors(page: Page): string[] {
