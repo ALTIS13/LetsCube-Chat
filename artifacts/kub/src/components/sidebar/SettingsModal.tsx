@@ -16,7 +16,7 @@ import { AudioSettingsSection } from "./AudioSettingsSection";
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { getBuildMetadata } from "@/lib/monitoring";
-import { isNativeApp } from "@/lib/platform/capabilities";
+import { isNativeAndroid, isNativeApp } from "@/lib/platform/capabilities";
 import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
 import {
   PROFILE_LIMITS,
@@ -38,6 +38,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const { canInstall, installed, promptInstall } = usePwaInstall();
   const nativeApp = isNativeApp();
+  const nativeAndroid = isNativeAndroid();
   const buildMetadata = getBuildMetadata();
   const {
     status: pushStatus,
@@ -369,8 +370,12 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               <div className="text-sm text-[color:var(--kub-text)]">Push-уведомления</div>
               <div className="text-xs text-[color:var(--kub-muted)]">
                 {pushStatus === "unsupported" && "Браузер не поддерживает"}
-                {pushStatus === "native_unavailable" && "Native push для Android будет подключён на следующем этапе"}
-                {pushStatus === "denied" && "Заблокировано в настройках браузера"}
+                {pushStatus === "native_unavailable" && (
+                  nativeAndroid
+                    ? "Android push через Firebase/FCM"
+                    : "Native push пока настроен только для Android"
+                )}
+                {pushStatus === "denied" && (nativeAndroid ? "Заблокировано в настройках приложения Android" : "Заблокировано в настройках браузера")}
                 {pushStatus === "missing_vapid" && "Нужен VAPID public key в конфигурации"}
                 {pushStatus === "migration_missing" && "Нужно обновление базы данных"}
                 {pushStatus === "inactive" && "Получать уведомления, даже когда вкладка закрыта"}
@@ -383,7 +388,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                   Выключить
                 </KubButton>
               </div>
-            ) : pushStatus === "inactive" ? (
+            ) : pushStatus === "inactive" || (nativeAndroid && pushStatus === "native_unavailable") ? (
               <div className="col-span-2 min-w-0 sm:col-span-1 sm:justify-self-end">
                 <KubButton size="sm" onClick={enablePush} className="w-full sm:w-auto">
                   Включить

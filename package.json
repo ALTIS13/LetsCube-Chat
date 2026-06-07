@@ -39,5 +39,8 @@
     "lightningcss-win32-x64-msvc": "1.31.1",
     "prettier": "^3.8.1",
     "typescript": "~5.9.2"
+  },
+  "dependencies": {
+    "@capacitor/push-notifications": "^8.1.1"
   }
 }

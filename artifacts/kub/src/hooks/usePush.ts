@@ -1,11 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { mapPgError } from "@/lib/errors";
 import { requestChatMessageJump } from "@/lib/chatJumpEvents";
 import { safeOpenChat } from "@/lib/safeOpenChat";
-import { isNativeApp, nativePushPendingMessage, supportsBrowserPush } from "@/lib/platform/capabilities";
+import { isNativeAndroid, isNativeApp, nativePushPendingMessage, supportsBrowserPush } from "@/lib/platform/capabilities";
+import {
+  disableNativeAndroidPush,
+  enableNativeAndroidPush,
+  getNativePushPermissionStatus,
+  registerNativePushNavigationListeners,
+  type NativePushResult,
+} from "@/lib/platform/nativePush";
+import { getBuildMetadata } from "@/lib/monitoring";
 import { useAppStore } from "@/store/app.store";
 
 /**
@@ -59,6 +67,7 @@ export function usePush() {
   const [preferences, setPreferences] = useState<PushPreferences>(DEFAULT_PREFERENCES);
   const [loadingPreferences, setLoadingPreferences] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const nativeTokenRef = useRef<string | null>(null);
 
   const markMigrationMissing = useCallback(() => {
     setStatus("migration_missing");
@@ -66,7 +75,7 @@ export function usePush() {
   }, []);
 
   const loadPreferences = useCallback(async () => {
-    if (!userId || isNativeApp()) return;
+    if (!userId) return;
     setLoadingPreferences(true);
     const { data, error } = await supabase
       .from("notification_preferences")
@@ -94,9 +103,18 @@ export function usePush() {
   // Detect browser support and starting state.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (isNativeApp()) {
+    if (isNativeAndroid()) {
       setStatus("native_unavailable");
       setMessage(nativePushPendingMessage());
+      void getNativePushPermissionStatus().then((result) => {
+        setStatus(normalizeNativeStatus(result));
+        setMessage(result.message);
+      });
+      return;
+    }
+    if (isNativeApp()) {
+      setStatus("native_unavailable");
+      setMessage("Native push пока настроен только для Android-приложения.");
       return;
     }
     if (!supportsBrowserPush()) {
@@ -126,6 +144,20 @@ export function usePush() {
 
   const enable = useCallback(async () => {
     if (!userId) return;
+    if (isNativeAndroid()) {
+      setStatus("native_unavailable");
+      setMessage("Регистрируем Android push...");
+      const result = await enableNativeAndroidPush(async (token) => {
+        nativeTokenRef.current = token;
+        return registerNativeDeviceToken(supabase, token);
+      });
+      setStatus(normalizeNativeStatus(result));
+      setMessage(result.message);
+      if (result.status === "native_active") {
+        setPreferences((prev) => ({ ...prev, push_enabled: true }));
+      }
+      return;
+    }
     if (isNativeApp()) {
       setStatus("native_unavailable");
       setMessage(nativePushPendingMessage());
@@ -217,9 +249,19 @@ export function usePush() {
 
   const disable = useCallback(async () => {
     try {
+      if (isNativeAndroid()) {
+        const result = await disableNativeAndroidPush(nativeTokenRef.current, async (token) => {
+          await unregisterNativeDeviceToken(supabase, token);
+        });
+        nativeTokenRef.current = null;
+        setStatus(normalizeNativeStatus(result));
+        setMessage(result.message);
+        setPreferences((prev) => ({ ...prev, push_enabled: false }));
+        return;
+      }
       if (isNativeApp()) {
         setStatus("native_unavailable");
-        setMessage(nativePushPendingMessage());
+        setMessage("Native push пока настроен только для Android-приложения.");
         return;
       }
       const reg = await navigator.serviceWorker.getRegistration("/sw.js");
@@ -260,11 +302,6 @@ export function usePush() {
 
   const setPreference = useCallback(async (key: PushPreferenceKey, value: boolean) => {
     if (!userId) return;
-    if (isNativeApp()) {
-      setStatus("native_unavailable");
-      setMessage(nativePushPendingMessage());
-      return;
-    }
     const previous = preferences;
     const next = { ...preferences, [key]: value };
     setPreferences(next);
@@ -311,6 +348,15 @@ export function usePushNotificationNavigation() {
     };
     navigator.serviceWorker.addEventListener("message", onMsg);
     return () => navigator.serviceWorker.removeEventListener("message", onMsg);
+  }, []);
+
+  useEffect(() => {
+    if (!isNativeAndroid()) return undefined;
+    let cleanup: (() => void) | null = null;
+    void registerNativePushNavigationListeners(openPushTargetInApp).then((removeListeners) => {
+      cleanup = removeListeners;
+    });
+    return () => cleanup?.();
   }, []);
 
   useEffect(() => {
@@ -369,6 +415,70 @@ function looksLikeSchemaMissing(error: unknown): boolean {
     text.includes("chat_notification_preferences") ||
     text.includes("is_active") ||
     text.includes("last_seen_at") ||
-    text.includes("platform")
+    text.includes("platform") ||
+    text.includes("user_push_devices") ||
+    text.includes("register_push_device") ||
+    text.includes("unregister_push_device")
   );
+}
+
+function normalizeNativeStatus(result: NativePushResult): PushStatus {
+  if (result.status === "native_active") return "active";
+  if (result.status === "native_denied") return "denied";
+  if (result.status === "migration_missing") return "migration_missing";
+  return "native_unavailable";
+}
+
+async function registerNativeDeviceToken(
+  supabase: ReturnType<typeof createClient>,
+  token: string,
+): Promise<NativePushResult | null> {
+  const tokenHash = await sha256Hex(token).catch(() => null);
+  const metadata = getBuildMetadata();
+  const { error } = await (supabase as unknown as {
+    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ error: unknown }>;
+  }).rpc("register_push_device", {
+    p_platform: "android",
+    p_provider: "fcm",
+    p_token: token,
+    p_token_hash: tokenHash,
+    p_device_id: null,
+    p_device_model: getDeviceModel(),
+    p_app_version: metadata.version,
+  });
+
+  if (error) {
+    if (looksLikeSchemaMissing(error)) {
+      return {
+        status: "migration_missing",
+        message: "Нужно применить migration user_push_devices/register_push_device для Android push.",
+      };
+    }
+    return { status: "native_error", message: mapPgError(error) };
+  }
+
+  return null;
+}
+
+async function unregisterNativeDeviceToken(
+  supabase: ReturnType<typeof createClient>,
+  token: string,
+): Promise<void> {
+  await (supabase as unknown as {
+    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ error: unknown }>;
+  }).rpc("unregister_push_device", {
+    p_provider: "fcm",
+    p_token: token,
+  });
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function getDeviceModel(): string | null {
+  if (typeof navigator === "undefined") return null;
+  return navigator.userAgent || null;
 }

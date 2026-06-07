@@ -1,5 +1,15 @@
 # QA Results
 
+2026-06-07 native Android push / FCM foundation:
+
+- Added the Capacitor Push Notifications client foundation for Android without changing the browser/PWA Web Push path.
+- Android settings now show Firebase/FCM setup status instead of the old “next stage” placeholder or browser permission copy.
+- The native adapter creates Android channels `messages`, `tasks`, and `system`, listens for registration and notification taps, and routes safe payloads inside the SPA.
+- FCM registration tokens are sent only to the authenticated `register_push_device` RPC when that SQL is applied; raw tokens are not printed and are not stored in frontend localStorage.
+- `android/app/google-services.json` is not present locally and remains git-ignored, so physical FCM delivery is still pending.
+- SQL was not applied automatically. The existing proposal `20260531_notification_center_read_sync_native_push.sql` remains the manual device-token/RPC prerequisite.
+- Backend FCM delivery is still pending: trusted Firebase credentials must be configured server-side and the push dispatcher/Edge Function must fan out to `user_push_devices`.
+
 2026-05-27 notification center read-sync/native push foundation:
 
 - Notification Center now separates events into tabs: `Все`, `Задачи`, `Сообщения`, `Системные`.

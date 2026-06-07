@@ -37,6 +37,32 @@ test.describe("KUB push and phone production foundation", () => {
     await expect(page.getByRole("button", { name: /Сохранить без/ })).toHaveCount(0);
   });
 
+  test("native Android settings show FCM setup state instead of browser push placeholder", async ({ page }) => {
+    const role = findFirstAvailableQaRole(["owner", "tech_admin", "location_admin", "location_staff", "client"], {
+      includeDefault: true,
+    });
+    test.skip(!role, "QA credentials or auth state are not configured");
+
+    await page.addInitScript(() => {
+      Object.defineProperty(window, "androidBridge", {
+        configurable: true,
+        value: {},
+      });
+    });
+
+    await gotoOrSkip(page, "/");
+    await loginAsRoleOrSkip(page, role);
+
+    await page.getByRole("button", { name: "Меню" }).click();
+    await page.getByRole("button", { name: "Настройки" }).click();
+
+    await page.getByText("Push-уведомления").scrollIntoViewIfNeeded();
+    await expect(page.getByText("Push-уведомления")).toBeVisible();
+    await expect(page.getByText(/Firebase\/FCM|Android-приложении/i).first()).toBeVisible();
+    await expect(page.getByText(/следующем этапе/i)).toHaveCount(0);
+    await expect(page.getByText(/настройках браузера/i)).toHaveCount(0);
+  });
+
   test("phone verification requires international format and hides SMS provider details", async ({ page }) => {
     const role = findFirstAvailableQaRole(["owner", "tech_admin", "location_admin", "location_staff", "client"], {
       includeDefault: true,
@@ -90,5 +116,18 @@ test.describe("KUB push and phone production foundation", () => {
     expect(swSource).toContain("renotify: !data.isMessagePush");
     expect(swSource).toContain("timestamp: data.timestamp");
     expect(swSource).not.toMatch(/media_url|signedUrl|access_token|refresh_token/i);
+  });
+
+  test("native push adapter keeps FCM tokens out of logs and defines Android channels", async () => {
+    const nativePushSource = readFileSync(resolve("artifacts/kub/src/lib/platform/nativePush.ts"), "utf8");
+    const usePushSource = readFileSync(resolve("artifacts/kub/src/hooks/usePush.ts"), "utf8");
+    expect(nativePushSource).toContain('id: "messages"');
+    expect(nativePushSource).toContain('id: "tasks"');
+    expect(nativePushSource).toContain('id: "system"');
+    expect(nativePushSource).toContain("pushNotificationActionPerformed");
+    expect(usePushSource).toContain("register_push_device");
+    expect(usePushSource).toContain("unregister_push_device");
+    expect(`${nativePushSource}\n${usePushSource}`).not.toMatch(/console\.(log|debug)\(/);
+    expect(`${nativePushSource}\n${usePushSource}`).not.toMatch(/localStorage\.setItem\([^)]*token/i);
   });
 });

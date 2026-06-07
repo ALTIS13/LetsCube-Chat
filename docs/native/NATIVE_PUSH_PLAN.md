@@ -26,22 +26,17 @@ Keep the current notification model as the source of truth:
    - APNs for iOS;
    - optional Windows notification channel if desktop wrapper needs it.
 
-## Possible schema extension later
+## Device token schema
 
-Do not apply SQL now. A future proposal can add a device table such as:
+Do not apply SQL automatically. The current proposal is:
 
 ```text
-native_push_devices
-- id
-- user_id
-- platform
-- token
-- app_version
-- is_active
-- last_seen_at
+.migration-backup/supabase/migrations/20260531_notification_center_read_sync_native_push.sql
 ```
 
-The existing browser `push_subscriptions` table should remain for web/PWA.
+It adds `user_push_devices` and the `register_push_device` /
+`unregister_push_device` RPCs for FCM/APNS/WebPush-style device records.
+The existing browser `push_subscriptions` table remains the Web/PWA model.
 
 ## Payload policy
 
@@ -60,10 +55,23 @@ The existing browser `push_subscriptions` table should remain for web/PWA.
 
 ## Android
 
-- Use FCM through a Capacitor-compatible push plugin.
+- Use FCM through `@capacitor/push-notifications`.
 - Store server credentials only in backend/Supabase secrets or server-side
   worker config.
 - Request notification permission from a user action.
+- Android channels:
+  - `messages`;
+  - `tasks`;
+  - `system`.
+- The Android client must never print raw FCM tokens. Tokens go only to the
+  authenticated registration RPC.
+
+Current implementation status:
+
+- Client permission/registration/tap-routing foundation exists.
+- `android/app/google-services.json` is intentionally local-only and ignored.
+- Backend FCM delivery remains pending until Firebase credentials and the
+  device-token SQL are configured.
 
 ## iOS
 

@@ -71,17 +71,32 @@ Schedule it from Supabase Cron or an external scheduler with `POST` and either `
 - Private chat message pushes render as sender + preview. Group message pushes render as chat + `sender: preview`.
 - Browser/PWA grouping uses a stable `NotificationOptions.tag`; before showing a replacement notification, the service worker closes existing notifications with the same tag. Exact OS-level notification history behavior still depends on the browser and operating system.
 - In-app Notification Center groups message rows by chat/dialog so tasks stay visible. Opening a chat marks loaded message notifications for that chat read immediately; after applying `20260531_notification_center_read_sync_native_push.sql`, the server RPC can mark all matching unread message notifications for the user.
-- Native Android push is separate from browser Web Push. It requires local `android/app/google-services.json`, Firebase/FCM configuration, a device-token table/RPC, and backend delivery. Do not commit `google-services.json`, Firebase credentials, private keys, or signing files.
+- Native Android push is separate from browser Web Push. The client foundation uses Capacitor Push Notifications and the same in-app notification semantics, but production delivery still requires local `android/app/google-services.json`, Firebase/FCM backend credentials, the `user_push_devices` table/RPC, and an FCM delivery adapter. Do not commit `google-services.json`, Firebase credentials, private keys, raw device tokens, or signing files.
 
 ## Native Android push status
 
-Native push is not ready yet. The Android APK currently shows native notifications as a pending setup path instead of reusing browser `PushManager` or the PWA service worker. To enable it later:
+Native Android push has a client foundation, but production delivery is still pending until Firebase and backend pieces are configured.
+
+Implemented in the APK/client:
+
+- Android settings use native push copy instead of browser `PushManager` copy.
+- `@capacitor/push-notifications` is the native client plugin.
+- The app requests Android notification permission only from a user action.
+- The app creates Android channels:
+  - `messages`
+  - `tasks`
+  - `system`
+- The app listens for FCM registration and sends the token to `register_push_device` when that RPC exists.
+- Raw FCM tokens are not printed and are not stored in frontend localStorage.
+- Notification tap payloads route inside the SPA where possible.
+
+Still required before calling native Android push ready:
 
 1. Place `google-services.json` locally at `android/app/google-services.json`; it is ignored by git.
 2. Apply the native device-token proposal in `20260531_notification_center_read_sync_native_push.sql`.
-3. Add a Capacitor native push client only after Firebase config is present.
-4. Extend the server/Edge Function delivery path to send FCM payloads from backend secrets, not from frontend.
-5. Run physical Android foreground/background delivery QA before calling native push production-ready.
+3. Configure trusted backend/Supabase secrets for FCM delivery.
+4. Extend or deploy the backend delivery adapter so `notifications_push_outbox` can fan out to FCM tokens in `user_push_devices`.
+5. Run physical Android foreground/background/killed-app delivery QA before calling native push production-ready.
 
 ## Manual QA
 

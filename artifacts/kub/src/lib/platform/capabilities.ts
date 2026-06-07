@@ -47,7 +47,7 @@ export function supportsBrowserPush(): boolean {
 }
 
 export function supportsNativePush(): boolean {
-  return false;
+  return isNativeAndroid() && supportsCapacitorPlugin("PushNotifications");
 }
 
 export function supportsNativeGeolocation(): boolean {
@@ -89,5 +89,5 @@ export function locationPermissionHelp(): string {
 }
 
 export function nativePushPendingMessage(): string {
-  return "Уведомления в Android-приложении будут подключены через native push на следующем этапе.";
+  return "Android push работает через Firebase/FCM. Для доставки нужны локальный google-services.json, применённая migration user_push_devices и backend FCM credentials.";
 }

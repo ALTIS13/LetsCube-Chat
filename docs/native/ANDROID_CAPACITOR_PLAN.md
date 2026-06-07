@@ -74,10 +74,10 @@ permissions on app launch; request them when the user starts the feature.
 
 ## Push
 
-Browser Web Push does not become native Android push automatically. Native
-Android push should use FCM through a native plugin or Capacitor-compatible
-push bridge. FCM, `google-services.json`, and production push token handling
-are intentionally excluded from this MVP groundwork. See
+Browser Web Push does not become native Android push automatically. Android
+now has a Capacitor Push Notifications client foundation, but production FCM
+delivery still requires local `android/app/google-services.json`, the
+`user_push_devices` SQL/RPC proposal, and trusted backend FCM credentials. See
 [Native push plan](./NATIVE_PUSH_PLAN.md).
 
 ## Release signing
@@ -113,7 +113,8 @@ pnpm.cmd android:open
 
 ## Known MVP limitations
 
-- Native push/FCM is not implemented.
+- Native push/FCM client foundation exists, but physical delivery is pending
+  Firebase/backend setup and QA.
 - Android app links/custom scheme are not finalized.
 - Release signing/AAB is not configured.
 - Final app icon/splash/club visual branding is still pending.
