@@ -67,6 +67,19 @@ export function createClient(): SupabaseClient<Database> {
   return instance
 }
 
+export function createNonPersistedAuthClient(): SupabaseClient<Database> {
+  if (!isSupabaseConfigured()) {
+    throw new Error(MISSING_SUPABASE_CONFIG_ERROR)
+  }
+  return createSupabaseClient<Database>(SUPABASE_URL ?? "", SUPABASE_KEY ?? "", {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  })
+}
+
 export function getRealtimeClient() {
   return createClient()
 }

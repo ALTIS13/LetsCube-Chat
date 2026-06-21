@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { createClient } from "@/lib/supabase/client";
 import { KubBrandLogo, KubButton, KubIcon, KubInput, KubPanel } from "@/components/kub";
 import { kubBrandAsset } from "@/components/kub/brandAssets";
@@ -238,7 +238,13 @@ export function LoginForm() {
         </KubPanel>
 
         <p className="text-center text-sm mt-5 text-[color:var(--kub-muted)]">
-          Нет доступа к аккаунту? Обратитесь к администратору клуба.
+          Нет аккаунта?{" "}
+          <Link
+            href="/register"
+            className="font-semibold text-[color:var(--kub-cyan)] hover:text-[color:var(--kub-cyan-hover)] transition-colors"
+          >
+            Зарегистрироваться
+          </Link>
         </p>
       </div>
     </div>
