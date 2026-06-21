@@ -21,7 +21,8 @@ import { AdminLayout } from "@/pages/admin/AdminLayout";
 import { TasksPage } from "@/pages/tasks/TasksPage";
 import NotFound from "@/pages/not-found";
 import { ThemeSync } from "@/hooks/useTheme";
-import { KubLogo } from "@/components/kub";
+import { KubBrandLogo, KubButton, KubIcon, KubInput, KubLogo, KubPanel } from "@/components/kub";
+import { kubBrandAsset } from "@/components/kub/brandAssets";
 import { clearMonitoringUser, reportError, setMonitoringUser } from "@/lib/monitoring";
 import { getAuthCallbackErrorMessage, getAuthCallbackExceptionMessage } from "@/lib/authRedirect";
 import {
@@ -143,60 +144,101 @@ function AuthCallback() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center kub-grid-bg">
-      <div className="flex w-full max-w-sm flex-col items-center gap-4 px-4 text-center">
-        <KubLogo size={64} withGlow />
+    <div className="min-h-screen flex items-center justify-center px-4 kub-grid-bg kub-auth-shell">
+      <img
+        src={kubBrandAsset("letscube-mascot-primary.png")}
+        alt=""
+        aria-hidden="true"
+        loading="eager"
+        decoding="async"
+        className="kub-auth-mascot"
+      />
+      <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-4 text-center" data-testid="password-recovery-shell">
+        <div className="flex flex-col items-center gap-3">
+          <KubBrandLogo
+            variant="vertical"
+            tone="light"
+            className="h-24 w-56 justify-center"
+            imgClassName="max-h-24"
+            alt="Letscube"
+          />
+          <p className="text-sm text-[color:var(--kub-muted)]">
+            Панель связи киберарены
+          </p>
+        </div>
         {recoveryMode ? (
-          <form onSubmit={handlePasswordUpdate} className="w-full rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-5 text-left shadow-2xl">
-            <h1 className="mb-2 text-lg font-bold text-[color:var(--kub-text)]">Новый пароль</h1>
-            <p className="mb-4 text-sm text-[color:var(--kub-muted)]">
-              Введите новый пароль для аккаунта.
-            </p>
-            <div className="space-y-3">
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                minLength={8}
-                autoComplete="new-password"
-                placeholder="Новый пароль"
-                className="h-11 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
-              />
-              <input
-                type="password"
-                value={repeatPassword}
-                onChange={(e) => setRepeatPassword(e.target.value)}
-                minLength={8}
-                autoComplete="new-password"
-                placeholder="Повторите пароль"
-                className="h-11 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
-              />
-              {error && <p className="text-xs text-[color:var(--kub-danger)]">{error}</p>}
-              <button
-                type="submit"
-                disabled={savingPassword}
-                className="h-10 w-full rounded-lg bg-[var(--kub-cyan)] px-4 text-sm font-semibold text-[color:var(--kub-bg)] transition-colors hover:bg-[var(--kub-cyan-hover)] disabled:opacity-60"
-              >
-                {savingPassword ? "Сохраняем..." : "Сменить пароль"}
-              </button>
-            </div>
+          <form onSubmit={handlePasswordUpdate} className="w-full">
+            <KubPanel glow="soft" padded={false} className="w-full overflow-hidden text-left">
+              <div className="border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/50 px-3 py-2">
+                <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-cyan)]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--kub-cyan)] kub-pulse" />
+                  Восстановление доступа
+                </div>
+              </div>
+              <div className="space-y-4 p-5">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]">
+                    <KubIcon name="lock" size={18} />
+                  </span>
+                  <div className="min-w-0">
+                    <h1 className="text-lg font-bold text-[color:var(--kub-text)]">Новый пароль</h1>
+                    <p className="mt-1 text-sm leading-relaxed text-[color:var(--kub-muted)]">
+                      Ссылка из письма уже подтверждена. Введите новый пароль, код из письма вводить не нужно.
+                    </p>
+                  </div>
+                </div>
+                <KubInput
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  minLength={8}
+                  autoComplete="new-password"
+                  placeholder="Новый пароль"
+                  leftIcon={<KubIcon name="lock" size={16} />}
+                />
+                <KubInput
+                  type="password"
+                  value={repeatPassword}
+                  onChange={(e) => setRepeatPassword(e.target.value)}
+                  minLength={8}
+                  autoComplete="new-password"
+                  placeholder="Повторите пароль"
+                  leftIcon={<KubIcon name="shield" size={16} />}
+                />
+                {error && <p className="text-xs text-[color:var(--kub-danger)]">{error}</p>}
+                <KubButton
+                  type="submit"
+                  loading={savingPassword}
+                  fullWidth
+                  size="lg"
+                  leftIcon={<KubIcon name="checkCircle" size={16} />}
+                >
+                  Сменить пароль
+                </KubButton>
+              </div>
+            </KubPanel>
           </form>
         ) : (
-          <div className="flex items-center gap-2 text-sm text-[color:var(--kub-text)]">
+          <KubPanel glow="soft" className="w-full text-center">
+            <div className="mb-3 flex justify-center">
+              <KubLogo size={48} withGlow />
+            </div>
+            <div className="flex items-center justify-center gap-2 text-sm text-[color:var(--kub-text)]">
             {!error && (
               <span className="inline-flex h-2 w-2 rounded-full bg-[var(--kub-cyan)] kub-pulse" />
             )}
             {error ?? "Входим..."}
-          </div>
+            </div>
+          </KubPanel>
         )}
         {error && !recoveryMode && (
-          <button
+          <KubButton
             type="button"
             onClick={() => setLocation("/login?auth_error=confirmation_link")}
-            className="h-10 px-4 rounded-lg text-sm font-semibold transition-colors bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] hover:bg-[var(--kub-cyan-hover)]"
+            size="md"
           >
             Перейти ко входу
-          </button>
+          </KubButton>
         )}
       </div>
     </div>
