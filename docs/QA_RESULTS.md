@@ -4,11 +4,15 @@
 
 - Registration now treats existing-email signup errors as generic confirmation/recovery guidance, so the UI does not reveal whether an email is already registered.
 - The signup form still uses a non-persisted Supabase Auth client, so a signup response cannot create an app session or localStorage auth token.
-- Self-host read-only audit confirmed all inspected `public` tables have RLS enabled, no `public` views/materialized views exist, and only `public.get_my_chat_ids()` plus `public.handle_new_user()` still need explicit `search_path` hardening.
+- Self-host read-only audit confirmed all inspected `public` tables have RLS enabled and no `public` views/materialized views exist.
+- Applied `.migration-backup/supabase/migrations/20260621_auth_rls_security_hardening.sql` on the live self-hosted database after explicit approval. Pre-apply backup: `/srv/letscube/backups/config/function-defs-pre-search-path-20260621-202946.sql`.
+- Live verification confirmed `public.get_my_chat_ids()` and `public.handle_new_user()` now both have `search_path=public`; live verification also confirmed `public_tables_without_rls=0` out of `public_tables_total=29`.
 - Server-side GoTrue email throttles were enabled on self-hosted Supabase: `GOTRUE_RATE_LIMIT_EMAIL_SENT=60` and `GOTRUE_SMTP_MAX_FREQUENCY=60s`. The `supabase-auth` container was recreated and returned healthy.
 - `/auth/v1/settings` returned 200 with the public anon key after the auth restart; `external.email=true` and `disable_signup=false`.
-- SQL was not applied automatically. Proposal-only SQL remains `.migration-backup/supabase/migrations/20260621_auth_rls_security_hardening.sql`.
+- Added Traefik edge throttling for sensitive `core.letscube.ru` Auth endpoints: `/auth/v1/token`, `/auth/v1/signup`, `/auth/v1/recover`, `/auth/v1/verify`, `/auth/v1/otp`, and `/auth/v1/resend`. Configured middleware `letscube-auth-sensitive-rate` uses average `20/min`, burst `40`, period `1m`; backup: `/srv/letscube/backups/config/supabase-traefik-pre-auth-throttle-20260621-203230.yml`.
+- After the Traefik update, `supabase-kong`, `supabase-auth`, `supabase-rest`, `realtime-dev.supabase-realtime`, and `supabase-storage` were running healthy. `https://core.letscube.ru/auth/v1/settings` and `https://app.letscube.ru/login` returned HTTP 200.
 - Validation: `git diff --check`, auth Playwright spec across 3840/1920/1440/390/412, KUB typecheck/build, deployed `e2e:smoke`, and `db:types:check` passed. `rls:smoke` skipped locally because Supabase URL/key are not configured in the local QA env.
+- Post-apply validation after SQL and Traefik changes: `git diff --check`, KUB typecheck/build, deployed `KUB_BASE_URL=https://app.letscube.ru pnpm.cmd e2e:smoke`, and `db:types:check` passed. `rls:smoke` still skipped locally because Supabase URL/key are not configured in the local QA env. Build keeps the existing Vite sourcemap/chunk-size warnings.
 
 2026-06-07 native Android push / FCM foundation:
 

@@ -1,6 +1,6 @@
 # LETSCUBE Auth, RLS And Anti-Abuse Plan
 
-Status: working plan, 2026-06-21. No secrets. No SQL applied by this file.
+Status: applied baseline, 2026-06-21. No secrets.
 
 ## Current Findings
 
@@ -13,16 +13,26 @@ Status: working plan, 2026-06-21. No secrets. No SQL applied by this file.
 - No public views were found.
 - Live self-host read-only audit on 2026-06-21 confirmed all inspected `public` tables have `relrowsecurity = true`.
 - Live self-host read-only audit on 2026-06-21 found no `public` views/materialized views.
-- Live self-host read-only audit on 2026-06-21 confirmed two existing `SECURITY DEFINER` functions still need explicit `search_path` hardening:
+- Live self-host read-only audit on 2026-06-21 found two existing `SECURITY DEFINER` functions without explicit `search_path`:
   - `public.get_my_chat_ids()`
   - `public.handle_new_user()`
-- Live self-host auth env on 2026-06-21 did not show explicit `GOTRUE_RATE_LIMIT_*` values. Configure Auth-side limits before relying on public registration at scale.
+- Applied live on 2026-06-21 from proposal `.migration-backup/supabase/migrations/20260621_auth_rls_security_hardening.sql`:
+  - `public.get_my_chat_ids()` now has `search_path=public`.
+  - `public.handle_new_user()` now has `search_path=public`.
+  - Pre-apply function definition backup: `/srv/letscube/backups/config/function-defs-pre-search-path-20260621-202946.sql`.
+- Initial live self-host auth env audit on 2026-06-21 did not show explicit `GOTRUE_RATE_LIMIT_*` values. The email throttles below were then configured on the self-hosted GoTrue service.
 - Server config update on 2026-06-21 enabled low-risk Auth email throttles on self-hosted GoTrue:
   - `GOTRUE_RATE_LIMIT_EMAIL_SENT=60`
   - `GOTRUE_SMTP_MAX_FREQUENCY=60s`
   The auth container was recreated and returned healthy. `/auth/v1/settings` returned 200 with the public anon key, `external.email = true`, `disable_signup = false`.
+- Reverse proxy update on 2026-06-21 added a dedicated Traefik router for sensitive Auth endpoints on `core.letscube.ru`:
+  - paths: `/auth/v1/token`, `/auth/v1/signup`, `/auth/v1/recover`, `/auth/v1/verify`, `/auth/v1/otp`, `/auth/v1/resend`;
+  - middleware: `letscube-auth-sensitive-rate`;
+  - limits: average `20/min`, burst `40`, period `1m`;
+  - router priority: `200`;
+  - config backup: `/srv/letscube/backups/config/supabase-traefik-pre-auth-throttle-20260621-203230.yml`.
 
-Migration proposal:
+Applied migration proposal:
 
 - `.migration-backup/supabase/migrations/20260621_auth_rls_security_hardening.sql`
 
@@ -45,27 +55,31 @@ Migration proposal:
 
 Goal: slow password guessing without blocking normal staff use.
 
-Recommended controls:
+Configured controls:
 
 - Server-side Auth rate limits in self-hosted GoTrue.
 - Reverse proxy request throttling for `/auth/v1/token`, `/auth/v1/signup`, `/auth/v1/recover`, `/auth/v1/verify`.
 - Friendly frontend messages for `429 Too Many Requests`.
+
+Recommended next controls:
+
 - Audit dashboard query for repeated failed login activity by IP/user agent if available in Auth logs.
 
 Do not implement brute-force protection only in the frontend. Frontend cooldowns are helpful UX, but not security boundaries.
 
-Supabase Auth documentation confirms that exceeded auth limits return HTTP 429 and that Auth uses rate limiting on authentication endpoints. For self-hosted LETSCUBE, the next implementation step is to set explicit GoTrue rate-limit environment values and add proxy throttling in front of `/auth/v1/*`.
+Supabase Auth documentation confirms that exceeded auth limits return HTTP 429 and that Auth uses rate limiting on authentication endpoints. For self-hosted LETSCUBE, explicit GoTrue email throttles and Traefik request throttling are now configured as the first production baseline.
 
-Initial self-host targets configured:
+Initial self-host targets configured and verified:
 
 - Project-wide email send budget: `GOTRUE_RATE_LIMIT_EMAIL_SENT=60`.
 - Minimum SMTP send interval: `GOTRUE_SMTP_MAX_FREQUENCY=60s`.
+- Traefik auth endpoint throttle: `20/min` average, `40` burst for sensitive `/auth/v1/*` endpoints listed above.
+- `supabase-kong`, `supabase-auth`, `supabase-rest`, `realtime-dev.supabase-realtime`, and `supabase-storage` returned healthy after the proxy update.
+- `/auth/v1/settings` and `/login` returned HTTP 200 after the proxy update.
 - UI: generic signup/recovery copy is in place and 429 maps to a friendly "too many attempts" message.
 
 Next self-host targets to configure and validate:
 
-- Password grant `/auth/v1/token`: throttle by client IP at the reverse proxy to slow password guessing.
-- `/auth/v1/signup`, `/auth/v1/recover`, `/auth/v1/verify`: throttle by client IP at the reverse proxy, with separate limits from normal app traffic.
 - GoTrue IP-based rate limit header: configure only after the proxy chain strips/spoof-proofs client-supplied forwarding headers. Do not point Auth at an untrusted `X-Forwarded-For`.
 
 ## Anti-Spam / Multi-Account Stage
