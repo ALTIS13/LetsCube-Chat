@@ -221,7 +221,7 @@ function loadYandexSmartCaptchaScript(): Promise<void> {
     }
 
     const script = document.createElement("script");
-    script.src = "https://smartcaptcha.yandexcloud.net/captcha.js?render=onload";
+    script.src = "https://smartcaptcha.cloud.yandex.ru/captcha.js?render=onload";
     script.async = true;
     script.defer = true;
     script.dataset.kubYandexSmartcaptcha = "true";

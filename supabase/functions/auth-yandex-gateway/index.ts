@@ -125,7 +125,7 @@ async function verifyYandexSmartCaptcha(token: string, ip: string | null): Promi
 
   let response: Response;
   try {
-    response = await fetch("https://smartcaptcha.yandexcloud.net/validate", {
+    response = await fetch("https://smartcaptcha.cloud.yandex.ru/validate", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: params,
