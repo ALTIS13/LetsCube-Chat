@@ -1,5 +1,15 @@
 # QA Results
 
+2026-06-21 auth anti-abuse and RLS hardening:
+
+- Registration now treats existing-email signup errors as generic confirmation/recovery guidance, so the UI does not reveal whether an email is already registered.
+- The signup form still uses a non-persisted Supabase Auth client, so a signup response cannot create an app session or localStorage auth token.
+- Self-host read-only audit confirmed all inspected `public` tables have RLS enabled, no `public` views/materialized views exist, and only `public.get_my_chat_ids()` plus `public.handle_new_user()` still need explicit `search_path` hardening.
+- Server-side GoTrue email throttles were enabled on self-hosted Supabase: `GOTRUE_RATE_LIMIT_EMAIL_SENT=60` and `GOTRUE_SMTP_MAX_FREQUENCY=60s`. The `supabase-auth` container was recreated and returned healthy.
+- `/auth/v1/settings` returned 200 with the public anon key after the auth restart; `external.email=true` and `disable_signup=false`.
+- SQL was not applied automatically. Proposal-only SQL remains `.migration-backup/supabase/migrations/20260621_auth_rls_security_hardening.sql`.
+- Validation: `git diff --check`, auth Playwright spec across 3840/1920/1440/390/412, KUB typecheck/build, deployed `e2e:smoke`, and `db:types:check` passed. `rls:smoke` skipped locally because Supabase URL/key are not configured in the local QA env.
+
 2026-06-07 native Android push / FCM foundation:
 
 - Added the Capacitor Push Notifications client foundation for Android without changing the browser/PWA Web Push path.

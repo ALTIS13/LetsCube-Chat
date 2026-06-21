@@ -17,6 +17,10 @@ Status: working plan, 2026-06-21. No secrets. No SQL applied by this file.
   - `public.get_my_chat_ids()`
   - `public.handle_new_user()`
 - Live self-host auth env on 2026-06-21 did not show explicit `GOTRUE_RATE_LIMIT_*` values. Configure Auth-side limits before relying on public registration at scale.
+- Server config update on 2026-06-21 enabled low-risk Auth email throttles on self-hosted GoTrue:
+  - `GOTRUE_RATE_LIMIT_EMAIL_SENT=60`
+  - `GOTRUE_SMTP_MAX_FREQUENCY=60s`
+  The auth container was recreated and returned healthy. `/auth/v1/settings` returned 200 with the public anon key, `external.email = true`, `disable_signup = false`.
 
 Migration proposal:
 
@@ -52,13 +56,17 @@ Do not implement brute-force protection only in the frontend. Frontend cooldowns
 
 Supabase Auth documentation confirms that exceeded auth limits return HTTP 429 and that Auth uses rate limiting on authentication endpoints. For self-hosted LETSCUBE, the next implementation step is to set explicit GoTrue rate-limit environment values and add proxy throttling in front of `/auth/v1/*`.
 
-Initial self-host targets to configure and validate:
+Initial self-host targets configured:
 
-- Signup confirmation/recovery resend window: keep at least 60 seconds per email/user.
-- Email send budget: keep conservative because all mail is delivered through the local Mailcow SMTP.
+- Project-wide email send budget: `GOTRUE_RATE_LIMIT_EMAIL_SENT=60`.
+- Minimum SMTP send interval: `GOTRUE_SMTP_MAX_FREQUENCY=60s`.
+- UI: generic signup/recovery copy is in place and 429 maps to a friendly "too many attempts" message.
+
+Next self-host targets to configure and validate:
+
 - Password grant `/auth/v1/token`: throttle by client IP at the reverse proxy to slow password guessing.
 - `/auth/v1/signup`, `/auth/v1/recover`, `/auth/v1/verify`: throttle by client IP at the reverse proxy, with separate limits from normal app traffic.
-- UI: keep generic signup/recovery copy and map 429 to a friendly "too many attempts" message.
+- GoTrue IP-based rate limit header: configure only after the proxy chain strips/spoof-proofs client-supplied forwarding headers. Do not point Auth at an untrusted `X-Forwarded-For`.
 
 ## Anti-Spam / Multi-Account Stage
 
