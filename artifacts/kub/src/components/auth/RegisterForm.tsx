@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
+import { AuthCaptcha } from "@/components/auth/AuthCaptcha";
 import { createNonPersistedAuthClient } from "@/lib/supabase/client";
 import { KubBrandLogo, KubButton, KubIcon, KubInput, KubPanel } from "@/components/kub";
 import { kubBrandAsset } from "@/components/kub/brandAssets";
 import { getAuthCallbackUrl } from "@/lib/authRedirect";
+import { getAuthCaptchaRequiredMessage, isAuthCaptchaEnabled } from "@/lib/authCaptcha";
 import { mapPgError } from "@/lib/errors";
 import { PROFILE_LIMITS, normalizeFullName, validateFullName } from "@/lib/profileValidation";
 
@@ -16,6 +18,8 @@ export function RegisterForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaResetSignal, setCaptchaResetSignal] = useState(0);
 
   const supabase = createNonPersistedAuthClient();
 
@@ -26,11 +30,15 @@ export function RegisterForm() {
     try {
       const fullNameError = validateFullName(fullName);
       if (fullNameError) throw new Error(fullNameError);
+      if (isAuthCaptchaEnabled() && !captchaToken) {
+        throw new Error(getAuthCaptchaRequiredMessage());
+      }
 
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
         options: {
+          captchaToken: captchaToken || undefined,
           data: { full_name: normalizeFullName(fullName) },
           emailRedirectTo: getAuthCallbackUrl(),
         },
@@ -45,6 +53,10 @@ export function RegisterForm() {
       }
       setError(mapPgError(err));
     } finally {
+      if (isAuthCaptchaEnabled()) {
+        setCaptchaToken("");
+        setCaptchaResetSignal((value) => value + 1);
+      }
       setLoading(false);
     }
   };
@@ -192,6 +204,8 @@ export function RegisterForm() {
                 </button>
               }
             />
+
+            <AuthCaptcha onTokenChange={setCaptchaToken} resetSignal={captchaResetSignal} />
 
             {error && (
               <p className="text-xs text-[color:var(--kub-danger)] px-1">{error}</p>

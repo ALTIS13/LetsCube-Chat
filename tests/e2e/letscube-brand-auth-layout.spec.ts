@@ -9,6 +9,7 @@ test.describe("Letscube auth brand layout", () => {
 
       await expect(page.getByTestId("auth-brand-lockup")).toBeVisible();
       await expect(page.locator('img[src*="letscube-logo"]')).toHaveCount(1);
+      await expect(page.getByTestId("auth-captcha")).toHaveCount(0);
       await expect(page.getByText("КУБ", { exact: true })).toHaveCount(0);
       await expect(page.getByText("KUB", { exact: true })).toHaveCount(0);
 
@@ -147,6 +148,7 @@ test.describe("Letscube safe public registration", () => {
 
     await expect(page.getByRole("button", { name: "Отправить ссылку" })).toBeVisible();
     await expect(page.locator('input[type="password"]')).toHaveCount(0);
+    await expect(page.getByTestId("auth-captcha")).toHaveCount(0);
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
 });

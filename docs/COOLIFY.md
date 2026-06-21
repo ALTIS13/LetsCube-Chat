@@ -43,6 +43,8 @@ VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=<YOUR_SUPABASE_PUBLISHABLE_KEY>
 VITE_SUPABASE_ANON_KEY=
 VITE_VAPID_PUBLIC_KEY=
+VITE_AUTH_CAPTCHA_PROVIDER=
+VITE_AUTH_CAPTCHA_SITE_KEY=
 BASE_PATH=/
 PORT=5173
 ```
@@ -58,6 +60,16 @@ KUB_WEB_PORT=8080
 ```env
 VITE_VAPID_PUBLIC_KEY=<YOUR_VAPID_PUBLIC_KEY>
 ```
+
+If signup/recovery CAPTCHA is enabled, add only public frontend values here:
+
+```env
+VITE_AUTH_CAPTCHA_PROVIDER=turnstile
+VITE_AUTH_CAPTCHA_SITE_KEY=<YOUR_PUBLIC_CAPTCHA_SITE_KEY>
+```
+
+The CAPTCHA provider secret belongs only in the self-hosted Supabase Auth/GoTrue
+environment, never in the frontend service.
 
 `VITE_*` переменные являются build-time значениями Vite. После изменения Supabase URL/key, VAPID public key или `BASE_PATH` нужен rebuild/redeploy frontend, а не простой restart.
 

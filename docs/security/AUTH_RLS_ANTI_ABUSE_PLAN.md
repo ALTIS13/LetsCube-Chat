@@ -88,13 +88,25 @@ Goal: prevent unlimited bot-created accounts while still allowing real new users
 
 Recommended layered approach:
 
-- CAPTCHA or equivalent bot check on signup if supported in the current self-hosted Auth deployment.
+- CAPTCHA or equivalent bot check on signup/recovery if supported in the current self-hosted Auth deployment.
 - Optional club invite / registration code for public signup.
 - Optional admin approval state for newly created profiles before chat/task access.
 - Rate limits and proxy throttling on signup and recovery.
 - Monitoring for many new accounts from one IP / ASN / user agent.
 
-Supabase Auth supports CAPTCHA tokens on `signUp` and related auth flows. Do not add CAPTCHA frontend-only; it must be enabled and verified by the self-hosted Auth service with the CAPTCHA provider secret stored server-side.
+Supabase Auth supports CAPTCHA tokens on `signUp` and related auth flows. Frontend support is prepared behind optional public build-time env:
+
+- `VITE_AUTH_CAPTCHA_PROVIDER=turnstile`
+- `VITE_AUTH_CAPTCHA_SITE_KEY=<public site key>`
+
+Do not add CAPTCHA frontend-only; it must be enabled and verified by the self-hosted Auth service with the CAPTCHA provider secret stored server-side. For self-hosted GoTrue the relevant secret-side env names are:
+
+- `GOTRUE_SECURITY_CAPTCHA_ENABLED=true`
+- `GOTRUE_SECURITY_CAPTCHA_PROVIDER=hcaptcha` or `turnstile`
+- `GOTRUE_SECURITY_CAPTCHA_SECRET=<provider secret>`
+- `GOTRUE_SECURITY_CAPTCHA_TIMEOUT=10s`
+
+If external CAPTCHA providers are not acceptable for the Russian-hosted production posture, prefer invite/admin-approval flow as the next anti-spam layer.
 
 If strict staff-only access is required later, prefer an invite-code or admin-created-account flow over fully open public signup.
 
@@ -107,5 +119,12 @@ Next read-only checks:
 - Verify storage policies for chat media, avatars, and task attachments.
 - Verify no policies depend on user-editable `raw_user_meta_data`.
 - Verify task/admin RPCs are not executable by `anon`.
+
+2026-06-21 read-only live audit result:
+
+- `public` tables without RLS: `0`.
+- policies referencing `raw_user_meta_data`: `0`.
+- storage object policies are authenticated-only and path-scoped for chat/media access.
+- many public `SECURITY DEFINER` functions are still callable through the default `anon`/`PUBLIC` execute grants; app-prefixed callable count was `50`.
 
 Do not revoke execute privileges broadly without mapping frontend/RPC usage first.

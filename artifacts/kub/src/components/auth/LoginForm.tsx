@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useLocation, Link } from "wouter";
+import { AuthCaptcha } from "@/components/auth/AuthCaptcha";
 import { createClient } from "@/lib/supabase/client";
 import { KubBrandLogo, KubButton, KubIcon, KubInput, KubPanel } from "@/components/kub";
 import { kubBrandAsset } from "@/components/kub/brandAssets";
 import { mapPgError } from "@/lib/errors";
 import { CONFIRMATION_LINK_INVALID_MESSAGE, getAuthCallbackUrl } from "@/lib/authRedirect";
+import { getAuthCaptchaRequiredMessage, isAuthCaptchaEnabled } from "@/lib/authCaptcha";
 
 interface BanInfo {
   reason: string;
@@ -40,6 +42,8 @@ export function LoginForm() {
     return new URLSearchParams(window.location.search).get("reset") === "1";
   });
   const [banInfo, setBanInfo] = useState<BanInfo | null>(null);
+  const [resetCaptchaToken, setResetCaptchaToken] = useState("");
+  const [resetCaptchaResetSignal, setResetCaptchaResetSignal] = useState(0);
 
   const supabase = createClient();
 
@@ -88,10 +92,15 @@ export function LoginForm() {
       setError("Введите email, чтобы получить ссылку для сброса пароля.");
       return;
     }
+    if (isAuthCaptchaEnabled() && !resetCaptchaToken) {
+      setError(getAuthCaptchaRequiredMessage());
+      return;
+    }
     setError("");
     setResetLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        captchaToken: resetCaptchaToken || undefined,
         redirectTo: getAuthCallbackUrl(),
       });
       if (error) throw error;
@@ -100,6 +109,10 @@ export function LoginForm() {
     } catch (err: unknown) {
       setError(mapPgError(err));
     } finally {
+      if (isAuthCaptchaEnabled()) {
+        setResetCaptchaToken("");
+        setResetCaptchaResetSignal((value) => value + 1);
+      }
       setResetLoading(false);
     }
   };
@@ -210,6 +223,10 @@ export function LoginForm() {
                 />
               )}
 
+              {resetMode && (
+                <AuthCaptcha onTokenChange={setResetCaptchaToken} resetSignal={resetCaptchaResetSignal} />
+              )}
+
               {error && (
                 <p className="text-xs text-[color:var(--kub-danger)] px-1">{error}</p>
               )}
@@ -228,6 +245,8 @@ export function LoginForm() {
                 onClick={() => {
                   setResetMode((v) => !v);
                   setError("");
+                  setResetCaptchaToken("");
+                  setResetCaptchaResetSignal((value) => value + 1);
                 }}
                 className="text-xs font-semibold text-[color:var(--kub-cyan)] hover:text-[color:var(--kub-cyan-hover)] transition-colors"
               >

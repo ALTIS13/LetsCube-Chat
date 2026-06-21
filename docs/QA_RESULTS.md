@@ -1,5 +1,14 @@
 # QA Results
 
+2026-06-21 auth CAPTCHA and RLS execute-grant follow-up:
+
+- Added optional Cloudflare Turnstile frontend support for registration and password recovery. It is disabled by default and renders only when public build-time env values `VITE_AUTH_CAPTCHA_PROVIDER=turnstile` and `VITE_AUTH_CAPTCHA_SITE_KEY` are provided.
+- Registration and recovery now pass `captchaToken` to Supabase Auth when CAPTCHA is enabled. Normal password login remains protected by server/proxy rate limiting and does not show a CAPTCHA prompt.
+- Deployment docs now include the public frontend CAPTCHA env names; provider secrets remain server-side only in the self-hosted GoTrue environment.
+- Created setup docs at `docs/security/AUTH_CAPTCHA_SETUP.md`. Server-side CAPTCHA was not enabled because no provider site/secret keys were supplied.
+- Read-only live RLS/RPC audit confirmed `public` tables without RLS = `0`, policies referencing `raw_user_meta_data` = `0`, storage object policies are authenticated-only/path-scoped, and many public functions remain callable by `anon` through default function execute grants.
+- Created proposal-only SQL `.migration-backup/supabase/migrations/20260621_revoke_anon_public_function_execute.sql` to revoke `PUBLIC`/`anon` execute from public functions while granting execution to `authenticated` and `service_role`. SQL was not applied automatically.
+
 2026-06-21 auth anti-abuse and RLS hardening:
 
 - Registration now treats existing-email signup errors as generic confirmation/recovery guidance, so the UI does not reveal whether an email is already registered.
