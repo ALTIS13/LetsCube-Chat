@@ -94,12 +94,30 @@ Recommended layered approach:
 - Rate limits and proxy throttling on signup and recovery.
 - Monitoring for many new accounts from one IP / ASN / user agent.
 
-Supabase Auth supports CAPTCHA tokens on `signUp` and related auth flows. Frontend support is prepared behind optional public build-time env:
+Preferred LETSCUBE CAPTCHA provider is Yandex SmartCaptcha. Supabase Auth does
+not expose Yandex as a native GoTrue CAPTCHA provider, so the secure path is an
+Edge Function gateway that verifies the Yandex token server-side before calling
+Supabase Auth.
 
-- `VITE_AUTH_CAPTCHA_PROVIDER=turnstile`
+Frontend support is prepared behind optional public build-time env:
+
+- `VITE_AUTH_CAPTCHA_PROVIDER=yandex-smartcaptcha`
 - `VITE_AUTH_CAPTCHA_SITE_KEY=<public site key>`
+- `VITE_AUTH_GATEWAY_URL=https://core.letscube.ru/functions/v1/auth-yandex-gateway`
 
-Do not add CAPTCHA frontend-only; it must be enabled and verified by the self-hosted Auth service with the CAPTCHA provider secret stored server-side. For self-hosted GoTrue the relevant secret-side env names are:
+Do not add CAPTCHA frontend-only; it must be enabled and verified server-side.
+For Yandex SmartCaptcha the relevant secret-side Edge Function env names are:
+
+- `YANDEX_SMARTCAPTCHA_SECRET=<provider secret>`
+- `SUPABASE_ANON_KEY=<public anon key>`
+- `KUB_AUTH_ALLOWED_REDIRECT_ORIGINS=https://app.letscube.ru`
+
+Full protection also requires blocking or rerouting public direct calls to
+`/auth/v1/signup` and password recovery; otherwise bots can bypass the frontend
+and hit Supabase Auth directly.
+
+For self-hosted GoTrue Turnstile/hCaptcha fallback the relevant secret-side env
+names are:
 
 - `GOTRUE_SECURITY_CAPTCHA_ENABLED=true`
 - `GOTRUE_SECURITY_CAPTCHA_PROVIDER=hcaptcha` or `turnstile`

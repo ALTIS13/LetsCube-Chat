@@ -6,7 +6,8 @@ import { KubBrandLogo, KubButton, KubIcon, KubInput, KubPanel } from "@/componen
 import { kubBrandAsset } from "@/components/kub/brandAssets";
 import { mapPgError } from "@/lib/errors";
 import { CONFIRMATION_LINK_INVALID_MESSAGE, getAuthCallbackUrl } from "@/lib/authRedirect";
-import { getAuthCaptchaRequiredMessage, isAuthCaptchaEnabled } from "@/lib/authCaptcha";
+import { getAuthCaptchaRequiredMessage, isAuthCaptchaEnabled, shouldUseAuthCaptchaGateway } from "@/lib/authCaptcha";
+import { requestAuthGateway } from "@/lib/authGateway";
 
 interface BanInfo {
   reason: string;
@@ -99,11 +100,19 @@ export function LoginForm() {
     setError("");
     setResetLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-        captchaToken: resetCaptchaToken || undefined,
-        redirectTo: getAuthCallbackUrl(),
-      });
-      if (error) throw error;
+      if (shouldUseAuthCaptchaGateway()) {
+        await requestAuthGateway({
+          action: "recovery",
+          email: cleanEmail,
+          captchaToken: resetCaptchaToken,
+        });
+      } else {
+        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+          captchaToken: resetCaptchaToken || undefined,
+          redirectTo: getAuthCallbackUrl(),
+        });
+        if (error) throw error;
+      }
       setNotice("Если такой email зарегистрирован, мы отправили ссылку для сброса пароля.");
       setResetMode(false);
     } catch (err: unknown) {

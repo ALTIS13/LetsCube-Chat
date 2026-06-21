@@ -20,6 +20,7 @@ services:
         VITE_VAPID_PUBLIC_KEY: ${VITE_VAPID_PUBLIC_KEY:-}
         VITE_AUTH_CAPTCHA_PROVIDER: ${VITE_AUTH_CAPTCHA_PROVIDER:-}
         VITE_AUTH_CAPTCHA_SITE_KEY: ${VITE_AUTH_CAPTCHA_SITE_KEY:-}
+        VITE_AUTH_GATEWAY_URL: ${VITE_AUTH_GATEWAY_URL:-}
         BASE_PATH: ${BASE_PATH:-/}
     image: kub-web:latest
     container_name: kub-web

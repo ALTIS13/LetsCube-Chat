@@ -49,6 +49,7 @@ VITE_SUPABASE_ANON_KEY=
 VITE_VAPID_PUBLIC_KEY=
 VITE_AUTH_CAPTCHA_PROVIDER=
 VITE_AUTH_CAPTCHA_SITE_KEY=
+VITE_AUTH_GATEWAY_URL=
 BASE_PATH=/
 PORT=5173
 KUB_WEB_PORT=8080
@@ -59,7 +60,7 @@ Notes:
 - `VITE_SUPABASE_PUBLISHABLE_KEY` is the public browser key.
 - `VITE_SUPABASE_ANON_KEY` is kept only as a compatibility fallback. Leave it empty if you use the publishable key.
 - `VITE_VAPID_PUBLIC_KEY` is optional unless browser push is enabled.
-- `VITE_AUTH_CAPTCHA_PROVIDER` and `VITE_AUTH_CAPTCHA_SITE_KEY` are optional public build-time values for signup/recovery bot protection. The CAPTCHA secret must live only in the self-hosted Supabase Auth service environment.
+- `VITE_AUTH_CAPTCHA_PROVIDER`, `VITE_AUTH_CAPTCHA_SITE_KEY`, and optional `VITE_AUTH_GATEWAY_URL` are public build-time values for signup/recovery bot protection. For `yandex-smartcaptcha`, provider secret must live only in the `auth-yandex-gateway` Edge Function runtime environment.
 - Do not add private server secrets to frontend env files.
 
 `SUPABASE_SERVICE_ROLE_KEY` must never be passed to the Vite frontend, Docker build args, static web image, or committed files.
@@ -220,6 +221,7 @@ VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=<YOUR_SUPABASE_PUBLISHABLE_KEY>
 VITE_AUTH_CAPTCHA_PROVIDER=
 VITE_AUTH_CAPTCHA_SITE_KEY=
+VITE_AUTH_GATEWAY_URL=
 BASE_PATH=/
 KUB_WEB_PORT=8080
 ```

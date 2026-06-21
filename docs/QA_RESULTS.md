@@ -1,5 +1,13 @@
 # QA Results
 
+2026-06-21 Yandex SmartCaptcha auth gateway foundation:
+
+- Added `yandex-smartcaptcha` as the preferred CAPTCHA provider for registration and password recovery.
+- Added frontend routing so Yandex-protected registration/recovery call `/functions/v1/auth-yandex-gateway` instead of direct Supabase Auth endpoints.
+- Added `auth-yandex-gateway` Edge Function source. It verifies Yandex SmartCaptcha server-side and then calls Supabase Auth with the public anon key.
+- No Yandex secret was committed. Runtime needs `YANDEX_SMARTCAPTCHA_SECRET`, `SUPABASE_ANON_KEY`, and `KUB_AUTH_ALLOWED_REDIRECT_ORIGINS`.
+- Important remaining hardening: public direct `/auth/v1/signup` and recovery calls must be restricted/routed through the gateway at the Supabase/Kong/Caddy layer to prevent bypass outside the official UI.
+
 2026-06-21 auth CAPTCHA and RLS execute-grant follow-up:
 
 - Added optional Cloudflare Turnstile frontend support for registration and password recovery. It is disabled by default and renders only when public build-time env values `VITE_AUTH_CAPTCHA_PROVIDER=turnstile` and `VITE_AUTH_CAPTCHA_SITE_KEY` are provided.

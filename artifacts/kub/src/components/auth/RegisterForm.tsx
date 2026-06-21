@@ -5,7 +5,8 @@ import { createNonPersistedAuthClient } from "@/lib/supabase/client";
 import { KubBrandLogo, KubButton, KubIcon, KubInput, KubPanel } from "@/components/kub";
 import { kubBrandAsset } from "@/components/kub/brandAssets";
 import { getAuthCallbackUrl } from "@/lib/authRedirect";
-import { getAuthCaptchaRequiredMessage, isAuthCaptchaEnabled } from "@/lib/authCaptcha";
+import { getAuthCaptchaRequiredMessage, isAuthCaptchaEnabled, shouldUseAuthCaptchaGateway } from "@/lib/authCaptcha";
+import { requestAuthGateway } from "@/lib/authGateway";
 import { mapPgError } from "@/lib/errors";
 import { PROFILE_LIMITS, normalizeFullName, validateFullName } from "@/lib/profileValidation";
 
@@ -34,16 +35,26 @@ export function RegisterForm() {
         throw new Error(getAuthCaptchaRequiredMessage());
       }
 
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          captchaToken: captchaToken || undefined,
-          data: { full_name: normalizeFullName(fullName) },
-          emailRedirectTo: getAuthCallbackUrl(),
-        },
-      });
-      if (error) throw error;
+      if (shouldUseAuthCaptchaGateway()) {
+        await requestAuthGateway({
+          action: "signup",
+          email: email.trim(),
+          password,
+          fullName: normalizeFullName(fullName),
+          captchaToken,
+        });
+      } else {
+        const { error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            captchaToken: captchaToken || undefined,
+            data: { full_name: normalizeFullName(fullName) },
+            emailRedirectTo: getAuthCallbackUrl(),
+          },
+        });
+        if (error) throw error;
+      }
 
       setSuccess(true);
     } catch (err: unknown) {

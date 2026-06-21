@@ -1,6 +1,6 @@
 const env = import.meta.env as Record<string, string | undefined>;
 
-export type AuthCaptchaProvider = "turnstile";
+export type AuthCaptchaProvider = "turnstile" | "yandex-smartcaptcha";
 
 export interface AuthCaptchaConfig {
   provider: AuthCaptchaProvider;
@@ -21,13 +21,20 @@ export function getAuthCaptchaRequiredMessage(): string {
   return "Подтвердите защиту от автоматической регистрации.";
 }
 
+export function shouldUseAuthCaptchaGateway(): boolean {
+  return AUTH_CAPTCHA_CONFIG?.provider === "yandex-smartcaptcha";
+}
+
 function resolveAuthCaptchaConfig(): AuthCaptchaConfig | null {
   const configuredProvider = env.VITE_AUTH_CAPTCHA_PROVIDER?.trim().toLowerCase();
   const siteKey = (env.VITE_AUTH_CAPTCHA_SITE_KEY || env.VITE_TURNSTILE_SITE_KEY || "").trim();
   if (!siteKey) return null;
 
   const provider = configuredProvider || "turnstile";
-  if (provider !== "turnstile") return null;
+  if (provider === "turnstile") return { provider, siteKey };
+  if (provider === "yandex" || provider === "yandex-smartcaptcha" || provider === "smartcaptcha") {
+    return { provider: "yandex-smartcaptcha", siteKey };
+  }
 
-  return { provider, siteKey };
+  return null;
 }
