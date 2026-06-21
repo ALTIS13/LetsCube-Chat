@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation, Link } from "wouter";
+import { useLocation } from "wouter";
 import { createClient } from "@/lib/supabase/client";
 import { KubBrandLogo, KubButton, KubIcon, KubInput, KubPanel } from "@/components/kub";
 import { kubBrandAsset } from "@/components/kub/brandAssets";
@@ -35,7 +35,10 @@ export function LoginForm() {
   const [resetLoading, setResetLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState(getInitialAuthNotice);
-  const [resetMode, setResetMode] = useState(false);
+  const [resetMode, setResetMode] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("reset") === "1";
+  });
   const [banInfo, setBanInfo] = useState<BanInfo | null>(null);
 
   const supabase = createClient();
@@ -235,13 +238,7 @@ export function LoginForm() {
         </KubPanel>
 
         <p className="text-center text-sm mt-5 text-[color:var(--kub-muted)]">
-          Нет аккаунта?{" "}
-          <Link
-            href="/register"
-            className="font-semibold text-[color:var(--kub-cyan)] hover:text-[color:var(--kub-cyan-hover)] transition-colors"
-          >
-            Зарегистрироваться
-          </Link>
+          Нет доступа к аккаунту? Обратитесь к администратору клуба.
         </p>
       </div>
     </div>

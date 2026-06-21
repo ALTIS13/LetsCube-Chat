@@ -53,6 +53,39 @@ test.describe("Letscube auth brand layout", () => {
   }
 });
 
+test.describe("Letscube closed public registration", () => {
+  test("/register explains administrator-issued access and has no signup form", async ({ page }) => {
+    const consoleErrors = collectConsoleErrors(page);
+    await gotoOrSkip(page, "/register");
+
+    await expect(page.getByText("Регистрация закрыта")).toBeVisible();
+    await expect(page.getByText("Аккаунты LETSCUBE выдаёт администратор клуба")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Войти в аккаунт" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Восстановить доступ" })).toBeVisible();
+    await expect(page.locator('input[type="password"]')).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Создать аккаунт|Зарегистрироваться/ })).toHaveCount(0);
+    expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
+  });
+
+  test("/login does not advertise public signup", async ({ page }) => {
+    const consoleErrors = collectConsoleErrors(page);
+    await gotoOrSkip(page, "/login");
+
+    await expect(page.getByText("Нет доступа к аккаунту? Обратитесь к администратору клуба.")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Зарегистрироваться" })).toHaveCount(0);
+    expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
+  });
+
+  test("/login?reset=1 opens recovery mode directly", async ({ page }) => {
+    const consoleErrors = collectConsoleErrors(page);
+    await gotoOrSkip(page, "/login?reset=1");
+
+    await expect(page.getByRole("button", { name: "Отправить ссылку" })).toBeVisible();
+    await expect(page.locator('input[type="password"]')).toHaveCount(0);
+    expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
+  });
+});
+
 function collectConsoleErrors(page: Page): string[] {
   const consoleErrors: string[] = [];
   page.on("console", (message) => {
