@@ -115,6 +115,32 @@ test.describe("Letscube safe public registration", () => {
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
 
+  test("/register keeps existing-email signup errors generic", async ({ page }) => {
+    const consoleErrors = collectConsoleErrors(page);
+    await page.route("**/auth/v1/signup**", async (route) => {
+      await route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: "user_already_exists",
+          msg: "User already registered",
+          message: "User already registered",
+        }),
+      });
+    });
+
+    await gotoOrSkip(page, "/register");
+    await page.locator('input[autocomplete="name"]').fill("Существующий Игрок");
+    await page.locator('input[type="email"]').fill("existing-user@example.test");
+    await page.locator('input[type="password"]').fill("correct-horse-battery");
+    await page.getByRole("button", { name: "Создать аккаунт" }).click();
+
+    await expect(page.getByText("Проверьте почту")).toBeVisible();
+    await expect(page.getByText(/Пользователь.*уже зарегистрирован/i)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Восстановить доступ" })).toBeVisible();
+    expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
+  });
+
   test("/login?reset=1 opens recovery mode directly", async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
     await gotoOrSkip(page, "/login?reset=1");

@@ -39,6 +39,10 @@ export function RegisterForm() {
 
       setSuccess(true);
     } catch (err: unknown) {
+      if (isExistingAccountSignupError(err)) {
+        setSuccess(true);
+        return;
+      }
       setError(mapPgError(err));
     } finally {
       setLoading(false);
@@ -217,5 +221,21 @@ export function RegisterForm() {
         </p>
       </div>
     </div>
+  );
+}
+
+function isExistingAccountSignupError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const record = err as Record<string, unknown>;
+  const code = typeof record.code === "string" ? record.code.toLowerCase() : "";
+  const message = typeof record.message === "string" ? record.message.toLowerCase() : "";
+  const status = typeof record.status === "number" ? record.status : null;
+
+  return (
+    (status === null || status === 400) &&
+    (code === "user_already_exists" ||
+      code === "email_exists" ||
+      message.includes("already registered") ||
+      message.includes("already exists"))
   );
 }

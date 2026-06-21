@@ -11,6 +11,11 @@
 --
 -- Manual apply target:
 --   self-hosted LETSCUBE Supabase Postgres.
+--
+-- Live read-only audit on 2026-06-21:
+--   public.get_my_chat_ids() and public.handle_new_user() are the two
+--   SECURITY DEFINER functions still missing explicit search_path.
+--   No SQL was applied during the audit.
 
 begin;
 
@@ -21,4 +26,3 @@ alter function public.handle_new_user()
   set search_path = public;
 
 commit;
-
