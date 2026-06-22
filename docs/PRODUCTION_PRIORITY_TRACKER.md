@@ -52,11 +52,12 @@ Current baseline:
 - Existing docs report all inspected public tables with RLS enabled.
 - Existing proposals harden function `search_path` and revoke anonymous function execute.
 - Local `pnpm.cmd rls:smoke` exists, but depends on configured target env.
+- Live read-only metadata/REST probe is recorded in `docs/security/RLS_SECURITY_AUDIT_20260622.md`.
 
 Next checks:
 
-- Read-only live audit of public tables, views, function grants, security definer functions and storage policies.
-- Compare live findings against `.migration-backup/supabase/migrations/20260621_*`.
+- Add a repeatable anon REST probe script that does not print keys or row contents.
+- Run two-account authenticated boundary tests for chats, messages, tasks, notifications, profiles and storage.
 - Create new proposal only if drift or a concrete gap is found.
 
 ## Priority 3 - Backup And Restore Drill
