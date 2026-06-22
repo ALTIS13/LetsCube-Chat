@@ -1,109 +1,216 @@
 # LETSCUBE Production Priority Tracker
 
-Status: approved execution order, 2026-06-22.
+Status: active production-hardening tracker, updated 2026-06-22.
 
-This file is the working tracker for the production-hardening sequence. It is intentionally narrow: APK/native packaging is postponed, and the next work focuses on web/PWA production safety.
+This file is the working source of truth for the next production stages. Before starting any new production task, read this file first, then update the relevant checkboxes/status when work is completed, blocked, or intentionally deferred.
+
+Legend:
+
+- `[x]` done and covered by regression checks.
+- `[~]` active stage.
+- `[ ]` pending.
+- `[!]` blocked or deferred by an external dependency.
+
+## Current Execution Order
+
+1. `[x]` Priority 1 - Auth and anti-abuse baseline.
+2. `[x]` Priority 2 - RLS and security audit baseline.
+3. `[~]` Priority 3 - Backup and restore drill.
+4. `[ ]` Priority 4 - Operator security observability.
+5. `[ ]` Priority 5 - Installed web/PWA production shell.
+6. `[!]` Priority 6 - Monitoring and self-hosted Sentry.
+7. `[!]` Deferred native/mobile packaging and native push.
+
+## Last Confirmed Deploy Baseline
+
+- GitHub `main`: `1dd8f8c263f284c5ee45906d206d95e6ab75e2b2`.
+- Coolify app: `letscube-web`.
+- Public app: `https://app.letscube.ru`.
+- Auto deploy: GitHub webhook to Coolify was restored; test push queued and completed with `is_webhook=t`.
+- Self-host stack: Coolify, self-hosted Supabase, Mailcow, Caddy, and app deployment are already in place.
+
+## Completed Baseline - Do Not Rebuild Without A New Finding
+
+- `[x]` Self-host migration foundation: app, Supabase, Storage/media, mail delivery, and Coolify deployment moved to the server.
+- `[x]` Docker subnet conflict with hoster gateway identified and avoided by custom Docker address pools.
+- `[x]` Mail delivery baseline: Mailcow DNS, DKIM, PTR, external smoke, Supabase recovery email delivery and branded recovery template.
+- `[x]` Auth copy: signup and recovery messages are generic and do not reveal account existence.
+- `[x]` Password recovery route and UI flow work with self-hosted mail.
+- `[x]` Existing-account signup cannot be used to obtain access to an existing user account.
+- `[x]` Yandex SmartCaptcha gateway protects signup and recovery.
+- `[x]` Direct public signup/recovery bypass paths are blocked at the proxy layer.
+- `[x]` Auth gateway has in-function rate limiting before CAPTCHA/Auth calls.
+- `[x]` Login token endpoint HTTP 429 maps to friendly Russian UI copy.
+- `[x]` Invite code/link flow exists, with invite-only mode controlled from the admin panel.
+- `[x]` Invite code field is hidden when invite-only mode is off; preconfigured invite links apply role/club in the background.
+- `[x]` Reserved admin-like usernames are blocked for non-admin users.
+- `[x]` RLS smoke and anon REST probes exist and cover authenticated/anonymous boundaries.
+- `[x]` Group invite non-member hardening proposal was applied manually after explicit approval.
+- `[x]` Notification center tabs and grouping are in place.
+- `[x]` Message notification read-sync/grouping baseline is in place.
+- `[x]` Chat scroll anchoring baseline: no unread -> bottom, unread -> first unread, search/notification jumps preserved.
+- `[x]` LETSCUBE visual cleanup: auth branding, duplicate sidebar logo, mascot placement, and visible KUB/KUB text cleanup are done.
 
 ## Priority 1 - Auth And Anti-Abuse
+
+Status: `[x]` baseline complete. Keep as regression guard.
 
 Goal: public auth endpoints must not allow bot signup, password guessing, recovery abuse, or CAPTCHA bypass.
 
 Definition of done:
 
-- Signup and recovery go through the Yandex SmartCaptcha auth gateway in the public app.
-- Direct public bypass paths to sensitive Supabase Auth endpoints are blocked or rate limited at the proxy layer.
-- Login, signup, recovery, verify, resend and token endpoints have server-side throttling.
-- User-facing auth errors do not reveal whether an account exists.
-- Existing users cannot obtain a session through the registration screen.
-- 429/rate-limit errors map to friendly Russian UI copy.
-- Auth abuse checks have repeatable smoke tests and operational verification commands.
+- `[x]` Signup and recovery go through the Yandex SmartCaptcha auth gateway in the public app.
+- `[x]` Direct public bypass paths to sensitive Supabase Auth endpoints are blocked or rate limited at the proxy layer.
+- `[x]` Login, signup, recovery, verify, resend and token endpoints have server-side throttling or gateway protections.
+- `[x]` User-facing auth errors do not reveal whether an account exists.
+- `[x]` Existing users cannot obtain a session through the registration screen.
+- `[x]` 429/rate-limit errors map to friendly Russian UI copy.
+- `[x]` Auth abuse checks have repeatable smoke tests and operational verification commands.
 
-Current baseline:
+Keep checking:
 
-- Yandex SmartCaptcha gateway is deployed for signup and recovery.
-- Direct external signup/recovery bypass is blocked at the proxy layer.
-- Generic signup/recovery copy is in place.
-- Self-hosted GoTrue email throttles and Traefik auth endpoint throttling are documented in `docs/security/AUTH_RLS_ANTI_ABUSE_PLAN.md`.
-- `auth-yandex-gateway` has an in-function signup/recovery rate limiter before CAPTCHA/Auth calls.
-- Auth gateway redirect targets are restricted to explicit `KUB_AUTH_ALLOWED_REDIRECT_ORIGINS`; request `Origin` is not treated as an implicit redirect allowlist.
-- 2026-06-22 live check: direct external `POST /auth/v1/signup` and `POST /auth/v1/recover` with an anon key returned HTTP 403.
-- 2026-06-22 UI regression tests verify that signup and recovery use `auth-yandex-gateway` when Yandex SmartCaptcha is enabled and map gateway 429/rate-limit responses to friendly Russian copy.
-- 2026-06-22 UI regression tests verify that login token endpoint HTTP 429 / `over_request_rate_limit` maps to friendly Russian copy without running a real brute-force load against production Auth.
-- 2026-06-22 live gateway smoke verified repeated valid-shape signup requests without CAPTCHA return five `captcha_required` responses followed by HTTP 429 `rate_limited`.
-
-Next checks:
-
-- Keep gateway/no-direct-auth Playwright checks in validation when captcha env is enabled.
-- Add an operator-facing auth anti-abuse smoke script if repeated manual curl checks become noisy.
-- Consider admin approval or invite-code onboarding if public signup abuse continues despite CAPTCHA/rate limits.
-- Move to Priority 2 authenticated boundary checks for chats, messages, tasks, notifications, profiles and storage.
+- `[ ]` Run gateway/no-direct-auth Playwright checks when CAPTCHA env is enabled.
+- `[ ]` Add an operator-facing auth anti-abuse smoke script if repeated manual curl checks become noisy.
+- `[ ]` Revisit stronger account creation controls only if abuse continues despite CAPTCHA/rate limits/invite mode.
 
 ## Priority 2 - RLS And Security Audit
 
-Goal: authenticated users can only read/write rows, objects and RPC effects allowed by their membership, role, location and task permissions.
+Status: `[x]` baseline complete. Keep as regression guard.
+
+Goal: authenticated users can only read/write rows, objects and RPC effects allowed by membership, role, location and task permissions.
 
 Definition of done:
 
-- All exposed public tables have RLS enabled.
-- Public views are absent or use `security_invoker` / restricted grants.
-- `anon` cannot execute app RPCs unless a function is intentionally public and documented.
-- `SECURITY DEFINER` functions pin `search_path` and validate `auth.uid()` / permissions internally.
-- Storage policies for media, avatars and task attachments are path-scoped and role-aware.
-- Policies do not depend on user-editable `raw_user_meta_data`.
-- RLS/RPC smoke tests cover chat, media, tasks, notifications, roles and admin boundaries.
+- `[x]` All inspected exposed public tables have RLS enabled.
+- `[x]` Public views are absent or use `security_invoker` / restricted grants.
+- `[x]` Anonymous REST exposure checks exist.
+- `[x]` Authenticated role boundary checks exist.
+- `[x]` Storage policies for media, avatars and task attachments are path-scoped and role-aware.
+- `[x]` SECURITY DEFINER function hardening is tracked through proposals when needed.
 
-Current baseline:
+Keep checking:
 
-- Existing docs report all inspected public tables with RLS enabled.
-- Existing proposals harden function `search_path` and revoke anonymous function execute.
-- Live read-only metadata/REST probe is recorded in `docs/security/RLS_SECURITY_AUDIT_20260622.md`.
-- Local `pnpm.cmd rls:smoke` now reads the same local QA env path as the anon REST probe and covers five QA roles with authenticated REST/RPC boundary checks.
-- 2026-06-22 authenticated smoke showed no non-owned rows through notifications, push subscriptions, notification preferences or chat notification preferences.
-- 2026-06-22 authenticated smoke showed non-admin `profile_contacts` privacy intact, visible messages constrained to visible chats, and no broad object listing from the private `chat-media` bucket.
-- 2026-06-22 opt-in `KUB_QA_ALLOW_MUTATIONS=1 pnpm.cmd rls:smoke` created and cleaned up one inactive `push_subscriptions` fixture, proving cross-user insert/select/update/delete is blocked while owner update/read still works.
-- 2026-06-22 opt-in `KUB_QA_ALLOW_MUTATIONS=1 pnpm.cmd rls:smoke` created and cleaned up one temporary `chat-media` object, proving a chat member can upload/sign while a non-member cannot sign or upload into that chat path.
-- 2026-06-22 opt-in fixture smoke now covers task, chat membership and group invite boundaries with temporary rows and cleanup.
-- 2026-06-22 `20260622_group_invite_nonmember_hardening.sql` was applied manually after explicit approval. The smoke RPC parser was also tightened so error payloads are not counted as returned rows. Rerun result: task/chat/group-invite/chat-media fixtures all green.
-
-Next checks:
-
-- Keep `pnpm.cmd rls:anon-rest` in validation for anonymous REST exposure checks.
-- Keep `pnpm.cmd rls:smoke` in validation for authenticated boundary checks.
-- Keep `KUB_QA_ALLOW_MUTATIONS=1 pnpm.cmd rls:smoke` in security-stage validation and require task/chat/group-invite/chat-media fixtures to stay green.
-- Add stable private `chat-media` object fixtures only if the normal non-mutating signed-url probe needs to run without temporary storage mutation.
-- Create new proposal only if drift or a concrete gap is found.
+- `[ ]` Run `pnpm.cmd rls:anon-rest` in security-stage validation.
+- `[ ]` Run `pnpm.cmd rls:smoke` in security-stage validation.
+- `[ ]` Run `KUB_QA_ALLOW_MUTATIONS=1 pnpm.cmd rls:smoke` only when mutation fixture validation is needed.
+- `[ ]` Create new SQL proposals only for concrete drift or a verified gap.
 
 ## Priority 3 - Backup And Restore Drill
 
+Status: `[~]` active stage.
+
 Goal: a full LETSCUBE production restore must be executable from backups without relying on memory or ad hoc commands.
+
+Guardrails:
+
+- No SQL changes in this stage unless explicitly requested.
+- No restore into production.
+- No destructive remote cleanup during inventory.
+- No env, token, database password, SMTP password, or secret contents in repo/docs/logs.
+- Restore rehearsal must use an isolated temporary target.
 
 Definition of done:
 
-- Postgres logical backup is scheduled and retained.
-- Supabase Storage/media backup is scheduled and retained.
-- Coolify, mail, Supabase compose/env/config and ops docs are backed up.
-- A restore rehearsal runs into a separate temporary restore target.
-- Restore verification checks row counts, key tables, Storage object counts and a basic app smoke.
-- The runbook explains exact backup, restore, validation and rollback commands.
+- `[x]` P3.1 Read current backup status and runbooks before making changes.
+- `[x]` P3.2 Record read-only live inventory: backup directories, scripts, timers, cron, Docker volumes, Supabase/Mailcow/Coolify config locations.
+- `[x]` P3.3 Confirm Postgres logical backup command and retention policy.
+- `[x]` P3.4 Confirm Supabase Storage/media backup command and retention policy.
+- `[x]` P3.5 Confirm Coolify, Mailcow, Caddy, Supabase compose/env/config, and ops docs are backed up without exposing secret values.
+- `[x]` P3.6 Add or update backup scripts only if missing, idempotent, and secret-safe. Existing scripts are present; no script update was needed during this inventory pass.
+- `[x]` P3.7 Run non-destructive backup verification: archive listing, metadata checks, row/object counts where safe.
+- `[ ]` P3.8 Prepare isolated restore target plan and get explicit approval before any restore.
+- `[ ]` P3.9 Rehearse restore into isolated target.
+- `[ ]` P3.10 Verify restore: row counts, key tables, Storage object counts, basic app smoke.
+- `[ ]` P3.11 Decide and document off-server/offsite backup destination.
 
 Current baseline:
 
 - Infrastructure docs describe backup/restore expectations.
 - Self-host migration placed operational files under `/srv/letscube`.
-- Server backup inventory is recorded in `docs/infra/BACKUP_RESTORE_STATUS_20260622.md`.
+- Server backup inventory and non-destructive verification are recorded in `docs/infra/BACKUP_RESTORE_STATUS_20260622.md`.
+- Latest verified local backup set: `/srv/letscube/backups/automated/20260622-034450`.
+- Latest backup checksum verification: passed.
+- Offsite tooling exists, but offsite backup is not configured yet.
 
-Next checks:
+Next action:
 
-- Prepare an isolated restore target.
-- Perform a non-destructive restore rehearsal only after confirming target isolation.
-- Add off-server backup verification once offsite storage is finalized.
+- `[ ]` Choose off-server backup target (`rclone`, `restic`, or `borg`) and configure it only on the server.
+- `[ ]` Run one controlled offsite sync after the remote target is configured.
+- `[ ]` Prepare an isolated restore target plan and get explicit approval before any restore.
 
-## Deferred
+## Priority 4 - Operator Security Observability
 
-- APK/native app packaging.
-- Native FCM push.
-- Release signing/AAB.
-- Deep links/app links.
-- SMS provider rollout.
+Status: `[ ]` pending after Priority 3.
+
+Goal: make auth abuse, invite-code abuse, and suspicious registration/login patterns visible to operators without leaking sensitive data.
+
+Candidate work:
+
+- `[ ]` Add or document an operator smoke command for auth gateway rate limits and direct-auth bypass checks.
+- `[ ]` Add an admin-facing or ops-facing view/report for recent auth gateway abuse counters if product-safe.
+- `[ ]` Ensure reports do not show raw secrets, passwords, CAPTCHA tokens, recovery tokens, or full IP data unless explicitly approved.
+- `[ ]` Keep this separate from CAPTCHA/rate-limit implementation unless new gaps are found.
+
+## Priority 5 - Installed Web/PWA Production Shell
+
+Status: `[ ]` pending after Priority 3/4.
+
+Goal: ship the web/PWA path as the production app experience while APK/native work remains deferred.
+
+Scope:
+
+- `[ ]` Verify installed PWA window on desktop/mobile without browser chrome where the platform supports it.
+- `[ ]` Verify browser/PWA push delivery, grouping, notification click routing, and read-sync.
+- `[ ]` Verify iOS/Android home-screen/install behavior and document platform limitations.
+- `[ ]` Preserve full messenger functionality: auth, chats, media, camera, voice, video-circle, tasks, search, notifications.
+- `[ ]` Keep native APK/FCM/release signing out of this stage.
+
+## Priority 6 - Monitoring And Self-Hosted Sentry
+
+Status: `[!]` deferred until backup/restore baseline is safe.
+
+Goal: add production monitoring without relying on foreign unstable SaaS paths.
+
+Candidate work:
+
+- `[ ]` Deploy self-hosted Sentry or a lighter local monitoring alternative.
+- `[ ]` Verify error capture from frontend and Edge Functions without secrets/message content/media URLs.
+- `[ ]` Add uptime and synthetic checks for app, Supabase, mail, and Coolify.
+- `[ ]` Add backup job failure alerts.
+
+## Deferred Native/Mobile Work
+
+Status: `[!]` intentionally deferred.
+
+- `[!]` APK/native app packaging.
+- `[!]` Native Android FCM push.
+- `[!]` Release signing/AAB.
+- `[!]` Deep links/app links.
+- `[!]` SMS provider rollout.
 
 Standalone web/PWA remains the production app path for now. The app should behave like an installed messenger tab without browser chrome where the platform supports installed PWAs.
+
+## Default Validation Commands
+
+Run only the commands relevant to the touched area, but prefer this baseline before commit/push:
+
+- `git diff --check`
+- `pnpm.cmd --filter @workspace/kub run typecheck`
+- `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"`
+- `pnpm.cmd e2e:smoke` when frontend behavior changed.
+- `pnpm.cmd db:types:check` when schema/types/database code changed.
+- `pnpm.cmd rls:anon-rest` and `pnpm.cmd rls:smoke` during RLS/security stages.
+
+Known validation notes:
+
+- Vite sourcemap/chunk-size warnings may exist and are not automatically blocking unless new.
+- `db:types:check` may report known advisory drift around message media fields/search RPCs/notification outbox until those are separately resolved.
+
+## Security Guardrails For Every Stage
+
+- No credentials, env values, access tokens, DB passwords, SMTP passwords, Firebase keys, CAPTCHA server keys, or service-role keys in git/docs/output.
+- No `service_role` in frontend/public/mobile bundles.
+- No `google-services.json`, keystores, or signing secrets in git.
+- No SQL apply without explicit user approval.
+- No production restore, destructive cleanup, or broad firewall/network changes without explicit user approval.
+- Use focused diffs and record validation results.
