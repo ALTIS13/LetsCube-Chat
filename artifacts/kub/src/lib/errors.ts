@@ -47,6 +47,8 @@ export function mapPgError(err: AnyErr): string {
   const lowerMessage = message?.toLowerCase();
 
   if (lowerMessage) {
+    if (lowerMessage.includes("reserved_username_requires_admin"))
+      return "Этот никнейм зарезервирован для администраторов.";
     if (lowerMessage.includes("only_staff_can_claim_pool_tasks"))
       return "Недостаточно прав, чтобы принять задачу.";
     if (lowerMessage.includes("task_already_assigned"))

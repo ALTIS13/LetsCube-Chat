@@ -101,6 +101,30 @@ test.describe("KUB push and phone production foundation", () => {
     await expect(page.getByRole("button", { name: /Сохранить без/ })).toHaveCount(0);
   });
 
+  test("profile usernames reserve admin-looking handles for real admins", async () => {
+    const profileValidationSource = readFileSync(resolve("artifacts/kub/src/lib/profileValidation.ts"), "utf8");
+    const settingsSource = readFileSync(resolve("artifacts/kub/src/components/sidebar/SettingsModal.tsx"), "utf8");
+    const errorsSource = readFileSync(resolve("artifacts/kub/src/lib/errors.ts"), "utf8");
+    const migrationSource = readFileSync(
+      resolve(".migration-backup/supabase/migrations/20260622_reserved_profile_usernames.sql"),
+      "utf8",
+    );
+
+    expect(profileValidationSource).toContain("RESERVED_USERNAME_KEYS");
+    expect(profileValidationSource).toContain('"admin"');
+    expect(profileValidationSource).toContain('"support"');
+    expect(profileValidationSource).toContain('"letscube"');
+    expect(profileValidationSource).toContain("reservedUsernameKey");
+    expect(profileValidationSource).toContain("Этот никнейм зарезервирован для администраторов.");
+    expect(settingsSource).toContain("useIsAdmin");
+    expect(settingsSource).toContain("allowReserved: isAdmin");
+    expect(errorsSource).toContain("reserved_username_requires_admin");
+    expect(migrationSource).toContain("profiles_reserved_username_guard");
+    expect(migrationSource).toContain("user_global_roles_reserved_username_guard");
+    expect(migrationSource).toContain("public.is_admin(p_user_id)");
+    expect(migrationSource).toContain("new.role::text = 'admin'");
+  });
+
   test("service worker contains safe push and click routing handlers", async () => {
     const swSource = readFileSync(resolve("artifacts/kub/public/sw.js"), "utf8");
     expect(swSource).toContain('self.addEventListener("push"');

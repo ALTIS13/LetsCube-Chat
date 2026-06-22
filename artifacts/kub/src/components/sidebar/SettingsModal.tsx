@@ -9,7 +9,7 @@ import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useTheme } from "@/hooks/useTheme";
 import { usePwaInstall } from "@/hooks/usePwa";
 import { usePush } from "@/hooks/usePush";
-import { useIsManagerOrAdmin } from "@/hooks/useRole";
+import { useIsAdmin, useIsManagerOrAdmin } from "@/hooks/useRole";
 import { KubButton, KubIcon, KubModal, KubSwitch, type KubIconName } from "@/components/kub";
 import { PhoneSection } from "./PhoneSection";
 import { AudioSettingsSection } from "./AudioSettingsSection";
@@ -50,6 +50,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     setPreference: setPushPreference,
   } = usePush();
   const isStaff = useIsManagerOrAdmin();
+  const isAdmin = useIsAdmin();
   const [, setLocation] = useLocation();
 
   const [fullName, setFullName] = useState(currentUser?.full_name ?? "");
@@ -64,7 +65,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const handleSave = async () => {
     if (!currentUser) return;
     const fullNameError = validateFullName(fullName);
-    const usernameError = validateUsername(username);
+    const usernameError = validateUsername(username, { allowReserved: isAdmin });
     if (fullNameError || usernameError) {
       setError(fullNameError ?? usernameError);
       return;
