@@ -26,6 +26,12 @@ Standalone web/PWA остаётся основным production-клиентом
 - Android browser: установка через браузерный install/home-screen flow остаётся web/PWA-режимом, не native APK.
 - iOS/iPadOS: home-screen app зависит от Safari/WebKit ограничений. Web Push работает только при выполнении требований iOS для установленных web apps и разрешений пользователя.
 - Capacitor/native Android не должен показывать browser install CTA; native push/FCM остаётся отдельным этапом.
+- Settings показывают platform-aware блок установки:
+  - ПК: `ПК Web/PWA`, режим `Браузер` или `Установлено`.
+  - iPhone/iPad: `iPhone / iOS PWA` или `iPad / iOS PWA`, режим `Safari` или `Установлено`.
+  - Android browser: `Android Web/PWA`, режим `Браузер` или `Установлено`.
+  - Android APK: `Android APK`, режим `Native`.
+- На iPhone/iPad кнопка `Установить` раскрывает шаги Safari `Поделиться` -> `На экран Домой` -> `Добавить`, потому что iOS не разрешает сайтам запускать системную установку программно.
 
 ## Push и notification click
 
@@ -60,12 +66,14 @@ Standalone web/PWA остаётся основным production-клиентом
 - `pnpm.cmd --filter @workspace/kub run typecheck`
 - `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"`
 - `pnpm.cmd exec playwright test tests/e2e/pwa.spec.ts`
+- `pnpm.cmd exec playwright test tests/e2e/pwa-install-settings.spec.ts`
 - `pnpm.cmd exec playwright test tests/e2e/letscube-brand-auth-layout.spec.ts`
 
 Manual/browser checks:
 
 - document title и installed-app title показывают `LETSCUBE`;
 - install prompt появляется там, где browser поддерживает `beforeinstallprompt`;
+- iPhone/iPad Settings показывают home-screen install guidance;
 - standalone launch открывает `/`;
 - direct refresh `/tasks` и `/admin` отдаёт app shell;
 - browser/PWA push click открывает правильный route;

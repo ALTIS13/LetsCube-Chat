@@ -179,6 +179,7 @@ Goal: ship the web/PWA path as the production app experience while APK/native wo
 Scope:
 
 - `[x]` Refresh PWA shell identity: document title, Apple app title, manifest name/short name and install metadata use `LETSCUBE`.
+- `[x]` Add platform-aware Settings install state for desktop, Android browser, iPhone/iPad, mobile browser and native Android APK.
 - `[x]` Verify PWA manifest, service worker registration, offline/reconnect banner and direct app-shell routes across desktop/mobile Playwright viewports.
 - `[x]` Verify browser/PWA push contract: stable notification tags, same-tag close behavior, click routing, and no raw media/token fields in SW payload handling.
 - `[ ]` Verify installed PWA window on desktop/mobile without browser chrome where the platform supports it.
@@ -191,7 +192,9 @@ Current baseline:
 
 - `artifacts/kub/index.html` title and Apple web app title are `LETSCUBE`.
 - `artifacts/kub/public/manifest.json` uses `LETSCUBE`, `display: standalone`, and `display_override` fallbacks.
+- Settings install block shows the detected install variant (`ПК Web/PWA`, `iPhone / iOS PWA`, `Android Web/PWA`, `Android APK`) and opens platform-specific installation guidance when a direct browser prompt is unavailable.
 - `tests/e2e/pwa.spec.ts` covers PWA shell metadata, service worker safety, offline/reconnect banner, and SPA direct routes on 1440, 1920, 3840, 390 and 412 viewports.
+- `tests/e2e/pwa-install-settings.spec.ts` covers desktop install variant and iPhone Safari home-screen guidance from the Settings install button.
 - `tests/e2e/push-phone-foundation.spec.ts` covers push settings layout, phone fallback, SW push grouping/click-routing, native push adapter token hygiene and Android channels on the same viewport matrix.
 
 ## Priority 6 - Monitoring And Self-Hosted Sentry
