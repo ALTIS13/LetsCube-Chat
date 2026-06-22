@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { AuthCaptcha } from "@/components/auth/AuthCaptcha";
 import { createNonPersistedAuthClient } from "@/lib/supabase/client";
@@ -10,6 +10,9 @@ import { requestAuthGateway } from "@/lib/authGateway";
 import { mapPgError } from "@/lib/errors";
 import { PROFILE_LIMITS, normalizeFullName, validateFullName } from "@/lib/profileValidation";
 import {
+  REGISTRATION_INVITE_ONLY_BANNER_BODY,
+  REGISTRATION_INVITE_ONLY_BANNER_TITLE,
+  REGISTRATION_INVITE_ONLY_CODE_REQUIRED_MESSAGE,
   normalizeRegistrationInviteCode,
   readRegistrationInviteFromSearch,
 } from "@/lib/registrationInvite";
@@ -28,14 +31,32 @@ export function RegisterForm() {
   const [success, setSuccess] = useState(false);
   const [captchaToken, setCaptchaToken] = useState("");
   const [captchaResetSignal, setCaptchaResetSignal] = useState(0);
+  const [inviteOnlyEnabled, setInviteOnlyEnabled] = useState(false);
 
-  const supabase = createNonPersistedAuthClient();
+  const supabase = useMemo(() => createNonPersistedAuthClient(), []);
 
   useEffect(() => {
     const query = location.includes("?") ? location.slice(location.indexOf("?")) : window.location.search;
     const nextInviteCode = readRegistrationInviteFromSearch(query);
     if (nextInviteCode) setInviteCode(nextInviteCode);
   }, [location]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await supabase.rpc("registration_invite_mode");
+        if (cancelled) return;
+        const row = Array.isArray(data) ? data[0] : data;
+        setInviteOnlyEnabled(Boolean(row?.invite_only_enabled));
+      } catch {
+        if (!cancelled) setInviteOnlyEnabled(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase]);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,6 +71,9 @@ export function RegisterForm() {
       const normalizedInviteCode = normalizeRegistrationInviteCode(inviteCode);
       if (inviteCode.trim() && !normalizedInviteCode) {
         throw new Error("Код приглашения должен быть 6–64 символа: латинские буквы, цифры, дефис или подчёркивание.");
+      }
+      if (inviteOnlyEnabled && !normalizedInviteCode) {
+        throw new Error(REGISTRATION_INVITE_ONLY_CODE_REQUIRED_MESSAGE);
       }
 
       if (shouldUseAuthCaptchaGateway()) {
@@ -197,6 +221,23 @@ export function RegisterForm() {
           </div>
 
           <form onSubmit={handleRegister} className="p-5 flex flex-col gap-3">
+            {inviteOnlyEnabled && (
+              <div
+                data-testid="registration-invite-only-banner"
+                className="rounded-xl border border-[color:var(--kub-warn)]/35 bg-[color-mix(in_srgb,var(--kub-warn)_13%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-text)]"
+              >
+                <div className="flex items-start gap-2">
+                  <KubIcon name="lock" size={16} tone="warn" className="mt-0.5 shrink-0" />
+                  <div className="min-w-0">
+                    <div className="font-semibold">{REGISTRATION_INVITE_ONLY_BANNER_TITLE}</div>
+                    <div className="mt-1 text-xs leading-5 text-[color:var(--kub-muted)]">
+                      {REGISTRATION_INVITE_ONLY_BANNER_BODY}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <KubInput
               type="text"
               placeholder="Имя и фамилия"

@@ -1,5 +1,5 @@
 import { createAuthRateLimiter } from "./rateLimit.mjs";
-import { normalizeInviteCode } from "./inviteCode.mjs";
+import { normalizeInviteCode, shouldValidateInviteGate } from "./inviteCode.mjs";
 
 type GatewayAction = "signup" | "recovery";
 
@@ -69,8 +69,8 @@ Deno.serve(async (request: Request) => {
     if (rawInviteCode != null && String(rawInviteCode).trim() && !inviteCode) {
       return corsJson({ ok: false, error: "invite_invalid" }, 400, request);
     }
-    if (inviteCode || inviteRequired) {
-      const invite = await validateInviteCode(supabaseUrl, supabaseKey, inviteCode);
+    if (shouldValidateInviteGate(action)) {
+      const invite = await validateInviteSignupGate(supabaseUrl, supabaseKey, inviteCode, inviteRequired);
       if (!invite.ok) return corsJson({ ok: false, error: invite.error }, invite.status, request);
     }
 
@@ -325,6 +325,68 @@ async function validateInviteCode(
     return { ok: false, error, status: 400 };
   }
   return { ok: false, error: "invite_invalid", status: 400 };
+}
+
+async function validateInviteSignupGate(
+  supabaseUrl: string,
+  supabaseKey: string,
+  inviteCode: string | null,
+  strictFallback: boolean,
+): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
+  const url = new URL("/rest/v1/rpc/registration_invite_signup_gate", supabaseUrl);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: supabaseKey,
+        authorization: `Bearer ${supabaseKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ p_code: inviteCode }),
+    });
+  } catch {
+    if (!inviteCode && strictFallback) return { ok: false, error: "invite_required", status: 400 };
+    if (inviteCode || strictFallback) return validateInviteCode(supabaseUrl, supabaseKey, inviteCode);
+    return { ok: true };
+  }
+
+  const body = await readRemoteJson(response);
+  if (!response.ok) {
+    if (isMissingInviteGateRpc(response.status, body)) {
+      if (!inviteCode && strictFallback) return { ok: false, error: "invite_required", status: 400 };
+      if (inviteCode || strictFallback) return validateInviteCode(supabaseUrl, supabaseKey, inviteCode);
+      return { ok: true };
+    }
+    console.error("auth-yandex-gateway invite gate unavailable", { status: response.status });
+    return { ok: false, error: "invite_not_configured", status: 500 };
+  }
+
+  const row = Array.isArray(body) ? body[0] : body;
+  if (row && typeof row === "object" && "ok" in row) {
+    const result = row as { ok?: unknown; error?: unknown };
+    if (result.ok === true) return { ok: true };
+    const error = typeof result.error === "string" ? result.error : "invite_invalid";
+    return { ok: false, error, status: 400 };
+  }
+  return { ok: false, error: "invite_invalid", status: 400 };
+}
+
+function isMissingInviteGateRpc(status: number, error: Record<string, unknown>) {
+  const text = [
+    String(error.code || ""),
+    String(error.error || ""),
+    String(error.message || ""),
+    String(error.msg || ""),
+    String(error.details || ""),
+    String(error.hint || ""),
+  ].join(" ").toLowerCase();
+  return (
+    status === 404 ||
+    text.includes("pgrst202") ||
+    text.includes("42883") ||
+    (text.includes("registration_invite_signup_gate") && text.includes("function"))
+  );
 }
 
 function readInviteError(error: Record<string, unknown>): string | null {

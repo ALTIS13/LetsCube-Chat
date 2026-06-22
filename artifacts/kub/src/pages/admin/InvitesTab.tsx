@@ -1,29 +1,36 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { KubBadge, KubButton, KubIcon, KubInput, KubPanel } from "@/components/kub";
+import { KubBadge, KubButton, KubIcon, KubInput, KubPanel, KubSwitch } from "@/components/kub";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
+import { usePermissionAccess } from "@/hooks/useRole";
 import { useTaskRouting, useTaskRoutingEnabledPreference } from "@/hooks/useTaskRouting";
 import { LOCATION_ROUTING_REQUIRED_MESSAGE } from "@/lib/locationRouting";
 import {
+  REGISTRATION_INVITE_MODE_REQUIRED_MESSAGE,
   REGISTRATION_INVITES_REQUIRED_MESSAGE,
   buildRegistrationInviteLink,
 } from "@/lib/registrationInvite";
 import { getRoleLabel, mapRolesPermissionsError } from "@/lib/rolePermissions";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import type { DynamicRole, RegistrationInviteListRow } from "@/types/database";
+import type { DynamicRole, RegistrationInviteListRow, RegistrationInviteModeRow } from "@/types/database";
 
 const selectClassName =
   "h-11 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none transition-colors focus:border-[color:var(--kub-cyan)]";
 
 export function InvitesTab() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [rolesEnabled] = useDynamicRolesEnabledPreference();
   const [routingEnabled, setRoutingEnabled] = useTaskRoutingEnabledPreference();
   const roles = useDynamicRoles({ enabled: rolesEnabled, includeAssignments: false });
   const routing = useTaskRouting({ enabled: routingEnabled, includeMembers: true });
+  const systemAccess = usePermissionAccess(["system.manage"]);
   const [invites, setInvites] = useState<RegistrationInviteListRow[]>([]);
+  const [inviteOnlyEnabled, setInviteOnlyEnabled] = useState(false);
+  const [modeLoading, setModeLoading] = useState(true);
+  const [modeSaving, setModeSaving] = useState(false);
+  const [modeError, setModeError] = useState<string | null>(null);
   const [label, setLabel] = useState("");
   const [maxUses, setMaxUses] = useState(1);
   const [expiresInDays, setExpiresInDays] = useState("14");
@@ -49,9 +56,30 @@ export function InvitesTab() {
     setInvites((data ?? []) as RegistrationInviteListRow[]);
   }, [supabase]);
 
+  const loadInviteMode = useCallback(
+    async (options: { background?: boolean } = {}) => {
+      if (!options.background) setModeLoading(true);
+      setModeError(null);
+      const { data, error } = await supabase.rpc("registration_invite_mode");
+      setModeLoading(false);
+      if (error) {
+        setModeError(mapInviteModeError(error));
+        setInviteOnlyEnabled(false);
+        return;
+      }
+      const row = readInviteModeRow(data);
+      setInviteOnlyEnabled(Boolean(row?.invite_only_enabled));
+    },
+    [supabase],
+  );
+
   useEffect(() => {
     void loadInvites();
   }, [loadInvites]);
+
+  useEffect(() => {
+    void loadInviteMode();
+  }, [loadInviteMode]);
 
   const globalRoles = useMemo(
     () => roles.roles.filter((role) => role.scope === "global" && role.is_active),
@@ -137,6 +165,23 @@ export function InvitesTab() {
     await loadInvites();
   };
 
+  const toggleInviteOnlyMode = async (next: boolean) => {
+    setModeSaving(true);
+    setModeError(null);
+    setNotice(null);
+    const { data, error } = await supabase.rpc("registration_invite_set_mode", {
+      p_invite_only_enabled: next,
+    });
+    setModeSaving(false);
+    if (error) {
+      setModeError(mapInviteModeError(error));
+      return;
+    }
+    const row = readInviteModeRow(data);
+    setInviteOnlyEnabled(Boolean(row?.invite_only_enabled ?? next));
+    setNotice(next ? "Режим регистрации только по приглашению включён." : "Открытая регистрация включена.");
+  };
+
   const copyInviteLink = async (invite: RegistrationInviteListRow) => {
     const origin = typeof window === "undefined" ? "" : window.location.origin;
     const link = buildRegistrationInviteLink(origin, invite.code);
@@ -146,6 +191,50 @@ export function InvitesTab() {
 
   return (
     <div className="space-y-4">
+      <KubPanel className="space-y-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-cyan)]">
+              <KubIcon name="lock" size={14} />
+              Режим регистрации
+            </div>
+            <h2 className="mt-2 text-lg font-bold text-[color:var(--kub-text)]">
+              {inviteOnlyEnabled ? "Только по приглашению" : "Открытая регистрация"}
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-[color:var(--kub-muted)]">
+              По умолчанию регистрация доступна постоянно. Если включить invite-only, новые аккаунты
+              смогут создаваться только по invite-code или invite-link из этой вкладки.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center justify-between gap-3 rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/70 px-3 py-2">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-[color:var(--kub-text)]">
+                Invite-only
+              </div>
+              <div className="text-xs text-[color:var(--kub-muted)]">
+                {modeLoading ? "Проверяем режим..." : inviteOnlyEnabled ? "Регистрация ограничена" : "Регистрация открыта"}
+              </div>
+            </div>
+            <KubSwitch
+              aria-label="Включить режим только по приглашению"
+              checked={inviteOnlyEnabled}
+              disabled={modeLoading || modeSaving || systemAccess.checking || !systemAccess.hasPermission("system.manage")}
+              onCheckedChange={(checked) => void toggleInviteOnlyMode(checked)}
+            />
+          </div>
+        </div>
+        {modeError && (
+          <div className="rounded-xl border border-[color:var(--kub-warn)]/30 bg-[color-mix(in_srgb,var(--kub-warn)_12%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-warn)]">
+            {modeError}
+          </div>
+        )}
+        {!systemAccess.checking && !systemAccess.hasPermission("system.manage") && (
+          <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/70 px-3 py-2 text-xs text-[color:var(--kub-muted)]">
+            Переключать режим регистрации может только пользователь с правом «Управление системой».
+          </div>
+        )}
+      </KubPanel>
+
       <KubPanel className="space-y-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
@@ -451,6 +540,21 @@ function mapInviteError(error: unknown): string {
   if (text.includes("invite_critical_role_forbidden")) return "Критические роли может выдавать только тех. администратор.";
   if (text.includes("permission") || text.includes("42501")) return "Недостаточно прав для управления инвайтами.";
   return mapRolesPermissionsError(error, "Не удалось выполнить действие с инвайтом.");
+}
+
+function readInviteModeRow(value: unknown): RegistrationInviteModeRow | null {
+  const row = Array.isArray(value) ? value[0] : value;
+  if (!row || typeof row !== "object") return null;
+  return row as RegistrationInviteModeRow;
+}
+
+function mapInviteModeError(error: unknown): string {
+  if (isRegistrationInviteMissingError(error)) return REGISTRATION_INVITE_MODE_REQUIRED_MESSAGE;
+  const text = readErrorText(error);
+  if (text.includes("permission") || text.includes("42501")) {
+    return "Недостаточно прав для переключения режима регистрации.";
+  }
+  return mapRolesPermissionsError(error, "Не удалось загрузить режим регистрации.");
 }
 
 function isRegistrationInviteMissingError(error: unknown): boolean {

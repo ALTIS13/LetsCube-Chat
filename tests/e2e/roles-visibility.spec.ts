@@ -71,6 +71,8 @@ test.describe("KUB role visibility", () => {
 
     await gotoOrSkip(page, "/admin/invites");
     await expect(page).toHaveURL(/\/admin\/invites/);
+    await expect(page.getByText("Режим регистрации")).toBeVisible();
+    await expect(page.getByRole("switch", { name: "Включить режим только по приглашению" })).toBeVisible();
     await expect(
       page.getByText(/Приглашения сотрудников|Инвайты требуют обновления базы данных/),
     ).toBeVisible();

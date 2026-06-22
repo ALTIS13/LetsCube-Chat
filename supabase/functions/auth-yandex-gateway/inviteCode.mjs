@@ -12,3 +12,7 @@ export function normalizeInviteCode(value) {
 export function shouldSendInviteCode(action, inviteCode) {
   return action === "signup" && typeof inviteCode === "string" && inviteCode.length > 0;
 }
+
+export function shouldValidateInviteGate(action) {
+  return action === "signup";
+}

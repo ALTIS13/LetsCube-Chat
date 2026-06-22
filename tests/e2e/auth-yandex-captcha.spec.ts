@@ -125,6 +125,32 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
     expect(requests.directSignup).toBe(0);
   });
 
+  test("/register shows invite-only banner and blocks signup without an invite", async ({
+    page,
+  }) => {
+    const requests = collectAuthRequests(page);
+    await page.route("**/rest/v1/rpc/registration_invite_mode", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([{ invite_only_enabled: true }]),
+      });
+    });
+
+    await gotoOrSkip(page, "/register");
+    await expect(
+      page.getByText("Регистрация сейчас доступна только по приглашению."),
+    ).toBeVisible();
+
+    await fillRegistration(page);
+    await page.evaluate(() => window.__lastSmartCaptchaOptions?.callback("playwright-smart-token"));
+    await page.getByRole("button", { name: "Создать аккаунт" }).click();
+
+    await expect(page.getByText("Введите код приглашения, чтобы создать аккаунт.")).toBeVisible();
+    expect(requests.gateway).toBe(0);
+    expect(requests.directSignup).toBe(0);
+  });
+
   test("/register maps gateway rate limit to friendly copy and never calls direct signup", async ({
     page,
   }) => {

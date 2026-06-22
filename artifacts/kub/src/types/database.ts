@@ -1182,6 +1182,18 @@ export interface Database {
         Args: { p_code: string | null }
         Returns: { ok: boolean; error: string | null }[]
       }
+      registration_invite_mode: {
+        Args: Record<string, never>
+        Returns: { invite_only_enabled: boolean; updated_at: string | null; updated_by: string | null }[]
+      }
+      registration_invite_set_mode: {
+        Args: { p_invite_only_enabled: boolean }
+        Returns: { invite_only_enabled: boolean; updated_at: string | null; updated_by: string | null }[]
+      }
+      registration_invite_signup_gate: {
+        Args: { p_code: string | null }
+        Returns: { ok: boolean; error: string | null }[]
+      }
       global_search: {
         Args: {
           p_query: string
@@ -1594,6 +1606,7 @@ export type RolePermission = Database['public']['Tables']['role_permissions']['R
 export type UserGlobalRole = Database['public']['Tables']['user_global_roles']['Row']
 export type RegistrationInvite = Database['public']['Tables']['registration_invites']['Row']
 export type RegistrationInviteListRow = Database['public']['Functions']['registration_invites_list']['Returns'][number]
+export type RegistrationInviteModeRow = Database['public']['Functions']['registration_invite_mode']['Returns'][number]
 export type Chat = Database['public']['Tables']['chats']['Row']
 export type ChatMember = Database['public']['Tables']['chat_members']['Row']
 export type GroupInvite = Database['public']['Tables']['group_invites']['Row']
