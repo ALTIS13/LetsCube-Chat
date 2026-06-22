@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { gotoOrSkip } from "./helpers/auth";
 
-test.describe("KUB PWA baseline", () => {
+test.describe("LETSCUBE PWA baseline", () => {
   test("exposes installable manifest, safe service worker and offline banner", async ({
     page,
     context,
@@ -28,13 +28,18 @@ test.describe("KUB PWA baseline", () => {
     expect(manifest.ok).toBe(true);
     expect(manifest.contentType).toContain("json");
     expect(manifest.body).toMatchObject({
-      name: "KUB Messenger",
-      short_name: "KUB",
+      name: "LETSCUBE",
+      short_name: "LETSCUBE",
       start_url: "/",
       scope: "/",
       display: "standalone",
       orientation: "any",
     });
+    expect(manifest.body.description).toContain("LETSCUBE");
+    expect(manifest.body.display_override).toEqual(
+      expect.arrayContaining(["standalone", "minimal-ui"]),
+    );
+    await expect(page).toHaveTitle(/LETSCUBE/);
     expect(manifest.body.icons).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ sizes: "192x192", type: "image/png" }),

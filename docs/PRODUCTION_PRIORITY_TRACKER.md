@@ -172,17 +172,27 @@ Current baseline:
 
 ## Priority 5 - Installed Web/PWA Production Shell
 
-Status: `[~]` active next stage after Priority 4.
+Status: `[~]` active. Automated shell/push-contract baseline was refreshed on 2026-06-22; manual installed-window/home-screen checks remain.
 
 Goal: ship the web/PWA path as the production app experience while APK/native work remains deferred.
 
 Scope:
 
+- `[x]` Refresh PWA shell identity: document title, Apple app title, manifest name/short name and install metadata use `LETSCUBE`.
+- `[x]` Verify PWA manifest, service worker registration, offline/reconnect banner and direct app-shell routes across desktop/mobile Playwright viewports.
+- `[x]` Verify browser/PWA push contract: stable notification tags, same-tag close behavior, click routing, and no raw media/token fields in SW payload handling.
 - `[ ]` Verify installed PWA window on desktop/mobile without browser chrome where the platform supports it.
-- `[ ]` Verify browser/PWA push delivery, grouping, notification click routing, and read-sync.
+- `[ ]` Verify real browser/PWA push delivery and notification click routing against a live installed client.
 - `[ ]` Verify iOS/Android home-screen/install behavior and document platform limitations.
 - `[ ]` Preserve full messenger functionality: auth, chats, media, camera, voice, video-circle, tasks, search, notifications.
 - `[ ]` Keep native APK/FCM/release signing out of this stage.
+
+Current baseline:
+
+- `artifacts/kub/index.html` title and Apple web app title are `LETSCUBE`.
+- `artifacts/kub/public/manifest.json` uses `LETSCUBE`, `display: standalone`, and `display_override` fallbacks.
+- `tests/e2e/pwa.spec.ts` covers PWA shell metadata, service worker safety, offline/reconnect banner, and SPA direct routes on 1440, 1920, 3840, 390 and 412 viewports.
+- `tests/e2e/push-phone-foundation.spec.ts` covers push settings layout, phone fallback, SW push grouping/click-routing, native push adapter token hygiene and Android channels on the same viewport matrix.
 
 ## Priority 6 - Monitoring And Self-Hosted Sentry
 

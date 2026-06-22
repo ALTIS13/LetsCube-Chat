@@ -1,96 +1,72 @@
-# PWA and Native Readiness
+# LETSCUBE PWA Readiness
 
-## Current PWA baseline
+## Текущий production-путь
 
-- `artifacts/kub/public/manifest.json` defines the installable app identity:
-  - `name`: `KUB Messenger`
-  - `short_name`: `KUB`
+Standalone web/PWA остаётся основным production-клиентом LETSCUBE, пока native APK/FCM, release signing и deep links отложены.
+
+Текущая shell-идентичность:
+
+- `artifacts/kub/public/manifest.json`
+  - `name`: `LETSCUBE`
+  - `short_name`: `LETSCUBE`
   - `start_url`: `/`
   - `scope`: `/`
   - `display`: `standalone`
+  - `display_override`: `window-controls-overlay`, `standalone`, `minimal-ui`
   - `orientation`: `any`
-  - icons: 192x192, 512x512, and 512x512 maskable.
-- `artifacts/kub/index.html` links the manifest, favicon, apple touch icon, theme color, and mobile web app meta tags.
-- `artifacts/kub/src/hooks/usePwa.ts` registers the service worker from the app runtime and exposes browser install prompt state.
-- Settings show an install action when the browser exposes `beforeinstallprompt`; otherwise they show browser-menu install guidance.
-- Browser push setup is documented in [PUSH_NOTIFICATIONS.md](./PUSH_NOTIFICATIONS.md). Real delivery requires manual VAPID, DB migration, and Edge Function/scheduler setup.
+  - icons: 192x192, 512x512 и maskable 512x512.
+- `artifacts/kub/index.html`
+  - document title: `LETSCUBE`
+  - Apple mobile web app title: `LETSCUBE`
+  - manifest, favicon, apple touch icon и mobile web app meta tags подключены.
 
-## Service worker strategy
+## Installed-режим
 
-The service worker is intentionally conservative because KUB is an authenticated realtime app.
+- Desktop Chrome/Edge: установка должна открывать отдельное standalone-окно без обычного browser chrome, если платформа поддерживает PWA install.
+- Android browser: установка через браузерный install/home-screen flow остаётся web/PWA-режимом, не native APK.
+- iOS/iPadOS: home-screen app зависит от Safari/WebKit ограничений. Web Push работает только при выполнении требований iOS для установленных web apps и разрешений пользователя.
+- Capacitor/native Android не должен показывать browser install CTA; native push/FCM остаётся отдельным этапом.
 
-Cached:
+## Push и notification click
 
-- app shell navigation fallback;
-- `index.html`;
-- `manifest.json`;
-- `offline.html`;
-- favicon and PWA icons;
-- same-origin Vite static assets under `/assets/`.
+- In-app notification center остаётся source of truth.
+- Browser/PWA push использует Service Worker `artifacts/kub/public/sw.js`.
+- Message push collapses/grouping выполняется через стабильный `tag`, например `message:chat:<chat_id>`.
+- Перед `showNotification` Service Worker закрывает существующие notifications с тем же `tag`, насколько это поддерживает браузер/OS.
+- `notificationclick` фокусирует существующее окно LETSCUBE или открывает безопасный относительный route внутри текущего origin.
+- Service Worker не кэширует Supabase Auth, REST, Realtime, Storage, Edge Functions и любые non-GET/cross-origin requests.
 
-Not cached:
+## Offline/update поведение
 
-- Supabase Auth, REST, Realtime, Storage, and Edge Function requests;
-- non-GET requests;
-- cross-origin requests;
-- authenticated API responses.
+- Navigation requests используют network-first с fallback на `offline.html`.
+- Статические same-origin assets под `/assets/` используют stale-while-revalidate.
+- `skipWaiting` отправляется только после действия пользователя в update banner.
+- `clients.claim()` не используется.
+- Offline/reconnect banner не сбрасывает draft, staged attachments, staged voice/video и текущий UI state.
 
-Navigation requests use network-first behavior with an offline shell fallback. Static assets use stale-while-revalidate. Offline send queue and background mutation replay are not implemented in this stage.
+## Что не входит в этот этап
 
-## Update behavior
-
-- The existing `AppUpdateBanner` still detects changed Vite bundle paths.
-- Service worker waiting updates also surface through the same update banner.
-- `skipWaiting` is sent only after the user clicks the update button.
-- `clients.claim()` is not used.
-- The app reloads only after explicit user update action; focus/visibility checks never force a reload.
-- Frontend monitoring does not alter PWA update or offline behavior; Sentry is initialized only when `VITE_SENTRY_DSN` is configured.
-
-## Offline and reconnect UI
-
-- `PwaRuntime` renders a compact offline/reconnect banner.
-- Offline state shows: `Нет подключения`.
-- Reconnect state shows: `Подключение восстановлено` and hides automatically.
-- Existing in-memory state, drafts, staged attachments, staged voice/video, and loaded UI state are not reset by the banner.
-- Actual message/media upload still requires an online server response.
-
-## Native packaging later
-
-Do not add native wrappers until the web PWA baseline is stable.
-
-Future Android/iOS work:
-
-- Capacitor shell;
-- camera and microphone permission mapping;
-- file/media picker permissions;
-- push notification registration and deep links;
-- phone verification SMS provider setup, documented in [PHONE_VERIFICATION.md](./PHONE_VERIFICATION.md); until then, the UI shows a friendly provider-missing state and never marks a phone verified without OTP success;
-- Supabase Auth callback/deep-link configuration;
-- offline mutation queue if product requires it.
-
-Future Windows/macOS/Linux work:
-
-- Tauri or Electron wrapper;
-- app update channel;
-- local notification bridge;
-- camera/microphone/file permissions;
-- tray/background behavior policy.
+- Native Android FCM/device-token model.
+- APK release signing/AAB.
+- Android/iOS deep links/app links.
+- SMS provider rollout.
+- Offline mutation queue/background replay.
 
 ## Validation checklist
 
-After PWA changes:
+После PWA shell-изменений:
 
+- `git diff --check`
 - `pnpm.cmd --filter @workspace/kub run typecheck`
-- `PORT=5173 BASE_PATH=/ pnpm.cmd --filter @workspace/kub run build`
-- `pnpm.cmd e2e:smoke`
-- `pnpm.cmd rls:smoke`
-- `pnpm.cmd db:types:check`
+- `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"`
 - `pnpm.cmd exec playwright test tests/e2e/pwa.spec.ts`
+- `pnpm.cmd exec playwright test tests/e2e/letscube-brand-auth-layout.spec.ts`
 
-Manual browser checks:
+Manual/browser checks:
 
-- install prompt appears where supported;
-- standalone launch opens `/` correctly;
-- direct refresh of `/tasks` and `/admin` still reaches the app shell;
-- `/auth/callback` and recovery links keep query/hash parameters;
-- camera, microphone, media viewer, and push notification permission prompts still work.
+- document title и installed-app title показывают `LETSCUBE`;
+- install prompt появляется там, где browser поддерживает `beforeinstallprompt`;
+- standalone launch открывает `/`;
+- direct refresh `/tasks` и `/admin` отдаёт app shell;
+- browser/PWA push click открывает правильный route;
+- auth, chats, tasks, media, camera/voice/video-circle и notification center не регрессируют.

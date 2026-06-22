@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { findFirstAvailableQaRole, gotoOrSkip, loginAsRoleOrSkip } from "./helpers/auth";
 
-test.describe("KUB push and phone production foundation", () => {
+test.describe("LETSCUBE push and phone production foundation", () => {
   test("settings expose push preferences and require OTP for phone changes", async ({ page }) => {
     const role = findFirstAvailableQaRole(["owner", "tech_admin", "location_admin", "location_staff", "client"], {
       includeDefault: true,
