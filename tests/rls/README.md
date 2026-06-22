@@ -36,12 +36,18 @@ them up before exit. The current fixture-backed check creates an inactive `push_
 record for one QA user, verifies another QA user cannot insert/select/update/delete it, verifies
 the owner can still update/read it, and then deletes the fixture.
 
+The opt-in run also creates a tiny temporary `chat-media` object under a chat where one QA user is a
+member and another QA user is not. It verifies the member can upload/sign the object, verifies the
+non-member cannot sign or upload into that chat path, and removes the temporary object with the
+operator cleanup key before exit.
+
 Current authenticated boundary coverage:
 
 - notification, push subscription and notification preference rows remain owner-scoped;
 - non-admin users cannot read other users' `profile_contacts`;
 - visible messages must reference chats visible to the same user;
 - private `chat-media` bucket root listing must not expose objects;
-- if a suitable existing `chat-media` object/non-member fixture exists, non-members cannot create
-  signed URLs for that object;
+- opt-in fixture mode validates private `chat-media` upload/sign boundaries with a temporary object;
+- normal non-mutating mode additionally checks existing `chat-media` objects when a stable
+  object/non-member pair is available;
 - legacy public `media` bucket root listing is reported as an informational count only.

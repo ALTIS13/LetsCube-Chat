@@ -93,12 +93,19 @@ Latest local run:
 - Verified the second QA user could not select, update or delete the fixture.
 - Verified the owner could still update/read the fixture.
 - Deleted the fixture before exit.
+- Created one temporary `chat-media` object under a chat path where one QA user is a member and a
+  second QA user is not.
+- Verified the member could upload and sign the temporary object.
+- Verified the non-member could not sign the object or upload into that chat path.
+- Removed the temporary storage object through the operator cleanup key before exit.
 
 Storage object-level probe:
 
-- The script now attempts signed-url checks for existing private `chat-media` objects.
-- Latest local run skipped this object-level check because no suitable existing
-  object/non-member fixture pair was available.
+- The normal non-mutating script still attempts signed-url checks for existing private
+  `chat-media` objects.
+- Latest local non-mutating run skipped that existing-object check because no suitable existing
+  object/non-member fixture pair was available; the opt-in temporary-object fixture covered the
+  same member/non-member access boundary.
 
 ## Notes
 
@@ -108,7 +115,7 @@ Several `block banned reads/writes` policies are restrictive policies. They must
 
 ## Next Security Work
 
-- Add fixture-backed mutation checks for task, chat, invite and storage write boundaries on an
-  isolated target.
-- Add stable `chat-media` object fixtures so the signed-url non-member check can run every time.
+- Add fixture-backed mutation checks for task, chat and invite boundaries on an isolated target.
+- Add stable permanent `chat-media` fixtures only if we want the normal non-mutating signed-url
+  check to run without `KUB_QA_ALLOW_MUTATIONS=1`.
 - Keep any SQL changes as proposals first unless an apply step is explicitly approved.

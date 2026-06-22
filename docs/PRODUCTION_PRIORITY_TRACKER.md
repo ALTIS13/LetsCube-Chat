@@ -58,13 +58,14 @@ Current baseline:
 - 2026-06-22 authenticated smoke showed no non-owned rows through notifications, push subscriptions, notification preferences or chat notification preferences.
 - 2026-06-22 authenticated smoke showed non-admin `profile_contacts` privacy intact, visible messages constrained to visible chats, and no broad object listing from the private `chat-media` bucket.
 - 2026-06-22 opt-in `KUB_QA_ALLOW_MUTATIONS=1 pnpm.cmd rls:smoke` created and cleaned up one inactive `push_subscriptions` fixture, proving cross-user insert/select/update/delete is blocked while owner update/read still works.
+- 2026-06-22 opt-in `KUB_QA_ALLOW_MUTATIONS=1 pnpm.cmd rls:smoke` created and cleaned up one temporary `chat-media` object, proving a chat member can upload/sign while a non-member cannot sign or upload into that chat path.
 
 Next checks:
 
 - Keep `pnpm.cmd rls:anon-rest` in validation for anonymous REST exposure checks.
 - Keep `pnpm.cmd rls:smoke` in validation for authenticated boundary checks.
-- Expand `KUB_QA_ALLOW_MUTATIONS=1` fixtures to task, chat, invite and storage write boundaries on an isolated target.
-- Add stable private `chat-media` object fixtures so object-level signed-url checks always run.
+- Expand `KUB_QA_ALLOW_MUTATIONS=1` fixtures to task, chat and invite write boundaries on an isolated target.
+- Add stable private `chat-media` object fixtures only if the normal non-mutating signed-url probe needs to run without temporary storage mutation.
 - Create new proposal only if drift or a concrete gap is found.
 
 ## Priority 3 - Backup And Restore Drill

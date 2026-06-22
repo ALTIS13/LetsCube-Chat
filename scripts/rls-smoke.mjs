@@ -460,7 +460,10 @@ async function runFixtureMutationProbes(signedCandidates) {
     ];
   }
 
-  return [await pushSubscriptionFixtureOwnershipProbe(creator, challenger)];
+  return [
+    await pushSubscriptionFixtureOwnershipProbe(creator, challenger),
+    await chatMediaFixtureOwnershipProbe(signedCandidates),
+  ];
 }
 
 async function pushSubscriptionFixtureOwnershipProbe(creator, challenger) {
@@ -603,6 +606,139 @@ async function restMutationRows(session, method, pathAndQuery, body) {
   };
 }
 
+async function chatMediaFixtureOwnershipProbe(signedCandidates) {
+  if (!operatorApiKey) {
+    return skippedProbe(
+      "storage",
+      "storage chat-media fixture ownership",
+      "skipped: operator cleanup key is required for storage fixture cleanup",
+    );
+  }
+
+  const pair = await findChatMediaFixturePair(signedCandidates);
+  if (!pair) {
+    return skippedProbe(
+      "storage",
+      "storage chat-media fixture ownership",
+      "skipped: no suitable member/nonmember chat fixture found",
+    );
+  }
+
+  const nonce = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const memberPath = `${pair.chatId}/rls-smoke/member-${nonce}.png`;
+  const nonmemberPath = `${pair.chatId}/rls-smoke/nonmember-${nonce}.png`;
+  const cleanupPaths = [];
+  const messages = [];
+
+  try {
+    const memberUpload = await storageUploadProbe(pair.member.session, memberPath);
+    if (!memberUpload.ok) {
+      return {
+        role: `${pair.member.role}/${pair.nonmember.role}`,
+        probe: "storage chat-media fixture ownership",
+        status: memberUpload.status,
+        ok: false,
+        missing: memberUpload.missing,
+        value: 0,
+        leakCount: null,
+        message: `member upload failed: ${memberUpload.message}`,
+      };
+    }
+    cleanupPaths.push(memberPath);
+
+    const memberSign = await storageSignProbe(pair.member.session, memberPath);
+    if (!memberSign.ok) messages.push("member could not sign own chat-media fixture");
+
+    const nonmemberSign = await storageSignProbe(pair.nonmember.session, memberPath);
+    if (nonmemberSign.ok) messages.push("non-member signed private chat-media fixture");
+
+    const nonmemberUpload = await storageUploadProbe(pair.nonmember.session, nonmemberPath);
+    if (nonmemberUpload.ok) {
+      cleanupPaths.push(nonmemberPath);
+      messages.push("non-member uploaded into private chat-media chat path");
+    }
+
+    return {
+      role: `${pair.member.role}/${pair.nonmember.role}`,
+      probe: "storage chat-media fixture ownership",
+      status: messages.length > 0 ? "fail" : 200,
+      ok: messages.length === 0,
+      missing: false,
+      value: 1,
+      leakCount: messages.length,
+      message: messages.length > 0 ? messages.join("; ") : "ok",
+    };
+  } finally {
+    if (cleanupPaths.length > 0) await storageRemoveObjectsWithOperator(cleanupPaths);
+  }
+}
+
+async function findChatMediaFixturePair(signedCandidates) {
+  const memberChatsByUser = new Map();
+  for (const candidate of signedCandidates) {
+    memberChatsByUser.set(candidate.session.user.id, await fetchOwnChatMemberChatIds(candidate));
+  }
+
+  for (const member of signedCandidates) {
+    const memberChatIds = memberChatsByUser.get(member.session.user.id) ?? new Set();
+    for (const chatId of memberChatIds) {
+      const nonmember = signedCandidates.find((candidate) => {
+        if (candidate.session.user.id === member.session.user.id) return false;
+        return !memberChatsByUser.get(candidate.session.user.id)?.has(chatId);
+      });
+      if (nonmember) return { member, nonmember, chatId };
+    }
+  }
+
+  return null;
+}
+
+async function fetchOwnChatMemberChatIds(candidate) {
+  const memberships = await restRowsProbe(
+    candidate.role,
+    candidate.session,
+    "own chat memberships for storage fixture",
+    `/rest/v1/chat_members?select=chat_id,user_id&user_id=eq.${candidate.session.user.id}&limit=1000`,
+  );
+  if (!memberships.ok) return new Set();
+  return new Set(memberships.rows.map((row) => row?.chat_id).filter(Boolean));
+}
+
+async function storageUploadProbe(session, mediaPath) {
+  const response = await fetch(
+    `${supabaseUrl}/storage/v1/object/chat-media/${encodeStoragePath(mediaPath)}`,
+    {
+      method: "POST",
+      headers: {
+        ...authHeaders(session.access_token),
+        "content-type": "image/png",
+        "x-upsert": "false",
+      },
+      body: tinyPngFixture(),
+    },
+  );
+  const text = await response.text();
+  return {
+    status: response.status,
+    ok: response.ok,
+    missing: response.status === 404,
+    message: response.ok ? "ok" : summarize(text),
+  };
+}
+
+async function storageRemoveObjectsWithOperator(mediaPaths) {
+  const response = await fetch(`${supabaseUrl}/storage/v1/object/chat-media`, {
+    method: "DELETE",
+    headers: operatorHeaders(),
+    body: JSON.stringify({ prefixes: mediaPaths }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`storage fixture cleanup failed: ${summarize(text)}`);
+  }
+  return response;
+}
+
 async function runStorageObjectBoundaryProbes(signedCandidates) {
   if (signedCandidates.length < 2) {
     return [
@@ -706,6 +842,14 @@ function encodeStoragePath(value) {
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
+}
+
+function tinyPngFixture() {
+  return Uint8Array.from([
+    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0,
+    0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 248, 15, 4, 0, 9, 251, 3,
+    253, 167, 91, 198, 23, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+  ]);
 }
 
 async function runDueProbe(role, session) {
@@ -897,6 +1041,14 @@ function authHeaders(accessToken) {
   return {
     apikey: restApiKey,
     authorization: `Bearer ${accessToken}`,
+    "content-type": "application/json",
+  };
+}
+
+function operatorHeaders() {
+  return {
+    apikey: operatorApiKey,
+    authorization: `Bearer ${operatorApiKey}`,
     "content-type": "application/json",
   };
 }
