@@ -204,7 +204,7 @@ Next media/performance action:
   - `[x]` Applied `.migration-backup/supabase/migrations/20260622_media_variants_pipeline.sql` to self-host Postgres after a schema backup.
   - `[x]` Added optional server-side `kub-worker` runtime target/service for trusted media processing; frontend still receives no service-role secrets.
   - `[x]` Added image message variants (`image_thumb`, `image_preview`) and user avatar variants (`avatar_128`, `avatar_256`) generation through `artifacts/api-server`.
-  - `[ ]` Wire frontend read path to prefer ready variants over original media where available.
+  - `[x]` Wired frontend read path to prefer ready message image variants and user avatar variants over original media where available. Avatar variants for chat peers need manual application of `.migration-backup/supabase/migrations/20260623_avatar_variants_read_policy.sql`.
   - `[ ]` Add video poster/transcode worker path after ffmpeg/runtime sizing and load testing.
 
 ## Priority 6 - Monitoring And Self-Hosted Sentry

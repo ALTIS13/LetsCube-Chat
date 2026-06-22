@@ -8,6 +8,7 @@ import { KubIcon } from "@/components/kub";
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import { useAppStore } from "@/store/app.store";
 import { cn } from "@/lib/utils";
+import type { AvatarVariantUrls } from "@/hooks/useMediaVariants";
 import { formatChatMessagePreview } from "@/lib/messagePreview";
 import { getMessageDeliveryState } from "@/lib/messageDelivery";
 import { isUserOnline } from "@/lib/presence";
@@ -36,6 +37,7 @@ interface ChatListItemProps {
   onPinnedDrop?: () => void;
   onPinnedDragEnd?: () => void;
   presenceNow?: number;
+  avatarVariant?: AvatarVariantUrls;
 }
 
 export function ChatListItem({
@@ -53,6 +55,7 @@ export function ChatListItem({
   onPinnedDrop,
   onPinnedDragEnd,
   presenceNow = Date.now(),
+  avatarVariant,
 }: ChatListItemProps) {
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
   const longPressTimerRef = useRef<number | null>(null);
@@ -191,7 +194,7 @@ export function ChatListItem({
       )}
 
       <div className="flex-shrink-0 relative">
-        <ChatAvatar chat={chat} size="md" isSaved={display.isSaved} />
+        <ChatAvatar chat={chat} size="md" isSaved={display.isSaved} avatarVariant={avatarVariant} />
         {isOtherOnline && (
           <span
             className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 bg-[var(--kub-online)] kub-pulse"

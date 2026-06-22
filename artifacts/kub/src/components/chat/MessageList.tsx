@@ -13,7 +13,7 @@ import { getGroupReadReceiptInfo, getReceiptDisplayName, type GroupReadReceiptIn
 import { requestAppConfirm } from "@/lib/appDialogs";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { formatFullTime } from "@/lib/format";
-import { useMessageMediaVariantUrls } from "@/hooks/useMediaVariants";
+import { useAvatarVariantUrls, useMessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 
 interface MessageListProps {
   messages: MessageWithSender[];
@@ -151,6 +151,14 @@ export function MessageList({
     return map;
   }, [sortedMessages]);
   const messageMediaVariants = useMessageMediaVariantUrls(sortedMessages);
+  const senderAvatarProfileIds = React.useMemo(() => {
+    const ids = new Set<string>();
+    for (const message of sortedMessages) {
+      if (message.sender?.id && message.sender.avatar_url) ids.add(message.sender.id);
+    }
+    return Array.from(ids).sort();
+  }, [sortedMessages]);
+  const senderAvatarVariants = useAvatarVariantUrls(senderAvatarProfileIds);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [newCount, setNewCount] = useState(0);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -659,6 +667,7 @@ export function MessageList({
                     usersMap={usersMap}
                     messagesMap={messagesMap}
                     mediaVariant={messageMediaVariants[msg.id]}
+                    senderAvatarVariant={msg.sender?.id ? senderAvatarVariants[msg.sender.id] : undefined}
                     deliveryState={deliveryState}
                     groupReadInfo={groupReadInfo}
                     onOpenGroupReadReceipts={groupReadInfo ? () => setReadReceiptsMessageId(msg.id) : undefined}

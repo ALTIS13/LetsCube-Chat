@@ -11,7 +11,24 @@ export interface MessageMediaVariantUrls {
   thumbHeight?: number | null;
 }
 
+export interface AvatarVariantUrls {
+  avatar128Url?: string;
+  avatar128Width?: number | null;
+  avatar128Height?: number | null;
+  avatar256Url?: string;
+  avatar256Width?: number | null;
+  avatar256Height?: number | null;
+}
+
 const MESSAGE_IMAGE_VARIANT_KINDS = ["image_preview", "image_thumb"] as const;
+const AVATAR_VARIANT_KINDS = ["avatar_128", "avatar_256"] as const;
+
+function getVariantPublicUrl(
+  storage: ReturnType<typeof createClient>["storage"],
+  row: Pick<MediaVariant, "variant_bucket" | "variant_path">,
+): string | null {
+  return storage.from(row.variant_bucket).getPublicUrl(row.variant_path).data.publicUrl ?? null;
+}
 
 export function useMessageMediaVariantUrls(messages: MessageWithSender[]): Record<string, MessageMediaVariantUrls> {
   const messageIds = useMemo(() => {
@@ -61,9 +78,7 @@ export function useMessageMediaVariantUrls(messages: MessageWithSender[]): Recor
       const next: Record<string, MessageMediaVariantUrls> = {};
       for (const row of (data ?? []) as unknown as MediaVariant[]) {
         if (!row.message_id) continue;
-        const publicUrl = supabase.storage
-          .from(row.variant_bucket)
-          .getPublicUrl(row.variant_path).data.publicUrl;
+        const publicUrl = getVariantPublicUrl(supabase.storage, row);
         if (!publicUrl) continue;
 
         const current = next[row.message_id] ?? {};
@@ -89,4 +104,75 @@ export function useMessageMediaVariantUrls(messages: MessageWithSender[]): Recor
   }, [messageIdKey]);
 
   return variantsByMessageId;
+}
+
+export function useAvatarVariantUrls(profileIds: readonly string[]): Record<string, AvatarVariantUrls> {
+  const profileIdKey = useMemo(() => {
+    const ids = new Set<string>();
+    for (const id of profileIds) {
+      if (id) ids.add(id);
+    }
+    return Array.from(ids).sort().join("|");
+  }, [profileIds]);
+  const normalizedProfileIds = useMemo(
+    () => profileIdKey ? profileIdKey.split("|") : [],
+    [profileIdKey],
+  );
+  const [variantsByProfileId, setVariantsByProfileId] = useState<Record<string, AvatarVariantUrls>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    if (normalizedProfileIds.length === 0) {
+      setVariantsByProfileId({});
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const supabase = createClient();
+
+    const loadVariants = async () => {
+      const { data, error } = await supabase
+        .from("media_variants")
+        .select("id,profile_id,variant_kind,variant_bucket,variant_path,width,height,status")
+        .eq("status", "ready")
+        .in("variant_kind", [...AVATAR_VARIANT_KINDS])
+        .in("profile_id", normalizedProfileIds);
+
+      if (cancelled) return;
+      if (error) {
+        console.warn("Avatar variants fetch failed:", error.message);
+        setVariantsByProfileId({});
+        return;
+      }
+
+      const next: Record<string, AvatarVariantUrls> = {};
+      for (const row of (data ?? []) as unknown as MediaVariant[]) {
+        if (!row.profile_id) continue;
+        const publicUrl = getVariantPublicUrl(supabase.storage, row);
+        if (!publicUrl) continue;
+
+        const current = next[row.profile_id] ?? {};
+        if (row.variant_kind === "avatar_128") {
+          current.avatar128Url = publicUrl;
+          current.avatar128Width = row.width;
+          current.avatar128Height = row.height;
+        } else if (row.variant_kind === "avatar_256") {
+          current.avatar256Url = publicUrl;
+          current.avatar256Width = row.width;
+          current.avatar256Height = row.height;
+        }
+        next[row.profile_id] = current;
+      }
+
+      setVariantsByProfileId(next);
+    };
+
+    void loadVariants();
+    return () => {
+      cancelled = true;
+    };
+  }, [profileIdKey]);
+
+  return variantsByProfileId;
 }

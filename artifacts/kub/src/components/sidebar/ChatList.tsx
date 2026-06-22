@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { ProfileRoleSummary } from "@/components/profile/ProfileRoleSummary";
 import { isUserOnline } from "@/lib/presence";
 import { usePresenceNow } from "@/hooks/usePresenceNow";
+import { useAvatarVariantUrls, type AvatarVariantUrls } from "@/hooks/useMediaVariants";
 import type { ChatWithLastMessage } from "@/types/database";
 
 interface ChatListProps {
@@ -86,6 +87,16 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
     () => chats.map((chat) => ({ ...chat, is_muted: mutedChatIds.includes(chat.id) })),
     [chats, mutedChatIds],
   );
+  const avatarProfileIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const chat of chatsWithMute) {
+      if (chat.type !== "private") continue;
+      if (!chat.other_user?.id || !chat.other_user.avatar_url) continue;
+      ids.add(chat.other_user.id);
+    }
+    return Array.from(ids).sort();
+  }, [chatsWithMute]);
+  const avatarVariants = useAvatarVariantUrls(avatarProfileIds);
 
   const closeMenu = useCallback(() => setOpenMenu(null), []);
 
@@ -499,6 +510,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
             isReorderable={isReorderable}
             isDragging={draggedPinnedChatId === chat.id}
             isDragOver={dragOverPinnedChatId === chat.id}
+            avatarVariant={chat.other_user?.id ? avatarVariants[chat.other_user.id] : undefined}
             onPinnedDragStart={() => handlePinnedDragStart(chat.id)}
             onPinnedDragEnter={() => handlePinnedDragEnter(chat.id)}
             onPinnedDragOver={handlePinnedDragOver}
@@ -542,6 +554,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
           onOpenChat={() => openPreviewChat(previewChat.id)}
           onRun={runPreviewAction}
           presenceNow={presenceNow}
+          avatarVariant={previewChat.other_user?.id ? avatarVariants[previewChat.other_user.id] : undefined}
         />
       )}
     </>
@@ -556,6 +569,7 @@ function ChatProfilePreviewModal({
   onOpenChat,
   onRun,
   presenceNow,
+  avatarVariant,
 }: {
   chat: ChatWithLastMessage;
   actions: ChatAction[];
@@ -564,6 +578,7 @@ function ChatProfilePreviewModal({
   onOpenChat: () => void;
   onRun: (action: ChatAction) => void | Promise<void>;
   presenceNow: number;
+  avatarVariant?: AvatarVariantUrls;
 }) {
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
   const mutedChatIds = useAppStore((s) => s.mutedChatIds);
@@ -601,7 +616,7 @@ function ChatProfilePreviewModal({
     >
       <div data-chat-profile-preview className="flex flex-col">
         <div className="flex flex-col items-center gap-3 border-b border-[color:var(--kub-border-color)] px-5 py-6 text-center">
-          <ChatAvatar chat={chat} size="lg" isSaved={display.isSaved} />
+          <ChatAvatar chat={chat} size="lg" isSaved={display.isSaved} avatarVariant={avatarVariant} />
           <div className="min-w-0">
             <div className="max-w-full truncate text-lg font-semibold text-[color:var(--kub-text)]">
               {display.title}

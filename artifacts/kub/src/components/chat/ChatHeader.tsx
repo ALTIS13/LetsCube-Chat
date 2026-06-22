@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar } from "@/components/ui/ChatAvatar";
 import { KubModal, KubIcon, type KubIconName } from "@/components/kub";
@@ -12,6 +12,7 @@ import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import { getUserPresenceState } from "@/lib/presence";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { usePresenceNow } from "@/hooks/usePresenceNow";
+import { useAvatarVariantUrls } from "@/hooks/useMediaVariants";
 import type { ChatWithLastMessage } from "@/types/database";
 
 interface ChatHeaderProps {
@@ -168,6 +169,14 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
 
   const subtitle = getSubtitle();
   const isOnline = type === "private" && getUserPresenceState(chat?.other_user, presenceNow).isOnline;
+  const avatarProfileIds = useMemo(
+    () => chat?.type === "private" && chat.other_user?.id && chat.other_user.avatar_url
+      ? [chat.other_user.id]
+      : [],
+    [chat?.other_user?.avatar_url, chat?.other_user?.id, chat?.type],
+  );
+  const avatarVariants = useAvatarVariantUrls(avatarProfileIds);
+  const avatarVariant = chat?.other_user?.id ? avatarVariants[chat.other_user.id] : undefined;
 
   const menuItems: Array<{ icon: KubIconName; label: string; danger?: boolean; disabled?: boolean; action: () => void }> = [
     { icon: "search", label: "Поиск в чате", action: () => { setShowMenu(false); onSearchOpen?.(); } },
@@ -216,6 +225,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
           size="sm"
           showOnline={isOnline}
           isSaved={display.isSaved}
+          avatarVariant={avatarVariant}
         />
         <div className="text-left min-w-0">
           <div className="text-sm font-semibold truncate leading-tight text-[color:var(--kub-text)]">

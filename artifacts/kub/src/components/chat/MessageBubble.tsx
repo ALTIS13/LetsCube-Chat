@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { MessageWithSender } from "@/types/database";
 import { formatFullTime } from "@/lib/format";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
+import type { AvatarVariantUrls, MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 import { AudioMessage } from "./AudioMessage";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app.store";
@@ -20,7 +21,6 @@ import {
   type GroupReadReceiptInfo,
 } from "@/lib/groupReadReceipts";
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
-import type { MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 
 const EMOJI_QUICK = ["👍", "❤️", "😂", "😮", "😢", "🔥", "👏", "🎉"];
 
@@ -63,6 +63,7 @@ interface MessageBubbleProps {
   usersMap?: Record<string, string>;
   messagesMap?: Record<string, MessageWithSender>;
   mediaVariant?: MessageMediaVariantUrls;
+  senderAvatarVariant?: AvatarVariantUrls;
   deliveryState?: MessageDeliveryState | null;
   groupReadInfo?: GroupReadReceiptInfo | null;
   onOpenGroupReadReceipts?: () => void;
@@ -428,7 +429,7 @@ export function MessageBubble({
   onRetrySend, onEditFailedSend, onDiscardLocalMessage,
   reactionMenuOpen = false, onToggleReactionMenu, onCloseReactionMenu,
   actionMenuOpen, onOpenActionMenu, onCloseActionMenu, selected = false, isSelectionMode = false,
-  usersMap = {}, messagesMap = {}, mediaVariant, deliveryState, groupReadInfo, onOpenGroupReadReceipts, isSavedChat,
+  usersMap = {}, messagesMap = {}, mediaVariant, senderAvatarVariant, deliveryState, groupReadInfo, onOpenGroupReadReceipts, isSavedChat,
 }: MessageBubbleProps) {
   const [showContext, setShowContext] = useState(false);
   const [reactionsExpanded, setReactionsExpanded] = useState(false);
@@ -1019,7 +1020,7 @@ export function MessageBubble({
         {!isMe && (
           <div className="flex-shrink-0 self-end mb-1 w-8">
             {isLastInGroup && message.sender && (
-              <UserAvatar user={message.sender} size="sm" />
+              <UserAvatar user={message.sender} size="sm" avatarVariant={senderAvatarVariant} />
             )}
           </div>
         )}
