@@ -69,6 +69,49 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
     expect(requests.directSignup).toBe(0);
   });
 
+  test("/register maps gateway rate limit to friendly copy and never calls direct signup", async ({ page }) => {
+    const requests = collectAuthRequests(page);
+    await page.route("**/functions/v1/auth-yandex-gateway", async (route) => {
+      await route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: false, error: "rate_limited" }),
+      });
+    });
+
+    await gotoOrSkip(page, "/register");
+    await fillRegistration(page);
+    await page.evaluate(() => window.__lastSmartCaptchaOptions?.callback("playwright-smart-token"));
+    await page.getByRole("button", { name: "Создать аккаунт" }).click();
+
+    await expect(page.getByText("Слишком много попыток. Подождите и повторите позже.")).toBeVisible();
+    expect(requests.gateway).toBe(1);
+    expect(requests.directSignup).toBe(0);
+  });
+
+  test("/login recovery submits through auth-yandex-gateway and maps gateway rate limit", async ({ page }) => {
+    const requests = collectAuthRequests(page);
+    await page.route("**/functions/v1/auth-yandex-gateway", async (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      expect(body.action).toBe("recovery");
+      expect(body.captchaToken).toBe("playwright-smart-token");
+      await route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: false, error: "too_many_requests" }),
+      });
+    });
+
+    await gotoOrSkip(page, "/login?reset=1");
+    await page.locator('input[type="email"]').fill("player@example.test");
+    await page.evaluate(() => window.__lastSmartCaptchaOptions?.callback("playwright-smart-token"));
+    await page.getByRole("button", { name: "Отправить ссылку" }).click();
+
+    await expect(page.getByText("Слишком много попыток. Подождите и повторите позже.")).toBeVisible();
+    expect(requests.gateway).toBe(1);
+    expect(requests.directRecover).toBe(0);
+  });
+
   test("/register keeps Yandex SmartCaptcha inside the auth card and passes resolved theme", async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem("kub-theme", "dark"));
     await gotoOrSkip(page, "/register");
@@ -103,10 +146,11 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
 });
 
 function collectAuthRequests(page: Page) {
-  const requests = { directSignup: 0, gateway: 0 };
+  const requests = { directSignup: 0, directRecover: 0, gateway: 0 };
   page.on("request", (request) => {
     const url = request.url();
     if (url.includes("/auth/v1/signup")) requests.directSignup += 1;
+    if (url.includes("/auth/v1/recover")) requests.directRecover += 1;
     if (url.includes("/functions/v1/auth-yandex-gateway")) requests.gateway += 1;
   });
   return requests;

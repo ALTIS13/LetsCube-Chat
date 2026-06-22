@@ -25,13 +25,14 @@ Current baseline:
 - Generic signup/recovery copy is in place.
 - Self-hosted GoTrue email throttles and Traefik auth endpoint throttling are documented in `docs/security/AUTH_RLS_ANTI_ABUSE_PLAN.md`.
 - Auth gateway redirect targets are restricted to explicit `KUB_AUTH_ALLOWED_REDIRECT_ORIGINS`; request `Origin` is not treated as an implicit redirect allowlist.
+- 2026-06-22 live check: direct external `POST /auth/v1/signup` and `POST /auth/v1/recover` with an anon key returned HTTP 403.
+- 2026-06-22 UI regression tests verify that signup and recovery use `auth-yandex-gateway` when Yandex SmartCaptcha is enabled and map gateway 429/rate-limit responses to friendly Russian copy.
 
 Next checks:
 
-- Verify live proxy rules still block direct `/auth/v1/signup` and `/auth/v1/recover`.
-- Verify login brute-force throttling behavior and friendly UI for 429.
-- Verify no frontend code calls direct signup/recovery when the gateway is configured.
-- Add or update tests for closed direct-auth behavior.
+- Verify login brute-force throttling behavior and friendly UI for 429 without generating excessive failed login traffic.
+- Keep gateway/no-direct-auth Playwright checks in validation when captcha env is enabled.
+- Add an operator-facing auth anti-abuse smoke script if repeated manual curl checks become noisy.
 
 ## Priority 2 - RLS And Security Audit
 

@@ -77,6 +77,13 @@ Initial self-host targets configured and verified:
 - `supabase-kong`, `supabase-auth`, `supabase-rest`, `realtime-dev.supabase-realtime`, and `supabase-storage` returned healthy after the proxy update.
 - `/auth/v1/settings` and `/login` returned HTTP 200 after the proxy update.
 - UI: generic signup/recovery copy is in place and 429 maps to a friendly "too many attempts" message.
+- 2026-06-22 regression coverage:
+  - Yandex SmartCaptcha signup uses `auth-yandex-gateway`, not direct `/auth/v1/signup`.
+  - Yandex SmartCaptcha recovery uses `auth-yandex-gateway`, not direct `/auth/v1/recover`.
+  - Gateway HTTP 429 / `rate_limited` / `too_many_requests` responses show the friendly Russian rate-limit copy.
+- 2026-06-22 live check:
+  - direct external `POST /auth/v1/signup` with anon headers returned HTTP 403.
+  - direct external `POST /auth/v1/recover` with anon headers returned HTTP 403.
 
 Next self-host targets to configure and validate:
 

@@ -33,7 +33,7 @@ export async function requestAuthGateway(payload: AuthGatewayPayload): Promise<v
 
   const body = await readJson(response);
   if (!response.ok || body?.ok !== true) {
-    throw new Error(mapAuthGatewayError(body?.error, payload.action));
+    throw new Error(mapAuthGatewayError(body?.error, payload.action, response.status));
   }
 }
 
@@ -64,7 +64,10 @@ async function readJson(response: Response): Promise<{ ok?: boolean; error?: str
   }
 }
 
-function mapAuthGatewayError(error: string | undefined, action: AuthGatewayAction): string {
+function mapAuthGatewayError(error: string | undefined, action: AuthGatewayAction, status?: number): string {
+  if (status === 429 || error === "rate_limited" || error === "too_many_requests") {
+    return "Слишком много попыток. Подождите и повторите позже.";
+  }
   if (error === "captcha_required" || error === "captcha_failed") {
     return "Подтвердите защиту от автоматической регистрации.";
   }
