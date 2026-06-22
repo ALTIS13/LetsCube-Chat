@@ -53,13 +53,16 @@ Current baseline:
 
 - Existing docs report all inspected public tables with RLS enabled.
 - Existing proposals harden function `search_path` and revoke anonymous function execute.
-- Local `pnpm.cmd rls:smoke` exists, but depends on configured target env.
 - Live read-only metadata/REST probe is recorded in `docs/security/RLS_SECURITY_AUDIT_20260622.md`.
+- Local `pnpm.cmd rls:smoke` now reads the same local QA env path as the anon REST probe and covers five QA roles with authenticated REST/RPC boundary checks.
+- 2026-06-22 authenticated smoke showed no non-owned rows through notifications, push subscriptions, notification preferences or chat notification preferences.
+- 2026-06-22 authenticated smoke showed non-admin `profile_contacts` privacy intact, visible messages constrained to visible chats, and no broad object listing from the private `chat-media` bucket.
 
 Next checks:
 
 - Keep `pnpm.cmd rls:anon-rest` in validation for anonymous REST exposure checks.
-- Run two-account authenticated boundary tests for chats, messages, tasks, notifications, profiles and storage.
+- Keep `pnpm.cmd rls:smoke` in validation for authenticated boundary checks.
+- Add fixture-backed mutation checks only after explicitly enabling `KUB_QA_ALLOW_MUTATIONS=1` for an isolated target.
 - Create new proposal only if drift or a concrete gap is found.
 
 ## Priority 3 - Backup And Restore Drill

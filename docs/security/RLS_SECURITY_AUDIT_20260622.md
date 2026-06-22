@@ -59,6 +59,25 @@ Latest local run against self-hosted Supabase:
 - `notification_preferences`: denied.
 - Result: passed, no anonymous row visibility detected.
 
+Authenticated boundary probe:
+
+```powershell
+pnpm.cmd rls:smoke
+```
+
+Latest local run against self-hosted Supabase used five QA roles and printed only statuses,
+counts and leak counters:
+
+- `notifications`, `push_subscriptions`, `notification_preferences` and
+  `chat_notification_preferences`: no non-owned rows visible for tested roles.
+- `profile_contacts`: owner/tech-admin can see broader contact rows by policy; location
+  staff and client saw only their own row.
+- `messages`: every sampled message referenced a chat visible to the same user.
+- Storage: private `chat-media` root broad listing returned zero objects for tested roles.
+- Storage: legacy public `media` bucket root listing is informational only because that bucket
+  intentionally remains public for avatars and old media compatibility.
+- Task recurrence run-due stayed forbidden for location-admin, location-staff and client roles.
+
 ## Notes
 
 `notifications_push_outbox` has RLS enabled and no policies. That is acceptable if the table is intended to be server-side only and accessed by trusted backend/Edge Function code.
@@ -67,12 +86,8 @@ Several `block banned reads/writes` policies are restrictive policies. They must
 
 ## Next Security Work
 
-- Audit authenticated cross-user boundaries with two QA users:
-  - chat membership;
-  - message visibility;
-  - task visibility;
-  - notifications;
-  - push subscriptions;
-  - profile contact privacy.
-- Audit storage object access through Supabase Storage API with anon and authenticated users.
+- Add fixture-backed mutation checks for task, chat, invite and storage write boundaries on an
+  isolated target.
+- Audit object-level storage downloads for specific private `chat-media` paths once stable
+  fixtures exist.
 - Keep any SQL changes as proposals first unless an apply step is explicitly approved.

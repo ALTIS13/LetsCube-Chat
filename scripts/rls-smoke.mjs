@@ -5,23 +5,32 @@ import os from "node:os";
 import path from "node:path";
 
 const fakeUuid = "00000000-0000-4000-8000-000000000001";
-const env = loadEnvFile(
-  process.env.KUB_QA_ENV_FILE || path.join(os.homedir(), ".kub-messenger-qa.env"),
-);
+const defaultEnvFiles = [
+  process.env.KUB_QA_ENV_FILE,
+  path.join(process.cwd(), ".local", "secrets", "letscube-infra.env"),
+  path.join(os.homedir(), ".kub-messenger-qa.env"),
+].filter(Boolean);
+const env = loadEnvFiles(defaultEnvFiles);
 const strict = readEnv("RLS_SMOKE_STRICT") === "1";
 const allowMutations = readEnv("KUB_QA_ALLOW_MUTATIONS") === "1";
 const roles = ["owner", "tech_admin", "location_admin", "location_staff", "client"];
+const authStateDir =
+  readEnv("KUB_QA_AUTH_STATE_DIR") || path.join(process.cwd(), "output", "playwright-auth");
+const defaultAuthStatePath =
+  readEnv("KUB_QA_AUTH_STATE_PATH") || path.join(process.cwd(), "output", "e2e-auth-state.json");
 const supabaseUrl = readEnv("SUPABASE_URL") || readEnv("VITE_SUPABASE_URL");
 const supabaseKey =
   readEnv("SUPABASE_PUBLISHABLE_KEY") ||
   readEnv("VITE_SUPABASE_PUBLISHABLE_KEY") ||
   readEnv("SUPABASE_ANON_KEY") ||
   readEnv("VITE_SUPABASE_ANON_KEY");
+const operatorApiKey = readEnv("SELFHOST_SERVICE_ROLE_KEY");
+const restApiKey = operatorApiKey || supabaseKey;
 const testLocationConfig =
   readEnv("KUB_QA_TEST_LOCATION_ID") || readEnv("KUB_QA_TEST_LOCATION_NAME");
 let testLocationId = testLocationConfig && isUuid(testLocationConfig) ? testLocationConfig : null;
 
-if (!supabaseUrl || !supabaseKey) {
+if (!supabaseUrl || !restApiKey) {
   console.log("RLS smoke skipped: Supabase URL/key are not configured.");
   process.exit(0);
 }
@@ -47,7 +56,7 @@ if (!allowMutations) {
   );
 }
 
-const taskClaimPermissionPresent = await permissionExists(accounts[0], "tasks.claim");
+const taskClaimPermissionPresent = await permissionExists(accounts, "tasks.claim");
 if (!taskClaimPermissionPresent) {
   console.log(
     "RLS smoke: tasks.claim permission is not present yet; claim checks are advisory until migration is applied.",
@@ -56,9 +65,24 @@ if (!taskClaimPermissionPresent) {
 
 const allResults = [];
 const expectationFailures = [];
+let usableSessionCount = 0;
 
 for (const account of accounts) {
-  const session = await signIn(account);
+  let session;
+  try {
+    session = await signIn(account);
+    usableSessionCount += 1;
+  } catch (error) {
+    allResults.push(
+      skippedProbe(
+        account.role,
+        "auth session",
+        error instanceof Error ? error.message : "auth unavailable",
+      ),
+    );
+    expectationFailures.push(`${account.role} QA session is unavailable`);
+    continue;
+  }
   const results = [];
 
   results.push(
@@ -160,6 +184,46 @@ for (const account of accounts) {
       p_invitee_id: fakeUuid,
     }),
   );
+  results.push(
+    await ownerScopedRestProbe(
+      account.role,
+      session,
+      "notifications own rows",
+      "/rest/v1/notifications?select=id,user_id&limit=50",
+      "user_id",
+    ),
+  );
+  results.push(
+    await ownerScopedRestProbe(
+      account.role,
+      session,
+      "push_subscriptions own rows",
+      "/rest/v1/push_subscriptions?select=id,user_id&limit=50",
+      "user_id",
+    ),
+  );
+  results.push(
+    await ownerScopedRestProbe(
+      account.role,
+      session,
+      "notification_preferences own rows",
+      "/rest/v1/notification_preferences?select=user_id&limit=50",
+      "user_id",
+    ),
+  );
+  results.push(
+    await ownerScopedRestProbe(
+      account.role,
+      session,
+      "chat_notification_preferences own rows",
+      "/rest/v1/chat_notification_preferences?select=user_id,chat_id&limit=50",
+      "user_id",
+    ),
+  );
+  results.push(await profileContactBoundaryProbe(account.role, session));
+  results.push(await messageChatBoundaryProbe(account.role, session));
+  results.push(await storageListBoundaryProbe(account.role, session, "media", ""));
+  results.push(await storageListBoundaryProbe(account.role, session, "chat-media", ""));
 
   allResults.push(...results);
   expectationFailures.push(
@@ -168,13 +232,14 @@ for (const account of accounts) {
 }
 
 console.table(
-  allResults.map(({ role, probe, status, ok, missing, value, message }) => ({
+  allResults.map(({ role, probe, status, ok, missing, value, leakCount, message }) => ({
     role,
     probe,
     status,
     ok,
     missing,
     value,
+    leakCount,
     message,
   })),
 );
@@ -182,6 +247,11 @@ console.table(
 if (expectationFailures.length > 0) {
   console.log("RLS smoke expectation warnings:");
   for (const failure of expectationFailures) console.log(`- ${failure}`);
+}
+
+if (usableSessionCount === 0) {
+  console.log("RLS smoke skipped: no usable QA sessions are configured.");
+  process.exit(0);
 }
 
 if (strict && (allResults.some((result) => result.missing) || expectationFailures.length > 0)) {
@@ -195,7 +265,7 @@ function collectAccounts() {
   if (defaultCredentials) result.push({ role: "default", ...defaultCredentials });
   for (const role of roles) {
     const credentials = readCredentials(role);
-    if (credentials) result.push({ role, ...credentials });
+    if (credentials || hasSavedAuthState(role)) result.push({ role, ...(credentials ?? {}) });
   }
   return result;
 }
@@ -237,6 +307,128 @@ async function restProbe(role, session, probe, pathAndQuery) {
   };
 }
 
+async function restRowsProbe(role, session, probe, pathAndQuery) {
+  const response = await fetch(`${supabaseUrl}${pathAndQuery}`, {
+    method: "GET",
+    headers: authHeaders(session.access_token),
+  });
+  const text = await response.text();
+  const parsed = parseJson(text);
+  return {
+    role,
+    probe,
+    status: response.status,
+    ok: response.ok,
+    missing: response.status === 404,
+    rows: Array.isArray(parsed) ? parsed : [],
+    value: Array.isArray(parsed) ? parsed.length : null,
+    leakCount: null,
+    message: response.ok ? "ok" : summarize(text),
+  };
+}
+
+async function ownerScopedRestProbe(role, session, probe, pathAndQuery, ownerField) {
+  const result = await restRowsProbe(role, session, probe, pathAndQuery);
+  if (!result.ok) return result;
+  const leakCount = result.rows.filter(
+    (row) => row?.[ownerField] && row[ownerField] !== session.user.id,
+  ).length;
+  return {
+    ...result,
+    rows: undefined,
+    leakCount,
+    message: leakCount > 0 ? "non-owned rows visible" : "ok",
+  };
+}
+
+async function profileContactBoundaryProbe(role, session) {
+  const result = await ownerScopedRestProbe(
+    role,
+    session,
+    "profile_contacts non-admin privacy",
+    "/rest/v1/profile_contacts?select=user_id&limit=50",
+    "user_id",
+  );
+  return result;
+}
+
+async function messageChatBoundaryProbe(role, session) {
+  const chats = await restRowsProbe(
+    role,
+    session,
+    "visible chats for message boundary",
+    "/rest/v1/chats?select=id&limit=1000",
+  );
+  const messages = await restRowsProbe(
+    role,
+    session,
+    "messages within visible chats",
+    "/rest/v1/messages?select=id,chat_id&limit=200",
+  );
+  if (!chats.ok || !messages.ok) {
+    return {
+      role,
+      probe: "messages within visible chats",
+      status: messages.ok ? chats.status : messages.status,
+      ok: false,
+      missing: chats.missing || messages.missing,
+      value: null,
+      leakCount: null,
+      message: "chat/message visibility probe failed",
+    };
+  }
+
+  const visibleChatIds = new Set(chats.rows.map((row) => row?.id).filter(Boolean));
+  const leakCount = messages.rows.filter(
+    (row) => row?.chat_id && !visibleChatIds.has(row.chat_id),
+  ).length;
+  return {
+    role,
+    probe: "messages within visible chats",
+    status: 200,
+    ok: true,
+    missing: false,
+    value: messages.rows.length,
+    leakCount,
+    message: leakCount > 0 ? "messages reference hidden chats" : "ok",
+  };
+}
+
+async function storageListBoundaryProbe(role, session, bucket, prefix) {
+  const response = await fetch(
+    `${supabaseUrl}/storage/v1/object/list/${encodeURIComponent(bucket)}`,
+    {
+      method: "POST",
+      headers: authHeaders(session.access_token),
+      body: JSON.stringify({ prefix, limit: 20, offset: 0 }),
+    },
+  );
+  const text = await response.text();
+  const parsed = parseJson(text);
+  const rows = Array.isArray(parsed) ? parsed : [];
+  const allowed = response.ok;
+  const leakCount = allowed ? rows.length : null;
+  return {
+    role,
+    probe: `storage ${bucket || "bucket"} broad list`,
+    status: response.status,
+    ok:
+      response.ok ||
+      response.status === 400 ||
+      response.status === 401 ||
+      response.status === 403 ||
+      response.status === 404,
+    missing: response.status === 404,
+    value: allowed ? rows.length : null,
+    leakCount,
+    message: allowed
+      ? rows.length > 0
+        ? "broad storage list returned rows"
+        : "ok"
+      : summarize(text),
+  };
+}
+
 async function runDueProbe(role, session) {
   const elevatedRole = role === "default" || role === "owner" || role === "tech_admin";
   if (elevatedRole && !allowMutations) {
@@ -268,7 +460,12 @@ async function resolveLocationIdByName(accounts, locationName) {
   });
 
   for (const account of accounts) {
-    const session = await signIn(account);
+    let session;
+    try {
+      session = await signIn(account);
+    } catch {
+      continue;
+    }
     const response = await fetch(`${supabaseUrl}/rest/v1/locations?${query.toString()}`, {
       method: "GET",
       headers: authHeaders(session.access_token),
@@ -283,21 +480,31 @@ async function resolveLocationIdByName(accounts, locationName) {
   return null;
 }
 
-async function permissionExists(account, permissionKey) {
-  const session = await signIn(account);
+async function permissionExists(candidateAccounts, permissionKey) {
   const query = new URLSearchParams({
     select: "key",
     key: `eq.${permissionKey}`,
     limit: "1",
   });
-  const response = await fetch(`${supabaseUrl}/rest/v1/permissions?${query.toString()}`, {
-    method: "GET",
-    headers: authHeaders(session.access_token),
-  });
-  if (!response.ok) return false;
 
-  const parsed = parseJson(await response.text());
-  return Array.isArray(parsed) && parsed.length > 0;
+  for (const account of candidateAccounts) {
+    let session;
+    try {
+      session = await signIn(account);
+    } catch {
+      continue;
+    }
+    const response = await fetch(`${supabaseUrl}/rest/v1/permissions?${query.toString()}`, {
+      method: "GET",
+      headers: authHeaders(session.access_token),
+    });
+    if (!response.ok) continue;
+
+    const parsed = parseJson(await response.text());
+    if (Array.isArray(parsed) && parsed.length > 0) return true;
+  }
+
+  return false;
 }
 
 function checkRoleExpectations(role, results, taskClaimPermissionPresent) {
@@ -310,6 +517,14 @@ function checkRoleExpectations(role, results, taskClaimPermissionPresent) {
   const systemManage = byProbe.get("has_permission:system.manage");
   const manageAllTasks = byProbe.get("has_permission:tasks.manage_all_locations");
   const runDue = byProbe.get("task_recurrence_run_due");
+  const ownerScopedProbes = [
+    "notifications own rows",
+    "push_subscriptions own rows",
+    "notification_preferences own rows",
+    "chat_notification_preferences own rows",
+  ];
+  const nonAdminContactRoles = new Set(["location_staff", "client"]);
+  const broadStorageProbes = ["storage chat-media broad list"];
 
   if (role === "client" && tasksView?.ok && tasksView.value !== false) {
     failures.push("client should not have global tasks.view by default");
@@ -353,27 +568,55 @@ function checkRoleExpectations(role, results, taskClaimPermissionPresent) {
   if ((role === "location_admin" || role === "location_staff" || role === "client") && runDue?.ok) {
     failures.push(`${role} should not be allowed to run due recurrences`);
   }
+  for (const probe of ownerScopedProbes) {
+    const result = byProbe.get(probe);
+    if (result?.ok && result.leakCount > 0) {
+      failures.push(`${role} can read non-owned rows through ${probe}`);
+    }
+  }
+  const contacts = byProbe.get("profile_contacts non-admin privacy");
+  if (nonAdminContactRoles.has(role) && contacts?.ok && contacts.leakCount > 0) {
+    failures.push(`${role} can read non-owned profile_contacts rows`);
+  }
+  const messageBoundary = byProbe.get("messages within visible chats");
+  if (messageBoundary?.ok && messageBoundary.leakCount > 0) {
+    failures.push(`${role} can read messages whose chats are not visible`);
+  }
+  for (const probe of broadStorageProbes) {
+    const result = byProbe.get(probe);
+    if (result?.ok && result.leakCount > 0) {
+      failures.push(`${role} broad-listed ${result.leakCount} object(s) through ${probe}`);
+    }
+  }
   return failures;
 }
 
 async function signIn(account) {
-  const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: {
-      apikey: supabaseKey,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ email: account.email, password: account.password }),
-  });
-  if (!response.ok) {
-    throw new Error(`QA sign-in failed for ${account.role} with status ${response.status}.`);
+  if (account.email && account.password) {
+    for (const apiKey of [supabaseKey, operatorApiKey].filter(Boolean)) {
+      const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+        method: "POST",
+        headers: {
+          apikey: apiKey,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ email: account.email, password: account.password }),
+      });
+      if (response.ok) return response.json();
+    }
   }
-  return response.json();
+
+  const savedSession = await readSavedOrRefreshedSession(account.role);
+  if (savedSession) return savedSession;
+
+  throw new Error(
+    `QA sign-in failed for ${account.role}; no valid saved auth state was available.`,
+  );
 }
 
 function authHeaders(accessToken) {
   return {
-    apikey: supabaseKey,
+    apikey: restApiKey,
     authorization: `Bearer ${accessToken}`,
     "content-type": "application/json",
   };
@@ -389,6 +632,53 @@ function readCredentials(role) {
   const email = readEnv(emailKey);
   const password = readEnv(passwordKey);
   return email && password ? { email, password } : null;
+}
+
+function hasSavedAuthState(role) {
+  return fs.existsSync(authStatePath(role));
+}
+
+function authStatePath(role) {
+  return role === "default" ? defaultAuthStatePath : path.join(authStateDir, `${role}.json`);
+}
+
+async function readSavedOrRefreshedSession(role) {
+  const session = readSavedSession(role);
+  if (!session?.access_token || !session?.user?.id) return null;
+  const expiresAt = typeof session.expires_at === "number" ? session.expires_at : 0;
+  if (expiresAt > Math.floor(Date.now() / 1000) + 60) return session;
+  if (!session.refresh_token) return null;
+  return refreshSession(session.refresh_token);
+}
+
+function readSavedSession(role) {
+  const filePath = authStatePath(role);
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    for (const origin of raw.origins ?? []) {
+      const entry = (origin.localStorage ?? []).find((item) => item.name === "kub-auth");
+      if (!entry?.value) continue;
+      const parsed = JSON.parse(entry.value);
+      if (parsed?.access_token && parsed?.user?.id) return parsed;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+async function refreshSession(refreshToken) {
+  const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=refresh_token`, {
+    method: "POST",
+    headers: {
+      apikey: restApiKey,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+  if (!response.ok) return null;
+  return response.json();
 }
 
 function readEnv(key) {
@@ -414,6 +704,15 @@ function loadEnvFile(filePath) {
       .slice(index + 1)
       .trim()
       .replace(/^['"]|['"]$/g, "");
+  }
+  return result;
+}
+
+function loadEnvFiles(filePaths) {
+  const result = {};
+  for (const filePath of filePaths) {
+    if (!filePath || !fs.existsSync(filePath)) continue;
+    Object.assign(result, loadEnvFile(filePath));
   }
   return result;
 }
