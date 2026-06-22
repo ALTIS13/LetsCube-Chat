@@ -115,11 +115,11 @@ Prepared tooling exists:
 - `letscube-offsite-backup.timer`.
 - Installed tools: `rclone`, `restic`, `borg`.
 
-Current status:
+Generic offsite script status:
 
 - `letscube-offsite-backup.timer` is disabled.
 - `/srv/letscube/scripts/letscube-offsite-backup.sh check` reports that `BACKUP_REMOTE_TYPE` is empty.
-- No off-server/offsite destination is configured yet.
+- No permanent `rclone` / `restic` / `borg` destination is configured yet.
 
 Supported offsite modes in the script:
 
@@ -127,7 +127,52 @@ Supported offsite modes in the script:
 - `restic`.
 - `borg`.
 
-Do not enable the offsite timer until a target is selected and tested with a non-sensitive backup copy.
+Do not enable the generic offsite timer until a permanent target is selected and tested.
+
+## Temporary GitHub Encrypted Offsite Backup
+
+Temporary target:
+
+- Private GitHub repository: `ALTIS13/letscube-encrypted-backups`.
+- Repository visibility: private.
+- Purpose: temporary encrypted latest-snapshot offsite copy until a dedicated backup environment is ready.
+
+Security model:
+
+- Raw backups are not pushed to GitHub.
+- The server encrypts the selected local backup set with `age`.
+- Encryption recipient: operator SSH public key.
+- The matching private key remains off GitHub and is required to decrypt.
+- Server GitHub access uses a dedicated deploy key scoped to `ALTIS13/letscube-encrypted-backups`.
+- Deploy key path on server: `/srv/letscube/secrets/github-backup-ed25519`.
+
+Server-side implementation:
+
+- Script: `/srv/letscube/scripts/letscube-github-offsite-backup.sh`.
+- Service: `letscube-github-offsite-backup.service`.
+- Timer: `letscube-github-offsite-backup.timer`.
+- Timer status: enabled and active.
+- Schedule: daily around `04:45` MSK with up to `45m` randomized delay.
+- Next observed trigger: `2026-06-23 05:00:23 MSK`.
+- Git transport: `ssh.github.com:443`.
+- Chunk size: `45M`.
+- Upload strategy: force-push latest encrypted snapshot to `main` to avoid normal git history growth.
+
+Controlled sync result:
+
+- Source local backup: `/srv/letscube/backups/automated/20260622-034450`.
+- Encrypted upload completed successfully on `2026-06-22`.
+- GitHub repository root contains `README.md`, `MANIFEST.txt`, `encrypted.sha256`, `chunks.sha256`, and `chunks/`.
+- Uploaded encrypted chunks: 9.
+- Total encrypted chunk size: 407,108,852 bytes.
+- Largest encrypted chunk size: 47,185,920 bytes.
+
+Limitations:
+
+- GitHub is not a real backup platform. This is only a temporary latest-snapshot offsite copy.
+- Private GitHub storage still depends on GitHub availability and account access.
+- The force-push strategy intentionally keeps only the latest encrypted snapshot in the branch view.
+- Replace this with a dedicated backup target as soon as available.
 
 ## Restore Drill Status
 

@@ -149,6 +149,63 @@ systemctl list-timers --all 'letscube-offsite-backup.timer'
 
 Do one controlled offsite sync and verify the remote object list before enabling the timer.
 
+## Temporary GitHub Encrypted Offsite Backup
+
+Until a dedicated backup environment is ready, the server also has a temporary encrypted GitHub offsite path.
+
+Repository:
+
+- `ALTIS13/letscube-encrypted-backups`
+- Visibility: private.
+- Contents: encrypted `age` chunks only, not raw backups.
+
+Server files:
+
+- Script: `/srv/letscube/scripts/letscube-github-offsite-backup.sh`
+- Service: `letscube-github-offsite-backup.service`
+- Timer: `letscube-github-offsite-backup.timer`
+- Deploy key: `/srv/letscube/secrets/github-backup-ed25519`
+
+Security properties:
+
+- The script encrypts the latest local backup set before upload.
+- The repository receives only encrypted chunks plus manifests/checksums.
+- The deploy key is scoped to the backup repository.
+- The decryption private key must stay outside GitHub.
+- Do not add raw backup archives to this repository.
+
+Manual check:
+
+```bash
+/srv/letscube/scripts/letscube-github-offsite-backup.sh check
+```
+
+Manual upload of the latest local backup:
+
+```bash
+/srv/letscube/scripts/letscube-github-offsite-backup.sh sync-latest
+```
+
+Timer status:
+
+```bash
+systemctl status letscube-github-offsite-backup.timer --no-pager -l
+systemctl list-timers --all 'letscube-github-offsite-backup.timer'
+```
+
+The current implementation force-pushes the latest encrypted snapshot to `main` so the branch view does not grow with every daily backup. GitHub is still not a real backup platform; replace this temporary path with `rclone`, `restic`, or `borg` on dedicated backup storage.
+
+Decrypt on a trusted machine with the matching private key:
+
+```bash
+cat chunks/letscube-<STAMP>.tar.age.part-* > letscube-<STAMP>.tar.age
+sha256sum -c encrypted.sha256
+age --decrypt -i /path/to/operator_private_key letscube-<STAMP>.tar.age > letscube-<STAMP>.tar
+tar -xf letscube-<STAMP>.tar
+```
+
+The extracted directory contains sensitive production backup material. Keep it outside git and public storage.
+
 ## Restore Rehearsal Target
 
 Do not restore into production for the first drill.

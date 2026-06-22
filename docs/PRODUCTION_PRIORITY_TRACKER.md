@@ -121,7 +121,7 @@ Definition of done:
 - `[ ]` P3.8 Prepare isolated restore target plan and get explicit approval before any restore.
 - `[ ]` P3.9 Rehearse restore into isolated target.
 - `[ ]` P3.10 Verify restore: row counts, key tables, Storage object counts, basic app smoke.
-- `[ ]` P3.11 Decide and document off-server/offsite backup destination.
+- `[x]` P3.11 Decide and document temporary off-server/offsite backup destination. Temporary target is a private GitHub repository with client-side encrypted chunks; permanent backup storage remains a later replacement.
 
 Current baseline:
 
@@ -130,12 +130,16 @@ Current baseline:
 - Server backup inventory and non-destructive verification are recorded in `docs/infra/BACKUP_RESTORE_STATUS_20260622.md`.
 - Latest verified local backup set: `/srv/letscube/backups/automated/20260622-034450`.
 - Latest backup checksum verification: passed.
-- Offsite tooling exists, but offsite backup is not configured yet.
+- Temporary GitHub offsite backup is configured and encrypted before upload.
+- GitHub offsite target: private repository `ALTIS13/letscube-encrypted-backups`.
+- Server upload script: `/srv/letscube/scripts/letscube-github-offsite-backup.sh`.
+- Server timer: `letscube-github-offsite-backup.timer`.
+- Latest controlled GitHub offsite sync: completed for `/srv/letscube/backups/automated/20260622-034450`.
 
 Next action:
 
-- `[ ]` Choose off-server backup target (`rclone`, `restic`, or `borg`) and configure it only on the server.
-- `[ ]` Run one controlled offsite sync after the remote target is configured.
+- `[ ]` Monitor the first scheduled GitHub offsite timer run on 2026-06-23.
+- `[ ]` Replace temporary GitHub storage with a dedicated backup target (`rclone`, `restic`, or `borg`) when available.
 - `[ ]` Prepare an isolated restore target plan and get explicit approval before any restore.
 
 ## Priority 4 - Operator Security Observability
