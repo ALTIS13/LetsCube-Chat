@@ -253,6 +253,60 @@ export interface Database {
           }
         ]
       }
+      media_variants: {
+        Row: {
+          id: string
+          message_id: string | null
+          chat_id: string | null
+          owner_id: string | null
+          profile_id: string | null
+          source_bucket: string
+          source_path: string
+          variant_kind: 'image_preview' | 'image_thumb' | 'video_poster' | 'video_720p' | 'avatar_128' | 'avatar_256'
+          variant_bucket: string
+          variant_path: string
+          mime_type: string
+          width: number | null
+          height: number | null
+          size_bytes: number | null
+          status: 'ready' | 'failed' | 'stale'
+          error_code: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "media_variants_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_variants_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_variants_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_variants_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       // Audit log (Task #33). Inserts are server-only via SECURITY
       // DEFINER trigger functions; clients only SELECT (admins only —
       // managers do NOT read this table). UPDATE/DELETE have no
@@ -573,6 +627,8 @@ export interface Database {
           user_id: string | null
           content: string | null
           type: 'text' | 'image' | 'video' | 'audio' | 'file' | 'sticker' | 'system'
+          media_bucket: string | null
+          media_path: string | null
           media_url: string | null
           media_metadata: Json | null
           reply_to_id: string | null
@@ -591,6 +647,8 @@ export interface Database {
           user_id?: string | null
           content?: string | null
           type?: 'text' | 'image' | 'video' | 'audio' | 'file' | 'sticker' | 'system'
+          media_bucket?: string | null
+          media_path?: string | null
           media_url?: string | null
           media_metadata?: Json | null
           reply_to_id?: string | null
@@ -605,7 +663,9 @@ export interface Database {
         Update: {
           content?: string | null
           edited_at?: string | null
+          media_bucket?: string | null
           media_metadata?: Json | null
+          media_path?: string | null
           deleted_at?: string | null
           pinned?: boolean
           client_message_id?: string | null
@@ -1671,6 +1731,7 @@ export type TaskEvent = Database['public']['Tables']['task_events']['Row']
 export type TaskRecurrenceEvent = Database['public']['Tables']['task_recurrence_events']['Row']
 export type ProfileContact = Database['public']['Tables']['profile_contacts']['Row']
 export type Notification = Database['public']['Tables']['notifications']['Row']
+export type MediaVariant = Database['public']['Tables']['media_variants']['Row']
 export type NotificationPreferences = Database['public']['Tables']['notification_preferences']['Row']
 export type ChatNotificationPreferences = Database['public']['Tables']['chat_notification_preferences']['Row']
 export type NotificationKind =

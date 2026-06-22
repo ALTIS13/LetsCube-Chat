@@ -24,3 +24,38 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+  kub-worker:
+    build:
+      context: ../..
+      dockerfile: docs/deploy/Dockerfile
+      target: api-runtime
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY:-}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
+        VITE_VAPID_PUBLIC_KEY: ${VITE_VAPID_PUBLIC_KEY:-}
+        VITE_AUTH_CAPTCHA_PROVIDER: ${VITE_AUTH_CAPTCHA_PROVIDER:-}
+        VITE_AUTH_CAPTCHA_SITE_KEY: ${VITE_AUTH_CAPTCHA_SITE_KEY:-}
+        VITE_AUTH_GATEWAY_URL: ${VITE_AUTH_GATEWAY_URL:-}
+        BASE_PATH: ${BASE_PATH:-/}
+    image: kub-worker:latest
+    restart: unless-stopped
+    environment:
+      PORT: 8096
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SELFHOST_SERVICE_ROLE_KEY: ${SELFHOST_SERVICE_ROLE_KEY:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_CONTACT: ${VAPID_CONTACT:-mailto:admin@example.com}
+      MEDIA_VARIANTS_WORKER_ENABLED: ${MEDIA_VARIANTS_WORKER_ENABLED:-1}
+      MEDIA_VARIANTS_WORKER_TICK_MS: ${MEDIA_VARIANTS_WORKER_TICK_MS:-60000}
+    expose:
+      - "8096"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8096/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3

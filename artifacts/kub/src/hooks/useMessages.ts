@@ -29,6 +29,8 @@ const ACTIVE_CHAT_RECONNECT_DELAY_MS = 900;
 interface SendMessageInput {
   type: SendableMessageType;
   content: string | null;
+  mediaBucket?: string | null;
+  mediaPath?: string | null;
   mediaUrl?: string | null;
   replyToId?: string | null;
   forwardedFromId?: string | null;
@@ -780,6 +782,8 @@ export function useMessages(
       targetChatId: string;
       userId: string;
       topicId: string | null;
+      mediaBucket: string | null;
+      mediaPath: string | null;
       mediaUrl: string | null;
       replyToId: string | null;
       forwardedFromId: string | null;
@@ -794,6 +798,8 @@ export function useMessages(
       user_id: input.userId,
       content: input.content,
       type: input.type,
+      media_bucket: input.mediaBucket,
+      media_path: input.mediaPath,
       media_url: input.mediaUrl,
       reply_to_id: input.replyToId,
       forwarded_from_id: input.forwardedFromId,
@@ -852,6 +858,8 @@ export function useMessages(
       user_id: user.id,
       content: trimmedContent,
       type: input.type,
+      media_bucket: input.mediaBucket ?? null,
+      media_path: input.mediaPath ?? null,
       media_url: input.mediaUrl ?? null,
       reply_to_id: input.replyToId ?? null,
       forwarded_from_id: input.forwardedFromId ?? null,
@@ -878,6 +886,8 @@ export function useMessages(
       userId: user.id,
       type: input.type,
       content: trimmedContent,
+      mediaBucket: input.mediaBucket ?? null,
+      mediaPath: input.mediaPath ?? null,
       mediaUrl: input.mediaUrl ?? null,
       replyToId: input.replyToId ?? null,
       forwardedFromId: input.forwardedFromId ?? null,
@@ -953,6 +963,8 @@ export function useMessages(
     type: Extract<SendableMessageType, "image" | "video" | "audio" | "file">;
     content: string | null;
     mediaUrl: string;
+    mediaBucket?: string | null;
+    mediaPath?: string | null;
     replyToId?: string | null;
     clientMessageId?: string | null;
     clientSentAt?: string | null;
@@ -961,6 +973,8 @@ export function useMessages(
     return sendLocalMessage({
       type: input.type,
       content: input.content,
+      mediaBucket: input.mediaBucket ?? null,
+      mediaPath: input.mediaPath ?? null,
       mediaUrl: input.mediaUrl,
       replyToId: input.replyToId ?? null,
       clientMessageId: input.clientMessageId ?? null,
@@ -974,6 +988,8 @@ export function useMessages(
     return sendLocalMessage({
       type: message.type as SendableMessageType,
       content: message.content,
+      mediaBucket: message.media_bucket,
+      mediaPath: message.media_path,
       mediaUrl: message.media_url,
       replyToId: message.reply_to_id,
       forwardedFromId: message.forwarded_from_id,

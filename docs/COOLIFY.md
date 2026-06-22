@@ -74,6 +74,23 @@ VITE_AUTH_GATEWAY_URL=https://core.letscube.ru/functions/v1/auth-yandex-gateway
 The Yandex SmartCaptcha secret belongs only in the `auth-yandex-gateway` Edge
 Function runtime environment, never in the frontend service.
 
+Optional private runtime values for the `kub-worker` service:
+
+```env
+SUPABASE_URL=https://core.example.com
+SUPABASE_SERVICE_ROLE_KEY=<SERVER_SIDE_ONLY>
+# Or use SELFHOST_SERVICE_ROLE_KEY=<SERVER_SIDE_ONLY> if that is the existing server secret name.
+VAPID_PUBLIC_KEY=<YOUR_VAPID_PUBLIC_KEY>
+VAPID_PRIVATE_KEY=<SERVER_SIDE_ONLY>
+VAPID_CONTACT=mailto:admin@example.com
+MEDIA_VARIANTS_WORKER_ENABLED=1
+MEDIA_VARIANTS_WORKER_TICK_MS=60000
+```
+
+`kub-worker` has no public port. It runs server-side dispatchers such as browser
+push delivery and media variant generation. If `SUPABASE_SERVICE_ROLE_KEY` is
+empty, the private workers self-disable and the web app continues to run.
+
 `VITE_*` переменные являются build-time значениями Vite. После изменения Supabase URL/key, VAPID public key или `BASE_PATH` нужен rebuild/redeploy frontend, а не простой restart.
 
 ## Безопасность

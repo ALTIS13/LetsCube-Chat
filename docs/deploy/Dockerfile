@@ -97,6 +97,8 @@ RUN set -eu; \
     export VITE_AUTH_GATEWAY_URL="${VITE_AUTH_GATEWAY_URL:-}"; \
     pnpm --filter @workspace/kub run build
 
+RUN pnpm --filter @workspace/api-server run build
+
 # ---------- Stage 3: runtime ----------
 FROM nginx:alpine AS runtime
 
@@ -106,3 +108,15 @@ COPY --from=build /app/artifacts/kub/dist/public /usr/share/nginx/html
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]
+
+# ---------- Optional API/worker runtime ----------
+FROM base AS api-runtime
+
+ENV NODE_ENV=production \
+    PORT=8096
+
+COPY --from=build /app/ ./
+
+EXPOSE 8096
+
+CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]

@@ -379,6 +379,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       const message = await sendMediaMessage({
         type: getStagedAttachmentMessageType(attachment),
         content,
+        mediaBucket: uploaded.bucket,
+        mediaPath: uploaded.path,
         mediaUrl: uploaded.publicUrl,
         replyToId: replyTo?.id ?? null,
         clientMessageId: attachment.clientMessageId,

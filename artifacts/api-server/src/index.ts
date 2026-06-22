@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startMediaVariantsWorker } from "./workers/mediaVariantsWorker";
 import { startPushDispatcher } from "./workers/pushDispatcher";
 
 const rawPort = process.env["PORT"];
@@ -27,4 +28,5 @@ app.listen(port, (err) => {
   // when SUPABASE_SERVICE_ROLE_KEY / VAPID_* are not configured, so
   // dev runs without secrets just log a warning and continue.
   startPushDispatcher();
+  startMediaVariantsWorker();
 });

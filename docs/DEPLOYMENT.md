@@ -53,6 +53,14 @@ VITE_AUTH_GATEWAY_URL=
 BASE_PATH=/
 PORT=5173
 KUB_WEB_PORT=8080
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+SELFHOST_SERVICE_ROLE_KEY=
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_CONTACT=mailto:admin@example.com
+MEDIA_VARIANTS_WORKER_ENABLED=1
+MEDIA_VARIANTS_WORKER_TICK_MS=60000
 ```
 
 Notes:
@@ -62,6 +70,7 @@ Notes:
 - `VITE_VAPID_PUBLIC_KEY` is optional unless browser push is enabled.
 - `VITE_AUTH_CAPTCHA_PROVIDER`, `VITE_AUTH_CAPTCHA_SITE_KEY`, and optional `VITE_AUTH_GATEWAY_URL` are public build-time values for signup/recovery bot protection. For `yandex-smartcaptcha`, provider secret must live only in the `auth-yandex-gateway` Edge Function runtime environment.
 - Do not add private server secrets to frontend env files.
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` / `SELFHOST_SERVICE_ROLE_KEY`, `VAPID_*` and `MEDIA_VARIANTS_*` are runtime values for the optional `kub-worker` service only. They must not be sent as Vite build args or exposed in the static web image.
 
 `SUPABASE_SERVICE_ROLE_KEY` must never be passed to the Vite frontend, Docker build args, static web image, or committed files.
 

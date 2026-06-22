@@ -200,7 +200,12 @@ Current baseline:
 
 Next media/performance action:
 
-- `[ ]` Review/apply the media variants proposal and add a trusted backend worker for thumbnails, avatar previews, video posters and future video transcodes.
+- `[~]` Media variants pipeline:
+  - `[x]` Applied `.migration-backup/supabase/migrations/20260622_media_variants_pipeline.sql` to self-host Postgres after a schema backup.
+  - `[x]` Added optional server-side `kub-worker` runtime target/service for trusted media processing; frontend still receives no service-role secrets.
+  - `[x]` Added image message variants (`image_thumb`, `image_preview`) and user avatar variants (`avatar_128`, `avatar_256`) generation through `artifacts/api-server`.
+  - `[ ]` Wire frontend read path to prefer ready variants over original media where available.
+  - `[ ]` Add video poster/transcode worker path after ffmpeg/runtime sizing and load testing.
 
 ## Priority 6 - Monitoring And Self-Hosted Sentry
 
