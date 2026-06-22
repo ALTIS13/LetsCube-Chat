@@ -1,5 +1,14 @@
 # QA Results
 
+2026-06-22 admin/ops security report foundation:
+
+- Added admin-only `/admin/ops` as a read-only operator report for auth/invite observability.
+- The tab shows current public CAPTCHA/gateway build status immediately and shows live aggregate metrics only after the manual RPC proposal is applied.
+- Created proposal-only SQL `.migration-backup/supabase/migrations/20260622_admin_ops_security_report.sql`; SQL was not applied automatically.
+- The proposal returns aggregate counts and sanitized invite/auth event labels only. It does not return email, IP, password, CAPTCHA token, recovery token, push token, actor ID, or target ID values.
+- Added `docs/security/ADMIN_OPS_REPORT.md` and `tests/e2e/admin-ops-report.spec.ts`.
+- Validation: `git diff --check`, KUB typecheck/build, `admin-ops-report.spec.ts` on 3840/1920/1440/390/412, `visual-style-layout.spec.ts --project=chromium-desktop-1440`, `e2e:smoke`, `db:types:check`, `rls:smoke`, and `auth:anti-abuse:smoke` passed. `db:types:check` keeps the known advisory drift for message media fields and search RPCs.
+
 2026-06-22 auth gateway rate-limit hardening:
 
 - Added an in-function rate limiter to `auth-yandex-gateway` for signup and

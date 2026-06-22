@@ -12,6 +12,7 @@ import { AuditTab } from "./AuditTab";
 import { LocationsTab } from "./LocationsTab";
 import { RolesPermissionsTab } from "./RolesPermissionsTab";
 import { InvitesTab } from "./InvitesTab";
+import { OpsReportTab } from "./OpsReportTab";
 
 type TabDef = { id: string; label: string; icon: KubIconName; path: string; adminOnly?: boolean };
 
@@ -22,6 +23,7 @@ const TABS: ReadonlyArray<TabDef> = [
   { id: "invites",   label: "Инвайты",      icon: "userPlus",   path: "/admin/invites", adminOnly: true },
   { id: "roles",     label: "Роли и права", icon: "shield",     path: "/admin/roles", adminOnly: true },
   { id: "bans",      label: "Блокировки",   icon: "shieldOff",  path: "/admin/bans" },
+  { id: "ops",       label: "Ops",           icon: "activity",   path: "/admin/ops", adminOnly: true },
   // Audit log is admin-only at the RLS layer (managers see no rows);
   // hide the tab from managers entirely so they don't get sent to a
   // permission-denied empty state.
@@ -112,6 +114,9 @@ export function AdminLayout() {
               {isAdmin ? <RolesPermissionsTab /> : <Redirect to="/admin" />}
             </Route>
             <Route path="/admin/bans" component={BansMutesTab} />
+            <Route path="/admin/ops">
+              {isAdmin ? <OpsReportTab /> : <Redirect to="/admin" />}
+            </Route>
             {/* Defence-in-depth: even if a manager hits /admin/audit
                 directly we redirect them; the AuditTab also has its
                 own gate, and the audit_logs RLS only allows admins. */}

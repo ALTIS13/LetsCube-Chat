@@ -29,6 +29,10 @@ const ACTION_LABEL: Record<AuditAction, string> = {
   folder_deleted: "Удалена папка",
   task_status_change: "Смена статуса задачи",
   message_deleted_by_staff: "Удалено сообщение",
+  registration_invite_created: "Инвайт создан",
+  registration_invite_revoked: "Инвайт отозван",
+  registration_invite_consumed: "Инвайт использован",
+  registration_invite_mode_updated: "Режим регистрации",
 };
 
 const ACTION_OPTIONS: AuditAction[] = [
@@ -43,6 +47,10 @@ const ACTION_OPTIONS: AuditAction[] = [
   "folder_deleted",
   "task_status_change",
   "message_deleted_by_staff",
+  "registration_invite_created",
+  "registration_invite_revoked",
+  "registration_invite_consumed",
+  "registration_invite_mode_updated",
 ];
 
 const ROLE_RU: Record<string, string> = {
@@ -161,6 +169,21 @@ function describe(row: AuditLogWithActor): string {
     }
     case "message_deleted_by_staff":
       return `${actor} удалил чужое сообщение`;
+    case "registration_invite_created":
+      return `${actor} создал регистрационный инвайт`;
+    case "registration_invite_revoked":
+      return `${actor} отозвал регистрационный инвайт`;
+    case "registration_invite_consumed":
+      return "Регистрационный инвайт был использован";
+    case "registration_invite_mode_updated": {
+      const enabled = get("invite_only_enabled");
+      if (typeof enabled === "boolean") {
+        return enabled
+          ? `${actor} включил регистрацию только по приглашению`
+          : `${actor} включил открытую регистрацию`;
+      }
+      return `${actor} изменил режим регистрации`;
+    }
     default:
       return `${actor}: ${row.action}`;
   }
@@ -586,7 +609,13 @@ function diffLabel(key: string): string {
     count: "Количество",
     expires_at: "Срок",
     from: "Было",
+    global_role_id: "Глобальная роль",
+    invite_id: "Инвайт",
+    invite_only_enabled: "Invite-only",
+    location_id: "Клуб",
+    location_role_id: "Роль клуба",
     mute_id: "Мьют",
+    primary_admin_id: "Администратор",
     reason: "Причина",
     role_key: "Роль",
     status: "Статус",

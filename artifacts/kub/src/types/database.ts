@@ -1138,6 +1138,10 @@ export interface Database {
         Args: { p_user_id: string; p_avatar_url: string | null }
         Returns: Database['public']['Tables']['profiles']['Row']
       }
+      admin_ops_security_report: {
+        Args: Record<string, never>
+        Returns: Json
+      }
       registration_invites_list: {
         Args: Record<string, never>
         Returns: {
@@ -1607,6 +1611,49 @@ export type UserGlobalRole = Database['public']['Tables']['user_global_roles']['
 export type RegistrationInvite = Database['public']['Tables']['registration_invites']['Row']
 export type RegistrationInviteListRow = Database['public']['Functions']['registration_invites_list']['Returns'][number]
 export type RegistrationInviteModeRow = Database['public']['Functions']['registration_invite_mode']['Returns'][number]
+export interface AdminOpsSecurityReportEvent {
+  action: string
+  target_kind: string
+  created_at: string
+}
+export interface AdminOpsSecurityReport {
+  generated_at?: string
+  auth?: {
+    total_users?: number
+    confirmed_users?: number
+    unconfirmed_users?: number
+    created_24h?: number
+    created_7d?: number
+    last_sign_in_24h?: number
+  }
+  profiles?: {
+    total_profiles?: number
+    created_24h?: number
+    created_7d?: number
+  }
+  invites?: {
+    invite_only_enabled?: boolean | null
+    active?: number
+    revoked?: number
+    expired?: number
+    exhausted?: number
+    created_24h?: number
+    created_7d?: number
+    uses_24h?: number
+    uses_7d?: number
+  }
+  audit?: {
+    invite_events_24h?: number
+    invite_events_7d?: number
+    recent_events?: AdminOpsSecurityReportEvent[]
+  }
+  controls?: {
+    invite_mode_available?: boolean
+    invite_table_available?: boolean
+    invite_uses_table_available?: boolean
+    audit_log_available?: boolean
+  }
+}
 export type Chat = Database['public']['Tables']['chats']['Row']
 export type ChatMember = Database['public']['Tables']['chat_members']['Row']
 export type GroupInvite = Database['public']['Tables']['group_invites']['Row']
@@ -1649,6 +1696,10 @@ export type AuditAction =
   | 'folder_deleted'
   | 'task_status_change'
   | 'message_deleted_by_staff'
+  | 'registration_invite_created'
+  | 'registration_invite_revoked'
+  | 'registration_invite_consumed'
+  | 'registration_invite_mode_updated'
 
 export interface AuditLogWithActor extends AuditLog {
   actor?: Profile | null

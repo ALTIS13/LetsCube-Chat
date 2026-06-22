@@ -16,8 +16,8 @@ Legend:
 1. `[x]` Priority 1 - Auth and anti-abuse baseline.
 2. `[x]` Priority 2 - RLS and security audit baseline.
 3. `[!]` Priority 3 - Backup and restore drill follow-ups.
-4. `[~]` Priority 4 - Operator security observability.
-5. `[ ]` Priority 5 - Installed web/PWA production shell.
+4. `[x]` Priority 4 - Operator security observability.
+5. `[~]` Priority 5 - Installed web/PWA production shell.
 6. `[!]` Priority 6 - Monitoring and self-hosted Sentry.
 7. `[!]` Deferred native/mobile packaging and native push.
 
@@ -144,16 +144,16 @@ Next action:
 
 ## Priority 4 - Operator Security Observability
 
-Status: `[~]` active stage.
+Status: `[x]` baseline complete. Keep as regression guard.
 
 Goal: make auth abuse, invite-code abuse, and suspicious registration/login patterns visible to operators without leaking sensitive data.
 
 Candidate work:
 
 - `[x]` Add or document an operator smoke command for auth gateway rate limits and direct-auth bypass checks.
-- `[ ]` Add an admin-facing or ops-facing view/report for recent auth gateway abuse counters if product-safe.
-- `[ ]` Ensure reports do not show raw secrets, passwords, CAPTCHA tokens, recovery tokens, or full IP data unless explicitly approved.
-- `[ ]` Keep this separate from CAPTCHA/rate-limit implementation unless new gaps are found.
+- `[x]` Add an admin-facing or ops-facing view/report for recent auth/invite security aggregates if product-safe.
+- `[x]` Ensure reports do not show raw secrets, passwords, CAPTCHA tokens, recovery tokens, or full IP data unless explicitly approved.
+- `[x]` Keep this separate from CAPTCHA/rate-limit implementation unless new gaps are found.
 
 Current baseline:
 
@@ -164,10 +164,15 @@ Current baseline:
 - Default smoke checks `auth-yandex-gateway` signup/recovery no-CAPTCHA handling.
 - Repeated gateway rate-limit stress is opt-in through `--stress-rate-limit` or `KUB_AUTH_SMOKE_STRESS_RATE_LIMIT=1`.
 - 2026-06-22 live smoke result: direct signup/recovery returned 403, gateway no-CAPTCHA returned `captcha_required`, opt-in stress observed 429 `rate_limited` on repeated gateway attempts.
+- Admin/Ops report UI: `/admin/ops`.
+- Admin/Ops report runbook: `docs/security/ADMIN_OPS_REPORT.md`.
+- Admin/Ops report SQL proposal: `.migration-backup/supabase/migrations/20260622_admin_ops_security_report.sql`.
+- SQL was not applied automatically. Until the RPC is applied, `/admin/ops` shows a friendly migration warning and still displays frontend protection status.
+- The report intentionally returns aggregate counts and sanitized invite/auth event labels only; it does not show email, IP, password, CAPTCHA/recovery/push tokens, actor IDs, or target IDs.
 
 ## Priority 5 - Installed Web/PWA Production Shell
 
-Status: `[ ]` pending after Priority 3/4.
+Status: `[~]` active next stage after Priority 4.
 
 Goal: ship the web/PWA path as the production app experience while APK/native work remains deferred.
 
