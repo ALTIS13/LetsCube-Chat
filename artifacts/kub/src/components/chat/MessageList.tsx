@@ -13,6 +13,7 @@ import { getGroupReadReceiptInfo, getReceiptDisplayName, type GroupReadReceiptIn
 import { requestAppConfirm } from "@/lib/appDialogs";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { formatFullTime } from "@/lib/format";
+import { useMessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 
 interface MessageListProps {
   messages: MessageWithSender[];
@@ -149,6 +150,7 @@ export function MessageList({
     sortedMessages.forEach((m) => { map[m.id] = m; });
     return map;
   }, [sortedMessages]);
+  const messageMediaVariants = useMessageMediaVariantUrls(sortedMessages);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [newCount, setNewCount] = useState(0);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -169,6 +171,8 @@ export function MessageList({
   const initialScrollAppliedRef = useRef<string | null>(null);
   const initialScrollPendingRef = useRef(false);
   const initialScrollPendingKeyRef = useRef<string | null>(null);
+  const initialBottomLockUntilRef = useRef(0);
+  const isInitialBottomLocked = useCallback(() => Date.now() < initialBottomLockUntilRef.current, []);
   const firstUnreadMessageId = React.useMemo(() => {
     if (!initialUnreadCount) return null;
     const boundaryTime = initialUnreadSince ? new Date(initialUnreadSince).getTime() : null;
@@ -286,7 +290,8 @@ export function MessageList({
       !onLoadOlder ||
       loadingOlderRef.current ||
       !hasMoreOlderRef.current ||
-      initialScrollPendingRef.current
+      initialScrollPendingRef.current ||
+      isInitialBottomLocked()
     ) return;
     const beforeHeight = el.scrollHeight;
     const beforeTop = el.scrollTop;
@@ -299,24 +304,31 @@ export function MessageList({
       }
       preservingOlderScrollRef.current = false;
     });
-  }, [onLoadOlder]);
+  }, [isInitialBottomLocked, onLoadOlder]);
 
   const handleScroll = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (isInitialBottomLocked()) {
+      isAtBottomRef.current = true;
+      setShowScrollBtn(false);
+      setNewCount(0);
+      return;
+    }
     const atBottom = distFromBottom < 120;
     isAtBottomRef.current = atBottom;
     setShowScrollBtn(!atBottom);
     if (atBottom) setNewCount(0);
-    if (!initialScrollPendingRef.current && el.scrollTop < 160) void loadOlderAtTop();
-  }, [loadOlderAtTop]);
+    const hasScrollableHistory = el.scrollHeight > el.clientHeight + 240;
+    if (!initialScrollPendingRef.current && hasScrollableHistory && el.scrollTop < 160) void loadOlderAtTop();
+  }, [isInitialBottomLocked, loadOlderAtTop]);
 
   const scrollToBottom = useCallback((smooth = true) => {
     requestAnimationFrame(() => {
       const el = containerRef.current;
       if (!el) return;
-      el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+      el.scrollTo({ top: Math.max(0, el.scrollHeight - el.clientHeight), behavior: smooth ? "smooth" : "auto" });
       setNewCount(0);
       setShowScrollBtn(false);
     });
@@ -386,7 +398,8 @@ export function MessageList({
     if (!content || typeof ResizeObserver === "undefined") return undefined;
     let frame = 0;
     const observer = new ResizeObserver(() => {
-      if (!isAtBottomRef.current || preservingOlderScrollRef.current || loadingOlderRef.current) return;
+      const shouldKeepBottom = isAtBottomRef.current || isInitialBottomLocked();
+      if (!shouldKeepBottom || preservingOlderScrollRef.current || loadingOlderRef.current) return;
       if (frame) cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => scrollToBottom(false));
     });
@@ -395,7 +408,7 @@ export function MessageList({
       observer.disconnect();
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [scrollToBottom]);
+  }, [isInitialBottomLocked, scrollToBottom]);
 
   // Initial chat open and chat switch need to wait for composer/tray layout
   // before locking the history to the real visual bottom.
@@ -412,17 +425,22 @@ export function MessageList({
     setNewCount(0);
     setShowScrollBtn(false);
     if (firstUnreadMessageId) {
+      initialBottomLockUntilRef.current = 0;
       isAtBottomRef.current = false;
       releaseInitialScrollGuard(initialScrollKey, 520);
       const cancelUnreadFrame = scrollToMessageAfterLayout(firstUnreadMessageId);
       return () => cancelUnreadFrame();
     }
+    initialBottomLockUntilRef.current = Date.now() + 1800;
     const cancelFrame = scrollToBottomAfterLayout(false);
-    const timeoutIds = [180, 420].map((delay) => window.setTimeout(() => scrollToBottom(false), delay));
-    releaseInitialScrollGuard(initialScrollKey, 680);
+    const scheduleBottomSettle = (delay: number) => window.setTimeout(() => {
+      if (initialScrollAppliedRef.current !== initialScrollKey) return;
+      scrollToBottom(false);
+    }, delay);
+    [120, 320, 680, 1200, 1750].forEach(scheduleBottomSettle);
+    releaseInitialScrollGuard(initialScrollKey, 1850);
     return () => {
       cancelFrame();
-      timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
     };
   }, [layoutKey, initialUnreadCount, initialUnreadSince, firstUnreadMessageId, sortedMessages.length, scrollToBottom, scrollToBottomAfterLayout, scrollToMessageAfterLayout, releaseInitialScrollGuard]);
 
@@ -640,6 +658,7 @@ export function MessageList({
                     isSelectionMode={selectionMode}
                     usersMap={usersMap}
                     messagesMap={messagesMap}
+                    mediaVariant={messageMediaVariants[msg.id]}
                     deliveryState={deliveryState}
                     groupReadInfo={groupReadInfo}
                     onOpenGroupReadReceipts={groupReadInfo ? () => setReadReceiptsMessageId(msg.id) : undefined}

@@ -133,6 +133,17 @@ test.describe("KUB visual style and layout", () => {
     });
     expect(metrics.distanceFromBottom).toBeLessThanOrEqual(32);
 
+    await page.waitForTimeout(2200);
+    const settledMetrics = await scrollContainer.evaluate((node) => {
+      const el = node as HTMLElement;
+      return {
+        distanceFromBottom: el.scrollHeight - el.scrollTop - el.clientHeight,
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+      };
+    });
+    expect(settledMetrics.distanceFromBottom).toBeLessThanOrEqual(32);
+
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
 });

@@ -20,6 +20,7 @@ import {
   type GroupReadReceiptInfo,
 } from "@/lib/groupReadReceipts";
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
+import type { MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 
 const EMOJI_QUICK = ["👍", "❤️", "😂", "😮", "😢", "🔥", "👏", "🎉"];
 
@@ -61,6 +62,7 @@ interface MessageBubbleProps {
   isSelectionMode?: boolean;
   usersMap?: Record<string, string>;
   messagesMap?: Record<string, MessageWithSender>;
+  mediaVariant?: MessageMediaVariantUrls;
   deliveryState?: MessageDeliveryState | null;
   groupReadInfo?: GroupReadReceiptInfo | null;
   onOpenGroupReadReceipts?: () => void;
@@ -426,7 +428,7 @@ export function MessageBubble({
   onRetrySend, onEditFailedSend, onDiscardLocalMessage,
   reactionMenuOpen = false, onToggleReactionMenu, onCloseReactionMenu,
   actionMenuOpen, onOpenActionMenu, onCloseActionMenu, selected = false, isSelectionMode = false,
-  usersMap = {}, messagesMap = {}, deliveryState, groupReadInfo, onOpenGroupReadReceipts, isSavedChat,
+  usersMap = {}, messagesMap = {}, mediaVariant, deliveryState, groupReadInfo, onOpenGroupReadReceipts, isSavedChat,
 }: MessageBubbleProps) {
   const [showContext, setShowContext] = useState(false);
   const [reactionsExpanded, setReactionsExpanded] = useState(false);
@@ -449,6 +451,12 @@ export function MessageBubble({
   const textContent = message.content ?? "";
   const mediaCaption = getVisibleMediaCaption(message);
   const mediaDimensions = getMessageMediaDimensions(message);
+  const imageDisplayUrl = message.type === "image"
+    ? mediaVariant?.previewUrl ?? message.media_url
+    : message.media_url;
+  const imageDimensions = message.type === "image" && mediaVariant?.previewWidth && mediaVariant?.previewHeight
+    ? { width: mediaVariant.previewWidth, height: mediaVariant.previewHeight }
+    : mediaDimensions;
   const textLayoutKind = getMessageTextLayoutKind(message.type, textContent);
   const widthClasses = getMessageWidthClasses(textLayoutKind);
   const stackStyle = getMessageStackStyle(textLayoutKind);
@@ -1137,9 +1145,10 @@ export function MessageBubble({
             ) : message.type === "image" && message.media_url ? (
               <MediaWithCaption caption={mediaCaption}>
                 <MediaImage
-                  url={message.media_url}
+                  url={imageDisplayUrl ?? message.media_url}
+                  thumbUrl={mediaVariant?.thumbUrl}
                   title={message.content ?? "Фото"}
-                  dimensions={mediaDimensions}
+                  dimensions={imageDimensions}
                   onOpen={() => onOpenMedia?.({ type: "image", url: message.media_url!, title: message.content ?? "Фото" })}
                 />
               </MediaWithCaption>
@@ -1294,11 +1303,13 @@ interface MediaDimensions {
 
 function MediaImage({
   url,
+  thumbUrl,
   title,
   dimensions,
   onOpen,
 }: {
   url: string;
+  thumbUrl?: string;
   title: string;
   dimensions: MediaDimensions | null;
   onOpen: () => void;
@@ -1329,6 +1340,8 @@ function MediaImage({
     >
       <img
         src={url}
+        srcSet={thumbUrl ? `${thumbUrl} 360w, ${url} 1280w` : undefined}
+        sizes="(max-width: 640px) 86vw, 420px"
         alt={title || "Фото"}
         loading="lazy"
         decoding="async"
