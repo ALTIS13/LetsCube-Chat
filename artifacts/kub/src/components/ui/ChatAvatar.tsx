@@ -73,6 +73,8 @@ export function ChatAvatar({ chat, size = "md", className, showOnline, isSaved: 
           alt={name}
           width={px}
           height={px}
+          loading="lazy"
+          decoding="async"
           className={cn("rounded-full object-cover", sizeMap[size])}
         />
       ) : (
@@ -123,6 +125,8 @@ export function UserAvatar({
           alt={name}
           width={px}
           height={px}
+          loading="lazy"
+          decoding="async"
           className={cn("rounded-full object-cover", sizeMap[size])}
         />
       ) : (

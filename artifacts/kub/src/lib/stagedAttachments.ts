@@ -31,8 +31,10 @@ export interface StagedAttachment {
 
 export const CHAT_MEDIA_BUCKET = "media";
 export const MAX_STAGED_ATTACHMENTS = 10;
-export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
-export const MAX_ATTACHMENT_SIZE_LABEL = "25 МБ";
+export const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
+export const MAX_ATTACHMENT_SIZE_LABEL = "50 МБ";
+export const MAX_VIDEO_ATTACHMENT_BYTES = 250 * 1024 * 1024;
+export const MAX_VIDEO_ATTACHMENT_SIZE_LABEL = "250 МБ";
 
 const MIME_EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -54,8 +56,11 @@ const MIME_EXTENSIONS: Record<string, string> = {
 
 export function validateStagedAttachment(file: File): string | null {
   if (!file) return "Файл недоступен.";
-  if (file.size > MAX_ATTACHMENT_BYTES) {
-    return `Файл слишком большой. Максимум ${MAX_ATTACHMENT_SIZE_LABEL}.`;
+  const kind = getAttachmentKind(file);
+  const maxBytes = kind === "video" ? MAX_VIDEO_ATTACHMENT_BYTES : MAX_ATTACHMENT_BYTES;
+  const maxLabel = kind === "video" ? MAX_VIDEO_ATTACHMENT_SIZE_LABEL : MAX_ATTACHMENT_SIZE_LABEL;
+  if (file.size > maxBytes) {
+    return `Файл слишком большой. Максимум ${maxLabel}.`;
   }
   return null;
 }

@@ -501,13 +501,29 @@ export function MessageInput({
       setText(preEditTextRef.current ?? "");
       preEditTextRef.current = null;
     } else {
-      const result = await onSend(trimmed);
+      const previousText = currentText;
+      setText("");
+      if (typeof window !== "undefined") localStorage.removeItem(draftKey(chatId));
+      setShowEmoji(false);
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto";
+        textareaRef.current.focus();
+      }
+      let result: unknown;
+      try {
+        result = await onSend(trimmed);
+      } catch (error) {
+        setText(previousText);
+        if (typeof window !== "undefined") localStorage.setItem(draftKey(chatId), previousText);
+        textareaRef.current?.focus();
+        throw error;
+      }
       if (result === false) {
+        setText(previousText);
+        if (typeof window !== "undefined") localStorage.setItem(draftKey(chatId), previousText);
         textareaRef.current?.focus();
         return;
       }
-      setText("");
-      if (typeof window !== "undefined") localStorage.removeItem(draftKey(chatId));
     }
     setShowEmoji(false);
     if (textareaRef.current) {

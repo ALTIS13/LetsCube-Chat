@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { getBuildMetadata } from "@/lib/monitoring";
 import { isNativeAndroid } from "@/lib/platform/capabilities";
-import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
+import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
 import {
   PROFILE_LIMITS,
   normalizeFullName,
@@ -108,10 +108,17 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     }
     setUploadingAvatar(true);
     setError(null);
-    const path = avatarUploadPath("user", currentUser.id, file);
+    const preparedFile = await prepareAvatarImage(file);
+    const preparedValidationError = validateAvatarUploadImage(preparedFile);
+    if (preparedValidationError) {
+      setError(preparedValidationError);
+      setUploadingAvatar(false);
+      return;
+    }
+    const path = avatarUploadPath("user", currentUser.id, preparedFile);
     const { data, error: upErr } = await supabase.storage
       .from("media")
-      .upload(path, file, { contentType: file.type, upsert: false });
+      .upload(path, preparedFile, { contentType: preparedFile.type, upsert: false });
     if (upErr) { setError(mapPgError(upErr)); setUploadingAvatar(false); return; }
     const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(data.path);
     const { error: profileErr } = await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", currentUser.id);

@@ -44,14 +44,17 @@ test.describe("KUB visual style and layout", () => {
     await expect(panel).toBeVisible();
     await expect(tabs).toBeVisible();
     await expect(list).toBeVisible();
+    await assertNoHorizontalOverflow(list, "notification list has horizontal overflow");
 
     for (const tab of ["all", "tasks", "messages", "system"]) {
       await page.getByTestId(`notification-tab-${tab}`).click();
       await expect(page.getByTestId(`notification-tab-${tab}`)).toHaveAttribute("data-state", "active");
+      await assertNoHorizontalOverflow(list, `notification list has horizontal overflow in ${tab}`);
       await assertBelow(tabs, list, `notification list overlaps tabs in ${tab}`);
       const firstItem = page.locator('[data-testid="notification-item"], [data-testid="notification-message-group"]').first();
       if (await firstItem.isVisible().catch(() => false)) {
         await assertBelow(tabs, firstItem, `notification item overlaps tabs in ${tab}`);
+        await assertNoHorizontalOverflow(firstItem, `notification item has horizontal overflow in ${tab}`);
       }
     }
 
@@ -164,4 +167,15 @@ async function requiredBox(locator: Locator, name: string) {
   const box = await locator.boundingBox();
   expect(box, `${name} should have a bounding box`).not.toBeNull();
   return box!;
+}
+
+async function assertNoHorizontalOverflow(locator: Locator, message: string) {
+  const metrics = await locator.evaluate((node) => {
+    const el = node as HTMLElement;
+    return {
+      clientWidth: el.clientWidth,
+      scrollWidth: el.scrollWidth,
+    };
+  });
+  expect(metrics.scrollWidth, message).toBeLessThanOrEqual(metrics.clientWidth + 1);
 }

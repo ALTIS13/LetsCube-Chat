@@ -486,13 +486,13 @@ export function MessageList({
           if (openReactionMessageId) setOpenReactionMessageId(null);
           if (openActionMessageId) setOpenActionMessageId(null);
         }}
-        className="chat-bg h-full min-w-0 overflow-y-auto overflow-x-hidden px-3 py-2 pb-6 sm:px-4"
+        className="chat-bg h-full min-w-0 overflow-y-auto overflow-x-hidden px-3 py-2 pb-6 [overflow-anchor:none] sm:px-4"
         style={{
           paddingBottom: `calc(1.5rem + ${resolvedBottomInset}px)`,
           scrollPaddingBottom: `calc(1.5rem + ${resolvedBottomInset}px)`,
         }}
       >
-        <div ref={contentRef}>
+        <div ref={contentRef} className="[overflow-anchor:none]">
           {(loadingOlder || olderError) && (
             <div className="flex justify-center py-2" data-message-history-status>
               <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--kub-border-color)] bg-[color-mix(in_srgb,var(--kub-bg)_78%,transparent)] px-3 py-1 text-xs text-[color:var(--kub-muted)] backdrop-blur-sm">

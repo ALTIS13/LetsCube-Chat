@@ -313,7 +313,7 @@ export function NotificationBell() {
           style={panelStyle ?? undefined}
           className={cn(
             "fixed z-[60] flex max-w-[calc(100vw-16px)] flex-col",
-            "overflow-hidden rounded-2xl border border-[color:var(--kub-border-color)]",
+            "overflow-hidden overflow-x-hidden rounded-2xl border border-[color:var(--kub-border-color)]",
             "bg-[var(--kub-surface)] shadow-2xl kub-glow-soft",
           )}
           data-kub-popover="true"
@@ -373,13 +373,13 @@ export function NotificationBell() {
             </div>
           )}
 
-          <div className="relative z-0 min-h-0 flex-1 overflow-y-auto overscroll-contain p-2" data-testid="notification-list">
+          <div className="relative z-0 min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain p-2" data-testid="notification-list">
             {loading && visibleEntries.length === 0 ? (
               <NotificationState icon="spinner" title="Загрузка уведомлений" body="Обновляем последние события." />
             ) : visibleEntries.length === 0 ? (
               <NotificationState icon="notifications" title="Уведомлений пока нет" body="Новые события появятся здесь." />
             ) : (
-              <div className="grid gap-1.5">
+              <div className="grid min-w-0 gap-1.5">
                 {visibleEntries.map((entry) => {
                   if (entry.kind === "message_group") {
                     return (
@@ -450,7 +450,7 @@ function NotificationItem({
         onClick();
       }}
       className={cn(
-        "group max-w-full rounded-xl border px-3 py-3 text-left transition-colors",
+        "group w-full min-w-0 max-w-full overflow-hidden rounded-xl border px-3 py-3 text-left transition-colors",
         "border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] hover:bg-[var(--kub-surface-3)]",
         unread && "border-[color-mix(in_srgb,var(--kub-cyan)_45%,var(--kub-border-color))] bg-[color-mix(in_srgb,var(--kub-cyan)_7%,var(--kub-surface-2))]",
       )}
@@ -465,9 +465,9 @@ function NotificationItem({
           <KubIcon name={display.icon} size={17} />
         </div>
 
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 max-w-full flex-1 overflow-hidden">
           <div className="flex min-w-0 items-start justify-between gap-2">
-            <div className="min-w-0">
+            <div className="min-w-0 max-w-full overflow-hidden">
               <div className="truncate text-sm font-semibold text-[color:var(--kub-text)] [overflow-wrap:anywhere]">
                 {display.title}
               </div>
@@ -557,7 +557,7 @@ function MessageGroupItem({
         onClick();
       }}
       className={cn(
-        "group max-w-full rounded-xl border px-3 py-3 text-left transition-colors",
+        "group w-full min-w-0 max-w-full overflow-hidden rounded-xl border px-3 py-3 text-left transition-colors",
         "border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] hover:bg-[var(--kub-surface-3)]",
         unread && "border-[color-mix(in_srgb,var(--kub-cyan)_45%,var(--kub-border-color))] bg-[color-mix(in_srgb,var(--kub-cyan)_7%,var(--kub-surface-2))]",
       )}
@@ -572,9 +572,9 @@ function MessageGroupItem({
           <KubIcon name="chatBubble" size={17} />
         </div>
 
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 max-w-full flex-1 overflow-hidden">
           <div className="flex min-w-0 items-start justify-between gap-2">
-            <div className="min-w-0">
+            <div className="min-w-0 max-w-full overflow-hidden">
               <div className="truncate text-sm font-semibold text-[color:var(--kub-text)] [overflow-wrap:anywhere]">
                 {truncateText(title)}
               </div>

@@ -21,6 +21,7 @@ import { KUB_CHAT_MESSAGE_JUMP_EVENT, requestChatMessageJump, type ChatMessageJu
 import { isSavedChat } from "@/lib/chatDisplay";
 import { reportError } from "@/lib/monitoring";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
+import { prepareChatImageAttachment } from "@/lib/mediaUpload";
 import {
   CHAT_MEDIA_BUCKET,
   MAX_STAGED_ATTACHMENTS,
@@ -223,7 +224,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     removeStagedAttachment(attachmentId);
   }, [removeStagedAttachment]);
 
-  const stageFiles = useCallback((files: File[], _source: "picker" | "paste" | "drop" | "camera") => {
+  const stageFiles = useCallback(async (files: File[], _source: "picker" | "paste" | "drop" | "camera") => {
     if (!files.length) return;
     const existingCount = stagedAttachmentsRef.current.length;
     const availableSlots = Math.max(0, MAX_STAGED_ATTACHMENTS - existingCount);
@@ -235,10 +236,13 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       return;
     }
 
-    for (const file of files.slice(0, availableSlots)) {
+    for (const sourceFile of files.slice(0, availableSlots)) {
+      const file = sourceFile.type.startsWith("image/")
+        ? await prepareChatImageAttachment(sourceFile)
+        : sourceFile;
       const error = validateStagedAttachment(file);
       if (error) {
-        errors.push(`${file.name || "Файл"}: ${error}`);
+        errors.push(`${sourceFile.name || file.name || "Файл"}: ${error}`);
         continue;
       }
       accepted.push(createStagedAttachment(file));

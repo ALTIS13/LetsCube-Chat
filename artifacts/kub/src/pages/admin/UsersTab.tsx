@@ -22,7 +22,7 @@ import { BanModal } from "./BanModal";
 import { MuteModal } from "./MuteModal";
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
-import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
+import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { ProfileRoleSummary } from "@/components/profile/ProfileRoleSummary";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
@@ -944,11 +944,19 @@ function ProfilePreviewModal({
     }
     setAvatarSaving(true);
     setAvatarError(null);
-    const path = avatarUploadPath("user", user.id, file);
+    const preparedFile = await prepareAvatarImage(file);
+    const preparedValidationError = validateAvatarUploadImage(preparedFile);
+    if (preparedValidationError) {
+      setAvatarError(preparedValidationError);
+      showAppAlert(preparedValidationError, "Аватар не загружен");
+      setAvatarSaving(false);
+      return;
+    }
+    const path = avatarUploadPath("user", user.id, preparedFile);
     try {
       const { data, error } = await supabase.storage
         .from("media")
-        .upload(path, file, { contentType: file.type, upsert: false });
+        .upload(path, preparedFile, { contentType: preparedFile.type, upsert: false });
       if (error || !data) throw error ?? new Error("avatar_upload_failed");
       const { data: publicData } = supabase.storage.from("media").getPublicUrl(data.path);
       setAvatarSaving(false);

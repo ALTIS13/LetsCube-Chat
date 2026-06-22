@@ -7,7 +7,7 @@ import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
 import { KubIcon, KubModal } from "@/components/kub";
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
-import { avatarUploadPath, validateAvatarImage } from "@/lib/mediaUpload";
+import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
 import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
@@ -303,9 +303,16 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       return;
     }
     setAvatarError(null);
-    const path = avatarUploadPath("chat", chat.id, file);
+    const preparedFile = await prepareAvatarImage(file);
+    const preparedValidationError = validateAvatarUploadImage(preparedFile);
+    if (preparedValidationError) {
+      setAvatarError(preparedValidationError);
+      showAppAlert(preparedValidationError, "Аватар не загружен");
+      return;
+    }
+    const path = avatarUploadPath("chat", chat.id, preparedFile);
     const { data, error } = await supabase.storage.from("media")
-      .upload(path, file, { contentType: file.type, upsert: false });
+      .upload(path, preparedFile, { contentType: preparedFile.type, upsert: false });
     if (error) {
       const message = prefixError("Не удалось загрузить аватар чата", error);
       setAvatarError(message);
