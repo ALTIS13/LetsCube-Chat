@@ -1,0 +1,478 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { KubBadge, KubButton, KubIcon, KubInput, KubPanel } from "@/components/kub";
+import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
+import { useTaskRouting, useTaskRoutingEnabledPreference } from "@/hooks/useTaskRouting";
+import { LOCATION_ROUTING_REQUIRED_MESSAGE } from "@/lib/locationRouting";
+import {
+  REGISTRATION_INVITES_REQUIRED_MESSAGE,
+  buildRegistrationInviteLink,
+} from "@/lib/registrationInvite";
+import { getRoleLabel, mapRolesPermissionsError } from "@/lib/rolePermissions";
+import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
+import type { DynamicRole, RegistrationInviteListRow } from "@/types/database";
+
+const selectClassName =
+  "h-11 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none transition-colors focus:border-[color:var(--kub-cyan)]";
+
+export function InvitesTab() {
+  const supabase = createClient();
+  const [rolesEnabled] = useDynamicRolesEnabledPreference();
+  const [routingEnabled, setRoutingEnabled] = useTaskRoutingEnabledPreference();
+  const roles = useDynamicRoles({ enabled: rolesEnabled, includeAssignments: false });
+  const routing = useTaskRouting({ enabled: routingEnabled, includeMembers: true });
+  const [invites, setInvites] = useState<RegistrationInviteListRow[]>([]);
+  const [label, setLabel] = useState("");
+  const [maxUses, setMaxUses] = useState(1);
+  const [expiresInDays, setExpiresInDays] = useState("14");
+  const [globalRoleId, setGlobalRoleId] = useState("");
+  const [locationId, setLocationId] = useState("");
+  const [locationRoleId, setLocationRoleId] = useState("");
+  const [primaryAdminId, setPrimaryAdminId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadInvites = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    const { data, error } = await supabase.rpc("registration_invites_list");
+    setLoading(false);
+    if (error) {
+      setError(mapInviteError(error));
+      setInvites([]);
+      return;
+    }
+    setInvites((data ?? []) as RegistrationInviteListRow[]);
+  }, [supabase]);
+
+  useEffect(() => {
+    void loadInvites();
+  }, [loadInvites]);
+
+  const globalRoles = useMemo(
+    () => roles.roles.filter((role) => role.scope === "global" && role.is_active),
+    [roles.roles],
+  );
+  const locationRoles = useMemo(
+    () => roles.roles.filter((role) => role.scope === "location" && role.is_active),
+    [roles.roles],
+  );
+  const selectedLocation = useMemo(
+    () => routing.locations.find((location) => location.id === locationId) ?? null,
+    [locationId, routing.locations],
+  );
+  const selectedLocationRole = useMemo(
+    () => locationRoles.find((role) => role.id === locationRoleId) ?? null,
+    [locationRoleId, locationRoles],
+  );
+  const selectedLocationAdmins = useMemo(() => {
+    if (!selectedLocation) return [];
+    return routing.members
+      .filter((member) => member.location_id === selectedLocation.id)
+      .filter((member) => ["owner", "admin", "manager"].includes(member.role))
+      .sort((a, b) => getProfileName(a.profile).localeCompare(getProfileName(b.profile), "ru-RU"));
+  }, [routing.members, selectedLocation]);
+
+  useEffect(() => {
+    if (!locationId) {
+      setLocationRoleId("");
+      setPrimaryAdminId("");
+      return;
+    }
+    if (locationRoleId) return;
+    const staffRole = locationRoles.find((role) => role.key === "location_staff") ?? locationRoles[0] ?? null;
+    setLocationRoleId(staffRole?.id ?? "");
+  }, [locationId, locationRoleId, locationRoles]);
+
+  useEffect(() => {
+    if (selectedLocationRole?.key === "location_staff") return;
+    setPrimaryAdminId("");
+  }, [selectedLocationRole?.key]);
+
+  const createInvite = async () => {
+    if (!label.trim()) {
+      setError("Укажите понятное название приглашения.");
+      return;
+    }
+    setSaving("create");
+    setNotice(null);
+    setError(null);
+    const expiresAt = toExpiresAt(expiresInDays);
+    const { data, error } = await supabase.rpc("registration_invite_create", {
+      p_label: label.trim(),
+      p_max_uses: Math.max(1, Math.min(1000, Math.floor(maxUses || 1))),
+      p_expires_at: expiresAt,
+      p_global_role_id: globalRoleId || null,
+      p_location_id: locationId || null,
+      p_location_role_id: locationId ? locationRoleId || null : null,
+      p_primary_admin_id: selectedLocationRole?.key === "location_staff" ? primaryAdminId || null : null,
+    });
+    setSaving(null);
+    if (error) {
+      setError(mapInviteError(error));
+      return;
+    }
+    const code = data?.[0]?.code;
+    setNotice(code ? `Инвайт создан: ${code}` : "Инвайт создан.");
+    setLabel("");
+    setMaxUses(1);
+    await loadInvites();
+  };
+
+  const revokeInvite = async (invite: RegistrationInviteListRow) => {
+    setSaving(invite.id);
+    setNotice(null);
+    setError(null);
+    const { error } = await supabase.rpc("registration_invite_revoke", { p_invite_id: invite.id });
+    setSaving(null);
+    if (error) {
+      setError(mapInviteError(error));
+      return;
+    }
+    setNotice("Инвайт отозван.");
+    await loadInvites();
+  };
+
+  const copyInviteLink = async (invite: RegistrationInviteListRow) => {
+    const origin = typeof window === "undefined" ? "" : window.location.origin;
+    const link = buildRegistrationInviteLink(origin, invite.code);
+    await navigator.clipboard.writeText(link);
+    setNotice("Ссылка приглашения скопирована.");
+  };
+
+  return (
+    <div className="space-y-4">
+      <KubPanel className="space-y-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-pink)]">
+              <KubIcon name="userPlus" size={14} />
+              Инвайты
+            </div>
+            <h2 className="mt-2 text-xl font-bold text-[color:var(--kub-text)]">
+              Приглашения сотрудников
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-[color:var(--kub-muted)]">
+              Создавайте invite-code или invite-link с лимитом использований и заранее заданной ролью/клубом,
+              чтобы не назначать работников вручную после регистрации.
+            </p>
+          </div>
+          <KubButton
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => void loadInvites()}
+            loading={loading}
+            leftIcon={<KubIcon name="rotate" size={13} />}
+          >
+            Обновить
+          </KubButton>
+        </div>
+
+        {notice && (
+          <div className="rounded-xl border border-[color:var(--kub-online)]/30 bg-[color-mix(in_srgb,var(--kub-online)_12%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-online)]">
+            {notice}
+          </div>
+        )}
+        {error && (
+          <div className="rounded-xl border border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-danger)]">
+            {error}
+          </div>
+        )}
+
+        <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
+          <KubInput
+            label="Название"
+            placeholder="Например: Смена ресепшн июнь"
+            value={label}
+            onChange={(event) => setLabel(event.target.value)}
+            maxLength={120}
+            leftIcon={<KubIcon name="hash" size={16} />}
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <KubInput
+              label="Использований"
+              type="number"
+              min={1}
+              max={1000}
+              value={maxUses}
+              onChange={(event) => setMaxUses(Number(event.target.value))}
+            />
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-[color:var(--kub-muted)]">
+                Срок
+              </span>
+              <select
+                className={selectClassName}
+                value={expiresInDays}
+                onChange={(event) => setExpiresInDays(event.target.value)}
+              >
+                <option value="1">1 день</option>
+                <option value="7">7 дней</option>
+                <option value="14">14 дней</option>
+                <option value="30">30 дней</option>
+                <option value="0">Без срока</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-wide text-[color:var(--kub-muted)]">
+              Глобальная роль
+            </span>
+            <select className={selectClassName} value={globalRoleId} onChange={(event) => setGlobalRoleId(event.target.value)}>
+              <option value="">Без глобальной роли</option>
+              {globalRoles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {getRoleLabel(role)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-wide text-[color:var(--kub-muted)]">
+              Клуб
+            </span>
+            <select className={selectClassName} value={locationId} onChange={(event) => setLocationId(event.target.value)}>
+              <option value="">Без клуба</option>
+              {routing.locations.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-wide text-[color:var(--kub-muted)]">
+              Роль в клубе
+            </span>
+            <select
+              className={selectClassName}
+              value={locationRoleId}
+              onChange={(event) => setLocationRoleId(event.target.value)}
+              disabled={!locationId}
+            >
+              <option value="">Автоматически</option>
+              {locationRoles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {getRoleLabel(role)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-wide text-[color:var(--kub-muted)]">
+              Основной администратор
+            </span>
+            <select
+              className={selectClassName}
+              value={primaryAdminId}
+              onChange={(event) => setPrimaryAdminId(event.target.value)}
+              disabled={!locationId || selectedLocationRole?.key !== "location_staff"}
+            >
+              <option value="">Не назначать</option>
+              {selectedLocationAdmins.map((member) => (
+                <option key={member.user_id} value={member.user_id}>
+                  {getProfileName(member.profile)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {(!routingEnabled || routing.error) && (
+          <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/70 px-3 py-2 text-xs text-[color:var(--kub-muted)]">
+            {routingEnabled ? routing.error ?? LOCATION_ROUTING_REQUIRED_MESSAGE : LOCATION_ROUTING_REQUIRED_MESSAGE}
+            <KubButton
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="ml-2"
+              onClick={() => setRoutingEnabled(true)}
+            >
+              Проверить
+            </KubButton>
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <KubButton
+            type="button"
+            onClick={() => void createInvite()}
+            loading={saving === "create"}
+            leftIcon={<KubIcon name="create" size={15} />}
+          >
+            Создать инвайт
+          </KubButton>
+        </div>
+      </KubPanel>
+
+      <KubPanel padded={false} className="overflow-hidden">
+        <div className="flex items-center justify-between border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/50 px-4 py-3">
+          <div>
+            <h3 className="text-sm font-semibold text-[color:var(--kub-text)]">Активные и прошлые инвайты</h3>
+            <p className="text-xs text-[color:var(--kub-muted)]">Ссылка копируется в формате /register?invite=CODE.</p>
+          </div>
+          <KubBadge tone="muted" pill>
+            {invites.length}
+          </KubBadge>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <KubIcon name="spinner" size={22} tone="accent" label="Загрузка" />
+          </div>
+        ) : invites.length === 0 ? (
+          <div className="px-4 py-10 text-center text-sm text-[color:var(--kub-muted)]">
+            Инвайтов пока нет.
+          </div>
+        ) : (
+          <div className="divide-y divide-[color:var(--kub-border-color)]">
+            {invites.map((invite) => (
+              <InviteRow
+                key={invite.id}
+                invite={invite}
+                saving={saving === invite.id}
+                onCopy={() => void copyInviteLink(invite)}
+                onRevoke={() => void revokeInvite(invite)}
+              />
+            ))}
+          </div>
+        )}
+      </KubPanel>
+    </div>
+  );
+}
+
+function InviteRow({
+  invite,
+  saving,
+  onCopy,
+  onRevoke,
+}: {
+  invite: RegistrationInviteListRow;
+  saving: boolean;
+  onCopy: () => void;
+  onRevoke: () => void;
+}) {
+  const status = getInviteStatus(invite);
+  return (
+    <div className="grid gap-3 px-4 py-4 lg:grid-cols-[1fr_auto] lg:items-center">
+      <div className="min-w-0 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-sm font-semibold text-[color:var(--kub-text)]">{invite.code}</span>
+          <KubBadge tone={status.tone} pill dot>
+            {status.label}
+          </KubBadge>
+          <span className="text-xs text-[color:var(--kub-muted)]">
+            {invite.uses_count}/{invite.max_uses} использ.
+          </span>
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-[color:var(--kub-text)]">{invite.label}</div>
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[color:var(--kub-muted)]">
+            <span>Глобальная: {invite.global_role_name ?? "нет"}</span>
+            <span>Клуб: {invite.location_name ?? "нет"}</span>
+            <span>Роль клуба: {invite.location_role_name ?? "нет"}</span>
+            {invite.primary_admin_name && <span>Админ: {invite.primary_admin_name}</span>}
+          </div>
+        </div>
+        <div className="text-xs text-[color:var(--kub-muted)]">
+          Создан {formatDate(invite.created_at)}
+          {invite.expires_at ? ` · истекает ${formatDate(invite.expires_at)}` : " · без срока"}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2 lg:justify-end">
+        <KubButton
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={onCopy}
+          leftIcon={<KubIcon name="copy" size={13} />}
+        >
+          Скопировать
+        </KubButton>
+        <KubButton
+          type="button"
+          variant="danger"
+          size="sm"
+          onClick={onRevoke}
+          loading={saving}
+          disabled={Boolean(invite.revoked_at)}
+          className={cn(invite.revoked_at && "opacity-50")}
+        >
+          Отозвать
+        </KubButton>
+      </div>
+    </div>
+  );
+}
+
+function getInviteStatus(invite: RegistrationInviteListRow): { label: string; tone: "online" | "warn" | "danger" | "muted" } {
+  if (invite.revoked_at) return { label: "Отозван", tone: "danger" };
+  if (invite.expires_at && new Date(invite.expires_at).getTime() <= Date.now()) return { label: "Истёк", tone: "warn" };
+  if (invite.uses_count >= invite.max_uses) return { label: "Использован", tone: "muted" };
+  return { label: "Активен", tone: "online" };
+}
+
+function toExpiresAt(days: string): string | null {
+  const value = Number(days);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return new Date(Date.now() + value * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function getProfileName(profile: { full_name?: string | null; username?: string | null } | null | undefined): string {
+  return profile?.full_name?.trim() || profile?.username?.trim() || "Без имени";
+}
+
+function formatDate(value: string): string {
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function mapInviteError(error: unknown): string {
+  if (isRegistrationInviteMissingError(error)) return REGISTRATION_INVITES_REQUIRED_MESSAGE;
+  const text = readErrorText(error);
+  if (text.includes("invite_label_invalid")) return "Название инвайта должно быть от 2 до 120 символов.";
+  if (text.includes("invite_max_uses_invalid")) return "Лимит использований должен быть от 1 до 1000.";
+  if (text.includes("invite_global_role_invalid")) return "Выбранная глобальная роль недоступна.";
+  if (text.includes("invite_location_invalid")) return "Выбранный клуб недоступен.";
+  if (text.includes("invite_location_role_invalid")) return "Выбранная роль клуба недоступна.";
+  if (text.includes("invite_critical_role_forbidden")) return "Критические роли может выдавать только тех. администратор.";
+  if (text.includes("permission") || text.includes("42501")) return "Недостаточно прав для управления инвайтами.";
+  return mapRolesPermissionsError(error, "Не удалось выполнить действие с инвайтом.");
+}
+
+function isRegistrationInviteMissingError(error: unknown): boolean {
+  const code = readErrorCode(error);
+  const text = readErrorText(error);
+  return (
+    ["42p01", "42703", "42883", "pgrst202", "pgrst204", "pgrst205"].includes(code) &&
+    (text.includes("registration_invite") || text.includes("registration_invites"))
+  );
+}
+
+function readErrorCode(error: unknown): string {
+  if (!error || typeof error !== "object") return "";
+  const code = (error as Record<string, unknown>).code;
+  return typeof code === "string" ? code.toLowerCase() : "";
+}
+
+function readErrorText(error: unknown): string {
+  if (!error || typeof error !== "object") return "";
+  const record = error as Record<string, unknown>;
+  return [record.code, record.message, record.details, record.hint]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+}

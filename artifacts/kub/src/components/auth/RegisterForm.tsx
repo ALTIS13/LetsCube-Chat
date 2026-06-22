@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { AuthCaptcha } from "@/components/auth/AuthCaptcha";
 import { createNonPersistedAuthClient } from "@/lib/supabase/client";
@@ -9,12 +9,19 @@ import { getAuthCaptchaRequiredMessage, isAuthCaptchaEnabled, shouldUseAuthCaptc
 import { requestAuthGateway } from "@/lib/authGateway";
 import { mapPgError } from "@/lib/errors";
 import { PROFILE_LIMITS, normalizeFullName, validateFullName } from "@/lib/profileValidation";
+import {
+  normalizeRegistrationInviteCode,
+  readRegistrationInviteFromSearch,
+} from "@/lib/registrationInvite";
 
 export function RegisterForm() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState(() =>
+    typeof window === "undefined" ? "" : readRegistrationInviteFromSearch(window.location.search),
+  );
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -23,6 +30,12 @@ export function RegisterForm() {
   const [captchaResetSignal, setCaptchaResetSignal] = useState(0);
 
   const supabase = createNonPersistedAuthClient();
+
+  useEffect(() => {
+    const query = location.includes("?") ? location.slice(location.indexOf("?")) : window.location.search;
+    const nextInviteCode = readRegistrationInviteFromSearch(query);
+    if (nextInviteCode) setInviteCode(nextInviteCode);
+  }, [location]);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,6 +47,10 @@ export function RegisterForm() {
       if (isAuthCaptchaEnabled() && !captchaToken) {
         throw new Error(getAuthCaptchaRequiredMessage());
       }
+      const normalizedInviteCode = normalizeRegistrationInviteCode(inviteCode);
+      if (inviteCode.trim() && !normalizedInviteCode) {
+        throw new Error("Код приглашения должен быть 6–64 символа: латинские буквы, цифры, дефис или подчёркивание.");
+      }
 
       if (shouldUseAuthCaptchaGateway()) {
         await requestAuthGateway({
@@ -42,6 +59,7 @@ export function RegisterForm() {
           password,
           fullName: normalizeFullName(fullName),
           captchaToken,
+          inviteCode: normalizedInviteCode,
         });
       } else {
         const { error } = await supabase.auth.signUp({
@@ -49,7 +67,10 @@ export function RegisterForm() {
           password,
           options: {
             captchaToken: captchaToken || undefined,
-            data: { full_name: normalizeFullName(fullName) },
+            data: {
+              full_name: normalizeFullName(fullName),
+              ...(normalizedInviteCode ? { invite_code: normalizedInviteCode } : {}),
+            },
             emailRedirectTo: getAuthCallbackUrl(),
           },
         });
@@ -215,6 +236,18 @@ export function RegisterForm() {
                   <KubIcon name={showPass ? "eyeOff" : "eye"} size={16} />
                 </button>
               }
+            />
+
+            <KubInput
+              type="text"
+              label="Код приглашения"
+              placeholder="Например STAFF-2026"
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value.toUpperCase().replace(/\s+/g, ""))}
+              maxLength={64}
+              leftIcon={<KubIcon name="userPlus" size={16} />}
+              autoComplete="off"
+              hint="Если у вас есть invite-link, код заполнится автоматически."
             />
 
             <AuthCaptcha onTokenChange={setCaptchaToken} resetSignal={captchaResetSignal} />

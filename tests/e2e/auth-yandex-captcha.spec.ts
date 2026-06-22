@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { gotoOrSkip } from "./helpers/auth";
 
 test.describe("Yandex SmartCaptcha auth gateway", () => {
@@ -9,7 +9,12 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
     );
 
     await page.addInitScript(() => {
-      (window as typeof window & { smartCaptcha?: FakeSmartCaptcha; __lastSmartCaptchaOptions?: FakeSmartCaptchaOptions }).smartCaptcha = {
+      (
+        window as typeof window & {
+          smartCaptcha?: FakeSmartCaptcha;
+          __lastSmartCaptchaOptions?: FakeSmartCaptchaOptions;
+        }
+      ).smartCaptcha = {
         render(container: HTMLElement, options: FakeSmartCaptchaOptions) {
           container.classList.add("smart-captcha");
           container.setAttribute("data-sitekey", options.sitekey);
@@ -28,7 +33,9 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
     });
   });
 
-  test("/register renders Yandex SmartCaptcha and blocks submit without token", async ({ page }) => {
+  test("/register renders Yandex SmartCaptcha and blocks submit without token", async ({
+    page,
+  }) => {
     const requests = collectAuthRequests(page);
     await gotoOrSkip(page, "/register");
 
@@ -69,7 +76,58 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
     expect(requests.directSignup).toBe(0);
   });
 
-  test("/register maps gateway rate limit to friendly copy and never calls direct signup", async ({ page }) => {
+  test("/register keeps invite code from URL and sends it only with signup payload", async ({
+    page,
+  }) => {
+    const requests = collectAuthRequests(page);
+    await page.route("**/functions/v1/auth-yandex-gateway", async (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      expect(body.action).toBe("signup");
+      expect(body.inviteCode).toBe("STAFF-2026");
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true }),
+      });
+    });
+
+    await gotoOrSkip(page, "/register?invite=staff-2026");
+    await expect(page.getByLabel("Код приглашения")).toHaveValue("STAFF-2026");
+    await fillRegistration(page);
+    await page.evaluate(() => window.__lastSmartCaptchaOptions?.callback("playwright-smart-token"));
+    await page.getByRole("button", { name: "Создать аккаунт" }).click();
+
+    await expect(page.getByText("Проверьте почту")).toBeVisible();
+    expect(requests.gateway).toBe(1);
+    expect(requests.directSignup).toBe(0);
+  });
+
+  test("/register maps unavailable invite to friendly copy", async ({ page }) => {
+    const requests = collectAuthRequests(page);
+    await page.route("**/functions/v1/auth-yandex-gateway", async (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      expect(body.action).toBe("signup");
+      expect(body.inviteCode).toBe("USED-CODE");
+      await route.fulfill({
+        status: 400,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: false, error: "invite_used" }),
+      });
+    });
+
+    await gotoOrSkip(page, "/register?invite=used-code");
+    await fillRegistration(page);
+    await page.evaluate(() => window.__lastSmartCaptchaOptions?.callback("playwright-smart-token"));
+    await page.getByRole("button", { name: "Создать аккаунт" }).click();
+
+    await expect(page.getByText("Лимит использований приглашения исчерпан.")).toBeVisible();
+    expect(requests.gateway).toBe(1);
+    expect(requests.directSignup).toBe(0);
+  });
+
+  test("/register maps gateway rate limit to friendly copy and never calls direct signup", async ({
+    page,
+  }) => {
     const requests = collectAuthRequests(page);
     await page.route("**/functions/v1/auth-yandex-gateway", async (route) => {
       await route.fulfill({
@@ -84,12 +142,16 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
     await page.evaluate(() => window.__lastSmartCaptchaOptions?.callback("playwright-smart-token"));
     await page.getByRole("button", { name: "Создать аккаунт" }).click();
 
-    await expect(page.getByText("Слишком много попыток. Подождите и повторите позже.")).toBeVisible();
+    await expect(
+      page.getByText("Слишком много попыток. Подождите и повторите позже."),
+    ).toBeVisible();
     expect(requests.gateway).toBe(1);
     expect(requests.directSignup).toBe(0);
   });
 
-  test("/login recovery submits through auth-yandex-gateway and maps gateway rate limit", async ({ page }) => {
+  test("/login recovery submits through auth-yandex-gateway and maps gateway rate limit", async ({
+    page,
+  }) => {
     const requests = collectAuthRequests(page);
     await page.route("**/functions/v1/auth-yandex-gateway", async (route) => {
       const body = route.request().postDataJSON() as Record<string, unknown>;
@@ -107,31 +169,38 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
     await page.evaluate(() => window.__lastSmartCaptchaOptions?.callback("playwright-smart-token"));
     await page.getByRole("button", { name: "Отправить ссылку" }).click();
 
-    await expect(page.getByText("Слишком много попыток. Подождите и повторите позже.")).toBeVisible();
+    await expect(
+      page.getByText("Слишком много попыток. Подождите и повторите позже."),
+    ).toBeVisible();
     expect(requests.gateway).toBe(1);
     expect(requests.directRecover).toBe(0);
   });
 
-  test("/register keeps Yandex SmartCaptcha inside the auth card and passes resolved theme", async ({ page }) => {
+  test("/register keeps Yandex SmartCaptcha inside the auth card and passes resolved theme", async ({
+    page,
+  }) => {
     await page.addInitScript(() => localStorage.setItem("kub-theme", "dark"));
     await gotoOrSkip(page, "/register");
 
-    const layout = await page.getByTestId("auth-captcha").locator(".smart-captcha").evaluate((node) => {
-      const rect = node.getBoundingClientRect();
-      const fakeWidget = node.querySelector<HTMLElement>('[data-testid="fake-yandex-widget"]');
-      const fakeRect = fakeWidget?.getBoundingClientRect();
-      const styles = getComputedStyle(node);
-      return {
-        bottomGap: fakeRect ? rect.bottom - fakeRect.bottom : null,
-        colorScheme: styles.colorScheme,
-        height: rect.height,
-        optionsTheme: window.__lastSmartCaptchaOptions?.theme,
-        overflow: styles.overflow,
-        paddingBottom: styles.paddingBottom,
-        paddingTop: styles.paddingTop,
-        themeAttribute: node.getAttribute("data-theme"),
-      };
-    });
+    const layout = await page
+      .getByTestId("auth-captcha")
+      .locator(".smart-captcha")
+      .evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        const fakeWidget = node.querySelector<HTMLElement>('[data-testid="fake-yandex-widget"]');
+        const fakeRect = fakeWidget?.getBoundingClientRect();
+        const styles = getComputedStyle(node);
+        return {
+          bottomGap: fakeRect ? rect.bottom - fakeRect.bottom : null,
+          colorScheme: styles.colorScheme,
+          height: rect.height,
+          optionsTheme: window.__lastSmartCaptchaOptions?.theme,
+          overflow: styles.overflow,
+          paddingBottom: styles.paddingBottom,
+          paddingTop: styles.paddingTop,
+          themeAttribute: node.getAttribute("data-theme"),
+        };
+      });
 
     expect(layout.height).toBeGreaterThanOrEqual(102);
     expect(layout.bottomGap).not.toBeNull();

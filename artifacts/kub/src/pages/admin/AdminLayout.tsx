@@ -11,6 +11,7 @@ import { BansMutesTab } from "./BansMutesTab";
 import { AuditTab } from "./AuditTab";
 import { LocationsTab } from "./LocationsTab";
 import { RolesPermissionsTab } from "./RolesPermissionsTab";
+import { InvitesTab } from "./InvitesTab";
 
 type TabDef = { id: string; label: string; icon: KubIconName; path: string; adminOnly?: boolean };
 
@@ -18,6 +19,7 @@ const TABS: ReadonlyArray<TabDef> = [
   { id: "dashboard", label: "Сводка",       icon: "dashboard",  path: "/admin" },
   { id: "users",     label: "Пользователи", icon: "users",      path: "/admin/users" },
   { id: "locations", label: "Локации",      icon: "mapPin",     path: "/admin/locations", adminOnly: true },
+  { id: "invites",   label: "Инвайты",      icon: "userPlus",   path: "/admin/invites", adminOnly: true },
   { id: "roles",     label: "Роли и права", icon: "shield",     path: "/admin/roles", adminOnly: true },
   { id: "bans",      label: "Блокировки",   icon: "shieldOff",  path: "/admin/bans" },
   // Audit log is admin-only at the RLS layer (managers see no rows);
@@ -42,7 +44,7 @@ export function AdminLayout() {
   if (checking) {
     return (
       <div className="flex items-center justify-center h-screen bg-[var(--kub-bg)] kub-grid-bg">
-        <KubIcon name="spinner" size={24} tone="accent" label="РџСЂРѕРІРµСЂРєР° СЂРѕР»РµР№" />
+        <KubIcon name="spinner" size={24} tone="accent" label="Проверка ролей" />
       </div>
     );
   }
@@ -102,6 +104,9 @@ export function AdminLayout() {
             <Route path="/admin/users" component={UsersTab} />
             <Route path="/admin/locations">
               {isAdmin ? <LocationsTab /> : <Redirect to="/admin" />}
+            </Route>
+            <Route path="/admin/invites">
+              {isAdmin ? <InvitesTab /> : <Redirect to="/admin" />}
             </Route>
             <Route path="/admin/roles">
               {isAdmin ? <RolesPermissionsTab /> : <Redirect to="/admin" />}

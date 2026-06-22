@@ -1,4 +1,5 @@
 import { createAuthRateLimiter } from "./rateLimit.mjs";
+import { normalizeInviteCode } from "./inviteCode.mjs";
 
 type GatewayAction = "signup" | "recovery";
 
@@ -8,6 +9,7 @@ type RequestBody = {
   password?: unknown;
   fullName?: unknown;
   captchaToken?: unknown;
+  inviteCode?: unknown;
   redirectTo?: unknown;
 };
 
@@ -61,16 +63,32 @@ Deno.serve(async (request: Request) => {
     const fullName = normalizeFullName(body?.fullName);
     if (!fullName) return corsJson({ ok: false, error: "invalid_name" }, 400, request);
 
+    const rawInviteCode = body?.inviteCode;
+    const inviteCode = normalizeInviteCode(rawInviteCode);
+    const inviteRequired = readBooleanEnv("KUB_AUTH_SIGNUP_INVITE_REQUIRED", false);
+    if (rawInviteCode != null && String(rawInviteCode).trim() && !inviteCode) {
+      return corsJson({ ok: false, error: "invite_invalid" }, 400, request);
+    }
+    if (inviteCode || inviteRequired) {
+      const invite = await validateInviteCode(supabaseUrl, supabaseKey, inviteCode);
+      if (!invite.ok) return corsJson({ ok: false, error: invite.error }, invite.status, request);
+    }
+
     const authResponse = await callAuthEndpoint(supabaseUrl, supabaseKey, "signup", {
       redirectTo,
       body: {
         email,
         password,
-        data: { full_name: fullName },
+        data: {
+          full_name: fullName,
+          ...(inviteCode ? { invite_code: inviteCode } : {}),
+        },
       },
     });
 
     if (!authResponse.ok && !isExistingAccountError(authResponse.body)) {
+      const inviteError = readInviteError(authResponse.body);
+      if (inviteError) return corsJson({ ok: false, error: inviteError }, 400, request);
       console.error("auth-yandex-gateway signup failed", summarizeAuthError(authResponse.status, authResponse.body));
       return corsJson({ ok: false, error: "auth_failed" }, 400, request);
     }
@@ -250,6 +268,12 @@ function readPositiveEnvInteger(name: string, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
+function readBooleanEnv(name: string, fallback: boolean): boolean {
+  const value = Deno.env.get(name);
+  if (value == null) return fallback;
+  return ["1", "true", "on", "yes"].includes(value.trim().toLowerCase());
+}
+
 function isExistingAccountError(error: Record<string, unknown>) {
   const code = String(error.code || "").toLowerCase();
   const message = String(error.message || error.msg || "").toLowerCase();
@@ -262,6 +286,60 @@ function summarizeAuthError(status: number, error: Record<string, unknown>) {
     code: String(error.code || "auth_error").slice(0, 80),
     message: String(error.message || error.msg || "auth error").slice(0, 160),
   };
+}
+
+async function validateInviteCode(
+  supabaseUrl: string,
+  supabaseKey: string,
+  inviteCode: string | null,
+): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
+  const url = new URL("/rest/v1/rpc/registration_invite_validate", supabaseUrl);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: supabaseKey,
+        authorization: `Bearer ${supabaseKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ p_code: inviteCode }),
+    });
+  } catch {
+    return { ok: false, error: "invite_not_configured", status: 503 };
+  }
+
+  if (!response.ok) {
+    console.error("auth-yandex-gateway invite validation unavailable", {
+      status: response.status,
+    });
+    return { ok: false, error: "invite_not_configured", status: 500 };
+  }
+
+  const body = await readRemoteJson(response);
+  const row = Array.isArray(body) ? body[0] : body;
+  if (row && typeof row === "object" && "ok" in row) {
+    const result = row as { ok?: unknown; error?: unknown };
+    if (result.ok === true) return { ok: true };
+    const error = typeof result.error === "string" ? result.error : "invite_invalid";
+    return { ok: false, error, status: 400 };
+  }
+  return { ok: false, error: "invite_invalid", status: 400 };
+}
+
+function readInviteError(error: Record<string, unknown>): string | null {
+  const text = [
+    String(error.code || ""),
+    String(error.error || ""),
+    String(error.message || ""),
+    String(error.msg || ""),
+  ]
+    .join(" ")
+    .toLowerCase();
+  for (const code of ["invite_required", "invite_invalid", "invite_expired", "invite_used", "invite_not_configured"]) {
+    if (text.includes(code)) return code;
+  }
+  return null;
 }
 
 function corsJson(body: Record<string, unknown>, status: number, request: Request, headers: HeadersInit = {}) {

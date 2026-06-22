@@ -66,7 +66,14 @@ test.describe("KUB role visibility", () => {
     await expect(page.getByText("Админ-панель")).toBeVisible();
     await expect(page.getByRole("link", { name: "Пользователи" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Локации" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Инвайты" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Роли и права" })).toBeVisible();
+
+    await gotoOrSkip(page, "/admin/invites");
+    await expect(page).toHaveURL(/\/admin\/invites/);
+    await expect(
+      page.getByText(/Приглашения сотрудников|Инвайты требуют обновления базы данных/),
+    ).toBeVisible();
 
     await gotoOrSkip(page, "/tasks");
     await expect(page).toHaveURL(/\/tasks/);

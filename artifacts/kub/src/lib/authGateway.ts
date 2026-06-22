@@ -1,4 +1,5 @@
 import { getAuthCallbackUrl } from "@/lib/authRedirect";
+import { mapRegistrationInviteError, normalizeRegistrationInviteCode } from "@/lib/registrationInvite";
 
 const env = import.meta.env as Record<string, string | undefined>;
 
@@ -10,6 +11,7 @@ interface SignupPayload {
   password: string;
   fullName: string;
   captchaToken: string;
+  inviteCode?: string | null;
 }
 
 interface RecoveryPayload {
@@ -22,11 +24,12 @@ type AuthGatewayPayload = SignupPayload | RecoveryPayload;
 
 export async function requestAuthGateway(payload: AuthGatewayPayload): Promise<void> {
   const gatewayUrl = getAuthGatewayUrl();
+  const requestBody = buildAuthGatewayRequestBody(payload);
   const response = await fetch(gatewayUrl, {
     method: "POST",
     headers: buildHeaders(),
     body: JSON.stringify({
-      ...payload,
+      ...requestBody,
       redirectTo: getAuthCallbackUrl(),
     }),
   });
@@ -35,6 +38,25 @@ export async function requestAuthGateway(payload: AuthGatewayPayload): Promise<v
   if (!response.ok || body?.ok !== true) {
     throw new Error(mapAuthGatewayError(body?.error, payload.action, response.status));
   }
+}
+
+function buildAuthGatewayRequestBody(payload: AuthGatewayPayload): Record<string, unknown> {
+  if (payload.action === "recovery") {
+    return {
+      action: payload.action,
+      email: payload.email,
+      captchaToken: payload.captchaToken,
+    };
+  }
+  const inviteCode = normalizeRegistrationInviteCode(payload.inviteCode);
+  return {
+    action: payload.action,
+    email: payload.email,
+    password: payload.password,
+    fullName: payload.fullName,
+    captchaToken: payload.captchaToken,
+    ...(inviteCode ? { inviteCode } : {}),
+  };
 }
 
 function getAuthGatewayUrl(): string {
@@ -65,6 +87,8 @@ async function readJson(response: Response): Promise<{ ok?: boolean; error?: str
 }
 
 function mapAuthGatewayError(error: string | undefined, action: AuthGatewayAction, status?: number): string {
+  const inviteError = mapRegistrationInviteError(error);
+  if (inviteError) return inviteError;
   if (status === 429 || error === "rate_limited" || error === "too_many_requests") {
     return "Слишком много попыток. Подождите и повторите позже.";
   }

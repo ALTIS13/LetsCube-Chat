@@ -312,6 +312,88 @@ export interface Database {
           }
         ]
       }
+      registration_invites: {
+        Row: {
+          id: string
+          code: string
+          label: string
+          global_role_id: string | null
+          location_id: string | null
+          location_role_id: string | null
+          primary_admin_id: string | null
+          max_uses: number
+          uses_count: number
+          expires_at: string | null
+          revoked_at: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "registration_invites_global_role_id_fkey"
+            columns: ["global_role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "registration_invites_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "registration_invites_location_role_id_fkey"
+            columns: ["location_role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "registration_invites_primary_admin_id_fkey"
+            columns: ["primary_admin_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "registration_invites_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      registration_invite_uses: {
+        Row: {
+          invite_id: string
+          user_id: string
+          used_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "registration_invite_uses_invite_id_fkey"
+            columns: ["invite_id"]
+            isOneToOne: false
+            referencedRelation: "registration_invites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "registration_invite_uses_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       chats: {
         Row: {
           id: string
@@ -1056,6 +1138,50 @@ export interface Database {
         Args: { p_user_id: string; p_avatar_url: string | null }
         Returns: Database['public']['Tables']['profiles']['Row']
       }
+      registration_invites_list: {
+        Args: Record<string, never>
+        Returns: {
+          id: string
+          code: string
+          label: string
+          global_role_id: string | null
+          global_role_name: string | null
+          location_id: string | null
+          location_name: string | null
+          location_role_id: string | null
+          location_role_name: string | null
+          primary_admin_id: string | null
+          primary_admin_name: string | null
+          max_uses: number
+          uses_count: number
+          expires_at: string | null
+          revoked_at: string | null
+          created_by: string | null
+          created_by_name: string | null
+          created_at: string
+          updated_at: string
+        }[]
+      }
+      registration_invite_create: {
+        Args: {
+          p_label: string
+          p_max_uses?: number
+          p_expires_at?: string | null
+          p_global_role_id?: string | null
+          p_location_id?: string | null
+          p_location_role_id?: string | null
+          p_primary_admin_id?: string | null
+        }
+        Returns: { id: string; code: string }[]
+      }
+      registration_invite_revoke: {
+        Args: { p_invite_id: string }
+        Returns: void
+      }
+      registration_invite_validate: {
+        Args: { p_code: string | null }
+        Returns: { ok: boolean; error: string | null }[]
+      }
       global_search: {
         Args: {
           p_query: string
@@ -1466,6 +1592,8 @@ export type DynamicRole = Database['public']['Tables']['roles']['Row']
 export type Permission = Database['public']['Tables']['permissions']['Row']
 export type RolePermission = Database['public']['Tables']['role_permissions']['Row']
 export type UserGlobalRole = Database['public']['Tables']['user_global_roles']['Row']
+export type RegistrationInvite = Database['public']['Tables']['registration_invites']['Row']
+export type RegistrationInviteListRow = Database['public']['Functions']['registration_invites_list']['Returns'][number]
 export type Chat = Database['public']['Tables']['chats']['Row']
 export type ChatMember = Database['public']['Tables']['chat_members']['Row']
 export type GroupInvite = Database['public']['Tables']['group_invites']['Row']
