@@ -415,15 +415,19 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     void sendStagedAttachments("", attachmentId);
   }, [sendStagedAttachments]);
 
-  const handleSend = async (content: string) => {
+  const handleSend = useCallback((content: string) => {
     if (stagedAttachmentsRef.current.length) {
       return sendStagedAttachments(content);
     }
+    if (!userId) {
+      showAppAlert("Войдите в аккаунт, чтобы отправлять сообщения.", "Сообщение");
+      return false;
+    }
     const replyToId = replyTo?.id;
-    await sendMessage(content, replyToId);
+    void sendMessage(content, replyToId);
     setReplyTo(null);
     return true;
-  };
+  }, [replyTo?.id, sendMessage, sendStagedAttachments, userId]);
 
   const handleReply = useCallback((msg: MessageWithSender) => {
     setReplyTo(msg);
