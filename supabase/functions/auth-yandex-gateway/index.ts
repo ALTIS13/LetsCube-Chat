@@ -1,3 +1,5 @@
+import { createAuthRateLimiter } from "./rateLimit.mjs";
+
 type GatewayAction = "signup" | "recovery";
 
 type RequestBody = {
@@ -13,6 +15,11 @@ const MAX_EMAIL_LENGTH = 254;
 const MAX_NAME_LENGTH = 80;
 const MAX_PASSWORD_LENGTH = 1024;
 const MAX_TOKEN_LENGTH = 4096;
+const rateLimiter = createAuthRateLimiter({
+  windowMs: readPositiveEnvSeconds("KUB_AUTH_GATEWAY_RATE_WINDOW_SECONDS", 15 * 60) * 1000,
+  emailLimit: readPositiveEnvInteger("KUB_AUTH_GATEWAY_EMAIL_LIMIT", 5),
+  ipLimit: readPositiveEnvInteger("KUB_AUTH_GATEWAY_IP_LIMIT", 30),
+});
 
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") return corsResponse(null, 204, request);
@@ -25,10 +32,18 @@ Deno.serve(async (request: Request) => {
   const email = normalizeEmail(body?.email);
   if (!email) return corsJson({ ok: false, error: "invalid_email" }, 400, request);
 
+  const ip = clientIp(request);
+  const rateLimit = rateLimiter.check({ action, email, ip });
+  if (!rateLimit.ok) {
+    return corsJson({ ok: false, error: "rate_limited" }, 429, request, {
+      "retry-after": String(rateLimit.retryAfterSeconds),
+    });
+  }
+
   const captchaToken = normalizeToken(body?.captchaToken);
   if (!captchaToken) return corsJson({ ok: false, error: "captcha_required" }, 400, request);
 
-  const captcha = await verifyYandexSmartCaptcha(captchaToken, clientIp(request));
+  const captcha = await verifyYandexSmartCaptcha(captchaToken, ip);
   if (!captcha.ok) return corsJson({ ok: false, error: captcha.error }, captcha.status, request);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -226,6 +241,15 @@ function clientIp(request: Request): string | null {
   return forwardedFor || request.headers.get("x-real-ip") || null;
 }
 
+function readPositiveEnvSeconds(name: string, fallback: number): number {
+  return readPositiveEnvInteger(name, fallback);
+}
+
+function readPositiveEnvInteger(name: string, fallback: number): number {
+  const value = Number(Deno.env.get(name));
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
 function isExistingAccountError(error: Record<string, unknown>) {
   const code = String(error.code || "").toLowerCase();
   const message = String(error.message || error.msg || "").toLowerCase();
@@ -240,9 +264,10 @@ function summarizeAuthError(status: number, error: Record<string, unknown>) {
   };
 }
 
-function corsJson(body: Record<string, unknown>, status: number, request: Request) {
+function corsJson(body: Record<string, unknown>, status: number, request: Request, headers: HeadersInit = {}) {
   return corsResponse(JSON.stringify(body), status, request, {
     "content-type": "application/json; charset=utf-8",
+    ...headers,
   });
 }
 

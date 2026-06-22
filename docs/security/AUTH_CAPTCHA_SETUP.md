@@ -25,7 +25,9 @@ Supabase URL: the app falls back to
 
 For `yandex-smartcaptcha`, the app sends signup/recovery requests to the
 `auth-yandex-gateway` Edge Function. The function verifies the SmartCaptcha
-token server-side before calling Supabase Auth.
+token server-side before calling Supabase Auth. The gateway also applies a
+server-side in-memory rate limit before CAPTCHA validation so repeated requests
+for the same email or IP do not keep reaching CAPTCHA/Auth.
 
 Cloudflare Turnstile remains supported as a fallback provider:
 
@@ -52,6 +54,18 @@ KUB_AUTH_ALLOWED_REDIRECT_ORIGINS=https://app.letscube.ru
 ```
 
 Do not print or log the SmartCaptcha secret or response token.
+
+Optional gateway rate-limit knobs:
+
+```env
+KUB_AUTH_GATEWAY_RATE_WINDOW_SECONDS=900
+KUB_AUTH_GATEWAY_EMAIL_LIMIT=5
+KUB_AUTH_GATEWAY_IP_LIMIT=30
+```
+
+These values are not secrets. They tune the Edge Function limiter for signup
+and recovery only. Login brute-force protection remains on GoTrue/proxy rate
+limits because normal password login does not go through this CAPTCHA gateway.
 
 For Turnstile/hCaptcha through self-hosted Supabase Auth / GoTrue, configure
 the secret only in the Auth service environment:
@@ -108,3 +122,6 @@ endpoint can bypass the frontend.
 6. Confirm Supabase Auth sends a confirmation email only after CAPTCHA passes.
 7. Repeat for `https://app.letscube.ru/login?reset=1`.
 8. Confirm no raw provider errors, tokens, or debug payloads appear in the UI.
+9. Optional smoke: send repeated valid-shape signup/recovery gateway requests
+   without a CAPTCHA token and confirm the gateway eventually returns HTTP 429
+   `rate_limited` before any Supabase Auth call.

@@ -1,5 +1,22 @@
 # QA Results
 
+2026-06-22 auth gateway rate-limit hardening:
+
+- Added an in-function rate limiter to `auth-yandex-gateway` for signup and
+  password recovery before CAPTCHA validation and Supabase Auth calls.
+- Defaults are `900s` window, `5` attempts per action/email and `30` attempts
+  per action/IP; runtime env knobs are documented in
+  `docs/security/AUTH_CAPTCHA_SETUP.md`.
+- Added `tests/security/auth-yandex-rate-limit.test.mjs` to cover email
+  throttling, IP fan-out throttling, action separation and missing-IP behavior.
+- Deployed updated `auth-yandex-gateway` files to the self-hosted function
+  volume and restarted `supabase-edge-functions`.
+- Live smoke against `core.letscube.ru/functions/v1/auth-yandex-gateway`
+  returned five `captcha_required` responses followed by HTTP 429
+  `rate_limited` for a repeated valid-shape signup request without CAPTCHA.
+- Targeted Playwright `auth-yandex-captcha.spec.ts` passed with the test
+  Yandex CAPTCHA env and still verifies no direct signup/recovery Auth calls.
+
 2026-06-21 Yandex SmartCaptcha auth gateway foundation:
 
 - Added `yandex-smartcaptcha` as the preferred CAPTCHA provider for registration and password recovery.

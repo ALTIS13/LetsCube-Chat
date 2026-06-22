@@ -11,8 +11,10 @@
       "playwright.config.ts",
       "tests/e2e/**",
       "tests/rls/**",
+      "tests/security/**",
       "scripts/supabase-typegen.mjs",
-      "scripts/rls-smoke.mjs"
+      "scripts/rls-smoke.mjs",
+      "supabase/functions/auth-yandex-gateway/rateLimit.mjs"
     ]
   },
   "formatter": {

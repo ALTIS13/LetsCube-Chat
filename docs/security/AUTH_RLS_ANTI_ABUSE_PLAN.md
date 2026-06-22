@@ -31,6 +31,13 @@ Status: applied baseline, 2026-06-21. No secrets.
   - limits: average `20/min`, burst `40`, period `1m`;
   - router priority: `200`;
   - config backup: `/srv/letscube/backups/config/supabase-traefik-pre-auth-throttle-20260621-203230.yml`.
+- Edge Function update on 2026-06-22 added an in-function rate limiter to
+  `auth-yandex-gateway` for signup and password recovery before CAPTCHA
+  verification or Supabase Auth calls. Defaults:
+  - `KUB_AUTH_GATEWAY_RATE_WINDOW_SECONDS=900`
+  - `KUB_AUTH_GATEWAY_EMAIL_LIMIT=5`
+  - `KUB_AUTH_GATEWAY_IP_LIMIT=30`
+  The values are runtime environment knobs; no secrets are stored in repo.
 
 Applied migration proposal:
 
@@ -59,6 +66,8 @@ Configured controls:
 
 - Server-side Auth rate limits in self-hosted GoTrue.
 - Reverse proxy request throttling for `/auth/v1/token`, `/auth/v1/signup`, `/auth/v1/recover`, `/auth/v1/verify`.
+- Edge Function request throttling inside `auth-yandex-gateway` for signup and
+  recovery before CAPTCHA/Auth work.
 - Friendly frontend messages for `429 Too Many Requests`.
 
 Recommended next controls:
@@ -85,6 +94,9 @@ Initial self-host targets configured and verified:
 - 2026-06-22 live check:
   - direct external `POST /auth/v1/signup` with anon headers returned HTTP 403.
   - direct external `POST /auth/v1/recover` with anon headers returned HTTP 403.
+  - repeated valid-shape `auth-yandex-gateway` signup requests without CAPTCHA
+    returned five `captcha_required` responses followed by HTTP 429
+    `rate_limited`.
   - Real brute-force load was not generated against production Auth; login 429 UX is covered by deterministic Playwright routing.
 
 Next self-host targets to configure and validate:
@@ -120,6 +132,12 @@ For Yandex SmartCaptcha the relevant secret-side Edge Function env names are:
 - `YANDEX_SMARTCAPTCHA_SECRET=<provider secret>`
 - `SUPABASE_ANON_KEY=<public anon key>`
 - `KUB_AUTH_ALLOWED_REDIRECT_ORIGINS=https://app.letscube.ru`
+
+Optional non-secret gateway rate-limit env names:
+
+- `KUB_AUTH_GATEWAY_RATE_WINDOW_SECONDS=900`
+- `KUB_AUTH_GATEWAY_EMAIL_LIMIT=5`
+- `KUB_AUTH_GATEWAY_IP_LIMIT=30`
 
 Full protection also requires blocking or rerouting public direct calls to
 `/auth/v1/signup` and password recovery; otherwise bots can bypass the frontend
