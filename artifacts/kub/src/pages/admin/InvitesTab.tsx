@@ -202,14 +202,14 @@ export function InvitesTab() {
               {inviteOnlyEnabled ? "Только по приглашению" : "Открытая регистрация"}
             </h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-[color:var(--kub-muted)]">
-              По умолчанию регистрация доступна постоянно. Если включить invite-only, новые аккаунты
-              смогут создаваться только по invite-code или invite-link из этой вкладки.
+              По умолчанию регистрация доступна постоянно. Если включить режим приглашений, новые аккаунты
+              смогут создаваться только по коду или ссылке-приглашению из этой вкладки.
             </p>
           </div>
           <div className="flex shrink-0 items-center justify-between gap-3 rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/70 px-3 py-2">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-[color:var(--kub-text)]">
-                Invite-only
+                Только по приглашениям
               </div>
               <div className="text-xs text-[color:var(--kub-muted)]">
                 {modeLoading ? "Проверяем режим..." : inviteOnlyEnabled ? "Регистрация ограничена" : "Регистрация открыта"}
@@ -246,7 +246,7 @@ export function InvitesTab() {
               Приглашения сотрудников
             </h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-[color:var(--kub-muted)]">
-              Создавайте invite-code или invite-link с лимитом использований и заранее заданной ролью/клубом,
+              Создавайте коды или ссылки-приглашения с лимитом использований и заранее заданной ролью/клубом,
               чтобы не назначать работников вручную после регистрации.
             </p>
           </div>

@@ -23,7 +23,7 @@ const TABS: ReadonlyArray<TabDef> = [
   { id: "invites",   label: "Инвайты",      icon: "userPlus",   path: "/admin/invites", adminOnly: true },
   { id: "roles",     label: "Роли и права", icon: "shield",     path: "/admin/roles", adminOnly: true },
   { id: "bans",      label: "Блокировки",   icon: "shieldOff",  path: "/admin/bans" },
-  { id: "ops",       label: "Ops",           icon: "activity",   path: "/admin/ops", adminOnly: true },
+  { id: "ops",       label: "Операции",      icon: "activity",   path: "/admin/ops", adminOnly: true },
   // Audit log is admin-only at the RLS layer (managers see no rows);
   // hide the tab from managers entirely so they don't get sent to a
   // permission-denied empty state.

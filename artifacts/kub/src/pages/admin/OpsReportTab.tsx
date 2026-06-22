@@ -57,14 +57,14 @@ export function OpsReportTab() {
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-cyan)]">
             <KubIcon name="activity" size={14} />
-            Admin / Ops report
+            Операционный отчёт
           </div>
           <h2 className="mt-2 text-xl font-bold text-[color:var(--kub-text)]">
             Операционная безопасность
           </h2>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-[color:var(--kub-muted)]">
-            Агрегированный отчёт по регистрации, invite-code и auth-защите без паролей, CAPTCHA-токенов,
-            recovery-токенов, IP-адресов и email-адресов.
+            Агрегированный отчёт по регистрации, приглашениям и защите входа без паролей,
+            токенов проверки, токенов восстановления, IP-адресов и адресов эл. почты.
           </p>
         </div>
         <KubButton
@@ -84,37 +84,38 @@ export function OpsReportTab() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-sm font-semibold text-[color:var(--kub-text)]">
-              Публичная auth-защита в текущей сборке
+              Защита публичных форм в текущей сборке
             </h3>
             <p className="mt-1 text-xs leading-5 text-[color:var(--kub-muted)]">
-              Эти статусы отражают frontend-конфигурацию и не заменяют live smoke `pnpm.cmd auth:anti-abuse:smoke`.
+              Эти статусы отражают конфигурацию интерфейса и не заменяют проверку командой
+              `pnpm.cmd auth:anti-abuse:smoke`.
             </p>
           </div>
           <KubBadge tone={isAuthCaptchaEnabled() ? "online" : "warn"} pill dot data-testid="admin-ops-captcha-status">
-            {isAuthCaptchaEnabled() ? "CAPTCHA включена" : "CAPTCHA не настроена"}
+            {isAuthCaptchaEnabled() ? "Капча включена" : "Капча не настроена"}
           </KubBadge>
         </div>
         <div className="grid gap-3 md:grid-cols-3">
           <ControlCard
             icon="shield"
-            title="CAPTCHA"
+            title="Капча"
             value={captchaConfig?.provider === "yandex-smartcaptcha" ? "Yandex SmartCaptcha" : captchaConfig?.provider ?? "нет"}
             ok={isAuthCaptchaEnabled()}
             detail="Проверка нужна на регистрации и восстановлении доступа."
           />
           <ControlCard
             icon="lock"
-            title="Auth gateway"
-            value={shouldUseAuthCaptchaGateway() ? "через gateway" : "прямая Auth-ветка"}
+            title="Шлюз авторизации"
+            value={shouldUseAuthCaptchaGateway() ? "через защищённый шлюз" : "прямая ветка авторизации"}
             ok={shouldUseAuthCaptchaGateway()}
-            detail="Для Yandex CAPTCHA публичная форма должна идти через Edge Function gateway."
+            detail="Для Яндекс SmartCaptcha публичная форма должна идти через защищённую серверную функцию."
           />
           <ControlCard
             icon="audit"
-            title="Операторский smoke"
+            title="Операторская проверка"
             value="доступен"
             ok
-            detail="Команда проверяет direct Auth bypass и rate-limit без создания пользователей."
+            detail="Команда проверяет обход прямой авторизации и ограничение частоты без создания пользователей."
           />
         </div>
       </KubPanel>
@@ -128,10 +129,10 @@ export function OpsReportTab() {
             <KubIcon name="warning" size={20} tone="warn" className="mt-0.5 shrink-0" />
             <div className="min-w-0">
               <div className="text-sm font-semibold text-[color:var(--kub-text)]">
-                Нужен SQL proposal для live-метрик
+                Нужно применить SQL-предложение для живых метрик
               </div>
               <p className="mt-1 text-sm leading-6 text-[color:var(--kub-muted)]">
-                Вкладка готова, но RPC `admin_ops_security_report` ещё не применён в базе. Примените вручную
+                Вкладка готова, но серверная функция `admin_ops_security_report` ещё не применена в базе. Примените вручную
                 `.migration-backup/supabase/migrations/20260622_admin_ops_security_report.sql`.
               </p>
             </div>
@@ -206,10 +207,10 @@ export function OpsReportTab() {
         <KubPanel padded={false} className="overflow-hidden" data-testid="admin-ops-events">
           <div className="border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/50 px-4 py-3">
             <h3 className="text-sm font-semibold text-[color:var(--kub-text)]">
-              Последние auth/invite события
+              Последние события авторизации и приглашений
             </h3>
             <p className="mt-1 text-xs text-[color:var(--kub-muted)]">
-              Без actor ID, target ID, email и IP. Полный audit log остаётся во вкладке «Журнал».
+              Без ID инициатора, ID цели, адресов эл. почты и IP. Полный журнал аудита остаётся во вкладке «Журнал».
             </p>
           </div>
           <EventList events={report?.audit?.recent_events ?? []} loading={state === "loading"} />
@@ -339,7 +340,7 @@ function buildCards(report: AdminOpsSecurityReport | null) {
     },
     {
       icon: "lock" as const,
-      label: "Invite-only",
+      label: "Режим приглашений",
       value: report?.invites?.invite_only_enabled == null
         ? "—"
         : report.invites.invite_only_enabled
@@ -355,7 +356,7 @@ function buildCards(report: AdminOpsSecurityReport | null) {
     },
     {
       icon: "audit" as const,
-      label: "Invite событий 7д",
+      label: "Событий приглашений за 7д",
       value: report?.audit?.invite_events_7d ?? "—",
       tone: "cyan" as const,
     },
@@ -367,34 +368,34 @@ function buildControlCards(report: AdminOpsSecurityReport | null) {
   const inviteModeKnown = report?.invites?.invite_only_enabled !== null && report?.invites?.invite_only_enabled !== undefined;
   return [
     {
-      title: "Direct Auth bypass проверяется smoke-командой",
-      detail: "Запускайте `pnpm.cmd auth:anti-abuse:smoke`; успешный baseline: direct signup/recovery заблокированы на proxy.",
+      title: "Обход прямой авторизации проверяется отдельной командой",
+      detail: "Запускайте `pnpm.cmd auth:anti-abuse:smoke`; ожидаемый результат: прямые регистрация и восстановление доступа заблокированы на прокси.",
       ok: true,
       tone: "cyan" as const,
     },
     {
-      title: "Invite-code модель видна отчёту",
+      title: "Модель инвайт-кодов видна отчёту",
       detail: controls?.invite_table_available
-        ? "Таблицы инвайтов доступны RPC только агрегированно."
-        : "Live-метрики инвайтов появятся после применения proposal или если таблицы доступны в текущей базе.",
+        ? "Таблицы инвайтов доступны серверной функции только агрегированно."
+        : "Живые метрики инвайтов появятся после применения SQL-предложения или если таблицы доступны в текущей базе.",
       ok: Boolean(controls?.invite_table_available),
       tone: "warn" as const,
     },
     {
-      title: "Invite-only режим управляется из админки",
+      title: "Режим регистрации по приглашениям управляется из админки",
       detail: inviteModeKnown
         ? report?.invites?.invite_only_enabled
-          ? "Открытая регистрация ограничена invite-code/link."
-          : "Открытая регистрация включена; invite-link продолжает предзаполнять роль/клуб в фоне."
-        : "Статус invite-only недоступен без RPC/таблицы настроек.",
+          ? "Открытая регистрация ограничена кодом или ссылкой-приглашением."
+          : "Открытая регистрация включена; ссылка-приглашение продолжает заранее задавать роль и клуб в фоне."
+        : "Статус режима приглашений недоступен без серверной функции или таблицы настроек.",
       ok: inviteModeKnown,
       tone: "warn" as const,
     },
     {
-      title: "Audit log подключён",
+      title: "Журнал аудита подключён",
       detail: controls?.audit_log_available
-        ? "Отчёт берёт только агрегаты и sanitised event labels; подробности остаются в обычном журнале."
-        : "Audit log недоступен для агрегированного отчёта.",
+        ? "Отчёт берёт только агрегаты и безопасные названия событий; подробности остаются в обычном журнале."
+        : "Журнал аудита недоступен для агрегированного отчёта.",
       ok: Boolean(controls?.audit_log_available),
       tone: "warn" as const,
     },

@@ -1053,7 +1053,7 @@ function ProfilePreviewModal({
       </div>
       <div className="grid grid-cols-2 gap-3 text-sm">
         <Field label="Базовая роль" value={roleLabel[user.role]} />
-        <Field label="Email" value={email ?? "—"} mono copyable />
+        <Field label="Эл. почта" value={email ?? "—"} mono copyable />
         <PhoneField phone={contact?.phone ?? null} verified={!!contact?.phone_verified} />
         <Field label="Был в сети" value={fmtAgo(user.online_at)} />
         <Field label="Зарегистрирован" value={fmt(user.created_at)} />

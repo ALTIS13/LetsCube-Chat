@@ -611,7 +611,7 @@ function diffLabel(key: string): string {
     from: "Было",
     global_role_id: "Глобальная роль",
     invite_id: "Инвайт",
-    invite_only_enabled: "Invite-only",
+    invite_only_enabled: "Режим приглашений",
     location_id: "Клуб",
     location_role_id: "Роль клуба",
     mute_id: "Мьют",

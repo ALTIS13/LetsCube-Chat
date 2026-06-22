@@ -95,7 +95,7 @@ function mapAuthGatewayError(error: string | undefined, action: AuthGatewayActio
   if (error === "captcha_required" || error === "captcha_failed") {
     return "Подтвердите защиту от автоматической регистрации.";
   }
-  if (error === "invalid_email") return "Введите корректный email.";
+  if (error === "invalid_email") return "Введите корректный адрес эл. почты.";
   if (error === "invalid_password") return "Пароль должен быть не короче 6 символов.";
   if (error === "invalid_name") return "Введите имя и фамилию.";
   if (error === "not_configured") {

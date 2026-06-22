@@ -134,11 +134,11 @@ export function mapPgError(err: AnyErr): string {
     )
       return "Сессия не найдена. Войдите снова.";
     if (m.includes("invalid login credentials"))
-      return "Неверный e-mail или пароль.";
+      return "Неверная эл. почта или пароль.";
     if (m.includes("user already registered"))
-      return "Пользователь с таким e-mail уже зарегистрирован.";
+      return "Пользователь с такой эл. почтой уже зарегистрирован.";
     if (m.includes("email not confirmed"))
-      return "Подтвердите e-mail по ссылке из письма.";
+      return "Подтвердите эл. почту по ссылке из письма.";
     if (m.includes("invalid otp") || m.includes("token has expired") || m.includes("invalid token"))
       return "Неверный или просроченный код.";
     if (m.includes("rate limit") || m.includes("too many"))

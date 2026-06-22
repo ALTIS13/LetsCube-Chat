@@ -30,6 +30,7 @@ test.describe("LETSCUBE admin ops report", () => {
 
     const bodyText = await page.locator("body").innerText();
     expect(bodyText).not.toMatch(/PGRST|DOMException|stack|payload|JSON\.stringify|captchaToken|recovery token/i);
+    expect(bodyText).not.toMatch(/Admin \/ Ops|Invite-only|invite-code|invite-link|Direct Auth|Auth gateway|Audit log|sanitised|Email/i);
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
 });

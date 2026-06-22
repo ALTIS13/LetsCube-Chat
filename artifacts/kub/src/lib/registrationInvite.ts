@@ -3,13 +3,13 @@ const MAX_INVITE_CODE_LENGTH = 64;
 const INVITE_CODE_RE = /^[A-Z0-9_-]+$/;
 
 export const REGISTRATION_INVITES_REQUIRED_MESSAGE =
-  "Инвайты требуют обновления базы данных. Примените proposal 20260622_registration_invite_codes.sql.";
+  "Инвайты требуют обновления базы данных. Примените SQL-предложение 20260622_registration_invite_codes.sql.";
 export const REGISTRATION_INVITE_MODE_REQUIRED_MESSAGE =
-  "Режим регистрации требует обновления базы данных. Примените proposal 20260622_registration_invite_mode_settings.sql.";
+  "Режим регистрации требует обновления базы данных. Примените SQL-предложение 20260622_registration_invite_mode_settings.sql.";
 export const REGISTRATION_INVITE_ONLY_BANNER_TITLE =
   "Регистрация сейчас доступна только по приглашению.";
 export const REGISTRATION_INVITE_ONLY_BANNER_BODY =
-  "Введите invite-code или перейдите по invite-link от администратора LETSCUBE.";
+  "Введите код приглашения или перейдите по ссылке-приглашению от администратора LETSCUBE.";
 export const REGISTRATION_INVITE_ONLY_CODE_REQUIRED_MESSAGE =
   "Введите код приглашения, чтобы создать аккаунт.";
 

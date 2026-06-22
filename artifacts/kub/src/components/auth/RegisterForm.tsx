@@ -289,7 +289,7 @@ export function RegisterForm() {
                 maxLength={64}
                 leftIcon={<KubIcon name="userPlus" size={16} />}
                 autoComplete="off"
-                hint="Если у вас есть invite-link, код заполнится автоматически."
+                hint="Если у вас есть ссылка-приглашение, код заполнится автоматически."
               />
             )}
 

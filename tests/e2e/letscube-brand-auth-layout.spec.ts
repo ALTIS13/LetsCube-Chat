@@ -5,11 +5,11 @@ test.describe("Letscube auth brand layout", () => {
   for (const path of ["/login", "/register"] as const) {
     test(`${path} has one brand lockup and no legacy KUB label`, async ({ page }) => {
       const consoleErrors = collectConsoleErrors(page);
+      await installCaptchaMock(page);
       await gotoOrSkip(page, path);
 
       await expect(page.getByTestId("auth-brand-lockup")).toBeVisible();
       await expect(page.locator('img[src*="letscube-logo"]')).toHaveCount(1);
-      await expect(page.getByTestId("auth-captcha")).toHaveCount(0);
       await expect(page.getByText("КУБ", { exact: true })).toHaveCount(0);
       await expect(page.getByText("KUB", { exact: true })).toHaveCount(0);
 
@@ -21,6 +21,7 @@ test.describe("Letscube auth brand layout", () => {
 
     test(`${path} keeps the auth form centered independently from the mascot`, async ({ page }, testInfo) => {
       const consoleErrors = collectConsoleErrors(page);
+      await installCaptchaMock(page);
       await gotoOrSkip(page, path);
 
       const formShell = page.getByTestId("auth-form-shell");
@@ -57,6 +58,7 @@ test.describe("Letscube auth brand layout", () => {
 test.describe("Letscube safe public registration", () => {
   test("/register provides signup form with recovery guidance", async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
+    await installCaptchaMock(page);
     await gotoOrSkip(page, "/register");
 
     await expect(page.getByRole("heading", { name: "Создать аккаунт" })).toBeVisible();
@@ -66,11 +68,15 @@ test.describe("Letscube safe public registration", () => {
     await expect(page.getByRole("button", { name: "Создать аккаунт" })).toBeVisible();
     await expect(page.getByText("Уже есть аккаунт?")).toBeVisible();
     await expect(page.getByRole("link", { name: "Восстановить доступ" })).toBeVisible();
+    const bodyText = await page.locator("body").innerText();
+    expect(bodyText).not.toMatch(/invite-link|invite-code|Invite-only|Email|e-mail/i);
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
 
   test("/register never opens an authenticated app session after signup", async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
+    await installCaptchaMock(page);
+    await mockAuthGatewaySuccess(page);
     await page.route("**/auth/v1/signup**", async (route) => {
       await route.fulfill({
         status: 200,
@@ -118,6 +124,8 @@ test.describe("Letscube safe public registration", () => {
 
   test("/register keeps existing-email signup errors generic", async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
+    await installCaptchaMock(page);
+    await mockAuthGatewaySuccess(page);
     await page.route("**/auth/v1/signup**", async (route) => {
       await route.fulfill({
         status: 400,
@@ -144,16 +152,17 @@ test.describe("Letscube safe public registration", () => {
 
   test("/login?reset=1 opens recovery mode directly", async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
+    await installCaptchaMock(page);
     await gotoOrSkip(page, "/login?reset=1");
 
     await expect(page.getByRole("button", { name: "Отправить ссылку" })).toBeVisible();
     await expect(page.locator('input[type="password"]')).toHaveCount(0);
-    await expect(page.getByTestId("auth-captcha")).toHaveCount(0);
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
 
   test("/login maps auth token rate limit to friendly copy", async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
+    await installCaptchaMock(page);
     let tokenRequests = 0;
     await page.route("**/auth/v1/token**", async (route) => {
       tokenRequests += 1;
@@ -193,6 +202,46 @@ const PLAYWRIGHT_FAKE_JWT =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
   "eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJleHAiOjQxMDI0NDQ4MDB9." +
   "playwright-redacted-signature";
+
+async function installCaptchaMock(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const complete = (callback?: (token: string) => void) => {
+      window.setTimeout(() => callback?.("playwright-captcha-token"), 0);
+    };
+    Object.defineProperty(window, "smartCaptcha", {
+      configurable: true,
+      value: {
+        render: (_container: HTMLElement, options: { callback?: (token: string) => void }) => {
+          complete(options.callback);
+          return "playwright-yandex-captcha";
+        },
+        reset: () => undefined,
+        destroy: () => undefined,
+      },
+    });
+    Object.defineProperty(window, "turnstile", {
+      configurable: true,
+      value: {
+        render: (_container: HTMLElement, options: { callback?: (token: string) => void }) => {
+          complete(options.callback);
+          return "playwright-turnstile-captcha";
+        },
+        reset: () => undefined,
+        remove: () => undefined,
+      },
+    });
+  });
+}
+
+async function mockAuthGatewaySuccess(page: Page): Promise<void> {
+  await page.route("**/functions/v1/auth-yandex-gateway", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true }),
+    });
+  });
+}
 
 function unexpectedConsoleErrors(messages: string[]): string[] {
   return messages.filter(

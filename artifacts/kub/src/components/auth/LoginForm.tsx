@@ -90,7 +90,7 @@ export function LoginForm() {
     e.preventDefault();
     const cleanEmail = email.trim();
     if (!cleanEmail) {
-      setError("Введите email, чтобы получить ссылку для сброса пароля.");
+      setError("Введите адрес эл. почты, чтобы получить ссылку для сброса пароля.");
       return;
     }
     if (isAuthCaptchaEnabled() && !resetCaptchaToken) {
@@ -113,7 +113,7 @@ export function LoginForm() {
         });
         if (error) throw error;
       }
-      setNotice("Если email зарегистрирован, письмо со ссылкой для сброса пароля придёт на почту.");
+      setNotice("Если такая эл. почта зарегистрирована, письмо со ссылкой для сброса пароля придёт на почту.");
       setResetMode(false);
     } catch (err: unknown) {
       setError(mapPgError(err));
