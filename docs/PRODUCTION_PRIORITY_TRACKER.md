@@ -15,8 +15,8 @@ Legend:
 
 1. `[x]` Priority 1 - Auth and anti-abuse baseline.
 2. `[x]` Priority 2 - RLS and security audit baseline.
-3. `[~]` Priority 3 - Backup and restore drill.
-4. `[ ]` Priority 4 - Operator security observability.
+3. `[!]` Priority 3 - Backup and restore drill follow-ups.
+4. `[~]` Priority 4 - Operator security observability.
 5. `[ ]` Priority 5 - Installed web/PWA production shell.
 6. `[!]` Priority 6 - Monitoring and self-hosted Sentry.
 7. `[!]` Deferred native/mobile packaging and native push.
@@ -97,7 +97,7 @@ Keep checking:
 
 ## Priority 3 - Backup And Restore Drill
 
-Status: `[~]` active stage.
+Status: `[!]` follow-ups deferred by user on 2026-06-22.
 
 Goal: a full LETSCUBE production restore must be executable from backups without relying on memory or ad hoc commands.
 
@@ -118,9 +118,9 @@ Definition of done:
 - `[x]` P3.5 Confirm Coolify, Mailcow, Caddy, Supabase compose/env/config, and ops docs are backed up without exposing secret values.
 - `[x]` P3.6 Add or update backup scripts only if missing, idempotent, and secret-safe. Existing scripts are present; no script update was needed during this inventory pass.
 - `[x]` P3.7 Run non-destructive backup verification: archive listing, metadata checks, row/object counts where safe.
-- `[ ]` P3.8 Prepare isolated restore target plan and get explicit approval before any restore.
-- `[ ]` P3.9 Rehearse restore into isolated target.
-- `[ ]` P3.10 Verify restore: row counts, key tables, Storage object counts, basic app smoke.
+- `[!]` P3.8 Prepare isolated restore target plan and get explicit approval before any restore. Deferred.
+- `[!]` P3.9 Rehearse restore into isolated target. Deferred.
+- `[!]` P3.10 Verify restore: row counts, key tables, Storage object counts, basic app smoke. Deferred.
 - `[x]` P3.11 Decide and document temporary off-server/offsite backup destination. Temporary target is a private GitHub repository with client-side encrypted chunks; permanent backup storage remains a later replacement.
 
 Current baseline:
@@ -138,22 +138,32 @@ Current baseline:
 
 Next action:
 
-- `[ ]` Monitor the first scheduled GitHub offsite timer run on 2026-06-23.
-- `[ ]` Replace temporary GitHub storage with a dedicated backup target (`rclone`, `restic`, or `borg`) when available.
-- `[ ]` Prepare an isolated restore target plan and get explicit approval before any restore.
+- `[!]` Monitor the first scheduled GitHub offsite timer run on 2026-06-23. Deferred by user.
+- `[!]` Replace temporary GitHub storage with a dedicated backup target (`rclone`, `restic`, or `borg`) when available. Deferred until backup environment is ready.
+- `[!]` Prepare an isolated restore target plan and get explicit approval before any restore. Deferred.
 
 ## Priority 4 - Operator Security Observability
 
-Status: `[ ]` pending after Priority 3.
+Status: `[~]` active stage.
 
 Goal: make auth abuse, invite-code abuse, and suspicious registration/login patterns visible to operators without leaking sensitive data.
 
 Candidate work:
 
-- `[ ]` Add or document an operator smoke command for auth gateway rate limits and direct-auth bypass checks.
+- `[x]` Add or document an operator smoke command for auth gateway rate limits and direct-auth bypass checks.
 - `[ ]` Add an admin-facing or ops-facing view/report for recent auth gateway abuse counters if product-safe.
 - `[ ]` Ensure reports do not show raw secrets, passwords, CAPTCHA tokens, recovery tokens, or full IP data unless explicitly approved.
 - `[ ]` Keep this separate from CAPTCHA/rate-limit implementation unless new gaps are found.
+
+Current baseline:
+
+- Operator smoke script: `scripts/auth-anti-abuse-smoke.mjs`.
+- Package command: `pnpm.cmd auth:anti-abuse:smoke`.
+- Runbook: `docs/security/AUTH_OPERATOR_SMOKE.md`.
+- Default smoke checks direct `/auth/v1/signup` and `/auth/v1/recover` protection without creating users.
+- Default smoke checks `auth-yandex-gateway` signup/recovery no-CAPTCHA handling.
+- Repeated gateway rate-limit stress is opt-in through `--stress-rate-limit` or `KUB_AUTH_SMOKE_STRESS_RATE_LIMIT=1`.
+- 2026-06-22 live smoke result: direct signup/recovery returned 403, gateway no-CAPTCHA returned `captcha_required`, opt-in stress observed 429 `rate_limited` on repeated gateway attempts.
 
 ## Priority 5 - Installed Web/PWA Production Shell
 

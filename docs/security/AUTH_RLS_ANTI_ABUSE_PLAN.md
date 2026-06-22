@@ -98,6 +98,15 @@ Initial self-host targets configured and verified:
     returned five `captcha_required` responses followed by HTTP 429
     `rate_limited`.
   - Real brute-force load was not generated against production Auth; login 429 UX is covered by deterministic Playwright routing.
+- 2026-06-22 operator smoke command added:
+  - `pnpm.cmd auth:anti-abuse:smoke`
+  - script: `scripts/auth-anti-abuse-smoke.mjs`
+  - runbook: `docs/security/AUTH_OPERATOR_SMOKE.md`
+  - default mode checks direct Auth bypass protection and gateway CAPTCHA gate without creating users.
+  - gateway rate-limit stress remains opt-in through `--stress-rate-limit`.
+- 2026-06-22 operator smoke live result:
+  - default smoke passed: direct signup/recovery returned HTTP 403; gateway signup/recovery without CAPTCHA returned `captcha_required`.
+  - opt-in stress passed: repeated no-CAPTCHA gateway signup attempts returned HTTP 429 `rate_limited`.
 
 Next self-host targets to configure and validate:
 
