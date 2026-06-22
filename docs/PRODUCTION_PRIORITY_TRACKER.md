@@ -56,7 +56,7 @@ Current baseline:
 
 Next checks:
 
-- Add a repeatable anon REST probe script that does not print keys or row contents.
+- Keep `pnpm.cmd rls:anon-rest` in validation for anonymous REST exposure checks.
 - Run two-account authenticated boundary tests for chats, messages, tasks, notifications, profiles and storage.
 - Create new proposal only if drift or a concrete gap is found.
 

@@ -40,6 +40,25 @@ REST probe with anon key and no user JWT:
 
 This did not confirm anonymous row leakage through the public REST API.
 
+Repeatable probe:
+
+```powershell
+pnpm.cmd rls:anon-rest
+```
+
+The script reads `SUPABASE_URL` / anon-key style variables from the environment, `KUB_QA_ENV_FILE`, `.local/secrets/letscube-infra.env`, or `~/.kub-messenger-qa.env`. It uses `HEAD` requests with exact counts and does not print API keys or row contents.
+
+Latest local run against self-hosted Supabase:
+
+- `messages`: denied.
+- `chats`: denied.
+- `profiles`: denied.
+- `tasks`: denied.
+- `notifications`: denied.
+- `push_subscriptions`: denied.
+- `notification_preferences`: denied.
+- Result: passed, no anonymous row visibility detected.
+
 ## Notes
 
 `notifications_push_outbox` has RLS enabled and no policies. That is acceptable if the table is intended to be server-side only and accessed by trusted backend/Edge Function code.
@@ -48,7 +67,6 @@ Several `block banned reads/writes` policies are restrictive policies. They must
 
 ## Next Security Work
 
-- Add a repeatable script that performs the REST anon probe without printing anon keys or row contents.
 - Audit authenticated cross-user boundaries with two QA users:
   - chat membership;
   - message visibility;
