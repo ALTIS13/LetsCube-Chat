@@ -113,7 +113,7 @@ RUN apt-get update \
 
 EXPOSE 8096
 
-CMD ["sh", "-lc", "if [ -f /run/secrets/letscube-infra.env ]; then set -a; . /run/secrets/letscube-infra.env; set +a; fi; : ${PORT:=8096}; : ${MEDIA_VARIANTS_WORKER_ENABLED:=1}; export PORT MEDIA_VARIANTS_WORKER_ENABLED; exec node --enable-source-maps artifacts/api-server/dist/index.mjs"]
+CMD ["sh", "-lc", "if [ -f /run/secrets/letscube-infra.env ]; then set -a; . /run/secrets/letscube-infra.env; set +a; fi; PORT=8096; : ${MEDIA_VARIANTS_WORKER_ENABLED:=1}; export PORT MEDIA_VARIANTS_WORKER_ENABLED; exec node --enable-source-maps artifacts/api-server/dist/index.mjs"]
 
 # ---------- Stage 3: runtime ----------
 FROM nginx:alpine AS runtime

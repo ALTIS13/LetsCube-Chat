@@ -99,6 +99,7 @@ create policy "media variants admins can read profile variants"
 
 revoke all on public.media_variants from public, anon;
 grant select on public.media_variants to authenticated;
+grant select, insert, update, delete on public.media_variants to service_role;
 
 commit;
 
