@@ -113,7 +113,7 @@ export function LoginForm() {
         });
         if (error) throw error;
       }
-      setNotice("Если такой email зарегистрирован, мы отправили ссылку для сброса пароля.");
+      setNotice("Если email зарегистрирован, письмо со ссылкой для сброса пароля придёт на почту.");
       setResetMode(false);
     } catch (err: unknown) {
       setError(mapPgError(err));
