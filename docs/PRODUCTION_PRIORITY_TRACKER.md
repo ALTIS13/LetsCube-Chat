@@ -57,12 +57,14 @@ Current baseline:
 - Local `pnpm.cmd rls:smoke` now reads the same local QA env path as the anon REST probe and covers five QA roles with authenticated REST/RPC boundary checks.
 - 2026-06-22 authenticated smoke showed no non-owned rows through notifications, push subscriptions, notification preferences or chat notification preferences.
 - 2026-06-22 authenticated smoke showed non-admin `profile_contacts` privacy intact, visible messages constrained to visible chats, and no broad object listing from the private `chat-media` bucket.
+- 2026-06-22 opt-in `KUB_QA_ALLOW_MUTATIONS=1 pnpm.cmd rls:smoke` created and cleaned up one inactive `push_subscriptions` fixture, proving cross-user insert/select/update/delete is blocked while owner update/read still works.
 
 Next checks:
 
 - Keep `pnpm.cmd rls:anon-rest` in validation for anonymous REST exposure checks.
 - Keep `pnpm.cmd rls:smoke` in validation for authenticated boundary checks.
-- Add fixture-backed mutation checks only after explicitly enabling `KUB_QA_ALLOW_MUTATIONS=1` for an isolated target.
+- Expand `KUB_QA_ALLOW_MUTATIONS=1` fixtures to task, chat, invite and storage write boundaries on an isolated target.
+- Add stable private `chat-media` object fixtures so object-level signed-url checks always run.
 - Create new proposal only if drift or a concrete gap is found.
 
 ## Priority 3 - Backup And Restore Drill

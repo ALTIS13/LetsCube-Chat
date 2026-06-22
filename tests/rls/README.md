@@ -30,8 +30,11 @@ resolved to an id through normal authenticated API access. For compatibility, a 
 Use `RLS_SMOKE_STRICT=1` only when the target migrations are expected to be applied and missing
 RPCs or role expectation mismatches should fail the run.
 
-`KUB_QA_ALLOW_MUTATIONS=1` is reserved for future fixture-backed mutation tests. The current
-smoke keeps mutation-like probes on fake UUIDs by default.
+Without `KUB_QA_ALLOW_MUTATIONS=1`, mutation-like probes stay on fake UUIDs. With
+`KUB_QA_ALLOW_MUTATIONS=1`, the smoke may create short-lived inactive QA fixtures and must clean
+them up before exit. The current fixture-backed check creates an inactive `push_subscriptions`
+record for one QA user, verifies another QA user cannot insert/select/update/delete it, verifies
+the owner can still update/read it, and then deletes the fixture.
 
 Current authenticated boundary coverage:
 
@@ -39,4 +42,6 @@ Current authenticated boundary coverage:
 - non-admin users cannot read other users' `profile_contacts`;
 - visible messages must reference chats visible to the same user;
 - private `chat-media` bucket root listing must not expose objects;
+- if a suitable existing `chat-media` object/non-member fixture exists, non-members cannot create
+  signed URLs for that object;
 - legacy public `media` bucket root listing is reported as an informational count only.

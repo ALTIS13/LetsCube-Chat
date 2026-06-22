@@ -78,6 +78,28 @@ counts and leak counters:
   intentionally remains public for avatars and old media compatibility.
 - Task recurrence run-due stayed forbidden for location-admin, location-staff and client roles.
 
+Opt-in fixture mutation probe:
+
+```powershell
+$env:KUB_QA_ALLOW_MUTATIONS = '1'
+pnpm.cmd rls:smoke
+Remove-Item Env:\KUB_QA_ALLOW_MUTATIONS -ErrorAction SilentlyContinue
+```
+
+Latest local run:
+
+- Created one inactive `push_subscriptions` fixture for a QA user through normal authenticated REST.
+- Verified a second QA user could not insert a row for the first user.
+- Verified the second QA user could not select, update or delete the fixture.
+- Verified the owner could still update/read the fixture.
+- Deleted the fixture before exit.
+
+Storage object-level probe:
+
+- The script now attempts signed-url checks for existing private `chat-media` objects.
+- Latest local run skipped this object-level check because no suitable existing
+  object/non-member fixture pair was available.
+
 ## Notes
 
 `notifications_push_outbox` has RLS enabled and no policies. That is acceptable if the table is intended to be server-side only and accessed by trusted backend/Edge Function code.
@@ -88,6 +110,5 @@ Several `block banned reads/writes` policies are restrictive policies. They must
 
 - Add fixture-backed mutation checks for task, chat, invite and storage write boundaries on an
   isolated target.
-- Audit object-level storage downloads for specific private `chat-media` paths once stable
-  fixtures exist.
+- Add stable `chat-media` object fixtures so the signed-url non-member check can run every time.
 - Keep any SQL changes as proposals first unless an apply step is explicitly approved.

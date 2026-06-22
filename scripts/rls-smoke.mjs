@@ -12,7 +12,7 @@ const defaultEnvFiles = [
 ].filter(Boolean);
 const env = loadEnvFiles(defaultEnvFiles);
 const strict = readEnv("RLS_SMOKE_STRICT") === "1";
-const allowMutations = readEnv("KUB_QA_ALLOW_MUTATIONS") === "1";
+const allowMutations = process.env.KUB_QA_ALLOW_MUTATIONS === "1";
 const roles = ["owner", "tech_admin", "location_admin", "location_staff", "client"];
 const authStateDir =
   readEnv("KUB_QA_AUTH_STATE_DIR") || path.join(process.cwd(), "output", "playwright-auth");
@@ -52,7 +52,7 @@ if (testLocationConfig && !testLocationId) {
 
 if (!allowMutations) {
   console.log(
-    "RLS smoke: mutation probes use fake IDs only. Set KUB_QA_ALLOW_MUTATIONS=1 for future fixture-backed mutations.",
+    "RLS smoke: mutation probes use fake IDs only. Set KUB_QA_ALLOW_MUTATIONS=1 for fixture-backed mutations.",
   );
 }
 
@@ -65,6 +65,7 @@ if (!taskClaimPermissionPresent) {
 
 const allResults = [];
 const expectationFailures = [];
+const signedAccounts = [];
 let usableSessionCount = 0;
 
 for (const account of accounts) {
@@ -72,6 +73,7 @@ for (const account of accounts) {
   try {
     session = await signIn(account);
     usableSessionCount += 1;
+    signedAccounts.push({ ...account, session });
   } catch (error) {
     allResults.push(
       skippedProbe(
@@ -230,6 +232,20 @@ for (const account of accounts) {
     ...checkRoleExpectations(account.role, results, taskClaimPermissionPresent),
   );
 }
+
+if (allowMutations) {
+  const mutationResults = await runFixtureMutationProbes(signedAccounts);
+  allResults.push(...mutationResults);
+  expectationFailures.push(
+    ...mutationResults.filter((result) => !result.ok).map((result) => result.message),
+  );
+}
+
+const storageObjectResults = await runStorageObjectBoundaryProbes(signedAccounts);
+allResults.push(...storageObjectResults);
+expectationFailures.push(
+  ...storageObjectResults.filter((result) => !result.ok).map((result) => result.message),
+);
 
 console.table(
   allResults.map(({ role, probe, status, ok, missing, value, leakCount, message }) => ({
@@ -427,6 +443,269 @@ async function storageListBoundaryProbe(role, session, bucket, prefix) {
         : "ok"
       : summarize(text),
   };
+}
+
+async function runFixtureMutationProbes(signedCandidates) {
+  const creator = signedCandidates[0];
+  const challenger = signedCandidates.find(
+    (candidate) => candidate.session.user.id !== creator?.session.user.id,
+  );
+  if (!creator || !challenger) {
+    return [
+      skippedProbe(
+        "fixture",
+        "push_subscriptions fixture ownership",
+        "skipped: two distinct QA sessions are required",
+      ),
+    ];
+  }
+
+  return [await pushSubscriptionFixtureOwnershipProbe(creator, challenger)];
+}
+
+async function pushSubscriptionFixtureOwnershipProbe(creator, challenger) {
+  const endpoint = `https://rls-smoke.invalid/push/${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  let fixtureId = null;
+  const messages = [];
+
+  try {
+    const insert = await restMutationRows(creator.session, "POST", "/rest/v1/push_subscriptions", {
+      user_id: creator.session.user.id,
+      endpoint,
+      p256dh: "rls-smoke-p256dh",
+      auth: "rls-smoke-auth",
+      user_agent: "rls-smoke:create",
+      platform: "rls-smoke",
+      is_active: false,
+    });
+    fixtureId = insert.rows[0]?.id;
+    if (!insert.ok || !fixtureId) {
+      return {
+        role: `${creator.role}/${challenger.role}`,
+        probe: "push_subscriptions fixture ownership",
+        status: insert.status,
+        ok: false,
+        missing: insert.missing,
+        value: null,
+        leakCount: null,
+        message: `fixture insert failed: ${insert.message}`,
+      };
+    }
+
+    const crossInsert = await restMutationRows(
+      challenger.session,
+      "POST",
+      "/rest/v1/push_subscriptions",
+      {
+        user_id: creator.session.user.id,
+        endpoint: `${endpoint}/cross-insert`,
+        p256dh: "rls-smoke-p256dh",
+        auth: "rls-smoke-auth",
+        user_agent: "rls-smoke:cross-insert",
+        platform: "rls-smoke",
+        is_active: false,
+      },
+    );
+    if (crossInsert.rows.length > 0) {
+      messages.push("cross-user insert with another user_id succeeded");
+      for (const row of crossInsert.rows) {
+        await deletePushSubscriptionFixture(creator.session, row.id);
+      }
+    }
+
+    const crossSelect = await restRowsProbe(
+      challenger.role,
+      challenger.session,
+      "push_subscriptions fixture cross select",
+      `/rest/v1/push_subscriptions?select=id,user_id&id=eq.${fixtureId}`,
+    );
+    if (crossSelect.ok && crossSelect.rows.length > 0) {
+      messages.push("cross-user select returned fixture row");
+    }
+
+    const crossUpdate = await restMutationRows(
+      challenger.session,
+      "PATCH",
+      `/rest/v1/push_subscriptions?id=eq.${fixtureId}`,
+      { user_agent: "rls-smoke:cross-update" },
+    );
+    if (crossUpdate.rows.length > 0) {
+      messages.push("cross-user update returned fixture row");
+    }
+
+    const ownerUpdate = await restMutationRows(
+      creator.session,
+      "PATCH",
+      `/rest/v1/push_subscriptions?id=eq.${fixtureId}`,
+      { user_agent: "rls-smoke:owner-update" },
+    );
+    if (!ownerUpdate.ok || ownerUpdate.rows[0]?.user_agent !== "rls-smoke:owner-update") {
+      messages.push("own update did not return updated fixture row");
+    }
+
+    const crossDelete = await restMutationRows(
+      challenger.session,
+      "DELETE",
+      `/rest/v1/push_subscriptions?id=eq.${fixtureId}`,
+    );
+    if (crossDelete.rows.length > 0) {
+      messages.push("cross-user delete returned fixture row");
+    }
+
+    const ownerVerify = await restRowsProbe(
+      creator.role,
+      creator.session,
+      "push_subscriptions fixture owner verify",
+      `/rest/v1/push_subscriptions?select=id,user_id&id=eq.${fixtureId}`,
+    );
+    if (!ownerVerify.ok || ownerVerify.rows.length !== 1) {
+      messages.push("fixture row was not visible to owner after cross-user attempts");
+    }
+
+    return {
+      role: `${creator.role}/${challenger.role}`,
+      probe: "push_subscriptions fixture ownership",
+      status: messages.length > 0 ? "fail" : 200,
+      ok: messages.length === 0,
+      missing: false,
+      value: 1,
+      leakCount: messages.length,
+      message: messages.length > 0 ? messages.join("; ") : "ok",
+    };
+  } finally {
+    if (fixtureId) await deletePushSubscriptionFixture(creator.session, fixtureId);
+  }
+}
+
+async function deletePushSubscriptionFixture(session, id) {
+  if (!id) return null;
+  return restMutationRows(session, "DELETE", `/rest/v1/push_subscriptions?id=eq.${id}`);
+}
+
+async function restMutationRows(session, method, pathAndQuery, body) {
+  const response = await fetch(`${supabaseUrl}${pathAndQuery}`, {
+    method,
+    headers: {
+      ...authHeaders(session.access_token),
+      prefer: "return=representation",
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await response.text();
+  const parsed = parseJson(text);
+  const rows = Array.isArray(parsed) ? parsed : [];
+  return {
+    status: response.status,
+    ok: response.ok,
+    missing: response.status === 404,
+    rows,
+    message: response.ok ? "ok" : summarize(text),
+  };
+}
+
+async function runStorageObjectBoundaryProbes(signedCandidates) {
+  if (signedCandidates.length < 2) {
+    return [
+      skippedProbe(
+        "storage",
+        "storage chat-media object sign nonmember",
+        "skipped: two distinct QA sessions are required",
+      ),
+    ];
+  }
+
+  const visibleChatsByUser = new Map();
+  for (const candidate of signedCandidates) {
+    visibleChatsByUser.set(candidate.session.user.id, await fetchVisibleChatIds(candidate));
+  }
+
+  for (const source of signedCandidates) {
+    const mediaMessages = await restRowsProbe(
+      source.role,
+      source.session,
+      "storage chat-media fixture lookup",
+      "/rest/v1/messages?select=chat_id,media_path&media_bucket=eq.chat-media&media_path=not.is.null&limit=20",
+    );
+    if (!mediaMessages.ok || mediaMessages.rows.length === 0) continue;
+
+    for (const message of mediaMessages.rows) {
+      if (!message?.chat_id || !message?.media_path) continue;
+      const challenger = signedCandidates.find((candidate) => {
+        if (candidate.session.user.id === source.session.user.id) return false;
+        return !visibleChatsByUser.get(candidate.session.user.id)?.has(message.chat_id);
+      });
+      if (!challenger) continue;
+
+      const ownSign = await storageSignProbe(source.session, message.media_path);
+      const crossSign = await storageSignProbe(challenger.session, message.media_path);
+      return [
+        {
+          role: source.role,
+          probe: "storage chat-media object sign member",
+          status: ownSign.status,
+          ok: ownSign.ok,
+          missing: ownSign.missing,
+          value: ownSign.ok ? 1 : 0,
+          leakCount: 0,
+          message: ownSign.ok ? "ok" : ownSign.message,
+        },
+        {
+          role: `${source.role}/${challenger.role}`,
+          probe: "storage chat-media object sign nonmember",
+          status: crossSign.status,
+          ok: !crossSign.ok,
+          missing: crossSign.missing,
+          value: crossSign.ok ? 1 : 0,
+          leakCount: crossSign.ok ? 1 : 0,
+          message: crossSign.ok ? "non-member signed private object" : "ok",
+        },
+      ];
+    }
+  }
+
+  return [
+    skippedProbe(
+      "storage",
+      "storage chat-media object sign nonmember",
+      "skipped: no suitable chat-media object/nonmember fixture found",
+    ),
+  ];
+}
+
+async function fetchVisibleChatIds(candidate) {
+  const chats = await restRowsProbe(
+    candidate.role,
+    candidate.session,
+    "visible chats for storage boundary",
+    "/rest/v1/chats?select=id&limit=1000",
+  );
+  if (!chats.ok) return new Set();
+  return new Set(chats.rows.map((row) => row?.id).filter(Boolean));
+}
+
+async function storageSignProbe(session, mediaPath) {
+  const response = await fetch(
+    `${supabaseUrl}/storage/v1/object/sign/chat-media/${encodeStoragePath(mediaPath)}`,
+    {
+      method: "POST",
+      headers: authHeaders(session.access_token),
+      body: JSON.stringify({ expiresIn: 60 }),
+    },
+  );
+  const text = await response.text();
+  return {
+    status: response.status,
+    ok: response.ok,
+    missing: response.status === 404,
+    message: response.ok ? "ok" : summarize(text),
+  };
+}
+
+function encodeStoragePath(value) {
+  return String(value)
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
 }
 
 async function runDueProbe(role, session) {
