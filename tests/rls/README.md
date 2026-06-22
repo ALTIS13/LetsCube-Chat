@@ -36,10 +36,21 @@ them up before exit. The current fixture-backed check creates an inactive `push_
 record for one QA user, verifies another QA user cannot insert/select/update/delete it, verifies
 the owner can still update/read it, and then deletes the fixture.
 
-The opt-in run also creates a tiny temporary `chat-media` object under a chat where one QA user is a
-member and another QA user is not. It verifies the member can upload/sign the object, verifies the
-non-member cannot sign or upload into that chat path, and removes the temporary object with the
-operator cleanup key before exit.
+The opt-in run also creates temporary task, chat, group invite and `chat-media` fixtures:
+
+- task fixture: verifies creator/assignee visibility, non-participant isolation and direct
+  insert/update/delete blocking;
+- chat fixture: verifies member visibility, non-member isolation and non-member update/delete
+  blocking;
+- group invite fixture: verifies inviter/invitee visibility and unrelated-user isolation;
+- `chat-media` fixture: verifies the member can upload/sign the object, verifies the non-member
+  cannot sign or upload into that chat path, and removes the temporary object with the operator
+  cleanup key before exit.
+
+As of 2026-06-22 the invite fixture exposed a live gap: a non-member could create an invite in a
+temporary owner-admin-only chat. See
+`.migration-backup/supabase/migrations/20260622_group_invite_nonmember_hardening.sql`; do not apply
+it automatically.
 
 Current authenticated boundary coverage:
 
@@ -47,6 +58,7 @@ Current authenticated boundary coverage:
 - non-admin users cannot read other users' `profile_contacts`;
 - visible messages must reference chats visible to the same user;
 - private `chat-media` bucket root listing must not expose objects;
+- opt-in fixture mode validates task visibility/mutation boundaries and chat membership boundaries;
 - opt-in fixture mode validates private `chat-media` upload/sign boundaries with a temporary object;
 - normal non-mutating mode additionally checks existing `chat-media` objects when a stable
   object/non-member pair is available;

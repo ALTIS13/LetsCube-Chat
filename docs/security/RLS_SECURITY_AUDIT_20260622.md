@@ -98,6 +98,17 @@ Latest local run:
 - Verified the member could upload and sign the temporary object.
 - Verified the non-member could not sign the object or upload into that chat path.
 - Removed the temporary storage object through the operator cleanup key before exit.
+- Created one temporary task with a creator, assignee and unrelated user.
+- Verified the creator and assignee could select it, while the unrelated user could not select,
+  update or delete it; direct task insert from the unrelated user returned no rows.
+- Created one temporary group chat.
+- Verified the member could select it, while a non-member could not select the chat, membership rows,
+  update it or delete it.
+- Created one temporary group invite through `group_invite_create`.
+- Verified inviter/invitee visibility and unrelated-user select/update isolation.
+- Found a remaining gap: an unrelated non-member could create an invite for the temporary
+  owner-admin-only group. Proposal created:
+  `.migration-backup/supabase/migrations/20260622_group_invite_nonmember_hardening.sql`.
 
 Storage object-level probe:
 
@@ -115,7 +126,10 @@ Several `block banned reads/writes` policies are restrictive policies. They must
 
 ## Next Security Work
 
-- Add fixture-backed mutation checks for task, chat and invite boundaries on an isolated target.
+- Apply/review the group invite hardening proposal, then rerun
+  `KUB_QA_ALLOW_MUTATIONS=1 pnpm.cmd rls:smoke` and require
+  `group_invites fixture ownership` to return `ok`.
+- Keep fixture-backed mutation checks for task, chat and invite boundaries on an isolated target.
 - Add stable permanent `chat-media` fixtures only if we want the normal non-mutating signed-url
   check to run without `KUB_QA_ALLOW_MUTATIONS=1`.
 - Keep any SQL changes as proposals first unless an apply step is explicitly approved.

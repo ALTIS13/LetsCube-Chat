@@ -59,12 +59,14 @@ Current baseline:
 - 2026-06-22 authenticated smoke showed non-admin `profile_contacts` privacy intact, visible messages constrained to visible chats, and no broad object listing from the private `chat-media` bucket.
 - 2026-06-22 opt-in `KUB_QA_ALLOW_MUTATIONS=1 pnpm.cmd rls:smoke` created and cleaned up one inactive `push_subscriptions` fixture, proving cross-user insert/select/update/delete is blocked while owner update/read still works.
 - 2026-06-22 opt-in `KUB_QA_ALLOW_MUTATIONS=1 pnpm.cmd rls:smoke` created and cleaned up one temporary `chat-media` object, proving a chat member can upload/sign while a non-member cannot sign or upload into that chat path.
+- 2026-06-22 opt-in fixture smoke now covers task and chat membership boundaries with temporary rows and cleanup.
+- 2026-06-22 opt-in invite fixture found a remaining gap: a non-member can create a group invite for an owner-admin-only fixture chat. Proposal created at `.migration-backup/supabase/migrations/20260622_group_invite_nonmember_hardening.sql`.
 
 Next checks:
 
 - Keep `pnpm.cmd rls:anon-rest` in validation for anonymous REST exposure checks.
 - Keep `pnpm.cmd rls:smoke` in validation for authenticated boundary checks.
-- Expand `KUB_QA_ALLOW_MUTATIONS=1` fixtures to task, chat and invite write boundaries on an isolated target.
+- Apply/review `20260622_group_invite_nonmember_hardening.sql`, then rerun `KUB_QA_ALLOW_MUTATIONS=1 pnpm.cmd rls:smoke` and require the invite fixture to turn green.
 - Add stable private `chat-media` object fixtures only if the normal non-mutating signed-url probe needs to run without temporary storage mutation.
 - Create new proposal only if drift or a concrete gap is found.
 

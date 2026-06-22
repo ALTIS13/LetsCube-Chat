@@ -462,6 +462,9 @@ async function runFixtureMutationProbes(signedCandidates) {
 
   return [
     await pushSubscriptionFixtureOwnershipProbe(creator, challenger),
+    await taskFixtureOwnershipProbe(signedCandidates),
+    await chatFixtureMembershipProbe(signedCandidates),
+    await groupInviteFixtureOwnershipProbe(signedCandidates),
     await chatMediaFixtureOwnershipProbe(signedCandidates),
   ];
 }
@@ -604,6 +607,537 @@ async function restMutationRows(session, method, pathAndQuery, body) {
     rows,
     message: response.ok ? "ok" : summarize(text),
   };
+}
+
+async function operatorRestRows(pathAndQuery) {
+  const response = await fetch(`${supabaseUrl}${pathAndQuery}`, {
+    method: "GET",
+    headers: operatorHeaders(),
+  });
+  const text = await response.text();
+  const parsed = parseJson(text);
+  return {
+    status: response.status,
+    ok: response.ok,
+    missing: response.status === 404,
+    rows: Array.isArray(parsed) ? parsed : [],
+    message: response.ok ? "ok" : summarize(text),
+  };
+}
+
+async function operatorRestMutationRows(method, pathAndQuery, body) {
+  const response = await fetch(`${supabaseUrl}${pathAndQuery}`, {
+    method,
+    headers: {
+      ...operatorHeaders(),
+      prefer: "return=representation",
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await response.text();
+  const parsed = parseJson(text);
+  return {
+    status: response.status,
+    ok: response.ok,
+    missing: response.status === 404,
+    rows: Array.isArray(parsed) ? parsed : [],
+    message: response.ok ? "ok" : summarize(text),
+  };
+}
+
+async function taskFixtureOwnershipProbe(signedCandidates) {
+  if (!operatorApiKey) {
+    return skippedProbe(
+      "fixture",
+      "tasks fixture ownership",
+      "skipped: operator cleanup key is required for task fixture cleanup",
+    );
+  }
+
+  const pair = fixtureAccessPair(signedCandidates);
+  if (!pair) {
+    return skippedProbe(
+      "fixture",
+      "tasks fixture ownership",
+      "skipped: three distinct QA sessions are required",
+    );
+  }
+
+  const nonce = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  let taskId = null;
+  const cleanupTaskIds = [];
+  const messages = [];
+
+  try {
+    const insert = await operatorRestMutationRows("POST", "/rest/v1/tasks", {
+      title: `rls-smoke task fixture ${nonce}`,
+      description: "temporary RLS smoke fixture",
+      created_by: pair.owner.session.user.id,
+      assignee_id: pair.participant.session.user.id,
+      status: "new",
+      priority: "low",
+      visibility: "private",
+      assignment_scope: "user",
+      created_for_admin: false,
+    });
+    taskId = insert.rows[0]?.id;
+    if (!insert.ok || !taskId) {
+      return {
+        role: `${pair.owner.role}/${pair.participant.role}/${pair.outsider.role}`,
+        probe: "tasks fixture ownership",
+        status: insert.status,
+        ok: false,
+        missing: insert.missing,
+        value: null,
+        leakCount: null,
+        message: `fixture insert failed: ${insert.message}`,
+      };
+    }
+    cleanupTaskIds.push(taskId);
+
+    const ownerSelect = await restRowsProbe(
+      pair.owner.role,
+      pair.owner.session,
+      "tasks fixture owner select",
+      `/rest/v1/tasks?select=id&id=eq.${taskId}`,
+    );
+    if (!ownerSelect.ok || ownerSelect.rows.length !== 1) {
+      messages.push("creator could not select task fixture");
+    }
+
+    const participantSelect = await restRowsProbe(
+      pair.participant.role,
+      pair.participant.session,
+      "tasks fixture participant select",
+      `/rest/v1/tasks?select=id&id=eq.${taskId}`,
+    );
+    if (!participantSelect.ok || participantSelect.rows.length !== 1) {
+      messages.push("assignee could not select task fixture");
+    }
+
+    const outsiderSelect = await restRowsProbe(
+      pair.outsider.role,
+      pair.outsider.session,
+      "tasks fixture outsider select",
+      `/rest/v1/tasks?select=id&id=eq.${taskId}`,
+    );
+    if (outsiderSelect.ok && outsiderSelect.rows.length > 0) {
+      messages.push("non-participant selected task fixture");
+    }
+
+    const directInsert = await restMutationRows(pair.outsider.session, "POST", "/rest/v1/tasks", {
+      title: `rls-smoke forbidden task ${nonce}`,
+      created_by: pair.outsider.session.user.id,
+      assignee_id: pair.outsider.session.user.id,
+    });
+    for (const row of directInsert.rows) {
+      if (row?.id) cleanupTaskIds.push(row.id);
+    }
+    if (directInsert.rows.length > 0) {
+      messages.push("direct task insert returned rows");
+    }
+
+    const outsiderUpdate = await restMutationRows(
+      pair.outsider.session,
+      "PATCH",
+      `/rest/v1/tasks?id=eq.${taskId}`,
+      { title: `rls-smoke task fixture tampered ${nonce}` },
+    );
+    if (outsiderUpdate.rows.length > 0) {
+      messages.push("non-participant updated task fixture");
+    }
+
+    const outsiderDelete = await restMutationRows(
+      pair.outsider.session,
+      "DELETE",
+      `/rest/v1/tasks?id=eq.${taskId}`,
+    );
+    if (outsiderDelete.rows.length > 0) {
+      messages.push("non-participant deleted task fixture");
+    }
+
+    const ownerVerify = await restRowsProbe(
+      pair.owner.role,
+      pair.owner.session,
+      "tasks fixture owner verify",
+      `/rest/v1/tasks?select=id&id=eq.${taskId}`,
+    );
+    if (!ownerVerify.ok || ownerVerify.rows.length !== 1) {
+      messages.push("task fixture disappeared after outsider attempts");
+    }
+
+    return {
+      role: `${pair.owner.role}/${pair.participant.role}/${pair.outsider.role}`,
+      probe: "tasks fixture ownership",
+      status: messages.length > 0 ? "fail" : 200,
+      ok: messages.length === 0,
+      missing: false,
+      value: 1,
+      leakCount: messages.length,
+      message: messages.length > 0 ? messages.join("; ") : "ok",
+    };
+  } finally {
+    await cleanupTaskFixtures(cleanupTaskIds);
+  }
+}
+
+async function chatFixtureMembershipProbe(signedCandidates) {
+  if (!operatorApiKey) {
+    return skippedProbe(
+      "fixture",
+      "chats fixture membership",
+      "skipped: operator cleanup key is required for chat fixture cleanup",
+    );
+  }
+
+  const pair = fixtureAccessPair(signedCandidates);
+  if (!pair) {
+    return skippedProbe(
+      "fixture",
+      "chats fixture membership",
+      "skipped: three distinct QA sessions are required",
+    );
+  }
+
+  let chatId = null;
+  const messages = [];
+
+  try {
+    const chat = await createChatFixture(pair.owner, "membership");
+    chatId = chat.id;
+
+    const ownerSelect = await restRowsProbe(
+      pair.owner.role,
+      pair.owner.session,
+      "chats fixture member select",
+      `/rest/v1/chats?select=id&id=eq.${chatId}`,
+    );
+    if (!ownerSelect.ok || ownerSelect.rows.length !== 1) {
+      messages.push("fixture member could not select chat");
+    }
+
+    const outsiderSelect = await restRowsProbe(
+      pair.outsider.role,
+      pair.outsider.session,
+      "chats fixture outsider select",
+      `/rest/v1/chats?select=id&id=eq.${chatId}`,
+    );
+    if (outsiderSelect.ok && outsiderSelect.rows.length > 0) {
+      messages.push("non-member selected chat fixture");
+    }
+
+    const outsiderMembershipSelect = await restRowsProbe(
+      pair.outsider.role,
+      pair.outsider.session,
+      "chat_members fixture outsider select",
+      `/rest/v1/chat_members?select=chat_id,user_id&chat_id=eq.${chatId}`,
+    );
+    if (outsiderMembershipSelect.ok && outsiderMembershipSelect.rows.length > 0) {
+      messages.push("non-member selected fixture membership rows");
+    }
+
+    const outsiderUpdate = await restMutationRows(
+      pair.outsider.session,
+      "PATCH",
+      `/rest/v1/chats?id=eq.${chatId}`,
+      { name: `rls-smoke tampered ${Date.now()}` },
+    );
+    if (outsiderUpdate.rows.length > 0) {
+      messages.push("non-member updated chat fixture");
+    }
+
+    const outsiderDelete = await restMutationRows(
+      pair.outsider.session,
+      "DELETE",
+      `/rest/v1/chats?id=eq.${chatId}`,
+    );
+    if (outsiderDelete.rows.length > 0) {
+      messages.push("non-member deleted chat fixture");
+    }
+
+    const ownerVerify = await restRowsProbe(
+      pair.owner.role,
+      pair.owner.session,
+      "chats fixture owner verify",
+      `/rest/v1/chats?select=id&id=eq.${chatId}`,
+    );
+    if (!ownerVerify.ok || ownerVerify.rows.length !== 1) {
+      messages.push("chat fixture disappeared after outsider attempts");
+    }
+
+    return {
+      role: `${pair.owner.role}/${pair.outsider.role}`,
+      probe: "chats fixture membership",
+      status: messages.length > 0 ? "fail" : 200,
+      ok: messages.length === 0,
+      missing: false,
+      value: 1,
+      leakCount: messages.length,
+      message: messages.length > 0 ? messages.join("; ") : "ok",
+    };
+  } finally {
+    if (chatId) await cleanupChatFixture(chatId);
+  }
+}
+
+async function groupInviteFixtureOwnershipProbe(signedCandidates) {
+  if (!operatorApiKey) {
+    return skippedProbe(
+      "fixture",
+      "group_invites fixture ownership",
+      "skipped: operator cleanup key is required for invite fixture cleanup",
+    );
+  }
+
+  const pair = fixtureAccessPair(signedCandidates);
+  if (!pair) {
+    return skippedProbe(
+      "fixture",
+      "group_invites fixture ownership",
+      "skipped: three distinct QA sessions are required",
+    );
+  }
+
+  let chatId = null;
+  let inviteId = null;
+  const messages = [];
+
+  try {
+    await cleanupRlsSmokeInviteNotifications();
+    const chat = await createChatFixture(pair.owner, "invite");
+    chatId = chat.id;
+
+    const invite = await rpcRowsProbe(pair.owner.session, "group_invite_create", {
+      p_chat_id: chatId,
+      p_invitee_id: pair.participant.session.user.id,
+    });
+    inviteId = invite.rows[0]?.id;
+    if (!invite.ok || !inviteId) {
+      return {
+        role: `${pair.owner.role}/${pair.participant.role}/${pair.outsider.role}`,
+        probe: "group_invites fixture ownership",
+        status: invite.status,
+        ok: false,
+        missing: invite.missing,
+        value: null,
+        leakCount: null,
+        message: `invite create failed: ${invite.message}`,
+      };
+    }
+
+    const inviterSelect = await restRowsProbe(
+      pair.owner.role,
+      pair.owner.session,
+      "group_invites fixture inviter select",
+      `/rest/v1/group_invites?select=id,status&id=eq.${inviteId}`,
+    );
+    if (!inviterSelect.ok || inviterSelect.rows.length !== 1) {
+      messages.push("inviter could not select invite fixture");
+    }
+
+    const inviteeSelect = await restRowsProbe(
+      pair.participant.role,
+      pair.participant.session,
+      "group_invites fixture invitee select",
+      `/rest/v1/group_invites?select=id,status&id=eq.${inviteId}`,
+    );
+    if (!inviteeSelect.ok || inviteeSelect.rows.length !== 1) {
+      messages.push("invitee could not select invite fixture");
+    }
+
+    const outsiderSelect = await restRowsProbe(
+      pair.outsider.role,
+      pair.outsider.session,
+      "group_invites fixture outsider select",
+      `/rest/v1/group_invites?select=id,status&id=eq.${inviteId}`,
+    );
+    if (outsiderSelect.ok && outsiderSelect.rows.length > 0) {
+      messages.push("unrelated user selected invite fixture");
+    }
+
+    const outsiderCreate = await rpcRowsProbe(pair.outsider.session, "group_invite_create", {
+      p_chat_id: chatId,
+      p_invitee_id: pair.outsider.session.user.id,
+    });
+    if (outsiderCreate.rows.length > 0) {
+      for (const row of outsiderCreate.rows) {
+        if (row?.id) await cleanupGroupInviteNotifications(row.id);
+      }
+      messages.push("non-member created invite for fixture chat");
+    }
+
+    const outsiderUpdate = await restMutationRows(
+      pair.outsider.session,
+      "PATCH",
+      `/rest/v1/group_invites?id=eq.${inviteId}`,
+      { status: "cancelled" },
+    );
+    if (outsiderUpdate.rows.length > 0) {
+      messages.push("unrelated user updated invite fixture");
+    }
+
+    const ownerVerify = await restRowsProbe(
+      pair.owner.role,
+      pair.owner.session,
+      "group_invites fixture owner verify",
+      `/rest/v1/group_invites?select=id,status&id=eq.${inviteId}`,
+    );
+    if (!ownerVerify.ok || ownerVerify.rows.length !== 1) {
+      messages.push("invite fixture disappeared after outsider attempts");
+    }
+
+    return {
+      role: `${pair.owner.role}/${pair.participant.role}/${pair.outsider.role}`,
+      probe: "group_invites fixture ownership",
+      status: messages.length > 0 ? "fail" : 200,
+      ok: messages.length === 0,
+      missing: false,
+      value: 1,
+      leakCount: messages.length,
+      message: messages.length > 0 ? messages.join("; ") : "ok",
+    };
+  } finally {
+    if (inviteId) {
+      await cleanupGroupInviteNotifications(inviteId);
+      await operatorRestMutationRows("DELETE", `/rest/v1/group_invites?id=eq.${inviteId}`);
+    }
+    if (chatId) await cleanupChatFixture(chatId);
+    await cleanupRlsSmokeInviteNotifications();
+  }
+}
+
+async function createChatFixture(owner, label) {
+  const nonce = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const insert = await operatorRestMutationRows("POST", "/rest/v1/chats", {
+    type: "group",
+    name: `rls-smoke ${label} ${nonce}`,
+    description: "temporary RLS smoke fixture",
+    created_by: owner.session.user.id,
+    invite_policy: "owner_admin_only",
+    is_forum: false,
+  });
+  const chat = insert.rows[0];
+  if (!insert.ok || !chat?.id) {
+    throw new Error(`chat fixture insert failed: ${insert.message}`);
+  }
+
+  const membership = await operatorRestRows(
+    `/rest/v1/chat_members?select=chat_id,user_id&chat_id=eq.${chat.id}&user_id=eq.${owner.session.user.id}&limit=1`,
+  );
+  if (!membership.ok || membership.rows.length !== 1) {
+    const memberInsert = await operatorRestMutationRows("POST", "/rest/v1/chat_members", {
+      chat_id: chat.id,
+      user_id: owner.session.user.id,
+      role: "owner",
+    });
+    if (!memberInsert.ok) {
+      throw new Error(`chat member fixture insert failed: ${memberInsert.message}`);
+    }
+  }
+
+  return chat;
+}
+
+async function cleanupTaskFixtures(taskIds) {
+  for (const taskId of new Set(taskIds.filter(Boolean))) {
+    await operatorRestMutationRows("DELETE", `/rest/v1/task_events?task_id=eq.${taskId}`);
+    await operatorRestMutationRows("DELETE", `/rest/v1/tasks?id=eq.${taskId}`);
+  }
+}
+
+async function cleanupChatFixture(chatId) {
+  await operatorRestMutationRows("DELETE", `/rest/v1/group_invites?chat_id=eq.${chatId}`);
+  await operatorRestMutationRows("DELETE", `/rest/v1/chat_members?chat_id=eq.${chatId}`);
+  await operatorRestMutationRows("DELETE", `/rest/v1/chats?id=eq.${chatId}`);
+}
+
+async function cleanupGroupInviteNotifications(inviteId) {
+  const notifications = await operatorRestRows(
+    "/rest/v1/notifications?select=id,payload&kind=eq.group_invite&order=created_at.desc&limit=100",
+  );
+  const matchingIds = notifications.rows
+    .filter((row) => row?.payload?.invite_id === inviteId)
+    .map((row) => row.id)
+    .filter(Boolean);
+  for (const notificationId of matchingIds) {
+    await operatorRestMutationRows("DELETE", `/rest/v1/notifications?id=eq.${notificationId}`);
+  }
+}
+
+async function cleanupRlsSmokeInviteNotifications() {
+  const notifications = await operatorRestRows(
+    "/rest/v1/notifications?select=id,payload&kind=eq.group_invite&order=created_at.desc&limit=100",
+  );
+  const inviteIds = notifications.rows
+    .map((row) => row?.payload?.invite_id)
+    .filter((inviteId) => typeof inviteId === "string" && isUuid(inviteId));
+  for (const inviteId of inviteIds) {
+    const invite = await operatorRestRows(`/rest/v1/group_invites?select=id&id=eq.${inviteId}`);
+    if (invite.ok && invite.rows.length === 0) {
+      await cleanupGroupInviteNotifications(inviteId);
+    }
+  }
+}
+
+async function rpcRowsProbe(session, rpcName, body) {
+  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/${rpcName}`, {
+    method: "POST",
+    headers: {
+      ...authHeaders(session.access_token),
+      prefer: "return=representation",
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await response.text();
+  const parsed = parseJson(text);
+  const rows = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === "object"
+      ? [parsed]
+      : [];
+  return {
+    status: response.status,
+    ok: response.ok,
+    missing: response.status === 404,
+    rows,
+    message: response.ok ? "ok" : summarize(text),
+  };
+}
+
+function fixtureAccessPair(signedCandidates) {
+  const owner =
+    signedCandidates.find((candidate) => candidate.role === "owner") ?? signedCandidates[0];
+  const participant =
+    signedCandidates.find(
+      (candidate) =>
+        candidate.role === "location_staff" && candidate.session.user.id !== owner?.session.user.id,
+    ) ??
+    signedCandidates.find(
+      (candidate) =>
+        candidate.role === "client" && candidate.session.user.id !== owner?.session.user.id,
+    );
+  const outsider =
+    signedCandidates.find(
+      (candidate) =>
+        candidate.role === "client" &&
+        candidate.session.user.id !== owner?.session.user.id &&
+        candidate.session.user.id !== participant?.session.user.id,
+    ) ??
+    signedCandidates.find(
+      (candidate) =>
+        candidate.role === "location_staff" &&
+        candidate.session.user.id !== owner?.session.user.id &&
+        candidate.session.user.id !== participant?.session.user.id,
+    ) ??
+    signedCandidates.find(
+      (candidate) =>
+        candidate.session.user.id !== owner?.session.user.id &&
+        candidate.session.user.id !== participant?.session.user.id &&
+        candidate.role !== "tech_admin",
+    );
+
+  if (!owner || !participant || !outsider) return null;
+  return { owner, participant, outsider };
 }
 
 async function chatMediaFixtureOwnershipProbe(signedCandidates) {
