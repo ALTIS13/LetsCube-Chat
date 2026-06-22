@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getAuthCaptchaConfig } from "@/lib/authCaptcha";
+import { useTheme } from "@/hooks/useTheme";
 
 type TurnstileWidgetId = string;
 type YandexWidgetId = string | number;
@@ -27,6 +28,7 @@ interface YandexSmartCaptchaRenderOptions {
   "error-callback"?: () => void;
   invisible?: boolean;
   test?: boolean;
+  theme?: "light" | "dark";
 }
 
 interface YandexSmartCaptchaApi {
@@ -53,6 +55,7 @@ let yandexScriptPromise: Promise<void> | null = null;
 
 export function AuthCaptcha({ disabled = false, onTokenChange, resetSignal = 0 }: AuthCaptchaProps) {
   const config = getAuthCaptchaConfig();
+  const { resolvedTheme } = useTheme();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetRef = useRef<TurnstileWidgetId | YandexWidgetId | null>(null);
   const [error, setError] = useState("");
@@ -68,7 +71,7 @@ export function AuthCaptcha({ disabled = false, onTokenChange, resetSignal = 0 }
         if (cancelled || !containerRef.current || widgetRef.current) return;
         widgetRef.current =
           config.provider === "yandex-smartcaptcha"
-            ? renderYandexSmartCaptcha(containerRef.current, config.siteKey, onTokenChange, setError)
+            ? renderYandexSmartCaptcha(containerRef.current, config.siteKey, resolvedTheme, onTokenChange, setError)
             : renderTurnstile(containerRef.current, config.siteKey, onTokenChange, setError);
       })
       .catch(() => {
@@ -93,7 +96,7 @@ export function AuthCaptcha({ disabled = false, onTokenChange, resetSignal = 0 }
       widgetRef.current = null;
       onTokenChange("");
     };
-  }, [config, disabled, onTokenChange]);
+  }, [config, disabled, onTokenChange, resolvedTheme]);
 
   useEffect(() => {
     if (!config || !widgetRef.current) return;
@@ -105,13 +108,20 @@ export function AuthCaptcha({ disabled = false, onTokenChange, resetSignal = 0 }
 
   if (!config) return null;
 
+  const captchaContainerClassName =
+    config.provider === "yandex-smartcaptcha"
+      ? "min-h-[104px] w-full overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/60 p-0"
+      : "min-h-[65px] overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/60 px-1 py-2";
+
   return (
     <div className="space-y-2" data-testid="auth-captcha">
       <div
         ref={containerRef}
         aria-label="Проверка защиты от автоматических регистраций"
         data-provider={config.provider}
-        className="min-h-[65px] overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/60 px-1 py-2"
+        data-theme={resolvedTheme}
+        className={captchaContainerClassName}
+        style={{ colorScheme: resolvedTheme }}
       />
       {error && (
         <p className="px-1 text-xs text-[color:var(--kub-danger)]">{error}</p>
@@ -152,12 +162,14 @@ function renderTurnstile(
 function renderYandexSmartCaptcha(
   container: HTMLElement,
   siteKey: string,
+  theme: "light" | "dark",
   onTokenChange: (token: string) => void,
   setError: (message: string) => void,
 ): YandexWidgetId {
   if (!window.smartCaptcha) throw new Error("Yandex SmartCaptcha runtime unavailable");
   return window.smartCaptcha.render(container, {
     sitekey: siteKey,
+    theme,
     callback: (token) => {
       setError("");
       onTokenChange(token);

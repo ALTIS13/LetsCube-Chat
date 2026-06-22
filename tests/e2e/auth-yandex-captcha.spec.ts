@@ -13,6 +13,12 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
         render(container: HTMLElement, options: FakeSmartCaptchaOptions) {
           container.classList.add("smart-captcha");
           container.setAttribute("data-sitekey", options.sitekey);
+          container.style.height = "102px";
+          const fakeWidget = document.createElement("div");
+          fakeWidget.setAttribute("data-testid", "fake-yandex-widget");
+          fakeWidget.style.height = "102px";
+          fakeWidget.style.width = "100%";
+          container.appendChild(fakeWidget);
           window.__lastSmartCaptchaOptions = options;
           return "playwright-yandex-widget";
         },
@@ -62,6 +68,38 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
     expect(requests.gateway).toBe(1);
     expect(requests.directSignup).toBe(0);
   });
+
+  test("/register keeps Yandex SmartCaptcha inside the auth card and passes resolved theme", async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("kub-theme", "dark"));
+    await gotoOrSkip(page, "/register");
+
+    const layout = await page.getByTestId("auth-captcha").locator(".smart-captcha").evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      const fakeWidget = node.querySelector<HTMLElement>('[data-testid="fake-yandex-widget"]');
+      const fakeRect = fakeWidget?.getBoundingClientRect();
+      const styles = getComputedStyle(node);
+      return {
+        bottomGap: fakeRect ? rect.bottom - fakeRect.bottom : null,
+        colorScheme: styles.colorScheme,
+        height: rect.height,
+        optionsTheme: window.__lastSmartCaptchaOptions?.theme,
+        overflow: styles.overflow,
+        paddingBottom: styles.paddingBottom,
+        paddingTop: styles.paddingTop,
+        themeAttribute: node.getAttribute("data-theme"),
+      };
+    });
+
+    expect(layout.height).toBeGreaterThanOrEqual(102);
+    expect(layout.bottomGap).not.toBeNull();
+    expect(layout.bottomGap as number).toBeGreaterThanOrEqual(0);
+    expect(layout.paddingTop).toBe("0px");
+    expect(layout.paddingBottom).toBe("0px");
+    expect(layout.overflow).toBe("hidden");
+    expect(layout.themeAttribute).toBe("dark");
+    expect(layout.colorScheme).toContain("dark");
+    expect(layout.optionsTheme).toBe("dark");
+  });
 });
 
 function collectAuthRequests(page: Page) {
@@ -85,6 +123,7 @@ interface FakeSmartCaptchaOptions {
   callback: (token: string) => void;
   "expired-callback"?: () => void;
   "error-callback"?: () => void;
+  theme?: "light" | "dark";
 }
 
 interface FakeSmartCaptcha {
