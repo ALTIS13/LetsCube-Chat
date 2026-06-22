@@ -99,16 +99,6 @@ RUN set -eu; \
 
 RUN pnpm --filter @workspace/api-server run build
 
-# ---------- Stage 3: runtime ----------
-FROM nginx:alpine AS runtime
-
-COPY docs/deploy/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/artifacts/kub/dist/public /usr/share/nginx/html
-
-EXPOSE 80
-
-CMD ["nginx", "-g", "daemon off;"]
-
 # ---------- Optional API/worker runtime ----------
 FROM base AS api-runtime
 
@@ -120,3 +110,13 @@ COPY --from=build /app/ ./
 EXPOSE 8096
 
 CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
+
+# ---------- Stage 3: runtime ----------
+FROM nginx:alpine AS runtime
+
+COPY docs/deploy/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/artifacts/kub/dist/public /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
