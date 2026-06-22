@@ -106,9 +106,11 @@ Latest local run:
   update it or delete it.
 - Created one temporary group invite through `group_invite_create`.
 - Verified inviter/invitee visibility and unrelated-user select/update isolation.
-- Found a remaining gap: an unrelated non-member could create an invite for the temporary
-  owner-admin-only group. Proposal created:
-  `.migration-backup/supabase/migrations/20260622_group_invite_nonmember_hardening.sql`.
+- Applied `.migration-backup/supabase/migrations/20260622_group_invite_nonmember_hardening.sql`
+  manually after explicit approval. The function now checks `chat_members` directly against the
+  captured caller before allowing member/admin invite paths.
+- Tightened the smoke RPC parser so expected error JSON is not counted as returned rows.
+- Rerun result: `group_invites fixture ownership` returns `ok`.
 
 Storage object-level probe:
 
@@ -126,10 +128,8 @@ Several `block banned reads/writes` policies are restrictive policies. They must
 
 ## Next Security Work
 
-- Apply/review the group invite hardening proposal, then rerun
-  `KUB_QA_ALLOW_MUTATIONS=1 pnpm.cmd rls:smoke` and require
-  `group_invites fixture ownership` to return `ok`.
 - Keep fixture-backed mutation checks for task, chat and invite boundaries on an isolated target.
+- Keep `group_invites fixture ownership` green in future security validation runs.
 - Add stable permanent `chat-media` fixtures only if we want the normal non-mutating signed-url
   check to run without `KUB_QA_ALLOW_MUTATIONS=1`.
 - Keep any SQL changes as proposals first unless an apply step is explicitly approved.

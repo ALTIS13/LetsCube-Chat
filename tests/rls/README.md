@@ -47,10 +47,10 @@ The opt-in run also creates temporary task, chat, group invite and `chat-media` 
   cannot sign or upload into that chat path, and removes the temporary object with the operator
   cleanup key before exit.
 
-As of 2026-06-22 the invite fixture exposed a live gap: a non-member could create an invite in a
-temporary owner-admin-only chat. See
-`.migration-backup/supabase/migrations/20260622_group_invite_nonmember_hardening.sql`; do not apply
-it automatically.
+As of 2026-06-22 the invite fixture is expected to be green after the manually applied
+`.migration-backup/supabase/migrations/20260622_group_invite_nonmember_hardening.sql` hardening.
+The smoke parser treats RPC error payloads as errors, not returned rows, so only successful returned
+invite rows count as a failed isolation boundary.
 
 Current authenticated boundary coverage:
 

@@ -1,4 +1,5 @@
--- Proposal only. Do not apply automatically.
+-- Proposal file. Applied manually to self-host Supabase on 2026-06-22
+-- after explicit approval; keep this file as migration history/proposal source.
 --
 -- Goal:
 -- Harden group_invite_create so a user cannot create invites for a group/channel
@@ -45,8 +46,21 @@ begin
   end if;
 
   v_policy := coalesce(v_chat.invite_policy, 'owner_admin_only');
-  v_is_member := public.is_chat_member(p_chat_id);
-  v_is_admin := public.is_chat_admin(p_chat_id);
+  -- Keep this check local to the function so invite authorization is tied to
+  -- the explicit caller captured above, not to nested helper behavior.
+  v_is_member := exists (
+    select 1
+      from public.chat_members
+     where chat_id = p_chat_id
+       and user_id = v_caller
+  );
+  v_is_admin := exists (
+    select 1
+      from public.chat_members
+     where chat_id = p_chat_id
+       and user_id = v_caller
+       and role in ('owner', 'admin')
+  );
   v_has_invite := public.has_permission(v_caller, 'chats.invite');
   v_has_invite_any := public.has_permission(v_caller, 'chats.invite_any');
   v_has_system_manage := public.has_permission(v_caller, 'system.manage');

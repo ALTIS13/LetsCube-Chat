@@ -1090,11 +1090,13 @@ async function rpcRowsProbe(session, rpcName, body) {
   });
   const text = await response.text();
   const parsed = parseJson(text);
-  const rows = Array.isArray(parsed)
-    ? parsed
-    : parsed && typeof parsed === "object"
-      ? [parsed]
-      : [];
+  const rows = response.ok
+    ? Array.isArray(parsed)
+      ? parsed
+      : parsed && typeof parsed === "object"
+        ? [parsed]
+        : []
+    : [];
   return {
     status: response.status,
     ok: response.ok,
