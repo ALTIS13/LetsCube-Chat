@@ -77,12 +77,13 @@ Current baseline:
 
 - Infrastructure docs describe backup/restore expectations.
 - Self-host migration placed operational files under `/srv/letscube`.
+- Server backup inventory is recorded in `docs/infra/BACKUP_RESTORE_STATUS_20260622.md`.
 
 Next checks:
 
-- Inspect server-side backup directories, cron/systemd timers and existing scripts.
-- Add missing scripts/runbooks without printing secrets.
+- Prepare an isolated restore target.
 - Perform a non-destructive restore rehearsal only after confirming target isolation.
+- Add off-server backup verification once offsite storage is finalized.
 
 ## Deferred
 
