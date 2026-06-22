@@ -27,12 +27,13 @@ Current baseline:
 - Auth gateway redirect targets are restricted to explicit `KUB_AUTH_ALLOWED_REDIRECT_ORIGINS`; request `Origin` is not treated as an implicit redirect allowlist.
 - 2026-06-22 live check: direct external `POST /auth/v1/signup` and `POST /auth/v1/recover` with an anon key returned HTTP 403.
 - 2026-06-22 UI regression tests verify that signup and recovery use `auth-yandex-gateway` when Yandex SmartCaptcha is enabled and map gateway 429/rate-limit responses to friendly Russian copy.
+- 2026-06-22 UI regression tests verify that login token endpoint HTTP 429 / `over_request_rate_limit` maps to friendly Russian copy without running a real brute-force load against production Auth.
 
 Next checks:
 
-- Verify login brute-force throttling behavior and friendly UI for 429 without generating excessive failed login traffic.
 - Keep gateway/no-direct-auth Playwright checks in validation when captcha env is enabled.
 - Add an operator-facing auth anti-abuse smoke script if repeated manual curl checks become noisy.
+- Move to Priority 2 authenticated boundary checks for chats, messages, tasks, notifications, profiles and storage.
 
 ## Priority 2 - RLS And Security Audit
 

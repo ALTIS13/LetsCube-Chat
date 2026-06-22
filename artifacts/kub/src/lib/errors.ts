@@ -18,7 +18,7 @@
  */
 
 type AnyErr =
-  | { message?: unknown; code?: unknown; details?: unknown; hint?: unknown }
+  | { message?: unknown; code?: unknown; details?: unknown; hint?: unknown; status?: unknown; statusCode?: unknown }
   | string
   | null
   | undefined
@@ -28,14 +28,20 @@ const FALLBACK = "Не удалось выполнить операцию. По�
 
 const CYRILLIC_RE = /[А-Яа-яЁё]/;
 
-function asRecord(e: AnyErr): { message?: string; code?: string } {
+function asRecord(e: AnyErr): { message?: string; code?: string; status?: number } {
   if (!e) return {};
   if (typeof e === "string") return { message: e };
   if (typeof e !== "object") return {};
   const obj = e as Record<string, unknown>;
   const msg = typeof obj.message === "string" ? obj.message : undefined;
   const code = typeof obj.code === "string" ? obj.code : undefined;
-  return { message: msg, code };
+  const status =
+    typeof obj.status === "number"
+      ? obj.status
+      : typeof obj.statusCode === "number"
+        ? obj.statusCode
+        : undefined;
+  return { message: msg, code, status };
 }
 
 /**
@@ -43,8 +49,11 @@ function asRecord(e: AnyErr): { message?: string; code?: string } {
  * Никогда не возвращает пустую строку.
  */
 export function mapPgError(err: AnyErr): string {
-  const { message, code } = asRecord(err);
+  const { message, code, status } = asRecord(err);
   const lowerMessage = message?.toLowerCase();
+  if (status === 429) {
+    return "Слишком много попыток. Подождите и повторите позже.";
+  }
 
   if (lowerMessage) {
     if (lowerMessage.includes("reserved_username_requires_admin"))
@@ -90,6 +99,8 @@ export function mapPgError(err: AnyErr): string {
       return "Запись недоступна или защищена правами доступа.";
     if (c === "PGRST204")
       return "Запись не найдена.";
+    if (c.includes("RATE_LIMIT") || c.includes("TOO_MANY"))
+      return "Слишком много попыток. Подождите и повторите позже.";
   }
 
   // 2. Текстовые шаблоны.

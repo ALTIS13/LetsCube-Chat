@@ -151,6 +151,31 @@ test.describe("Letscube safe public registration", () => {
     await expect(page.getByTestId("auth-captcha")).toHaveCount(0);
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
+
+  test("/login maps auth token rate limit to friendly copy", async ({ page }) => {
+    const consoleErrors = collectConsoleErrors(page);
+    let tokenRequests = 0;
+    await page.route("**/auth/v1/token**", async (route) => {
+      tokenRequests += 1;
+      await route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: "over_request_rate_limit",
+          message: "Request rejected",
+        }),
+      });
+    });
+
+    await gotoOrSkip(page, "/login");
+    await page.locator('input[type="email"]').fill("player@example.test");
+    await page.locator('input[type="password"]').fill("wrong-password");
+    await page.getByRole("button", { name: "Войти" }).click();
+
+    await expect(page.getByText("Слишком много попыток. Подождите и повторите позже.")).toBeVisible();
+    expect(tokenRequests).toBe(1);
+    expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
+  });
 });
 
 function collectConsoleErrors(page: Page): string[] {

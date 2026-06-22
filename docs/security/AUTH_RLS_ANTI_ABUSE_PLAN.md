@@ -81,9 +81,11 @@ Initial self-host targets configured and verified:
   - Yandex SmartCaptcha signup uses `auth-yandex-gateway`, not direct `/auth/v1/signup`.
   - Yandex SmartCaptcha recovery uses `auth-yandex-gateway`, not direct `/auth/v1/recover`.
   - Gateway HTTP 429 / `rate_limited` / `too_many_requests` responses show the friendly Russian rate-limit copy.
+  - Login token endpoint HTTP 429 / `over_request_rate_limit` responses show the same friendly Russian rate-limit copy through the shared error mapper.
 - 2026-06-22 live check:
   - direct external `POST /auth/v1/signup` with anon headers returned HTTP 403.
   - direct external `POST /auth/v1/recover` with anon headers returned HTTP 403.
+  - Real brute-force load was not generated against production Auth; login 429 UX is covered by deterministic Playwright routing.
 
 Next self-host targets to configure and validate:
 
