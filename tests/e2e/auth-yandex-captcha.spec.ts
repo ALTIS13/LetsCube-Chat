@@ -80,6 +80,7 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
     page,
   }) => {
     const requests = collectAuthRequests(page);
+    await mockRegistrationInviteMode(page, false);
     await page.route("**/functions/v1/auth-yandex-gateway", async (route) => {
       const body = route.request().postDataJSON() as Record<string, unknown>;
       expect(body.action).toBe("signup");
@@ -92,7 +93,7 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
     });
 
     await gotoOrSkip(page, "/register?invite=staff-2026");
-    await expect(page.getByLabel("Код приглашения")).toHaveValue("STAFF-2026");
+    await expect(page.getByPlaceholder("Например STAFF-2026")).toHaveCount(0);
     await fillRegistration(page);
     await page.evaluate(() => window.__lastSmartCaptchaOptions?.callback("playwright-smart-token"));
     await page.getByRole("button", { name: "Создать аккаунт" }).click();
@@ -129,18 +130,13 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
     page,
   }) => {
     const requests = collectAuthRequests(page);
-    await page.route("**/rest/v1/rpc/registration_invite_mode", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify([{ invite_only_enabled: true }]),
-      });
-    });
+    await mockRegistrationInviteMode(page, true);
 
     await gotoOrSkip(page, "/register");
     await expect(
       page.getByText("Регистрация сейчас доступна только по приглашению."),
     ).toBeVisible();
+    await expect(page.getByPlaceholder("Например STAFF-2026")).toBeVisible();
 
     await fillRegistration(page);
     await page.evaluate(() => window.__lastSmartCaptchaOptions?.callback("playwright-smart-token"));
@@ -255,6 +251,16 @@ async function fillRegistration(page: Page) {
   await page.locator('input[autocomplete="name"]').fill("Новый Игрок");
   await page.locator('input[type="email"]').fill("new-user@example.test");
   await page.locator('input[type="password"]').fill("correct-horse-battery");
+}
+
+async function mockRegistrationInviteMode(page: Page, inviteOnlyEnabled: boolean) {
+  await page.route("**/rest/v1/rpc/registration_invite_mode", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([{ invite_only_enabled: inviteOnlyEnabled }]),
+    });
+  });
 }
 
 interface FakeSmartCaptchaOptions {

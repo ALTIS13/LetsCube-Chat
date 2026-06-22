@@ -279,17 +279,19 @@ export function RegisterForm() {
               }
             />
 
-            <KubInput
-              type="text"
-              label="Код приглашения"
-              placeholder="Например STAFF-2026"
-              value={inviteCode}
-              onChange={(e) => setInviteCode(e.target.value.toUpperCase().replace(/\s+/g, ""))}
-              maxLength={64}
-              leftIcon={<KubIcon name="userPlus" size={16} />}
-              autoComplete="off"
-              hint="Если у вас есть invite-link, код заполнится автоматически."
-            />
+            {inviteOnlyEnabled && (
+              <KubInput
+                type="text"
+                label="Код приглашения"
+                placeholder="Например STAFF-2026"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value.toUpperCase().replace(/\s+/g, ""))}
+                maxLength={64}
+                leftIcon={<KubIcon name="userPlus" size={16} />}
+                autoComplete="off"
+                hint="Если у вас есть invite-link, код заполнится автоматически."
+              />
+            )}
 
             <AuthCaptcha onTokenChange={setCaptchaToken} resetSignal={captchaResetSignal} />
 
