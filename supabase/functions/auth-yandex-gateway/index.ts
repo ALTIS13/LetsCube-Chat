@@ -37,7 +37,7 @@ Deno.serve(async (request: Request) => {
     return corsJson({ ok: false, error: "not_configured" }, 500, request);
   }
 
-  const redirectTo = safeRedirectTo(request, body?.redirectTo);
+  const redirectTo = safeRedirectTo(body?.redirectTo);
 
   if (action === "signup") {
     const password = normalizePassword(body?.password);
@@ -189,11 +189,11 @@ async function readRemoteJson(response: Response): Promise<Record<string, unknow
   }
 }
 
-function safeRedirectTo(request: Request, value: unknown): string | undefined {
+function safeRedirectTo(value: unknown): string | undefined {
   if (typeof value !== "string" || !value.trim()) return undefined;
   try {
     const url = new URL(value);
-    const allowedOrigins = allowedRedirectOrigins(request);
+    const allowedOrigins = configuredRedirectOrigins();
     if (!allowedOrigins.has(url.origin)) return undefined;
     return url.toString();
   } catch {
@@ -201,17 +201,24 @@ function safeRedirectTo(request: Request, value: unknown): string | undefined {
   }
 }
 
-function allowedRedirectOrigins(request: Request) {
+function configuredRedirectOrigins() {
   const values = new Set<string>();
   const configured = Deno.env.get("KUB_AUTH_ALLOWED_REDIRECT_ORIGINS");
   for (const origin of (configured || "").split(",")) {
     const trimmed = origin.trim().replace(/\/+$/g, "");
     if (trimmed) values.add(trimmed);
   }
-
-  const requestOrigin = request.headers.get("origin");
-  if (requestOrigin) values.add(requestOrigin.replace(/\/+$/g, ""));
   return values;
+}
+
+function allowedCorsOrigin(request: Request): string {
+  const origin = request.headers.get("origin")?.replace(/\/+$/g, "");
+  if (!origin) return "*";
+
+  const allowedOrigins = configuredRedirectOrigins();
+  if (allowedOrigins.size === 0 || allowedOrigins.has(origin)) return origin;
+
+  return "null";
 }
 
 function clientIp(request: Request): string | null {
@@ -240,11 +247,10 @@ function corsJson(body: Record<string, unknown>, status: number, request: Reques
 }
 
 function corsResponse(body: BodyInit | null, status: number, request: Request, headers: HeadersInit = {}) {
-  const origin = request.headers.get("origin") || "*";
   return new Response(body, {
     status,
     headers: {
-      "access-control-allow-origin": origin,
+      "access-control-allow-origin": allowedCorsOrigin(request),
       "access-control-allow-methods": "POST, OPTIONS",
       "access-control-allow-headers": "authorization, apikey, content-type",
       vary: "Origin",
