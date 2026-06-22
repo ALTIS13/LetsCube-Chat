@@ -107,6 +107,10 @@ ENV NODE_ENV=production \
 
 COPY --from=build /app/ ./
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 EXPOSE 8096
 
 CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
