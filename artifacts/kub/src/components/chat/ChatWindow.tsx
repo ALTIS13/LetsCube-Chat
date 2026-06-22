@@ -21,7 +21,7 @@ import { KUB_CHAT_MESSAGE_JUMP_EVENT, requestChatMessageJump, type ChatMessageJu
 import { isSavedChat } from "@/lib/chatDisplay";
 import { reportError } from "@/lib/monitoring";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
-import { prepareChatImageAttachment } from "@/lib/mediaUpload";
+import { prepareChatImageAttachment, readMediaDimensions } from "@/lib/mediaUpload";
 import {
   CHAT_MEDIA_BUCKET,
   MAX_STAGED_ATTACHMENTS,
@@ -245,7 +245,14 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         errors.push(`${sourceFile.name || file.name || "Файл"}: ${error}`);
         continue;
       }
-      accepted.push(createStagedAttachment(file));
+      const dimensions = await readMediaDimensions(file);
+      accepted.push(createStagedAttachment(file, {
+        width: dimensions?.width,
+        height: dimensions?.height,
+        optimized: file !== sourceFile || file.size !== sourceFile.size || file.type !== sourceFile.type,
+        originalSize: sourceFile.size,
+        originalMimeType: sourceFile.type || undefined,
+      }));
     }
 
     if (files.length > availableSlots) {
@@ -787,6 +794,24 @@ function getStagedAttachmentMediaMetadata(attachment: StagedAttachment): Json | 
       shape: "round",
       duration_ms: attachment.durationMs ?? null,
       mime_type: attachment.mimeType,
+      size_bytes: attachment.size,
+    };
+  }
+  if (
+    attachment.kind === "image" ||
+    attachment.kind === "video" ||
+    attachment.kind === "audio" ||
+    attachment.kind === "file"
+  ) {
+    return {
+      kind: attachment.kind,
+      mime_type: attachment.mimeType,
+      size_bytes: attachment.size,
+      original_size_bytes: attachment.originalSize ?? attachment.size,
+      original_mime_type: attachment.originalMimeType ?? null,
+      optimized: attachment.optimized ?? false,
+      width: attachment.width ?? null,
+      height: attachment.height ?? null,
     };
   }
   return undefined;

@@ -448,6 +448,7 @@ export function MessageBubble({
   const { currentUser } = useAppStore();
   const textContent = message.content ?? "";
   const mediaCaption = getVisibleMediaCaption(message);
+  const mediaDimensions = getMessageMediaDimensions(message);
   const textLayoutKind = getMessageTextLayoutKind(message.type, textContent);
   const widthClasses = getMessageWidthClasses(textLayoutKind);
   const stackStyle = getMessageStackStyle(textLayoutKind);
@@ -1138,6 +1139,7 @@ export function MessageBubble({
                 <MediaImage
                   url={message.media_url}
                   title={message.content ?? "Фото"}
+                  dimensions={mediaDimensions}
                   onOpen={() => onOpenMedia?.({ type: "image", url: message.media_url!, title: message.content ?? "Фото" })}
                 />
               </MediaWithCaption>
@@ -1155,6 +1157,7 @@ export function MessageBubble({
                   <MediaVideo
                     url={message.media_url}
                     title={message.content ?? "Видео"}
+                    dimensions={mediaDimensions}
                     playbackItem={createPlaybackItemFromMessage(message, isMe)}
                     onOpen={() => onOpenMedia?.({ type: "video", url: message.media_url!, title: message.content ?? "Видео" })}
                   />
@@ -1284,8 +1287,25 @@ function setBodySelectionSuppressed(suppressed: boolean) {
   if (suppressed) window.getSelection()?.removeAllRanges();
 }
 
-function MediaImage({ url, title, onOpen }: { url: string; title: string; onOpen: () => void }) {
+interface MediaDimensions {
+  width: number;
+  height: number;
+}
+
+function MediaImage({
+  url,
+  title,
+  dimensions,
+  onOpen,
+}: {
+  url: string;
+  title: string;
+  dimensions: MediaDimensions | null;
+  onOpen: () => void;
+}) {
   const [failed, setFailed] = useState(false);
+  const aspectStyle = getMediaAspectStyle(dimensions);
+  const hasReservedAspect = Boolean(aspectStyle);
 
   if (failed) {
     return (
@@ -1303,14 +1323,19 @@ function MediaImage({ url, title, onOpen }: { url: string; title: string; onOpen
     <button
       type="button"
       onClick={onOpen}
-      className="group block w-[min(360px,calc(100vw-7.5rem))] max-w-full overflow-hidden rounded-xl text-left focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)] sm:w-[min(420px,70vw)]"
+      className="group block max-h-[340px] w-[min(360px,calc(100vw-7.5rem))] max-w-full overflow-hidden rounded-xl text-left focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)] sm:max-h-[380px] sm:w-[min(420px,70vw)]"
+      style={aspectStyle}
       aria-label="Открыть фото"
     >
       <img
         src={url}
         alt={title || "Фото"}
         loading="lazy"
-        className="max-h-[340px] w-full object-cover transition-transform duration-200 group-hover:scale-[1.01] sm:max-h-[380px]"
+        decoding="async"
+        className={cn(
+          "w-full object-cover transition-transform duration-200 group-hover:scale-[1.01]",
+          hasReservedAspect ? "h-full" : "max-h-[340px] sm:max-h-[380px]"
+        )}
         onError={() => setFailed(true)}
       />
     </button>
@@ -1333,17 +1358,20 @@ function MediaWithCaption({ children, caption }: { children: ReactNode; caption:
 function MediaVideo({
   url,
   title,
+  dimensions,
   playbackItem,
   onOpen,
 }: {
   url: string;
   title: string;
+  dimensions: MediaDimensions | null;
   playbackItem: ChatMediaPlaybackItem | null;
   onOpen: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [failed, setFailed] = useState(false);
   const mediaPlayback = useChatMediaPlayback();
+  const aspectStyle = getMediaAspectStyle(dimensions, 16 / 9);
 
   if (failed) {
     return (
@@ -1358,14 +1386,17 @@ function MediaVideo({
   }
 
   return (
-    <div className="relative w-[min(360px,calc(100vw-7.5rem))] max-w-full overflow-hidden rounded-xl bg-black sm:w-[min(420px,70vw)]">
+    <div
+      className="relative max-h-[320px] w-[min(360px,calc(100vw-7.5rem))] max-w-full overflow-hidden rounded-xl bg-black sm:w-[min(420px,70vw)]"
+      style={aspectStyle}
+    >
       <video
         ref={videoRef}
         src={url}
         preload="metadata"
         controls
         playsInline
-        className="block aspect-video w-full max-h-[320px] bg-black object-contain"
+        className="block h-full max-h-[320px] w-full bg-black object-contain"
         onPlay={(event) => {
           if (playbackItem) mediaPlayback.activate(playbackItem, event.currentTarget);
         }}
@@ -1612,6 +1643,20 @@ function getMediaMetadataNumber(message: MessageWithSender | undefined, key: str
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
   const value = (metadata as Record<string, unknown>)[key];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function getMessageMediaDimensions(message: MessageWithSender): MediaDimensions | null {
+  const width = getMediaMetadataNumber(message, "width");
+  const height = getMediaMetadataNumber(message, "height");
+  if (!width || !height || width <= 0 || height <= 0) return null;
+  return { width, height };
+}
+
+function getMediaAspectStyle(dimensions: MediaDimensions | null, fallbackRatio?: number): CSSProperties | undefined {
+  if (!dimensions && !fallbackRatio) return undefined;
+  const rawRatio = dimensions ? dimensions.width / dimensions.height : fallbackRatio ?? 1;
+  const ratio = Math.min(1.9, Math.max(0.72, rawRatio));
+  return { aspectRatio: ratio.toFixed(4) };
 }
 
 function formatMetadataDuration(durationMs: number): string {

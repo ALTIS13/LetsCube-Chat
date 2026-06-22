@@ -196,6 +196,11 @@ Current baseline:
 - `tests/e2e/pwa.spec.ts` covers PWA shell metadata, service worker safety, offline/reconnect banner, and SPA direct routes on 1440, 1920, 3840, 390 and 412 viewports.
 - `tests/e2e/pwa-install-settings.spec.ts` covers desktop install variant and iPhone Safari home-screen guidance from the Settings install button.
 - `tests/e2e/push-phone-foundation.spec.ts` covers push settings layout, phone fallback, SW push grouping/click-routing, native push adapter token hygiene and Android channels on the same viewport matrix.
+- Client-side chat media optimization baseline is in place: new image attachments and avatars are bounded before upload when possible; new image/video messages carry dimensions/size metadata for stable bubble layout.
+
+Next media/performance action:
+
+- `[ ]` Review/apply the media variants proposal and add a trusted backend worker for thumbnails, avatar previews, video posters and future video transcodes.
 
 ## Priority 6 - Monitoring And Self-Hosted Sentry
 

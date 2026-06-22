@@ -13,6 +13,14 @@ export interface StagedAttachmentUpload {
   publicUrl: string;
 }
 
+export interface StagedAttachmentMediaMetadata {
+  width?: number;
+  height?: number;
+  optimized?: boolean;
+  originalSize?: number;
+  originalMimeType?: string;
+}
+
 export interface StagedAttachment {
   id: string;
   file: File;
@@ -27,6 +35,11 @@ export interface StagedAttachment {
   clientMessageId: string;
   uploaded: StagedAttachmentUpload | null;
   durationMs?: number;
+  width?: number;
+  height?: number;
+  optimized?: boolean;
+  originalSize?: number;
+  originalMimeType?: string;
 }
 
 export const CHAT_MEDIA_BUCKET = "media";
@@ -65,7 +78,7 @@ export function validateStagedAttachment(file: File): string | null {
   return null;
 }
 
-export function createStagedAttachment(file: File): StagedAttachment {
+export function createStagedAttachment(file: File, metadata: StagedAttachmentMediaMetadata = {}): StagedAttachment {
   const id = safeUuid();
   const kind = getAttachmentKind(file);
   const previewUrl = kind === "image" || kind === "video" ? URL.createObjectURL(file) : null;
@@ -83,6 +96,11 @@ export function createStagedAttachment(file: File): StagedAttachment {
     error: null,
     clientMessageId: safeUuid(),
     uploaded: null,
+    width: metadata.width,
+    height: metadata.height,
+    optimized: metadata.optimized,
+    originalSize: metadata.originalSize,
+    originalMimeType: metadata.originalMimeType,
   };
 }
 
