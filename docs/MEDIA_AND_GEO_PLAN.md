@@ -4,6 +4,7 @@ Current media UX state as of 2026-06-22:
 
 - Chat images, GIFs and videos open inside the messenger via `MediaViewer`.
 - The chat info media gallery is paged. Static image items use lazy real previews for the current page only; GIF/video items use lightweight placeholder tiles to avoid eager full-file downloads.
+- When server-generated variants are ready, chat info media tiles use image thumbnails/previews and video posters instead of original media files.
 - GIFs are not animated in the gallery; the full GIF loads only in the viewer.
 - Videos are represented by a play tile in the gallery and load only in the viewer.
 - New chat image uploads are client-optimized to bounded WebP before upload when the browser/WebView can do it.

@@ -26,6 +26,7 @@ import {
 import type { GroupInviteStatus, InvitePolicy } from "@/lib/groupInvites";
 import type { ChatWithLastMessage, Profile, Message } from "@/types/database";
 import { CHAT_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
+import { useMessageMediaVariantUrls, type MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 
 interface ChatInfoPanelProps {
   chat: ChatWithLastMessage;
@@ -546,6 +547,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     () => media.filter((m) => m.type === "image" || m.type === "video"),
     [media],
   );
+  const mediaVariantUrls = useMessageMediaVariantUrls(mediaGridItems);
   const fileItems = useMemo(
     () => media.filter((m) => m.type === "file"),
     [media],
@@ -1106,20 +1108,23 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
             ) : (
               <>
                 <div className="grid grid-cols-3 gap-1 mb-3">
-                  {visibleMediaGridItems.map((m) => (
-                    <button
-                      type="button"
-                      key={m.id}
-                      className="relative aspect-square overflow-hidden rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-left focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)]"
-                      onClick={() => setOpenMedia({
-                        type: m.type as "image" | "video",
-                        url: m.media_url!,
-                        title: m.content ?? (m.type === "image" ? "Фото" : "Видео"),
-                      })}
-                    >
-                      <MediaGalleryTile message={m} />
-                    </button>
-                  ))}
+                  {visibleMediaGridItems.map((m) => {
+                    const mediaVariant = mediaVariantUrls[m.id];
+                    return (
+                      <button
+                        type="button"
+                        key={m.id}
+                        className="relative aspect-square overflow-hidden rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-left focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)]"
+                        onClick={() => setOpenMedia({
+                          type: m.type as "image" | "video",
+                          url: m.media_url!,
+                          title: m.content ?? (m.type === "image" ? "Фото" : "Видео"),
+                        })}
+                      >
+                        <MediaGalleryTile message={m} mediaVariant={mediaVariant} />
+                      </button>
+                    );
+                  })}
                 </div>
                 {hasMoreMedia && (
                   <button
@@ -1292,25 +1297,32 @@ function normalizeInvitePolicy(value: string | null | undefined): InvitePolicy {
   return value === "members_can_invite" ? "members_can_invite" : DEFAULT_INVITE_POLICY;
 }
 
-function MediaGalleryTile({ message }: { message: Message }) {
+function MediaGalleryTile({
+  message,
+  mediaVariant,
+}: {
+  message: Message;
+  mediaVariant?: MessageMediaVariantUrls;
+}) {
   const [previewFailed, setPreviewFailed] = useState(false);
   const kind = getMediaTileKind(message);
   const icon = kind === "video" ? "video" : kind === "gif" ? "image" : "image";
   const label = kind === "video" ? "Видео" : kind === "gif" ? "GIF" : "Фото";
+  const previewUrl = selectMediaGalleryPreviewUrl(message, mediaVariant);
 
-  if (kind === "image" && message.media_url && !previewFailed) {
+  if (previewUrl && !previewFailed) {
     return (
       <>
         <img
-          src={message.media_url}
-          alt={message.content ?? "Фото"}
+          src={previewUrl}
+          alt={message.content ?? label}
           loading="lazy"
           decoding="async"
           className="h-full w-full object-cover transition-transform duration-200 hover:scale-[1.03]"
           onError={() => setPreviewFailed(true)}
         />
         <span className="pointer-events-none absolute bottom-1 left-1 rounded-full bg-black/45 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white/85">
-          Фото
+          {label}
         </span>
       </>
     );
@@ -1331,6 +1343,16 @@ function MediaGalleryTile({ message }: { message: Message }) {
       </span>
     </div>
   );
+}
+
+function selectMediaGalleryPreviewUrl(
+  message: Message,
+  mediaVariant: MessageMediaVariantUrls | undefined,
+): string | null {
+  const kind = getMediaTileKind(message);
+  if (kind === "gif") return null;
+  if (kind === "video") return mediaVariant?.videoPosterUrl ?? null;
+  return mediaVariant?.thumbUrl ?? mediaVariant?.previewUrl ?? null;
 }
 
 function getMediaTileKind(message: Message): "image" | "gif" | "video" {

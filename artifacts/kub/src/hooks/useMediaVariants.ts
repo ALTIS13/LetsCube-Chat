@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { MediaVariant, MessageWithSender } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
 
+type MessageMediaVariantSource = Pick<MessageWithSender, "id" | "type" | "media_url" | "deleted_at">;
+
 export interface MessageMediaVariantUrls {
   previewUrl?: string;
   previewWidth?: number | null;
@@ -33,7 +35,7 @@ function getVariantPublicUrl(
   return storage.from(row.variant_bucket).getPublicUrl(row.variant_path).data.publicUrl ?? null;
 }
 
-export function useMessageMediaVariantUrls(messages: MessageWithSender[]): Record<string, MessageMediaVariantUrls> {
+export function useMessageMediaVariantUrls(messages: MessageMediaVariantSource[]): Record<string, MessageMediaVariantUrls> {
   const messageIds = useMemo(() => {
     const ids = new Set<string>();
     for (const message of messages) {
