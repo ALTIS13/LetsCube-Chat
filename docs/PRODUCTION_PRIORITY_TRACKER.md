@@ -25,7 +25,7 @@ Legend:
 
 Use this queue before starting the next production-hardening turn. Do not repeat completed items unless a new bug report or regression test proves the old fix is insufficient.
 
-1. `[~]` Fix Coolify worker auto-deploy gap so `letscube-worker` updates automatically when worker/backend code changes. Current status: a separate GitHub push webhook was added for the worker-specific Coolify secret; verify that the next push creates an `is_webhook=true` worker deployment before marking this closed.
+1. `[~]` Fix Coolify worker auto-deploy gap so `letscube-worker` updates automatically when worker/backend code changes. Current status: GitHub Actions repo secrets and `.github/workflows/deploy-worker.yml` are configured, but GitHub-hosted Actions are currently blocked by an account billing lock. The worker-specific Coolify GitHub webhook has been updated with the decrypted manual webhook secret; verify that the next push creates an `is_webhook=true` worker deployment before marking this closed.
 2. `[~]` Continue chat performance audit and synchronization hardening. Current known findings:
    - `[x]` Composer text is cleared immediately after optimistic send instead of waiting for delivery/read checks.
    - `[x]` Fully read chat opens anchored to latest messages.
@@ -44,7 +44,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 - Coolify app: `letscube-web`.
 - Public app: `https://app.letscube.ru`.
 - Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; `1b8edb6` deployed healthy on 2026-06-23.
-- Worker auto deploy: worker-specific GitHub webhook added, verification pending. `letscube-worker` is healthy and can also be deployed through Coolify API/manual deployment. Do not treat worker auto-deploy as closed until a push produces an `is_webhook=true` worker deployment.
+- Worker auto deploy: GitHub Actions secrets/workflow are present, but Actions cannot run until GitHub account billing is unlocked. The worker-specific GitHub webhook has been corrected to use the decrypted Coolify manual webhook secret; verification pending on the next push. `letscube-worker` is healthy and can also be deployed through Coolify API/manual deployment. Do not treat worker auto-deploy as closed until a push produces an `is_webhook=true` worker deployment.
 - Self-host stack: Coolify, self-hosted Supabase, Mailcow, Caddy, and app deployment are already in place.
 
 ## Completed Baseline - Do Not Rebuild Without A New Finding
