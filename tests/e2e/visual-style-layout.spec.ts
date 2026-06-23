@@ -120,6 +120,7 @@ test.describe("KUB visual style and layout", () => {
 
     const scrollContainer = page.getByTestId("message-scroll-container");
     await expect(scrollContainer).toBeVisible();
+    await expect(scrollContainer).toHaveAttribute("data-loading-older", "false");
     await page.waitForTimeout(900);
 
     const firstUnread = page.getByTestId("first-unread-separator");
@@ -134,6 +135,7 @@ test.describe("KUB visual style and layout", () => {
       };
     });
     expect(metrics.distanceFromBottom).toBeLessThanOrEqual(32);
+    const firstRenderedMessageId = await firstRenderedMessageIdOrNull(scrollContainer);
 
     await page.waitForTimeout(2200);
     const settledMetrics = await scrollContainer.evaluate((node) => {
@@ -145,6 +147,14 @@ test.describe("KUB visual style and layout", () => {
       };
     });
     expect(settledMetrics.distanceFromBottom).toBeLessThanOrEqual(32);
+    await expect(scrollContainer).toHaveAttribute("data-loading-older", "false");
+    if (firstRenderedMessageId) {
+      await expect
+        .poll(() => firstRenderedMessageIdOrNull(scrollContainer), {
+          message: "read chat open should not auto-prepend older messages before user scrolls",
+        })
+        .toBe(firstRenderedMessageId);
+    }
 
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
@@ -247,6 +257,13 @@ async function distanceFromBottom(locator: Locator): Promise<number> {
   return locator.evaluate((node) => {
     const el = node as HTMLElement;
     return el.scrollHeight - el.scrollTop - el.clientHeight;
+  });
+}
+
+async function firstRenderedMessageIdOrNull(locator: Locator): Promise<string | null> {
+  return locator.evaluate((node) => {
+    const el = node as HTMLElement;
+    return el.querySelector<HTMLElement>("[data-message-id]")?.dataset.messageId ?? null;
   });
 }
 

@@ -32,7 +32,8 @@ Use this queue before starting the next production-hardening turn. Do not repeat
    - `[x]` Chat with unread messages opens near the first unread boundary.
    - `[x]` Chat info media gallery uses generated variants instead of original media files for tiles.
    - `[x]` Reproduce and fix fast upward history scrolling bug: when the user quickly scrolls up through older messages, the message list no longer jumps back to the newest/bottom position during initial bottom settling.
-   - `[ ]` Audit slow initial chat load and realtime reconciliation under larger message/media history.
+   - `[x]` Prevent older-history auto-prepend from racing initial chat open anchoring: the top-of-list loader is disabled until the initial unread/bottom scroll has been applied, so read chats do not silently open on an older slice.
+   - `[~]` Audit slow initial chat load and realtime reconciliation under larger message/media history. Current finding: `useChats` still builds sidebar summaries with per-chat last-message/unread queries; the next safe optimization should move these summaries to a batched/RPC path or a dedicated SQL proposal instead of adding more frontend request fan-out.
 3. `[ ]` Add 720p video transcode worker path and upload quality selection after ffmpeg CPU/runtime sizing and load testing.
 4. `[ ]` Add media upload progress, retry and resume UX for large files.
 5. `[ ]` Run installed web/PWA production QA on desktop, iPhone/iOS home-screen and Android browser home-screen; keep APK/native push deferred.

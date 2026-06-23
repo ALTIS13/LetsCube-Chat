@@ -181,6 +181,10 @@ export function MessageList({
   const initialScrollPendingKeyRef = useRef<string | null>(null);
   const initialBottomLockUntilRef = useRef(0);
   const isInitialBottomLocked = useCallback(() => Date.now() < initialBottomLockUntilRef.current, []);
+  const initialScrollKey = React.useMemo(
+    () => `${layoutKey ?? "chat"}:${initialUnreadCount}:${initialUnreadSince ?? "none"}`,
+    [initialUnreadCount, initialUnreadSince, layoutKey],
+  );
   const firstUnreadMessageId = React.useMemo(() => {
     if (!initialUnreadCount) return null;
     const boundaryTime = initialUnreadSince ? new Date(initialUnreadSince).getTime() : null;
@@ -298,6 +302,7 @@ export function MessageList({
       !onLoadOlder ||
       loadingOlderRef.current ||
       !hasMoreOlderRef.current ||
+      initialScrollAppliedRef.current !== initialScrollKey ||
       initialScrollPendingRef.current ||
       isInitialBottomLocked()
     ) return;
@@ -312,7 +317,7 @@ export function MessageList({
       }
       preservingOlderScrollRef.current = false;
     });
-  }, [isInitialBottomLocked, onLoadOlder]);
+  }, [initialScrollKey, isInitialBottomLocked, onLoadOlder]);
 
   const handleScroll = useCallback(() => {
     const el = containerRef.current;
@@ -329,8 +334,13 @@ export function MessageList({
     setShowScrollBtn(!atBottom);
     if (atBottom) setNewCount(0);
     const hasScrollableHistory = el.scrollHeight > el.clientHeight + 240;
-    if (!initialScrollPendingRef.current && hasScrollableHistory && el.scrollTop < 160) void loadOlderAtTop();
-  }, [isInitialBottomLocked, loadOlderAtTop]);
+    if (
+      initialScrollAppliedRef.current === initialScrollKey &&
+      !initialScrollPendingRef.current &&
+      hasScrollableHistory &&
+      el.scrollTop < 160
+    ) void loadOlderAtTop();
+  }, [initialScrollKey, isInitialBottomLocked, loadOlderAtTop]);
 
   const scrollToBottom = useCallback((smooth = true) => {
     requestAnimationFrame(() => {
@@ -429,7 +439,6 @@ export function MessageList({
   useEffect(() => {
     const hasMessages = sortedMessages.length > 0;
     if (!hasMessages) return undefined;
-    const initialScrollKey = `${layoutKey ?? "chat"}:${initialUnreadCount}:${initialUnreadSince ?? "none"}`;
     if (initialScrollAppliedRef.current === initialScrollKey) return undefined;
     initialScrollAppliedRef.current = initialScrollKey;
     initialScrollPendingRef.current = true;
@@ -457,7 +466,7 @@ export function MessageList({
     return () => {
       cancelFrame();
     };
-  }, [isInitialBottomLocked, layoutKey, initialUnreadCount, initialUnreadSince, firstUnreadMessageId, sortedMessages.length, scrollToBottom, scrollToBottomAfterLayout, scrollToMessageAfterLayout, releaseInitialScrollGuard]);
+  }, [isInitialBottomLocked, initialScrollKey, firstUnreadMessageId, sortedMessages.length, scrollToBottom, scrollToBottomAfterLayout, scrollToMessageAfterLayout, releaseInitialScrollGuard]);
 
   const resolvedBottomInset = Math.max(0, bottomInset);
 
@@ -511,6 +520,8 @@ export function MessageList({
       <div
         ref={containerRef}
         data-testid="message-scroll-container"
+        data-has-more-older={hasMoreOlder ? "true" : "false"}
+        data-loading-older={loadingOlder ? "true" : "false"}
         onScroll={handleScroll}
         onPointerDown={releaseInitialScrollControl}
         onTouchStart={releaseInitialScrollControl}
@@ -566,6 +577,7 @@ export function MessageList({
           return (
             <div
               key={msg.id}
+              data-message-id={msg.id}
               ref={(el) => { if (el && messageRefs) messageRefs.current[msg.id] = el; }}
               className={cn(
                 highlightedId === msg.id &&
