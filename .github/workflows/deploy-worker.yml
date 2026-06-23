@@ -1,0 +1,64 @@
+name: Deploy worker
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/deploy-worker.yml"
+      - "artifacts/api-server/**"
+      - "docs/deploy/Dockerfile"
+      - "docs/deploy/docker-compose.yml"
+      - "docs/deploy/docker-compose.coolify.yml"
+      - "docker-compose.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: letscube-worker-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy-worker:
+    name: Trigger Coolify worker deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      COOLIFY_WORKER_DEPLOY_URL: ${{ secrets.COOLIFY_WORKER_DEPLOY_URL }}
+      COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+
+    steps:
+      - name: Check required secrets
+        run: |
+          set -euo pipefail
+          test -n "${COOLIFY_WORKER_DEPLOY_URL}"
+          test -n "${COOLIFY_API_TOKEN}"
+
+      - name: Trigger worker deployment
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          http_code="$(
+            curl --fail-with-body --silent --show-error --location \
+              --request GET \
+              --output "${response_file}" \
+              --write-out "%{http_code}" \
+              --header "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
+              "${COOLIFY_WORKER_DEPLOY_URL}"
+          )"
+
+          if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
+            echo "Coolify deploy request failed with HTTP ${http_code}."
+            exit 1
+          fi
+
+          if ! grep -q '"deployments"' "${response_file}"; then
+            echo "Coolify deploy response did not include deployments."
+            exit 1
+          fi
+
+          echo "Coolify worker deployment accepted."
