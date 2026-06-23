@@ -1,6 +1,6 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-06-22.
+Status: active production-hardening tracker, updated 2026-06-23.
 
 This file is the working source of truth for the next production stages. Before starting any new production task, read this file first, then update the relevant checkboxes/status when work is completed, blocked, or intentionally deferred.
 
@@ -21,12 +21,29 @@ Legend:
 6. `[!]` Priority 6 - Monitoring and self-hosted Sentry.
 7. `[!]` Deferred native/mobile packaging and native push.
 
+## Next Execution Queue
+
+Use this queue before starting the next production-hardening turn. Do not repeat completed items unless a new bug report or regression test proves the old fix is insufficient.
+
+1. `[ ]` Fix Coolify worker auto-deploy gap so `letscube-worker` updates automatically when worker/backend code changes. Current status: web auto-deploy works; worker required manual rebuild/recreate after `c7c5675`.
+2. `[~]` Continue chat performance audit and synchronization hardening. Current known findings:
+   - `[x]` Composer text is cleared immediately after optimistic send instead of waiting for delivery/read checks.
+   - `[x]` Fully read chat opens anchored to latest messages.
+   - `[x]` Chat with unread messages opens near the first unread boundary.
+   - `[x]` Chat info media gallery uses generated variants instead of original media files for tiles.
+   - `[ ]` Reproduce and fix fast upward history scrolling bug: when the user quickly scrolls up through older messages, the message list can jump back to the newest/bottom position and the user has to scroll up again.
+   - `[ ]` Audit slow initial chat load and realtime reconciliation under larger message/media history.
+3. `[ ]` Add 720p video transcode worker path and upload quality selection after ffmpeg CPU/runtime sizing and load testing.
+4. `[ ]` Add media upload progress, retry and resume UX for large files.
+5. `[ ]` Run installed web/PWA production QA on desktop, iPhone/iOS home-screen and Android browser home-screen; keep APK/native push deferred.
+6. `[!]` Keep monitoring/Sentry and backup restore rehearsal deferred until the user confirms the backup environment and restore-test window.
+
 ## Last Confirmed Deploy Baseline
 
-- GitHub `main`: `1dd8f8c263f284c5ee45906d206d95e6ab75e2b2`.
+- GitHub `main`: `1b8edb63e3387c0bf367297c567acfae47c05551`.
 - Coolify app: `letscube-web`.
 - Public app: `https://app.letscube.ru`.
-- Auto deploy: GitHub webhook to Coolify was restored; test push queued and completed with `is_webhook=t`.
+- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; `1b8edb6` deployed healthy on 2026-06-23.
 - Self-host stack: Coolify, self-hosted Supabase, Mailcow, Caddy, and app deployment are already in place.
 
 ## Completed Baseline - Do Not Rebuild Without A New Finding
@@ -208,6 +225,7 @@ Next media/performance action:
   - `[x]` Raised self-host Supabase Storage upload size for `supabase-storage` to 250 MB and verified a 60 MB object upload/delete through the Storage API.
   - `[x]` Added server-side video poster generation (`video_poster`) through the trusted worker and wired chat video bubbles to use ready posters.
   - `[x]` Wired chat info media gallery to use ready image/video variants for tiles instead of loading original media files.
+  - `[ ]` Reproduce and fix fast upward scroll jump in long chat history: quick upward scrolling can return the list to the newest/bottom position even when the user is trying to read old messages.
   - `[ ]` Add 720p video transcode worker path and upload quality selection after ffmpeg CPU/runtime sizing and load testing.
 
 ## Priority 6 - Monitoring And Self-Hosted Sentry
