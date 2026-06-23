@@ -24,6 +24,8 @@ import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import { prepareChatImageAttachment, readMediaDimensions } from "@/lib/mediaUpload";
 import {
   CHAT_MEDIA_BUCKET,
+  MAX_ATTACHMENT_SIZE_LABEL,
+  MAX_VIDEO_ATTACHMENT_SIZE_LABEL,
   MAX_STAGED_ATTACHMENTS,
   chatAttachmentUploadPath,
   createStagedAttachment,
@@ -350,6 +352,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         try {
           uploaded = await uploadStagedAttachment(attachment);
         } catch (error) {
+          const uploadErrorMessage = getAttachmentUploadErrorMessage(error, attachment.kind);
           console.warn("[attachments] upload failed:", error);
           reportError(error, {
             category: "attachment_upload_failed",
@@ -360,7 +363,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           updateStagedAttachment(attachment.id, (current) => ({
             ...current,
             status: "failed",
-            error: "Не удалось загрузить файл.",
+            error: uploadErrorMessage,
           }));
           return sentAny;
         }
@@ -791,6 +794,29 @@ function getStagedAttachmentMessageContent(attachment: StagedAttachment, caption
     return `Видео-сообщение (${formatVoiceDurationLabel(attachment.durationMs ?? 0)})`;
   }
   return caption?.trim() || attachment.name;
+}
+
+function getAttachmentUploadErrorMessage(error: unknown, kind: StagedAttachment["kind"]): string {
+  const status = typeof error === "object" && error
+    ? String((error as { status?: unknown; statusCode?: unknown }).status ?? (error as { statusCode?: unknown }).statusCode ?? "")
+    : "";
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const details = `${status} ${message}`.toLowerCase();
+  if (
+    details.includes("413") ||
+    details.includes("payload") ||
+    details.includes("too large") ||
+    details.includes("file size") ||
+    details.includes("size limit") ||
+    details.includes("exceeded")
+  ) {
+    const maxLabel = kind === "video" ? MAX_VIDEO_ATTACHMENT_SIZE_LABEL : MAX_ATTACHMENT_SIZE_LABEL;
+    return `Файл слишком большой для загрузки. Максимум ${maxLabel}.`;
+  }
+  if (details.includes("network") || details.includes("fetch") || details.includes("timeout")) {
+    return "Не удалось загрузить файл. Проверьте соединение и попробуйте снова.";
+  }
+  return "Не удалось загрузить файл. Попробуйте ещё раз.";
 }
 
 function getStagedAttachmentMediaMetadata(attachment: StagedAttachment): Json | null | undefined {

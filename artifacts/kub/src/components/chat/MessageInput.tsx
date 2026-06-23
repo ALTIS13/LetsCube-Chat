@@ -1225,7 +1225,11 @@ function AttachmentMeta({
         {attachment.name}
       </div>
       <div className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] text-[color:var(--kub-muted)]">
-        <span className="shrink-0">{formatAttachmentSize(attachment.size)}</span>
+        <span className="shrink-0">
+          {attachment.optimized && attachment.originalSize && attachment.originalSize > attachment.size
+            ? `${formatAttachmentSize(attachment.size)} после сжатия`
+            : formatAttachmentSize(attachment.size)}
+        </span>
         <span className="shrink-0">·</span>
         <span className={cn("truncate", failed && "text-[color:var(--kub-danger)]")}>
           {attachment.error ?? attachmentStatusLabel(attachment.status)}

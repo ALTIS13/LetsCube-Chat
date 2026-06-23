@@ -44,11 +44,13 @@ test.describe("KUB visual style and layout", () => {
     await expect(panel).toBeVisible();
     await expect(tabs).toBeVisible();
     await expect(list).toBeVisible();
+    await assertNoHorizontalOverflow(panel, "notification panel has horizontal overflow");
     await assertNoHorizontalOverflow(list, "notification list has horizontal overflow");
 
     for (const tab of ["all", "tasks", "messages", "system"]) {
       await page.getByTestId(`notification-tab-${tab}`).click();
       await expect(page.getByTestId(`notification-tab-${tab}`)).toHaveAttribute("data-state", "active");
+      await assertNoHorizontalOverflow(panel, `notification panel has horizontal overflow in ${tab}`);
       await assertNoHorizontalOverflow(list, `notification list has horizontal overflow in ${tab}`);
       await assertBelow(tabs, list, `notification list overlaps tabs in ${tab}`);
       const firstItem = page.locator('[data-testid="notification-item"], [data-testid="notification-message-group"]').first();

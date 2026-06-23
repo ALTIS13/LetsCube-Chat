@@ -384,6 +384,10 @@ export function MessageList({
     }, delayMs);
   }, []);
 
+  const releaseInitialBottomLock = useCallback(() => {
+    initialBottomLockUntilRef.current = 0;
+  }, []);
+
   // Keep bottom lock for new messages and typing indicator without pulling
   // users down when they intentionally scrolled up.
   useEffect(() => {
@@ -439,14 +443,14 @@ export function MessageList({
       const cancelUnreadFrame = scrollToMessageAfterLayout(firstUnreadMessageId);
       return () => cancelUnreadFrame();
     }
-    initialBottomLockUntilRef.current = Date.now() + 1800;
+    initialBottomLockUntilRef.current = Date.now() + 4200;
     const cancelFrame = scrollToBottomAfterLayout(false);
     const scheduleBottomSettle = (delay: number) => window.setTimeout(() => {
       if (initialScrollAppliedRef.current !== initialScrollKey) return;
       scrollToBottom(false);
     }, delay);
-    [120, 320, 680, 1200, 1750].forEach(scheduleBottomSettle);
-    releaseInitialScrollGuard(initialScrollKey, 1850);
+    [120, 320, 680, 1200, 1750, 2600, 3600, 4150].forEach(scheduleBottomSettle);
+    releaseInitialScrollGuard(initialScrollKey, 4300);
     return () => {
       cancelFrame();
     };
@@ -505,6 +509,9 @@ export function MessageList({
         ref={containerRef}
         data-testid="message-scroll-container"
         onScroll={handleScroll}
+        onPointerDown={releaseInitialBottomLock}
+        onTouchStart={releaseInitialBottomLock}
+        onWheel={releaseInitialBottomLock}
         onClickCapture={(event) => {
           const target = event.target as HTMLElement | null;
           if (target?.closest("[data-reaction-menu], [data-reaction-trigger]")) return;

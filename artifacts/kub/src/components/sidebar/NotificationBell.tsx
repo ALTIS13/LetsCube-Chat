@@ -336,7 +336,7 @@ export function NotificationBell() {
           </div>
 
           <div
-            className="relative z-10 flex shrink-0 gap-1 overflow-x-auto border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-2"
+            className="no-scrollbar relative z-10 flex max-w-full shrink-0 gap-1 overflow-x-auto overflow-y-hidden border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-2"
             data-testid="notification-tabs"
           >
             {NOTIFICATION_TABS.map((tab) => {
@@ -373,7 +373,7 @@ export function NotificationBell() {
             </div>
           )}
 
-          <div className="relative z-0 min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain p-2" data-testid="notification-list">
+          <div className="relative z-0 min-h-0 max-w-full flex-1 overflow-y-auto overflow-x-hidden overscroll-contain p-2" data-testid="notification-list">
             {loading && visibleEntries.length === 0 ? (
               <NotificationState icon="spinner" title="Загрузка уведомлений" body="Обновляем последние события." />
             ) : visibleEntries.length === 0 ? (
@@ -471,7 +471,7 @@ function NotificationItem({
               <div className="truncate text-sm font-semibold text-[color:var(--kub-text)] [overflow-wrap:anywhere]">
                 {display.title}
               </div>
-              <div className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-[color:var(--kub-muted)] [overflow-wrap:anywhere]">
+              <div className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-[color:var(--kub-muted)] [overflow-wrap:anywhere] [word-break:break-word]">
                 {display.body}
               </div>
             </div>
@@ -578,7 +578,7 @@ function MessageGroupItem({
               <div className="truncate text-sm font-semibold text-[color:var(--kub-text)] [overflow-wrap:anywhere]">
                 {truncateText(title)}
               </div>
-              <div className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-[color:var(--kub-muted)] [overflow-wrap:anywhere]">
+              <div className="mt-0.5 line-clamp-2 break-words text-xs leading-snug text-[color:var(--kub-muted)] [overflow-wrap:anywhere] [word-break:break-word]">
                 {truncateText(body)}
               </div>
             </div>
