@@ -148,6 +148,33 @@ test.describe("KUB visual style and layout", () => {
 
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
+
+  test("fast upward scroll after opening a read chat is not pulled back to bottom", async ({ page }) => {
+    const consoleErrors = collectConsoleErrors(page);
+    const role = findFirstAvailableQaRole(
+      ["owner", "tech_admin", "location_admin", "location_staff", "client"],
+      { includeDefault: true },
+    );
+    test.skip(!role, "QA credentials or auth state are not configured");
+
+    await gotoOrSkip(page, "/");
+    await loginAsRoleOrSkip(page, role);
+
+    const scrollContainer = await openScrollableReadChatOrSkip(page);
+
+    const firstUnread = page.getByTestId("first-unread-separator");
+    test.skip(await firstUnread.isVisible().catch(() => false), "Selected chat has an unread boundary");
+
+    await simulateFastUpwardScroll(scrollContainer, 720);
+    const afterUserScroll = await distanceFromBottom(scrollContainer);
+    expect(afterUserScroll).toBeGreaterThan(120);
+
+    await page.waitForTimeout(2400);
+    const settledAfterUserScroll = await distanceFromBottom(scrollContainer);
+    expect(settledAfterUserScroll).toBeGreaterThan(120);
+
+    expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
+  });
 });
 
 function collectConsoleErrors(page: Page): string[] {
@@ -191,4 +218,43 @@ async function assertNoHorizontalOverflow(locator: Locator, message: string) {
     };
   });
   expect(metrics.scrollWidth, message).toBeLessThanOrEqual(metrics.clientWidth + 1);
+}
+
+async function openScrollableReadChatOrSkip(page: Page): Promise<Locator> {
+  const readChats = page.locator('[data-testid="chat-list-item"][data-unread-count="0"][data-has-messages="true"]');
+  const count = await readChats.count();
+  test.skip(count === 0, "QA account has no fully read visible chats with messages");
+
+  const scrollContainer = page.getByTestId("message-scroll-container");
+  for (let index = 0; index < Math.min(count, 12); index += 1) {
+    const candidate = readChats.nth(index);
+    if (!(await candidate.isVisible().catch(() => false))) break;
+    await candidate.click();
+    await expect(scrollContainer).toBeVisible();
+    await page.waitForTimeout(500);
+    const canScroll = await scrollContainer.evaluate((node) => {
+      const el = node as HTMLElement;
+      return el.scrollHeight > el.clientHeight + 420;
+    });
+    if (canScroll) return scrollContainer;
+  }
+
+  test.skip(true, "QA account has no fully read chat with enough history for scroll anchoring regression");
+  return scrollContainer;
+}
+
+async function distanceFromBottom(locator: Locator): Promise<number> {
+  return locator.evaluate((node) => {
+    const el = node as HTMLElement;
+    return el.scrollHeight - el.scrollTop - el.clientHeight;
+  });
+}
+
+async function simulateFastUpwardScroll(locator: Locator, delta: number) {
+  await locator.evaluate((node, amount) => {
+    const el = node as HTMLElement;
+    el.dispatchEvent(new WheelEvent("wheel", { deltaY: -amount, bubbles: true, cancelable: true }));
+    el.scrollTop = Math.max(0, el.scrollTop - amount);
+    el.dispatchEvent(new Event("scroll", { bubbles: true }));
+  }, delta);
 }

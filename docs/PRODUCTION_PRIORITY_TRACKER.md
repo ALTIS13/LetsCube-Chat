@@ -31,7 +31,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
    - `[x]` Fully read chat opens anchored to latest messages.
    - `[x]` Chat with unread messages opens near the first unread boundary.
    - `[x]` Chat info media gallery uses generated variants instead of original media files for tiles.
-   - `[ ]` Reproduce and fix fast upward history scrolling bug: when the user quickly scrolls up through older messages, the message list can jump back to the newest/bottom position and the user has to scroll up again.
+   - `[x]` Reproduce and fix fast upward history scrolling bug: when the user quickly scrolls up through older messages, the message list no longer jumps back to the newest/bottom position during initial bottom settling.
    - `[ ]` Audit slow initial chat load and realtime reconciliation under larger message/media history.
 3. `[ ]` Add 720p video transcode worker path and upload quality selection after ffmpeg CPU/runtime sizing and load testing.
 4. `[ ]` Add media upload progress, retry and resume UX for large files.
@@ -226,7 +226,7 @@ Next media/performance action:
   - `[x]` Raised self-host Supabase Storage upload size for `supabase-storage` to 250 MB and verified a 60 MB object upload/delete through the Storage API.
   - `[x]` Added server-side video poster generation (`video_poster`) through the trusted worker and wired chat video bubbles to use ready posters.
   - `[x]` Wired chat info media gallery to use ready image/video variants for tiles instead of loading original media files.
-  - `[ ]` Reproduce and fix fast upward scroll jump in long chat history: quick upward scrolling can return the list to the newest/bottom position even when the user is trying to read old messages.
+  - `[x]` Reproduced and fixed fast upward scroll jump in long chat history: user wheel/touch/pointer input now cancels initial bottom settling so quick upward scrolling is preserved.
   - `[ ]` Add 720p video transcode worker path and upload quality selection after ffmpeg CPU/runtime sizing and load testing.
 
 ## Priority 6 - Monitoring And Self-Hosted Sentry

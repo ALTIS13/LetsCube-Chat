@@ -384,8 +384,10 @@ export function MessageList({
     }, delayMs);
   }, []);
 
-  const releaseInitialBottomLock = useCallback(() => {
+  const releaseInitialScrollControl = useCallback(() => {
     initialBottomLockUntilRef.current = 0;
+    initialScrollPendingRef.current = false;
+    initialScrollPendingKeyRef.current = null;
   }, []);
 
   // Keep bottom lock for new messages and typing indicator without pulling
@@ -447,6 +449,7 @@ export function MessageList({
     const cancelFrame = scrollToBottomAfterLayout(false);
     const scheduleBottomSettle = (delay: number) => window.setTimeout(() => {
       if (initialScrollAppliedRef.current !== initialScrollKey) return;
+      if (!isInitialBottomLocked()) return;
       scrollToBottom(false);
     }, delay);
     [120, 320, 680, 1200, 1750, 2600, 3600, 4150].forEach(scheduleBottomSettle);
@@ -454,7 +457,7 @@ export function MessageList({
     return () => {
       cancelFrame();
     };
-  }, [layoutKey, initialUnreadCount, initialUnreadSince, firstUnreadMessageId, sortedMessages.length, scrollToBottom, scrollToBottomAfterLayout, scrollToMessageAfterLayout, releaseInitialScrollGuard]);
+  }, [isInitialBottomLocked, layoutKey, initialUnreadCount, initialUnreadSince, firstUnreadMessageId, sortedMessages.length, scrollToBottom, scrollToBottomAfterLayout, scrollToMessageAfterLayout, releaseInitialScrollGuard]);
 
   const resolvedBottomInset = Math.max(0, bottomInset);
 
@@ -509,9 +512,9 @@ export function MessageList({
         ref={containerRef}
         data-testid="message-scroll-container"
         onScroll={handleScroll}
-        onPointerDown={releaseInitialBottomLock}
-        onTouchStart={releaseInitialBottomLock}
-        onWheel={releaseInitialBottomLock}
+        onPointerDown={releaseInitialScrollControl}
+        onTouchStart={releaseInitialScrollControl}
+        onWheel={releaseInitialScrollControl}
         onClickCapture={(event) => {
           const target = event.target as HTMLElement | null;
           if (target?.closest("[data-reaction-menu], [data-reaction-trigger]")) return;
