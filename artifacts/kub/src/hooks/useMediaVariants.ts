@@ -9,6 +9,9 @@ export interface MessageMediaVariantUrls {
   thumbUrl?: string;
   thumbWidth?: number | null;
   thumbHeight?: number | null;
+  videoPosterUrl?: string;
+  videoPosterWidth?: number | null;
+  videoPosterHeight?: number | null;
 }
 
 export interface AvatarVariantUrls {
@@ -20,7 +23,7 @@ export interface AvatarVariantUrls {
   avatar256Height?: number | null;
 }
 
-const MESSAGE_IMAGE_VARIANT_KINDS = ["image_preview", "image_thumb"] as const;
+const MESSAGE_VARIANT_KINDS = ["image_preview", "image_thumb", "video_poster"] as const;
 const AVATAR_VARIANT_KINDS = ["avatar_128", "avatar_256"] as const;
 
 function getVariantPublicUrl(
@@ -35,7 +38,7 @@ export function useMessageMediaVariantUrls(messages: MessageWithSender[]): Recor
     const ids = new Set<string>();
     for (const message of messages) {
       if (
-        message.type === "image" &&
+        (message.type === "image" || message.type === "video") &&
         message.media_url &&
         !message.deleted_at &&
         !message.id.startsWith("tmp:")
@@ -65,7 +68,7 @@ export function useMessageMediaVariantUrls(messages: MessageWithSender[]): Recor
         .from("media_variants")
         .select("id,message_id,variant_kind,variant_bucket,variant_path,width,height,status")
         .eq("status", "ready")
-        .in("variant_kind", [...MESSAGE_IMAGE_VARIANT_KINDS])
+        .in("variant_kind", [...MESSAGE_VARIANT_KINDS])
         .in("message_id", messageIds);
 
       if (cancelled) return;
@@ -90,6 +93,10 @@ export function useMessageMediaVariantUrls(messages: MessageWithSender[]): Recor
           current.thumbUrl = publicUrl;
           current.thumbWidth = row.width;
           current.thumbHeight = row.height;
+        } else if (row.variant_kind === "video_poster") {
+          current.videoPosterUrl = publicUrl;
+          current.videoPosterWidth = row.width;
+          current.videoPosterHeight = row.height;
         }
         next[row.message_id] = current;
       }

@@ -15,11 +15,15 @@ async function buildAll() {
   await rm(distDir, { recursive: true, force: true });
 
   await esbuild({
-    entryPoints: [path.resolve(artifactDir, "src/index.ts")],
+    entryPoints: [
+      path.resolve(artifactDir, "src/index.ts"),
+      path.resolve(artifactDir, "src/workers/mediaVariantRules.ts"),
+    ],
     platform: "node",
     bundle: true,
     format: "esm",
     outdir: distDir,
+    outbase: path.resolve(artifactDir, "src"),
     outExtension: { ".js": ".mjs" },
     logLevel: "info",
     // Some packages may not be bundleable, so we externalize them, we can add more here as needed.

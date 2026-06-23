@@ -6,7 +6,7 @@
 - Pre-apply schema backup: `/srv/letscube/backups/manual/pre-media-variants-schema-20260622T203630Z.sql`.
 - Verified `public.media_variants` exists, RLS is enabled, authenticated users have read-only access through scoped policies, and worker/server roles can write through trusted server credentials only.
 - Added optional `kub-worker` service/`api-runtime` Docker target. It starts the existing server-side push dispatcher plus a new media variants worker, and self-disables media processing if `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` are absent.
-- The worker currently generates WebP variants for image messages and user avatars. Video posters/transcoding remain a separate worker stage because they require ffmpeg/runtime sizing and production load checks.
+- The worker generates WebP variants for image messages and user avatars. It also has a video poster stage (`video_poster`) backed by ffmpeg in the API runtime; 720p video transcoding remains a separate stage because it needs CPU/runtime sizing and production load checks.
 - `db:types:check` no longer reports missing `messages.media_bucket` / `messages.media_path` in the manual compatibility layer. Existing advisory warnings remain for search RPCs and `notifications_push_outbox`.
 
 2026-06-22 admin/ops security report foundation:

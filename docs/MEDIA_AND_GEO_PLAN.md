@@ -9,7 +9,7 @@ Current media UX state as of 2026-06-22:
 - New chat image uploads are client-optimized to bounded WebP before upload when the browser/WebView can do it.
 - New avatar uploads are client-optimized to bounded WebP before upload when possible.
 - New image/video attachments store lightweight `media_metadata` dimensions and size fields so chat bubbles can reserve stable layout before the media file finishes loading.
-- Regular video attachments are allowed up to the current product limit, while server-side transcoding remains pending.
+- Regular video attachments are allowed up to the current product limit. Server-side poster generation is implemented; full video transcoding remains pending.
 
 Future media pipeline work:
 
@@ -17,9 +17,9 @@ Future media pipeline work:
 - Build a trusted backend worker for server-side variants:
   - chat image preview: max 1280px WebP;
   - chat image thumbnail: max 360px WebP;
-  - video poster: max 720px WebP/JPEG;
+  - video poster: max 720px WebP;
   - avatar previews: 128px and 256px WebP;
-  - future video transcodes such as 720p MP4/WebM.
+- Add future video transcodes such as 720p MP4/WebM after production CPU/runtime sizing.
 - Store variant bucket/path, dimensions and byte size separately from original media paths.
 - Keep original chat media in private Storage with chat-member access checks.
 - Add file upload progress and retry UI.

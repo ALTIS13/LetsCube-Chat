@@ -458,6 +458,7 @@ export function MessageBubble({
   const imageDimensions = message.type === "image" && mediaVariant?.previewWidth && mediaVariant?.previewHeight
     ? { width: mediaVariant.previewWidth, height: mediaVariant.previewHeight }
     : mediaDimensions;
+  const videoPosterUrl = message.type === "video" ? mediaVariant?.videoPosterUrl : undefined;
   const textLayoutKind = getMessageTextLayoutKind(message.type, textContent);
   const widthClasses = getMessageWidthClasses(textLayoutKind);
   const stackStyle = getMessageStackStyle(textLayoutKind);
@@ -1158,6 +1159,7 @@ export function MessageBubble({
                 <RoundVideoMessage
                   url={message.media_url}
                   title={message.content ?? "Видео-сообщение"}
+                  posterUrl={videoPosterUrl}
                   durationLabel={parseVideoMessageDuration(message.content, message)}
                   playbackItem={createPlaybackItemFromMessage(message, isMe)}
                   onOpen={() => onOpenMedia?.({ type: "video", url: message.media_url!, title: message.content ?? "Видео-сообщение" })}
@@ -1167,6 +1169,7 @@ export function MessageBubble({
                   <MediaVideo
                     url={message.media_url}
                     title={message.content ?? "Видео"}
+                    posterUrl={videoPosterUrl}
                     dimensions={mediaDimensions}
                     playbackItem={createPlaybackItemFromMessage(message, isMe)}
                     onOpen={() => onOpenMedia?.({ type: "video", url: message.media_url!, title: message.content ?? "Видео" })}
@@ -1372,12 +1375,14 @@ function MediaWithCaption({ children, caption }: { children: ReactNode; caption:
 function MediaVideo({
   url,
   title,
+  posterUrl,
   dimensions,
   playbackItem,
   onOpen,
 }: {
   url: string;
   title: string;
+  posterUrl?: string;
   dimensions: MediaDimensions | null;
   playbackItem: ChatMediaPlaybackItem | null;
   onOpen: () => void;
@@ -1407,6 +1412,7 @@ function MediaVideo({
       <video
         ref={videoRef}
         src={url}
+        poster={posterUrl}
         preload="metadata"
         controls
         playsInline
@@ -1432,12 +1438,14 @@ function MediaVideo({
 function RoundVideoMessage({
   url,
   title,
+  posterUrl,
   durationLabel,
   playbackItem,
   onOpen,
 }: {
   url: string;
   title: string;
+  posterUrl?: string;
   durationLabel: string | null;
   playbackItem: ChatMediaPlaybackItem | null;
   onOpen: () => void;
@@ -1532,6 +1540,7 @@ function RoundVideoMessage({
         <video
           ref={videoRef}
           src={url}
+          poster={posterUrl}
           preload="metadata"
           playsInline
           className="h-full w-full object-cover"

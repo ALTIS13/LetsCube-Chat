@@ -1,26 +1,31 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import sharp from "sharp";
+import sharp, { type OutputInfo } from "sharp";
 import { logger } from "../lib/logger";
+import {
+  AVATAR_VARIANTS,
+  MESSAGE_IMAGE_VARIANTS,
+  MESSAGE_VIDEO_VARIANTS,
+  buildMessageVariantPath,
+  getExpectedMessageVariantKinds,
+} from "./mediaVariantRules";
 
 const DEFAULT_TICK_MS = 60_000;
 const DEFAULT_CANDIDATE_LIMIT = 120;
 const DEFAULT_PROCESS_LIMIT = 12;
+const DEFAULT_FFMPEG_TIMEOUT_MS = 30_000;
 const MEDIA_BUCKET = "media";
-
-const MESSAGE_VARIANTS = [
-  { kind: "image_thumb", max: 360, quality: 76 },
-  { kind: "image_preview", max: 1280, quality: 82 },
-] as const;
-
-const AVATAR_VARIANTS = [
-  { kind: "avatar_128", size: 128, quality: 78 },
-  { kind: "avatar_256", size: 256, quality: 82 },
-] as const;
+const execFileAsync = promisify(execFile);
 
 interface MessageCandidate {
   id: string;
   chat_id: string;
   user_id: string | null;
+  type: string | null;
   media_bucket: string | null;
   media_path: string | null;
   media_url: string | null;
@@ -118,8 +123,8 @@ async function tick(supabase: SupabaseClient): Promise<void> {
 async function loadMessageCandidates(supabase: SupabaseClient): Promise<MessageCandidate[]> {
   const { data, error } = await supabase
     .from("messages")
-    .select("id, chat_id, user_id, media_bucket, media_path, media_url")
-    .eq("type", "image")
+    .select("id, chat_id, user_id, type, media_bucket, media_path, media_url")
+    .in("type", ["image", "video"])
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(candidateLimit());
@@ -141,7 +146,7 @@ async function loadMessageCandidates(supabase: SupabaseClient): Promise<MessageC
   );
   return candidates.filter((row) => {
     const kinds = existing.get(row.id) ?? new Set<string>();
-    return MESSAGE_VARIANTS.some((variant) => !kinds.has(variant.kind));
+    return getExpectedMessageVariantKinds(row).some((kind) => !kinds.has(kind));
   });
 }
 
@@ -209,9 +214,14 @@ async function ensureMessageVariants(supabase: SupabaseClient, message: MessageC
   const sourceBuffer = await downloadStorageObject(supabase, source);
   if (!sourceBuffer) return false;
 
+  if (message.type === "video") {
+    return ensureVideoMessageVariants(supabase, message, source, sourceBuffer);
+  }
+  if (message.type !== "image") return false;
+
   let generated = false;
-  for (const variant of MESSAGE_VARIANTS) {
-    const variantPath = `variants/messages/${message.chat_id}/${message.id}/${variant.kind}.webp`;
+  for (const variant of MESSAGE_IMAGE_VARIANTS) {
+    const variantPath = buildMessageVariantPath(message.chat_id, message.id, variant.kind);
     try {
       const output = await sharp(sourceBuffer)
         .rotate()
@@ -232,6 +242,73 @@ async function ensureMessageVariants(supabase: SupabaseClient, message: MessageC
     }
   }
   return generated;
+}
+
+async function ensureVideoMessageVariants(
+  supabase: SupabaseClient,
+  message: MessageCandidate,
+  source: StoragePointer,
+  sourceBuffer: Buffer,
+): Promise<boolean> {
+  let generated = false;
+  for (const variant of MESSAGE_VIDEO_VARIANTS) {
+    const variantPath = buildMessageVariantPath(message.chat_id, message.id, variant.kind);
+    try {
+      const output = await generateVideoPosterVariant(sourceBuffer, source.path, variant);
+      await uploadVariant(supabase, variantPath, output.data);
+      await replaceMessageVariant(supabase, message, source, {
+        kind: variant.kind,
+        path: variantPath,
+        width: output.info.width,
+        height: output.info.height,
+        sizeBytes: output.info.size,
+      });
+      generated = true;
+    } catch (err) {
+      await markMessageVariantFailed(supabase, message, source, variant.kind, variantPath, err);
+    }
+  }
+  return generated;
+}
+
+async function generateVideoPosterVariant(
+  sourceBuffer: Buffer,
+  sourcePath: string,
+  variant: (typeof MESSAGE_VIDEO_VARIANTS)[number],
+): Promise<{ data: Buffer; info: OutputInfo }> {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "letscube-video-poster-"));
+  const inputPath = path.join(tempDir, `source${videoTempExtension(sourcePath)}`);
+  const framePath = path.join(tempDir, "poster.jpg");
+  try {
+    await writeFile(inputPath, sourceBuffer);
+    await extractVideoFrame(inputPath, framePath);
+    const frame = await readFile(framePath);
+    return sharp(frame)
+      .rotate()
+      .resize({ width: variant.max, height: variant.max, fit: "inside", withoutEnlargement: true })
+      .webp({ quality: variant.quality })
+      .toBuffer({ resolveWithObject: true });
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function extractVideoFrame(inputPath: string, framePath: string): Promise<void> {
+  const baseArgs = ["-hide_banner", "-loglevel", "error", "-y"] as const;
+  const outputArgs = ["-frames:v", "1", "-an", framePath] as const;
+  try {
+    await runFfmpeg([...baseArgs, "-ss", "00:00:01", "-i", inputPath, ...outputArgs]);
+  } catch {
+    await runFfmpeg([...baseArgs, "-i", inputPath, ...outputArgs]);
+  }
+}
+
+async function runFfmpeg(args: string[]): Promise<void> {
+  await execFileAsync(ffmpegPath(), args, {
+    timeout: ffmpegTimeoutMs(),
+    windowsHide: true,
+    maxBuffer: 64 * 1024,
+  });
 }
 
 async function ensureProfileVariants(supabase: SupabaseClient, profile: ProfileCandidate): Promise<boolean> {
@@ -430,6 +507,19 @@ function candidateLimit(): number {
 
 function processLimit(): number {
   return positiveInteger(process.env["MEDIA_VARIANTS_PROCESS_LIMIT"], DEFAULT_PROCESS_LIMIT);
+}
+
+function ffmpegPath(): string {
+  return process.env["MEDIA_VARIANTS_FFMPEG_PATH"] || "ffmpeg";
+}
+
+function ffmpegTimeoutMs(): number {
+  return positiveInteger(process.env["MEDIA_VARIANTS_FFMPEG_TIMEOUT_MS"], DEFAULT_FFMPEG_TIMEOUT_MS);
+}
+
+function videoTempExtension(sourcePath: string): string {
+  const extension = path.extname(sourcePath).toLowerCase();
+  return /^\.[a-z0-9]{2,5}$/.test(extension) ? extension : ".mp4";
 }
 
 function positiveInteger(value: string | undefined, fallback: number): number {
