@@ -25,7 +25,7 @@ Legend:
 
 Use this queue before starting the next production-hardening turn. Do not repeat completed items unless a new bug report or regression test proves the old fix is insufficient.
 
-1. `[ ]` Fix Coolify worker auto-deploy gap so `letscube-worker` updates automatically when worker/backend code changes. Current status: web auto-deploy works; worker required manual rebuild/recreate after `c7c5675`.
+1. `[x]` Fix Coolify worker auto-deploy gap so `letscube-worker` updates automatically when worker/backend code changes. Current status: Coolify Auto Deploy is enabled for `letscube-worker`; validate on every worker/backend commit until the next backend change proves the path stable.
 2. `[~]` Continue chat performance audit and synchronization hardening. Current known findings:
    - `[x]` Composer text is cleared immediately after optimistic send instead of waiting for delivery/read checks.
    - `[x]` Fully read chat opens anchored to latest messages.
@@ -44,6 +44,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 - Coolify app: `letscube-web`.
 - Public app: `https://app.letscube.ru`.
 - Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; `1b8edb6` deployed healthy on 2026-06-23.
+- Worker auto deploy: Coolify Auto Deploy is enabled for `letscube-worker` after the earlier manual rebuild/recreate gap; verify that future `artifacts/api-server` / `docs/deploy/Dockerfile` commits queue both web and worker if both resources are intentionally active.
 - Self-host stack: Coolify, self-hosted Supabase, Mailcow, Caddy, and app deployment are already in place.
 
 ## Completed Baseline - Do Not Rebuild Without A New Finding
