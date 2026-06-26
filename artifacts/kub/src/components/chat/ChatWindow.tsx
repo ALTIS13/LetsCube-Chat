@@ -21,6 +21,12 @@ import { KUB_CHAT_MESSAGE_JUMP_EVENT, requestChatMessageJump, type ChatMessageJu
 import { isSavedChat } from "@/lib/chatDisplay";
 import { reportError } from "@/lib/monitoring";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
+import {
+  DEFAULT_MEDIA_QUALITY,
+  MEDIA_QUALITY_STORAGE_KEY,
+  normalizeMediaQuality,
+  type MediaQuality,
+} from "@/lib/mediaQuality";
 import { prepareChatImageAttachment, readMediaDimensions } from "@/lib/mediaUpload";
 import {
   CHAT_MEDIA_BUCKET,
@@ -96,6 +102,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const initialUnreadRef = useRef<{ chatId: string; count: number; since: string | null } | null>(null);
   const supabase = createClient();
   const [stagedAttachments, setStagedAttachments] = useState<StagedAttachment[]>([]);
+  const [mediaQuality, setMediaQualityState] = useState<MediaQuality>(() => {
+    if (typeof window === "undefined") return DEFAULT_MEDIA_QUALITY;
+    return normalizeMediaQuality(window.localStorage.getItem(MEDIA_QUALITY_STORAGE_KEY));
+  });
   const [keyboardInset, setKeyboardInset] = useState(0);
   const [composerHeight, setComposerHeight] = useState(0);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
@@ -107,6 +117,13 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   useEffect(() => {
     stagedAttachmentsRef.current = stagedAttachments;
   }, [stagedAttachments]);
+
+  const setMediaQuality = useCallback((quality: MediaQuality) => {
+    setMediaQualityState(quality);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(MEDIA_QUALITY_STORAGE_KEY, quality);
+    }
+  }, []);
 
   useEffect(() => {
     const visualViewport = window.visualViewport;
@@ -240,7 +257,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
     for (const sourceFile of files.slice(0, availableSlots)) {
       const file = sourceFile.type.startsWith("image/")
-        ? await prepareChatImageAttachment(sourceFile)
+        ? await prepareChatImageAttachment(sourceFile, mediaQuality)
         : sourceFile;
       const error = validateStagedAttachment(file);
       if (error) {
@@ -267,7 +284,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     if (errors.length) {
       showAppAlert(errors.slice(0, 3).join("\n"), "Вложения");
     }
-  }, []);
+  }, [mediaQuality]);
 
   const stageVoiceRecording = useCallback((blob: Blob, durationMs: number, mimeType: string) => {
     const error = validateStagedAttachment(new File([blob], "voice.webm", { type: mimeType || blob.type || "audio/webm" }));
@@ -741,6 +758,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             onSendVideoMessage={handleSendVideoMessage}
             onTyping={sendTyping}
             attachments={stagedAttachments}
+            mediaQuality={mediaQuality}
+            onMediaQualityChange={setMediaQuality}
             onStageFiles={(files, source) => stageFiles(files, source)}
             onRemoveAttachment={removeStagedAttachment}
             onRetryAttachment={retryStagedAttachment}

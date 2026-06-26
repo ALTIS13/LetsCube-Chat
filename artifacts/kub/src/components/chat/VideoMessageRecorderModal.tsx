@@ -3,13 +3,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KubButton, KubIcon, KubModal } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
+import { DEFAULT_MEDIA_QUALITY, getVideoRecordingProfile, type MediaQuality } from "@/lib/mediaQuality";
 import { cameraAndMicPermissionHelp, isNativeApp } from "@/lib/platform/capabilities";
 import { cn } from "@/lib/utils";
 
 const MAX_DURATION_MS = 60_000;
 const MIN_DURATION_MS = 700;
 const TIMER_TICK_MS = 250;
-const PREFERRED_MIME_TYPES = ["video/webm;codecs=vp8,opus", "video/webm;codecs=vp9,opus", "video/webm"] as const;
+const PREFERRED_MIME_TYPES = [
+  "video/webm;codecs=vp8,opus",
+  "video/webm;codecs=vp9,opus",
+  "video/webm",
+  "video/mp4;codecs=h264,aac",
+  "video/mp4",
+] as const;
 
 type RecorderStatus = "loading" | "ready" | "recording" | "recorded" | "denied" | "unavailable" | "unsupported" | "error";
 type FacingMode = "user" | "environment";
@@ -27,6 +34,7 @@ interface VideoMessageRecorderModalProps {
   onClose: () => void;
   onAddVideo: (blob: Blob, durationMs: number, mimeType: string) => void | Promise<void>;
   variant?: VideoRecorderVariant;
+  mediaQuality?: MediaQuality;
   autoStart?: boolean;
   autoAddOnStop?: boolean;
   stopSignal?: number;
@@ -39,6 +47,7 @@ export function VideoMessageRecorderModal({
   onClose,
   onAddVideo,
   variant = "round",
+  mediaQuality = DEFAULT_MEDIA_QUALITY,
   autoStart = false,
   autoAddOnStop = false,
   stopSignal = 0,
@@ -151,10 +160,10 @@ export function VideoMessageRecorderModal({
     }
 
     try {
-      const square = variant === "round";
+      const profile = getVideoRecordingProfile(mediaQuality, variant);
       const stream = await devices.getUserMedia({
         audio: true,
-        video: videoConstraints(nextFacingMode, square),
+        video: videoConstraints(nextFacingMode, profile),
       });
 
       if (!stream.getVideoTracks().length || !stream.getAudioTracks().length) {
@@ -181,7 +190,7 @@ export function VideoMessageRecorderModal({
         setStatus("error");
       }
     }
-  }, [attachPreviewStream, cleanupRecorder, clearRecorded, stopStream, variant]);
+  }, [attachPreviewStream, cleanupRecorder, clearRecorded, mediaQuality, stopStream, variant]);
 
   useEffect(() => {
     if (!open) return;
@@ -217,10 +226,13 @@ export function VideoMessageRecorderModal({
     setDurationMs(0);
 
     let recordingStream = stream;
+    const profile = getVideoRecordingProfile(mediaQuality, variant);
     if (variant === "round") {
       recordingStream = createRoundRecordingStream(
         videoRef.current,
         stream,
+        profile.width,
+        profile.frameRate,
         (frameId) => { frameRef.current = frameId; },
         (canvas) => { canvasRef.current = canvas; },
       );
@@ -229,7 +241,11 @@ export function VideoMessageRecorderModal({
 
     let recorder: MediaRecorder;
     try {
-      recorder = new MediaRecorder(recordingStream, { mimeType });
+      recorder = new MediaRecorder(recordingStream, {
+        mimeType,
+        videoBitsPerSecond: profile.videoBitsPerSecond,
+        audioBitsPerSecond: profile.audioBitsPerSecond,
+      });
     } catch {
       setStatus("unsupported");
       stopStream();
@@ -297,7 +313,7 @@ export function VideoMessageRecorderModal({
       setDurationMs(Date.now() - startedAtRef.current);
     }, TIMER_TICK_MS);
     maxTimerRef.current = setTimeout(finishRecording, MAX_DURATION_MS);
-  }, [cleanupRecorder, clearRecorded, finishRecording, onAddVideo, startPreview, status, stopStream, variant]);
+  }, [cleanupRecorder, clearRecorded, finishRecording, mediaQuality, onAddVideo, startPreview, status, stopStream, variant]);
 
   useEffect(() => {
     if (!open || !autoStart || status !== "ready") return;
@@ -351,9 +367,10 @@ export function VideoMessageRecorderModal({
       const devices = navigator.mediaDevices;
       if (!currentStream || !devices?.getUserMedia) return;
       setSwitchingCamera(true);
+      const profile = getVideoRecordingProfile(mediaQuality, "round");
       void devices.getUserMedia({
         audio: false,
-        video: videoConstraints(nextFacingMode, true),
+        video: videoConstraints(nextFacingMode, profile),
       }).then(async (nextVideoStream) => {
         const nextVideoTracks = nextVideoStream.getVideoTracks();
         if (!nextVideoTracks.length) {
@@ -380,9 +397,10 @@ export function VideoMessageRecorderModal({
       const devices = navigator.mediaDevices;
       if (!devices?.getUserMedia) return;
       setSwitchingCamera(true);
+      const profile = getVideoRecordingProfile(mediaQuality, variant);
       void devices.getUserMedia({
         audio: true,
-        video: videoConstraints(nextFacingMode, variant === "round"),
+        video: videoConstraints(nextFacingMode, profile),
       }).then(async (nextStream) => {
         if (!nextStream.getVideoTracks().length || !nextStream.getAudioTracks().length) {
           nextStream.getTracks().forEach((track) => track.stop());
@@ -403,7 +421,7 @@ export function VideoMessageRecorderModal({
         setSwitchingCamera(false);
       });
     }
-  }, [attachPreviewStream, cleanupRecorder, clearRecorded, status, switchingCamera, variant]);
+  }, [attachPreviewStream, cleanupRecorder, clearRecorded, mediaQuality, status, switchingCamera, variant]);
 
   const isRound = variant === "round";
   const statusCopy = getStatusCopy(status, variant);
@@ -620,11 +638,15 @@ export function VideoMessageRecorderModal({
   );
 }
 
-function videoConstraints(facingMode: FacingMode, square: boolean): MediaTrackConstraints {
+function videoConstraints(
+  facingMode: FacingMode,
+  profile: { width: number; height: number; frameRate: number },
+): MediaTrackConstraints {
   return {
     facingMode: { ideal: facingMode },
-    width: { ideal: square ? 720 : 1280 },
-    height: { ideal: square ? 720 : 720 },
+    width: { ideal: profile.width },
+    height: { ideal: profile.height },
+    frameRate: { ideal: profile.frameRate, max: 60 },
   };
 }
 
@@ -636,14 +658,16 @@ function supportsCanvasCapture(): boolean {
 function createRoundRecordingStream(
   video: HTMLVideoElement | null,
   sourceStream: MediaStream,
+  size: number,
+  frameRate: number,
   setFrameId: (frameId: number) => void,
   setCanvas: (canvas: HTMLCanvasElement) => void,
 ): MediaStream {
   if (!video || !supportsCanvasCapture()) return sourceStream;
 
   const canvas = document.createElement("canvas");
-  canvas.width = 720;
-  canvas.height = 720;
+  canvas.width = size;
+  canvas.height = size;
   setCanvas(canvas);
   const context = canvas.getContext("2d");
   if (!context) return sourceStream;
@@ -661,7 +685,7 @@ function createRoundRecordingStream(
   };
   draw();
 
-  const canvasStream = canvas.captureStream(30);
+  const canvasStream = canvas.captureStream(frameRate);
   return new MediaStream([
     ...canvasStream.getVideoTracks(),
     ...sourceStream.getAudioTracks(),

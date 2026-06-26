@@ -1,9 +1,9 @@
+import { DEFAULT_MEDIA_QUALITY, getImageUploadProfile, type MediaQuality } from "./mediaQuality";
+
 const MAX_AVATAR_UPLOAD_BYTES = 2 * 1024 * 1024;
 const MAX_AVATAR_SOURCE_BYTES = 15 * 1024 * 1024;
 const AVATAR_MAX_DIMENSION = 512;
 const AVATAR_QUALITY = 0.82;
-const CHAT_IMAGE_MAX_DIMENSION = 1920;
-const CHAT_IMAGE_QUALITY = 0.82;
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -49,11 +49,15 @@ export async function prepareAvatarImage(file: File): Promise<File> {
   });
 }
 
-export async function prepareChatImageAttachment(file: File): Promise<File> {
+export async function prepareChatImageAttachment(
+  file: File,
+  mediaQuality: MediaQuality = DEFAULT_MEDIA_QUALITY,
+): Promise<File> {
   if (!canOptimizeRasterImage(file)) return file;
+  const profile = getImageUploadProfile(mediaQuality);
   return optimizeRasterImage(file, {
-    maxDimension: CHAT_IMAGE_MAX_DIMENSION,
-    quality: CHAT_IMAGE_QUALITY,
+    maxDimension: profile.maxDimension,
+    quality: profile.quality,
     suffix: "image",
   });
 }

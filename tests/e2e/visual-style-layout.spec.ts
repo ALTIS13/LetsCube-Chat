@@ -65,6 +65,52 @@ test.describe("KUB visual style and layout", () => {
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
 
+  test("sidebar brand stays readable in light theme", async ({ page }) => {
+    const consoleErrors = collectConsoleErrors(page);
+    const role = findFirstAvailableQaRole(
+      ["owner", "tech_admin", "location_admin", "location_staff", "client"],
+      { includeDefault: true },
+    );
+    test.skip(!role, "QA credentials or auth state are not configured");
+
+    await gotoOrSkip(page, "/");
+    await loginAsRoleOrSkip(page, role);
+    await page.evaluate(() => window.localStorage.setItem("kub-theme", "light"));
+    await page.reload({ waitUntil: "domcontentloaded" });
+
+    const brand = page.getByTestId("sidebar-brand-strip");
+    await expect(brand).toBeVisible();
+    await expect(brand.locator('img[src*="letscube-logo-horizontal-dark"]')).toBeVisible();
+    await assertNoHorizontalOverflow(brand, "light theme sidebar brand has horizontal overflow");
+
+    expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
+  });
+
+  test("composer exposes media quality choices before attaching files", async ({ page }) => {
+    const consoleErrors = collectConsoleErrors(page);
+    const role = findFirstAvailableQaRole(
+      ["owner", "tech_admin", "location_admin", "location_staff", "client"],
+      { includeDefault: true },
+    );
+    test.skip(!role, "QA credentials or auth state are not configured");
+
+    await gotoOrSkip(page, "/");
+    await loginAsRoleOrSkip(page, role);
+
+    const firstChat = page.getByTestId("chat-list-item").first();
+    test.skip((await firstChat.count()) === 0, "QA account has no visible chats");
+    await firstChat.click();
+
+    await page.getByRole("button", { name: "Прикрепить" }).click();
+    const selector = page.getByTestId("media-quality-selector");
+    await expect(selector).toBeVisible();
+    await expect(selector).toContainText("Качество медиа");
+    await page.getByTestId("media-quality-option-high").click();
+    await expect(page.getByTestId("media-quality-option-high")).toHaveAttribute("data-state", "active");
+
+    expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
+  });
+
   test("chat profile panel header and summary are aligned", async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
     const role = findFirstAvailableQaRole(

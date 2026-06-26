@@ -23,6 +23,7 @@ import { KubIcon, type KubIconName } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
+import { DEFAULT_MEDIA_QUALITY, MEDIA_QUALITY_OPTIONS, type MediaQuality } from "@/lib/mediaQuality";
 import { isNativeApp, microphonePermissionHelp } from "@/lib/platform/capabilities";
 import { getMessengerLocationErrorMessage, getMessengerPosition } from "@/lib/platform/geolocation";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
@@ -56,6 +57,8 @@ interface MessageInputProps {
   onSendVideoMessage?: (blob: Blob, durationMs: number, mimeType: string) => void | Promise<void>;
   onTyping?: () => void;
   attachments?: StagedAttachment[];
+  mediaQuality?: MediaQuality;
+  onMediaQualityChange?: (quality: MediaQuality) => void;
   onStageFiles?: (files: File[], source: "picker" | "paste" | "camera") => void;
   onRemoveAttachment?: (attachmentId: string) => void;
   onRetryAttachment?: (attachmentId: string) => void;
@@ -75,6 +78,8 @@ export function MessageInput({
   onSendVideoMessage,
   onTyping,
   attachments = [],
+  mediaQuality = DEFAULT_MEDIA_QUALITY,
+  onMediaQualityChange,
   onStageFiles,
   onRemoveAttachment,
   onRetryAttachment,
@@ -681,6 +686,7 @@ export function MessageInput({
       <VideoMessageRecorderModal
         open={showVideoMessage}
         variant={videoRecorderVariant}
+        mediaQuality={mediaQuality}
         autoStart={videoAutoStart}
         autoAddOnStop={videoAutoAddOnStop}
         stopSignal={videoStopSignal}
@@ -725,6 +731,11 @@ export function MessageInput({
                 <span>{label}</span>
               </button>
             ))}
+            {onMediaQualityChange && attachments.length === 0 && (
+              <div className="border-t border-[color:var(--kub-border-color)] p-2">
+                <MediaQualitySelector value={mediaQuality} onChange={onMediaQualityChange} compact />
+              </div>
+            )}
           </div>
         </>
       )}
@@ -767,27 +778,32 @@ export function MessageInput({
         )}
 
         {attachments.length > 0 && (
-          <AttachmentTray
-            chatId={chatId}
-            attachments={attachments}
-            onRemove={onRemoveAttachment}
-            onRetry={onRetryAttachment}
-            onCancel={onCancelAttachment}
-            onRerecord={(attachmentId) => {
-              const target = attachments.find((attachment) => attachment.id === attachmentId);
-              onRemoveAttachment?.(attachmentId);
-              if (target?.kind === "video_message") {
-                setVideoRecorderVariant("round");
-                setVideoAutoStart(false);
-                setVideoAutoAddOnStop(false);
-                setShowVideoMessage(true);
-              } else {
-                setShowVoice(true);
-              }
-              setShowAttach(false);
-              setShowEmoji(false);
-            }}
-          />
+          <>
+            {onMediaQualityChange && (
+              <MediaQualitySelector value={mediaQuality} onChange={onMediaQualityChange} />
+            )}
+            <AttachmentTray
+              chatId={chatId}
+              attachments={attachments}
+              onRemove={onRemoveAttachment}
+              onRetry={onRetryAttachment}
+              onCancel={onCancelAttachment}
+              onRerecord={(attachmentId) => {
+                const target = attachments.find((attachment) => attachment.id === attachmentId);
+                onRemoveAttachment?.(attachmentId);
+                if (target?.kind === "video_message") {
+                  setVideoRecorderVariant("round");
+                  setVideoAutoStart(false);
+                  setVideoAutoAddOnStop(false);
+                  setShowVideoMessage(true);
+                } else {
+                  setShowVoice(true);
+                }
+                setShowAttach(false);
+                setShowEmoji(false);
+              }}
+            />
+          </>
         )}
 
         {(modeFeedback || holdRecorderState) && (
@@ -931,6 +947,58 @@ export function MessageInput({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function MediaQualitySelector({
+  value,
+  onChange,
+  compact = false,
+}: {
+  value: MediaQuality;
+  onChange: (quality: MediaQuality) => void;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      data-testid="media-quality-selector"
+      className={cn(
+        "rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 py-2",
+        !compact && "mb-2",
+        compact && "bg-[var(--kub-surface)]",
+      )}
+    >
+      <div className="mb-1.5 flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
+        <KubIcon name="video" size={13} />
+        <span>Качество медиа</span>
+      </div>
+      <div className="grid grid-cols-3 gap-1">
+        {MEDIA_QUALITY_OPTIONS.map((option) => {
+          const active = option.value === value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              data-testid={`media-quality-option-${option.value}`}
+              data-state={active ? "active" : "inactive"}
+              onClick={() => onChange(option.value)}
+              className={cn(
+                "min-w-0 rounded-xl px-2 py-2 text-left transition-colors",
+                active
+                  ? "bg-[color-mix(in_srgb,var(--kub-cyan)_20%,var(--kub-surface))] text-[color:var(--kub-text)] ring-1 ring-[color:var(--kub-cyan)]"
+                  : "bg-[var(--kub-surface)] text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]",
+              )}
+            >
+              <span className="block truncate text-xs font-semibold">{option.label}</span>
+              <span className="mt-0.5 block text-[10px] leading-3 opacity-80">{option.description}</span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-1.5 px-1 text-[10px] leading-4 text-[color:var(--kub-muted)]">
+        Профиль применяется к новым фото и записям. Готовые видеофайлы отправляются в исходном виде.
+      </p>
     </div>
   );
 }

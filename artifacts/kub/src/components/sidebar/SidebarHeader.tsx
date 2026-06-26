@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useAppStore } from "@/store/app.store";
 import { useSignOut } from "@/hooks/useUser";
+import { useTheme } from "@/hooks/useTheme";
 import { useIsManagerOrAdmin } from "@/hooks/useRole";
 import { useTaskAccessGate } from "@/hooks/useTaskAccess";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
@@ -30,6 +31,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
   // realtime-канал `profile-self` (Task #48). Полный `useUser()` смонтирован
   // один раз — в `App.tsx`.
   const signOut = useSignOut();
+  const { resolvedTheme } = useTheme();
   const isStaff = useIsManagerOrAdmin();
   const { canAccessTasks } = useTaskAccessGate();
   const [, setLocation] = useLocation();
@@ -123,7 +125,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
       <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5" data-testid="sidebar-brand-strip">
         <KubBrandLogo
           variant="horizontal"
-          tone="light"
+          tone={resolvedTheme === "light" ? "dark" : "light"}
           className="h-8 min-w-0 flex-1"
           imgClassName="max-h-8 w-auto max-w-full"
           alt="Letscube"

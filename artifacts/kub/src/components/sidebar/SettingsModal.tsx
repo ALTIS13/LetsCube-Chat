@@ -65,6 +65,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const avatarInputId = `profile-avatar-input-${currentUser?.id ?? "self"}`;
 
   const handleSave = async () => {
     if (!currentUser) return;
@@ -175,18 +176,32 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           ) : (
             <UserAvatar user={currentUser} size="xl" />
           )}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="absolute bottom-0 right-0 w-9 h-9 rounded-full flex items-center justify-center transition-transform hover:scale-110 bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan"
+          <label
+            htmlFor={avatarInputId}
+            role="button"
+            tabIndex={uploadingAvatar ? -1 : 0}
+            onKeyDown={(event) => {
+              if (uploadingAvatar) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
+            className={cn(
+              "absolute bottom-0 right-0 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] transition-transform kub-glow-cyan hover:scale-110",
+              uploadingAvatar && "pointer-events-none opacity-60",
+            )}
             aria-label="Сменить фото"
+            aria-disabled={uploadingAvatar}
           >
             <KubIcon name="camera" size={15} />
-          </button>
+          </label>
           <input
+            id={avatarInputId}
             ref={fileInputRef}
             type="file"
-            accept="image/*"
-            className="hidden"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="sr-only"
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) handleAvatarChange(f);

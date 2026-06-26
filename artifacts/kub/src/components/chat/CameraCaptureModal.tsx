@@ -5,9 +5,9 @@ import { KubButton, KubIcon, KubModal } from "@/components/kub";
 import { cameraPermissionHelp } from "@/lib/platform/capabilities";
 import { cn } from "@/lib/utils";
 
-const MAX_CAPTURE_DIMENSION = 1920;
+const MAX_CAPTURE_DIMENSION = 2560;
 const CAPTURE_MIME_TYPE = "image/jpeg";
-const CAPTURE_QUALITY = 0.9;
+const CAPTURE_QUALITY = 0.95;
 
 type CameraStatus = "loading" | "live" | "captured" | "denied" | "unavailable" | "error";
 type FacingMode = "environment" | "user";
@@ -63,8 +63,9 @@ export function CameraCaptureModal({ open, onClose, onAddFile }: CameraCaptureMo
         audio: false,
         video: {
           facingMode: { ideal: nextFacingMode },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 2560 },
+          height: { ideal: 1440 },
+          frameRate: { ideal: 30, max: 60 },
         },
       });
       streamRef.current = stream;
@@ -228,8 +229,7 @@ export function CameraCaptureModal({ open, onClose, onAddFile }: CameraCaptureMo
           ref={fallbackInputRef}
           type="file"
           accept="image/*"
-          capture="environment"
-          className="hidden"
+          className="sr-only"
           onChange={handleFallbackChange}
         />
 
