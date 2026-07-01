@@ -170,13 +170,14 @@ async function deliver(
 
 function safePayload(payload: Record<string, unknown>) {
   return {
-    title: safeText(payload.title, "KUB", 80),
+    title: safeText(payload.title, "LETSCUBE", 80),
     body: safeText(payload.body, "Новое уведомление", 180),
     url: safeRelativeUrl(payload.url),
     tag: safeText(payload.tag, "kub-notification", 80),
     kind: safeText(payload.kind, "notification", 60),
-    chatId: safeText(payload.chatId, "", 80),
-    messageId: safeText(payload.messageId, "", 80),
+    chatId: safeText(payload.chatId ?? payload.chat_id, "", 80),
+    messageId: safeText(payload.messageId ?? payload.message_id, "", 80),
+    renotify: typeof payload.renotify === "boolean" ? payload.renotify : true,
   };
 }
 

@@ -113,11 +113,17 @@ async function showPushNotification(data) {
   return self.registration.showNotification(data.title, {
     body: data.body,
     tag: data.tag,
-    renotify: !data.isMessagePush,
+    renotify: data.renotify,
     timestamp: data.timestamp,
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
-    data: { url: data.url, kind: data.kind, tag: data.tag },
+    data: {
+      url: data.url,
+      kind: data.kind,
+      tag: data.tag,
+      chatId: data.chatId,
+      messageId: data.messageId,
+    },
   });
 }
 
@@ -161,8 +167,11 @@ function normalizePushPayload(raw) {
     title: safeText(data.title, APP_NAME, 80),
     body: safeText(data.body || data.message || data.text, DEFAULT_PUSH_BODY, 180),
     tag: safeText(data.tag, fallbackTag, 100),
+    renotify: typeof data.renotify === "boolean" ? data.renotify : true,
     kind,
     isMessagePush,
+    chatId,
+    messageId,
     timestamp: safeTimestamp(data.timestamp || data.createdAt || data.created_at),
     url: routeForPush(data, { chatId, messageId, taskId, inviteId }),
   };

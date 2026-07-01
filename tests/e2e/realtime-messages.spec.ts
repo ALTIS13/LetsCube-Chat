@@ -46,6 +46,46 @@ test.describe("realtime incoming messages", () => {
         useAppStore.getState().setSelectedChatId(null);
       });
       await expect(ownerPage.getByTestId("chat-list-item").filter({ hasText: content }).first()).toBeVisible();
+
+      await delayInitialMessagesFetch(ownerPage, chatId);
+      await openChat(ownerPage, chatId);
+      await expect(messageText(ownerPage, content).first()).toBeVisible({ timeout: 1_500 });
+    } finally {
+      await clientContext.close().catch(() => null);
+      await ownerContext.close().catch(() => null);
+    }
+  });
+
+  test("hydrates chat metadata before opening a push target missing from local chat list", async ({ browser }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop-1440", "push target hydration check runs once");
+    test.skip(!hasRoleAuth("owner") || !hasRoleAuth("client"), "owner and client QA auth are required");
+
+    const ownerContext = await browser.newContext();
+    const clientContext = await browser.newContext();
+    const ownerPage = await ownerContext.newPage();
+    const clientPage = await clientContext.newPage();
+
+    try {
+      await gotoOrSkip(ownerPage, "/");
+      await loginAsRoleOrSkip(ownerPage, "owner");
+      await gotoOrSkip(clientPage, "/");
+      await loginAsRoleOrSkip(clientPage, "client");
+
+      const clientUserId = await getCurrentUserId(clientPage);
+      const chatId = await openPrivateChatWith(ownerPage, clientUserId);
+      const expectedTitle = await getCurrentUserDisplayName(clientPage);
+
+      const opened = await ownerPage.evaluate(async (targetChatId) => {
+        const { useAppStore } = await import("/src/store/app.store.ts");
+        const { safeOpenChat } = await import("/src/lib/safeOpenChat.ts");
+        const state = useAppStore.getState();
+        state.setSelectedChatId(null);
+        state.setChats(state.chats.filter((chat) => chat.id !== targetChatId));
+        return safeOpenChat(targetChatId);
+      }, chatId);
+
+      expect(opened).toBe(true);
+      await expect.poll(() => getChatHeaderTitle(ownerPage, chatId), { timeout: 5_000 }).toBe(expectedTitle);
     } finally {
       await clientContext.close().catch(() => null);
       await ownerContext.close().catch(() => null);
@@ -130,6 +170,42 @@ async function getChatLastMessageContent(page: Page, chatId: string): Promise<st
     const chat = useAppStore.getState().chats.find((item) => item.id === targetChatId);
     return chat?.last_message?.content ?? null;
   }, chatId);
+}
+
+async function getCurrentUserDisplayName(page: Page): Promise<string> {
+  return page.evaluate(async () => {
+    const { createClient } = await import("/src/lib/supabase/client.ts");
+    const supabase = createClient();
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData.user?.id) throw new Error("qa_user_not_available");
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("full_name,username")
+      .eq("id", userData.user.id)
+      .single();
+    if (error || !data) throw new Error("qa_profile_not_available");
+    return data.full_name || data.username || "Личный чат";
+  });
+}
+
+async function getChatHeaderTitle(page: Page, chatId: string): Promise<string | null> {
+  return page.evaluate(async (targetChatId) => {
+    const { useAppStore } = await import("/src/store/app.store.ts");
+    const chat = useAppStore.getState().chats.find((item) => item.id === targetChatId);
+    return chat?.name ?? null;
+  }, chatId);
+}
+
+async function delayInitialMessagesFetch(page: Page, chatId: string) {
+  let delayed = false;
+  await page.route("**/rest/v1/messages?**", async (route) => {
+    const url = route.request().url();
+    if (!delayed && route.request().method() === "GET" && url.includes(`chat_id=eq.${chatId}`)) {
+      delayed = true;
+      await new Promise((resolve) => setTimeout(resolve, 3_000));
+    }
+    await route.continue();
+  });
 }
 
 function messageText(page: Page, text: string) {

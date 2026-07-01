@@ -137,7 +137,8 @@ test.describe("LETSCUBE push and phone production foundation", () => {
     expect(swSource).toContain("isMessagePush");
     expect(swSource).toContain("getNotifications({ tag: data.tag })");
     expect(swSource).toContain("notification.close()");
-    expect(swSource).toContain("renotify: !data.isMessagePush");
+    expect(swSource).toContain("renotify: data.renotify");
+    expect(swSource).toContain('data.renotify === "boolean" ? data.renotify : true');
     expect(swSource).toContain("timestamp: data.timestamp");
     expect(swSource).not.toMatch(/media_url|signedUrl|access_token|refresh_token/i);
   });

@@ -156,82 +156,90 @@ export function useMessages(
   const fetchMessages = useCallback(async (options: FetchMessagesOptions = {}) => {
     if (!chatId) return;
     const background = options.background === true;
+    const hasCachedMessages = (useAppStore.getState().messages[chatId] ?? []).some((message) =>
+      messageBelongsToTopic(message, topicId, generalTopicIds)
+    );
     bumpFetch("useMessages");
-    if (!background) setLoading(true);
-    let localClearedAt: string | null = null;
-    const user = currentUserRef.current;
-    if (user) {
-      const { data: membership } = await supabase
-        .from("chat_members")
-        .select("cleared_at")
-        .eq("chat_id", chatId)
-        .eq("user_id", user.id)
-        .maybeSingle();
-      localClearedAt = membership?.cleared_at ?? null;
-      setClearedAt(localClearedAt);
-    }
-    // NB: we do NOT filter out `deleted_at IS NOT NULL` here.  Soft-deleted
-    // rows are kept in the timeline so MessageBubble can render a
-    // "сообщение удалено" placeholder in the slot they used to occupy —
-    // this matches Telegram-style soft delete and prevents the timeline
-    // from "shifting" when a message is removed (own scroll position,
-    // reply anchors, date separators all stay stable).  Original content
-    // is scrubbed server-side by policy / scheduled job.
-    let query = supabase
-      .from("messages")
-      .select(MESSAGE_SELECT_WITH_JOINS)
-      .eq("chat_id", chatId);
-    // Forum chats: scope to the selected topic.  Non-forum: all messages
-    // have topic_id = null, so the filter is a no-op when topicId is null.
-    if (topicId !== undefined) {
-      if (topicId) query = query.eq("topic_id", topicId);
-      else query = applyGeneralTopicFilter(query, generalTopicIds);
-    }
-    if (localClearedAt) query = query.gt("created_at", localClearedAt);
-    const { data, error } = await query
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
-      .limit(MESSAGE_PAGE_SIZE + 1);
-    if (error) {
-      console.error("Messages fetch error:", error);
-      if (!background) setLoading(false);
-      return;
-    }
-    if (data) {
-      const rawFetched = data as unknown as MessageWithSender[];
-      const fetched = rawFetched.slice(0, MESSAGE_PAGE_SIZE).reverse();
-      const nextHasMoreOlder = rawFetched.length > MESSAGE_PAGE_SIZE;
-      hasMoreOlderRef.current = nextHasMoreOlder;
-      setHasMoreOlder(nextHasMoreOlder);
-      setOlderError(null);
-      const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds(fetched));
-      rememberHiddenMessageIds(fetchedHiddenIds);
-      const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
-      const visibleFetched = sanitizeHiddenReplies(
-        fetched.filter((message) => !effectiveHiddenIds.has(message.id)),
-        effectiveHiddenIds,
-      );
-      const existing = useAppStore.getState().messages[chatId] ?? [];
-      const visibleExisting = sanitizeHiddenReplies(existing.filter((message) => {
-        if (effectiveHiddenIds.has(message.id)) return false;
-        if (!messageBelongsToTopic(message, topicId, generalTopicIds)) return false;
-        if (!localClearedAt) return true;
-        return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
-      }), effectiveHiddenIds);
-      setMessages(chatId, mergeMessagesById(visibleFetched, visibleExisting));
+    if (!background) setLoading(!hasCachedMessages);
+    try {
+      let localClearedAt: string | null = null;
+      const user = currentUserRef.current;
       if (user) {
-        const latestVisible = visibleFetched[visibleFetched.length - 1] ?? visibleExisting[visibleExisting.length - 1] ?? null;
-        const latestIncoming = [...visibleFetched].reverse().find((message) =>
-          message.user_id && message.user_id !== user.id && !message.deleted_at
+        const { data: membership } = await supabase
+          .from("chat_members")
+          .select("cleared_at")
+          .eq("chat_id", chatId)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        localClearedAt = membership?.cleared_at ?? null;
+        setClearedAt(localClearedAt);
+      }
+      // NB: we do NOT filter out `deleted_at IS NOT NULL` here.  Soft-deleted
+      // rows are kept in the timeline so MessageBubble can render a
+      // "сообщение удалено" placeholder in the slot they used to occupy —
+      // this matches Telegram-style soft delete and prevents the timeline
+      // from "shifting" when a message is removed (own scroll position,
+      // reply anchors, date separators all stay stable).  Original content
+      // is scrubbed server-side by policy / scheduled job.
+      let query = supabase
+        .from("messages")
+        .select(MESSAGE_SELECT_WITH_JOINS)
+        .eq("chat_id", chatId);
+      // Forum chats: scope to the selected topic.  Non-forum: all messages
+      // have topic_id = null, so the filter is a no-op when topicId is null.
+      if (topicId !== undefined) {
+        if (topicId) query = query.eq("topic_id", topicId);
+        else query = applyGeneralTopicFilter(query, generalTopicIds);
+      }
+      if (localClearedAt) query = query.gt("created_at", localClearedAt);
+      const { data, error } = await query
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(MESSAGE_PAGE_SIZE + 1);
+      if (error) {
+        console.error("Messages fetch error:", error);
+        return;
+      }
+      if (data) {
+        const rawFetched = data as unknown as MessageWithSender[];
+        const fetched = rawFetched.slice(0, MESSAGE_PAGE_SIZE).reverse();
+        const nextHasMoreOlder = rawFetched.length > MESSAGE_PAGE_SIZE;
+        hasMoreOlderRef.current = nextHasMoreOlder;
+        setHasMoreOlder(nextHasMoreOlder);
+        setOlderError(null);
+        const fetchedHiddenIds = await fetchHiddenMessageIdSet(supabase, getMessageAndReplyIds(fetched));
+        rememberHiddenMessageIds(fetchedHiddenIds);
+        const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
+        const visibleFetched = sanitizeHiddenReplies(
+          fetched.filter((message) => !effectiveHiddenIds.has(message.id)),
+          effectiveHiddenIds,
         );
-        if (latestVisible && document.visibilityState === "visible") {
-          scheduleMarkChatRead(supabase, chatId, latestVisible.created_at);
-        } else if (latestIncoming && shouldMarkDeliveredForPrivateChat(chatId, user.id)) {
-          scheduleMarkChatDelivered(supabase, chatId, latestIncoming.created_at);
+        const existing = useAppStore.getState().messages[chatId] ?? [];
+        const visibleExisting = sanitizeHiddenReplies(existing.filter((message) => {
+          if (effectiveHiddenIds.has(message.id)) return false;
+          if (!messageBelongsToTopic(message, topicId, generalTopicIds)) return false;
+          if (!localClearedAt) return true;
+          return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
+        }), effectiveHiddenIds);
+        setMessages(chatId, mergeMessagesById(visibleFetched, visibleExisting));
+        if (user) {
+          const latestVisible = visibleFetched[visibleFetched.length - 1] ?? visibleExisting[visibleExisting.length - 1] ?? null;
+          const latestIncoming = [...visibleFetched].reverse().find((message) =>
+            message.user_id && message.user_id !== user.id && !message.deleted_at
+          );
+          if (latestVisible && document.visibilityState === "visible") {
+            scheduleMarkChatRead(supabase, chatId, latestVisible.created_at);
+          } else if (latestIncoming && shouldMarkDeliveredForPrivateChat(chatId, user.id)) {
+            scheduleMarkChatDelivered(supabase, chatId, latestIncoming.created_at);
+          }
         }
       }
+    } catch (error) {
+      console.error("Messages fetch error:", error);
+      reportError(error, { category: "messages_fetch_failed", chatId, background });
+    } finally {
+      if (!background) setLoading(false);
     }
-    if (!background) setLoading(false);
   }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds, shouldMarkDeliveredForPrivateChat]);
 
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
