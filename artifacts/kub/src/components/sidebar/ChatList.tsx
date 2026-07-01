@@ -9,6 +9,7 @@ import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import { createClient } from "@/lib/supabase/client";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import { getChatDisplayInfo, isSavedChat } from "@/lib/chatDisplay";
+import { comparePinnedOrder, sortChatsForSidebar } from "@/lib/chatSort";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { cn } from "@/lib/utils";
@@ -873,27 +874,6 @@ function ChatActionButton({
   );
 }
 
-function sortChatsForSidebar(chats: ChatWithLastMessage[], currentUserId: string | null): ChatWithLastMessage[] {
-  return [...chats].sort((a, b) => {
-    const aSaved = isSavedChat(a, currentUserId);
-    const bSaved = isSavedChat(b, currentUserId);
-    if (aSaved !== bSaved) return aSaved ? -1 : 1;
-    const aPinned = Boolean(a.is_pinned);
-    const bPinned = Boolean(b.is_pinned);
-    if (aPinned !== bPinned) return aPinned ? -1 : 1;
-    if (aPinned && bPinned) {
-      const byPinnedOrder = comparePinnedOrder(a, b);
-      if (byPinnedOrder !== 0) return byPinnedOrder;
-      const aPinnedAt = a.pinned_at ? new Date(a.pinned_at).getTime() : 0;
-      const bPinnedAt = b.pinned_at ? new Date(b.pinned_at).getTime() : 0;
-      if (aPinnedAt !== bPinnedAt) return bPinnedAt - aPinnedAt;
-    }
-    const aTime = a.last_message?.created_at ?? a.updated_at;
-    const bTime = b.last_message?.created_at ?? b.updated_at;
-    return new Date(bTime).getTime() - new Date(aTime).getTime();
-  });
-}
-
 function getOrderedPinnedChats(chats: ChatWithLastMessage[], currentUserId: string | null): ChatWithLastMessage[] {
   return chats
     .filter((chat) => chat.is_pinned && !isSavedChat(chat, currentUserId))
@@ -905,15 +885,6 @@ function getOrderedPinnedChats(chats: ChatWithLastMessage[], currentUserId: stri
       if (aPinnedAt !== bPinnedAt) return bPinnedAt - aPinnedAt;
       return a.id.localeCompare(b.id);
     });
-}
-
-function comparePinnedOrder(a: ChatWithLastMessage, b: ChatWithLastMessage): number {
-  const aOrder = typeof a.pinned_order === "number" ? a.pinned_order : null;
-  const bOrder = typeof b.pinned_order === "number" ? b.pinned_order : null;
-  if (aOrder === null && bOrder === null) return 0;
-  if (aOrder === null) return 1;
-  if (bOrder === null) return -1;
-  return aOrder - bOrder;
 }
 
 function getChatMemberRoleLabel(role: string | null | undefined): string {

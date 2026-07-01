@@ -80,6 +80,7 @@ export function useMessages(
   const replaceMessage = useAppStore((s) => s.replaceMessage);
   const removeMessage = useAppStore((s) => s.removeMessage);
   const updateChat = useAppStore((s) => s.updateChat);
+  const updateChatLastMessage = useAppStore((s) => s.updateChatLastMessage);
   const currentUser = useAppStore((s) => s.currentUser);
   const mutedChatIds = useAppStore((s) => s.mutedChatIds);
   const userId = currentUser?.id ?? null;
@@ -585,6 +586,7 @@ export function useMessages(
           // can lag under rapid sends; keeping this provisional row prevents an
           // active chat from missing a message that the sidebar already saw.
           addMessage(payload.new.chat_id, provisional);
+          updateChatLastMessage(payload.new.chat_id, provisional);
           const { data } = await supabase
             .from("messages")
             .select(MESSAGE_SELECT_WITH_JOINS)
@@ -597,7 +599,9 @@ export function useMessages(
           const effectiveHiddenIds = new Set([...hiddenMessageIdsRef.current, ...fetchedHiddenIds]);
           if (effectiveHiddenIds.has(nextMessage.id)) return;
           if (!messageBelongsToTopic(nextMessage, topicIdRef.current, generalTopicIdsRef.current)) return;
-          addMessage(payload.new.chat_id, sanitizeHiddenReply(nextMessage, effectiveHiddenIds));
+          const visibleMessage = sanitizeHiddenReply(nextMessage, effectiveHiddenIds);
+          addMessage(payload.new.chat_id, visibleMessage);
+          updateChatLastMessage(payload.new.chat_id, visibleMessage);
           const user = currentUserRef.current;
           if (user && data.user_id !== user.id && !isNativeApp() && document.hidden &&
               typeof window !== "undefined" && "Notification" in window &&
@@ -642,6 +646,7 @@ export function useMessages(
             if (!messageBelongsToTopic(nextMessage, topicIdRef.current, generalTopicIdsRef.current)) return;
             const visibleMessage = sanitizeHiddenReply(nextMessage, effectiveHiddenIds);
             setMessages(payload.new.chat_id, current.map((m) => m.id === visibleMessage.id ? visibleMessage : m));
+            updateChatLastMessage(payload.new.chat_id, visibleMessage);
             setPinnedMessages((currentPinned) =>
               visibleMessage.pinned && !visibleMessage.deleted_at
                 ? upsertPinnedMessage(currentPinned, visibleMessage)
@@ -669,7 +674,7 @@ export function useMessages(
       rt.removeChannel(channel);
       unregisterChannel(channelName);
     };
-  }, [chatId, userId, rt, addMessage, fetchMessages, rememberHiddenMessageIds, setMessages, shouldMarkDeliveredForPrivateChat, supabase]);
+  }, [chatId, userId, rt, addMessage, fetchMessages, rememberHiddenMessageIds, setMessages, shouldMarkDeliveredForPrivateChat, supabase, updateChatLastMessage]);
 
   useEffect(() => {
     if (!chatId || !userId) return;
@@ -880,6 +885,7 @@ export function useMessages(
 
     if (input.tempId) replaceMessage(activeChatId, tempId, optimistic);
     else addMessage(activeChatId, optimistic);
+    updateChatLastMessage(activeChatId, optimistic);
 
     const ack = await insertMessageWithAck({
       targetChatId: activeChatId,
@@ -899,6 +905,7 @@ export function useMessages(
 
     if (ack.data) {
       replaceMessage(activeChatId, tempId, ack.data);
+      updateChatLastMessage(activeChatId, ack.data);
       await supabase.from("chats").update({ updated_at: ack.data.created_at }).eq("id", activeChatId);
       return ack.data;
     }
@@ -910,27 +917,32 @@ export function useMessages(
         type: input.type,
         hasMedia: Boolean(input.mediaUrl),
       });
-      replaceMessage(activeChatId, tempId, {
+      const checkingMessage: MessageWithSender = {
         ...optimistic,
         pending: false,
         checking: true,
         failed: false,
         send_error: null,
-      });
+      };
+      replaceMessage(activeChatId, tempId, checkingMessage);
+      updateChatLastMessage(activeChatId, checkingMessage);
       await delay(1_200);
       const existing = await fetchMessageByClientId(activeChatId, user.id, clientMessageId);
       if (existing) {
         replaceMessage(activeChatId, tempId, existing);
+        updateChatLastMessage(activeChatId, existing);
         await supabase.from("chats").update({ updated_at: existing.created_at }).eq("id", activeChatId);
         return existing;
       }
-      replaceMessage(activeChatId, tempId, {
+      const failedMessage: MessageWithSender = {
         ...optimistic,
         pending: false,
         checking: false,
         failed: true,
         send_error: "Не удалось подтвердить отправку. Проверьте соединение и повторите.",
-      });
+      };
+      replaceMessage(activeChatId, tempId, failedMessage);
+      updateChatLastMessage(activeChatId, failedMessage);
       return null;
     }
 
@@ -941,15 +953,17 @@ export function useMessages(
       type: input.type,
       hasMedia: Boolean(input.mediaUrl),
     });
-    replaceMessage(activeChatId, tempId, {
+    const failedMessage: MessageWithSender = {
       ...optimistic,
       pending: false,
       checking: false,
       failed: true,
       send_error: mapPgError(ack.error) || "Не удалось отправить сообщение.",
-    });
+    };
+    replaceMessage(activeChatId, tempId, failedMessage);
+    updateChatLastMessage(activeChatId, failedMessage);
     return null;
-  }, [addMessage, fetchMessageByClientId, insertMessageWithAck, replaceMessage, supabase]);
+  }, [addMessage, fetchMessageByClientId, insertMessageWithAck, replaceMessage, supabase, updateChatLastMessage]);
 
   const sendMessage = useCallback(async (content: string, replyToId?: string) => {
     return sendLocalMessage({

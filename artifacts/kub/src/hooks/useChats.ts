@@ -7,6 +7,7 @@ import { useAppStore } from "@/store/app.store";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 import { isSavedChat } from "@/lib/chatDisplay";
+import { sortChatsForSidebar } from "@/lib/chatSort";
 import { scheduleMarkChatDelivered } from "@/lib/deliveryReceipts";
 
 const VISIBILITY_REFRESH_THROTTLE_MS = 10_000;
@@ -196,38 +197,16 @@ export function useChats() {
         })();
       }
 
-      visibleChats.sort((a, b) => {
-        const aSaved = isSavedChat(a, userId);
-        const bSaved = isSavedChat(b, userId);
-        if (aSaved !== bSaved) return aSaved ? -1 : 1;
-        const aPinned = Boolean(a.is_pinned);
-        const bPinned = Boolean(b.is_pinned);
-        if (aPinned !== bPinned) return aPinned ? -1 : 1;
-        if (aPinned && bPinned) {
-          const aOrder = typeof a.pinned_order === "number" ? a.pinned_order : null;
-          const bOrder = typeof b.pinned_order === "number" ? b.pinned_order : null;
-          if (aOrder !== null || bOrder !== null) {
-            if (aOrder === null) return 1;
-            if (bOrder === null) return -1;
-            if (aOrder !== bOrder) return aOrder - bOrder;
-          }
-          const aPinnedAt = a.pinned_at ? new Date(a.pinned_at).getTime() : 0;
-          const bPinnedAt = b.pinned_at ? new Date(b.pinned_at).getTime() : 0;
-          if (aPinnedAt !== bPinnedAt) return bPinnedAt - aPinnedAt;
-        }
-        const aTime = a.last_message?.created_at ?? a.updated_at;
-        const bTime = b.last_message?.created_at ?? b.updated_at;
-        return new Date(bTime).getTime() - new Date(aTime).getTime();
-      });
+      const sortedVisibleChats = sortChatsForSidebar(visibleChats, userId);
 
       // Reconcile stale active chat after delete/member removal. Only clear
       // after a successful fresh list proves the selected chat is no longer visible.
       const selectedChatId = useAppStore.getState().selectedChatId;
-      if (!preserveActiveChat && selectedChatId && !visibleChats.some((chat) => chat.id === selectedChatId)) {
+      if (!preserveActiveChat && selectedChatId && !sortedVisibleChats.some((chat) => chat.id === selectedChatId)) {
         useAppStore.getState().setSelectedChatId(null);
       }
 
-      setChats(visibleChats);
+      setChats(sortedVisibleChats);
     } finally {
       setLoading(false);
       fetchInFlightRef.current = false;
@@ -380,9 +359,9 @@ export function useChats() {
   }, [chats]);
 
   useEffect(() => {
-    const refreshAfterBackground = () => {
+    const refreshAfterBackground = (force = false) => {
       const now = Date.now();
-      if (now - lastVisibilityFetchAt.current < VISIBILITY_REFRESH_THROTTLE_MS) return;
+      if (!force && now - lastVisibilityFetchAt.current < VISIBILITY_REFRESH_THROTTLE_MS) return;
       lastVisibilityFetchAt.current = now;
       void fetchChats({ preserveActiveChat: true });
     };
@@ -393,10 +372,21 @@ export function useChats() {
     const onOnline = () => {
       refreshAfterBackground();
     };
+    const onFocus = () => {
+      if (document.visibilityState !== "visible") return;
+      refreshAfterBackground();
+    };
+    const onPageShow = (event: PageTransitionEvent) => {
+      refreshAfterBackground(event.persisted);
+    };
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("pageshow", onPageShow);
     window.addEventListener("online", onOnline);
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("online", onOnline);
     };
   }, [fetchChats]);

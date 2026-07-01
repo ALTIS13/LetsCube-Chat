@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
+import { sortChatsForSidebar } from '@/lib/chatSort'
 import type { Profile, ChatWithLastMessage, MessageWithSender } from '@/types/database'
 
 interface AppState {
@@ -19,6 +20,7 @@ interface AppState {
   chats: ChatWithLastMessage[]
   setChats: (chats: ChatWithLastMessage[]) => void
   updateChat: (chat: ChatWithLastMessage) => void
+  updateChatLastMessage: (chatId: string, message: MessageWithSender) => void
 
   // Messages
   messages: Record<string, MessageWithSender[]>
@@ -128,6 +130,41 @@ function sortMessages(messages: MessageWithSender[]): MessageWithSender[] {
   return [...messages].sort(compareMessages);
 }
 
+function isSameLogicalMessage(
+  current: ChatWithLastMessage["last_message"],
+  next: MessageWithSender,
+): boolean {
+  if (!current) return false;
+  if (current.id === next.id) return true;
+  return Boolean(
+    current.client_message_id &&
+    next.client_message_id &&
+    current.client_message_id === next.client_message_id,
+  );
+}
+
+function shouldReplaceLastMessage(
+  current: ChatWithLastMessage["last_message"],
+  next: MessageWithSender,
+): boolean {
+  if (!current) return true;
+  if (isSameLogicalMessage(current, next)) return true;
+  const currentMs = new Date(current.created_at).getTime();
+  const nextMs = new Date(next.created_at).getTime();
+  if (!Number.isFinite(currentMs) || !Number.isFinite(nextMs)) return true;
+  return nextMs >= currentMs;
+}
+
+function latestTimestamp(a: string | null | undefined, b: string | null | undefined): string {
+  if (!a) return b ?? new Date().toISOString();
+  if (!b) return a;
+  const aMs = new Date(a).getTime();
+  const bMs = new Date(b).getTime();
+  if (!Number.isFinite(aMs)) return b;
+  if (!Number.isFinite(bMs)) return a;
+  return bMs > aMs ? b : a;
+}
+
 export const useAppStore = create<AppState>((set) => ({
   currentUser: null,
   /**
@@ -176,6 +213,22 @@ export const useAppStore = create<AppState>((set) => ({
     set((state) => ({
       chats: state.chats.map((c) => (c.id === chat.id ? { ...c, ...chat } : c)),
     })),
+  updateChatLastMessage: (chatId, message) =>
+    set((state) => {
+      let changed = false;
+      const nextChats = state.chats.map((chat) => {
+        if (chat.id !== chatId) return chat;
+        if (!shouldReplaceLastMessage(chat.last_message, message)) return chat;
+        changed = true;
+        return {
+          ...chat,
+          last_message: message as ChatWithLastMessage["last_message"],
+          updated_at: latestTimestamp(chat.updated_at, message.created_at),
+        };
+      });
+      if (!changed) return state;
+      return { chats: sortChatsForSidebar(nextChats, state.currentUser?.id ?? null) };
+    }),
 
   messages: {},
   setMessages: (chatId, msgs) =>

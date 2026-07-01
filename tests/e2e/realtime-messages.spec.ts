@@ -8,6 +8,50 @@ import {
 } from "./helpers/auth";
 
 test.describe("realtime incoming messages", () => {
+  test("keeps chat list preview in sync after sending from the open chat", async ({ browser }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop-1440", "chat list mutation check runs once");
+    const env = loadQaEnvValues();
+    const allowMutations = process.env.KUB_QA_ALLOW_MUTATIONS || env.get("KUB_QA_ALLOW_MUTATIONS");
+    test.skip(allowMutations !== "1", "KUB_QA_ALLOW_MUTATIONS=1 is required for chat list mutation QA");
+    test.skip(!hasRoleAuth("owner") || !hasRoleAuth("client"), "owner and client QA auth are required");
+
+    const ownerContext = await browser.newContext();
+    const clientContext = await browser.newContext();
+    const ownerPage = await ownerContext.newPage();
+    const clientPage = await clientContext.newPage();
+
+    try {
+      await gotoOrSkip(ownerPage, "/");
+      await loginAsRoleOrSkip(ownerPage, "owner");
+      await gotoOrSkip(clientPage, "/");
+      await loginAsRoleOrSkip(clientPage, "client");
+
+      const clientUserId = await getCurrentUserId(clientPage);
+      const chatId = await openPrivateChatWith(ownerPage, clientUserId);
+      await openChat(ownerPage, chatId);
+      await expect.poll(() => hasChatInStore(ownerPage, chatId), { timeout: 10_000 }).toBe(true);
+
+      const content = `codex preview sync ${Date.now()} ${Math.random().toString(36).slice(2)}`;
+      await ownerPage.getByPlaceholder("Сообщение…").fill(content);
+      await ownerPage.getByRole("button", { name: "Отправить" }).click();
+
+      await expect(messageText(ownerPage, content).first()).toBeVisible({ timeout: 15_000 });
+      await expect.poll(
+        () => getChatLastMessageContent(ownerPage, chatId),
+        { timeout: 3_000 },
+      ).toBe(content);
+
+      await ownerPage.evaluate(async () => {
+        const { useAppStore } = await import("/src/store/app.store.ts");
+        useAppStore.getState().setSelectedChatId(null);
+      });
+      await expect(ownerPage.getByTestId("chat-list-item").filter({ hasText: content }).first()).toBeVisible();
+    } finally {
+      await clientContext.close().catch(() => null);
+      await ownerContext.close().catch(() => null);
+    }
+  });
+
   test("reconciles a missed incoming private message after reconnect without page refresh", async ({ browser }) => {
     const env = loadQaEnvValues();
     const allowMutations = process.env.KUB_QA_ALLOW_MUTATIONS || env.get("KUB_QA_ALLOW_MUTATIONS");
@@ -71,6 +115,21 @@ test.describe("realtime incoming messages", () => {
 
 function hasRoleAuth(role: "owner" | "client") {
   return Boolean(loadQaCredentials(role) || hasSavedAuthState(role));
+}
+
+async function hasChatInStore(page: Page, chatId: string): Promise<boolean> {
+  return page.evaluate(async (targetChatId) => {
+    const { useAppStore } = await import("/src/store/app.store.ts");
+    return useAppStore.getState().chats.some((chat) => chat.id === targetChatId);
+  }, chatId);
+}
+
+async function getChatLastMessageContent(page: Page, chatId: string): Promise<string | null> {
+  return page.evaluate(async (targetChatId) => {
+    const { useAppStore } = await import("/src/store/app.store.ts");
+    const chat = useAppStore.getState().chats.find((item) => item.id === targetChatId);
+    return chat?.last_message?.content ?? null;
+  }, chatId);
 }
 
 function messageText(page: Page, text: string) {
