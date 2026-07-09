@@ -1,5 +1,15 @@
 # QA Results
 
+2026-07-10 production chat-load performance measurement:
+
+- Measured `owner`, `tech_admin`, `location_staff` and `client` QA accounts at 1440x900 and 390x844. `location_admin` was skipped because it currently has no measurable chat history. The largest accessible QA history contained 246 messages; other measured histories contained 88 and 2 messages.
+- Cold sidebar readiness across the matrix was 505-591 ms. Exactly one `chat_list_summaries` call was made per cold load at 37-55 ms, with zero legacy initial `messages` or `message_hidden_for_users` fan-out requests.
+- The 246-message history rendered the first 100 messages in 452-467 ms and reopened from the in-memory cache in 174-200 ms. The server-side summary function benchmark averaged 13.383 ms over 50 authenticated iterations (min 11.748 ms, max 19.278 ms).
+- The remaining 146 messages loaded in two prepend pages: 716/757 ms on desktop and 642/724 ms on mobile. The history did not return to the bottom; visual anchor error was 0 px desktop and at most 42 px mobile.
+- All measured fully read chats settled at the bottom with 0 px initial scroll shift. A preliminary unread run with 22 unread messages rendered its unread separator without scroll shift. No failed REST responses, console errors or ErrorBoundary were observed.
+- The next dominant startup cost is permission fan-out in `useRole`: normal accounts issued 49 initial REST requests, including 20 `has_permission`, 9 `has_location_permission` and 4 `has_global_role` calls. The chat summary path itself is no longer the primary bottleneck.
+- Detailed NDJSON and desktop/mobile screenshots are stored locally under `.local/performance/` and remain ignored by Git because they contain QA account UI data.
+
 2026-07-09 production connection, PWA identity and chat-summary batching groundwork:
 
 - Verified Coolify read/write MCP connectivity: Coolify `4.1.2`, MCP `2.13.0`, project `LETSCUBE`, and healthy `letscube-web`/`letscube-worker` applications.
