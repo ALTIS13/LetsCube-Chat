@@ -37,8 +37,8 @@ Use this queue before starting the next production-hardening turn. Do not repeat
    - `[x]` Reopen a recently visited PWA chat from cached messages without an empty loading loop, then reconcile in the background (`f2c6673`).
    - `[x]` Hydrate chat/sender metadata before completing push navigation so a slow PWA resume does not stay on the generic `Чат` fallback (`f2c6673`).
    - `[x]` Add proposal-only batched sidebar summaries RPC and a frontend compatibility path. The RPC reduces last-message/unread loading from approximately `2 + 3N` requests to three batch requests while remaining `SECURITY INVOKER` and RLS-aware.
-   - `[ ]` Manually apply `.migration-backup/supabase/migrations/20260709_chat_list_summaries.sql`, verify it with authenticated QA, then set `VITE_CHAT_LIST_SUMMARIES_RPC_ENABLED=1` in the web build environment and redeploy. Until then the current production path remains unchanged and does not probe the missing RPC.
-   - `[~]` Continue large-history load/realtime reconciliation measurement after the batch RPC is applied; compare request counts and initial sidebar readiness before starting another frontend optimization.
+   - `[x]` Applied `.migration-backup/supabase/migrations/20260709_chat_list_summaries.sql` manually on 2026-07-09 after a verified full database backup. All 10 users with chat memberships matched the legacy unread/preview semantics, anonymous RPC access is denied, authenticated REST and production frontend calls return `200`, and `VITE_CHAT_LIST_SUMMARIES_RPC_ENABLED=1` is active in the healthy web deployment.
+   - `[~]` Continue large-history load/realtime reconciliation measurement with the active batch RPC; compare request counts and initial sidebar readiness before starting another frontend optimization.
 3. `[ ]` Add 720p video transcode worker path and upload quality selection after ffmpeg CPU/runtime sizing and load testing.
 4. `[ ]` Add media upload progress, retry and resume UX for large files.
 5. `[ ]` Run installed web/PWA production QA on desktop, iPhone/iOS home-screen and Android browser home-screen; keep APK/native push deferred.
@@ -46,10 +46,10 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 
 ## Last Confirmed Deploy Baseline
 
-- GitHub `main`: `f2c66734e4b4f772f0c6ad0ed36cea5190795d8c`.
+- GitHub `main`: `3b1bb259f8710d979078863be85a30d41fc2e956`.
 - Coolify app: `letscube-web`.
 - Public app: `https://app.letscube.ru`.
-- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; Coolify reported `letscube-web` and `letscube-worker` as `running:healthy` on 2026-07-09.
+- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; both resources deployed commit `3b1bb25` successfully. The web app was rebuilt again after enabling the chat-summary RPC build flag and remains `running:healthy`.
 - Worker auto deploy: worker-specific GitHub webhook is verified. Push `56ac76e` created `letscube-worker` deployment `l9ca22g6e83fkn2psv6cc8lx` with `is_webhook=true` and status `finished`. Worker `watch_paths` are configured for worker/build/runtime paths only. GitHub Actions are intentionally disabled and repo workflow files/secrets were removed to avoid billing-lock email noise.
 - Self-host stack: Coolify proxy, self-hosted Supabase, Mailcow, app and worker deployment are already in place.
 - Production domains verified on 2026-07-09: `app.letscube.ru`, `deploy.letscube.ru`, `core.letscube.ru`, `mailserver.letscube.ru`, `notify.letscube.ru`, and SSH host `ms.letscube.ru` resolve and expose their expected services with valid TLS where applicable.

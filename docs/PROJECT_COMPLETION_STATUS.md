@@ -91,6 +91,6 @@ Snapshot updated: 2026-07-09. The detailed execution source of truth is
 - App signing for Android/iOS/Windows.
 - Isolated restore drill.
 - Sentry self-host decision and rollout.
-- Batched chat-list summaries to remove the remaining per-chat query fan-out.
+- Post-activation measurement of the batched chat-list summaries under larger histories.
 - Server-side 720p video transcode and large-upload retry/resume UX.
 - Broader installed PWA device/push matrix.

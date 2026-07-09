@@ -10,6 +10,14 @@
 - Created proposal-only `.migration-backup/supabase/migrations/20260709_chat_list_summaries.sql`. SQL was not applied. The frontend batch path is disabled by default and keeps the existing sidebar queries until the proposal is manually applied and `VITE_CHAT_LIST_SUMMARIES_RPC_ENABLED=1` is set for a rebuild.
 - Validation: chat summary unit tests passed (3/3), KUB typecheck/build passed, PWA spec passed on 1440/1920/3840/390/412 (5/5), authenticated smoke passed on the same viewport matrix (5/5), and realtime message reconciliation passed (7 passed, 8 viewport-conditional skips). Build retained the known sourcemap/chunk-size warnings.
 
+2026-07-09 chat-list summary RPC production activation:
+
+- Created and validated a full pre-migration custom-format database backup at `/srv/letscube/backups/pre-migrations/20260709-234302-before-chat-list-summaries.dump` before changing the schema.
+- Applied `.migration-backup/supabase/migrations/20260709_chat_list_summaries.sql` manually in one transaction. The partial index is valid/ready, and the function is stable, `SECURITY INVOKER`, and has a locked empty `search_path`.
+- Verified all 10 users with chat memberships: RPC row scope, unread counts and latest visible previews matched the legacy query path with zero mismatches. `anon` has no execute privilege; an anonymous REST call returned `401/42501`.
+- Reloaded the PostgREST schema cache, verified an authenticated REST call returned `200` with the expected row shape, enabled `VITE_CHAT_LIST_SUMMARIES_RPC_ENABLED=1` for `letscube-web`, and completed Coolify deployment `urbjmigkvmskeryfl3cjh4kj` successfully.
+- Production Playwright confirmed that the frontend issued `POST /rest/v1/rpc/chat_list_summaries` and received `200`. Authenticated production smoke passed at 1440/1920/3840/390/412 (5/5) with no console errors or ErrorBoundary.
+
 2026-06-22 media variants pipeline:
 
 - Applied `.migration-backup/supabase/migrations/20260622_media_variants_pipeline.sql` to the live self-host database after explicit approval.

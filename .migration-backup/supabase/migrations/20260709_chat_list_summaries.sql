@@ -1,4 +1,5 @@
--- Proposal only. Do not apply automatically.
+-- Applied manually to the LETSCUBE self-hosted production database on
+-- 2026-07-09 after explicit approval and a verified pre-migration backup.
 --
 -- Replaces the sidebar's per-chat last-message/unread fan-out with one
 -- authenticated, RLS-aware batch call. The frontend keeps the legacy query
