@@ -3,6 +3,9 @@
 This is a snapshot of the current production-readiness state. It is not a
 replacement for release QA.
 
+Snapshot updated: 2026-07-09. The detailed execution source of truth is
+`docs/PRODUCTION_PRIORITY_TRACKER.md`.
+
 ## Chat/messaging
 
 - Private and group chat are implemented.
@@ -55,6 +58,10 @@ replacement for release QA.
 
 - Manifest, icons, installability baseline, service worker, update UX, and
   offline/reconnect shell are implemented.
+- LETSCUBE identity is configured for the document title, Apple standalone
+  title, manifest name and dedicated iPhone/PWA/maskable icons.
+- Cached chat reopen, background reconciliation, sidebar optimistic updates and
+  push-to-chat metadata hydration have been hardened for installed PWA use.
 
 ## Monitoring
 
@@ -63,23 +70,27 @@ replacement for release QA.
 
 ## Self-host readiness
 
-- Runbooks now cover node sizing, Coolify, self-hosted Supabase, storage,
-  mail, phone verification, Sentry, backups, DNS/TLS, cutover, secrets, and
-  post-migration QA.
-- A rehearsal migration and restore drill are still required before cutover.
+- Production currently runs through Coolify with self-hosted Supabase, Storage,
+  Mailcow, the LETSCUBE web app and trusted worker on the LETSCUBE server.
+- Data and media were migrated and verified in the production client.
+- Runbooks cover operations, backups, DNS/TLS, cutover and rollback. An
+  isolated restore drill is still required.
 
 ## Native readiness
 
-- Native packaging plans now exist for Android, iOS, and Windows.
-- No native wrapper has been added yet.
-- Native push, signing, app store metadata, and deep links remain future work.
+- Capacitor Android groundwork and a debug APK exist and were physically
+  exercised for auth, media recording and geolocation.
+- Product delivery is intentionally focused on installed Web/PWA clients for
+  desktop and mobile; APK release work is deferred.
+- Native push, signing, app store metadata and deep links remain future work.
 
 ## Known gaps
 
 - Real SMS provider setup and device QA.
 - Native push token/device model.
 - App signing for Android/iOS/Windows.
-- Self-host rehearsal with restored data.
-- Restore drill.
+- Isolated restore drill.
 - Sentry self-host decision and rollout.
-- Final club visual style pass.
+- Batched chat-list summaries to remove the remaining per-chat query fan-out.
+- Server-side 720p video transcode and large-upload retry/resume UX.
+- Broader installed PWA device/push matrix.

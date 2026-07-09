@@ -1,6 +1,6 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-06-23.
+Status: active production-hardening tracker, updated 2026-07-09.
 
 This file is the working source of truth for the next production stages. Before starting any new production task, read this file first, then update the relevant checkboxes/status when work is completed, blocked, or intentionally deferred.
 
@@ -33,7 +33,12 @@ Use this queue before starting the next production-hardening turn. Do not repeat
    - `[x]` Chat info media gallery uses generated variants instead of original media files for tiles.
    - `[x]` Reproduce and fix fast upward history scrolling bug: when the user quickly scrolls up through older messages, the message list no longer jumps back to the newest/bottom position during initial bottom settling.
    - `[x]` Prevent older-history auto-prepend from racing initial chat open anchoring: the top-of-list loader is disabled until the initial unread/bottom scroll has been applied, so read chats do not silently open on an older slice.
-   - `[~]` Audit slow initial chat load and realtime reconciliation under larger message/media history. Current finding: `useChats` still builds sidebar summaries with per-chat last-message/unread queries; the next safe optimization should move these summaries to a batched/RPC path or a dedicated SQL proposal instead of adding more frontend request fan-out.
+   - `[x]` Keep the sent message visible in the sidebar immediately through the optimistic store update and reconcile it with the realtime echo by `client_message_id` (`a458cd9`).
+   - `[x]` Reopen a recently visited PWA chat from cached messages without an empty loading loop, then reconcile in the background (`f2c6673`).
+   - `[x]` Hydrate chat/sender metadata before completing push navigation so a slow PWA resume does not stay on the generic `Чат` fallback (`f2c6673`).
+   - `[x]` Add proposal-only batched sidebar summaries RPC and a frontend compatibility path. The RPC reduces last-message/unread loading from approximately `2 + 3N` requests to three batch requests while remaining `SECURITY INVOKER` and RLS-aware.
+   - `[ ]` Manually apply `.migration-backup/supabase/migrations/20260709_chat_list_summaries.sql`, verify it with authenticated QA, then set `VITE_CHAT_LIST_SUMMARIES_RPC_ENABLED=1` in the web build environment and redeploy. Until then the current production path remains unchanged and does not probe the missing RPC.
+   - `[~]` Continue large-history load/realtime reconciliation measurement after the batch RPC is applied; compare request counts and initial sidebar readiness before starting another frontend optimization.
 3. `[ ]` Add 720p video transcode worker path and upload quality selection after ffmpeg CPU/runtime sizing and load testing.
 4. `[ ]` Add media upload progress, retry and resume UX for large files.
 5. `[ ]` Run installed web/PWA production QA on desktop, iPhone/iOS home-screen and Android browser home-screen; keep APK/native push deferred.
@@ -41,12 +46,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 
 ## Last Confirmed Deploy Baseline
 
-- GitHub `main`: `1b8edb63e3387c0bf367297c567acfae47c05551`.
+- GitHub `main`: `f2c66734e4b4f772f0c6ad0ed36cea5190795d8c`.
 - Coolify app: `letscube-web`.
 - Public app: `https://app.letscube.ru`.
-- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; `1b8edb6` deployed healthy on 2026-06-23.
+- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; Coolify reported `letscube-web` and `letscube-worker` as `running:healthy` on 2026-07-09.
 - Worker auto deploy: worker-specific GitHub webhook is verified. Push `56ac76e` created `letscube-worker` deployment `l9ca22g6e83fkn2psv6cc8lx` with `is_webhook=true` and status `finished`. Worker `watch_paths` are configured for worker/build/runtime paths only. GitHub Actions are intentionally disabled and repo workflow files/secrets were removed to avoid billing-lock email noise.
-- Self-host stack: Coolify, self-hosted Supabase, Mailcow, Caddy, and app deployment are already in place.
+- Self-host stack: Coolify proxy, self-hosted Supabase, Mailcow, app and worker deployment are already in place.
+- Production domains verified on 2026-07-09: `app.letscube.ru`, `deploy.letscube.ru`, `core.letscube.ru`, `mailserver.letscube.ru`, `notify.letscube.ru`, and SSH host `ms.letscube.ru` resolve and expose their expected services with valid TLS where applicable.
+- `api.letscube.ru`, `status.letscube.ru`, and `monitor.letscube.ru` currently resolve to the server but have no HTTPS service behind them. Treat them as reserved future endpoints, not active dependencies.
+- The installed Supabase MCP connector still targets the legacy cloud project. Production self-host checks must use `core.letscube.ru`, the local secret-safe env file, or read-only SSH/database inspection.
 
 ## Completed Baseline - Do Not Rebuild Without A New Finding
 
@@ -211,6 +219,7 @@ Current baseline:
 
 - `artifacts/kub/index.html` title and Apple web app title are `LETSCUBE`.
 - `artifacts/kub/public/manifest.json` uses `LETSCUBE`, `display: standalone`, and `display_override` fallbacks.
+- The iPhone home-screen icon uses a dedicated 180x180 LETSCUBE club asset; 192/512/maskable PWA icons use the same official mark, and the service worker precaches the complete icon set.
 - Settings install block shows the detected install variant (`ПК Web/PWA`, `iPhone / iOS PWA`, `Android Web/PWA`, `Android APK`) and opens platform-specific installation guidance when a direct browser prompt is unavailable.
 - `tests/e2e/pwa.spec.ts` covers PWA shell metadata, service worker safety, offline/reconnect banner, and SPA direct routes on 1440, 1920, 3840, 390 and 412 viewports.
 - `tests/e2e/pwa-install-settings.spec.ts` covers desktop install variant and iPhone Safari home-screen guidance from the Settings install button.

@@ -1279,6 +1279,14 @@ export interface Database {
           rank: number | null
         }[]
       }
+      chat_list_summaries: {
+        Args: { p_chat_ids?: string[] | null }
+        Returns: {
+          chat_id: string
+          last_message: Json | null
+          unread_count: number
+        }[]
+      }
       // Atomically returns the existing private chat between caller and
       // target, or creates a new one. SECURITY DEFINER — see
       // `.migration-backup/supabase/migrations/20260504_chats_membership_hardening.sql`.

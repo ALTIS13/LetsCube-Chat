@@ -40,8 +40,21 @@ test.describe("LETSCUBE PWA baseline", () => {
       expect.arrayContaining(["standalone", "minimal-ui"]),
     );
     await expect(page).toHaveTitle(/LETSCUBE/);
+    await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute(
+      "href",
+      "/icons/apple-touch-icon.png",
+    );
+    await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute(
+      "sizes",
+      "180x180",
+    );
     expect(manifest.body.icons).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({
+          src: "/icons/apple-touch-icon.png",
+          sizes: "180x180",
+          type: "image/png",
+        }),
         expect.objectContaining({ sizes: "192x192", type: "image/png" }),
         expect.objectContaining({ sizes: "512x512", type: "image/png" }),
         expect.objectContaining({ sizes: "512x512", purpose: expect.stringContaining("maskable") }),
@@ -63,6 +76,7 @@ test.describe("LETSCUBE PWA baseline", () => {
     const beforeMessageHandler = swSource.split('self.addEventListener("message"')[0] ?? swSource;
     expect(beforeMessageHandler).not.toMatch(/skipWaiting/);
     expect(swSource).toContain("KUB_SKIP_WAITING");
+    expect(swSource).toContain("/icons/apple-touch-icon.png");
     expect(swSource).not.toMatch(/clients\.claim\(\)/);
 
     await expect

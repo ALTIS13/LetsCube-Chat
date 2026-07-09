@@ -11,15 +11,15 @@ self-host cutover.
 - [ ] Task push checked.
 - [ ] Invite push checked.
 - [ ] Muted chat suppression checked.
-- [ ] Native push plan converted into schema/function proposal.
+- [x] Native push plan converted into schema/function proposal.
 
 ## Phone and auth
 
 - [ ] SMS provider selected.
 - [ ] SMS provider configured in Supabase Auth.
 - [ ] Real phone OTP test completed.
-- [ ] Password recovery checked after domain change.
-- [ ] Auth callback checked after domain change.
+- [x] Password recovery checked after domain change.
+- [x] Auth callback checked after domain change.
 
 ## Monitoring
 
@@ -29,33 +29,33 @@ self-host cutover.
 
 ## Native packaging
 
-- [ ] Android Capacitor wrapper added.
-- [ ] Android debug APK tested.
+- [x] Android Capacitor wrapper added.
+- [x] Android debug APK tested.
 - [ ] Android release signing configured outside repo.
 - [ ] iOS Capacitor wrapper added.
 - [ ] iOS TestFlight build tested.
 - [ ] Windows packaging technology selected.
 - [ ] Windows signed installer tested.
 - [ ] Deep links tested on all target platforms.
-- [ ] Native permissions copy reviewed.
+- [x] Native permissions copy reviewed.
 - [ ] Store privacy metadata prepared.
 
 ## Infrastructure
 
 - [ ] Self-host rehearsal completed.
-- [ ] Cloud-to-self-host data restore completed.
-- [ ] Storage migration verified.
-- [ ] Edge Functions deployed on self-hosted backend.
-- [ ] Cron jobs verified.
-- [ ] Backup job configured.
+- [x] Cloud-to-self-host data restore completed.
+- [x] Storage migration verified.
+- [x] Edge Functions deployed on self-hosted backend.
+- [x] Cron jobs verified.
+- [x] Backup job configured.
 - [ ] Restore drill completed.
 - [ ] Cutover plan approved.
 - [ ] Rollback plan approved.
 
 ## Product polish
 
-- [ ] Club visual style pass.
+- [x] Club visual style pass.
 - [ ] Mobile physical-device QA.
-- [ ] Long-session QA.
+- [x] Long-session QA.
 - [ ] Performance pass on low-end devices.
 - [ ] Accessibility pass on high-traffic flows.

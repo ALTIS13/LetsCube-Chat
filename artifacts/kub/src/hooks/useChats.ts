@@ -9,9 +9,23 @@ import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail 
 import { isSavedChat } from "@/lib/chatDisplay";
 import { sortChatsForSidebar } from "@/lib/chatSort";
 import { scheduleMarkChatDelivered } from "@/lib/deliveryReceipts";
+import {
+  buildChatSummaryMap,
+  isChatListSummariesEnabled,
+  isChatListSummariesUnavailable,
+  type ChatSummary,
+} from "@/lib/chatSummaryBatching";
 
 const VISIBILITY_REFRESH_THROTTLE_MS = 10_000;
 const CHAT_REFETCH_DEBOUNCE_MS = 350;
+const CHAT_LIST_SUMMARIES_ENABLED = isChatListSummariesEnabled(
+  import.meta.env.VITE_CHAT_LIST_SUMMARIES_RPC_ENABLED,
+);
+let chatListSummariesCapability: "unknown" | "supported" | "unsupported" =
+  CHAT_LIST_SUMMARIES_ENABLED ? "unknown" : "unsupported";
+
+type SidebarLastMessage = NonNullable<ChatWithLastMessage["last_message"]>;
+type SidebarSummaryMap = Map<string, ChatSummary<SidebarLastMessage>>;
 
 type FetchChatsOptions = {
   preserveActiveChat?: boolean;
@@ -86,6 +100,8 @@ export function useChats() {
 
       if (!chatsData) return;
 
+      const batchedSummaries = await fetchBatchedChatSummaries(supabase, chatIds);
+
       const enriched: ChatWithLastMessage[] = await Promise.all(
         chatsData.map(async (chat) => {
           const myMembership = membershipByChat.get(chat.id) ?? null;
@@ -95,46 +111,53 @@ export function useChats() {
             myMembership?.cleared_at,
           );
 
-          let lastMessageQuery = supabase
-            .from("messages")
-            .select("*, sender:profiles(*)")
-            .eq("chat_id", chat.id)
-            .is("deleted_at", null);
-          if (myMembership?.cleared_at) {
-            lastMessageQuery = lastMessageQuery.gt("created_at", myMembership.cleared_at);
-          }
-          const { data: lastMsgRows } = await lastMessageQuery
-            .order("created_at", { ascending: false })
-            .limit(25);
-          const lastRows = (lastMsgRows ?? []) as NonNullable<ChatWithLastMessage["last_message"]>[];
-          const hiddenLastIds = await fetchHiddenMessageIdSet(supabase, lastRows.map((message) => message.id));
-          const lastMsgData = lastRows.find((message) => !hiddenLastIds.has(message.id)) ?? null;
+          const batchedSummary = batchedSummaries?.get(chat.id) ?? null;
+          let lastMsgData = batchedSummary?.lastMessage ?? null;
+          let unreadCount = batchedSummary?.unreadCount ?? 0;
 
-          let unreadCount = 0;
-          if (effectiveReadAt) {
-            let unreadQuery = supabase
+          if (!batchedSummary) {
+            let lastMessageQuery = supabase
               .from("messages")
-              .select("id", { count: "exact" })
+              .select("*, sender:profiles(*)")
               .eq("chat_id", chat.id)
-              .neq("user_id", userId)
-              .gt("created_at", effectiveReadAt)
-              .is("deleted_at", null)
-              .limit(1);
-            const { count } = await unreadQuery;
-            unreadCount = count ?? 0;
-          } else {
-            let unreadQuery = supabase
-              .from("messages")
-              .select("id", { count: "exact" })
-              .eq("chat_id", chat.id)
-              .neq("user_id", userId)
-              .is("deleted_at", null)
-              .limit(1);
+              .is("deleted_at", null);
             if (myMembership?.cleared_at) {
-              unreadQuery = unreadQuery.gt("created_at", myMembership.cleared_at);
+              lastMessageQuery = lastMessageQuery.gt("created_at", myMembership.cleared_at);
             }
-            const { count } = await unreadQuery;
-            unreadCount = count ?? 0;
+            const { data: lastMsgRows } = await lastMessageQuery
+              .order("created_at", { ascending: false })
+              .limit(25);
+            const lastRows = (lastMsgRows ?? []) as SidebarLastMessage[];
+            const hiddenLastIds = await fetchHiddenMessageIdSet(
+              supabase,
+              lastRows.map((message) => message.id),
+            );
+            lastMsgData = lastRows.find((message) => !hiddenLastIds.has(message.id)) ?? null;
+
+            if (effectiveReadAt) {
+              const { count } = await supabase
+                .from("messages")
+                .select("id", { count: "exact" })
+                .eq("chat_id", chat.id)
+                .neq("user_id", userId)
+                .gt("created_at", effectiveReadAt)
+                .is("deleted_at", null)
+                .limit(1);
+              unreadCount = count ?? 0;
+            } else {
+              let unreadQuery = supabase
+                .from("messages")
+                .select("id", { count: "exact" })
+                .eq("chat_id", chat.id)
+                .neq("user_id", userId)
+                .is("deleted_at", null)
+                .limit(1);
+              if (myMembership?.cleared_at) {
+                unreadQuery = unreadQuery.gt("created_at", myMembership.cleared_at);
+              }
+              const { count } = await unreadQuery;
+              unreadCount = count ?? 0;
+            }
           }
 
           let displayName = chat.name;
@@ -422,4 +445,30 @@ async function fetchHiddenMessageIdSet(
     return new Set();
   }
   return new Set((data ?? []).map((row) => row.message_id));
+}
+
+async function fetchBatchedChatSummaries(
+  supabase: ReturnType<typeof createClient>,
+  chatIds: string[],
+): Promise<SidebarSummaryMap | null> {
+  if (!chatIds.length || chatListSummariesCapability === "unsupported") return null;
+  const { data, error } = await supabase.rpc("chat_list_summaries", {
+    p_chat_ids: chatIds,
+  });
+  if (error) {
+    if (isChatListSummariesUnavailable(error)) {
+      chatListSummariesCapability = "unsupported";
+    } else if (import.meta.env.DEV) {
+      console.warn("Chat summary batch fetch failed; using compatibility fallback.", error);
+    }
+    return null;
+  }
+  chatListSummariesCapability = "supported";
+  return buildChatSummaryMap<SidebarLastMessage>(
+    (data ?? []).map((row) => ({
+      chat_id: row.chat_id,
+      last_message: row.last_message as SidebarLastMessage | null,
+      unread_count: row.unread_count,
+    })),
+  );
 }

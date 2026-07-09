@@ -1,5 +1,15 @@
 # QA Results
 
+2026-07-09 production connection, PWA identity and chat-summary batching groundwork:
+
+- Verified Coolify read/write MCP connectivity: Coolify `4.1.2`, MCP `2.13.0`, project `LETSCUBE`, and healthy `letscube-web`/`letscube-worker` applications.
+- Verified SSH access for both `techadmin@ms.letscube.ru` and the configured root maintenance profile without exposing key material.
+- Verified DNS and expected service reachability for `app.letscube.ru`, `deploy.letscube.ru`, `core.letscube.ru`, `mailserver.letscube.ru`, `notify.letscube.ru`, and `ms.letscube.ru`. `api`, `status`, and `monitor` currently resolve but have no HTTPS service and are treated as reserved endpoints.
+- Verified the production web bundle embeds `core.letscube.ru` and does not embed the legacy cloud Supabase hostname. The installed Supabase MCP connector still targets the legacy cloud project and is not used for production database inspection.
+- Added dedicated LETSCUBE iPhone/PWA/maskable icons, wired the 180x180 Apple touch icon through HTML/manifest/service-worker precache, and advanced the app-shell cache version.
+- Created proposal-only `.migration-backup/supabase/migrations/20260709_chat_list_summaries.sql`. SQL was not applied. The frontend batch path is disabled by default and keeps the existing sidebar queries until the proposal is manually applied and `VITE_CHAT_LIST_SUMMARIES_RPC_ENABLED=1` is set for a rebuild.
+- Validation: chat summary unit tests passed (3/3), KUB typecheck/build passed, PWA spec passed on 1440/1920/3840/390/412 (5/5), authenticated smoke passed on the same viewport matrix (5/5), and realtime message reconciliation passed (7 passed, 8 viewport-conditional skips). Build retained the known sourcemap/chunk-size warnings.
+
 2026-06-22 media variants pipeline:
 
 - Applied `.migration-backup/supabase/migrations/20260622_media_variants_pipeline.sql` to the live self-host database after explicit approval.
