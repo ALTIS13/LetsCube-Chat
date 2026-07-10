@@ -1,5 +1,17 @@
 # QA Results
 
+2026-07-10 pre-packaging access snapshot groundwork:
+
+- Added proposal-only `.migration-backup/supabase/migrations/20260710_current_user_access_snapshot.sql`; SQL was not applied. The self-scoped authenticated RPC returns global role keys, global permissions and per-location permission keys without accepting a target user id.
+- `useRole` now has one shared in-flight snapshot/cache path for all role and permission hooks, cache invalidation notifies mounted consumers, and the existing per-key RPC implementation remains the compatibility fallback.
+- Rollout is gated by `VITE_ACCESS_SNAPSHOT_RPC_ENABLED=1`. With the flag disabled, the browser does not probe a missing RPC and therefore emits no expected PostgREST 404. The flag must be enabled only after the proposal is applied and verified.
+- Access snapshot unit/source-contract tests passed 6/6. Typecheck and production build passed; build retained the existing sourcemap and large-chunk warnings.
+- A rollout-only Playwright build with `VITE_ACCESS_SNAPSHOT_RPC_ENABLED=1` intercepted the snapshot response and verified exactly one snapshot request with zero `has_permission`, `has_location_permission` or `has_global_role` calls. The test exposed and then covered an enabled-state transition race that initially allowed nine location permission fallbacks to start after the snapshot request.
+- Authenticated smoke passed on 1440x900, 1920x1080, 3840x2160, 390x844 and 412x915 (5/5). PWA shell/offline checks passed on the same viewport matrix (5/5), with no console errors in smoke.
+- Multi-account realtime QA passed 3/3 on Vite dev: optimistic sidebar preview, push-target chat hydration and missed-message reconnect reconciliation all worked without refresh.
+- The long-session test was corrected to use the available role-specific auth states instead of silently skipping for a missing default account. Its 125-second idle, tab return and offline/reconnect scenario passed in 2.5 minutes with no reload, draft loss, duplicate realtime channels, failed requests or console errors.
+- `pnpm.cmd rls:smoke` passed against the current production schema with mutation probes disabled. `pnpm.cmd db:types:check` passed with the existing advisory drift for `global_search_v2`, `search_chat_messages` and server-only `notifications_push_outbox`.
+
 2026-07-10 production chat-load performance measurement:
 
 - Measured `owner`, `tech_admin`, `location_staff` and `client` QA accounts at 1440x900 and 390x844. `location_admin` was skipped because it currently has no measurable chat history. The largest accessible QA history contained 246 messages; other measured histories contained 88 and 2 messages.
@@ -733,6 +745,7 @@ Recurring tasks roadmap note:
 - Guard scans completed: no credentials matches, no `service_role` frontend matches, no `window.confirm/alert/prompt`, no forbidden pnpm PowerShell wrapper references. Reload scan still finds only existing explicit/manual paths: ErrorBoundary refresh button, app-update button, iframe open-current-page action and safe link formatting.
 
 2026-05-17 recurring scheduler setup:
+
 - Production scheduler strategy is now documented as Supabase Edge Function + Supabase Cron. Function source: `supabase/functions/recurring-tasks-run-due/index.ts`.
 - Manual scheduler SQL proposal created at `.migration-backup/supabase/migrations/20260524_recurring_scheduler_edge_function.sql`. SQL was not applied automatically and the function was not deployed automatically.
 - The Edge Function requires a scheduler token and backend-only Supabase secret key in Supabase Edge runtime. No secret values were committed.
@@ -741,6 +754,7 @@ Recurring tasks roadmap note:
 - Validation completed: `git diff --check`, `node --check scripts/rls-smoke.mjs`, `pnpm.cmd exec biome check scripts/rls-smoke.mjs supabase/functions/recurring-tasks-run-due/index.ts`, `pnpm.cmd --filter @workspace/kub run typecheck`, `PORT=5173 BASE_PATH=/ pnpm.cmd --filter @workspace/kub run build`, `pnpm.cmd e2e:smoke`, `pnpm.cmd exec playwright test tests/e2e/roles-visibility.spec.ts`, and `pnpm.cmd rls:smoke` passed. Build still emits the existing Vite sourcemap/chunk-size warnings.
 
 2026-05-17 deployed recurring scheduler read-only verification:
+
 - Supabase MCP read-only SQL confirmed `cron.job` has active job `kub-recurring-tasks-run-due` with schedule `*/5 * * * *`.
 - Supabase Edge Function list confirmed `recurring-tasks-run-due` is `ACTIVE`.
 - Latest `net._http_response` rows showed HTTP `200` at `2026-05-17 18:25`, `18:30` and `18:35` UTC. Earlier `401` rows were from before the scheduler token was fixed.
@@ -750,6 +764,7 @@ Recurring tasks roadmap note:
 - Validation completed: `git diff --check`, credential/service-role/forbidden-wrapper guard scans, `pnpm.cmd rls:smoke` with deployed public Supabase config, `pnpm.cmd --filter @workspace/kub run typecheck`, `PORT=5173 BASE_PATH=/ pnpm.cmd --filter @workspace/kub run build`, `KUB_BASE_URL=https://kub.apollot.ru pnpm.cmd e2e:smoke`, and `KUB_BASE_URL=https://kub.apollot.ru pnpm.cmd exec playwright test tests/e2e/roles-visibility.spec.ts` passed. Build still emits the existing Vite sourcemap/chunk-size warnings.
 
 2026-05-17 deployed recurring scheduler applied-flow verification:
+
 - Local mutation guard was enabled with `KUB_QA_ALLOW_MUTATIONS=1`; passwords/tokens were read only from the local QA env and were not printed.
 - Created two temporary authenticated owner QA fixtures in `TestLocationCodex`: one staff-visible staff-pool recurrence and one admin-only recurrence routed to the location-admin QA account.
 - Waited for deployed cron/Edge scheduler rather than calling the scheduler token locally. Cron created both due occurrences during the `2026-05-17 19:15:00` UTC run; `net._http_response` latest rows remained HTTP `200`.
@@ -781,6 +796,7 @@ Recurring tasks roadmap note:
 - `20260522_global_search.sql` was rechecked after the previous syntax fix; SQL was not applied automatically.
 - Playwright QA ran on 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915. Evidence is in ignored `output/qa-sidebar-global-search/`: desktop `*-sidebar-username.png`, `*-sidebar-chat.png`, `*-chat-opened.png`; mobile `*-mobile-sheet-username.png`; `qa-summary.json`.
 - QA summary: Ctrl+K focused sidebar search on desktop, sidebar `@te` and `TestGroup` searches rendered without overflow, chat result opened through the normal chat path, mobile search tab opened the global search sheet, console errors 0, unexpected failed requests 0.
+
 ## 2026-05-17 — Multi-account QA fixtures foundation
 
 - Added local-only multi-account QA format for owner, tech admin, location admin, location staff, and client in `docs/QA_ACCOUNTS.md`.

@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { gotoOrSkip, loadQaCredentials, loginIfNeeded } from "./helpers/auth";
+import { findFirstAvailableQaRole, gotoOrSkip, loginAsRoleOrSkip } from "./helpers/auth";
 
 type KubDevInstrumentationSnapshot = {
   activeRealtimeChannels?: Record<string, number>;
@@ -15,8 +15,11 @@ test.describe("KUB long-session reliability", () => {
   test("keeps state stable across idle, tab return and reconnect", async ({ context, page }) => {
     test.setTimeout(210_000);
 
-    const credentials = loadQaCredentials();
-    test.skip(!credentials, "QA credentials are not configured in env or ~/.kub-messenger-qa.env");
+    const role = findFirstAvailableQaRole(
+      ["owner", "tech_admin", "location_admin", "location_staff", "client"],
+      { includeDefault: true },
+    );
+    test.skip(!role, "QA credentials or auth state are not configured");
 
     const consoleErrors: string[] = [];
     const failedRequests: string[] = [];
@@ -45,7 +48,7 @@ test.describe("KUB long-session reliability", () => {
     });
 
     await gotoOrSkip(page, "/");
-    await loginIfNeeded(page, credentials);
+    await loginAsRoleOrSkip(page, role);
     await expect(page.locator("body")).toBeVisible();
     await page.locator("button.w-full").first().waitFor({ state: "visible", timeout: 10_000 }).catch(() => undefined);
 

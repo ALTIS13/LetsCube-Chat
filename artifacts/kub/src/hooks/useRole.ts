@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { selectAnyLocationPermissionKeys, selectPermissionKeys } from "@/lib/accessSnapshot";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import type { AppRole } from "@/types/database";
+import { clearAccessSnapshotCache, useAccessSnapshot } from "./useAccessSnapshot";
 
 const ACCESS_ROLE_KEYS = ["owner", "tech_admin", "admin", "manager"] as const;
 const ADMIN_ACCESS_PERMISSIONS = [
@@ -27,12 +29,14 @@ const permissionCache = new Map<string, { keys: Set<string>; promise?: Promise<S
 export function clearRoleAccessCache(userId?: string): void {
   if (userId) {
     accessCache.delete(userId);
+    clearAccessSnapshotCache(userId);
     for (const key of permissionCache.keys()) {
       if (key.startsWith(`${userId}:`)) permissionCache.delete(key);
     }
   } else {
     accessCache.clear();
     permissionCache.clear();
+    clearAccessSnapshotCache();
   }
 }
 
@@ -83,6 +87,7 @@ export function usePermissionAccess(
   const enabled = options.enabled ?? true;
   const locationId = options.locationId ?? null;
   const locationOnly = options.locationOnly === true;
+  const accessSnapshot = useAccessSnapshot(Boolean(enabled && currentUserId));
   const keySignature = useMemo(
     () => Array.from(new Set(permissionKeys)).sort().join(","),
     [permissionKeys],
@@ -98,6 +103,23 @@ export function usePermissionAccess(
 
     if (!enabled || !currentUserId || keys.length === 0) {
       setState({ keys: new Set<string>(), checking: false });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (accessSnapshot.checking) {
+      setState((current) => ({ ...current, checking: true }));
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (accessSnapshot.snapshot) {
+      setState({
+        keys: selectPermissionKeys(accessSnapshot.snapshot, keys, { locationId, locationOnly }),
+        checking: false,
+      });
       return () => {
         cancelled = true;
       };
@@ -172,7 +194,7 @@ export function usePermissionAccess(
     return () => {
       cancelled = true;
     };
-  }, [currentUserId, enabled, keySignature, legacyRole, locationId, locationOnly, supabase]);
+  }, [accessSnapshot.checking, accessSnapshot.snapshot, currentUserId, enabled, keySignature, legacyRole, locationId, locationOnly, supabase]);
 
   return {
     checking: state.checking,
@@ -195,6 +217,7 @@ export function useAnyLocationPermissionAccess(
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
   const supabase = useMemo(() => createClient(), []);
   const enabled = options.enabled ?? true;
+  const accessSnapshot = useAccessSnapshot(Boolean(enabled && currentUserId));
   const keySignature = useMemo(
     () => Array.from(new Set(permissionKeys)).sort().join(","),
     [permissionKeys],
@@ -215,6 +238,23 @@ export function useAnyLocationPermissionAccess(
 
     if (!enabled || !currentUserId || keys.length === 0 || locations.length === 0) {
       setState({ keys: new Set<string>(), checking: false });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (accessSnapshot.checking) {
+      setState((current) => ({ ...current, checking: true }));
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (accessSnapshot.snapshot) {
+      setState({
+        keys: selectAnyLocationPermissionKeys(accessSnapshot.snapshot, keys, locations),
+        checking: false,
+      });
       return () => {
         cancelled = true;
       };
@@ -266,7 +306,7 @@ export function useAnyLocationPermissionAccess(
     return () => {
       cancelled = true;
     };
-  }, [currentUserId, enabled, keySignature, locationSignature, supabase]);
+  }, [accessSnapshot.checking, accessSnapshot.snapshot, currentUserId, enabled, keySignature, locationSignature, supabase]);
 
   return {
     checking: state.checking,
@@ -279,6 +319,7 @@ export function useAnyLocationPermissionAccess(
 function useCurrentGlobalRoleAccess(shouldLoad: boolean): { keys: Set<string>; checking: boolean } {
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
   const supabase = useMemo(() => createClient(), []);
+  const accessSnapshot = useAccessSnapshot(Boolean(shouldLoad && currentUserId));
   const [state, setState] = useState<{ keys: Set<string>; checking: boolean }>({
     keys: new Set<string>(),
     checking: false,
@@ -289,6 +330,20 @@ function useCurrentGlobalRoleAccess(shouldLoad: boolean): { keys: Set<string>; c
 
     if (!shouldLoad || !currentUserId) {
       setState({ keys: new Set<string>(), checking: false });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (accessSnapshot.checking) {
+      setState((current) => ({ ...current, checking: true }));
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (accessSnapshot.snapshot) {
+      setState({ keys: new Set(accessSnapshot.snapshot.globalRoleKeys), checking: false });
       return () => {
         cancelled = true;
       };
@@ -339,7 +394,7 @@ function useCurrentGlobalRoleAccess(shouldLoad: boolean): { keys: Set<string>; c
     return () => {
       cancelled = true;
     };
-  }, [currentUserId, shouldLoad, supabase]);
+  }, [accessSnapshot.checking, accessSnapshot.snapshot, currentUserId, shouldLoad, supabase]);
 
   return state;
 }

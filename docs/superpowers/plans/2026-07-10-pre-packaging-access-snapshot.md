@@ -14,11 +14,13 @@ has not yet been applied.
 3. Make role and permission hooks consume the snapshot first.
 4. Keep the existing `has_permission`, `has_location_permission` and
    `has_global_role` lookups as compatibility fallback.
-5. Make `clearRoleAccessCache()` invalidate the snapshot and notify mounted
+5. Gate the new RPC behind `VITE_ACCESS_SNAPSHOT_RPC_ENABLED=1` so browsers do
+   not emit a PostgREST 404 before the proposal is applied.
+6. Make `clearRoleAccessCache()` invalidate the snapshot and notify mounted
    consumers so role changes reconcile without reload.
-6. Add source-contract and RLS smoke coverage for the new RPC.
-7. Run typecheck, build, smoke, RLS/type drift and measured browser QA.
-8. Apply SQL only after explicit approval, then compare production request
+7. Add source-contract and RLS smoke coverage for the new RPC.
+8. Run typecheck, build, smoke, RLS/type drift and measured browser QA.
+9. Apply SQL only after explicit approval, enable the deployment flag, then compare production request
    counts and update the tracker.
 
 ## Expected Result
