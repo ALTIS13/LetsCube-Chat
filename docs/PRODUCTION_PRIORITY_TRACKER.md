@@ -19,7 +19,7 @@ Legend:
 4. `[x]` Priority 4 - Operator security observability.
 5. `[~]` Priority 5 - Installed web/PWA production shell.
 6. `[!]` Priority 6 - Monitoring and self-hosted Sentry.
-7. `[!]` Deferred native/mobile packaging and native push.
+7. `[~]` Native/mobile packaging resumed: Android release candidate first, then Windows Electron capability spike and EXE packaging.
 
 ## Next Execution Queue
 
@@ -44,6 +44,8 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 4. `[ ]` Add media upload progress, retry and resume UX for large files.
 5. `[ ]` Run installed web/PWA production QA on desktop, iPhone/iOS home-screen and Android browser home-screen; keep APK/native push deferred.
 6. `[!]` Keep monitoring/Sentry and backup restore rehearsal deferred until the user confirms the backup environment and restore-test window.
+7. `[ ]` After the shared pre-packaging gate passes, complete the existing Capacitor Android release candidate: final assets/versioning, FCM, internal routing, signing and internal AAB/APK QA.
+8. `[ ]` After Android RC, run an Electron capability spike and package an internal Windows NSIS setup executable.
 
 ## Last Confirmed Deploy Baseline
 
@@ -253,17 +255,18 @@ Candidate work:
 - `[ ]` Add uptime and synthetic checks for app, Supabase, mail, and Coolify.
 - `[ ]` Add backup job failure alerts.
 
-## Deferred Native/Mobile Work
+## Native And Desktop Packaging
 
-Status: `[!]` intentionally deferred.
+Status: `[~]` resumed on 2026-07-10. Approved order: shared pre-packaging gate, Android release candidate, then Windows Electron capability spike and packaging.
 
-- `[!]` APK/native app packaging.
-- `[!]` Native Android FCM push.
-- `[!]` Release signing/AAB.
-- `[!]` Deep links/app links.
+- `[~]` APK/native app packaging after the shared performance gate.
+- `[ ]` Native Android FCM push and physical delivery QA.
+- `[ ]` Release signing/AAB with secrets outside Git.
+- `[ ]` Android deep links/app links and recovery callback.
+- `[ ]` Windows Electron capability spike, NSIS installer, native notifications and self-hosted update channel.
 - `[!]` SMS provider rollout.
 
-Standalone web/PWA remains the production app path for now. The app should behave like an installed messenger tab without browser chrome where the platform supports installed PWAs.
+Standalone web/PWA remains the current production path until the Android and Windows release gates pass. Packaging must reuse the same validated frontend and may not weaken browser/PWA behavior.
 
 ## Default Validation Commands
 
