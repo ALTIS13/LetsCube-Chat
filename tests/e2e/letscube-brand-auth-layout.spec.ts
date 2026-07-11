@@ -2,6 +2,16 @@ import { expect, test, type Page } from "@playwright/test";
 import { gotoOrSkip } from "./helpers/auth";
 
 test.describe("Letscube auth brand layout", () => {
+  test("light auth theme uses the dark official wordmark", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-desktop-1440", "theme asset check runs once");
+    await page.addInitScript(() => localStorage.setItem("kub-theme", "light"));
+    await installCaptchaMock(page);
+    await gotoOrSkip(page, "/login");
+
+    const logo = page.getByTestId("auth-brand-lockup").locator("img");
+    await expect(logo).toHaveAttribute("src", /letscube-logo-vertical-dark\.svg$/);
+  });
+
   for (const path of ["/login", "/register"] as const) {
     test(`${path} has one brand lockup and no legacy KUB label`, async ({ page }) => {
       const consoleErrors = collectConsoleErrors(page);

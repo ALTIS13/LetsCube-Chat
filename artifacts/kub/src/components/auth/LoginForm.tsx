@@ -8,6 +8,7 @@ import { mapPgError } from "@/lib/errors";
 import { CONFIRMATION_LINK_INVALID_MESSAGE, getAuthCallbackUrl } from "@/lib/authRedirect";
 import { getAuthCaptchaRequiredMessage, isAuthCaptchaEnabled, shouldUseAuthCaptchaGateway } from "@/lib/authCaptcha";
 import { requestAuthGateway } from "@/lib/authGateway";
+import { useTheme } from "@/hooks/useTheme";
 
 interface BanInfo {
   reason: string;
@@ -31,6 +32,7 @@ function getInitialAuthNotice(): string {
 
 export function LoginForm() {
   const [, setLocation] = useLocation();
+  const { resolvedTheme } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -150,7 +152,7 @@ export function LoginForm() {
           <div data-testid="auth-brand-lockup">
             <KubBrandLogo
               variant="vertical"
-              tone="light"
+              tone={resolvedTheme === "light" ? "dark" : "light"}
               className="h-24 w-56 justify-center"
               imgClassName="max-h-24"
               alt="Letscube"

@@ -1,5 +1,16 @@
 # QA Results
 
+2026-07-11 Android 16 emulator native-push release QA:
+
+- Added a Google Play Android 16 / API 36 emulator to the existing Android 15 physical-device matrix and installed the production-configured debug APK without exposing private build values.
+- Real owner-to-client message QA produced one recipient notification, zero sender notifications and one native outbox delivery. Three same-chat messages collapsed to one active Android notification with the stable `message:chat:<chat_id>` tag. Tapping the notification opened the correct chat, and all three related server notification rows became read.
+- A task created through `task_create_v3` produced a separate native task notification. Tapping it opened the tasks route safely; the client-role fixture received the expected access-restricted screen instead of an ErrorBoundary. A staff-role task-detail routing pass remains pending.
+- Disabling the message push category kept the in-app message notification but suppressed the native outbox. The category was restored after the check.
+- Fixed native push lifecycle persistence: enable/disable now writes `notification_preferences.push_enabled`, and an enabled Android installation automatically refreshes its FCM registration after a cold app restart without prompting again. Android UI and database enabled/revoked states were verified.
+- Fixed the light-theme auth logo to use the official dark LETSCUBE vertical wordmark; the targeted Playwright assertion passes.
+- Validation passed: 9 Android production/FCM/preference unit tests, typecheck, web build, 21 auth-brand layout checks across five viewports, 5 Notification Center checks, 30 push/phone checks, 5 PWA checks, 5 authenticated smoke checks, advisory DB type drift check, RLS smoke, and a final production Android build/install on both the Android 15 physical device and Android 16 emulator. Eight unrelated signup assertions in the full auth file cannot reach their mocked signup response while live `invite-only` mode requires a code; the rendered restriction banner was verified and the focused brand suite passes.
+- QA cleanup removed only the prefixed test messages/task/notifications/outboxes and the emulator device/preference rows. Production verification returned zero remaining prefixed QA messages and tasks. Raw FCM tokens and Firebase credentials were never printed.
+
 2026-07-11 Android production APK and native FCM delivery foundation:
 
 - Added a production debug APK build path that reads public Vite connection values from the ignored local infrastructure env, validates the HTTPS Supabase endpoint and publishes only an explicit public allowlist into the Vite build. Server credentials and service-role values are not forwarded to the app bundle.
@@ -8,7 +19,7 @@
 - Physical QA used a Nothing/Spacewar A063 on Android 15. The production APK installed and launched with the live connection configuration, Android notification permission was granted, FCM registration completed without printing the token, and the `messages`, `tasks`, and `system` channels were created.
 - Auth-scoped REST/RPC smoke returned HTTP 204 for both device registration and revocation. The enabled and revoked database states were verified, then the smoke device row and temporary token files were removed.
 - Trusted dispatcher smoke delivered one FCM notification to the backgrounded physical device. The notification appeared under LETSCUBE and tapping it opened the app without an ErrorBoundary. Test notification/device/outbox rows were removed afterward.
-- Remaining native push release QA: logged-in multi-account message/task delivery, sender exclusion, mute/preferences, chat/task route handling with real semantic payloads, killed-app behavior, and a broader Android device matrix. Release signing/AAB and external app links remain separate stages.
+- Remaining native push release QA: killed-app delivery, a staff-role task-detail route, and a broader physical-device matrix. Release signing/AAB and external app links remain separate stages.
 
 2026-07-11 Android release-candidate branding groundwork:
 

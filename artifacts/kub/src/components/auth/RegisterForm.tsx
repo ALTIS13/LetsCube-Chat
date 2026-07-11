@@ -16,9 +16,11 @@ import {
   normalizeRegistrationInviteCode,
   readRegistrationInviteFromSearch,
 } from "@/lib/registrationInvite";
+import { useTheme } from "@/hooks/useTheme";
 
 export function RegisterForm() {
   const [location, setLocation] = useLocation();
+  const { resolvedTheme } = useTheme();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -133,7 +135,7 @@ export function RegisterForm() {
             <div data-testid="auth-brand-lockup">
               <KubBrandLogo
                 variant="vertical"
-                tone="light"
+                tone={resolvedTheme === "light" ? "dark" : "light"}
                 className="h-24 w-56 justify-center"
                 imgClassName="max-h-24"
                 alt="Letscube"
@@ -196,7 +198,7 @@ export function RegisterForm() {
           <div data-testid="auth-brand-lockup">
             <KubBrandLogo
               variant="vertical"
-              tone="light"
+              tone={resolvedTheme === "light" ? "dark" : "light"}
               className="h-24 w-56 justify-center"
               imgClassName="max-h-24"
               alt="Letscube"

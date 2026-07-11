@@ -22,7 +22,9 @@ export function KubBrandLogo({
     variant === "mark"
       ? "letscube-mark.svg"
       : variant === "vertical"
-        ? "letscube-logo-vertical-light.svg"
+        ? tone === "dark"
+          ? "letscube-logo-vertical-dark.svg"
+          : "letscube-logo-vertical-light.svg"
         : tone === "dark"
           ? "letscube-logo-horizontal-dark.svg"
           : "letscube-logo-horizontal-light.svg";

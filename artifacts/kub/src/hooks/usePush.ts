@@ -14,6 +14,11 @@ import {
   type NativePushResult,
 } from "@/lib/platform/nativePush";
 import { getBuildMetadata } from "@/lib/monitoring";
+import {
+  persistPushPreferenceState,
+  shouldRestoreNativePushRegistration,
+  type PushPreferenceState,
+} from "@/lib/pushPreferences";
 import { useAppStore } from "@/store/app.store";
 
 /**
@@ -34,12 +39,7 @@ import { useAppStore } from "@/store/app.store";
  */
 export type PushStatus = "unsupported" | "native_unavailable" | "denied" | "missing_vapid" | "migration_missing" | "inactive" | "active";
 
-export type PushPreferences = {
-  push_enabled: boolean;
-  message_push_enabled: boolean;
-  task_push_enabled: boolean;
-  invite_push_enabled: boolean;
-};
+export type PushPreferences = PushPreferenceState;
 
 export type PushPreferenceKey = keyof Omit<PushPreferences, "push_enabled">;
 
@@ -68,6 +68,7 @@ export function usePush() {
   const [loadingPreferences, setLoadingPreferences] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const nativeTokenRef = useRef<string | null>(null);
+  const nativeRegistrationAttemptedUserRef = useRef<string | null>(null);
 
   const markMigrationMissing = useCallback(() => {
     setStatus("migration_missing");
@@ -142,15 +143,59 @@ export function usePush() {
     void loadPreferences();
   }, [loadPreferences]);
 
+  useEffect(() => {
+    if (!shouldRestoreNativePushRegistration({
+      nativeAndroid: isNativeAndroid(),
+      userId,
+      loadingPreferences,
+      pushEnabled: preferences.push_enabled,
+      attemptedUserId: nativeRegistrationAttemptedUserRef.current,
+    })) return;
+
+    nativeRegistrationAttemptedUserRef.current = userId;
+    let active = true;
+    setStatus("native_unavailable");
+    setMessage("Восстанавливаем Android push...");
+    void enableNativeAndroidPush(async (token) => {
+      nativeTokenRef.current = token;
+      return registerNativeDeviceToken(supabase, token);
+    }).then((result) => {
+      if (!active) return;
+      setStatus(normalizeNativeStatus(result));
+      setMessage(result.message);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [loadingPreferences, preferences.push_enabled, supabase, userId]);
+
   const enable = useCallback(async () => {
     if (!userId) return;
     if (isNativeAndroid()) {
+      nativeRegistrationAttemptedUserRef.current = userId;
       setStatus("native_unavailable");
       setMessage("Регистрируем Android push...");
       const result = await enableNativeAndroidPush(async (token) => {
         nativeTokenRef.current = token;
         return registerNativeDeviceToken(supabase, token);
       });
+      if (result.status === "native_active") {
+        const preferenceError = await persistPushPreferenceState(
+          supabase as unknown as Parameters<typeof persistPushPreferenceState>[0],
+          userId,
+          preferences,
+          true,
+        );
+        if (preferenceError) {
+          if (looksLikeSchemaMissing(preferenceError)) markMigrationMissing();
+          else {
+            setStatus("native_unavailable");
+            setMessage(mapPgError(preferenceError));
+          }
+          return;
+        }
+      }
       setStatus(normalizeNativeStatus(result));
       setMessage(result.message);
       if (result.status === "native_active") {
@@ -254,8 +299,21 @@ export function usePush() {
           await unregisterNativeDeviceToken(supabase, token);
         });
         nativeTokenRef.current = null;
+        const preferenceError = userId
+          ? await persistPushPreferenceState(
+              supabase as unknown as Parameters<typeof persistPushPreferenceState>[0],
+              userId,
+              preferences,
+              false,
+            )
+          : null;
         setStatus(normalizeNativeStatus(result));
-        setMessage(result.message);
+        if (preferenceError) {
+          if (looksLikeSchemaMissing(preferenceError)) markMigrationMissing();
+          else setMessage(mapPgError(preferenceError));
+        } else {
+          setMessage(result.message);
+        }
         setPreferences((prev) => ({ ...prev, push_enabled: false }));
         return;
       }
