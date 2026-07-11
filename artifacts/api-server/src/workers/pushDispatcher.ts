@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import webpush from "web-push";
 import { logger } from "../lib/logger";
+import { sanitizeLegacyWebPushFailure } from "./pushDispatcherConfig";
 
 /**
  * Push dispatcher worker (Task #32 — push side of in-app notifications).
@@ -51,7 +52,7 @@ export function startPushDispatcher(): void {
     process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? process.env["SELFHOST_SERVICE_ROLE_KEY"];
   const vapidPublic = process.env["VAPID_PUBLIC_KEY"];
   const vapidPrivate = process.env["VAPID_PRIVATE_KEY"];
-  const vapidContact = process.env["VAPID_CONTACT"] ?? "mailto:admin@kub.local";
+  const vapidContact = process.env["VAPID_SUBJECT"] ?? process.env["VAPID_CONTACT"] ?? "mailto:admin@kub.local";
 
   if (!url || !serviceKey) {
     logger.warn(
@@ -147,8 +148,8 @@ async function deliver(
       .update({ sent_at: new Date().toISOString(), last_error: null })
       .eq("id", row.id);
   } catch (err: unknown) {
-    const status = (err as { statusCode?: number } | null)?.statusCode;
-    const message = err instanceof Error ? err.message : String(err);
+    const failure = sanitizeLegacyWebPushFailure(err);
+    const status = failure.status ?? undefined;
     if (status === 404 || status === 410) {
       // Permanent: prune the dead subscription. Outbox row stays
       // marked with the error for observability.
@@ -164,10 +165,10 @@ async function deliver(
         .from("notifications_push_outbox")
         .update({
           attempt_count: row.attempt_count + 1,
-          last_error: `${status ?? "?"}:${message}`.slice(0, 500),
+          last_error: `webpush:${status ?? "unknown"}:${failure.reason}`,
         })
         .eq("id", row.id);
-      logger.warn({ err, rowId: row.id, status }, "push delivery failed");
+      logger.warn({ rowId: row.id, status, reason: failure.reason }, "push delivery failed");
     }
   }
 }

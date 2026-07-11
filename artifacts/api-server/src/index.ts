@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { startMediaVariantsWorker } from "./workers/mediaVariantsWorker";
 import { startPushDispatcher } from "./workers/pushDispatcher";
+import { shouldStartLegacyPushDispatcher } from "./workers/pushDispatcherConfig";
 
 const rawPort = process.env["PORT"];
 
@@ -24,9 +25,11 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
-  // Boot the in-process push dispatcher (Task #32). It self-disables
-  // when SUPABASE_SERVICE_ROLE_KEY / VAPID_* are not configured, so
-  // dev runs without secrets just log a warning and continue.
-  startPushDispatcher();
+  // Supabase Cron + send-push-notifications is the production owner of both
+  // Web Push and native delivery. Keep the legacy loop opt-in so two consumers
+  // cannot race the same outbox and exhaust attempts before the cron tick.
+  if (shouldStartLegacyPushDispatcher(process.env["PUSH_DISPATCHER_ENABLED"])) {
+    startPushDispatcher();
+  }
   startMediaVariantsWorker();
 });
