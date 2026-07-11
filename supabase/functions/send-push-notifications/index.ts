@@ -1,4 +1,5 @@
 import webpush from "npm:web-push@3.6.7";
+import { buildFcmMessage, isPermanentFcmTokenError } from "./fcm.ts";
 
 type OutboxRow = {
   id: string;
@@ -13,6 +14,26 @@ type SubscriptionRow = {
   p256dh: string;
   auth: string;
   is_active?: boolean;
+};
+
+type NativeOutboxRow = {
+  id: string;
+  device_id: string;
+  payload: Record<string, unknown>;
+  attempt_count: number;
+};
+
+type PushDeviceRow = {
+  id: string;
+  token: string;
+  enabled: boolean;
+  revoked_at?: string | null;
+};
+
+type FcmConfig = {
+  projectId: string;
+  clientEmail: string;
+  privateKey: string;
 };
 
 const DEFAULT_LIMIT = 50;
@@ -45,9 +66,12 @@ Deno.serve(async (request: Request) => {
   const limit = normalizeLimit(body?.limit);
   webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
 
-  const rows = await selectOutbox(supabaseUrl, secretKey, limit);
+  const [rows, nativeRows] = await Promise.all([
+    selectOutbox(supabaseUrl, secretKey, limit),
+    selectNativeOutbox(supabaseUrl, secretKey, limit),
+  ]);
   if (!rows.ok) return json(rows.body, rows.status);
-  if (rows.data.length === 0) return json({ ok: true, sent: 0, failed: 0, pruned: 0, limit });
+  if (!nativeRows.ok) return json(nativeRows.body, nativeRows.status);
 
   const subscriptionIds = Array.from(new Set(rows.data.map((row) => row.subscription_id)));
   const subscriptions = await selectSubscriptions(supabaseUrl, secretKey, subscriptionIds);
@@ -64,7 +88,14 @@ Deno.serve(async (request: Request) => {
     else failed += 1;
   }
 
-  return json({ ok: true, sent, failed, pruned, limit });
+  const native = await dispatchNativePush(
+    supabaseUrl,
+    secretKey,
+    nativeRows.data,
+    nativeRows.schemaMissing,
+  );
+
+  return json({ ok: true, sent, failed, pruned, limit, native });
 });
 
 function isAuthorized(request: Request, expectedToken: string) {
@@ -121,6 +152,155 @@ async function selectSubscriptions(supabaseUrl: string, secretKey: string, ids: 
   const response = await restFetch(url, secretKey);
   if (!response.ok) return { ok: false as const, status: 500, body: await summarizeResponse(response) };
   return { ok: true as const, data: (await response.json()) as SubscriptionRow[] };
+}
+
+async function selectNativeOutbox(supabaseUrl: string, secretKey: string, limit: number) {
+  const url = new URL("/rest/v1/notifications_native_push_outbox", supabaseUrl);
+  url.searchParams.set("select", "id,device_id,payload,attempt_count");
+  url.searchParams.set("sent_at", "is.null");
+  url.searchParams.set("attempt_count", `lt.${MAX_ATTEMPTS}`);
+  url.searchParams.set("order", "created_at.asc");
+  url.searchParams.set("limit", String(limit));
+  const response = await restFetch(url, secretKey);
+  if (response.ok) {
+    return {
+      ok: true as const,
+      data: (await response.json()) as NativeOutboxRow[],
+      schemaMissing: false,
+    };
+  }
+
+  const text = await response.text();
+  if (response.status === 404 || text.includes("notifications_native_push_outbox")) {
+    return { ok: true as const, data: [] as NativeOutboxRow[], schemaMissing: true };
+  }
+  return {
+    ok: false as const,
+    status: 500,
+    body: {
+      ok: false,
+      error: "native_push_outbox_query_failed",
+      status: response.status,
+    },
+  };
+}
+
+async function selectPushDevices(supabaseUrl: string, secretKey: string, ids: string[]) {
+  if (ids.length === 0) return { ok: true as const, data: [] as PushDeviceRow[] };
+  const url = new URL("/rest/v1/user_push_devices", supabaseUrl);
+  url.searchParams.set("select", "id,token,enabled,revoked_at");
+  url.searchParams.set("id", `in.(${ids.join(",")})`);
+  const response = await restFetch(url, secretKey);
+  if (!response.ok) return { ok: false as const, status: response.status };
+  return { ok: true as const, data: (await response.json()) as PushDeviceRow[] };
+}
+
+async function dispatchNativePush(
+  supabaseUrl: string,
+  secretKey: string,
+  rows: NativeOutboxRow[],
+  schemaMissing: boolean,
+) {
+  if (schemaMissing) {
+    return { sent: 0, failed: 0, pruned: 0, pending: 0, status: "schema_pending" };
+  }
+  if (rows.length === 0) {
+    return { sent: 0, failed: 0, pruned: 0, pending: 0, status: "idle" };
+  }
+
+  const config = readFcmConfig();
+  if (!config) {
+    return { sent: 0, failed: 0, pruned: 0, pending: rows.length, status: "credentials_pending" };
+  }
+
+  const deviceIds = Array.from(new Set(rows.map((row) => row.device_id)));
+  const devices = await selectPushDevices(supabaseUrl, secretKey, deviceIds);
+  if (!devices.ok) {
+    return { sent: 0, failed: rows.length, pruned: 0, pending: rows.length, status: "device_query_failed" };
+  }
+
+  let accessToken: string;
+  try {
+    accessToken = await getGoogleAccessToken(config);
+  } catch {
+    return { sent: 0, failed: rows.length, pruned: 0, pending: rows.length, status: "fcm_auth_failed" };
+  }
+
+  const byId = new Map(devices.data.map((device) => [device.id, device]));
+  let sent = 0;
+  let failed = 0;
+  let pruned = 0;
+  for (const row of rows) {
+    const result = await deliverFcm(
+      supabaseUrl,
+      secretKey,
+      config.projectId,
+      accessToken,
+      row,
+      byId.get(row.device_id),
+    );
+    if (result === "sent") sent += 1;
+    else if (result === "pruned") pruned += 1;
+    else failed += 1;
+  }
+  return { sent, failed, pruned, pending: failed, status: "ready" };
+}
+
+async function deliverFcm(
+  supabaseUrl: string,
+  secretKey: string,
+  projectId: string,
+  accessToken: string,
+  row: NativeOutboxRow,
+  device: PushDeviceRow | undefined,
+): Promise<"sent" | "failed" | "pruned"> {
+  if (!device || !device.enabled || device.revoked_at) {
+    await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+      sent_at: new Date().toISOString(),
+      last_error: "device_missing",
+    });
+    return "pruned";
+  }
+
+  const response = await fetch(
+    `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/messages:send`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(buildFcmMessage(row.payload, device.token)),
+    },
+  );
+
+  if (response.ok) {
+    await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+      sent_at: new Date().toISOString(),
+      last_error: null,
+    });
+    return "sent";
+  }
+
+  const body = await readJson(response);
+  if (isPermanentFcmTokenError(response.status, body)) {
+    await patchRow(supabaseUrl, secretKey, "user_push_devices", device.id, {
+      enabled: false,
+      revoked_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+      sent_at: new Date().toISOString(),
+      last_error: `gone:${response.status}`,
+    });
+    return "pruned";
+  }
+
+  await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+    attempt_count: row.attempt_count + 1,
+    last_error: `fcm:${response.status}:${readFcmErrorStatus(body)}`.slice(0, 160),
+  });
+  return "failed";
 }
 
 async function deliver(
@@ -213,10 +393,18 @@ async function markOutbox(supabaseUrl: string, secretKey: string, id: string, pa
   await patchRow(supabaseUrl, secretKey, "notifications_push_outbox", id, patch);
 }
 
+async function markNativeOutbox(supabaseUrl: string, secretKey: string, id: string, patch: Record<string, unknown>) {
+  await patchRow(supabaseUrl, secretKey, "notifications_native_push_outbox", id, patch);
+}
+
 async function patchRow(
   supabaseUrl: string,
   secretKey: string,
-  table: "notifications_push_outbox" | "push_subscriptions",
+  table:
+    | "notifications_push_outbox"
+    | "notifications_native_push_outbox"
+    | "push_subscriptions"
+    | "user_push_devices",
   id: string,
   patch: Record<string, unknown>,
 ) {
@@ -226,6 +414,91 @@ async function patchRow(
     method: "PATCH",
     body: JSON.stringify(patch),
   });
+}
+
+function readFcmConfig(): FcmConfig | null {
+  const projectId = Deno.env.get("FCM_PROJECT_ID")?.trim();
+  const clientEmail = Deno.env.get("FCM_CLIENT_EMAIL")?.trim();
+  const privateKey = Deno.env.get("FCM_PRIVATE_KEY")?.replace(/\\n/g, "\n").trim();
+  if (!projectId || !clientEmail || !privateKey) return null;
+  return { projectId, clientEmail, privateKey };
+}
+
+async function getGoogleAccessToken(config: FcmConfig): Promise<string> {
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const header = base64UrlJson({ alg: "RS256", typ: "JWT" });
+  const claims = base64UrlJson({
+    iss: config.clientEmail,
+    scope: "https://www.googleapis.com/auth/firebase.messaging",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: issuedAt,
+    exp: issuedAt + 3600,
+  });
+  const unsignedToken = `${header}.${claims}`;
+  const key = await crypto.subtle.importKey(
+    "pkcs8",
+    pemToArrayBuffer(config.privateKey),
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    new TextEncoder().encode(unsignedToken),
+  );
+  const assertion = `${unsignedToken}.${base64UrlBytes(new Uint8Array(signature))}`;
+  const body = new URLSearchParams({
+    grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+    assertion,
+  });
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  const payload = await readJson(response) as { access_token?: unknown } | null;
+  if (!response.ok || typeof payload?.access_token !== "string") {
+    throw new Error("fcm_oauth_failed");
+  }
+  return payload.access_token;
+}
+
+function base64UrlJson(value: Record<string, unknown>): string {
+  return base64UrlBytes(new TextEncoder().encode(JSON.stringify(value)));
+}
+
+function base64UrlBytes(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function pemToArrayBuffer(pem: string): ArrayBuffer {
+  const base64 = pem
+    .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+    .replace(/-----END PRIVATE KEY-----/g, "")
+    .replace(/\s+/g, "");
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes.buffer;
+}
+
+async function readJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function readFcmErrorStatus(body: unknown): string {
+  if (!body || typeof body !== "object") return "unknown";
+  const error = (body as { error?: unknown }).error;
+  if (!error || typeof error !== "object") return "unknown";
+  const status = (error as { status?: unknown }).status;
+  return typeof status === "string" ? status.slice(0, 60) : "unknown";
 }
 
 function restFetch(url: URL, secretKey: string, init: RequestInit = {}) {

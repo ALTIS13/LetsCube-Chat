@@ -257,10 +257,11 @@ Candidate work:
 
 ## Native And Desktop Packaging
 
-Status: `[~]` resumed on 2026-07-10. Approved order: shared pre-packaging gate, Android release candidate, then Windows Electron capability spike and packaging.
+Status: `[~]` active. Approved order: shared pre-packaging gate, Android release candidate, then Windows Electron capability spike and packaging.
 
-- `[~]` APK/native app packaging: the shared performance gate is complete. LETSCUBE adaptive icons/dark splash and Android `0.1.0` versioning are ready; physical branding QA is pending because no ADB device was connected.
-- `[!]` Native Android FCM push and physical delivery QA. The client/plugin foundation exists, but local `android/app/google-services.json` is absent (and correctly ignored) and the live database does not yet contain `user_push_devices`, `register_push_device` or `unregister_push_device`. Apply/configure these only in the dedicated FCM rollout.
+- `[x]` Production debug APK connection and physical launch: the public build allowlist, LETSCUBE adaptive icons/dark splash, Android `0.1.0` versioning, install and first launch were verified on a Nothing/Spacewar A063 running Android 15.
+- `[x]` Native Android FCM foundation: local ignored Firebase client config, Capacitor permission/registration/channels, live auth-scoped device RPCs, RLS-protected device/outbox schema, trusted HTTP v1 delivery and one physical background notification/tap smoke are complete.
+- `[ ]` Native push release QA: real multi-account message/task delivery, sender exclusion, mutes/preferences, semantic route handling, killed-app behavior and a broader Android device matrix.
 - `[ ]` Release signing/AAB with secrets outside Git.
 - `[ ]` Android deep links/app links and recovery callback.
 - `[ ]` Windows Electron capability spike, NSIS installer, native notifications and self-hosted update channel.

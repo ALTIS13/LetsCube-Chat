@@ -146,6 +146,8 @@ test.describe("LETSCUBE push and phone production foundation", () => {
   test("native push adapter keeps FCM tokens out of logs and defines Android channels", async () => {
     const nativePushSource = readFileSync(resolve("artifacts/kub/src/lib/platform/nativePush.ts"), "utf8");
     const usePushSource = readFileSync(resolve("artifacts/kub/src/hooks/usePush.ts"), "utf8");
+    expect(nativePushSource).not.toContain("async function loadPushNotifications");
+    expect(nativePushSource).not.toContain("await loadPushNotifications()");
     expect(nativePushSource).toContain('id: "messages"');
     expect(nativePushSource).toContain('id: "tasks"');
     expect(nativePushSource).toContain('id: "system"');

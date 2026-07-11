@@ -1,6 +1,7 @@
 # Native Push Plan
 
-KUB currently has browser/PWA push foundation:
+LETSCUBE has a browser/PWA push foundation and an Android FCM delivery
+foundation:
 
 - browser push subscriptions;
 - notification preferences and chat mute preferences;
@@ -28,14 +29,14 @@ Keep the current notification model as the source of truth:
 
 ## Device token schema
 
-Do not apply SQL automatically. The current proposal is:
+The Android delivery migration applied after explicit approval is:
 
 ```text
-.migration-backup/supabase/migrations/20260531_notification_center_read_sync_native_push.sql
+.migration-backup/supabase/migrations/20260711_native_push_fcm_delivery.sql
 ```
 
-It adds `user_push_devices` and the `register_push_device` /
-`unregister_push_device` RPCs for FCM/APNS/WebPush-style device records.
+It adds `user_push_devices`, the `register_push_device` /
+`unregister_push_device` RPCs and the native delivery outbox.
 The existing browser `push_subscriptions` table remains the Web/PWA model.
 
 ## Payload policy
@@ -68,10 +69,17 @@ The existing browser `push_subscriptions` table remains the Web/PWA model.
 
 Current implementation status:
 
-- Client permission/registration/tap-routing foundation exists.
-- `android/app/google-services.json` is intentionally local-only and ignored.
-- Backend FCM delivery remains pending until Firebase credentials and the
-  device-token SQL are configured.
+- Client permission, registration, channels and internal tap-routing foundation
+  exists.
+- `android/app/google-services.json` is present only on the packaging machine,
+  intentionally ignored and untracked.
+- Firebase Admin credentials are stored only in the trusted server environment;
+  the repository contains no private key or service-account JSON.
+- The self-hosted Edge Function sends FCM HTTP v1 messages from the native
+  outbox while preserving the separate browser Web Push path.
+- Physical Android QA confirmed registration, background delivery and opening
+  the app from a system notification. Full real-account message/task/mute and
+  killed-app scenarios remain release gates.
 
 ## iOS
 

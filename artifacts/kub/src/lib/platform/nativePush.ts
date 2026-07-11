@@ -1,3 +1,4 @@
+import { PushNotifications } from "@capacitor/push-notifications";
 import { isNativeAndroid } from "./capabilities";
 
 export type NativePushResultStatus =
@@ -18,8 +19,7 @@ export type NativePushResult = {
 export type NativePushTokenRegistration = (token: string) => Promise<NativePushResult | null | void>;
 export type NativePushTokenUnregister = (token: string) => Promise<void>;
 
-type PushNotificationsModule = typeof import("@capacitor/push-notifications");
-type PushNotificationsPlugin = PushNotificationsModule["PushNotifications"];
+type PushNotificationsPlugin = typeof PushNotifications;
 type PluginListenerHandle = Awaited<ReturnType<PushNotificationsPlugin["addListener"]>>;
 
 const NATIVE_PUSH_TIMEOUT_MS = 20_000;
@@ -41,7 +41,7 @@ export async function getNativePushPermissionStatus(): Promise<NativePushResult>
   }
 
   try {
-    const push = await loadPushNotifications();
+    const push = PushNotifications;
     const permission = await push.checkPermissions();
     if (permission.receive === "denied") {
       return { status: "native_denied", message: nativePushPermissionHelp() };
@@ -66,7 +66,7 @@ export async function enableNativeAndroidPush(
   }
 
   try {
-    const push = await loadPushNotifications();
+    const push = PushNotifications;
     await ensureAndroidNotificationChannels(push);
 
     let permission = await push.checkPermissions();
@@ -96,7 +96,7 @@ export async function disableNativeAndroidPush(
   }
 
   try {
-    const push = await loadPushNotifications();
+    const push = PushNotifications;
     if (token) await unregisterToken(token);
     await push.unregister();
     return { status: "native_inactive", message: "Push-уведомления Android выключены для этого устройства." };
@@ -112,7 +112,7 @@ export async function registerNativePushNavigationListeners(
   if (!hasCallableAndroidBridge()) return () => undefined;
 
   try {
-    const push = await loadPushNotifications();
+    const push = PushNotifications;
     const received = await push.addListener("pushNotificationReceived", () => {
       // Foreground notifications are already represented by in-app notification state.
       // OS delivery remains a transport layer, not a second notification source.
@@ -128,11 +128,6 @@ export async function registerNativePushNavigationListeners(
   } catch {
     return () => undefined;
   }
-}
-
-async function loadPushNotifications(): Promise<PushNotificationsPlugin> {
-  const module = await import("@capacitor/push-notifications");
-  return module.PushNotifications;
 }
 
 async function ensureAndroidNotificationChannels(push: PushNotificationsPlugin): Promise<void> {
@@ -194,7 +189,7 @@ async function waitForRegistration(
     const timeoutId = window.setTimeout(() => {
       finish({
         status: "native_setup_missing",
-        message: "Не удалось получить FCM token. Проверьте Firebase/FCM setup и google-services.json.",
+        message: "Не удалось зарегистрировать устройство для push-уведомлений. Проверьте настройку Firebase/FCM.",
       });
     }, NATIVE_PUSH_TIMEOUT_MS);
 

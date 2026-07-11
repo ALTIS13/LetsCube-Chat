@@ -17,6 +17,7 @@ Status: production foundation is in the repo, but database SQL and Edge Function
 - Message notifications require the additional proposal `20260529_message_notifications_for_push.sql`, which creates `message` notification rows from `public.messages` inserts.
 - Message push copy/collapse polish requires `20260530_push_message_notification_polish.sql`: private first-message chats do not emit `chat_added`, message payloads include `chat_type`, and browser notifications collapse by stable `message:chat:<chat_id>` tags.
 - Notification Center read-sync/native-device foundation requires `20260531_notification_center_read_sync_native_push.sql`: it marks historical self-message notifications read, adds `notifications_mark_chat_messages_read`, and proposes `user_push_devices` for future FCM/APNS device tokens.
+- Native Android delivery uses `20260711_native_push_fcm_delivery.sql`: it hardens auth-scoped FCM device registration, adds a separate native outbox and fans out the same semantic notification rows to native devices without replacing the browser Web Push outbox.
 
 ## Manual Supabase setup
 
@@ -27,6 +28,7 @@ Status: production foundation is in the repo, but database SQL and Edge Function
 .migration-backup/supabase/migrations/20260529_message_notifications_for_push.sql
 .migration-backup/supabase/migrations/20260530_push_message_notification_polish.sql
 .migration-backup/supabase/migrations/20260531_notification_center_read_sync_native_push.sql
+.migration-backup/supabase/migrations/20260711_native_push_fcm_delivery.sql
 ```
 
 2. Generate VAPID keys locally with a trusted tool, for example:
@@ -71,11 +73,11 @@ Schedule it from Supabase Cron or an external scheduler with `POST` and either `
 - Private chat message pushes render as sender + preview. Group message pushes render as chat + `sender: preview`.
 - Browser/PWA grouping uses a stable `NotificationOptions.tag`; before showing a replacement notification, the service worker closes existing notifications with the same tag. Exact OS-level notification history behavior still depends on the browser and operating system.
 - In-app Notification Center groups message rows by chat/dialog so tasks stay visible. Opening a chat marks loaded message notifications for that chat read immediately; after applying `20260531_notification_center_read_sync_native_push.sql`, the server RPC can mark all matching unread message notifications for the user.
-- Native Android push is separate from browser Web Push. The client foundation uses Capacitor Push Notifications and the same in-app notification semantics, but production delivery still requires local `android/app/google-services.json`, Firebase/FCM backend credentials, the `user_push_devices` table/RPC, and an FCM delivery adapter. Do not commit `google-services.json`, Firebase credentials, private keys, raw device tokens, or signing files.
+- Native Android push is separate from browser Web Push. The client uses Capacitor Push Notifications and the same in-app notification semantics; FCM credentials and delivery stay in the trusted Edge Function runtime. Do not commit `google-services.json`, Firebase credentials, private keys, raw device tokens, or signing files.
 
 ## Native Android push status
 
-Native Android push has a client foundation, but production delivery is still pending until Firebase and backend pieces are configured.
+Native Android push now has a working client, schema and trusted delivery foundation. It is not release-complete until real-account semantic scenarios and the broader physical matrix pass.
 
 Implemented in the APK/client:
 
@@ -90,13 +92,15 @@ Implemented in the APK/client:
 - Raw FCM tokens are not printed and are not stored in frontend localStorage.
 - Notification tap payloads route inside the SPA where possible.
 
-Still required before calling native Android push ready:
+Verified foundation:
 
-1. Place `google-services.json` locally at `android/app/google-services.json`; it is ignored by git.
-2. Apply the native device-token proposal in `20260531_notification_center_read_sync_native_push.sql`.
-3. Configure trusted backend/Supabase secrets for FCM delivery.
-4. Extend or deploy the backend delivery adapter so `notifications_push_outbox` can fan out to FCM tokens in `user_push_devices`.
-5. Run physical Android foreground/background/killed-app delivery QA before calling native push production-ready.
+1. Local ignored `google-services.json` matches package `com.kub.messenger`.
+2. Auth-scoped device registration and revocation RPCs are applied and verified.
+3. Trusted Firebase credentials are configured only in the server runtime.
+4. The Edge Function delivers FCM HTTP v1 payloads from the native outbox and prunes only permanent token failures.
+5. A physical Android background delivery and notification tap smoke passed.
+
+Still required before release readiness: real multi-account message/task delivery, sender exclusion, mutes/preferences, semantic chat/task routing, killed-app delivery and a broader device matrix.
 
 ## Manual QA
 

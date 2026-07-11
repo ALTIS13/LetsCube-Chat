@@ -79,9 +79,9 @@ permissions on app launch; request them when the user starts the feature.
 ## Push
 
 Browser Web Push does not become native Android push automatically. Android
-now has a Capacitor Push Notifications client foundation, but production FCM
-delivery still requires local `android/app/google-services.json`, the
-`user_push_devices` SQL/RPC proposal, and trusted backend FCM credentials. See
+now has a Capacitor Push Notifications client, applied device registration
+schema and trusted FCM HTTP v1 delivery foundation. Firebase client and Admin
+configuration remain local/server-only and are not committed. See
 [Native push plan](./NATIVE_PUSH_PLAN.md).
 
 ## Release signing
@@ -117,8 +117,8 @@ pnpm.cmd android:open
 
 ## Known MVP limitations
 
-- Native push/FCM client foundation exists, but physical delivery is pending
-  Firebase/backend setup and QA.
+- Native push/FCM foundation has one physical background delivery/tap smoke;
+  full real-account message/task/mute, killed-app and broader-device QA remains.
 - Android app links/custom scheme are not finalized.
 - Release signing/AAB is not configured.
 - Store-listing artwork and final release screenshots are still pending.
