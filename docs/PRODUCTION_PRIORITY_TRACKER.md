@@ -39,7 +39,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
    - `[x]` Add proposal-only batched sidebar summaries RPC and a frontend compatibility path. The RPC reduces last-message/unread loading from approximately `2 + 3N` requests to three batch requests while remaining `SECURITY INVOKER` and RLS-aware.
    - `[x]` Applied `.migration-backup/supabase/migrations/20260709_chat_list_summaries.sql` manually on 2026-07-09 after a verified full database backup. All 10 users with chat memberships matched the legacy unread/preview semantics, anonymous RPC access is denied, authenticated REST and production frontend calls return `200`, and `VITE_CHAT_LIST_SUMMARIES_RPC_ENABLED=1` is active in the healthy web deployment.
    - `[x]` Measured the active batch RPC and large-history rendering in production on 2026-07-10 with `owner`, `tech_admin`, `location_staff` and `client` QA accounts at 1440x900 and 390x844. For the 246-message history, cold sidebar readiness was 505-564 ms, summary RPC was 47-55 ms, first 100 messages rendered in 452-467 ms, and warm reopen was 174-200 ms. Loading the remaining 146 messages took two 642-757 ms prepend pages without returning to the bottom; scroll-anchor error was 0 px desktop and at most 42 px mobile.
-   - `[~]` Optimize the new startup bottleneck in `useRole`: 33 of 49 initial REST calls on normal QA roles are repeated permission checks (`has_permission` 20, `has_location_permission` 9, `has_global_role` 4). Proposal `.migration-backup/supabase/migrations/20260710_current_user_access_snapshot.sql`, shared frontend snapshot cache and compatibility fallback are ready. Smoke/PWA/realtime/long-session QA pass with the rollout flag disabled. Remaining work: explicitly approve/apply the proposal, verify role parity, enable `VITE_ACCESS_SNAPSHOT_RPC_ENABLED=1`, deploy and remeasure production request counts.
+   - `[x]` Replaced the startup permission fan-out with one authenticated access snapshot. `.migration-backup/supabase/migrations/20260710_current_user_access_snapshot.sql` was applied manually on 2026-07-11 after verified backup `/srv/letscube/backups/pre-migrations/20260711-105607-before-access-snapshot.dump`. Full parity covered all 12 profiles with zero global-role, global-permission or location-permission mismatches. `anon` has no execute grant, `authenticated` does. `VITE_ACCESS_SNAPSHOT_RPC_ENABLED=1` is active in production; live Playwright observed exactly one `current_user_access_snapshot` request and zero legacy `has_permission`, `has_location_permission` or `has_global_role` requests.
 3. `[ ]` Add 720p video transcode worker path and upload quality selection after ffmpeg CPU/runtime sizing and load testing.
 4. `[ ]` Add media upload progress, retry and resume UX for large files.
 5. `[ ]` Run installed web/PWA production QA on desktop, iPhone/iOS home-screen and Android browser home-screen; keep APK/native push deferred.
@@ -49,10 +49,10 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 
 ## Last Confirmed Deploy Baseline
 
-- GitHub `main`: `04610b2632f87a1758859517248fb64688e855bc` (last confirmed deployed baseline before the access-snapshot proposal rollout).
+- GitHub `main`: `81d3a474dcbf6502efd74fc93f79bade7c6a2735` (access snapshot rollout baseline).
 - Coolify app: `letscube-web`.
 - Public app: `https://app.letscube.ru`.
-- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; deployment `srh5kpq17izwz7abjpy44pjw` completed commit `04610b2` successfully. The chat-summary RPC build flag remains enabled; web and worker remain `running:healthy`.
+- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; deployment `yyexubdplrbqn87zncw47gac` completed commit `81d3a47` successfully. The chat-summary and access-snapshot RPC build flags are enabled; web and worker remain `running:healthy`.
 - Worker auto deploy: worker-specific GitHub webhook is verified. Push `56ac76e` created `letscube-worker` deployment `l9ca22g6e83fkn2psv6cc8lx` with `is_webhook=true` and status `finished`. Worker `watch_paths` are configured for worker/build/runtime paths only. GitHub Actions are intentionally disabled and repo workflow files/secrets were removed to avoid billing-lock email noise.
 - Self-host stack: Coolify proxy, self-hosted Supabase, Mailcow, app and worker deployment are already in place.
 - Production domains verified on 2026-07-09: `app.letscube.ru`, `deploy.letscube.ru`, `core.letscube.ru`, `mailserver.letscube.ru`, `notify.letscube.ru`, and SSH host `ms.letscube.ru` resolve and expose their expected services with valid TLS where applicable.
@@ -259,7 +259,7 @@ Candidate work:
 
 Status: `[~]` resumed on 2026-07-10. Approved order: shared pre-packaging gate, Android release candidate, then Windows Electron capability spike and packaging.
 
-- `[~]` APK/native app packaging after the shared performance gate.
+- `[~]` APK/native app packaging: the shared performance gate is complete; final Android assets/versioning are the active release-candidate step.
 - `[ ]` Native Android FCM push and physical delivery QA.
 - `[ ]` Release signing/AAB with secrets outside Git.
 - `[ ]` Android deep links/app links and recovery callback.

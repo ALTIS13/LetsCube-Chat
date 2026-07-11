@@ -17,10 +17,10 @@ test.describe("access snapshot rollout", () => {
       includeDefault: true,
     });
     test.skip(!role, "Owner or tech-admin QA auth state is required");
+    const liveSnapshot = process.env.KUB_ACCESS_SNAPSHOT_LIVE === "1";
 
     let snapshotRequests = 0;
     let legacyPermissionRequests = 0;
-    const legacyRpcNames: string[] = [];
     const rpcSequence: string[] = [];
     page.on("request", (request) => {
       const url = request.url();
@@ -35,35 +35,36 @@ test.describe("access snapshot rollout", () => {
       ) {
         legacyPermissionRequests += 1;
         const rpcName = new URL(url).pathname.split("/").at(-1) ?? "unknown";
-        legacyRpcNames.push(rpcName);
         rpcSequence.push(rpcName);
       }
     });
-    await page.route(
-      "**/rest/v1/rpc/current_user_access_snapshot",
-      async (route) => {
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({
-            global_role_keys: ["owner"],
-            global_permission_keys: [
-              "audit.view",
-              "locations.manage",
-              "roles.manage",
-              "system.manage",
-              "tasks.assign",
-              "tasks.create",
-              "tasks.manage",
-              "tasks.view",
-              "users.manage",
-              "users.view",
-            ],
-            location_permissions: {},
-          }),
-        });
-      },
-    );
+    if (!liveSnapshot) {
+      await page.route(
+        "**/rest/v1/rpc/current_user_access_snapshot",
+        async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              global_role_keys: ["owner"],
+              global_permission_keys: [
+                "audit.view",
+                "locations.manage",
+                "roles.manage",
+                "system.manage",
+                "tasks.assign",
+                "tasks.create",
+                "tasks.manage",
+                "tasks.view",
+                "users.manage",
+                "users.view",
+              ],
+              location_permissions: {},
+            }),
+          });
+        },
+      );
+    }
 
     await gotoOrSkip(page, "/");
     await loginAsRoleOrSkip(page, role);

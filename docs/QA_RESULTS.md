@@ -1,5 +1,13 @@
 # QA Results
 
+2026-07-11 production access snapshot activation:
+
+- Created and validated custom-format backup `/srv/letscube/backups/pre-migrations/20260711-105607-before-access-snapshot.dump` before changing the production schema.
+- Applied `.migration-backup/supabase/migrations/20260710_current_user_access_snapshot.sql` in one transaction. The function is `SECURITY INVOKER`; `anon` has no execute grant and `authenticated` has execute access.
+- Compared the snapshot with the legacy role/permission path for all 12 profiles: zero global-role, global-permission and location-permission mismatches. No profile identifiers or personal data were emitted by the comparison.
+- Enabled `VITE_ACCESS_SNAPSHOT_RPC_ENABLED=1` in Coolify and completed deployment `yyexubdplrbqn87zncw47gac` for commit `81d3a47`.
+- Live production Playwright observed exactly one `current_user_access_snapshot` request and zero `has_permission`, `has_location_permission` or `has_global_role` requests. The production authenticated smoke suite passed at 1440x900, 1920x1080, 3840x2160, 390x844 and 412x915 (5/5).
+
 2026-07-10 pre-packaging access snapshot groundwork:
 
 - Added proposal-only `.migration-backup/supabase/migrations/20260710_current_user_access_snapshot.sql`; SQL was not applied. The self-scoped authenticated RPC returns global role keys, global permissions and per-location permission keys without accepting a target user id.
