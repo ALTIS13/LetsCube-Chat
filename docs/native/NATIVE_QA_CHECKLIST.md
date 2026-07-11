@@ -51,6 +51,9 @@ Run this after a native wrapper is introduced. Android MVP groundwork exists in
 
 ## Platform release
 
+- LETSCUBE launcher icon is not clipped by circle/squircle masks.
+- Dark LETSCUBE splash has no white flash in light or dark system theme.
+- Package metadata reports `com.kub.messenger`, label `LETSCUBE` and the expected version code/name.
 - Android debug build first.
 - Android signed internal build later.
 - iOS TestFlight build.

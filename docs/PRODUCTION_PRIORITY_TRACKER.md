@@ -44,15 +44,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 4. `[ ]` Add media upload progress, retry and resume UX for large files.
 5. `[ ]` Run installed web/PWA production QA on desktop, iPhone/iOS home-screen and Android browser home-screen; keep APK/native push deferred.
 6. `[!]` Keep monitoring/Sentry and backup restore rehearsal deferred until the user confirms the backup environment and restore-test window.
-7. `[ ]` After the shared pre-packaging gate passes, complete the existing Capacitor Android release candidate: final assets/versioning, FCM, internal routing, signing and internal AAB/APK QA.
+7. `[~]` Complete the Capacitor Android release candidate. LETSCUBE adaptive icons, dark splash resources and the `0.1.0` version baseline are generated and the debug APK builds. Remaining: physical branding QA, FCM, internal routing, signing and internal AAB/APK QA.
 8. `[ ]` After Android RC, run an Electron capability spike and package an internal Windows NSIS setup executable.
 
 ## Last Confirmed Deploy Baseline
 
-- GitHub `main`: `81d3a474dcbf6502efd74fc93f79bade7c6a2735` (access snapshot rollout baseline).
+- GitHub `main`: `2bee4ec0a66553976ebfdd44cbedbb70983c896e` (access snapshot rollout QA baseline).
 - Coolify app: `letscube-web`.
 - Public app: `https://app.letscube.ru`.
-- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; deployment `yyexubdplrbqn87zncw47gac` completed commit `81d3a47` successfully. The chat-summary and access-snapshot RPC build flags are enabled; web and worker remain `running:healthy`.
+- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; deployment `slnhfpzay5c3n80fbxgsz00a` completed commit `2bee4ec` successfully. The chat-summary and access-snapshot RPC build flags are enabled; web and worker remain `running:healthy`.
 - Worker auto deploy: worker-specific GitHub webhook is verified. Push `56ac76e` created `letscube-worker` deployment `l9ca22g6e83fkn2psv6cc8lx` with `is_webhook=true` and status `finished`. Worker `watch_paths` are configured for worker/build/runtime paths only. GitHub Actions are intentionally disabled and repo workflow files/secrets were removed to avoid billing-lock email noise.
 - Self-host stack: Coolify proxy, self-hosted Supabase, Mailcow, app and worker deployment are already in place.
 - Production domains verified on 2026-07-09: `app.letscube.ru`, `deploy.letscube.ru`, `core.letscube.ru`, `mailserver.letscube.ru`, `notify.letscube.ru`, and SSH host `ms.letscube.ru` resolve and expose their expected services with valid TLS where applicable.
@@ -259,8 +259,8 @@ Candidate work:
 
 Status: `[~]` resumed on 2026-07-10. Approved order: shared pre-packaging gate, Android release candidate, then Windows Electron capability spike and packaging.
 
-- `[~]` APK/native app packaging: the shared performance gate is complete; final Android assets/versioning are the active release-candidate step.
-- `[ ]` Native Android FCM push and physical delivery QA.
+- `[~]` APK/native app packaging: the shared performance gate is complete. LETSCUBE adaptive icons/dark splash and Android `0.1.0` versioning are ready; physical branding QA is pending because no ADB device was connected.
+- `[!]` Native Android FCM push and physical delivery QA. The client/plugin foundation exists, but local `android/app/google-services.json` is absent (and correctly ignored) and the live database does not yet contain `user_push_devices`, `register_push_device` or `unregister_push_device`. Apply/configure these only in the dedicated FCM rollout.
 - `[ ]` Release signing/AAB with secrets outside Git.
 - `[ ]` Android deep links/app links and recovery callback.
 - `[ ]` Windows Electron capability spike, NSIS installer, native notifications and self-hosted update channel.

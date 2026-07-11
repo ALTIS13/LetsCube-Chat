@@ -14,7 +14,7 @@ without changing KUB web behavior.
   with `javac`, not a JRE-only install.
 - Production-like HTTPS domain, for example `https://kub.example.com`.
 - Supabase Auth redirect URLs configured for web and future Android deep links.
-- Real app icons and splash assets prepared.
+- LETSCUBE icon and splash resources generated from the official club mark.
 
 ## Phase 1: current MVP groundwork
 
@@ -23,15 +23,19 @@ Current repository groundwork:
 - Capacitor config: `capacitor.config.ts`
 - Android project: `android/`
 - App id: `com.kub.messenger`
-- App name: `KUB Messenger`
+- App name: `LETSCUBE`
 - Web assets directory: `artifacts/kub/dist/public`
+- Android version: `versionCode 1`, `versionName 0.1.0`
+- Reproducible icon/splash source: `assets/logo.svg`
+- Android asset generation script: `pnpm.cmd android:assets`
 - Android sync script: `pnpm.cmd android:sync`
 - Android Studio open script: `pnpm.cmd android:open`
 - Debug build script: `pnpm.cmd android:build:debug`
 
-The sync flow is:
+The asset/build sync flow is:
 
 ```powershell
+pnpm.cmd android:assets
 cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"
 pnpm.cmd android:sync
 ```
@@ -117,7 +121,7 @@ pnpm.cmd android:open
   Firebase/backend setup and QA.
 - Android app links/custom scheme are not finalized.
 - Release signing/AAB is not configured.
-- Final app icon/splash/club visual branding is still pending.
+- Store-listing artwork and final release screenshots are still pending.
 
 ## Android QA
 
