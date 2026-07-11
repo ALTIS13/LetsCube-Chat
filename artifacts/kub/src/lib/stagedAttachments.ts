@@ -1,3 +1,5 @@
+import type { MediaQuality } from "./mediaQuality";
+
 export type StagedAttachmentKind = "image" | "video" | "audio" | "voice" | "video_message" | "file";
 
 export type StagedAttachmentStatus =
@@ -19,6 +21,7 @@ export interface StagedAttachmentMediaMetadata {
   optimized?: boolean;
   originalSize?: number;
   originalMimeType?: string;
+  mediaQuality?: MediaQuality;
 }
 
 export interface StagedAttachment {
@@ -40,6 +43,7 @@ export interface StagedAttachment {
   optimized?: boolean;
   originalSize?: number;
   originalMimeType?: string;
+  mediaQuality?: MediaQuality;
 }
 
 export const CHAT_MEDIA_BUCKET = "media";
@@ -101,6 +105,7 @@ export function createStagedAttachment(file: File, metadata: StagedAttachmentMed
     optimized: metadata.optimized,
     originalSize: metadata.originalSize,
     originalMimeType: metadata.originalMimeType,
+    mediaQuality: metadata.mediaQuality,
   };
 }
 
@@ -129,7 +134,12 @@ export function createStagedVoiceAttachment(blob: Blob, durationMs: number, mime
   };
 }
 
-export function createStagedVideoMessageAttachment(blob: Blob, durationMs: number, mimeType: string): StagedAttachment {
+export function createStagedVideoMessageAttachment(
+  blob: Blob,
+  durationMs: number,
+  mimeType: string,
+  mediaQuality: MediaQuality,
+): StagedAttachment {
   const ext = MIME_EXTENSIONS[mimeType] ?? (mimeType.includes("mp4") ? "mp4" : "webm");
   const file = new File([blob], `video-message-${timestampLabel()}.${ext}`, {
     type: mimeType || blob.type || "video/webm",
@@ -151,6 +161,7 @@ export function createStagedVideoMessageAttachment(blob: Blob, durationMs: numbe
     clientMessageId: safeUuid(),
     uploaded: null,
     durationMs,
+    mediaQuality,
   };
 }
 

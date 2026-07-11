@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, useLayoutEffect, type CSSProperties, type ReactNode } from "react";
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { MessageWithSender } from "@/types/database";
 import { formatFullTime } from "@/lib/format";
@@ -21,6 +21,7 @@ import {
   type GroupReadReceiptInfo,
 } from "@/lib/groupReadReceipts";
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
+import { getVideoPlaybackFallbackUrl, selectVideoPlaybackUrl } from "@/lib/mediaQuality";
 
 const EMOJI_QUICK = ["👍", "❤️", "😂", "😮", "😢", "🔥", "👏", "🎉"];
 
@@ -459,6 +460,13 @@ export function MessageBubble({
     ? { width: mediaVariant.previewWidth, height: mediaVariant.previewHeight }
     : mediaDimensions;
   const videoPosterUrl = message.type === "video" ? mediaVariant?.videoPosterUrl : undefined;
+  const videoPlaybackUrl = message.type === "video" && message.media_url
+    ? selectVideoPlaybackUrl({
+      originalUrl: message.media_url,
+      video720pUrl: mediaVariant?.video720pUrl,
+      mediaMetadata: message.media_metadata,
+    })
+    : message.media_url;
   const textLayoutKind = getMessageTextLayoutKind(message.type, textContent);
   const widthClasses = getMessageWidthClasses(textLayoutKind);
   const stackStyle = getMessageStackStyle(textLayoutKind);
@@ -1157,21 +1165,23 @@ export function MessageBubble({
             ) : message.type === "video" && message.media_url ? (
               isRoundVideoMessage(message) ? (
                 <RoundVideoMessage
-                  url={message.media_url}
+                  url={videoPlaybackUrl ?? message.media_url}
+                  originalUrl={message.media_url}
                   title={message.content ?? "Видео-сообщение"}
                   posterUrl={videoPosterUrl}
                   durationLabel={parseVideoMessageDuration(message.content, message)}
-                  playbackItem={createPlaybackItemFromMessage(message, isMe)}
+                  playbackItem={createPlaybackItemFromMessage(message, isMe, videoPlaybackUrl ?? message.media_url)}
                   onOpen={() => onOpenMedia?.({ type: "video", url: message.media_url!, title: message.content ?? "Видео-сообщение" })}
                 />
               ) : (
                 <MediaWithCaption caption={mediaCaption}>
                   <MediaVideo
-                    url={message.media_url}
+                    url={videoPlaybackUrl ?? message.media_url}
+                    originalUrl={message.media_url}
                     title={message.content ?? "Видео"}
                     posterUrl={videoPosterUrl}
                     dimensions={mediaDimensions}
-                    playbackItem={createPlaybackItemFromMessage(message, isMe)}
+                    playbackItem={createPlaybackItemFromMessage(message, isMe, videoPlaybackUrl ?? message.media_url)}
                     onOpen={() => onOpenMedia?.({ type: "video", url: message.media_url!, title: message.content ?? "Видео" })}
                   />
                 </MediaWithCaption>
@@ -1374,6 +1384,7 @@ function MediaWithCaption({ children, caption }: { children: ReactNode; caption:
 
 function MediaVideo({
   url,
+  originalUrl,
   title,
   posterUrl,
   dimensions,
@@ -1381,6 +1392,7 @@ function MediaVideo({
   onOpen,
 }: {
   url: string;
+  originalUrl: string;
   title: string;
   posterUrl?: string;
   dimensions: MediaDimensions | null;
@@ -1389,15 +1401,35 @@ function MediaVideo({
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [failed, setFailed] = useState(false);
+  const [usingOriginal, setUsingOriginal] = useState(false);
   const mediaPlayback = useChatMediaPlayback();
   const aspectStyle = getMediaAspectStyle(dimensions, 16 / 9);
+  const activeUrl = usingOriginal ? originalUrl : url;
+  const activePlaybackItem = useMemo(
+    () => playbackItem && { ...playbackItem, url: activeUrl },
+    [activeUrl, playbackItem],
+  );
+
+  useEffect(() => {
+    setFailed(false);
+    setUsingOriginal(false);
+  }, [originalUrl, url]);
+
+  const handleError = () => {
+    const fallbackUrl = getVideoPlaybackFallbackUrl(activeUrl, originalUrl);
+    if (fallbackUrl) {
+      setUsingOriginal(true);
+      return;
+    }
+    setFailed(true);
+  };
 
   if (failed) {
     return (
       <div className="flex max-w-[280px] items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
         <KubIcon name="warning" size={16} />
         <span className="min-w-0 flex-1">Не удалось загрузить видео.</span>
-        <a href={url} target="_blank" rel="noreferrer" className="text-[color:var(--kub-cyan)] hover:underline">
+        <a href={originalUrl} target="_blank" rel="noreferrer" className="text-[color:var(--kub-cyan)] hover:underline">
           Открыть
         </a>
       </div>
@@ -1411,16 +1443,16 @@ function MediaVideo({
     >
       <video
         ref={videoRef}
-        src={url}
+        src={activeUrl}
         poster={posterUrl}
         preload="metadata"
         controls
         playsInline
         className="block h-full max-h-[320px] w-full bg-black object-contain"
         onPlay={(event) => {
-          if (playbackItem) mediaPlayback.activate(playbackItem, event.currentTarget);
+          if (activePlaybackItem) mediaPlayback.activate(activePlaybackItem, event.currentTarget);
         }}
-        onError={() => setFailed(true)}
+        onError={handleError}
       />
       <button
         type="button"
@@ -1437,6 +1469,7 @@ function MediaVideo({
 
 function RoundVideoMessage({
   url,
+  originalUrl,
   title,
   posterUrl,
   durationLabel,
@@ -1444,6 +1477,7 @@ function RoundVideoMessage({
   onOpen,
 }: {
   url: string;
+  originalUrl: string;
   title: string;
   posterUrl?: string;
   durationLabel: string | null;
@@ -1454,19 +1488,30 @@ function RoundVideoMessage({
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [failed, setFailed] = useState(false);
+  const [usingOriginal, setUsingOriginal] = useState(false);
   const mediaPlayback = useChatMediaPlayback();
   const activateMediaPlayback = mediaPlayback.activate;
+  const activeUrl = usingOriginal ? originalUrl : url;
+  const activePlaybackItem = useMemo(
+    () => playbackItem && { ...playbackItem, url: activeUrl },
+    [activeUrl, playbackItem],
+  );
+
+  useEffect(() => {
+    setFailed(false);
+    setUsingOriginal(false);
+  }, [originalUrl, url]);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     const sync = () => {
-      const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : getMediaMetadataNumberFromItem(playbackItem) / 1000;
+      const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : getMediaMetadataNumberFromItem(activePlaybackItem) / 1000;
       setProgress(duration > 0 ? Math.min(1, Math.max(0, video.currentTime / duration)) : 0);
     };
     const onPlay = () => {
       setPlaying(true);
-      if (playbackItem) activateMediaPlayback(playbackItem, video);
+      if (activePlaybackItem) activateMediaPlayback(activePlaybackItem, video);
       sync();
     };
     const onPause = () => setPlaying(false);
@@ -1486,21 +1531,30 @@ function RoundVideoMessage({
       video.removeEventListener("pause", onPause);
       video.removeEventListener("ended", onEnded);
     };
-  }, [activateMediaPlayback, playbackItem, url]);
+  }, [activateMediaPlayback, activePlaybackItem, activeUrl]);
 
   const togglePlayback = () => {
     const video = videoRef.current;
     if (!video || failed) return;
-    if (playbackItem) {
-      mediaPlayback.toggle(playbackItem, video);
+    if (activePlaybackItem) {
+      mediaPlayback.toggle(activePlaybackItem, video);
       return;
     }
     if (video.paused) void video.play().catch(() => setPlaying(false));
     else video.pause();
   };
-  const activeProgress = playbackItem && mediaPlayback.isCurrent(playbackItem.id) ? mediaPlayback.progress : progress;
-  const isActivePlaying = playbackItem && mediaPlayback.isCurrent(playbackItem.id) ? mediaPlayback.isPlaying : playing;
-  const isActiveMedia = Boolean(playbackItem && mediaPlayback.isCurrent(playbackItem.id));
+  const activeProgress = activePlaybackItem && mediaPlayback.isCurrent(activePlaybackItem.id) ? mediaPlayback.progress : progress;
+  const isActivePlaying = activePlaybackItem && mediaPlayback.isCurrent(activePlaybackItem.id) ? mediaPlayback.isPlaying : playing;
+  const isActiveMedia = Boolean(activePlaybackItem && mediaPlayback.isCurrent(activePlaybackItem.id));
+
+  const handleError = () => {
+    const fallbackUrl = getVideoPlaybackFallbackUrl(activeUrl, originalUrl);
+    if (fallbackUrl) {
+      setUsingOriginal(true);
+      return;
+    }
+    setFailed(true);
+  };
 
   if (failed) {
     return (
@@ -1539,12 +1593,12 @@ function RoundVideoMessage({
       >
         <video
           ref={videoRef}
-          src={url}
+          src={activeUrl}
           poster={posterUrl}
           preload="metadata"
           playsInline
           className="h-full w-full object-cover"
-          onError={() => setFailed(true)}
+          onError={handleError}
         />
         {!isActivePlaying && (
           <span className="absolute inset-0 flex items-center justify-center bg-black/20 text-white transition-colors group-hover:bg-black/30">
@@ -1586,8 +1640,12 @@ function parseVideoMessageDuration(content: string | null | undefined, message?:
   return content?.match(/(\d{1,2}:\d{2})/)?.[1] ?? null;
 }
 
-function createPlaybackItemFromMessage(message: MessageWithSender, isMe: boolean): ChatMediaPlaybackItem | null {
-  if (!message.media_url || message.deleted_at) return null;
+function createPlaybackItemFromMessage(
+  message: MessageWithSender,
+  isMe: boolean,
+  mediaUrl: string | null | undefined = message.media_url,
+): ChatMediaPlaybackItem | null {
+  if (!mediaUrl || message.deleted_at) return null;
   if (message.type !== "audio" && message.type !== "video") return null;
   const kind: ChatMediaPlaybackItem["kind"] = message.type === "video"
     ? isRoundVideoMessage(message)
@@ -1601,7 +1659,7 @@ function createPlaybackItemFromMessage(message: MessageWithSender, isMe: boolean
     id: message.id,
     chatId: message.chat_id,
     kind,
-    url: message.media_url,
+    url: mediaUrl,
     title: kind === "video_message"
       ? "Видеосообщение"
       : kind === "voice"

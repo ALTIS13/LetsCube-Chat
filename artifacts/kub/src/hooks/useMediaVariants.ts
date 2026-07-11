@@ -14,6 +14,9 @@ export interface MessageMediaVariantUrls {
   videoPosterUrl?: string;
   videoPosterWidth?: number | null;
   videoPosterHeight?: number | null;
+  video720pUrl?: string;
+  video720pWidth?: number | null;
+  video720pHeight?: number | null;
 }
 
 export interface AvatarVariantUrls {
@@ -25,8 +28,20 @@ export interface AvatarVariantUrls {
   avatar256Height?: number | null;
 }
 
-const MESSAGE_VARIANT_KINDS = ["image_preview", "image_thumb", "video_poster"] as const;
+const MESSAGE_VARIANT_KINDS = ["image_preview", "image_thumb", "video_poster", "video_720p"] as const;
 const AVATAR_VARIANT_KINDS = ["avatar_128", "avatar_256"] as const;
+const VIDEO_VARIANT_REFRESH_INTERVAL_MS = 60_000;
+
+interface MessageVariantCacheEntry {
+  messageIds: string[];
+  hasVideoMessages: boolean;
+  variants: Record<string, MessageMediaVariantUrls>;
+  listeners: Set<(variants: Record<string, MessageMediaVariantUrls>) => void>;
+  loading: boolean;
+  stopRefresh: (() => void) | null;
+}
+
+const messageVariantCache = new Map<string, MessageVariantCacheEntry>();
 
 function getVariantPublicUrl(
   storage: ReturnType<typeof createClient>["storage"],
@@ -52,67 +67,116 @@ export function useMessageMediaVariantUrls(messages: MessageMediaVariantSource[]
   }, [messages]);
 
   const messageIdKey = messageIds.join("|");
+  const hasVideoMessages = useMemo(
+    () => messages.some((message) => message.type === "video" && message.media_url && !message.deleted_at && !message.id.startsWith("tmp:")),
+    [messages],
+  );
   const [variantsByMessageId, setVariantsByMessageId] = useState<Record<string, MessageMediaVariantUrls>>({});
 
   useEffect(() => {
-    let cancelled = false;
     if (messageIds.length === 0) {
       setVariantsByMessageId({});
-      return () => {
-        cancelled = true;
-      };
+      return;
     }
 
-    const supabase = createClient();
-
-    const loadVariants = async () => {
-      const { data, error } = await supabase
-        .from("media_variants")
-        .select("id,message_id,variant_kind,variant_bucket,variant_path,width,height,status")
-        .eq("status", "ready")
-        .in("variant_kind", [...MESSAGE_VARIANT_KINDS])
-        .in("message_id", messageIds);
-
-      if (cancelled) return;
-      if (error) {
-        console.warn("Media variants fetch failed:", error.message);
-        setVariantsByMessageId({});
-        return;
-      }
-
-      const next: Record<string, MessageMediaVariantUrls> = {};
-      for (const row of (data ?? []) as unknown as MediaVariant[]) {
-        if (!row.message_id) continue;
-        const publicUrl = getVariantPublicUrl(supabase.storage, row);
-        if (!publicUrl) continue;
-
-        const current = next[row.message_id] ?? {};
-        if (row.variant_kind === "image_preview") {
-          current.previewUrl = publicUrl;
-          current.previewWidth = row.width;
-          current.previewHeight = row.height;
-        } else if (row.variant_kind === "image_thumb") {
-          current.thumbUrl = publicUrl;
-          current.thumbWidth = row.width;
-          current.thumbHeight = row.height;
-        } else if (row.variant_kind === "video_poster") {
-          current.videoPosterUrl = publicUrl;
-          current.videoPosterWidth = row.width;
-          current.videoPosterHeight = row.height;
-        }
-        next[row.message_id] = current;
-      }
-
-      setVariantsByMessageId(next);
-    };
-
-    void loadVariants();
+    const entry = getMessageVariantCacheEntry(messageIdKey, messageIds, hasVideoMessages);
+    entry.listeners.add(setVariantsByMessageId);
+    setVariantsByMessageId(entry.variants);
+    startMessageVariantRefresh(entry);
     return () => {
-      cancelled = true;
+      entry.listeners.delete(setVariantsByMessageId);
+      if (entry.listeners.size === 0) entry.stopRefresh?.();
     };
-  }, [messageIdKey]);
+  }, [hasVideoMessages, messageIdKey]);
 
   return variantsByMessageId;
+}
+
+function getMessageVariantCacheEntry(
+  key: string,
+  messageIds: string[],
+  hasVideoMessages: boolean,
+): MessageVariantCacheEntry {
+  const existing = messageVariantCache.get(key);
+  if (existing) return existing;
+  const entry: MessageVariantCacheEntry = {
+    messageIds,
+    hasVideoMessages,
+    variants: {},
+    listeners: new Set(),
+    loading: false,
+    stopRefresh: null,
+  };
+  messageVariantCache.set(key, entry);
+  return entry;
+}
+
+function startMessageVariantRefresh(entry: MessageVariantCacheEntry): void {
+  if (entry.stopRefresh) return;
+  const refresh = () => {
+    if (document.visibilityState === "visible") void loadMessageVariants(entry);
+  };
+  const intervalId = entry.hasVideoMessages
+    ? window.setInterval(refresh, VIDEO_VARIANT_REFRESH_INTERVAL_MS)
+    : null;
+  if (entry.hasVideoMessages) {
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+  }
+  entry.stopRefresh = () => {
+    if (intervalId !== null) window.clearInterval(intervalId);
+    if (entry.hasVideoMessages) {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    }
+    entry.stopRefresh = null;
+  };
+  void loadMessageVariants(entry);
+}
+
+async function loadMessageVariants(entry: MessageVariantCacheEntry): Promise<void> {
+  if (entry.loading) return;
+  entry.loading = true;
+  try {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("media_variants")
+      .select("id,message_id,variant_kind,variant_bucket,variant_path,width,height,status")
+      .eq("status", "ready")
+      .in("variant_kind", [...MESSAGE_VARIANT_KINDS])
+      .in("message_id", entry.messageIds);
+    if (error) return;
+
+    const next: Record<string, MessageMediaVariantUrls> = {};
+    for (const row of (data ?? []) as unknown as MediaVariant[]) {
+      if (!row.message_id) continue;
+      const publicUrl = getVariantPublicUrl(supabase.storage, row);
+      if (!publicUrl) continue;
+      const current = next[row.message_id] ?? {};
+      if (row.variant_kind === "image_preview") {
+        current.previewUrl = publicUrl;
+        current.previewWidth = row.width;
+        current.previewHeight = row.height;
+      } else if (row.variant_kind === "image_thumb") {
+        current.thumbUrl = publicUrl;
+        current.thumbWidth = row.width;
+        current.thumbHeight = row.height;
+      } else if (row.variant_kind === "video_poster") {
+        current.videoPosterUrl = publicUrl;
+        current.videoPosterWidth = row.width;
+        current.videoPosterHeight = row.height;
+      } else if (row.variant_kind === "video_720p") {
+        current.video720pUrl = publicUrl;
+        current.video720pWidth = row.width;
+        current.video720pHeight = row.height;
+      }
+      next[row.message_id] = current;
+    }
+    entry.variants = next;
+    for (const listener of entry.listeners) listener(next);
+  } finally {
+    entry.loading = false;
+  }
 }
 
 export function useAvatarVariantUrls(profileIds: readonly string[]): Record<string, AvatarVariantUrls> {
@@ -150,7 +214,7 @@ export function useAvatarVariantUrls(profileIds: readonly string[]): Record<stri
 
       if (cancelled) return;
       if (error) {
-        console.warn("Avatar variants fetch failed:", error.message);
+        console.warn("Avatar variants fetch failed.");
         setVariantsByProfileId({});
         return;
       }

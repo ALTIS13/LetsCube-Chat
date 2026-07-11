@@ -2,6 +2,7 @@ export type MediaQuality = "compact" | "balanced" | "high";
 
 export const DEFAULT_MEDIA_QUALITY: MediaQuality = "balanced";
 export const MEDIA_QUALITY_STORAGE_KEY = "letscube:media-quality";
+export const MEDIA_QUALITY_METADATA_KEY = "media_quality";
 
 export const MEDIA_QUALITY_OPTIONS: ReadonlyArray<{
   value: MediaQuality;
@@ -73,6 +74,31 @@ export function normalizeMediaQuality(value: unknown): MediaQuality {
   return value === "compact" || value === "balanced" || value === "high"
     ? value
     : DEFAULT_MEDIA_QUALITY;
+}
+
+export function getMediaQualityFromMetadata(metadata: unknown): MediaQuality {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return DEFAULT_MEDIA_QUALITY;
+  }
+  return normalizeMediaQuality((metadata as Record<string, unknown>)[MEDIA_QUALITY_METADATA_KEY]);
+}
+
+export function selectVideoPlaybackUrl({
+  originalUrl,
+  video720pUrl,
+  mediaMetadata,
+}: {
+  originalUrl: string;
+  video720pUrl?: string | null;
+  mediaMetadata: unknown;
+}): string {
+  return getMediaQualityFromMetadata(mediaMetadata) === "high" || !video720pUrl
+    ? originalUrl
+    : video720pUrl;
+}
+
+export function getVideoPlaybackFallbackUrl(activeUrl: string, originalUrl: string): string | null {
+  return activeUrl === originalUrl ? null : originalUrl;
 }
 
 export function getImageUploadProfile(quality: MediaQuality): { maxDimension: number; quality: number } {

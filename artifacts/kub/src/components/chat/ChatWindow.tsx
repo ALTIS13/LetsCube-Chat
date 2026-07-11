@@ -13,6 +13,7 @@ import { ChatMediaPlaybackBar, ChatMediaPlaybackProvider, type ChatMediaPlayback
 import { TopicStrip } from "./TopicStrip";
 import { useTopics } from "@/hooks/useTopics";
 import { useMessages } from "@/hooks/useMessages";
+import { useMessageMediaVariantUrls, type MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 import { useAppStore } from "@/store/app.store";
 import { createClient } from "@/lib/supabase/client";
 import { KubEmptyState, KubIcon } from "@/components/kub";
@@ -23,8 +24,10 @@ import { reportError } from "@/lib/monitoring";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import {
   DEFAULT_MEDIA_QUALITY,
+  MEDIA_QUALITY_METADATA_KEY,
   MEDIA_QUALITY_STORAGE_KEY,
   normalizeMediaQuality,
+  selectVideoPlaybackUrl,
   type MediaQuality,
 } from "@/lib/mediaQuality";
 import { prepareChatImageAttachment, readMediaDimensions } from "@/lib/mediaUpload";
@@ -271,6 +274,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         optimized: file !== sourceFile || file.size !== sourceFile.size || file.type !== sourceFile.type,
         originalSize: sourceFile.size,
         originalMimeType: sourceFile.type || undefined,
+        mediaQuality,
       }));
     }
 
@@ -313,8 +317,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       showAppAlert(`Можно подготовить не больше ${MAX_STAGED_ATTACHMENTS} вложений за раз.`, "Видео-сообщение");
       return;
     }
-    setStagedAttachments((current) => [...current, createStagedVideoMessageAttachment(blob, durationMs, mimeType)]);
-  }, [removeStagedAttachment]);
+    setStagedAttachments((current) => [...current, createStagedVideoMessageAttachment(blob, durationMs, mimeType, mediaQuality)]);
+  }, [mediaQuality, removeStagedAttachment]);
 
   const uploadStagedAttachment = useCallback(async (attachment: StagedAttachment): Promise<StagedAttachmentUpload> => {
     if (!userId) throw new Error("auth");
@@ -370,8 +374,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           uploaded = await uploadStagedAttachment(attachment);
         } catch (error) {
           const uploadErrorMessage = getAttachmentUploadErrorMessage(error, attachment.kind);
-          console.warn("[attachments] upload failed:", error);
-          reportError(error, {
+          console.warn("[attachments] upload failed.");
+          reportError(new Error("attachment_upload_failed"), {
             category: "attachment_upload_failed",
             attachmentKind: attachment.kind,
             mimeType: attachment.mimeType,
@@ -621,11 +625,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   }, [stageFiles]);
 
   const messageListBottomInset = 0;
+  const messageMediaVariants = useMessageMediaVariantUrls(messages);
   const mediaPlaylist = useMemo(
     () => messages
-      .map((message) => createMediaPlaybackItem(message, chatId, userId))
+      .map((message) => createMediaPlaybackItem(message, chatId, userId, messageMediaVariants[message.id]))
       .filter((item): item is ChatMediaPlaybackItem => Boolean(item)),
-    [chatId, messages, userId],
+    [chatId, messageMediaVariants, messages, userId],
   );
 
   return (
@@ -846,6 +851,7 @@ function getStagedAttachmentMediaMetadata(attachment: StagedAttachment): Json | 
       duration_ms: attachment.durationMs ?? null,
       mime_type: attachment.mimeType,
       size_bytes: attachment.size,
+      [MEDIA_QUALITY_METADATA_KEY]: attachment.mediaQuality,
     };
   }
   if (
@@ -863,6 +869,9 @@ function getStagedAttachmentMediaMetadata(attachment: StagedAttachment): Json | 
       optimized: attachment.optimized ?? false,
       width: attachment.width ?? null,
       height: attachment.height ?? null,
+      ...(attachment.kind === "image" || attachment.kind === "video"
+        ? { [MEDIA_QUALITY_METADATA_KEY]: attachment.mediaQuality }
+        : {}),
     };
   }
   return undefined;
@@ -875,7 +884,12 @@ function formatVoiceDurationLabel(durationMs: number): string {
   return `${minutes}:${seconds}`;
 }
 
-function createMediaPlaybackItem(message: MessageWithSender, chatId: string, currentUserId: string | null): ChatMediaPlaybackItem | null {
+function createMediaPlaybackItem(
+  message: MessageWithSender,
+  chatId: string,
+  currentUserId: string | null,
+  mediaVariant?: MessageMediaVariantUrls,
+): ChatMediaPlaybackItem | null {
   if (!message.media_url || message.deleted_at) return null;
   if (message.type !== "audio" && message.type !== "video") return null;
   const kind: ChatMediaPlaybackItem["kind"] = message.type === "video"
@@ -892,7 +906,13 @@ function createMediaPlaybackItem(message: MessageWithSender, chatId: string, cur
     id: message.id,
     chatId,
     kind,
-    url: message.media_url,
+    url: message.type === "video"
+      ? selectVideoPlaybackUrl({
+        originalUrl: message.media_url,
+        video720pUrl: mediaVariant?.video720pUrl,
+        mediaMetadata: message.media_metadata,
+      })
+      : message.media_url,
     title: kind === "video_message"
       ? "Видеосообщение"
       : kind === "voice"
