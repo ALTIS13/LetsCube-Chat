@@ -1,3 +1,8 @@
+export {
+  VIDEO_720P_ENCODING,
+  mediaVariantWorkerTestSeams,
+} from "./mediaVariantsWorkerHelpers";
+
 export const MESSAGE_IMAGE_VARIANTS = [
   { kind: "image_thumb", max: 360, quality: 76 },
   { kind: "image_preview", max: 1280, quality: 82 },
@@ -10,18 +15,6 @@ export const MESSAGE_VIDEO_VARIANTS = [
   VIDEO_POSTER_VARIANT,
   VIDEO_720P_VARIANT,
 ] as const;
-
-export const VIDEO_720P_ENCODING = {
-  width: 1280,
-  height: 720,
-  preset: "veryfast",
-  crf: 24,
-  maxRate: "3M",
-  bufferSize: "6M",
-  audioBitrate: "128k",
-  pixelFormat: "yuv420p",
-  fastStart: true,
-} as const;
 
 const VARIANT_ERROR_CODES = new Set(["enoent", "etimedout", "video_probe_failed"]);
 

@@ -10,7 +10,6 @@ import {
   AVATAR_VARIANTS,
   MESSAGE_IMAGE_VARIANTS,
   MESSAGE_VIDEO_VARIANTS,
-  VIDEO_720P_ENCODING,
   VIDEO_POSTER_VARIANT,
   buildMessageVariantPath,
   getExpectedMessageVariantKinds,
@@ -18,6 +17,13 @@ import {
   sanitizeVariantErrorCode,
   type MessageVariantKind,
 } from "./mediaVariantRules";
+import {
+  buildMessageVariantFailedRow,
+  buildMessageVariantReadyRow,
+  buildVideo720pFfmpegArgs,
+  parseVideoDimensions,
+  safeStorageFailureDetails,
+} from "./mediaVariantsWorkerHelpers";
 
 const DEFAULT_TICK_MS = 60_000;
 const DEFAULT_CANDIDATE_LIMIT = 120;
@@ -140,7 +146,7 @@ async function loadMessageCandidates(supabase: SupabaseClient): Promise<MessageC
     .limit(candidateLimit());
 
   if (error) {
-    logger.warn({ err: sanitizedDbError(error) }, "mediaVariantsWorker message select failed");
+    logger.warn({ err: safeStorageFailureDetails(error) }, "mediaVariantsWorker message select failed");
     return [];
   }
 
@@ -170,7 +176,7 @@ async function loadProfileCandidates(supabase: SupabaseClient): Promise<ProfileC
     .limit(candidateLimit());
 
   if (error) {
-    logger.warn({ err: sanitizedDbError(error) }, "mediaVariantsWorker profile select failed");
+    logger.warn({ err: safeStorageFailureDetails(error) }, "mediaVariantsWorker profile select failed");
     return [];
   }
 
@@ -203,7 +209,7 @@ async function loadExistingVariants(
     .eq("status", "ready");
 
   if (error) {
-    logger.warn({ err: sanitizedDbError(error) }, "mediaVariantsWorker variants lookup failed");
+    logger.warn({ err: safeStorageFailureDetails(error) }, "mediaVariantsWorker variants lookup failed");
     return new Map();
   }
 
@@ -373,41 +379,7 @@ async function generateVideo720pVariant(
   try {
     await writeFile(inputPath, sourceBuffer);
     await runFfmpeg(
-      [
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-y",
-        "-i",
-        inputPath,
-        "-map",
-        "0:v:0",
-        "-map",
-        "0:a?",
-        "-vf",
-        `scale=w=min(${VIDEO_720P_ENCODING.width}\\,iw):h=min(${VIDEO_720P_ENCODING.height}\\,ih):force_original_aspect_ratio=decrease:force_divisible_by=2`,
-        "-c:v",
-        "libx264",
-        "-preset",
-        VIDEO_720P_ENCODING.preset,
-        "-crf",
-        String(VIDEO_720P_ENCODING.crf),
-        "-maxrate",
-        VIDEO_720P_ENCODING.maxRate,
-        "-bufsize",
-        VIDEO_720P_ENCODING.bufferSize,
-        "-pix_fmt",
-        VIDEO_720P_ENCODING.pixelFormat,
-        "-c:a",
-        "aac",
-        "-b:a",
-        VIDEO_720P_ENCODING.audioBitrate,
-        "-threads",
-        String(videoTranscodeThreads()),
-        "-movflags",
-        "+faststart",
-        outputPath,
-      ],
+      buildVideo720pFfmpegArgs(inputPath, outputPath, videoTranscodeThreads()),
       videoTranscodeTimeoutMs(),
     );
     const [data, dimensions] = await Promise.all([readFile(outputPath), probeVideoDimensions(outputPath)]);
@@ -431,17 +403,8 @@ async function probeVideoDimensions(outputPath: string): Promise<{ width: number
     ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", outputPath],
     { timeout: videoTranscodeTimeoutMs(), windowsHide: true, maxBuffer: 64 * 1024 },
   );
-  try {
-    const stream = (JSON.parse(stdout) as { streams?: Array<{ width?: unknown; height?: unknown }> })
-      .streams?.[0];
-    const width = Number(stream?.width);
-    const height = Number(stream?.height);
-    if (Number.isInteger(width) && width > 0 && Number.isInteger(height) && height > 0) {
-      return { width, height };
-    }
-  } catch {
-    // The failure record uses the bounded code below rather than probe output.
-  }
+  const dimensions = parseVideoDimensions(stdout);
+  if (dimensions) return dimensions;
   throw Object.assign(new Error("video probe failed"), { code: "video_probe_failed" });
 }
 
@@ -484,7 +447,7 @@ async function downloadStorageObject(
 ): Promise<Buffer | null> {
   const { data, error } = await supabase.storage.from(source.bucket).download(source.path);
   if (error || !data) {
-    logger.warn({ err: sanitizedDbError(error) }, "mediaVariantsWorker storage download failed");
+    logger.warn({ err: safeStorageFailureDetails(error) }, "mediaVariantsWorker storage download failed");
     return null;
   }
   return Buffer.from(await data.arrayBuffer());
@@ -511,22 +474,9 @@ async function replaceMessageVariant(
 ): Promise<void> {
   await supabase.from("media_variants").delete().eq("message_id", message.id).eq("variant_kind", variant.kind);
 
-  const { error } = await supabase.from("media_variants").insert({
-    message_id: message.id,
-    chat_id: message.chat_id,
-    owner_id: message.user_id,
-    source_bucket: source.bucket,
-    source_path: source.path,
-    variant_kind: variant.kind,
-    variant_bucket: MEDIA_BUCKET,
-    variant_path: variant.path,
-    mime_type: variant.mimeType,
-    width: variant.width,
-    height: variant.height,
-    size_bytes: variant.sizeBytes,
-    status: "ready",
-    updated_at: new Date().toISOString(),
-  });
+  const { error } = await supabase
+    .from("media_variants")
+    .insert(buildMessageVariantReadyRow(message, source, variant, new Date().toISOString()));
   if (error) throw error;
 }
 
@@ -565,20 +515,19 @@ async function markMessageVariantFailed(
   err: unknown,
 ): Promise<void> {
   await supabase.from("media_variants").delete().eq("message_id", message.id).eq("variant_kind", kind);
-  await supabase.from("media_variants").insert({
-    message_id: message.id,
-    chat_id: message.chat_id,
-    owner_id: message.user_id,
-    source_bucket: source.bucket,
-    source_path: source.path,
-    variant_kind: kind,
-    variant_bucket: MEDIA_BUCKET,
-    variant_path: path,
-    mime_type: mimeType,
-    status: "failed",
-    error_code: errorCode(err),
-    updated_at: new Date().toISOString(),
-  });
+  await supabase
+    .from("media_variants")
+    .insert(
+      buildMessageVariantFailedRow(
+        message,
+        source,
+        kind,
+        path,
+        mimeType,
+        errorCode(err),
+        new Date().toISOString(),
+      ),
+    );
 }
 
 async function markProfileVariantFailed(
@@ -621,16 +570,6 @@ function resolveStoragePath(
   const parsedPath = decodeURIComponent(tail.slice(slash + 1).split("?")[0] ?? "");
   if (!parsedBucket || !parsedPath) return null;
   return { bucket: parsedBucket, path: parsedPath };
-}
-
-function sanitizedDbError(err: unknown): { name?: string; code?: string; message?: string } | null {
-  if (!err || typeof err !== "object") return null;
-  const record = err as { name?: string; code?: string; message?: string };
-  return {
-    name: record.name,
-    code: record.code,
-    message: record.message?.slice(0, 180),
-  };
 }
 
 function errorCode(err: unknown): string {

@@ -58,3 +58,128 @@ test("media variants worker uses bounded error codes", () => {
     "variant_generation_failed",
   );
 });
+
+test("media variants worker builds bounded 720p ffmpeg args and parses probed dimensions", () => {
+  const seam = mediaVariantRules.mediaVariantWorkerTestSeams;
+  assert.equal(typeof seam?.buildVideo720pFfmpegArgs, "function");
+  if (typeof seam?.buildVideo720pFfmpegArgs !== "function") return;
+
+  assert.deepEqual(seam.buildVideo720pFfmpegArgs("input.mov", "output.mp4", 2), [
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-y",
+    "-i",
+    "input.mov",
+    "-map",
+    "0:v:0",
+    "-map",
+    "0:a?",
+    "-vf",
+    "scale=w=min(1280\\,iw):h=min(720\\,ih):force_original_aspect_ratio=decrease:force_divisible_by=2",
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-crf",
+    "24",
+    "-maxrate",
+    "3M",
+    "-bufsize",
+    "6M",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "128k",
+    "-threads",
+    "2",
+    "-movflags",
+    "+faststart",
+    "output.mp4",
+  ]);
+  assert.deepEqual(
+    seam.parseVideoDimensions('{"streams":[{"width":1278,"height":718}]}'),
+    { width: 1278, height: 718 },
+  );
+  assert.equal(seam.parseVideoDimensions('{"streams":[{"width":0,"height":718}]}'), null);
+});
+
+test("media variants worker builds MIME-aware ready and failed video rows", () => {
+  const seam = mediaVariantRules.mediaVariantWorkerTestSeams;
+  assert.equal(typeof seam?.buildMessageVariantReadyRow, "function");
+  if (typeof seam?.buildMessageVariantReadyRow !== "function") return;
+
+  const message = { id: "message-1", chat_id: "chat-1", user_id: "user-1" };
+  const source = { bucket: "media", path: "source/video.mov" };
+  const variant = {
+    kind: "video_720p",
+    path: "variants/messages/chat-1/message-1/video_720p.mp4",
+    mimeType: "video/mp4",
+    width: 1278,
+    height: 718,
+    sizeBytes: 12345,
+  };
+
+  assert.deepEqual(
+    seam.buildMessageVariantReadyRow(message, source, variant, "2026-07-12T00:00:00.000Z"),
+    {
+      message_id: "message-1",
+      chat_id: "chat-1",
+      owner_id: "user-1",
+      source_bucket: "media",
+      source_path: "source/video.mov",
+      variant_kind: "video_720p",
+      variant_bucket: "media",
+      variant_path: "variants/messages/chat-1/message-1/video_720p.mp4",
+      mime_type: "video/mp4",
+      width: 1278,
+      height: 718,
+      size_bytes: 12345,
+      status: "ready",
+      updated_at: "2026-07-12T00:00:00.000Z",
+    },
+  );
+  assert.deepEqual(
+    seam.buildMessageVariantFailedRow(
+      message,
+      source,
+      "video_720p",
+      "variants/messages/chat-1/message-1/video_720p.mp4",
+      "video/mp4",
+      "etimedout",
+      "2026-07-12T00:00:00.000Z",
+    ),
+    {
+      message_id: "message-1",
+      chat_id: "chat-1",
+      owner_id: "user-1",
+      source_bucket: "media",
+      source_path: "source/video.mov",
+      variant_kind: "video_720p",
+      variant_bucket: "media",
+      variant_path: "variants/messages/chat-1/message-1/video_720p.mp4",
+      mime_type: "video/mp4",
+      status: "failed",
+      error_code: "etimedout",
+      updated_at: "2026-07-12T00:00:00.000Z",
+    },
+  );
+});
+
+test("media variants worker removes message and source details from storage failure logs", () => {
+  const seam = mediaVariantRules.mediaVariantWorkerTestSeams;
+  assert.equal(typeof seam?.safeStorageFailureDetails, "function");
+  if (typeof seam?.safeStorageFailureDetails !== "function") return;
+
+  const details = seam.safeStorageFailureDetails({
+    name: "StorageApiError",
+    code: "not_found",
+    status: 404,
+    message: "private/source/video.mov was not found",
+  });
+  assert.deepEqual(details, { name: "StorageApiError", code: "not_found", status: 404 });
+  assert.equal(Object.hasOwn(details, "message"), false);
+  assert.equal(JSON.stringify(details).includes("source/video.mov"), false);
+});
