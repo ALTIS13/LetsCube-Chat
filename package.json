@@ -17,7 +17,7 @@
     "cap:open:android": "cap open android",
     "android:sync": "cap sync android",
     "android:open": "cap open android",
-    "android:assets": "capacitor-assets generate --android --assetPath assets --iconBackgroundColor \"#17212b\" --iconBackgroundColorDark \"#17212b\" --splashBackgroundColor \"#17212b\" --splashBackgroundColorDark \"#17212b\" --logoSplashScale 0.18",
+    "android:assets": "pnpm dlx @capacitor/assets@3.0.5 generate --android --assetPath assets --iconBackgroundColor \"#17212b\" --iconBackgroundColorDark \"#17212b\" --splashBackgroundColor \"#17212b\" --splashBackgroundColorDark \"#17212b\" --logoSplashScale 0.18",
     "android:build:debug": "cd android && gradlew.bat assembleDebug",
     "format": "biome format --write package.json biome.json playwright.config.ts tests/e2e tests/rls tests/security scripts/supabase-typegen.mjs scripts/rls-smoke.mjs scripts/rls-anon-rest-probe.mjs scripts/auth-anti-abuse-smoke.mjs scripts/e2e-auth-states.mjs supabase/functions/auth-yandex-gateway/rateLimit.mjs supabase/functions/auth-yandex-gateway/inviteCode.mjs",
     "format:check": "biome format package.json biome.json playwright.config.ts tests/e2e tests/rls tests/security scripts/supabase-typegen.mjs scripts/rls-smoke.mjs scripts/rls-anon-rest-probe.mjs scripts/auth-anti-abuse-smoke.mjs scripts/e2e-auth-states.mjs supabase/functions/auth-yandex-gateway/rateLimit.mjs supabase/functions/auth-yandex-gateway/inviteCode.mjs",
@@ -35,7 +35,6 @@
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
     "@capacitor/android": "^8.3.4",
-    "@capacitor/assets": "3.0.5",
     "@capacitor/cli": "^8.3.4",
     "@capacitor/core": "^8.3.4",
     "@capacitor/geolocation": "8.2.0",

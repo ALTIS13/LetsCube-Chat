@@ -3,7 +3,7 @@
 2026-07-11 Android release-candidate branding groundwork:
 
 - Replaced the default Capacitor launcher/splash resources with generated LETSCUBE assets based on the official blue/magenta mark and dark club surface. The adaptive foreground includes mask-safe padding and both light/dark Android splash resource sets are generated.
-- Added pinned development tool `@capacitor/assets@3.0.5`, reproducible source `assets/logo.svg` and `pnpm.cmd android:assets`. Android identity remains `com.kub.messenger` / `LETSCUBE`; version baseline is `versionCode 1`, `versionName 0.1.0`.
+- Added reproducible source `assets/logo.svg` and `pnpm.cmd android:assets`, which invokes pinned `@capacitor/assets@3.0.5` through `pnpm dlx` so the generator does not inflate production web/worker dependencies. Android identity remains `com.kub.messenger` / `LETSCUBE`; version baseline is `versionCode 1`, `versionName 0.1.0`.
 - Android release asset contract tests passed 2/2. `pnpm.cmd android:sync` passed and `pnpm.cmd android:build:debug` completed successfully; `android/app/build/outputs/apk/debug/app-debug.apk` exists. Android Build Tools `aapt` confirmed package `com.kub.messenger`, version `1` / `0.1.0`, label `LETSCUBE`, min SDK 24 and target SDK 36.
 - Physical install/launch branding QA is pending because `adb devices -l` returned no connected device. Native FCM, internal routing, release signing and AAB were not changed in this step.
 
