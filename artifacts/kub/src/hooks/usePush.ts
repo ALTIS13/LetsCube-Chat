@@ -14,6 +14,7 @@ import {
   type NativePushResult,
 } from "@/lib/platform/nativePush";
 import { getBuildMetadata } from "@/lib/monitoring";
+import { createDeferredPushTargetHandler } from "@/lib/pushNavigationQueue";
 import {
   persistPushPreferenceState,
   shouldRestoreNativePushRegistration,
@@ -394,6 +395,13 @@ export function usePush() {
 
 export function usePushNotificationNavigation() {
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
+  const deferredNativeTargetRef = useRef<ReturnType<typeof createDeferredPushTargetHandler> | null>(null);
+  if (!deferredNativeTargetRef.current) {
+    deferredNativeTargetRef.current = createDeferredPushTargetHandler(
+      openPushTargetInApp,
+      () => Boolean(useAppStore.getState().currentUser?.id),
+    );
+  }
 
   useEffect(() => {
     if (isNativeApp()) return;
@@ -411,11 +419,18 @@ export function usePushNotificationNavigation() {
   useEffect(() => {
     if (!isNativeAndroid()) return undefined;
     let cleanup: (() => void) | null = null;
-    void registerNativePushNavigationListeners(openPushTargetInApp).then((removeListeners) => {
+    const targetHandler = deferredNativeTargetRef.current;
+    if (!targetHandler) return undefined;
+    void registerNativePushNavigationListeners(targetHandler.handle).then((removeListeners) => {
       cleanup = removeListeners;
     });
     return () => cleanup?.();
   }, []);
+
+  useEffect(() => {
+    if (!currentUserId || !isNativeAndroid()) return;
+    deferredNativeTargetRef.current?.flush();
+  }, [currentUserId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

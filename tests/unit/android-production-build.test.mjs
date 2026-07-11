@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 
 import {
@@ -44,4 +45,9 @@ test("Android production build rejects missing public Supabase settings", () => 
       }),
     /VITE_SUPABASE_URL/,
   );
+});
+
+test("Android phone activity stays in portrait orientation", () => {
+  const manifest = fs.readFileSync("android/app/src/main/AndroidManifest.xml", "utf8");
+  assert.match(manifest, /android:screenOrientation="portrait"/);
 });

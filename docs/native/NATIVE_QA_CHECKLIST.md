@@ -11,6 +11,7 @@ Run this after a native wrapper is introduced. Android MVP groundwork exists in
 - Android debug APK builds.
 - Logout/login.
 - Session restore after app kill.
+- Phone activity remains portrait during normal messenger use.
 - App resumes after long background period.
 - No console/runtime errors in debug build.
 
@@ -21,6 +22,8 @@ Run this after a native wrapper is introduced. Android MVP groundwork exists in
 - Incoming message appears without refresh.
 - Message ordering follows server `created_at`.
 - Message push click opens chat and highlights message when available.
+- Cold-start push click waits for auth restore and does not show a false unavailable-chat dialog.
+- Opening the pushed chat marks its message notification read server-side even before the bell list loads.
 
 ## Media
 
@@ -48,6 +51,8 @@ Run this after a native wrapper is introduced. Android MVP groundwork exists in
 - Invite push.
 - Muted chat suppression.
 - Same-chat message grouping where the platform supports it.
+- Killed-process delivery (distinct from Android force-stop, which intentionally suppresses app delivery).
+- Task-channel tap opens an assigned task for a location-staff account.
 
 ## Platform release
 

@@ -1,5 +1,14 @@
 # QA Results
 
+2026-07-12 Android physical-device push and cold-start routing QA:
+
+- Added a second physical Android 15 device (Realme RMX3830) to the Android UI matrix. The packaged phone activity is now locked to portrait so a sensor state cannot launch LETSCUBE in landscape; production-configured APK install and portrait startup passed on both physical devices.
+- Updated the Realme custom-ROM microG stack from the official microG release, installed the matching Companion and Framework Proxy, enabled device registration/cloud messaging and excluded microG/LETSCUBE from battery optimization. The ROM still receives `AccountDisabled` from Google Check-in and therefore cannot obtain FCM registration. Official GMS was not mixed into the locked crDroid GSI because a reliable replacement requires a GApps-capable system image, not user-level APK replacement.
+- On the Nothing/Spacewar A063 with official Google Play Services, a real owner-to-location-staff message was delivered while the LETSCUBE process was absent. The message used the `messages` channel and stable per-chat tag; tapping it cold-started the app and opened the correct chat.
+- Fixed the cold-start action race: native push targets now wait until the authenticated profile is restored before calling `safeOpenChat`, preventing a false `Chat unavailable` dialog. Fixed the related bell race by marking chat message notifications through the existing auth-scoped server RPC even when the local Notification Center page has not loaded yet.
+- Physical retest confirmed the tapped message was visible, no unavailable/ErrorBoundary UI appeared, and the corresponding server notification row became read. A separately created task arrived through the `tasks` channel and opened the assigned task on `/tasks` for `location_staff`.
+- QA cleanup removed exactly three temporary messages, one task, their notifications/outboxes and the temporary location-staff FCM device row. Both physical devices were returned to the login screen; no credentials or raw FCM tokens were printed or committed.
+
 2026-07-11 Android 16 emulator native-push release QA:
 
 - Added a Google Play Android 16 / API 36 emulator to the existing Android 15 physical-device matrix and installed the production-configured debug APK without exposing private build values.

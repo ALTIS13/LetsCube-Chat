@@ -62,6 +62,10 @@ hardcode a temporary domain.
 
 ## Permissions
 
+The Android phone activity is locked to portrait orientation so the packaged
+messenger does not inherit a landscape sensor state at launch. Responsive
+desktop and tablet layouts remain available through the web/PWA client.
+
 Map existing web permissions to Android:
 
 - `android.permission.INTERNET` for Supabase/API/web asset runtime access;

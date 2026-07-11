@@ -7,6 +7,7 @@ import { mapPgError } from "@/lib/errors";
 import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import { KUB_CHAT_NOTIFICATIONS_READ_EVENT, type ChatNotificationsReadDetail } from "@/lib/notificationEvents";
+import { markChatMessageNotificationsRead } from "@/lib/notificationReadSync";
 import type { Notification } from "@/types/database";
 
 const PAGE_SIZE = 30;
@@ -184,19 +185,32 @@ export function useNotifications() {
     [markReadIds],
   );
 
-  const markMessageNotificationsForChatRead = useCallback(async (chatId: string) => {
+  const markMessageNotificationsForChatRead = useCallback(async (chatId: string, readUntil: string | null = null) => {
     const matchingIds = items
       .filter((item) => !item.read_at && isMessageNotification(item) && payloadString(item.payload, "chat_id") === chatId)
       .map((item) => item.id);
-    if (!matchingIds.length) return;
-    await markReadIds(matchingIds, { silent: true });
-  }, [items, markReadIds]);
+    const rpcError = await markChatMessageNotificationsRead(supabase, chatId, readUntil);
+    if (!rpcError) {
+      const nowIso = new Date().toISOString();
+      setItems((prev) => prev.map((item) =>
+        !item.read_at && isMessageNotification(item) && payloadString(item.payload, "chat_id") === chatId
+          ? { ...item, read_at: nowIso }
+          : item
+      ));
+      return;
+    }
+
+    // Compatibility fallback for deployments where the chat-scoped RPC has
+    // not been applied yet. It cannot cover rows absent from the local page,
+    // but preserves the previous per-notification behavior.
+    if (matchingIds.length) await markReadIds(matchingIds, { silent: true });
+  }, [items, markReadIds, supabase]);
 
   useEffect(() => {
     const handleChatNotificationsRead = (event: Event) => {
       const detail = (event as CustomEvent<ChatNotificationsReadDetail>).detail;
       if (!detail?.chatId) return;
-      void markMessageNotificationsForChatRead(detail.chatId);
+      void markMessageNotificationsForChatRead(detail.chatId, detail.readUntil ?? null);
     };
     const handleFocus = () => {
       void refresh();

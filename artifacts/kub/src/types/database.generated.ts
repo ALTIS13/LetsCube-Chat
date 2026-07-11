@@ -1690,6 +1690,10 @@ export type Database = {
       mark_chat_delivered: { Args: { p_chat_id: string }; Returns: undefined }
       mark_chat_read: { Args: { p_chat_id: string }; Returns: undefined }
       notifications_mark_all_read: { Args: never; Returns: undefined }
+      notifications_mark_chat_messages_read: {
+        Args: { p_chat_id: string; p_read_until?: string | null }
+        Returns: undefined
+      }
       notifications_mark_read: { Args: { p_id: string }; Returns: undefined }
       open_or_create_private_chat: {
         Args: { target_user_id: string }

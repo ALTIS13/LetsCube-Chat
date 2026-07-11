@@ -1591,6 +1591,10 @@ export interface Database {
         Args: Record<string, never>
         Returns: void
       }
+      notifications_mark_chat_messages_read: {
+        Args: { p_chat_id: string; p_read_until?: string | null }
+        Returns: void
+      }
       group_invite_create: {
         Args: { p_chat_id: string; p_invitee_id: string }
         Returns: Database['public']['Tables']['group_invites']['Row']
