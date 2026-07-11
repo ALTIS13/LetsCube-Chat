@@ -1403,6 +1403,7 @@ function MediaVideo({
   const [failed, setFailed] = useState(false);
   const [usingOriginal, setUsingOriginal] = useState(false);
   const mediaPlayback = useChatMediaPlayback();
+  const replaceCurrentItemUrl = mediaPlayback.replaceCurrentItemUrl;
   const aspectStyle = getMediaAspectStyle(dimensions, 16 / 9);
   const activeUrl = usingOriginal ? originalUrl : url;
   const activePlaybackItem = useMemo(
@@ -1415,9 +1416,16 @@ function MediaVideo({
     setUsingOriginal(false);
   }, [originalUrl, url]);
 
+  useEffect(() => {
+    if (activePlaybackItem) replaceCurrentItemUrl(activePlaybackItem.id, activePlaybackItem.url);
+  }, [activePlaybackItem?.id, activePlaybackItem?.url, replaceCurrentItemUrl]);
+
   const handleError = () => {
     const fallbackUrl = getVideoPlaybackFallbackUrl(activeUrl, originalUrl);
     if (fallbackUrl) {
+      if (activePlaybackItem) {
+        replaceCurrentItemUrl(activePlaybackItem.id, fallbackUrl, { suppressCurrentError: true });
+      }
       setUsingOriginal(true);
       return;
     }
@@ -1491,6 +1499,7 @@ function RoundVideoMessage({
   const [usingOriginal, setUsingOriginal] = useState(false);
   const mediaPlayback = useChatMediaPlayback();
   const activateMediaPlayback = mediaPlayback.activate;
+  const replaceCurrentItemUrl = mediaPlayback.replaceCurrentItemUrl;
   const activeUrl = usingOriginal ? originalUrl : url;
   const activePlaybackItem = useMemo(
     () => playbackItem && { ...playbackItem, url: activeUrl },
@@ -1501,6 +1510,10 @@ function RoundVideoMessage({
     setFailed(false);
     setUsingOriginal(false);
   }, [originalUrl, url]);
+
+  useEffect(() => {
+    if (activePlaybackItem) replaceCurrentItemUrl(activePlaybackItem.id, activePlaybackItem.url);
+  }, [activePlaybackItem?.id, activePlaybackItem?.url, replaceCurrentItemUrl]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -1550,6 +1563,9 @@ function RoundVideoMessage({
   const handleError = () => {
     const fallbackUrl = getVideoPlaybackFallbackUrl(activeUrl, originalUrl);
     if (fallbackUrl) {
+      if (activePlaybackItem) {
+        replaceCurrentItemUrl(activePlaybackItem.id, fallbackUrl, { suppressCurrentError: true });
+      }
       setUsingOriginal(true);
       return;
     }

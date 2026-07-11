@@ -1,8 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import type { MediaVariant, MessageWithSender } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
+import {
+  beginMessageVariantRefresh,
+  completeMessageVariantRefresh,
+  getMessageVariantCacheKey,
+  getMessageVariantSourceIds,
+  hasVideoVariantSources,
+  queueMessageVariantRefresh,
+  selectMessageVariantCacheEvictions,
+  type MessageVariantRefreshState,
+} from "@/lib/messageVariantRefresh";
 
-type MessageMediaVariantSource = Pick<MessageWithSender, "id" | "type" | "media_url" | "deleted_at">;
+type MessageMediaVariantSource = Pick<MessageWithSender, "id" | "chat_id" | "type" | "media_url" | "deleted_at">;
 
 export interface MessageMediaVariantUrls {
   previewUrl?: string;
@@ -31,14 +41,21 @@ export interface AvatarVariantUrls {
 const MESSAGE_VARIANT_KINDS = ["image_preview", "image_thumb", "video_poster", "video_720p"] as const;
 const AVATAR_VARIANT_KINDS = ["avatar_128", "avatar_256"] as const;
 const VIDEO_VARIANT_REFRESH_INTERVAL_MS = 60_000;
+const MESSAGE_VARIANT_REFRESH_DEBOUNCE_MS = 120;
+const MESSAGE_VARIANT_CACHE_LIMIT = 8;
 
 interface MessageVariantCacheEntry {
-  messageIds: string[];
+  chatId: string;
+  refreshState: MessageVariantRefreshState;
   hasVideoMessages: boolean;
   variants: Record<string, MessageMediaVariantUrls>;
   listeners: Set<(variants: Record<string, MessageMediaVariantUrls>) => void>;
-  loading: boolean;
-  stopRefresh: (() => void) | null;
+  intervalId: number | null;
+  refreshOnFocus: (() => void) | null;
+  debounceTimer: number | null;
+  evictionTimer: number | null;
+  hasStarted: boolean;
+  disposed: boolean;
 }
 
 const messageVariantCache = new Map<string, MessageVariantCacheEntry>();
@@ -51,92 +68,121 @@ function getVariantPublicUrl(
 }
 
 export function useMessageMediaVariantUrls(messages: MessageMediaVariantSource[]): Record<string, MessageMediaVariantUrls> {
-  const messageIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const message of messages) {
-      if (
-        (message.type === "image" || message.type === "video") &&
-        message.media_url &&
-        !message.deleted_at &&
-        !message.id.startsWith("tmp:")
-      ) {
-        ids.add(message.id);
-      }
-    }
-    return Array.from(ids).sort();
-  }, [messages]);
-
+  const messageIds = useMemo(() => getMessageVariantSourceIds(messages), [messages]);
   const messageIdKey = messageIds.join("|");
-  const hasVideoMessages = useMemo(
-    () => messages.some((message) => message.type === "video" && message.media_url && !message.deleted_at && !message.id.startsWith("tmp:")),
-    [messages],
-  );
+  const chatId = useMemo(() => getMessageVariantCacheKey(messages), [messages]);
+  const hasVideoMessages = useMemo(() => hasVideoVariantSources(messages), [messages]);
   const [variantsByMessageId, setVariantsByMessageId] = useState<Record<string, MessageMediaVariantUrls>>({});
 
   useEffect(() => {
-    if (messageIds.length === 0) {
+    if (!chatId) {
       setVariantsByMessageId({});
       return;
     }
 
-    const entry = getMessageVariantCacheEntry(messageIdKey, messageIds, hasVideoMessages);
+    const entry = getMessageVariantCacheEntry(chatId);
     entry.listeners.add(setVariantsByMessageId);
+    if (entry.evictionTimer !== null) {
+      window.clearTimeout(entry.evictionTimer);
+      entry.evictionTimer = null;
+    }
     setVariantsByMessageId(entry.variants);
-    startMessageVariantRefresh(entry);
+    updateMessageVariantCacheEntry(entry, messageIds, hasVideoMessages);
     return () => {
       entry.listeners.delete(setVariantsByMessageId);
-      if (entry.listeners.size === 0) entry.stopRefresh?.();
+      scheduleMessageVariantEntryEviction(entry);
     };
-  }, [hasVideoMessages, messageIdKey]);
+  }, [chatId, hasVideoMessages, messageIdKey]);
 
   return variantsByMessageId;
 }
 
-function getMessageVariantCacheEntry(
-  key: string,
-  messageIds: string[],
-  hasVideoMessages: boolean,
-): MessageVariantCacheEntry {
-  const existing = messageVariantCache.get(key);
+function getMessageVariantCacheEntry(chatId: string): MessageVariantCacheEntry {
+  const existing = messageVariantCache.get(chatId);
   if (existing) return existing;
   const entry: MessageVariantCacheEntry = {
-    messageIds,
-    hasVideoMessages,
+    chatId,
+    refreshState: { messageIds: [], loading: false, reloadPending: false },
+    hasVideoMessages: false,
     variants: {},
     listeners: new Set(),
-    loading: false,
-    stopRefresh: null,
+    intervalId: null,
+    refreshOnFocus: null,
+    debounceTimer: null,
+    evictionTimer: null,
+    hasStarted: false,
+    disposed: false,
   };
-  messageVariantCache.set(key, entry);
+  evictUnusedMessageVariantEntries();
+  messageVariantCache.set(chatId, entry);
   return entry;
 }
 
-function startMessageVariantRefresh(entry: MessageVariantCacheEntry): void {
-  if (entry.stopRefresh) return;
-  const refresh = () => {
-    if (document.visibilityState === "visible") void loadMessageVariants(entry);
-  };
-  const intervalId = entry.hasVideoMessages
-    ? window.setInterval(refresh, VIDEO_VARIANT_REFRESH_INTERVAL_MS)
-    : null;
-  if (entry.hasVideoMessages) {
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", refresh);
+function updateMessageVariantCacheEntry(
+  entry: MessageVariantCacheEntry,
+  messageIds: string[],
+  hasVideoMessages: boolean,
+): void {
+  const transition = queueMessageVariantRefresh(entry.refreshState, messageIds);
+  entry.refreshState = transition.state;
+  configureMessageVariantPolling(entry, hasVideoMessages);
+  if (messageIds.length === 0) {
+    entry.variants = {};
+    notifyMessageVariantListeners(entry);
+    return;
   }
-  entry.stopRefresh = () => {
-    if (intervalId !== null) window.clearInterval(intervalId);
-    if (entry.hasVideoMessages) {
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", refresh);
-    }
-    entry.stopRefresh = null;
+  if (transition.startNow) {
+    scheduleMessageVariantLoad(entry, entry.hasStarted ? MESSAGE_VARIANT_REFRESH_DEBOUNCE_MS : 0);
+  }
+}
+
+function configureMessageVariantPolling(entry: MessageVariantCacheEntry, hasVideoMessages: boolean): void {
+  if (entry.hasVideoMessages === hasVideoMessages) return;
+  stopMessageVariantPolling(entry);
+  entry.hasVideoMessages = hasVideoMessages;
+  if (!hasVideoMessages) return;
+  const refresh = () => {
+    if (document.visibilityState === "visible") scheduleMessageVariantLoad(entry, 0);
   };
-  void loadMessageVariants(entry);
+  entry.refreshOnFocus = refresh;
+  entry.intervalId = window.setInterval(refresh, VIDEO_VARIANT_REFRESH_INTERVAL_MS);
+  window.addEventListener("focus", refresh);
+  document.addEventListener("visibilitychange", refresh);
+}
+
+function stopMessageVariantPolling(entry: MessageVariantCacheEntry): void {
+  if (entry.intervalId !== null) window.clearInterval(entry.intervalId);
+  if (entry.refreshOnFocus) {
+    window.removeEventListener("focus", entry.refreshOnFocus);
+    document.removeEventListener("visibilitychange", entry.refreshOnFocus);
+  }
+  entry.intervalId = null;
+  entry.refreshOnFocus = null;
+}
+
+function scheduleMessageVariantLoad(entry: MessageVariantCacheEntry, delay: number): void {
+  if (entry.disposed || entry.refreshState.messageIds.length === 0) return;
+  if (entry.refreshState.loading) {
+    entry.refreshState = { ...entry.refreshState, reloadPending: true };
+    return;
+  }
+  if (entry.debounceTimer !== null) window.clearTimeout(entry.debounceTimer);
+  if (delay === 0) {
+    entry.debounceTimer = null;
+    void loadMessageVariants(entry);
+    return;
+  }
+  entry.debounceTimer = window.setTimeout(() => {
+    entry.debounceTimer = null;
+    void loadMessageVariants(entry);
+  }, delay);
 }
 
 async function loadMessageVariants(entry: MessageVariantCacheEntry): Promise<void> {
-  if (entry.loading) return;
-  entry.loading = true;
+  if (entry.disposed || entry.refreshState.loading || entry.refreshState.messageIds.length === 0) return;
+  entry.refreshState = beginMessageVariantRefresh(entry.refreshState);
+  entry.hasStarted = true;
+  const messageIds = entry.refreshState.messageIds;
   try {
     const supabase = createClient();
     const { data, error } = await supabase
@@ -144,7 +190,7 @@ async function loadMessageVariants(entry: MessageVariantCacheEntry): Promise<voi
       .select("id,message_id,variant_kind,variant_bucket,variant_path,width,height,status")
       .eq("status", "ready")
       .in("variant_kind", [...MESSAGE_VARIANT_KINDS])
-      .in("message_id", entry.messageIds);
+      .in("message_id", messageIds);
     if (error) return;
 
     const next: Record<string, MessageMediaVariantUrls> = {};
@@ -173,10 +219,48 @@ async function loadMessageVariants(entry: MessageVariantCacheEntry): Promise<voi
       next[row.message_id] = current;
     }
     entry.variants = next;
-    for (const listener of entry.listeners) listener(next);
+    notifyMessageVariantListeners(entry);
   } finally {
-    entry.loading = false;
+    const transition = completeMessageVariantRefresh(entry.refreshState);
+    entry.refreshState = transition.state;
+    if (transition.startNow) scheduleMessageVariantLoad(entry, MESSAGE_VARIANT_REFRESH_DEBOUNCE_MS);
   }
+}
+
+function notifyMessageVariantListeners(entry: MessageVariantCacheEntry): void {
+  for (const listener of entry.listeners) listener(entry.variants);
+}
+
+function scheduleMessageVariantEntryEviction(entry: MessageVariantCacheEntry): void {
+  if (entry.listeners.size > 0 || entry.evictionTimer !== null) return;
+  entry.evictionTimer = window.setTimeout(() => {
+    entry.evictionTimer = null;
+    if (entry.listeners.size === 0) destroyMessageVariantCacheEntry(entry);
+  }, 0);
+}
+
+function evictUnusedMessageVariantEntries(): void {
+  if (messageVariantCache.size < MESSAGE_VARIANT_CACHE_LIMIT) return;
+  const chatIds = selectMessageVariantCacheEvictions(
+    Array.from(messageVariantCache.values()).map((entry) => ({
+      chatId: entry.chatId,
+      listenerCount: entry.listeners.size,
+    })),
+    MESSAGE_VARIANT_CACHE_LIMIT,
+  );
+  for (const chatId of chatIds) {
+    const entry = messageVariantCache.get(chatId);
+    if (entry) destroyMessageVariantCacheEntry(entry);
+  }
+}
+
+function destroyMessageVariantCacheEntry(entry: MessageVariantCacheEntry): void {
+  if (entry.disposed) return;
+  entry.disposed = true;
+  if (entry.debounceTimer !== null) window.clearTimeout(entry.debounceTimer);
+  if (entry.evictionTimer !== null) window.clearTimeout(entry.evictionTimer);
+  stopMessageVariantPolling(entry);
+  messageVariantCache.delete(entry.chatId);
 }
 
 export function useAvatarVariantUrls(profileIds: readonly string[]): Record<string, AvatarVariantUrls> {

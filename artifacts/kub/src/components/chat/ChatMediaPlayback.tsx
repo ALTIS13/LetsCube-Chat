@@ -16,6 +16,7 @@ import { applyAudioOutputDevice } from "@/lib/audioOutput";
 import { reportError } from "@/lib/monitoring";
 import { clampAudioElementVolume, useAudioSettings } from "@/hooks/useAudioSettings";
 import { cn } from "@/lib/utils";
+import { replacePlaybackItemUrl } from "@/lib/mediaQuality";
 
 export type ChatMediaPlaybackKind = "voice" | "audio" | "video" | "video_message";
 
@@ -51,6 +52,7 @@ interface ChatMediaPlaybackContextValue {
   previous: () => void;
   close: () => void;
   closeIfCurrent: (itemId: string) => void;
+  replaceCurrentItemUrl: (itemId: string, nextUrl: string, options?: { suppressCurrentError?: boolean }) => void;
   canNext: boolean;
   canPrevious: boolean;
 }
@@ -80,6 +82,7 @@ export function ChatMediaPlaybackProvider({
   const progressFrameRef = useRef<number | null>(null);
   const lastProgressSyncRef = useRef(0);
   const activeElementRef = useRef<HTMLMediaElement | null>(null);
+  const suppressedErrorItemIdRef = useRef<string | null>(null);
   const [activeElement, setActiveElement] = useState<HTMLMediaElement | null>(null);
   const [currentItem, setCurrentItem] = useState<ChatMediaPlaybackItem | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -190,6 +193,11 @@ export function ChatMediaPlaybackProvider({
       hideTimerRef.current = window.setTimeout(() => setVisible(false), 2200);
     };
     const handleError = () => {
+      if (suppressedErrorItemIdRef.current === currentItem?.id) {
+        suppressedErrorItemIdRef.current = null;
+        setError(null);
+        return;
+      }
       stopProgressLoop();
       setIsPlaying(false);
       setError("Не удалось воспроизвести медиа.");
@@ -220,7 +228,7 @@ export function ChatMediaPlaybackProvider({
       activeElement.removeEventListener("ended", handleEnded);
       activeElement.removeEventListener("error", handleError);
     };
-  }, [activeElement, currentItem?.isStaged, currentItem?.kind, startProgressLoop, stopProgressLoop, syncFromElement]);
+  }, [activeElement, currentItem?.id, currentItem?.isStaged, currentItem?.kind, startProgressLoop, stopProgressLoop, syncFromElement]);
 
   const mediaElementForItem = useCallback((item: ChatMediaPlaybackItem) => {
     return item.kind === "voice" || item.kind === "audio" ? audioRef.current : videoRef.current;
@@ -337,6 +345,20 @@ export function ChatMediaPlaybackProvider({
     if (currentItem?.id === itemId) close();
   }, [close, currentItem?.id]);
 
+  const replaceCurrentItemUrl = useCallback((
+    itemId: string,
+    nextUrl: string,
+    options: { suppressCurrentError?: boolean } = {},
+  ) => {
+    if (options.suppressCurrentError && currentItem?.id === itemId) {
+      suppressedErrorItemIdRef.current = itemId;
+    } else if (suppressedErrorItemIdRef.current === itemId) {
+      suppressedErrorItemIdRef.current = null;
+    }
+    setCurrentItem((current) => replacePlaybackItemUrl(current, itemId, nextUrl));
+    setError(null);
+  }, [currentItem?.id]);
+
   const value = useMemo<ChatMediaPlaybackContextValue>(() => ({
     currentItem: visible ? currentItem : null,
     isPlaying,
@@ -358,6 +380,7 @@ export function ChatMediaPlaybackProvider({
     previous,
     close,
     closeIfCurrent,
+    replaceCurrentItemUrl,
     canNext,
     canPrevious,
   }), [
@@ -377,6 +400,7 @@ export function ChatMediaPlaybackProvider({
     play,
     previous,
     progress,
+    replaceCurrentItemUrl,
     seek,
     setRate,
     setVolume,
@@ -419,6 +443,7 @@ export function useChatMediaPlayback() {
       previous: noop,
       close: noop,
       closeIfCurrent: noop,
+      replaceCurrentItemUrl: noop,
       canNext: false,
       canPrevious: false,
     } satisfies ChatMediaPlaybackContextValue;

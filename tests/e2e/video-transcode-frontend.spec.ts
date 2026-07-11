@@ -7,6 +7,14 @@ import {
   getVideoPlaybackFallbackUrl,
   selectVideoPlaybackUrl,
 } from "../../artifacts/kub/src/lib/mediaQuality";
+import {
+  completeMessageVariantRefresh,
+  getMessageVariantCacheKey,
+  queueMessageVariantRefresh,
+  selectMessageVariantCacheEvictions,
+  type MessageVariantRefreshState,
+} from "../../artifacts/kub/src/lib/messageVariantRefresh";
+import { replacePlaybackItemUrl } from "../../artifacts/kub/src/lib/mediaQuality";
 
 test("resolves imported video playback from persisted media quality", () => {
   const originalUrl = "https://media.example/original.mp4";
@@ -39,4 +47,59 @@ test("wires one batched 720p variant query through persisted quality metadata", 
   expect(mediaVariantsSource).not.toContain("error.message");
   expect(bubbleSource).toContain("selectVideoPlaybackUrl");
   expect(inputSource).toContain("серверную 720p-копию");
+});
+
+test("uses one stable cache key for a chat regardless of realtime message IDs", () => {
+  expect(getMessageVariantCacheKey([
+    { id: "m-1", chat_id: "chat-1", type: "video", media_url: "https://media.example/one.mp4", deleted_at: null },
+  ])).toBe("chat-1");
+  expect(getMessageVariantCacheKey([
+    { id: "m-1", chat_id: "chat-1", type: "video", media_url: "https://media.example/one.mp4", deleted_at: null },
+    { id: "m-2", chat_id: "chat-1", type: "image", media_url: "https://media.example/two.jpg", deleted_at: null },
+  ])).toBe("chat-1");
+});
+
+test("coalesces a changed batch while a variant refresh is loading", () => {
+  const loading: MessageVariantRefreshState = {
+    messageIds: ["m-1"],
+    loading: true,
+    reloadPending: false,
+  };
+  const queued = queueMessageVariantRefresh(loading, ["m-1", "m-2"]);
+
+  expect(queued.startNow).toBe(false);
+  expect(queued.state.messageIds).toEqual(["m-1", "m-2"]);
+  expect(queued.state.reloadPending).toBe(true);
+  expect(completeMessageVariantRefresh(queued.state)).toEqual({
+    state: { messageIds: ["m-1", "m-2"], loading: false, reloadPending: false },
+    startNow: true,
+  });
+});
+
+test("evicts only unused chat cache entries when the bounded cache is full", () => {
+  expect(selectMessageVariantCacheEvictions([
+    { chatId: "chat-active", listenerCount: 1 },
+    { chatId: "chat-oldest", listenerCount: 0 },
+    { chatId: "chat-newer", listenerCount: 0 },
+  ], 3)).toEqual(["chat-oldest"]);
+  expect(selectMessageVariantCacheEvictions([
+    { chatId: "chat-active", listenerCount: 1 },
+    { chatId: "chat-oldest", listenerCount: 0 },
+  ], 3)).toEqual([]);
+});
+
+test("replaces the provider item URL without retaining a failed variant", () => {
+  const current = {
+    id: "m-1",
+    chatId: "chat-1",
+    kind: "video" as const,
+    url: "https://media.example/failed-720p.mp4",
+    title: "Видео",
+  };
+
+  expect(replacePlaybackItemUrl(current, "m-1", "https://media.example/original.mp4")).toEqual({
+    ...current,
+    url: "https://media.example/original.mp4",
+  });
+  expect(replacePlaybackItemUrl(current, "m-2", "https://media.example/original.mp4")).toBe(current);
 });

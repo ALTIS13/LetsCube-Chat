@@ -101,6 +101,15 @@ export function getVideoPlaybackFallbackUrl(activeUrl: string, originalUrl: stri
   return activeUrl === originalUrl ? null : originalUrl;
 }
 
+export function replacePlaybackItemUrl<T extends { id: string; url: string }>(
+  currentItem: T | null,
+  itemId: string,
+  nextUrl: string,
+): T | null {
+  if (!currentItem || currentItem.id !== itemId || currentItem.url === nextUrl) return currentItem;
+  return { ...currentItem, url: nextUrl };
+}
+
 export function getImageUploadProfile(quality: MediaQuality): { maxDimension: number; quality: number } {
   return IMAGE_PROFILES[quality] ?? IMAGE_PROFILES[DEFAULT_MEDIA_QUALITY];
 }
