@@ -1,5 +1,12 @@
 import webpush from "npm:web-push@3.6.7";
 import { buildFcmMessage, isPermanentFcmTokenError } from "./fcm.ts";
+import {
+  buildDeclarativeWebPushPayload,
+  createWebPushTopic,
+  getWebPushUrgency,
+  isPermanentWebPushSubscriptionError,
+  readWebPushErrorReason,
+} from "./webpush.ts";
 
 type OutboxRow = {
   id: string;
@@ -55,6 +62,7 @@ Deno.serve(async (request: Request) => {
   const vapidPublic = Deno.env.get("VAPID_PUBLIC_KEY");
   const vapidPrivate = Deno.env.get("VAPID_PRIVATE_KEY");
   const vapidSubject = Deno.env.get("VAPID_SUBJECT") || "mailto:admin@kub.local";
+  const webPushAppOrigin = Deno.env.get("WEB_PUSH_APP_ORIGIN");
   if (!supabaseUrl || !secretKey) {
     return json({ ok: false, error: "supabase_runtime_env_not_configured" }, 500);
   }
@@ -82,7 +90,7 @@ Deno.serve(async (request: Request) => {
   let failed = 0;
   let pruned = 0;
   for (const row of rows.data) {
-    const result = await deliver(supabaseUrl, secretKey, row, byId.get(row.subscription_id));
+    const result = await deliver(supabaseUrl, secretKey, row, byId.get(row.subscription_id), webPushAppOrigin);
     if (result === "sent") sent += 1;
     else if (result === "pruned") pruned += 1;
     else failed += 1;
@@ -308,6 +316,7 @@ async function deliver(
   secretKey: string,
   row: OutboxRow,
   subscription: SubscriptionRow | undefined,
+  webPushAppOrigin: string | undefined,
 ): Promise<"sent" | "failed" | "pruned"> {
   if (!subscription || subscription.is_active === false) {
     await markOutbox(supabaseUrl, secretKey, row.id, { sent_at: new Date().toISOString(), last_error: "subscription_missing" });
@@ -315,34 +324,40 @@ async function deliver(
   }
 
   try {
+    const legacyPayload = safePayload(row.payload);
+    const topic = await createWebPushTopic(legacyPayload.tag);
     await webpush.sendNotification(
       {
         endpoint: subscription.endpoint,
         keys: { p256dh: subscription.p256dh, auth: subscription.auth },
       },
-      JSON.stringify(safePayload(row.payload)),
-      { TTL: 60 * 60 * 24 },
+      JSON.stringify(buildDeclarativeWebPushPayload(legacyPayload, webPushAppOrigin)),
+      {
+        TTL: 60 * 60 * 24,
+        urgency: getWebPushUrgency(legacyPayload.kind),
+        ...(topic ? { topic } : {}),
+      },
     );
     await markOutbox(supabaseUrl, secretKey, row.id, { sent_at: new Date().toISOString(), last_error: null });
     return "sent";
   } catch (error) {
     const status = typeof error === "object" && error ? (error as { statusCode?: number }).statusCode : undefined;
-    const message = error instanceof Error ? error.message : String(error);
-    if (status === 404 || status === 410) {
+    const reason = readWebPushErrorReason(error);
+    if (isPermanentWebPushSubscriptionError(status, reason)) {
       await patchRow(supabaseUrl, secretKey, "push_subscriptions", subscription.id, {
         is_active: false,
         updated_at: new Date().toISOString(),
       });
       await markOutbox(supabaseUrl, secretKey, row.id, {
         sent_at: new Date().toISOString(),
-        last_error: `gone:${status}`,
+        last_error: `gone:${status ?? "unknown"}:${reason ?? "subscription_invalid"}`,
       });
       return "pruned";
     }
 
     await markOutbox(supabaseUrl, secretKey, row.id, {
       attempt_count: row.attempt_count + 1,
-      last_error: `${status ?? "?"}:${message}`.slice(0, 300),
+      last_error: `webpush:${status ?? "unknown"}:${reason ?? "unknown"}`,
     });
     return "failed";
   }

@@ -944,3 +944,15 @@ Recurring tasks roadmap note:
 - Playwright QA used local dev server `http://127.0.0.1:5173` and saved multi-account auth states. `push-phone-foundation.spec.ts`, `pwa.spec.ts`, `smoke.spec.ts`, and `realtime-messages.spec.ts` passed on 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915.
 - Realtime multi-account QA verified owner/client private-chat incoming message reconciliation without refresh, no duplicate after a second reconcile, and ordering by server `created_at`.
 - Validation completed: `git diff --check`, `pnpm.cmd --filter @workspace/kub run typecheck`, `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"`, `pnpm.cmd e2e:smoke`, configured `pnpm.cmd rls:smoke`, `pnpm.cmd db:types:check`, `pnpm.cmd exec playwright test tests/e2e/pwa.spec.ts`, `pnpm.cmd exec playwright test tests/e2e/push-phone-foundation.spec.ts`, and `pnpm.cmd exec playwright test tests/e2e/realtime-messages.spec.ts` passed. Build still emits existing Vite sourcemap/chunk-size warnings; `db:types:check` still reports known advisory drift.
+
+## 2026-07-12 - Web/PWA push reliability and cross-device read presentation
+
+- Production read-only audit confirmed one active Apple Web Push subscription, an every-minute successful dispatcher cron, 0 self-message notification rows out of 88 recent message notifications, and 0 self-message Web Push outbox rows.
+- The Apple subscription had not refreshed `last_seen_at` since 2026-06-22. Historical 2026-07-01 delivery contained 5 exhausted HTTP 403 rows and 2 accepted rows. Current web/Edge VAPID public fingerprints match, the private/public keypair validates, and the configured VAPID subject has a valid non-local format.
+- Added browser subscription reconciliation on startup, focus, reconnect and `pushsubscriptionchange`, including VAPID-key comparison and server `is_active/last_seen_at` repair.
+- Added Declarative Web Push fallback, per-tag hashed Web Push Topic, urgency selection, sanitized Apple reason parsing and permanent `VapidPkHashMismatch` pruning without exposing endpoint or key data.
+- Reading a notification now closes its matching same-tag browser card on active clients and updates the installed-app badge. Cross-device DB `read_at` remains server/realtime-backed.
+- Multi-account mutation passed: sender exclusion, recipient notification insert and chat-open read-sync. QA fixture messages and notifications were removed afterward.
+- Playwright: push/notification/PWA viewport matrix passed 41 tests across 1440x900, 1920x1080, 3840x2160, 390x844 and 412x915; 4 mutation duplicates skipped by design. Realtime messaging passed 3/3 and smoke passed 5/5 with no unexpected console errors.
+- Unit contracts passed 32/32; typecheck and production Vite build passed. Existing sourcemap and chunk-size warnings remain advisory.
+- Physical iPhone Home Screen background delivery remains required after deploy; Windows Chromium cannot validate Apple OS delivery or Notification Center history.

@@ -212,6 +212,8 @@ Scope:
 - `[x]` Add platform-aware Settings install state for desktop, Android browser, iPhone/iPad, mobile browser and native Android APK.
 - `[x]` Verify PWA manifest, service worker registration, offline/reconnect banner and direct app-shell routes across desktop/mobile Playwright viewports.
 - `[x]` Verify browser/PWA push contract: stable notification tags, same-tag close behavior, click routing, and no raw media/token fields in SW payload handling.
+- `[x]` Harden browser/PWA push lifecycle: reconcile subscriptions on startup/focus/reconnect, detect stale VAPID keys, close read same-tag cards on active clients, update the installed-app badge, and preserve DB `read_at` as the cross-device source of truth.
+- `[x]` Add Web Push `Topic` isolation and a backward-compatible Declarative Web Push fallback for iOS/iPadOS 18.4+ without changing Browser/PWA subscription semantics.
 - `[ ]` Verify installed PWA window on desktop/mobile without browser chrome where the platform supports it.
 - `[ ]` Verify real browser/PWA push delivery and notification click routing against a live installed client.
 - `[ ]` Verify iOS/Android home-screen/install behavior and document platform limitations.
@@ -227,6 +229,8 @@ Current baseline:
 - `tests/e2e/pwa.spec.ts` covers PWA shell metadata, service worker safety, offline/reconnect banner, and SPA direct routes on 1440, 1920, 3840, 390 and 412 viewports.
 - `tests/e2e/pwa-install-settings.spec.ts` covers desktop install variant and iPhone Safari home-screen guidance from the Settings install button.
 - `tests/e2e/push-phone-foundation.spec.ts` covers push settings layout, phone fallback, SW push grouping/click-routing, native push adapter token hygiene and Android channels on the same viewport matrix.
+- 2026-07-12 production audit found one Apple subscription stale since 2026-06-22 and historical HTTP 403 delivery failures whose Apple reason had not been retained. Current web/Edge public VAPID fingerprints match and the VAPID keypair is valid. The dispatcher now preserves a sanitized reason and distinguishes permanent subscription mismatch from retryable server/configuration failures.
+- Same-chat OS push replacement is intentional: the latest card represents that chat. Different chats/tasks remain isolated by tag and hashed Web Push Topic; the in-app Notification Center retains grouped semantic rows and unread counts.
 - Client-side chat media optimization baseline is in place: new image attachments and avatars are bounded before upload when possible; new image/video messages carry dimensions/size metadata for stable bubble layout.
 
 Next media/performance action:
@@ -266,6 +270,15 @@ Status: `[~]` active. Approved order: shared pre-packaging gate, Android release
 - `[ ]` Android deep links/app links and recovery callback.
 - `[ ]` Windows Electron capability spike, NSIS installer, native notifications and self-hosted update channel.
 - `[!]` SMS provider rollout.
+
+## Deferred Phone Verification Rollout
+
+Status: `[!]` explicitly deferred on 2026-07-12 until push/PWA reliability and packaging gates are complete.
+
+- Keep the current no-fake-verification fallback and never mark a number verified before a real OTP succeeds.
+- Later select a stable provider reachable from the Russian self-hosted infrastructure, connect Supabase Auth phone OTP, and keep provider credentials only in backend/Supabase secrets.
+- Decide separately where verified phone is required: profile contact, account recovery, sensitive admin actions, or optional MFA. Do not silently require phone verification for existing users without a migration and rollout plan.
+- Add anti-abuse limits, OTP resend cooldowns, audit events and real-device delivery QA before enabling enforcement.
 
 Standalone web/PWA remains the current production path until the Android and Windows release gates pass. Packaging must reuse the same validated frontend and may not weaken browser/PWA behavior.
 

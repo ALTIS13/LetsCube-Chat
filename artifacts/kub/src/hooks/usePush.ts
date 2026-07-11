@@ -14,6 +14,11 @@ import {
   type NativePushResult,
 } from "@/lib/platform/nativePush";
 import { getBuildMetadata } from "@/lib/monitoring";
+import {
+  applicationServerKeyMatches,
+  browserSubscriptionRecord,
+  urlBase64ToUint8Array,
+} from "@/lib/browserPushSubscription";
 import { createDeferredPushTargetHandler } from "@/lib/pushNavigationQueue";
 import {
   persistPushPreferenceState,
@@ -52,24 +57,18 @@ const DEFAULT_PREFERENCES: PushPreferences = {
   invite_push_enabled: true,
 };
 
-function urlBase64ToUint8Array(base64: string): Uint8Array {
-  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
-  const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const raw = atob(b64);
-  const out = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
-  return out;
-}
-
 export function usePush() {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
   const supabase = createClient();
   const [status, setStatus] = useState<PushStatus>("inactive");
   const [preferences, setPreferences] = useState<PushPreferences>(DEFAULT_PREFERENCES);
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [loadingPreferences, setLoadingPreferences] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const nativeTokenRef = useRef<string | null>(null);
   const nativeRegistrationAttemptedUserRef = useRef<string | null>(null);
+  const browserReconcileInFlightRef = useRef(false);
+  const browserLastReconciledAtRef = useRef(0);
 
   const markMigrationMissing = useCallback(() => {
     setStatus("migration_missing");
@@ -77,7 +76,11 @@ export function usePush() {
   }, []);
 
   const loadPreferences = useCallback(async () => {
-    if (!userId) return;
+    if (!userId) {
+      setPreferencesLoaded(false);
+      return;
+    }
+    setPreferencesLoaded(false);
     setLoadingPreferences(true);
     const { data, error } = await supabase
       .from("notification_preferences")
@@ -85,8 +88,10 @@ export function usePush() {
       .eq("user_id", userId)
       .maybeSingle();
     setLoadingPreferences(false);
+    setPreferencesLoaded(true);
 
     if (error) {
+      setPreferencesLoaded(false);
       if (looksLikeSchemaMissing(error)) {
         markMigrationMissing();
         return;
@@ -132,17 +137,104 @@ export function usePush() {
       setMessage("VAPID public key не настроен.");
       return;
     }
-    // Check whether we already have an active subscription registered.
-    navigator.serviceWorker.getRegistration("/sw.js").then(async (reg) => {
-      if (!reg) { setStatus("inactive"); return; }
-      const sub = await reg.pushManager.getSubscription();
-      setStatus(sub ? "active" : "inactive");
-    });
+    setStatus("inactive");
   }, []);
 
   useEffect(() => {
     void loadPreferences();
   }, [loadPreferences]);
+
+  const reconcileBrowserSubscription = useCallback(async (force = false) => {
+    if (!userId || !preferencesLoaded || isNativeApp() || !supportsBrowserPush() || !VAPID_PUBLIC) return;
+    if (browserReconcileInFlightRef.current) return;
+    const now = Date.now();
+    if (!force && now - browserLastReconciledAtRef.current < 60_000) return;
+
+    browserReconcileInFlightRef.current = true;
+    browserLastReconciledAtRef.current = now;
+    try {
+      if (Notification.permission === "denied") {
+        setStatus("denied");
+        return;
+      }
+      const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+      const subscription = registration ? await registration.pushManager.getSubscription() : null;
+      if (!subscription) {
+        setStatus("inactive");
+        if (preferences.push_enabled) {
+          setMessage("Push-подписка этого устройства неактивна. Включите уведомления повторно.");
+        }
+        return;
+      }
+
+      const keyMatches = applicationServerKeyMatches(subscription, VAPID_PUBLIC);
+      if (keyMatches === false) {
+        await supabase
+          .from("push_subscriptions")
+          .update({ is_active: false, updated_at: new Date().toISOString() })
+          .eq("user_id", userId)
+          .eq("endpoint", subscription.endpoint);
+        await subscription.unsubscribe();
+        setStatus("inactive");
+        setMessage("Ключ push-подписки обновился. Включите уведомления повторно.");
+        return;
+      }
+
+      if (!preferences.push_enabled) {
+        setStatus("inactive");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("push_subscriptions")
+        .upsert(
+          browserSubscriptionRecord(subscription, userId, navigator.userAgent, getPlatform()),
+          { onConflict: "user_id,endpoint" },
+        );
+      if (error) {
+        if (looksLikeSchemaMissing(error)) markMigrationMissing();
+        else {
+          setStatus("inactive");
+          setMessage(mapPgError(error));
+        }
+        return;
+      }
+      setStatus("active");
+      setMessage(null);
+    } catch (error) {
+      setStatus("inactive");
+      setMessage(mapPgError(error));
+    } finally {
+      browserReconcileInFlightRef.current = false;
+    }
+  }, [markMigrationMissing, preferences.push_enabled, preferencesLoaded, supabase, userId]);
+
+  useEffect(() => {
+    void reconcileBrowserSubscription(true);
+  }, [reconcileBrowserSubscription]);
+
+  useEffect(() => {
+    if (isNativeApp() || !supportsBrowserPush()) return;
+    const reconcile = () => void reconcileBrowserSubscription(false);
+    const handleServiceWorkerMessage = (event: MessageEvent) => {
+      if (event.data?.type === "KUB_PUSH_SUBSCRIPTION_CHANGED") {
+        void reconcileBrowserSubscription(true);
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") reconcile();
+    };
+    window.addEventListener("focus", reconcile);
+    window.addEventListener("online", reconcile);
+    document.addEventListener("visibilitychange", onVisibility);
+    navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
+    return () => {
+      window.removeEventListener("focus", reconcile);
+      window.removeEventListener("online", reconcile);
+      document.removeEventListener("visibilitychange", onVisibility);
+      navigator.serviceWorker.removeEventListener("message", handleServiceWorkerMessage);
+    };
+  }, [reconcileBrowserSubscription]);
 
   useEffect(() => {
     if (!shouldRestoreNativePushRegistration({
@@ -225,17 +317,22 @@ export function usePush() {
         return;
       }
 
-      const sub = await reg.pushManager.subscribe({
+      let sub = await reg.pushManager.getSubscription();
+      if (sub && applicationServerKeyMatches(sub, VAPID_PUBLIC) === false) {
+        await supabase
+          .from("push_subscriptions")
+          .update({ is_active: false, updated_at: new Date().toISOString() })
+          .eq("user_id", userId)
+          .eq("endpoint", sub.endpoint);
+        await sub.unsubscribe();
+        sub = null;
+      }
+      sub ??= await reg.pushManager.subscribe({
         userVisibleOnly: true,
         // Cast: PushManager.subscribe expects BufferSource; Uint8Array<ArrayBufferLike>
         // satisfies that at runtime but TS's narrower BufferSource overload trips.
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC) as unknown as BufferSource,
       });
-
-      const json = sub.toJSON();
-      const endpoint = json.endpoint!;
-      const p256dh = json.keys?.p256dh ?? "";
-      const auth = json.keys?.auth ?? "";
 
       // Upsert on user+endpoint so re-enabling on the same device does not
       // create duplicate rows and the same browser endpoint cannot be moved
@@ -243,17 +340,7 @@ export function usePush() {
       const { error } = await supabase
         .from("push_subscriptions")
         .upsert(
-          {
-            user_id: userId,
-            endpoint,
-            p256dh,
-            auth,
-            user_agent: navigator.userAgent,
-            platform: getPlatform(),
-            is_active: true,
-            last_seen_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
+          browserSubscriptionRecord(sub, userId, navigator.userAgent, getPlatform()),
           { onConflict: "user_id,endpoint" },
         );
       if (error) {
@@ -288,6 +375,7 @@ export function usePush() {
       setPreferences((prev) => ({ ...prev, push_enabled: true }));
       setMessage("Push-уведомления включены.");
       setStatus("active");
+      browserLastReconciledAtRef.current = Date.now();
     } catch (e) {
       setMessage(mapPgError(e));
     }

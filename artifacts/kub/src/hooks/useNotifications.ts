@@ -8,6 +8,11 @@ import { bumpFetch, registerChannel, unregisterChannel } from "@/lib/dev/instrum
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import { KUB_CHAT_NOTIFICATIONS_READ_EVENT, type ChatNotificationsReadDetail } from "@/lib/notificationEvents";
 import { markChatMessageNotificationsRead } from "@/lib/notificationReadSync";
+import {
+  closeBrowserNotification,
+  notificationPresentationTag,
+  updateBrowserAppBadge,
+} from "@/lib/browserNotificationPresentation";
 import type { Notification } from "@/types/database";
 
 const PAGE_SIZE = 30;
@@ -50,6 +55,7 @@ export function useNotifications() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const autoMarkingReadRef = useRef<Set<string>>(new Set());
+  const unreadPresentationTagsRef = useRef<Map<string, string>>(new Map());
 
   const markReadIds = useCallback(async (ids: string[], options: { silent?: boolean } = {}) => {
     const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
@@ -177,6 +183,34 @@ export function useNotifications() {
   }, [normalizeRowsForDisplay]);
 
   const unreadCount = items.reduce((acc, n) => (n.read_at ? acc : acc + 1), 0);
+
+  useEffect(() => {
+    const previousUnread = unreadPresentationTagsRef.current;
+    const currentUnread = new Map<string, string>();
+    const currentUnreadTagCounts = new Map<string, number>();
+    for (const item of items) {
+      if (item.read_at) continue;
+      const tag = notificationPresentationTag(item);
+      if (!tag) continue;
+      currentUnread.set(item.id, tag);
+      currentUnreadTagCounts.set(tag, (currentUnreadTagCounts.get(tag) ?? 0) + 1);
+    }
+    for (const item of items) {
+      if (!item.read_at) continue;
+      const previousTag = previousUnread.get(item.id);
+      if (previousTag && !currentUnreadTagCounts.has(previousTag)) {
+        void closeBrowserNotification(previousTag);
+      }
+    }
+    unreadPresentationTagsRef.current = currentUnread;
+    void updateBrowserAppBadge(unreadCount);
+  }, [items, unreadCount]);
+
+  useEffect(() => {
+    if (userId) return;
+    unreadPresentationTagsRef.current.clear();
+    void updateBrowserAppBadge(0);
+  }, [userId]);
 
   const markRead = useCallback(
     async (id: string) => {

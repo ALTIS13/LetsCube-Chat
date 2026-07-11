@@ -30,9 +30,28 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("message", (event) => {
-  if (event.data?.type !== "KUB_SKIP_WAITING") return;
-  const update = self.skipWaiting();
-  if (typeof event.waitUntil === "function") event.waitUntil(update);
+  if (event.data?.type === "KUB_SKIP_WAITING") {
+    const update = self.skipWaiting();
+    if (typeof event.waitUntil === "function") event.waitUntil(update);
+    return;
+  }
+  if (event.data?.type === "KUB_CLOSE_NOTIFICATION") {
+    const tag = safeText(event.data?.tag, "", 120);
+    if (!tag) return;
+    const closeMatching = self.registration.getNotifications({ tag }).then((notifications) => {
+      notifications.forEach((notification) => notification.close());
+    });
+    if (typeof event.waitUntil === "function") event.waitUntil(closeMatching);
+  }
+});
+
+self.addEventListener("pushsubscriptionchange", (event) => {
+  const notifyClients = self.clients
+    .matchAll({ type: "window", includeUncontrolled: true })
+    .then((clients) => {
+      clients.forEach((client) => client.postMessage({ type: "KUB_PUSH_SUBSCRIPTION_CHANGED" }));
+    });
+  event.waitUntil(notifyClients);
 });
 
 self.addEventListener("fetch", (event) => {
@@ -149,6 +168,7 @@ self.addEventListener("notificationclick", (event) => {
 
 function normalizePushPayload(raw) {
   const data = raw && typeof raw === "object" ? raw : {};
+  const proposed = data.notification && typeof data.notification === "object" ? data.notification : {};
   const chatId = safeId(data.chatId || data.chat_id);
   const messageId = safeId(data.messageId || data.message_id);
   const taskId = safeId(data.taskId || data.task_id);
@@ -165,21 +185,21 @@ function normalizePushPayload(raw) {
           ? `chat:${chatId}`
           : "kub-notification";
   return {
-    title: safeText(data.title, APP_NAME, 80),
-    body: safeText(data.body || data.message || data.text, DEFAULT_PUSH_BODY, 180),
-    tag: safeText(data.tag, fallbackTag, 100),
+    title: safeText(proposed.title || data.title, APP_NAME, 80),
+    body: safeText(proposed.body || data.body || data.message || data.text, DEFAULT_PUSH_BODY, 180),
+    tag: safeText(proposed.tag || data.tag, fallbackTag, 100),
     renotify: typeof data.renotify === "boolean" ? data.renotify : true,
     kind,
     isMessagePush,
     chatId,
     messageId,
     timestamp: safeTimestamp(data.timestamp || data.createdAt || data.created_at),
-    url: routeForPush(data, { chatId, messageId, taskId, inviteId }),
+    url: routeForPush({ ...data, navigate: proposed.navigate }, { chatId, messageId, taskId, inviteId }),
   };
 }
 
 function routeForPush(data, ids) {
-  const explicit = ensureRelativeUrl(data.url || data.route);
+  const explicit = ensureRelativeUrl(data.navigate || data.url || data.route);
   if (explicit !== "/") return explicit;
   if (ids.chatId && ids.messageId) {
     return `/?chat=${encodeURIComponent(ids.chatId)}&message=${encodeURIComponent(ids.messageId)}`;

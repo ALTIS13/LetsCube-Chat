@@ -63,6 +63,14 @@ supabase functions deploy send-push-notifications
 
 Schedule it from Supabase Cron or an external scheduler with `POST` and either `x-kub-push-token` or `Authorization: Bearer <token>`.
 
+For the iOS declarative fallback, configure the public application origin in the trusted Edge Function runtime:
+
+```text
+WEB_PUSH_APP_ORIGIN=https://app.example.com
+```
+
+The value must be an HTTPS origin. It is deployment configuration, not a frontend secret.
+
 ## Privacy and routing
 
 - Message pushes use safe truncated text previews or media labels such as `Фото`, `Видео`, `Голосовое`, `Файл`; raw media URLs are not included.
@@ -72,7 +80,11 @@ Schedule it from Supabase Cron or an external scheduler with `POST` and either `
 - User push settings and chat mute settings are enforced in the enqueue function before outbox rows are created.
 - Private chat message pushes render as sender + preview. Group message pushes render as chat + `sender: preview`.
 - Browser/PWA grouping uses a stable `NotificationOptions.tag`; before showing a replacement notification, the service worker closes existing notifications with the same tag. Exact OS-level notification history behavior still depends on the browser and operating system.
+- The dispatcher also sends a hashed Web Push `Topic` for meaningful tags. Messages from the same chat can therefore coalesce while queued by the push service, while another chat, task or invite uses another topic and remains separate.
+- On iOS/iPadOS 18.4+ the payload includes the backward-compatible Declarative Web Push envelope. Safari can use it as a visible fallback if service worker JavaScript is unavailable; older browsers continue through the existing service worker handler.
+- A signed-in web/PWA client reconciles its existing subscription on startup, focus, reconnect and `pushsubscriptionchange`. A matching subscription is reactivated and its `last_seen_at` is refreshed; a stale VAPID-key subscription is deactivated and requires the user to enable notifications again from a direct gesture.
 - In-app Notification Center groups message rows by chat/dialog so tasks stay visible. Opening a chat marks loaded message notifications for that chat read immediately; after applying `20260531_notification_center_read_sync_native_push.sql`, the server RPC can mark all matching unread message notifications for the user.
+- When a notification becomes read on an active browser/PWA client, the client asks its service worker to close the matching OS card and updates the app badge. Database `read_at` remains the cross-device source of truth. A browser cannot guarantee immediate removal of an already displayed OS card on a sleeping device; cleanup occurs when that client receives realtime state or resumes.
 - Native Android push is separate from browser Web Push. The client uses Capacitor Push Notifications and the same in-app notification semantics; FCM credentials and delivery stay in the trusted Edge Function runtime. Do not commit `google-services.json`, Firebase credentials, private keys, raw device tokens, or signing files.
 
 ## Native Android push status
@@ -110,3 +122,13 @@ Still required before release readiness: real multi-account message/task deliver
 - Verify notification delivery in a normal browser tab and installed PWA.
 - Click the notification and confirm it focuses an existing KUB tab or opens the correct route.
 - Send 2-3 messages in the same chat and confirm the browser replaces/updates the same chat notification where tag replacement is supported; send from another chat and confirm it stays separate.
+- On iPhone/iPad, test only the Home Screen web app on iOS/iPadOS 16.4 or later. Notification permission must be requested from the Settings button after a user gesture.
+- Three messages from one chat should result in one latest same-chat OS card by design. Verify all three semantic rows remain visible as one grouped conversation in Notification Center. A message from another chat and a task must produce separate cards.
+- Reopen the installed PWA after an OS/app update and verify Settings still shows an active subscription. If the VAPID key no longer matches, enable notifications again and confirm `last_seen_at` advances.
+
+## Production audit 2026-07-12
+
+- The semantic pipeline, sender exclusion and read-sync passed a real owner/client Playwright mutation: the sender received no notification row, the recipient row appeared, and opening the chat populated `read_at` without touching task notifications.
+- Production contained one active Apple Web Push subscription whose `last_seen_at` had not advanced since 2026-06-22. Five deliveries from 2026-07-01 exhausted retries with HTTP 403 and two were accepted after retries. The old worker stored only a generic message, so the exact Apple `reason` was unavailable.
+- The configured public VAPID value matches the web production bundle and the configured private/public VAPID pair is cryptographically valid. The hardened dispatcher now stores only a sanitized Apple reason such as `VapidPkHashMismatch` and prunes only errors proven to invalidate that subscription.
+- The remaining release gate is a physical iPhone Home Screen test after deployment: reopen LETSCUBE to reconcile the subscription, send same-chat/different-chat/task scenarios, and verify background delivery plus notification click routing.
