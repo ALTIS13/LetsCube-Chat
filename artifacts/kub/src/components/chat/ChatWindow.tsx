@@ -15,7 +15,7 @@ import { useTopics } from "@/hooks/useTopics";
 import { useMessages } from "@/hooks/useMessages";
 import { useMessageMediaVariantUrls, type MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 import { useAppStore } from "@/store/app.store";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, getSupabasePublicUrl } from "@/lib/supabase/client";
 import { KubEmptyState, KubIcon } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
 import { KUB_CHAT_MESSAGE_JUMP_EVENT, requestChatMessageJump, type ChatMessageJumpDetail } from "@/lib/chatJumpEvents";
@@ -45,6 +45,11 @@ import {
   type StagedAttachment,
   type StagedAttachmentUpload,
 } from "@/lib/stagedAttachments";
+import {
+  shouldUseResumableUpload,
+  startResumableStorageUpload,
+  type ResumableStorageUploadHandle,
+} from "@/lib/resumableStorageUpload";
 import type { Json, MessageWithSender } from "@/types/database";
 
 interface ChatWindowProps {
@@ -114,12 +119,37 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const [isComposerFocused, setIsComposerFocused] = useState(false);
   const stagedAttachmentsRef = useRef<StagedAttachment[]>([]);
   const cancelledAttachmentIdsRef = useRef<Set<string>>(new Set());
+  const activeUploadHandlesRef = useRef<Map<string, ResumableStorageUploadHandle>>(new Map());
+  const activeChatIdRef = useRef<string | null>(chatId);
   const dragDepthRef = useRef(0);
   const [draggingFiles, setDraggingFiles] = useState(false);
 
   useEffect(() => {
     stagedAttachmentsRef.current = stagedAttachments;
   }, [stagedAttachments]);
+
+  const abortActiveUpload = useCallback(async (attachmentId: string) => {
+    const handle = activeUploadHandlesRef.current.get(attachmentId);
+    if (!handle) return;
+    activeUploadHandlesRef.current.delete(attachmentId);
+    try {
+      await handle.abort(true);
+    } catch {
+      // Cancellation is best-effort and must not expose transport details.
+    }
+  }, []);
+
+  const abortActiveUploads = useCallback(async () => {
+    const handles = [...activeUploadHandlesRef.current.values()];
+    activeUploadHandlesRef.current.clear();
+    await Promise.all(handles.map(async (handle) => {
+      try {
+        await handle.abort(true);
+      } catch {
+        // Cancellation is best-effort and must not expose transport details.
+      }
+    }));
+  }, []);
 
   const setMediaQuality = useCallback((quality: MediaQuality) => {
     setMediaQualityState(quality);
@@ -191,6 +221,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   ]);
 
   useEffect(() => {
+    activeChatIdRef.current = chatId;
+    void abortActiveUploads();
     setStagedAttachments((current) => {
       current.forEach(revokeAttachmentPreview);
       return [];
@@ -199,10 +231,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     setDraggingFiles(false);
     dragDepthRef.current = 0;
     return () => {
+      activeChatIdRef.current = null;
+      void abortActiveUploads();
       stagedAttachmentsRef.current.forEach(revokeAttachmentPreview);
       cancelledAttachmentIdsRef.current.clear();
     };
-  }, [chatId]);
+  }, [abortActiveUploads, chatId]);
 
   useEffect(() => {
     if (!chatPanelRequest || chatPanelRequest.chatId !== chatId) return;
@@ -234,12 +268,13 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
   const removeStagedAttachment = useCallback((attachmentId: string) => {
     cancelledAttachmentIdsRef.current.add(attachmentId);
+    void abortActiveUpload(attachmentId);
     setStagedAttachments((current) => {
       const target = current.find((attachment) => attachment.id === attachmentId);
       if (target) revokeAttachmentPreview(target);
       return current.filter((attachment) => attachment.id !== attachmentId);
     });
-  }, []);
+  }, [abortActiveUpload]);
 
   const cancelStagedAttachment = useCallback((attachmentId: string) => {
     cancelledAttachmentIdsRef.current.add(attachmentId);
@@ -320,23 +355,58 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     setStagedAttachments((current) => [...current, createStagedVideoMessageAttachment(blob, durationMs, mimeType, mediaQuality)]);
   }, [mediaQuality, removeStagedAttachment]);
 
-  const uploadStagedAttachment = useCallback(async (attachment: StagedAttachment): Promise<StagedAttachmentUpload> => {
+  const uploadStagedAttachment = useCallback(async (
+    attachment: StagedAttachment,
+    sourceChatId: string,
+  ): Promise<StagedAttachmentUpload> => {
     if (!userId) throw new Error("auth");
-    const path = chatAttachmentUploadPath(chatId, userId, attachment);
-    const { data, error } = await supabase.storage
-      .from(CHAT_MEDIA_BUCKET)
-      .upload(path, attachment.file, {
-        contentType: attachment.mimeType || attachment.file.type || "application/octet-stream",
-        upsert: false,
+    const path = chatAttachmentUploadPath(sourceChatId, userId, attachment);
+    const contentType = attachment.mimeType || attachment.file.type || "application/octet-stream";
+    let uploadedPath = path;
+
+    if (shouldUseResumableUpload(attachment.file.size)) {
+      const handle = startResumableStorageUpload({
+        supabaseClient: supabase,
+        supabaseUrl: getSupabasePublicUrl(),
+        file: attachment.file,
+        bucketName: CHAT_MEDIA_BUCKET,
+        objectName: path,
+        contentType,
+        onProgress: (progress) => {
+          if (
+            activeChatIdRef.current !== sourceChatId ||
+            cancelledAttachmentIdsRef.current.has(attachment.id)
+          ) return;
+          updateStagedAttachment(attachment.id, (current) => ({ ...current, progress }));
+        },
       });
-    if (error || !data) throw error ?? new Error("upload_failed");
-    const { data: publicData } = supabase.storage.from(CHAT_MEDIA_BUCKET).getPublicUrl(data.path);
+      activeUploadHandlesRef.current.set(attachment.id, handle);
+      try {
+        const result = await handle.result;
+        uploadedPath = result.path;
+      } finally {
+        if (activeUploadHandlesRef.current.get(attachment.id) === handle) {
+          activeUploadHandlesRef.current.delete(attachment.id);
+        }
+      }
+    } else {
+      const { data, error } = await supabase.storage
+        .from(CHAT_MEDIA_BUCKET)
+        .upload(path, attachment.file, {
+          contentType,
+          upsert: false,
+        });
+      if (error || !data) throw error ?? new Error("upload_failed");
+      uploadedPath = data.path;
+    }
+
+    const { data: publicData } = supabase.storage.from(CHAT_MEDIA_BUCKET).getPublicUrl(uploadedPath);
     return {
       bucket: CHAT_MEDIA_BUCKET,
-      path: data.path,
+      path: uploadedPath,
       publicUrl: publicData.publicUrl,
     };
-  }, [chatId, supabase, userId]);
+  }, [supabase, updateStagedAttachment, userId]);
 
   const sendStagedAttachments = useCallback(async (caption: string, onlyAttachmentId?: string): Promise<boolean> => {
     if (!userId) {
@@ -344,6 +414,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       return false;
     }
 
+    const sourceChatId = chatId;
     const captionText = caption.trim();
     const targets = stagedAttachmentsRef.current.filter((attachment) => {
       if (onlyAttachmentId && attachment.id !== onlyAttachmentId) return false;
@@ -360,19 +431,26 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     }
 
     for (const attachment of targets) {
-      if (cancelledAttachmentIdsRef.current.has(attachment.id)) continue;
+      if (
+        cancelledAttachmentIdsRef.current.has(attachment.id) ||
+        activeChatIdRef.current !== sourceChatId
+      ) return sentAny;
       updateStagedAttachment(attachment.id, (current) => ({
         ...current,
         status: "uploading",
-        progress: null,
+        progress: 0,
         error: null,
       }));
 
       let uploaded: StagedAttachmentUpload | null = attachment.uploaded;
       if (!uploaded) {
         try {
-          uploaded = await uploadStagedAttachment(attachment);
+          uploaded = await uploadStagedAttachment(attachment, sourceChatId);
         } catch (error) {
+          if (
+            cancelledAttachmentIdsRef.current.has(attachment.id) ||
+            activeChatIdRef.current !== sourceChatId
+          ) return sentAny;
           const uploadErrorMessage = getAttachmentUploadErrorMessage(error, attachment.kind);
           console.warn("[attachments] upload failed.");
           reportError(new Error("attachment_upload_failed"), {
@@ -390,11 +468,23 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         }
       }
 
-      if (cancelledAttachmentIdsRef.current.has(attachment.id)) continue;
+      if (
+        cancelledAttachmentIdsRef.current.has(attachment.id) ||
+        activeChatIdRef.current !== sourceChatId
+      ) return sentAny;
+
+      updateStagedAttachment(attachment.id, (current) => ({
+        ...current,
+        progress: 100,
+        uploaded,
+      }));
+
+      if (activeChatIdRef.current !== sourceChatId) return sentAny;
 
       updateStagedAttachment(attachment.id, (current) => ({
         ...current,
         status: "sending",
+        progress: 100,
         uploaded,
         error: null,
       }));
@@ -433,7 +523,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
     if (sentAny) setReplyTo(null);
     return sentAny;
-  }, [replyTo?.id, removeStagedAttachment, sendMediaMessage, sendMessage, updateStagedAttachment, uploadStagedAttachment, userId]);
+  }, [chatId, replyTo?.id, removeStagedAttachment, sendMediaMessage, sendMessage, updateStagedAttachment, uploadStagedAttachment, userId]);
 
   const retryStagedAttachment = useCallback((attachmentId: string) => {
     void sendStagedAttachments("", attachmentId);
@@ -834,7 +924,7 @@ function getAttachmentUploadErrorMessage(error: unknown, kind: StagedAttachment[
     details.includes("size limit") ||
     details.includes("exceeded")
   ) {
-    const maxLabel = kind === "video" ? MAX_VIDEO_ATTACHMENT_SIZE_LABEL : MAX_ATTACHMENT_SIZE_LABEL;
+    const maxLabel = kind === "video" || kind === "video_message" ? MAX_VIDEO_ATTACHMENT_SIZE_LABEL : MAX_ATTACHMENT_SIZE_LABEL;
     return `Файл слишком большой для загрузки. Максимум ${maxLabel}.`;
   }
   if (details.includes("network") || details.includes("fetch") || details.includes("timeout")) {

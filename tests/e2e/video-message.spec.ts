@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { gotoOrSkip, loadQaCredentials, loginIfNeeded } from "./helpers/auth";
 
 test.use({
@@ -8,6 +10,17 @@ test.use({
 });
 
 test.describe("KUB video recorders", () => {
+  test("uses the 250 MB payload-too-large copy for video circles", () => {
+    const chatWindowSource = readFileSync(
+      resolve(process.cwd(), "artifacts/kub/src/components/chat/ChatWindow.tsx"),
+      "utf8",
+    );
+
+    expect(chatWindowSource).toContain(
+      'kind === "video" || kind === "video_message" ? MAX_VIDEO_ATTACHMENT_SIZE_LABEL',
+    );
+  });
+
   test("switches the composer recorder mode with desktop context click", async ({ page }) => {
     const credentials = loadQaCredentials();
     test.skip(!credentials, "QA credentials are not configured in env or ~/.kub-messenger-qa.env");

@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   buildResumableUploadEndpoint,
   normalizeUploadProgress,
@@ -16,6 +18,14 @@ import {
 } from "../../artifacts/kub/src/lib/stagedAttachments";
 
 const FILE_SIZE = RESUMABLE_UPLOAD_THRESHOLD_BYTES + 1;
+const CHAT_WINDOW_SOURCE = readFileSync(
+  resolve(process.cwd(), "artifacts/kub/src/components/chat/ChatWindow.tsx"),
+  "utf8",
+);
+const MESSAGE_INPUT_SOURCE = readFileSync(
+  resolve(process.cwd(), "artifacts/kub/src/components/chat/MessageInput.tsx"),
+  "utf8",
+);
 
 test.describe("resumable media upload contracts", () => {
   test("uses TUS only above the exact 6 MiB boundary", () => {
@@ -163,6 +173,33 @@ test.describe("resumable media upload contracts", () => {
       name: "ResumableStorageUploadError",
       code: "upload_aborted",
     });
+  });
+
+  test("renders determinate staged upload progress without replacing sending indeterminate state", () => {
+    expect(MESSAGE_INPUT_SOURCE).toContain('data-testid="staged-attachment-upload-progress"');
+    expect(MESSAGE_INPUT_SOURCE).toContain('role="progressbar"');
+    expect(MESSAGE_INPUT_SOURCE).toContain("aria-valuenow={progress}");
+    expect(MESSAGE_INPUT_SOURCE).toContain("{progress}%");
+    expect(MESSAGE_INPUT_SOURCE).toContain('data-testid="staged-attachment-sending-progress"');
+  });
+
+  test("owns and terminates active upload handles before removing staged state", () => {
+    expect(CHAT_WINDOW_SOURCE).toContain("useRef<Map<string, ResumableStorageUploadHandle>>(new Map())");
+    expect(CHAT_WINDOW_SOURCE).toContain("await handle.abort(true)");
+    expect(CHAT_WINDOW_SOURCE).toContain(
+      "void abortActiveUploads();\n    setStagedAttachments((current) =>",
+    );
+  });
+
+  test("guards media message creation with the captured source chat", () => {
+    expect(CHAT_WINDOW_SOURCE).toContain("const sourceChatId = chatId;");
+    const loopIndex = CHAT_WINDOW_SOURCE.indexOf("for (const attachment of targets)");
+    const guardIndex = CHAT_WINDOW_SOURCE.indexOf("activeChatIdRef.current !== sourceChatId", loopIndex);
+    const uploadStateIndex = CHAT_WINDOW_SOURCE.indexOf('status: "uploading"', loopIndex);
+    const sendIndex = CHAT_WINDOW_SOURCE.indexOf("const message = await sendMediaMessage({");
+    expect(guardIndex).toBeGreaterThan(-1);
+    expect(guardIndex).toBeLessThan(uploadStateIndex);
+    expect(guardIndex).toBeLessThan(sendIndex);
   });
 });
 

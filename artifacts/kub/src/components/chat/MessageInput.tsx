@@ -1268,11 +1268,7 @@ function VideoMessageAttachmentPreview({
         <div className={cn("mt-1 truncate text-[11px] text-[color:var(--kub-muted)]", failed && "text-[color:var(--kub-danger)]")}>
           {attachment.error ?? attachmentStatusLabel(attachment.status)}
         </div>
-        {busy && (
-          <div className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--kub-surface-3)]">
-            <div className="h-full w-2/3 animate-pulse rounded-full bg-[var(--kub-cyan)]" />
-          </div>
-        )}
+        <AttachmentTransferProgress attachment={attachment} />
       </div>
     </div>
   );
@@ -1303,11 +1299,7 @@ function AttachmentMeta({
           {attachment.error ?? attachmentStatusLabel(attachment.status)}
         </span>
       </div>
-      {busy && (
-        <div className="mt-1 h-1 overflow-hidden rounded-full bg-[var(--kub-surface-3)]">
-          <div className="h-full w-2/3 animate-pulse rounded-full bg-[var(--kub-cyan)]" />
-        </div>
-      )}
+      <AttachmentTransferProgress attachment={attachment} />
     </>
   );
 }
@@ -1395,7 +1387,50 @@ function VoiceAttachmentPreview({
         <div className={cn("mt-1 truncate text-[11px] text-[color:var(--kub-muted)]", failed && "text-[color:var(--kub-danger)]")}>
           {attachment.error ?? attachmentStatusLabel(attachment.status)}
         </div>
+        <AttachmentTransferProgress attachment={attachment} />
       </div>
+    </div>
+  );
+}
+
+function AttachmentTransferProgress({ attachment }: { attachment: StagedAttachment }) {
+  const progress = attachment.status === "uploading" && typeof attachment.progress === "number"
+    ? Math.min(100, Math.max(0, Math.round(attachment.progress)))
+    : null;
+
+  return (
+    <div className="mt-1 h-5" aria-live="polite">
+      {progress !== null ? (
+        <div className="flex h-full items-center gap-2">
+          <div
+            data-testid="staged-attachment-upload-progress"
+            role="progressbar"
+            aria-label="Загрузка вложения"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress}
+            className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--kub-surface-3)]"
+          >
+            <div
+              className="h-full rounded-full bg-[var(--kub-cyan)] transition-[width] duration-150"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <span className="w-8 shrink-0 text-right text-[10px] tabular-nums text-[color:var(--kub-muted)]">
+            {progress}%
+          </span>
+        </div>
+      ) : attachment.status === "sending" ? (
+        <div
+          data-testid="staged-attachment-sending-progress"
+          className="flex h-full items-center"
+          aria-label="Отправка вложения"
+        >
+          <div className="h-1 w-full overflow-hidden rounded-full bg-[var(--kub-surface-3)]">
+            <div className="h-full w-2/3 animate-pulse rounded-full bg-[var(--kub-cyan)]" />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
