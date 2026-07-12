@@ -31,6 +31,8 @@ test("Windows Tauri shell stays isolated from the root workspace and exposes onl
 
   const shellPackage = readJson("windows-tauri/package.json");
   assert.equal(shellPackage.private, true);
+  assert.equal(Number.isSafeInteger(shellPackage.desktopBuild), true);
+  assert.ok(shellPackage.desktopBuild > 0);
 
   const pinnedDependencies = {
     ...(shellPackage.dependencies ?? {}),
@@ -72,11 +74,15 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
 
   assert.match(mainRs, /letscube_windows_tauri::run\(\)/);
   assert.match(buildRs, /tauri_build::build\(\)/);
+  assert.match(buildRs, /package\.json/);
+  assert.match(buildRs, /LETSCUBE_DESKTOP_BUILD/);
 
   assert.match(libRs, /https:\/\/app\.letscube\.ru\//);
   assert.match(libRs, /webview-production-v1/);
   assert.match(libRs, /window\.letscubeDesktop/);
   assert.match(libRs, /Object\.freeze/);
+  assert.match(libRs, /version:\s*runtimeInfo\.version/);
+  assert.match(libRs, /build:\s*runtimeInfo\.build/);
   assert.match(libRs, /platform:\s*"windows"/);
   assert.match(libRs, /build:/);
   assert.match(libRs, /is_dev\(\)|cfg!\(debug_assertions\)/);

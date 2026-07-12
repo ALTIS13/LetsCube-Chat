@@ -12,7 +12,7 @@ use tauri::{
 const PRODUCTION_ORIGIN: &str = "https://app.letscube.ru";
 const PRODUCTION_URL: &str = "https://app.letscube.ru/";
 const PRODUCTION_PROFILE: &str = "webview-production-v1";
-const DESKTOP_BUILD: u32 = 4;
+const DESKTOP_BUILD: &str = env!("LETSCUBE_DESKTOP_BUILD");
 
 fn is_allowed_navigation(url: &Url) -> bool {
     url.origin().ascii_serialization() == PRODUCTION_ORIGIN
@@ -40,6 +40,8 @@ fn desktop_bridge_script() -> String {
   }});
   window.letscubeDesktop = Object.freeze({{
     platform: "windows",
+    version: runtimeInfo.version,
+    build: runtimeInfo.build,
     getRuntimeInfo: async () => runtimeInfo
   }});
   Object.defineProperty(window, "letscubeDesktop", {{

@@ -11,6 +11,7 @@ name = "letscube_windows_tauri"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
+serde_json = "1.0.149"
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
