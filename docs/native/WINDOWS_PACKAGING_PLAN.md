@@ -1,7 +1,8 @@
 # Windows Packaging Plan
 
-KUB can be packaged for Windows after web/PWA and self-host readiness are
-stable. Do not add desktop dependencies until a packaging technology is chosen.
+LETSCUBE will be packaged for Windows after the Android release gate. The
+approved first step is an Electron capability spike; do not add the desktop
+runtime until that spike begins.
 
 ## Technology comparison
 
@@ -10,9 +11,10 @@ stable. Do not add desktop dependencies until a packaging technology is chosen.
 | Tauri | Smaller bundles, native window shell, lower idle footprint | Requires Rust toolchain and Tauri-specific update/signing work | Production desktop client when footprint matters |
 | Electron | Mature ecosystem, broad plugin support, easier web-to-desktop bridge | Larger bundles and higher memory use | Fastest path if team needs desktop APIs quickly |
 
-Initial recommendation: evaluate Tauri first on the target Windows machines.
-Use Electron only if a required desktop capability is substantially easier
-there.
+Approved direction: evaluate Electron first because LETSCUBE depends on
+Chromium camera, microphone, MediaRecorder, realtime and media playback
+behavior. Tauri remains a later footprint comparison, not the first packaging
+implementation.
 
 ## Shared requirements
 
@@ -42,11 +44,17 @@ Supabase Auth redirect URLs must include the chosen desktop callback model.
 ## Push and notifications
 
 Desktop browser Web Push does not become native Windows push automatically.
-Options:
+The Windows browser remains usable but is not offered PWA installation.
+Electron must provide native desktop notifications through a restricted
+preload bridge; backend delivery changes are added only if a concrete Windows
+token model is required.
 
-- keep browser/PWA push for installed PWA users;
-- implement native desktop notifications through the chosen wrapper;
-- add a backend delivery adapter later if Windows push tokens are used.
+## Release catalog
+
+`https://api.letscube.ru/releases/v1/windows/stable.json` is active with
+`available: false` until an EXE exists. Future NSIS artifacts and updater
+metadata use immutable versioned paths under
+`https://api.letscube.ru/releases/files/windows/`.
 
 ## Packaging QA
 

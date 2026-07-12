@@ -82,7 +82,7 @@ export function useReleaseCatalog(target: DistributionTarget) {
     if (!platform || typeof window === "undefined") return;
     const handleResume = () => void refresh(true);
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") void refresh(false);
+      if (document.visibilityState === "visible") void refresh(true);
     };
     window.addEventListener("online", handleResume);
     document.addEventListener("visibilitychange", handleVisibility);

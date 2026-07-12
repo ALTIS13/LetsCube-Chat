@@ -35,6 +35,7 @@ test.describe("LETSCUBE native distribution status", () => {
 
     const state = page.getByTestId("release-catalog-state");
     await expect(state).toHaveAttribute("data-state", /available|current|update_available/);
+    await expect(state).toContainText(/12.*2026/);
     await expect(page.getByTestId("release-download-button")).toHaveAttribute("href", artifactUrl);
 
     const cardBox = await page.getByTestId("release-distribution-card").boundingBox();
@@ -43,6 +44,44 @@ test.describe("LETSCUBE native distribution status", () => {
     expect(buttonBox).not.toBeNull();
     expect(buttonBox!.x + buttonBox!.width).toBeLessThanOrEqual(cardBox!.x + cardBox!.width + 1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  });
+
+  test("visible-app resume bypasses a fresh cache and refreshes release status", async ({ page }, testInfo) => {
+    const platform = testInfo.project.name.includes("mobile") ? "android" : "windows";
+    const extension = platform === "android" ? "apk" : "exe";
+    const artifactUrl =
+      `https://api.letscube.ru/releases/files/${platform}/0.2.0/letscube-0.2.0.${extension}`;
+    let requestCount = 0;
+    await page.route(`https://api.letscube.ru/releases/v1/${platform}/stable.json`, async (route) => {
+      requestCount += 1;
+      const available = requestCount > 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: JSON.stringify({
+          schemaVersion: 1,
+          platform,
+          channel: "stable",
+          available,
+          version: available ? "0.2.0" : "0.0.0",
+          build: available ? 2 : 0,
+          publishedAt: "2026-07-12T00:00:00.000Z",
+          minimumSupportedVersion: null,
+          mandatory: false,
+          notes: "",
+          artifact: available
+            ? { url: artifactUrl, size: 8_734_685, sha256: SHA256 }
+            : null,
+        }),
+      });
+    });
+
+    await openSettingsOrSkip(page);
+    await expect(page.getByTestId("release-catalog-state")).toHaveAttribute("data-state", "preparing");
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await expect(page.getByTestId("release-catalog-state")).toHaveAttribute("data-state", "available");
+    expect(requestCount).toBeGreaterThanOrEqual(2);
   });
 });
 

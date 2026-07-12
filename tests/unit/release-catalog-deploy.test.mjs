@@ -18,13 +18,15 @@ const bash = process.env.KUB_BASH
 test("release catalog nginx is read-only, CORS-enabled and uses distinct cache policies", () => {
   const nginx = readFileSync(nginxPath, "utf8");
   assert.match(nginx, /autoindex\s+off/);
-  assert.match(nginx, /location\s+\^~\s+\/releases\/v1\//);
+  assert.match(nginx, /location\s+\/releases\/v1\//);
   assert.match(nginx, /no-cache, no-store, must-revalidate/);
-  assert.match(nginx, /location\s+\^~\s+\/releases\/files\//);
+  assert.match(nginx, /location\s+\/releases\/files\//);
   assert.match(nginx, /max-age=31536000, immutable/);
   assert.match(nginx, /Access-Control-Allow-Origin\s+"\*"/);
   assert.match(nginx, /limit_except\s+GET\s+HEAD/);
   assert.match(nginx, /location\s+=\s+\/healthz/);
+  assert.doesNotMatch(nginx, /location\s+\^~\s+\/releases\//);
+  assert.match(nginx, /location\s+~\s+\/\\\./);
   assert.doesNotMatch(nginx, /try_files\s+\$uri\s+\$uri\/\s+\/index\.html/);
 });
 

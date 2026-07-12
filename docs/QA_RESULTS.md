@@ -1,5 +1,13 @@
 # QA Results
 
+## 2026-07-12 - Native release catalog and iOS-only PWA policy
+
+- Added strict Android/Windows release manifest validation, SemVer plus Android build comparison, five-second timeout, six-hour cache, stale fallback and safe download URL allow-listing for `api.letscube.ru`.
+- Settings now offers Home Screen PWA installation only on iPhone/iPad. Android browsers show APK status, Windows browsers show EXE status, and Capacitor Android compares its installed version/build. Download handoff is animated but never reports fake byte percentages.
+- Deployed Coolify application `letscube-releases` (`fsk7qm5e4nm9kap9hv8chtts`) from exact commit `491e172`; final deployment `x11jjzh6qbcnszndx5av5paj` is healthy. The runtime uses non-root Nginx, host catalog files are not writable by the process, TLS is valid, manifests return CORS plus `no-cache`, artifacts return immutable caching, directory/root requests return 404 and POST is denied.
+- Published the production-configured Android `0.1.0` debug APK as an internal QA artifact. Public download size and SHA-256 match the local build. Windows remains `available:false`; release signing/AAB and the Electron/NSIS package are pending.
+- Validation passed: release unit/deployment contracts 17/17, typecheck, production Vite build, Android sync and production-debug APK build, PWA/distribution Settings 25/25 over 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915, authenticated smoke 5/5, production Settings smoke, advisory DB type drift check and RLS smoke. Existing Vite sourcemap/chunk-size warnings and generated/manual DB type warnings remain advisory.
+
 2026-07-12 Android physical-device push and cold-start routing QA:
 
 - Added a second physical Android 15 device (Realme RMX3830) to the Android UI matrix. The packaged phone activity is now locked to portrait so a sensor state cannot launch LETSCUBE in landscape; production-configured APK install and portrait startup passed on both physical devices.

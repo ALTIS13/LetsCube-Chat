@@ -2,7 +2,7 @@
 
 ## Текущий production-путь
 
-Standalone web/PWA остаётся основным production-клиентом LETSCUBE, пока native APK/FCM, release signing и deep links отложены.
+Полная web-версия остаётся доступной на всех платформах. Установка PWA предлагается только на iPhone/iPad; Android использует отдельный APK, Windows будет использовать отдельный EXE.
 
 Текущая shell-идентичность:
 
@@ -18,18 +18,19 @@ Standalone web/PWA остаётся основным production-клиентом
 - `artifacts/kub/index.html`
   - document title: `LETSCUBE`
   - Apple mobile web app title: `LETSCUBE`
-  - manifest, favicon, apple touch icon и mobile web app meta tags подключены.
+  - favicon и Apple touch metadata подключены постоянно;
+  - manifest link добавляется до React startup только для iPhone/iPad user agent.
 
 ## Installed-режим
 
-- Desktop Chrome/Edge: установка должна открывать отдельное standalone-окно без обычного browser chrome, если платформа поддерживает PWA install.
-- Android browser: установка через браузерный install/home-screen flow остаётся web/PWA-режимом, не native APK.
+- Desktop Chrome/Edge: PWA install не предлагается; Settings проверяет доступность Windows EXE.
+- Android browser: PWA install не предлагается; Settings проверяет доступность Android APK.
 - iOS/iPadOS: home-screen app зависит от Safari/WebKit ограничений. Web Push работает только при выполнении требований iOS для установленных web apps и разрешений пользователя.
-- Capacitor/native Android не должен показывать browser install CTA; native push/FCM остаётся отдельным этапом.
+- Capacitor/native Android не показывает browser install CTA; существующий native FCM path остаётся отдельным от Browser Web Push.
 - Settings показывают platform-aware блок установки:
-  - ПК: `ПК Web/PWA`, режим `Браузер` или `Установлено`.
+  - Windows: `Windows EXE`, режим `Браузер` до установки desktop-клиента.
   - iPhone/iPad: `iPhone / iOS PWA` или `iPad / iOS PWA`, режим `Safari` или `Установлено`.
-  - Android browser: `Android Web/PWA`, режим `Браузер` или `Установлено`.
+  - Android browser: `Android APK`, режим `Браузер`.
   - Android APK: `Android APK`, режим `Native`.
 - На iPhone/iPad кнопка `Установить` раскрывает шаги Safari `Поделиться` -> `На экран Домой` -> `Добавить`, потому что iOS не разрешает сайтам запускать системную установку программно.
 
@@ -37,6 +38,7 @@ Standalone web/PWA остаётся основным production-клиентом
 
 - In-app notification center остаётся source of truth.
 - Browser/PWA push использует Service Worker `artifacts/kub/public/sw.js`.
+- Release status использует `https://api.letscube.ru/releases/v1/{android,windows}/stable.json`; проверка не блокирует auth/chat startup и сохраняет последний валидный результат на шесть часов.
 - Message push collapses/grouping выполняется через стабильный `tag`, например `message:chat:<chat_id>`.
 - Перед `showNotification` Service Worker закрывает существующие notifications с тем же `tag`, насколько это поддерживает браузер/OS.
 - `notificationclick` фокусирует существующее окно LETSCUBE или открывает безопасный относительный route внутри текущего origin.
@@ -52,8 +54,7 @@ Standalone web/PWA остаётся основным production-клиентом
 
 ## Что не входит в этот этап
 
-- Native Android FCM/device-token model.
-- APK release signing/AAB.
+- Android release signing/AAB и store/public distribution.
 - Android/iOS deep links/app links.
 - SMS provider rollout.
 - Offline mutation queue/background replay.
@@ -72,7 +73,7 @@ Standalone web/PWA остаётся основным production-клиентом
 Manual/browser checks:
 
 - document title и installed-app title показывают `LETSCUBE`;
-- install prompt появляется там, где browser поддерживает `beforeinstallprompt`;
+- PWA install guidance появляется только на iPhone/iPad; Android/Windows получают только APK/EXE status;
 - iPhone/iPad Settings показывают home-screen install guidance;
 - standalone launch открывает `/`;
 - direct refresh `/tasks` и `/admin` отдаёт app shell;

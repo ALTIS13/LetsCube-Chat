@@ -90,6 +90,11 @@ configuration remain local/server-only and are not committed. See
 
 ## Release signing
 
+The self-hosted release catalog is active at
+`https://api.letscube.ru/releases/v1/android/stable.json`. The current
+`0.1.0` production-configured debug APK is published only for internal QA;
+public release status still requires the signing steps below.
+
 - Create a release keystore outside the repo.
 - Store keystore and passwords in a password manager or CI secret store.
 - Build an internal release before any Play Store submission.

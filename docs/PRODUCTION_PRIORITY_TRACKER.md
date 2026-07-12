@@ -42,21 +42,21 @@ Use this queue before starting the next production-hardening turn. Do not repeat
    - `[x]` Replaced the startup permission fan-out with one authenticated access snapshot. `.migration-backup/supabase/migrations/20260710_current_user_access_snapshot.sql` was applied manually on 2026-07-11 after verified backup `/srv/letscube/backups/pre-migrations/20260711-105607-before-access-snapshot.dump`. Full parity covered all 12 profiles with zero global-role, global-permission or location-permission mismatches. `anon` has no execute grant, `authenticated` does. `VITE_ACCESS_SNAPSHOT_RPC_ENABLED=1` is active in production; live Playwright observed exactly one `current_user_access_snapshot` request and zero legacy `has_permission`, `has_location_permission` or `has_global_role` requests.
 3. `[x]` Add a bounded 720p video transcode worker path and upload/playback quality selection. The trusted worker now creates H.264/AAC MP4 variants at up to 1280x720 without upscaling, with two ffmpeg threads and a ten-minute timeout. A production-runtime benchmark converted a 10-second 1080p/9 MB sample to approximately 1 MB in 1.55 seconds; landscape, portrait, audio and no-upscale contracts passed. Compact/standard playback prefers the ready 720p derivative, high quality and explicit original-file opening keep the original. Existing originals are retained. Production backfill is complete for all 26 non-deleted videos with a valid Storage source; five older videos initially outside the newest 120 media rows were recovered after adding bounded pagination.
 4. `[x]` Added hybrid media upload progress, retry and current-session resume. Files above 6 MiB use TUS with exact 6 MiB chunks and bounded retries; smaller files keep the standard Storage path. Cancellation terminates partial uploads, retry keeps a stable object path, and chat/composer scopes prevent delayed files, recordings, location results or failed captions from crossing into another chat. A disposable 7 MiB production object was uploaded, read back at the exact size and deleted.
-5. `[~]` Run installed web/PWA production QA on desktop, iPhone/iOS home-screen and Android browser home-screen; keep APK/native push deferred.
+5. `[~]` Keep iPhone/iPad Home Screen as the only PWA install target. Android browsers use the APK catalog and Windows browsers use the EXE catalog; physical iOS Home Screen/push confirmation remains pending.
 6. `[!]` Keep monitoring/Sentry and backup restore rehearsal deferred until the user confirms the backup environment and restore-test window.
-7. `[~]` Complete the Capacitor Android release candidate. LETSCUBE adaptive icons, dark splash resources and the `0.1.0` version baseline are generated and the debug APK builds. Remaining: physical branding QA, FCM, internal routing, signing and internal AAB/APK QA.
+7. `[~]` Complete the Capacitor Android release candidate. LETSCUBE `0.1.0` production-configured debug APK is published through the self-hosted release catalog with verified size/SHA parity. Remaining: release signing/AAB, app links/recovery callback and broader signed-package QA.
 8. `[ ]` After Android RC, run an Electron capability spike and package an internal Windows NSIS setup executable.
 
 ## Last Confirmed Deploy Baseline
 
-- Production media code baseline: `70de36e40ac299b68d0ba83d8fac20c84aa001cb` (bounded 720p variants plus hybrid resumable upload progress/retry/cancel and cross-chat async guards; documentation-only commits may be newer).
+- Production web/release baseline: `491e172ad58dc71e6c53bdedeca693ad9563fb90` (iOS-only PWA install policy, native release status/download UI and hardened release-catalog runtime). Media/upload baseline remains included from `70de36e40ac299b68d0ba83d8fac20c84aa001cb`.
 - Coolify app: `letscube-web`.
 - Public app: `https://app.letscube.ru`.
 - Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; deployment `exe5a6smqbvwpyxj2hxtc0pa` completed exact commit `70de36e` successfully and production reports `running:healthy`. The chat-summary and access-snapshot RPC build flags remain enabled.
 - Worker auto deploy: worker-specific GitHub webhook is verified. Deployment `ayhm60bc1qvuvwe5vjp1vq9w` completed exact commit `70de36e` with `is_webhook=true`, status `finished` and `running:healthy`; it rebuilt because the shared `pnpm-lock.yaml` changed for the frontend TUS dependency. Worker `watch_paths` remain limited to worker/build/runtime paths and shared package manifests. GitHub Actions are intentionally disabled and repo workflow files/secrets were removed to avoid billing-lock email noise.
 - Self-host stack: Coolify proxy, self-hosted Supabase, Mailcow, app and worker deployment are already in place.
 - Production domains verified on 2026-07-09: `app.letscube.ru`, `deploy.letscube.ru`, `core.letscube.ru`, `mailserver.letscube.ru`, `notify.letscube.ru`, and SSH host `ms.letscube.ru` resolve and expose their expected services with valid TLS where applicable.
-- `api.letscube.ru`, `status.letscube.ru`, and `monitor.letscube.ru` currently resolve to the server but have no HTTPS service behind them. Treat them as reserved future endpoints, not active dependencies.
+- `api.letscube.ru` now serves the read-only native release catalog with valid TLS through Coolify application `letscube-releases`; `status.letscube.ru` and `monitor.letscube.ru` remain reserved future endpoints.
 - The installed Supabase MCP connector still targets the legacy cloud project. Production self-host checks must use `core.letscube.ru`, the local secret-safe env file, or read-only SSH/database inspection.
 
 ## Completed Baseline - Do Not Rebuild Without A New Finding
@@ -202,31 +202,34 @@ Current baseline:
 
 ## Priority 5 - Installed Web/PWA Production Shell
 
-Status: `[~]` active. Automated shell/push-contract baseline was refreshed on 2026-06-22; manual installed-window/home-screen checks remain.
+Status: `[~]` active. iOS-only install policy and the Android/Windows release catalog were deployed on 2026-07-12; physical iPhone Home Screen/push checks remain.
 
-Goal: ship the web/PWA path as the production app experience while APK/native work remains deferred.
+Goal: retain the full browser client on every platform, expose PWA installation only on iPhone/iPad, and direct Android/Windows users to dedicated native packages.
 
 Scope:
 
 - `[x]` Refresh PWA shell identity: document title, Apple app title, manifest name/short name and install metadata use `LETSCUBE`.
-- `[x]` Add platform-aware Settings install state for desktop, Android browser, iPhone/iPad, mobile browser and native Android APK.
+- `[x]` Add platform-aware Settings distribution state: iPhone/iPad PWA, Android APK and Windows EXE. Android/Windows no longer render a PWA CTA or receive a manifest link.
+- `[x]` Add a five-second, six-hour cached release check with stale fallback, strict manifest/SemVer/SHA validation and honest system download handoff without fake byte progress.
+- `[x]` Deploy read-only `https://api.letscube.ru/releases/` through non-root Nginx/Coolify with SSH-only atomic publishing, CORS, no-cache manifests and immutable artifacts.
 - `[x]` Verify PWA manifest, service worker registration, offline/reconnect banner and direct app-shell routes across desktop/mobile Playwright viewports.
 - `[x]` Verify browser/PWA push contract: stable notification tags, same-tag close behavior, click routing, and no raw media/token fields in SW payload handling.
 - `[x]` Harden browser/PWA push lifecycle: reconcile subscriptions on startup/focus/reconnect, detect stale VAPID keys, close read same-tag cards on active clients, update the installed-app badge, and preserve DB `read_at` as the cross-device source of truth.
 - `[x]` Add Web Push `Topic` isolation and a backward-compatible Declarative Web Push fallback for iOS/iPadOS 18.4+ without changing Browser/PWA subscription semantics.
 - `[x]` Remove the dual-dispatcher race: Supabase Cron/`send-push-notifications` owns production Web/FCM delivery; the legacy API push loop is off by default and cannot consume the same outbox unless explicitly enabled for isolated local testing.
-- `[ ]` Verify installed PWA window on desktop/mobile without browser chrome where the platform supports it.
+- `[ ]` Verify the installed iPhone/iPad Home Screen window without browser chrome.
 - `[ ]` Verify real browser/PWA push delivery and notification click routing against a live installed client.
-- `[ ]` Verify iOS/Android home-screen/install behavior and document platform limitations.
+- `[x]` Verify automated iOS manifest injection and confirm Android/Windows browsers are not offered PWA installation across all five Playwright viewports.
 - `[ ]` Preserve full messenger functionality: auth, chats, media, camera, voice, video-circle, tasks, search, notifications.
-- `[ ]` Keep native APK/FCM/release signing out of this stage.
+- `[x]` Keep release signing material out of Git; the published `0.1.0` APK is explicitly internal/debug until signed release packaging is completed.
 
 Current baseline:
 
 - `artifacts/kub/index.html` title and Apple web app title are `LETSCUBE`.
 - `artifacts/kub/public/manifest.json` uses `LETSCUBE`, `display: standalone`, and `display_override` fallbacks.
 - The iPhone home-screen icon uses a dedicated 180x180 LETSCUBE club asset; 192/512/maskable PWA icons use the same official mark, and the service worker precaches the complete icon set.
-- Settings install block shows the detected install variant (`ПК Web/PWA`, `iPhone / iOS PWA`, `Android Web/PWA`, `Android APK`) and opens platform-specific installation guidance when a direct browser prompt is unavailable.
+- Settings distribution block shows `iPhone/iPad / iOS PWA`, `Android APK`, `Windows EXE` or web-only status. Native manifests refresh on Settings open/resume without blocking app startup.
+- `letscube-releases` deployment `x11jjzh6qbcnszndx5av5paj` finished exact commit `491e172`; TLS/health, 404 listing denial, POST denial, CORS/cache headers and Android artifact size/SHA parity passed.
 - `tests/e2e/pwa.spec.ts` covers PWA shell metadata, service worker safety, offline/reconnect banner, and SPA direct routes on 1440, 1920, 3840, 390 and 412 viewports.
 - `tests/e2e/pwa-install-settings.spec.ts` covers desktop install variant and iPhone Safari home-screen guidance from the Settings install button.
 - `tests/e2e/push-phone-foundation.spec.ts` covers push settings layout, phone fallback, SW push grouping/click-routing, native push adapter token hygiene and Android channels on the same viewport matrix.
@@ -269,6 +272,7 @@ Status: `[~]` active. Approved order: shared pre-packaging gate, Android release
 
 - `[x]` Production debug APK connection and physical launch: the public build allowlist, LETSCUBE adaptive icons/dark splash, Android `0.1.0` versioning, install and first launch were verified on a Nothing/Spacewar A063 running Android 15.
 - `[x]` Native Android FCM foundation: local ignored Firebase client config, Capacitor permission/registration/channels, live auth-scoped device RPCs, RLS-protected device/outbox schema, trusted HTTP v1 delivery and one physical background notification/tap smoke are complete.
+- `[x]` Self-hosted native release catalog: Android `0.1.0` internal APK is available at `api.letscube.ru`; Windows remains a valid `available:false` manifest until an EXE is built.
 - `[~]` Native push release QA: real owner-to-client message delivery, sender exclusion, category preference suppression, same-chat collapse, server-backed chat read-sync, cold-start tap routing, killed-process delivery, separate task delivery, location-staff task routing, restart registration recovery and Android 16 Google Play emulator coverage pass. A second Android 15 Realme device passes APK/portrait UI QA, but its custom-ROM microG cannot complete Google Check-in (`AccountDisabled`); broader FCM coverage still needs another device with official Google Play Services.
 - `[ ]` Release signing/AAB with secrets outside Git.
 - `[ ]` Android deep links/app links and recovery callback.
@@ -284,7 +288,7 @@ Status: `[!]` explicitly deferred on 2026-07-12 until push/PWA reliability and p
 - Decide separately where verified phone is required: profile contact, account recovery, sensitive admin actions, or optional MFA. Do not silently require phone verification for existing users without a migration and rollout plan.
 - Add anti-abuse limits, OTP resend cooldowns, audit events and real-device delivery QA before enabling enforcement.
 
-Standalone web/PWA remains the current production path until the Android and Windows release gates pass. Packaging must reuse the same validated frontend and may not weaken browser/PWA behavior.
+The browser client remains the universal fallback and iPhone/iPad PWA remains the only web-installed target until Android and Windows release gates pass. Packaging must reuse the same validated frontend and may not weaken browser behavior.
 
 ## Default Validation Commands
 

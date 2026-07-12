@@ -213,7 +213,7 @@ Create `/srv/letscube/releases/public/releases/v1/{android,windows}` and `/srv/l
 
 - [ ] **Step 3: Create the Coolify application**
 
-Create a GitHub/Dockerfile application from `ALTIS13/kub-messenger.git`, branch `main`, Dockerfile `/docs/deploy/release-catalog/Dockerfile`, exposed port `80`, domain `https://api.letscube.ru`, health path `/healthz`, and persistent read-only storage mounted at `/usr/share/nginx/html/releases`.
+Create a GitHub/Dockerfile application from `ALTIS13/kub-messenger.git`, branch `main`, Dockerfile `/docs/deploy/release-catalog/Dockerfile`, exposed port `8080`, domain `https://api.letscube.ru`, health path `/healthz`, and persistent host storage mounted at `/usr/share/nginx/html`. The image runs as non-root `nginx`, so the root-owned catalog files are not writable even though Coolify's host bind itself is read-write.
 
 - [ ] **Step 4: Deploy and verify TLS before enabling client use**
 

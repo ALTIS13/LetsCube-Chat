@@ -81,7 +81,7 @@ export function ReleaseDistributionSection() {
               </div>
               {manifest?.available && (
                 <div className="mt-1 text-[11px] text-[color:var(--kub-muted)]">
-                  Версия {manifest.version} · {formatFileSize(manifest.artifact?.size ?? 0)}
+                  Версия {manifest.version} · {formatFileSize(manifest.artifact?.size ?? 0)} · {formatReleaseDate(manifest.publishedAt)}
                 </div>
               )}
               {handoff && (
@@ -154,4 +154,10 @@ export function ReleaseDistributionSection() {
 function formatFileSize(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) return "размер уточняется";
   return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(bytes / 1_048_576)} МБ`;
+}
+
+function formatReleaseDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "дата не указана";
+  return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", year: "numeric" }).format(date);
 }
