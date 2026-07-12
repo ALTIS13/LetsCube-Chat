@@ -19,7 +19,7 @@ Legend:
 4. `[x]` Priority 4 - Operator security observability.
 5. `[~]` Priority 5 - Installed web/PWA production shell.
 6. `[!]` Priority 6 - Monitoring and self-hosted Sentry.
-7. `[~]` Native/mobile packaging resumed: Android release candidate first, then Windows Electron capability spike and EXE packaging.
+7. `[~]` Native/mobile packaging resumed: Android release candidate first, then compact Windows Tauri packaging.
 
 ## Next Execution Queue
 
@@ -45,7 +45,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 5. `[~]` Keep iPhone/iPad Home Screen as the only PWA install target. Android browsers use the APK catalog and Windows browsers use the EXE catalog; physical iOS Home Screen/push confirmation remains pending.
 6. `[!]` Keep monitoring/Sentry and backup restore rehearsal deferred until the user confirms the backup environment and restore-test window.
 7. `[~]` Complete the Capacitor Android release candidate. LETSCUBE `0.1.0` production-configured debug APK is published through the self-hosted release catalog with verified size/SHA parity. Remaining: release signing/AAB, app links/recovery callback and broader signed-package QA.
-8. `[~]` Run the Electron capability spike and package an internal Windows x64 NSIS setup executable. Active plan: `docs/superpowers/plans/2026-07-12-windows-electron-internal-release.md`.
+8. `[~]` Replace the retired Electron spike with a clean-profile Tauri 2 Windows client. Active plan: `docs/superpowers/plans/2026-07-12-windows-tauri-migration.md`.
 
 ## Last Confirmed Deploy Baseline
 
@@ -268,7 +268,7 @@ Candidate work:
 
 ## Native And Desktop Packaging
 
-Status: `[~]` active. Approved order: shared pre-packaging gate, Android release candidate, then Windows Electron capability spike and packaging.
+Status: `[~]` active. Android internal candidate is available; Windows is migrating from the retired Electron spike to Tauri 2.
 
 - `[x]` Production debug APK connection and physical launch: the public build allowlist, LETSCUBE adaptive icons/dark splash, Android `0.1.0` versioning, install and first launch were verified on a Nothing/Spacewar A063 running Android 15.
 - `[x]` Native Android FCM foundation: local ignored Firebase client config, Capacitor permission/registration/channels, live auth-scoped device RPCs, RLS-protected device/outbox schema, trusted HTTP v1 delivery and one physical background notification/tap smoke are complete.
@@ -276,8 +276,9 @@ Status: `[~]` active. Approved order: shared pre-packaging gate, Android release
 - `[~]` Native push release QA: real owner-to-client message delivery, sender exclusion, category preference suppression, same-chat collapse, server-backed chat read-sync, cold-start tap routing, killed-process delivery, separate task delivery, location-staff task routing, restart registration recovery and Android 16 Google Play emulator coverage pass. A second Android 15 Realme device passes APK/portrait UI QA, but its custom-ROM microG cannot complete Google Check-in (`AccountDisabled`); broader FCM coverage still needs another device with official Google Play Services.
 - `[ ]` Release signing/AAB with secrets outside Git.
 - `[ ]` Android deep links/app links and recovery callback.
-- `[x]` Windows Electron capability spike and unsigned internal x64 NSIS installer: exact-origin remote shell, sandbox/context isolation, minimal version bridge, hardened fuses and release-catalog comparison are implemented.
-- `[ ]` Windows public release gate: Authenticode signing/SmartScreen, install-upgrade-uninstall matrix, native notifications and signed auto-update apply.
+- `[x]` Retire the Electron spike after QA profile leakage and excessive package weight were confirmed. Windows stable is unavailable during migration; Electron source, installed package and shared QA profile were removed.
+- `[~]` Tauri 2 migration: isolated WebView2 profile, compact installer, tray, branded startup, minimum remote capabilities and native foreground notifications.
+- `[ ]` Windows public release gate: Authenticode signing/SmartScreen, install-upgrade-uninstall matrix, killed-process notifications and signed auto-update apply.
 - `[!]` SMS provider rollout.
 
 ## Deferred Phone Verification Rollout

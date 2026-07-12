@@ -27,7 +27,7 @@
 - Android browser: PWA install не предлагается; Settings проверяет доступность Android APK.
 - iOS/iPadOS: home-screen app зависит от Safari/WebKit ограничений. Web Push работает только при выполнении требований iOS для установленных web apps и разрешений пользователя.
 - Capacitor/native Android не показывает browser install CTA; существующий native FCM path остаётся отдельным от Browser Web Push.
-- Electron/Windows не регистрирует Service Worker и не использует Browser Web Push. Встроенная оболочка показывает установленную версию из безопасного preload bridge и сверяет её с Windows release catalog.
+- Windows Electron-клиент выведен из эксплуатации. До публикации Tauri 2 Windows release catalog возвращает `available:false`; браузерная версия остаётся рабочим fallback.
 - Settings показывают platform-aware блок установки:
   - Windows: `Windows EXE`, режим `Браузер` до установки desktop-клиента.
   - iPhone/iPad: `iPhone / iOS PWA` или `iPad / iOS PWA`, режим `Safari` или `Установлено`.
