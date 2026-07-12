@@ -21,6 +21,13 @@ export function isSupabaseConfigured(): boolean {
   return Boolean(SUPABASE_URL && SUPABASE_KEY)
 }
 
+export function getSupabasePublicUrl(): string {
+  if (!SUPABASE_URL) {
+    throw new Error(MISSING_SUPABASE_CONFIG_ERROR)
+  }
+  return SUPABASE_URL
+}
+
 let instance: SupabaseClient<Database> | null = null
 
 export function createClient(): SupabaseClient<Database> {

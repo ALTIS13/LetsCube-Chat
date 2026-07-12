@@ -195,7 +195,7 @@ export function chatAttachmentUploadPath(chatId: string, userId: string, attachm
   const ext = fileExtension(attachment.file);
   // Keep the first path segment as userId: existing Storage RLS for the media
   // bucket allows authenticated users to write inside their own folder.
-  return `${userId}/${Date.now()}-${chatId}-${attachment.id}.${ext}`;
+  return `${userId}/${chatId}-${attachment.id}.${ext}`;
 }
 
 export function revokeAttachmentPreview(attachment: Pick<StagedAttachment, "previewUrl">): void {
