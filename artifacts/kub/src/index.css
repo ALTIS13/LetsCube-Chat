@@ -701,3 +701,32 @@ textarea::placeholder, input::placeholder {
     inset: -1px;
   }
 }
+@keyframes release-status-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes release-status-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+.release-status-enter {
+  animation: release-status-enter 180ms ease-out both;
+}
+
+.release-status-pulse {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: 0 0 auto;
+  border-radius: 9999px;
+  background: var(--kub-cyan);
+  animation: release-status-pulse 1.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .release-status-enter,
+  .release-status-pulse {
+    animation: none;
+  }
+}

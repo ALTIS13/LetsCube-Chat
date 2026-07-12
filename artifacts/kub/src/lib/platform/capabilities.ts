@@ -1,4 +1,5 @@
 import { Capacitor } from "@capacitor/core";
+import { detectDistributionTarget, supportsPwaInstallForTarget } from "./distribution";
 
 export type RuntimePlatform = "web" | "ios" | "android" | string;
 
@@ -35,7 +36,18 @@ export function supportsCapacitorPlugin(pluginName: string): boolean {
 }
 
 export function supportsPwaInstall(): boolean {
-  return isWebBrowser() && typeof window !== "undefined";
+  return supportsPwaInstallForTarget(getCurrentDistributionTarget());
+}
+
+export function getCurrentDistributionTarget() {
+  const browser = typeof navigator === "undefined" ? undefined : navigator;
+  return detectDistributionTarget({
+    native: isNativeApp(),
+    nativePlatform: getRuntimePlatform(),
+    userAgent: browser?.userAgent,
+    platform: browser?.platform,
+    maxTouchPoints: browser?.maxTouchPoints,
+  });
 }
 
 export function supportsBrowserPush(): boolean {

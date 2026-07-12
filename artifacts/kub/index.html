@@ -10,12 +10,24 @@
     <title>LETSCUBE</title>
     <meta name="description" content="LETSCUBE - мессенджер для киберарены, задач и рабочих чатов." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="manifest" href="/manifest.json" />
+    <script>
+      // LETSCUBE is installable as a PWA only on iPhone/iPad. Android and
+      // Windows use dedicated packages and therefore do not receive a manifest.
+      (function () {
+        var ua = navigator.userAgent || "";
+        var ios = /iPhone|iPod|iPad/i.test(ua)
+          || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+        if (!ios) return;
+        var manifest = document.createElement("link");
+        manifest.rel = "manifest";
+        manifest.href = "/manifest.json";
+        document.head.appendChild(manifest);
+      })();
+    </script>
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="LETSCUBE" />
-    <meta name="mobile-web-app-capable" content="yes" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

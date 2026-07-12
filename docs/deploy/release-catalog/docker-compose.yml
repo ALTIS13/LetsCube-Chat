@@ -1,0 +1,22 @@
+services:
+  letscube-releases:
+    build:
+      context: ../../..
+      dockerfile: docs/deploy/release-catalog/Dockerfile
+    image: letscube-releases:latest
+    restart: unless-stopped
+    expose:
+      - "80"
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    volumes:
+      - /srv/letscube/releases/public:/usr/share/nginx/html:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

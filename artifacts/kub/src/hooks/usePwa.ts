@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { reportError } from "@/lib/monitoring";
-import { getRuntimePlatform, isNativeApp, supportsPwaInstall } from "@/lib/platform/capabilities";
+import { getCurrentDistributionTarget, isNativeApp, supportsPwaInstall } from "@/lib/platform/capabilities";
+import type { DistributionTarget } from "@/lib/platform/distribution";
 
 export const KUB_SW_UPDATE_READY_EVENT = "kub:sw-update-ready";
 export const KUB_SW_CONTROLLER_CHANGED_EVENT = "kub:sw-controller-changed";
@@ -13,10 +14,8 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
-export type PwaInstallPlatform = "native_android" | "ios_phone" | "ios_tablet" | "android" | "desktop" | "mobile";
-
 export type PwaInstallCopy = {
-  platform: PwaInstallPlatform;
+  platform: DistributionTarget;
   title: string;
   description: string;
   buttonLabel: string;
@@ -131,7 +130,7 @@ export function usePwaInstall() {
   const canPromptInstall = supportsPwaInstall() && Boolean(installPrompt) && !installed;
   const showInstallButton = supportsPwaInstall() && !isNativeApp() && !installed;
   const installCopy = getPwaInstallCopy({
-    platform: detectPwaInstallPlatform(),
+    platform: getCurrentDistributionTarget(),
     installed,
     canPromptInstall,
   });
@@ -167,32 +166,16 @@ function isStandaloneDisplay() {
   );
 }
 
-function detectPwaInstallPlatform(): PwaInstallPlatform {
-  if (isNativeApp() && getRuntimePlatform() === "android") return "native_android";
-  if (typeof navigator === "undefined") return "desktop";
-
-  const userAgent = navigator.userAgent || "";
-  const platform = navigator.platform || "";
-  const maxTouchPoints = navigator.maxTouchPoints || 0;
-  const isIpad = /iPad/i.test(userAgent) || (platform === "MacIntel" && maxTouchPoints > 1);
-  const isIphone = /iPhone|iPod/i.test(userAgent);
-  if (isIpad) return "ios_tablet";
-  if (isIphone) return "ios_phone";
-  if (/Android/i.test(userAgent)) return "android";
-  if (/Mobile|Tablet/i.test(userAgent)) return "mobile";
-  return "desktop";
-}
-
 function getPwaInstallCopy({
   platform,
   installed,
   canPromptInstall,
 }: {
-  platform: PwaInstallPlatform;
+  platform: DistributionTarget;
   installed: boolean;
   canPromptInstall: boolean;
 }): PwaInstallCopy {
-  if (platform === "native_android") {
+  if (platform === "android_native") {
     return {
       platform,
       title: "Android-приложение LETSCUBE",
@@ -207,8 +190,10 @@ function getPwaInstallCopy({
 
   const installedPrefix = installed ? "LETSCUBE установлен" : "Установить LETSCUBE";
 
-  if (platform === "ios_phone" || platform === "ios_tablet") {
-    const device = platform === "ios_phone" ? "iPhone" : "iPad";
+  if (platform === "ios_pwa") {
+    const isTablet = typeof navigator !== "undefined"
+      && (/iPad/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+    const device = isTablet ? "iPad" : "iPhone";
     return {
       platform,
       title: installed ? `${installedPrefix} на ${device}` : `${installedPrefix} на ${device}`,
@@ -227,62 +212,40 @@ function getPwaInstallCopy({
     };
   }
 
-  if (platform === "android") {
+  if (platform === "android_download") {
     return {
       platform,
-      title: installed ? `${installedPrefix} на Android` : `${installedPrefix} на Android`,
-      description: installed
-        ? "Приложение уже открывается в standalone-режиме."
-        : canPromptInstall
-          ? "Установите LETSCUBE как отдельное приложение без вкладки браузера."
-          : "Если системное окно установки недоступно, используйте меню браузера.",
-      buttonLabel: "Установить",
-      variantLabel: "Android Web/PWA",
-      modeLabel: installed ? "Установлено" : "Браузер",
-      instructionTitle: "Установка на Android",
-      instructionSteps: [
-        "Откройте меню браузера.",
-        "Выберите «Установить приложение» или «Добавить на главный экран».",
-        "Подтвердите установку LETSCUBE.",
-      ],
+      title: "LETSCUBE для Android",
+      description: "Используйте отдельное Android-приложение. Доступность APK проверяется автоматически.",
+      buttonLabel: "Скачать APK",
+      variantLabel: "Android APK",
+      modeLabel: "Браузер",
+      instructionTitle: "Android-приложение",
+      instructionSteps: [],
     };
   }
 
-  if (platform === "mobile") {
+  if (platform === "windows_download") {
     return {
       platform,
-      title: installed ? `${installedPrefix} на телефоне` : `${installedPrefix} на телефоне`,
-      description: installed
-        ? "Приложение уже открывается в standalone-режиме."
-        : "Если системное окно установки недоступно, используйте меню браузера.",
-      buttonLabel: "Установить",
-      variantLabel: "Мобильный Web/PWA",
-      modeLabel: installed ? "Установлено" : "Браузер",
-      instructionTitle: "Установка на телефоне",
-      instructionSteps: [
-        "Откройте меню браузера.",
-        "Выберите установку приложения или добавление на главный экран.",
-        "Подтвердите установку LETSCUBE.",
-      ],
+      title: "LETSCUBE для Windows",
+      description: "Используйте отдельное Windows-приложение. Доступность EXE проверяется автоматически.",
+      buttonLabel: "Скачать EXE",
+      variantLabel: "Windows EXE",
+      modeLabel: "Браузер",
+      instructionTitle: "Windows-приложение",
+      instructionSteps: [],
     };
   }
 
   return {
     platform,
-    title: installed ? `${installedPrefix} на ПК` : `${installedPrefix} на ПК`,
-    description: installed
-      ? "Приложение уже открывается в отдельном окне без обычной вкладки браузера."
-      : canPromptInstall
-        ? "Установите LETSCUBE как отдельное окно без обычной вкладки браузера."
-        : "Если системное окно установки недоступно, используйте кнопку установки в адресной строке или меню браузера.",
-    buttonLabel: "Установить",
-    variantLabel: "ПК Web/PWA",
-    modeLabel: installed ? "Установлено" : "Браузер",
-    instructionTitle: "Установка на ПК",
-    instructionSteps: [
-      "Откройте LETSCUBE в Chrome, Edge или другом PWA-совместимом браузере.",
-      "Нажмите кнопку установки в адресной строке или откройте меню браузера.",
-      "Выберите «Установить LETSCUBE».",
-    ],
+    title: "Веб-версия LETSCUBE",
+    description: "Продолжайте работу в браузере. Отдельная установка для этой платформы не требуется.",
+    buttonLabel: "",
+    variantLabel: "Web",
+    modeLabel: "Браузер",
+    instructionTitle: "",
+    instructionSteps: [],
   };
 }

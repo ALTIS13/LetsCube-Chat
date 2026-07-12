@@ -28,6 +28,8 @@
     "auth:anti-abuse:smoke": "node scripts/auth-anti-abuse-smoke.mjs",
     "rls:smoke": "node scripts/rls-smoke.mjs",
     "rls:anon-rest": "node scripts/rls-anon-rest-probe.mjs",
+    "release:catalog:test": "node --test tests/unit/release-catalog.test.mts tests/unit/distribution-platform.test.mts tests/unit/release-catalog-deploy.test.mjs",
+    "release:publish": "bash scripts/publish-native-release.sh",
     "supabase:typegen": "node scripts/supabase-typegen.mjs",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
@@ -47,6 +49,7 @@
     "typescript": "~5.9.2"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.0",
     "@capacitor/push-notifications": "^8.1.1"
   }
 }

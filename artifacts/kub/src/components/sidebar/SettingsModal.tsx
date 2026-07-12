@@ -7,7 +7,6 @@ import { useAppStore } from "@/store/app.store";
 import { createClient } from "@/lib/supabase/client";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useTheme } from "@/hooks/useTheme";
-import { usePwaInstall } from "@/hooks/usePwa";
 import { usePush } from "@/hooks/usePush";
 import { useIsAdmin, useIsManagerOrAdmin } from "@/hooks/useRole";
 import { KubButton, KubIcon, KubModal, KubSwitch, type KubIconName } from "@/components/kub";
@@ -15,8 +14,8 @@ import { PhoneSection } from "./PhoneSection";
 import { AudioSettingsSection } from "./AudioSettingsSection";
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
-import { getBuildMetadata } from "@/lib/monitoring";
 import { isNativeAndroid } from "@/lib/platform/capabilities";
+import { ReleaseDistributionSection } from "@/components/settings/ReleaseDistributionSection";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
 import {
   PROFILE_LIMITS,
@@ -36,14 +35,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const { currentUser, setCurrentUser } = useAppStore();
   const supabase = createClient();
   const { theme, resolvedTheme, setTheme } = useTheme();
-  const {
-    installCopy,
-    instructionsOpen,
-    showInstallButton,
-    promptInstall,
-  } = usePwaInstall();
   const nativeAndroid = isNativeAndroid();
-  const buildMetadata = getBuildMetadata();
   const {
     status: pushStatus,
     preferences: pushPreferences,
@@ -333,67 +325,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
       <div className="px-4 py-4 border-t border-[color:var(--kub-border-color)]">
         <SectionLabel>Приложение</SectionLabel>
-        <div className="rounded-xl overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
-          <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
-            <KubIcon
-              name={installCopy.platform === "desktop" ? "cloud" : "phone"}
-              size={16}
-              className="text-[color:var(--kub-cyan)]"
-            />
-            <div className="min-w-0 flex-1">
-              <div className="text-sm text-[color:var(--kub-text)]" data-testid="pwa-install-title">
-                {installCopy.title}
-              </div>
-              <div className="text-xs text-[color:var(--kub-muted)]" data-testid="pwa-install-description">
-                {installCopy.description}
-              </div>
-              <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-[color:var(--kub-muted)]">
-                <span
-                  className="rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-1"
-                  data-testid="pwa-install-variant"
-                >
-                  Версия установки: {installCopy.variantLabel}
-                </span>
-                <span
-                  className="rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-1"
-                  data-testid="pwa-install-mode"
-                >
-                  Режим: {installCopy.modeLabel}
-                </span>
-              </div>
-            </div>
-            {showInstallButton && (
-              <KubButton
-                size="sm"
-                onClick={() => void promptInstall()}
-                className="col-span-2 w-full sm:col-span-1 sm:w-auto"
-                data-testid="pwa-install-button"
-              >
-                {installCopy.buttonLabel}
-              </KubButton>
-            )}
-          </div>
-          {instructionsOpen && (
-            <div
-              className="mx-4 mb-3 rounded-xl border border-[color:var(--kub-cyan)]/25 bg-[color-mix(in_srgb,var(--kub-cyan)_8%,var(--kub-surface))] px-3 py-3"
-              data-testid="pwa-install-guidance"
-            >
-              <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-[color:var(--kub-text)]">
-                <KubIcon name="externalLink" size={13} className="text-[color:var(--kub-cyan)]" />
-                {installCopy.instructionTitle}
-              </div>
-              <ol className="space-y-1 pl-4 text-xs leading-relaxed text-[color:var(--kub-muted)]">
-                {installCopy.instructionSteps.map((step) => (
-                  <li key={step} className="list-decimal">{step}</li>
-                ))}
-              </ol>
-            </div>
-          )}
-          <div className="border-t border-[color:var(--kub-border-color)] px-4 py-2 text-xs text-[color:var(--kub-muted)]">
-            Сборка: {buildMetadata.version}
-            {buildMetadata.commit !== "unknown" ? ` · ${buildMetadata.commit.slice(0, 7)}` : ""}
-          </div>
-        </div>
+        <ReleaseDistributionSection />
       </div>
 
       {isStaff && (

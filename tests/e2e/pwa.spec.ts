@@ -40,6 +40,7 @@ test.describe("LETSCUBE PWA baseline", () => {
       expect.arrayContaining(["standalone", "minimal-ui"]),
     );
     await expect(page).toHaveTitle(/LETSCUBE/);
+    await expect(page.locator('link[rel="manifest"]')).toHaveCount(0);
     await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute(
       "href",
       "/icons/apple-touch-icon.png",
@@ -113,5 +114,27 @@ test.describe("LETSCUBE PWA baseline", () => {
         !message.includes("Missing Supabase environment variables"),
     );
     expect(unexpectedConsoleErrors, `Unexpected console errors:\n${unexpectedConsoleErrors.join("\n")}`).toEqual([]);
+  });
+
+  test("injects the install manifest only for iPhone and iPad", async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "userAgent", {
+        configurable: true,
+        get: () =>
+          "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) " +
+          "AppleWebKit/605.1.15 Version/17.5 Mobile/15E148 Safari/604.1",
+      });
+      Object.defineProperty(navigator, "platform", {
+        configurable: true,
+        get: () => "iPhone",
+      });
+      Object.defineProperty(navigator, "maxTouchPoints", {
+        configurable: true,
+        get: () => 5,
+      });
+    });
+
+    await gotoOrSkip(page, "/");
+    await expect(page.locator('link[rel="manifest"]')).toHaveAttribute("href", "/manifest.json");
   });
 });

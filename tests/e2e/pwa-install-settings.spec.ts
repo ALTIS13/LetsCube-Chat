@@ -4,17 +4,14 @@ import { findFirstAvailableQaRole, gotoOrSkip, loginAsRoleOrSkip } from "./helpe
 const QA_ROLES = ["owner", "tech_admin", "location_admin", "location_staff", "client"] as const;
 
 test.describe("LETSCUBE PWA install settings", () => {
-  test("browser settings show the detected install variant and manual fallback", async ({ page }, testInfo) => {
+  test("Android and Windows browsers do not offer PWA installation", async ({ page }, testInfo) => {
     await openSettingsOrSkip(page);
 
     await expect(page.getByTestId("pwa-install-title")).toContainText("LETSCUBE");
-    const expectedVariant = testInfo.project.name.includes("mobile") ? "Android Web/PWA" : "ПК Web/PWA";
+    const expectedVariant = testInfo.project.name.includes("mobile") ? "Android APK" : "Windows EXE";
     await expect(page.getByTestId("pwa-install-variant")).toContainText(expectedVariant);
-    await expect(page.getByTestId("pwa-install-mode")).toContainText("Браузер");
-
-    await page.getByTestId("pwa-install-button").click();
-    const expectedGuidance = testInfo.project.name.includes("mobile") ? "Установка на Android" : "Установка на ПК";
-    await expect(page.getByTestId("pwa-install-guidance")).toContainText(expectedGuidance);
+    await expect(page.getByTestId("pwa-install-button")).toHaveCount(0);
+    await expect(page.getByTestId("pwa-install-guidance")).toHaveCount(0);
   });
 
   test("iPhone browser shows iOS home-screen install guidance from the install button", async ({ page }) => {
@@ -41,8 +38,8 @@ async function openSettingsOrSkip(page: Page) {
 
   await page.getByRole("button", { name: "Меню" }).click();
   await page.getByRole("button", { name: "Настройки" }).click();
-  await page.getByText("Приложение").scrollIntoViewIfNeeded();
-  await expect(page.getByText("Приложение")).toBeVisible();
+  await page.getByText("Приложение", { exact: true }).scrollIntoViewIfNeeded();
+  await expect(page.getByText("Приложение", { exact: true })).toBeVisible();
 }
 
 async function emulateIphoneSafari(page: Page) {

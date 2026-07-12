@@ -161,7 +161,7 @@ Expected: focused unit and all configured Playwright viewport projects pass or a
 - Modify: `.gitignore`
 
 **Interfaces:**
-- Container mounts `/srv/letscube/releases/public` read-only at `/usr/share/nginx/html/releases`.
+- Container mounts `/srv/letscube/releases/public` read-only at `/usr/share/nginx/html`; the host root itself contains `releases/v1` and `releases/files`.
 - Publisher signature: `publish-native-release.sh PLATFORM CHANNEL VERSION BUILD ARTIFACT [NOTES]`.
 
 - [ ] **Step 1: Write failing deployment-contract tests**
@@ -209,7 +209,7 @@ Confirm the web auto-deploy starts only for frontend-relevant changes and obtain
 
 - [ ] **Step 2: Create host storage safely over SSH**
 
-Create `/srv/letscube/releases/public/releases/v1/{android,windows}` and `/srv/letscube/releases/public/releases/files/{android,windows}`. Grant the existing `techadmin` release group write access without broad root permissions. Do not remove or overwrite unrelated `/srv/letscube` data.
+Create `/srv/letscube/releases/public/releases/v1/{android,windows}` and `/srv/letscube/releases/public/releases/files/{android,windows}`. Grant the existing `techadmin` release group write access without broad root permissions. Do not remove or overwrite unrelated `/srv/letscube` data. Mount `/srv/letscube/releases/public` at `/usr/share/nginx/html` so public URLs contain exactly one `/releases/` segment.
 
 - [ ] **Step 3: Create the Coolify application**
 
