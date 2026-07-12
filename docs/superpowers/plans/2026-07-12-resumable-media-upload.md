@@ -37,12 +37,12 @@
 - Produce `startResumableStorageUpload(options): { result: Promise<{ path: string }>; abort(terminate?: boolean): Promise<void> }`.
 - Change `chatAttachmentUploadPath` to return the same path for repeated calls with the same chat, user and attachment.
 
-- [ ] Write failing tests for the 6 MiB boundary, URL normalization, stable path, 0-100 progress clamping, previous-upload resume and abort termination.
-- [ ] Run `pnpm.cmd exec playwright test tests/e2e/resumable-media-upload.spec.ts --project=chromium-desktop-1440` and confirm failures are caused by missing interfaces.
-- [ ] Install exactly `tus-js-client@4.3.1` with `pnpm.cmd --filter @workspace/kub add tus-js-client@4.3.1`.
-- [ ] Implement the minimal adapter with 6 MiB chunks, the specified retry delays, authenticated session token, `uploadDataDuringCreation`, `removeFingerprintOnSuccess`, `findPreviousUploads` and sanitized errors.
-- [ ] Run the focused test and KUB typecheck until green.
-- [ ] Commit with message `feat: add resumable storage upload adapter`.
+- [x] Write failing tests for the 6 MiB boundary, URL normalization, stable path, 0-100 progress clamping, previous-upload resume and abort termination.
+- [x] Run `pnpm.cmd exec playwright test tests/e2e/resumable-media-upload.spec.ts --project=chromium-desktop-1440` and confirm failures are caused by missing interfaces.
+- [x] Install exactly `tus-js-client@4.3.1` with `pnpm.cmd --filter @workspace/kub add tus-js-client@4.3.1`.
+- [x] Implement the minimal adapter with 6 MiB chunks, the specified retry delays, authenticated session token, `uploadDataDuringCreation`, `removeFingerprintOnSuccess`, `findPreviousUploads` and sanitized errors.
+- [x] Run the focused test and KUB typecheck until green.
+- [x] Commit with message `feat: add resumable storage upload adapter`.
 
 ### Task 2: Chat Workflow, Progress UI And Cross-Chat Safety
 
@@ -58,14 +58,14 @@
 - Store upload progress as an integer percentage in `StagedAttachment.progress`.
 - Keep one active handle per attachment ID and abort it on removal/chat change/unmount.
 
-- [ ] Add failing tests for determinate progress copy/bar, failed retry, active cancellation, source-chat guard and the 250 MB video-circle error label.
-- [ ] Run the focused test and confirm each new assertion fails for the intended missing behavior.
-- [ ] Route files above 6 MiB through the TUS adapter and smaller files through the existing standard upload.
-- [ ] Capture the source chat ID and stop before `sendMediaMessage` when the selected chat changed.
-- [ ] Abort and remove active handles on cancellation, removal, chat change and unmount.
-- [ ] Render progress percentage and a determinate bar without resizing the attachment tray.
-- [ ] Run focused upload/video tests and KUB typecheck until green.
-- [ ] Commit with message `feat: add staged upload progress and cancellation`.
+- [x] Add failing tests for determinate progress copy/bar, failed retry, active cancellation, source-chat guard and the 250 MB video-circle error label.
+- [x] Run the focused test and confirm each new assertion fails for the intended missing behavior.
+- [x] Route files above 6 MiB through the TUS adapter and smaller files through the existing standard upload.
+- [x] Capture the source chat ID and stop before `sendMediaMessage` when the selected chat changed.
+- [x] Abort and remove active handles on cancellation, removal, chat change and unmount.
+- [x] Render progress percentage and a determinate bar without resizing the attachment tray.
+- [x] Run focused upload/video tests and KUB typecheck until green.
+- [x] Commit with message `feat: add staged upload progress and cancellation`.
 
 ### Task 3: Integrated QA, Production Smoke And Documentation
 
@@ -73,13 +73,12 @@
 - Modify: `docs/PRODUCTION_PRIORITY_TRACKER.md`
 - Modify: `docs/QA_RESULTS.md`
 
-- [ ] Run `git diff --check`.
-- [ ] Run `pnpm.cmd --filter @workspace/kub run typecheck`.
-- [ ] Run `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"`.
-- [ ] Run focused Playwright on 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915.
-- [ ] Run `pnpm.cmd e2e:smoke`, `pnpm.cmd db:types:check` and `pnpm.cmd rls:smoke`.
-- [ ] Push `main`, verify the exact Coolify deployment and `running:healthy` state.
-- [ ] Upload and delete a disposable authenticated QA object above 6 MiB through production TUS; do not print credentials, upload URLs or object paths.
-- [ ] Record exact results and remaining limitations in the tracker and QA report.
-- [ ] Commit with message `Document resumable media upload rollout` and push `main`.
-
+- [x] Run `git diff --check`.
+- [x] Run `pnpm.cmd --filter @workspace/kub run typecheck`.
+- [x] Run `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"`.
+- [x] Run focused Playwright on 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915.
+- [x] Run `pnpm.cmd e2e:smoke`, `pnpm.cmd db:types:check` and `pnpm.cmd rls:smoke`.
+- [x] Push `main`, verify the exact Coolify deployment and `running:healthy` state.
+- [x] Upload and delete a disposable authenticated QA object above 6 MiB through production TUS; do not print credentials, upload URLs or object paths.
+- [x] Record exact results and remaining limitations in the tracker and QA report.
+- [x] Commit with message `Document resumable media upload rollout` and push `main`.

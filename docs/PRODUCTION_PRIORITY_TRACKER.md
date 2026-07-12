@@ -49,11 +49,11 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 
 ## Last Confirmed Deploy Baseline
 
-- Production media code baseline: `4775a1a16e596787decc0fb1ff8d19c94d0af846` (bounded 720p variants plus paginated backfill; documentation-only commits may be newer).
+- Production media code baseline: `70de36e40ac299b68d0ba83d8fac20c84aa001cb` (bounded 720p variants plus hybrid resumable upload progress/retry/cancel and cross-chat async guards; documentation-only commits may be newer).
 - Coolify app: `letscube-web`.
 - Public app: `https://app.letscube.ru`.
-- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; deployment `oqlj1qbl89whqgtt4hqvpx05` completed commit `4775a1a` successfully. The chat-summary and access-snapshot RPC build flags remain enabled; web and worker report `running:healthy`.
-- Worker auto deploy: worker-specific GitHub webhook is verified. Deployment `q78f7hbdjcs0yl2328tfqqol` completed media commit `4775a1a` with `is_webhook=true` and status `finished`. Worker `watch_paths` are configured for worker/build/runtime paths only. GitHub Actions are intentionally disabled and repo workflow files/secrets were removed to avoid billing-lock email noise.
+- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; deployment `exe5a6smqbvwpyxj2hxtc0pa` completed exact commit `70de36e` successfully and production reports `running:healthy`. The chat-summary and access-snapshot RPC build flags remain enabled.
+- Worker auto deploy: worker-specific GitHub webhook is verified. Deployment `ayhm60bc1qvuvwe5vjp1vq9w` completed exact commit `70de36e` with `is_webhook=true`, status `finished` and `running:healthy`; it rebuilt because the shared `pnpm-lock.yaml` changed for the frontend TUS dependency. Worker `watch_paths` remain limited to worker/build/runtime paths and shared package manifests. GitHub Actions are intentionally disabled and repo workflow files/secrets were removed to avoid billing-lock email noise.
 - Self-host stack: Coolify proxy, self-hosted Supabase, Mailcow, app and worker deployment are already in place.
 - Production domains verified on 2026-07-09: `app.letscube.ru`, `deploy.letscube.ru`, `core.letscube.ru`, `mailserver.letscube.ru`, `notify.letscube.ru`, and SSH host `ms.letscube.ru` resolve and expose their expected services with valid TLS where applicable.
 - `api.letscube.ru`, `status.letscube.ru`, and `monitor.letscube.ru` currently resolve to the server but have no HTTPS service behind them. Treat them as reserved future endpoints, not active dependencies.
