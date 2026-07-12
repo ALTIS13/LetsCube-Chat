@@ -999,3 +999,17 @@ Recurring tasks roadmap note:
 - The packaged ASAR contains six expected entries and no application dependencies. Electron fuses disable RunAsNode, Node environment/inspect flags and file-protocol privileges while enabling cookie encryption and ASAR integrity.
 - `pnpm.cmd windows:test` passed 10/10. Production Electron QA passed 6/6 across 1440x900, 1920x1080 and 3840x2160, including first-context desktop detection and installed-version state. The x64 NSIS installer built and installed silently for the current user, and the installed executable opened a responsive `LETSCUBE` window. Android sync/debug build remained green. The internal installer is unsigned by design.
 - Web typecheck/build, release catalog tests 18/18, five-viewport authenticated smoke 5/5, RLS smoke and advisory DB type drift check completed. Existing Vite sourcemap/chunk warnings and generated-only search RPC/outbox drift remain unchanged.
+
+## 2026-07-12 - Windows Tauri clean-profile replacement
+
+- Retired the Electron source, dependencies, installer offer, installed package and shared QA profile after confirming that Electron Playwright and the installed app reused `%APPDATA%/letscube-desktop`. The old `Owner Test` session was local profile state, not credentials bundled in ASAR.
+- Added an isolated Tauri 2 shell under `windows-tauri/`, outside the root pnpm workspace. Rust `1.97.0`, Cargo `1.97.0`, MSVC `14.44.35207` and WebView2 `150.0.4078.65` were verified without changing Java/Android configuration.
+- The shell accepts only `https://app.letscube.ru`, uses stable `webview-production-v1` storage, ignores QA profile overrides in release builds, grants only exact-origin notification plugin permissions and exposes no filesystem/shell/process/updater capability.
+- A local animated splash, reduced-motion mode, single instance, native tray Open/Exit and close-to-hide are implemented. Runtime detection is synchronous before React startup; version/build retrieval remains the existing async frontend contract.
+- Foreground realtime message notifications use the official Tauri notification plugin only while the Windows window is hidden/in tray. Browser Notification, Browser/PWA Push and Android FCM paths remain separate and unchanged. Killed-process Windows push is not claimed.
+- Tauri contract tests passed 3/3; Rust tests passed 2/2; frontend Tauri/distribution tests passed 11/11; independent task reviews returned spec PASS and quality APPROVED.
+- The unsigned x64 NSIS installer built successfully at 1,240,690 bytes (1.18 MiB), and the executable is 3.14 MiB. Installed WebView2 is reused rather than bundling Chromium.
+- Clean install physical QA opened the LETSCUBE login page with no authenticated shell and no `Owner Test` state. Alt+F4 hid the only process; a second launch kept process count at one and restored the single window.
+- Web typecheck/build and release catalog tests passed. Authenticated browser smoke passed 5/5 and PWA regression passed 10/10 across 3840x2160, 1920x1080, 1440x900, 390x844 and 412x915. Android sync/debug build passed.
+- RLS smoke completed with existing advisory/leak probes reported separately; no SQL/RLS/schema change was made in this Windows stage. DB type drift remains advisory for the two search RPCs and server-only outbox.
+- Public Windows catalog remains unavailable until exact-commit Coolify deployment and final production Tauri check complete. Authenticode, signed updater metadata, killed-process push and the broader Windows 10/11 device matrix remain release gates.

@@ -277,7 +277,8 @@ Status: `[~]` active. Android internal candidate is available; Windows is migrat
 - `[ ]` Release signing/AAB with secrets outside Git.
 - `[ ]` Android deep links/app links and recovery callback.
 - `[x]` Retire the Electron spike after QA profile leakage and excessive package weight were confirmed. Windows stable is unavailable during migration; Electron source, installed package and shared QA profile were removed.
-- `[~]` Tauri 2 migration: isolated WebView2 profile, compact installer, tray, branded startup, minimum remote capabilities and native foreground notifications.
+- `[x]` Tauri 2 internal candidate: isolated WebView2 profile, 1.18 MiB NSIS installer, tray/close-to-hide, branded startup, single instance, minimum exact-origin capabilities, clean-profile login and hidden-window foreground notifications.
+- `[~]` Tauri rollout: deploy the frontend adapter, repeat production installed-client QA, then publish the verified immutable `0.2.0` build `4` artifact. Keep Windows stable unavailable until these checks pass.
 - `[ ]` Windows public release gate: Authenticode signing/SmartScreen, install-upgrade-uninstall matrix, killed-process notifications and signed auto-update apply.
 - `[!]` SMS provider rollout.
 
