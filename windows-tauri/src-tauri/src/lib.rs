@@ -1,21 +1,30 @@
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::webview::PageLoadEvent;
+use tauri::webview::{NewWindowResponse, PageLoadEvent};
 use tauri::{
     AppHandle, Emitter, Manager, Runtime, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
     WindowEvent,
 };
+use tauri_plugin_opener::OpenerExt;
 
 const PRODUCTION_ORIGIN: &str = "https://app.letscube.ru";
 const PRODUCTION_URL: &str = "https://app.letscube.ru/";
 const PRODUCTION_PROFILE: &str = "webview-production-v1";
 const DESKTOP_BUILD: &str = env!("LETSCUBE_DESKTOP_BUILD");
+static MAIN_READY: AtomicBool = AtomicBool::new(false);
 
 fn is_allowed_navigation(url: &Url) -> bool {
     url.origin().ascii_serialization() == PRODUCTION_ORIGIN
+}
+
+fn is_safe_external_url(url: &Url) -> bool {
+    matches!(url.scheme(), "http" | "https" | "mailto")
+        && url.username().is_empty()
+        && url.password().is_none()
 }
 
 fn production_profile_dir<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
@@ -66,6 +75,21 @@ fn show_main<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+fn show_splash<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(splash) = app.get_webview_window("splash") {
+        let _ = splash.show();
+        let _ = splash.set_focus();
+    }
+}
+
+fn restore_startup_surface<R: Runtime>(app: &AppHandle<R>) {
+    if MAIN_READY.load(Ordering::Acquire) {
+        show_main(app);
+    } else {
+        show_splash(app);
+    }
+}
+
 fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Открыть LETSCUBE", true, None::<&str>)?;
     let exit = MenuItem::with_id(app, "exit", "Выйти", true, None::<&str>)?;
@@ -75,7 +99,7 @@ fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         .menu(&menu)
         .tooltip("LETSCUBE")
         .on_menu_event(|app, event| match event.id.as_ref() {
-            "open" => show_main(app),
+            "open" => restore_startup_surface(app),
             "exit" => app.exit(0),
             _ => {}
         })
@@ -88,7 +112,7 @@ fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
                     ..
                 }
             ) {
-                show_main(tray.app_handle());
+                restore_startup_surface(tray.app_handle());
             }
         });
 
@@ -102,6 +126,8 @@ fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 fn build_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let production_url = Url::parse(PRODUCTION_URL).expect("production URL is static and valid");
     let profile_dir = production_profile_dir(app)?;
+    let navigation_handle = app.clone();
+    let new_window_handle = app.clone();
 
     WebviewWindowBuilder::new(app, "main", WebviewUrl::External(production_url))
         .title("LETSCUBE")
@@ -111,9 +137,29 @@ fn build_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         .visible(false)
         .data_directory(profile_dir)
         .initialization_script(desktop_bridge_script())
-        .on_navigation(is_allowed_navigation)
+        .on_navigation(move |url| {
+            if is_allowed_navigation(url) {
+                true
+            } else {
+                if is_safe_external_url(url) {
+                    let _ = navigation_handle
+                        .opener()
+                        .open_url(url.as_str(), None::<&str>);
+                }
+                false
+            }
+        })
+        .on_new_window(move |url, _features| {
+            if is_safe_external_url(&url) {
+                let _ = new_window_handle
+                    .opener()
+                    .open_url(url.as_str(), None::<&str>);
+            }
+            NewWindowResponse::Deny
+        })
         .on_page_load(|window, payload| {
             if payload.event() == PageLoadEvent::Finished {
+                MAIN_READY.store(true, Ordering::Release);
                 let app = window.app_handle();
                 show_main(app);
                 if let Some(splash) = app.get_webview_window("splash") {
@@ -131,6 +177,11 @@ fn retry_main(window: WebviewWindow, app: AppHandle) {
     if window.label() != "splash" {
         return;
     }
+    MAIN_READY.store(false, Ordering::Release);
+    show_splash(&app);
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.hide();
+    }
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.navigate(Url::parse(PRODUCTION_URL).expect("production URL is valid"));
     }
@@ -139,7 +190,7 @@ fn retry_main(window: WebviewWindow, app: AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            show_main(app);
+            restore_startup_surface(app);
         }))
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
@@ -194,5 +245,24 @@ mod tests {
         assert!(script.contains("Object.freeze"));
         assert!(!script.to_ascii_lowercase().contains("service_role"));
         assert!(!script.to_ascii_lowercase().contains("supabase_key"));
+    }
+
+    #[test]
+    fn external_handoff_allows_only_safe_system_protocols() {
+        assert!(is_safe_external_url(
+            &Url::parse("https://api.letscube.ru/releases/files/windows/client.exe").unwrap()
+        ));
+        assert!(is_safe_external_url(
+            &Url::parse("mailto:admin@example.com").unwrap()
+        ));
+        assert!(!is_safe_external_url(
+            &Url::parse("file:///C:/Windows/System32/cmd.exe").unwrap()
+        ));
+        assert!(!is_safe_external_url(
+            &Url::parse("javascript:alert(1)").unwrap()
+        ));
+        assert!(!is_safe_external_url(
+            &Url::parse("https://user:password@example.com/").unwrap()
+        ));
     }
 }

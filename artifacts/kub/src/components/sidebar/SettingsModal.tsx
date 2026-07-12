@@ -368,7 +368,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                   nativeAndroid
                     ? "Android push через Firebase/FCM"
                     : desktopWindows
-                      ? "Системные уведомления Windows готовятся"
+                      ? "Системные уведомления, пока приложение запущено"
                       : "Системные уведомления пока настроены только для Android"
                 )}
                 {pushStatus === "denied" && (

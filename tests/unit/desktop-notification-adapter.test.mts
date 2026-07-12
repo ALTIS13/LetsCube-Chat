@@ -170,4 +170,11 @@ test("Windows settings copy describes tray delivery without claiming killed-proc
   );
   assert.match(source, /пока LETSCUBE запущен/i);
   assert.match(source, /полного выхода/i);
+
+  const settingsSource = readFileSync(
+    new URL("../../artifacts/kub/src/components/sidebar/SettingsModal.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(settingsSource, /пока приложение запущено/i);
+  assert.doesNotMatch(settingsSource, /Системные уведомления Windows готовятся/i);
 });

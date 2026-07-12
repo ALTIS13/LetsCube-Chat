@@ -77,3 +77,4 @@ pnpm.cmd --filter @workspace/kub run typecheck
 - Added visibility gating so native Windows toasts are silent while the chat window is visible and appear only while hidden/in tray.
 - Updated Windows settings copy to describe running-process delivery without claiming killed-process push.
 - Re-ran focused tests: 11/11 passed; frontend typecheck passed.
+- Final branch review aligned the visible Settings status with running-process delivery; killed-process delivery remains explicitly pending.

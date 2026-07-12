@@ -93,6 +93,11 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.match(libRs, /hide\(\)/);
   assert.match(libRs, /show\(\)/);
   assert.match(libRs, /notify|notification/i);
+  assert.match(libRs, /on_new_window/);
+  assert.match(libRs, /is_safe_external_url/);
+  assert.match(libRs, /opener\(\)\s*\.open_url/);
+  assert.match(libRs, /MAIN_READY/);
+  assert.match(libRs, /restore_startup_surface/);
   assert.match(
     libRs,
     /window\.label\(\)\s*!=\s*"splash"/,
