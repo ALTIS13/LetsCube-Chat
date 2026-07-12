@@ -29,6 +29,10 @@ export interface StagedUploadHandleRegistry {
   release(attachmentId: string, handle: StagedUploadAbortHandle): void;
 }
 
+export interface MutableStagedAttachmentRef {
+  current: StagedAttachment[];
+}
+
 export type StagedSendAttemptResult<T> =
   | { status: "sent"; value: T }
   | { status: "failed" }
@@ -58,6 +62,36 @@ export function createStagedUploadScope(initialChatId: string): StagedUploadScop
       return active && token.chatId === chatId && token.generation === generation;
     },
   };
+}
+
+export function clearStagedAttachmentChat(
+  scope: StagedUploadScope,
+  stagedRef: MutableStagedAttachmentRef,
+): StagedAttachment[] {
+  scope.invalidate();
+  const staleAttachments = stagedRef.current;
+  stagedRef.current = [];
+  return staleAttachments;
+}
+
+export function transitionStagedAttachmentChat(
+  scope: StagedUploadScope,
+  nextChatId: string,
+  stagedRef: MutableStagedAttachmentRef,
+): StagedAttachment[] {
+  const staleAttachments = clearStagedAttachmentChat(scope, stagedRef);
+  scope.activate(nextChatId);
+  return staleAttachments;
+}
+
+export function selectStagedAttachmentsForSend(
+  attachments: StagedAttachment[],
+  onlyAttachmentId?: string,
+): StagedAttachment[] {
+  return attachments.filter((attachment) => {
+    if (onlyAttachmentId && attachment.id !== onlyAttachmentId) return false;
+    return attachment.status !== "uploading" && attachment.status !== "sending";
+  });
 }
 
 export function createStagedUploadHandleRegistry(): StagedUploadHandleRegistry {

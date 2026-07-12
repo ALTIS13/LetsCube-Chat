@@ -50,9 +50,12 @@ import {
 import {
   createStagedUploadHandleRegistry,
   createStagedUploadScope,
+  clearStagedAttachmentChat,
   getAttachmentUploadErrorMessage,
   markStagedAttachmentSendFailed,
   runScopedStagedSendAttempt,
+  selectStagedAttachmentsForSend,
+  transitionStagedAttachmentChat,
   type StagedUploadScopeToken,
 } from "@/lib/stagedUploadWorkflow";
 import type { Json, MessageWithSender } from "@/types/database";
@@ -133,7 +136,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const dragDepthRef = useRef(0);
   const [draggingFiles, setDraggingFiles] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     stagedAttachmentsRef.current = stagedAttachments;
   }, [stagedAttachments]);
 
@@ -207,26 +210,24 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   ]);
 
   useLayoutEffect(() => {
-    uploadScope.activate(chatId);
-    return () => {
-      uploadScope.invalidate();
-      void uploadRegistry.abortAll();
-    };
-  }, [chatId, uploadRegistry, uploadScope]);
-
-  useEffect(() => {
-    setStagedAttachments((current) => {
-      current.forEach(revokeAttachmentPreview);
-      return [];
-    });
+    const staleAttachments = transitionStagedAttachmentChat(
+      uploadScope,
+      chatId,
+      stagedAttachmentsRef,
+    );
+    staleAttachments.forEach(revokeAttachmentPreview);
+    setStagedAttachments((current) => current.length ? [] : current);
     cancelledAttachmentIdsRef.current.clear();
     setDraggingFiles(false);
     dragDepthRef.current = 0;
+
     return () => {
-      stagedAttachmentsRef.current.forEach(revokeAttachmentPreview);
+      const abandonedAttachments = clearStagedAttachmentChat(uploadScope, stagedAttachmentsRef);
+      void uploadRegistry.abortAll();
+      abandonedAttachments.forEach(revokeAttachmentPreview);
       cancelledAttachmentIdsRef.current.clear();
     };
-  }, [chatId]);
+  }, [chatId, uploadRegistry, uploadScope]);
 
   useEffect(() => {
     if (!chatPanelRequest || chatPanelRequest.chatId !== chatId) return;
@@ -405,10 +406,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
     const scopeToken = uploadScope.capture();
     const captionText = caption.trim();
-    const targets = stagedAttachmentsRef.current.filter((attachment) => {
-      if (onlyAttachmentId && attachment.id !== onlyAttachmentId) return false;
-      return attachment.status !== "uploading" && attachment.status !== "sending";
-    });
+    const targets = selectStagedAttachmentsForSend(
+      stagedAttachmentsRef.current,
+      onlyAttachmentId,
+    );
     if (!targets.length) return false;
 
     let sentAny = false;

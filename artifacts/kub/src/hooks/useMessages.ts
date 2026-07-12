@@ -11,6 +11,7 @@ import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail 
 import { isSavedChat } from "@/lib/chatDisplay";
 import { scheduleMarkChatDelivered, scheduleMarkChatRead } from "@/lib/deliveryReceipts";
 import { isNativeApp } from "@/lib/platform/capabilities";
+import { sanitizeMessageAckError } from "@/lib/messageAckError";
 
 const MESSAGE_PAGE_SIZE = 100;
 const SEND_ACK_TIMEOUT_MS = 12_000;
@@ -954,10 +955,13 @@ export function useMessages(
       return null;
     }
 
-    console.error("Send error:", ack.error);
-    reportError(ack.error, {
+    const friendlySendError = mapPgError(ack.error) || "Не удалось отправить сообщение.";
+    const safeAckError = sanitizeMessageAckError(ack.error);
+    console.error("[messages] send failed.", safeAckError.code, safeAckError.name);
+    reportError(safeAckError.error, {
       category: "message_send_failed",
-      chatId: activeChatId,
+      errorCode: safeAckError.code,
+      errorName: safeAckError.name,
       type: input.type,
       hasMedia: Boolean(input.mediaUrl),
     });
@@ -966,7 +970,7 @@ export function useMessages(
       pending: false,
       checking: false,
       failed: true,
-      send_error: mapPgError(ack.error) || "Не удалось отправить сообщение.",
+      send_error: friendlySendError,
     };
     replaceMessage(activeChatId, tempId, failedMessage);
     updateChatLastMessage(activeChatId, failedMessage);

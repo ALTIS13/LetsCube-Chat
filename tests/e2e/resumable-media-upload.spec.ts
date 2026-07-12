@@ -231,6 +231,56 @@ test.describe("resumable media upload contracts", () => {
     expect(sendCalls).toBe(0);
   });
 
+  test("clears old staged attachments before activating the next chat scope", async () => {
+    const {
+      createStagedUploadScope,
+      selectStagedAttachmentsForSend,
+      transitionStagedAttachmentChat,
+    } = await loadStagedUploadWorkflow();
+    const baseScope = createStagedUploadScope("chat-a");
+    const oldToken = baseScope.capture();
+    const events: string[] = [];
+    const scope = {
+      activate(chatId: string) {
+        events.push(`activate:${chatId}`);
+        baseScope.activate(chatId);
+      },
+      capture: () => baseScope.capture(),
+      invalidate() {
+        events.push("invalidate");
+        baseScope.invalidate();
+      },
+      isActive: (token: typeof oldToken) => baseScope.isActive(token),
+    };
+    let current = [attachmentStub({
+      status: "failed",
+      uploaded: {
+        bucket: "media",
+        path: "user/chat-a-attachment.mp4",
+        publicUrl: "https://example.invalid/old.mp4",
+      },
+    })];
+    const stagedRef = {
+      get current() {
+        return current;
+      },
+      set current(value: StagedAttachment[]) {
+        events.push("clear");
+        current = value;
+      },
+    };
+
+    const staleAttachments = transitionStagedAttachmentChat(scope, "chat-b", stagedRef);
+    const newToken = scope.capture();
+
+    expect(events).toEqual(["invalidate", "clear", "activate:chat-b"]);
+    expect(staleAttachments).toHaveLength(1);
+    expect(stagedRef.current).toEqual([]);
+    expect(scope.isActive(oldToken)).toBe(false);
+    expect(scope.isActive(newToken)).toBe(true);
+    expect(selectStagedAttachmentsForSend(stagedRef.current)).toEqual([]);
+  });
+
   test("converts rejected attachment sends into a friendly failed staged state", async () => {
     const {
       createStagedUploadScope,
