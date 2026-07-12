@@ -79,3 +79,12 @@ output/playwright-auth/
 *.auth.json
 test-results/
 /kub-*.png
+
+# Desktop signing and updater outputs are local/release-server only.
+electron-builder.env
+*.pfx
+*.p12
+*.pvk
+*.spc
+*.blockmap
+latest*.yml

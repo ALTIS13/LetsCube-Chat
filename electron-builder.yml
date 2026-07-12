@@ -1,0 +1,44 @@
+appId: ru.letscube.messenger
+productName: LETSCUBE
+copyright: Copyright © LETSCUBE
+asar: true
+electronDist: node_modules/electron/dist
+compression: maximum
+npmRebuild: false
+
+directories:
+  app: desktop
+  output: dist/windows
+
+files:
+  - "**/*"
+  - "!node_modules/**/*"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: desktop/assets/letscube.ico
+  executableName: LETSCUBE
+  artifactName: LETSCUBE-${version}-${arch}-setup.${ext}
+  requestedExecutionLevel: asInvoker
+  forceCodeSigning: false
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: LETSCUBE
+  uninstallDisplayName: LETSCUBE
+
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  grantFileProtocolExtraPrivileges: false

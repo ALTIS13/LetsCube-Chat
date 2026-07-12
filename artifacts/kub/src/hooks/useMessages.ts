@@ -10,7 +10,7 @@ import { reportError } from "@/lib/monitoring";
 import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 import { isSavedChat } from "@/lib/chatDisplay";
 import { scheduleMarkChatDelivered, scheduleMarkChatRead } from "@/lib/deliveryReceipts";
-import { isNativeApp } from "@/lib/platform/capabilities";
+import { isWebBrowser } from "@/lib/platform/capabilities";
 import {
   createMessageSendTimeoutContext,
   getMessageAckUserMessage,
@@ -616,7 +616,7 @@ export function useMessages(
           addMessage(payload.new.chat_id, visibleMessage);
           updateChatLastMessage(payload.new.chat_id, visibleMessage);
           const user = currentUserRef.current;
-          if (user && data.user_id !== user.id && !isNativeApp() && document.hidden &&
+          if (user && data.user_id !== user.id && isWebBrowser() && document.hidden &&
               typeof window !== "undefined" && "Notification" in window &&
               Notification.permission === "granted" && !mutedRef.current.includes(payload.new.chat_id)) {
             const senderName = (data as unknown as MessageWithSender).sender?.full_name ?? "Новое сообщение";

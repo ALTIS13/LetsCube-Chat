@@ -9,7 +9,7 @@ import { useUser } from "@/hooks/useUser";
 import { useHeartbeat } from "@/hooks/useHeartbeat";
 import { useBanState } from "@/hooks/useBanState";
 import { usePushNotificationNavigation } from "@/hooks/usePush";
-import { isNativeApp } from "@/lib/platform/capabilities";
+import { supportsBrowserPush } from "@/lib/platform/capabilities";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { IframeAuthBanner } from "@/components/IframeAuthBanner";
 import { AppUpdateBanner } from "@/components/AppUpdateBanner";
@@ -354,7 +354,7 @@ function AppRoutes() {
   useEffect(() => {
     if (
       userId &&
-      !isNativeApp() &&
+      supportsBrowserPush() &&
       typeof window !== "undefined" &&
       "Notification" in window &&
       Notification.permission === "default"

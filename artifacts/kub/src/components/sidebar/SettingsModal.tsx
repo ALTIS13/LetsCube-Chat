@@ -15,6 +15,7 @@ import { AudioSettingsSection } from "./AudioSettingsSection";
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { isNativeAndroid } from "@/lib/platform/capabilities";
+import { isDesktopApp } from "@/lib/platform/desktop";
 import { ReleaseDistributionSection } from "@/components/settings/ReleaseDistributionSection";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
 import {
@@ -36,6 +37,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const supabase = createClient();
   const { theme, resolvedTheme, setTheme } = useTheme();
   const nativeAndroid = isNativeAndroid();
+  const desktopWindows = isDesktopApp();
   const {
     status: pushStatus,
     preferences: pushPreferences,
@@ -365,9 +367,17 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 {pushStatus === "native_unavailable" && (
                   nativeAndroid
                     ? "Android push через Firebase/FCM"
-                    : "Native push пока настроен только для Android"
+                    : desktopWindows
+                      ? "Системные уведомления Windows готовятся"
+                      : "Системные уведомления пока настроены только для Android"
                 )}
-                {pushStatus === "denied" && (nativeAndroid ? "Заблокировано в настройках приложения Android" : "Заблокировано в настройках браузера")}
+                {pushStatus === "denied" && (
+                  nativeAndroid
+                    ? "Заблокировано в настройках приложения Android"
+                    : desktopWindows
+                      ? "Заблокировано в настройках приложения Windows"
+                      : "Заблокировано в настройках браузера"
+                )}
                 {pushStatus === "missing_vapid" && "Нужен VAPID public key в конфигурации"}
                 {pushStatus === "migration_missing" && "Нужно обновление базы данных"}
                 {pushStatus === "inactive" && "Получать уведомления, даже когда вкладка закрыта"}

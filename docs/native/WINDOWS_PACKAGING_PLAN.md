@@ -1,8 +1,9 @@
 # Windows Packaging Plan
 
-LETSCUBE will be packaged for Windows after the Android release gate. The
-approved first step is an Electron capability spike; do not add the desktop
-runtime until that spike begins.
+LETSCUBE now has an internal Windows Electron package. Version `0.1.0`, build
+`1`, is produced as an unsigned x64 NSIS installer. The shell loads only
+`https://app.letscube.ru` and keeps the production web application as the
+shared product surface.
 
 ## Technology comparison
 
@@ -11,15 +12,32 @@ runtime until that spike begins.
 | Tauri | Smaller bundles, native window shell, lower idle footprint | Requires Rust toolchain and Tauri-specific update/signing work | Production desktop client when footprint matters |
 | Electron | Mature ecosystem, broad plugin support, easier web-to-desktop bridge | Larger bundles and higher memory use | Fastest path if team needs desktop APIs quickly |
 
-Approved direction: evaluate Electron first because LETSCUBE depends on
-Chromium camera, microphone, MediaRecorder, realtime and media playback
-behavior. Tauri remains a later footprint comparison, not the first packaging
-implementation.
+Approved direction: Electron was selected for the first Windows package because
+LETSCUBE depends on Chromium camera, microphone, MediaRecorder, realtime and
+media playback behavior. Tauri remains a later footprint comparison.
+
+## Current internal package
+
+- Application ID: `ru.letscube.messenger`.
+- Product/executable name: `LETSCUBE`.
+- Runtime: Electron `43.1.0`, x64.
+- Installer: assisted per-user NSIS setup.
+- Source: `desktop/`; config: `electron-builder.yml`.
+- Build: `pnpm.cmd windows:build:internal`.
+- Output: `dist/windows/LETSCUBE-0.1.0-x64-setup.exe`.
+- Renderer isolation: sandbox and context isolation enabled, Node integration disabled.
+- Navigation and permissions are restricted to the exact production app origin.
+- The preload exposes only validated platform/version/build metadata.
+- Browser Service Worker, PWA installation and Browser Web Push are disabled in
+  the Electron runtime. Native Windows notifications remain a separate stage.
+
+The internal installer is intentionally unsigned. Windows SmartScreen can warn
+until a trusted code-signing certificate and release signing pipeline are added.
 
 ## Shared requirements
 
 - Windows code signing certificate.
-- Installer format decision: MSIX, MSI, or setup exe.
+- Decide whether public distribution remains NSIS or later moves to MSIX/MSI.
 - Auto-update channel policy.
 - Crash/error reporting decision; Sentry self-host can be added later.
 - Native notification bridge.
@@ -27,16 +45,16 @@ implementation.
 
 ## Deep links
 
-Register a protocol handler, for example:
+Future protocol handler candidate:
 
 ```text
-kub://auth/callback
+letscube://auth/callback
 ```
 
 Also keep the HTTPS route:
 
 ```text
-https://kub.example.com/auth/callback
+https://app.letscube.ru/auth/callback
 ```
 
 Supabase Auth redirect URLs must include the chosen desktop callback model.

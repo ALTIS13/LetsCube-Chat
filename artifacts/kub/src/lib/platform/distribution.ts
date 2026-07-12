@@ -3,11 +3,14 @@ export type DistributionTarget =
   | "android_download"
   | "android_native"
   | "windows_download"
+  | "windows_native"
   | "web_only";
 
 export type DistributionEnvironment = {
   native?: boolean;
   nativePlatform?: string;
+  desktop?: boolean;
+  desktopPlatform?: string;
   userAgent?: string;
   platform?: string;
   maxTouchPoints?: number;
@@ -15,6 +18,7 @@ export type DistributionEnvironment = {
 
 export function detectDistributionTarget(environment: DistributionEnvironment): DistributionTarget {
   if (environment.native && environment.nativePlatform === "android") return "android_native";
+  if (environment.desktop && environment.desktopPlatform === "windows") return "windows_native";
 
   const userAgent = environment.userAgent ?? "";
   const platform = environment.platform ?? "";

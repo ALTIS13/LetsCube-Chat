@@ -1,5 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 import { detectDistributionTarget, supportsPwaInstallForTarget } from "./distribution";
+import { isDesktopApp } from "./desktop";
 
 export type RuntimePlatform = "web" | "ios" | "android" | string;
 
@@ -24,7 +25,7 @@ export function isNativeAndroid(): boolean {
 }
 
 export function isWebBrowser(): boolean {
-  return !isNativeApp();
+  return !isNativeApp() && !isDesktopApp();
 }
 
 export function supportsCapacitorPlugin(pluginName: string): boolean {
@@ -44,6 +45,8 @@ export function getCurrentDistributionTarget() {
   return detectDistributionTarget({
     native: isNativeApp(),
     nativePlatform: getRuntimePlatform(),
+    desktop: isDesktopApp(),
+    desktopPlatform: isDesktopApp() ? "windows" : undefined,
     userAgent: browser?.userAgent,
     platform: browser?.platform,
     maxTouchPoints: browser?.maxTouchPoints,
@@ -77,24 +80,28 @@ export function supportsMediaCapture(): boolean {
 }
 
 export function microphonePermissionHelp(): string {
+  if (isDesktopApp()) return "Разрешите доступ к микрофону в настройках приложения Windows.";
   return isNativeAndroid()
     ? "Разрешите доступ к микрофону в настройках приложения Android."
     : "Разрешите доступ к микрофону в настройках браузера.";
 }
 
 export function cameraPermissionHelp(): string {
+  if (isDesktopApp()) return "Разрешите доступ к камере в настройках приложения Windows.";
   return isNativeAndroid()
     ? "Разрешите доступ к камере в настройках приложения Android."
     : "Разрешите доступ к камере в браузере.";
 }
 
 export function cameraAndMicPermissionHelp(): string {
+  if (isDesktopApp()) return "Разрешите доступ к камере и микрофону в настройках приложения Windows.";
   return isNativeAndroid()
     ? "Разрешите доступ к камере и микрофону в настройках приложения Android."
     : "Разрешите доступ в браузере и попробуйте ещё раз.";
 }
 
 export function locationPermissionHelp(): string {
+  if (isDesktopApp()) return "Разрешите доступ к геолокации в настройках приложения Windows.";
   return isNativeAndroid()
     ? "Разрешите доступ к геолокации в настройках приложения Android."
     : "Разрешите доступ к геолокации в настройках браузера.";

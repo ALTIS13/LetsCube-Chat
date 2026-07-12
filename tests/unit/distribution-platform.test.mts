@@ -48,3 +48,15 @@ test("Windows browser uses EXE distribution and other systems stay web-only", ()
   assert.equal(supportsPwaInstallForTarget("windows_download"), false);
   assert.equal(supportsPwaInstallForTarget("web_only"), false);
 });
+
+test("Electron Windows shell is native and never becomes a PWA target", () => {
+  const target = detectDistributionTarget({
+    desktop: true,
+    desktopPlatform: "windows",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Electron/43.1.0",
+    platform: "Win32",
+  });
+
+  assert.equal(target, "windows_native");
+  assert.equal(supportsPwaInstallForTarget(target), false);
+});

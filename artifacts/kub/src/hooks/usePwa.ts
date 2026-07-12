@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { reportError } from "@/lib/monitoring";
 import { getCurrentDistributionTarget, isNativeApp, supportsPwaInstall } from "@/lib/platform/capabilities";
+import { isDesktopApp } from "@/lib/platform/desktop";
 import type { DistributionTarget } from "@/lib/platform/distribution";
 
 export const KUB_SW_UPDATE_READY_EVENT = "kub:sw-update-ready";
@@ -30,12 +31,12 @@ let registrationStarted = false;
 export function usePwaServiceWorker() {
   useEffect(() => {
     if (registrationStarted) return;
-    if (isNativeApp()) {
+    if (isNativeApp() || isDesktopApp()) {
       if (typeof window !== "undefined" && "serviceWorker" in navigator) {
         void navigator.serviceWorker.getRegistrations()
           .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
           .catch((error) => {
-            reportError(error, { category: "native_service_worker_cleanup" });
+            reportError(error, { category: "packaged_service_worker_cleanup" });
           });
       }
       return;
@@ -185,6 +186,19 @@ function getPwaInstallCopy({
       modeLabel: "Native",
       instructionTitle: "Установка не требуется",
       instructionSteps: ["LETSCUBE уже открыт как Android-приложение."],
+    };
+  }
+
+  if (platform === "windows_native") {
+    return {
+      platform,
+      title: "Windows-приложение LETSCUBE",
+      description: "Приложение уже запущено как Windows-клиент. Доступность обновлений проверяется автоматически.",
+      buttonLabel: "Установлено",
+      variantLabel: "Windows EXE",
+      modeLabel: "Приложение",
+      instructionTitle: "Установка не требуется",
+      instructionSteps: ["LETSCUBE уже открыт как Windows-приложение."],
     };
   }
 

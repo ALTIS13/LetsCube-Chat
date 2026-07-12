@@ -8,6 +8,7 @@ import {
   type ReleasePlatform,
 } from "@/lib/releaseCatalog";
 import type { DistributionTarget } from "@/lib/platform/distribution";
+import { getDesktopRuntimeInfo } from "@/lib/platform/desktop";
 import { reportError } from "@/lib/monitoring";
 
 export type ReleaseCatalogUiState =
@@ -59,6 +60,13 @@ export function useReleaseCatalog(target: DistributionTarget) {
   }, [platform, refresh]);
 
   useEffect(() => {
+    if (target === "windows_native") {
+      let active = true;
+      void getDesktopRuntimeInfo().then((info) => {
+        if (active && info) setInstalledRelease({ version: info.version, build: info.build });
+      });
+      return () => { active = false; };
+    }
     if (target !== "android_native") {
       setInstalledRelease(null);
       return;
@@ -114,5 +122,6 @@ export function useReleaseCatalog(target: DistributionTarget) {
 function getReleasePlatform(target: DistributionTarget): ReleasePlatform | null {
   if (target === "android_download" || target === "android_native") return "android";
   if (target === "windows_download") return "windows";
+  if (target === "windows_native") return "windows";
   return null;
 }

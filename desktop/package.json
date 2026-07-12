@@ -1,0 +1,10 @@
+{
+  "name": "letscube-desktop",
+  "version": "0.1.0",
+  "desktopBuild": 1,
+  "private": true,
+  "main": "main.mjs",
+  "description": "LETSCUBE desktop messenger for cyber-arena operations.",
+  "author": "LETSCUBE",
+  "license": "MIT"
+}

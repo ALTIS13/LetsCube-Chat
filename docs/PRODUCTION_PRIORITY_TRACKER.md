@@ -276,7 +276,8 @@ Status: `[~]` active. Approved order: shared pre-packaging gate, Android release
 - `[~]` Native push release QA: real owner-to-client message delivery, sender exclusion, category preference suppression, same-chat collapse, server-backed chat read-sync, cold-start tap routing, killed-process delivery, separate task delivery, location-staff task routing, restart registration recovery and Android 16 Google Play emulator coverage pass. A second Android 15 Realme device passes APK/portrait UI QA, but its custom-ROM microG cannot complete Google Check-in (`AccountDisabled`); broader FCM coverage still needs another device with official Google Play Services.
 - `[ ]` Release signing/AAB with secrets outside Git.
 - `[ ]` Android deep links/app links and recovery callback.
-- `[ ]` Windows Electron capability spike, NSIS installer, native notifications and self-hosted update channel.
+- `[x]` Windows Electron capability spike and unsigned internal x64 NSIS installer: exact-origin remote shell, sandbox/context isolation, minimal version bridge, hardened fuses and release-catalog comparison are implemented.
+- `[ ]` Windows public release gate: Authenticode signing/SmartScreen, install-upgrade-uninstall matrix, native notifications and signed auto-update apply.
 - `[!]` SMS provider rollout.
 
 ## Deferred Phone Verification Rollout

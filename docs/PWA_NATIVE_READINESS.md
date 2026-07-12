@@ -27,11 +27,13 @@
 - Android browser: PWA install не предлагается; Settings проверяет доступность Android APK.
 - iOS/iPadOS: home-screen app зависит от Safari/WebKit ограничений. Web Push работает только при выполнении требований iOS для установленных web apps и разрешений пользователя.
 - Capacitor/native Android не показывает browser install CTA; существующий native FCM path остаётся отдельным от Browser Web Push.
+- Electron/Windows не регистрирует Service Worker и не использует Browser Web Push. Встроенная оболочка показывает установленную версию из безопасного preload bridge и сверяет её с Windows release catalog.
 - Settings показывают platform-aware блок установки:
   - Windows: `Windows EXE`, режим `Браузер` до установки desktop-клиента.
   - iPhone/iPad: `iPhone / iOS PWA` или `iPad / iOS PWA`, режим `Safari` или `Установлено`.
   - Android browser: `Android APK`, режим `Браузер`.
   - Android APK: `Android APK`, режим `Native`.
+  - Windows EXE: `Windows EXE`, режим `Приложение`.
 - На iPhone/iPad кнопка `Установить` раскрывает шаги Safari `Поделиться` -> `На экран Домой` -> `Добавить`, потому что iOS не разрешает сайтам запускать системную установку программно.
 
 ## Push и notification click
@@ -55,6 +57,7 @@
 ## Что не входит в этот этап
 
 - Android release signing/AAB и store/public distribution.
+- Публичная подпись Windows EXE, native Windows notifications и auto-update apply.
 - Android/iOS deep links/app links.
 - SMS provider rollout.
 - Offline mutation queue/background replay.

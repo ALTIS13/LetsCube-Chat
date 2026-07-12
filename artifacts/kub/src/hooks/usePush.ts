@@ -6,6 +6,7 @@ import { mapPgError } from "@/lib/errors";
 import { requestChatMessageJump } from "@/lib/chatJumpEvents";
 import { safeOpenChat } from "@/lib/safeOpenChat";
 import { isNativeAndroid, isNativeApp, nativePushPendingMessage, supportsBrowserPush } from "@/lib/platform/capabilities";
+import { isDesktopApp } from "@/lib/platform/desktop";
 import {
   disableNativeAndroidPush,
   enableNativeAndroidPush,
@@ -117,6 +118,11 @@ export function usePush() {
         setStatus(normalizeNativeStatus(result));
         setMessage(result.message);
       });
+      return;
+    }
+    if (isDesktopApp()) {
+      setStatus("native_unavailable");
+      setMessage("Системные уведомления Windows будут подключены отдельным этапом.");
       return;
     }
     if (isNativeApp()) {
@@ -492,7 +498,7 @@ export function usePushNotificationNavigation() {
   }
 
   useEffect(() => {
-    if (isNativeApp()) return;
+    if (isNativeApp() || isDesktopApp()) return;
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
     const onMsg = (e: MessageEvent) => {
       if (e.data?.type === "kub-open" && typeof e.data.url === "string") {

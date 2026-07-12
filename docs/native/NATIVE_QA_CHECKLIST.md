@@ -1,7 +1,7 @@
 # Native QA Checklist
 
-Run this after a native wrapper is introduced. Android MVP groundwork exists in
-`android/`; iOS and Windows are still planning-only.
+Run this after a packaged-client change. Android and the internal Windows
+Electron wrapper exist; iOS remains PWA-only.
 
 ## Baseline
 
@@ -65,3 +65,16 @@ Run this after a native wrapper is introduced. Android MVP groundwork exists in
 - Windows signed installer.
 - Store metadata, privacy labels, and screenshots reviewed.
 - Rollback plan documented.
+
+## Windows internal gate
+
+- `pnpm.cmd windows:test` passes shell security and distribution contracts.
+- `pnpm.cmd windows:build:internal` creates the expected x64 NSIS installer.
+- Packaged ASAR contains only the desktop main/preload/security files and icon.
+- Electron fuses disable RunAsNode, Node options/inspect and extra file-protocol privileges.
+- Fresh packaged runtime opens only `https://app.letscube.ru`.
+- Preload exposes no `require`, tokens, filesystem or arbitrary IPC surface.
+- Camera, microphone and geolocation prompts work through the packaged session.
+- Browser PWA install and Browser Web Push controls are absent in the EXE.
+- Install, uninstall and upgrade are tested before a public release.
+- Authenticode signature and SmartScreen reputation are required before public distribution.
