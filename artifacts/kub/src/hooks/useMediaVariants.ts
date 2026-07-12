@@ -4,12 +4,14 @@ import { createClient } from "@/lib/supabase/client";
 import {
   beginMessageVariantRefresh,
   completeMessageVariantRefresh,
+  createMessageVariantRefreshLifecycle,
   getMessageVariantCacheKey,
   getMessageVariantSourceIds,
   hasVideoVariantSources,
   queueMessageVariantRefresh,
   selectMessageVariantCacheEvictions,
   type MessageVariantRefreshState,
+  type MessageVariantRefreshLifecycle,
 } from "@/lib/messageVariantRefresh";
 
 type MessageMediaVariantSource = Pick<MessageWithSender, "id" | "chat_id" | "type" | "media_url" | "deleted_at">;
@@ -42,6 +44,7 @@ const MESSAGE_VARIANT_KINDS = ["image_preview", "image_thumb", "video_poster", "
 const AVATAR_VARIANT_KINDS = ["avatar_128", "avatar_256"] as const;
 const VIDEO_VARIANT_REFRESH_INTERVAL_MS = 60_000;
 const MESSAGE_VARIANT_REFRESH_DEBOUNCE_MS = 120;
+const MESSAGE_VARIANT_TAB_RETURN_DEBOUNCE_MS = 80;
 const MESSAGE_VARIANT_CACHE_LIMIT = 8;
 
 interface MessageVariantCacheEntry {
@@ -50,8 +53,7 @@ interface MessageVariantCacheEntry {
   hasVideoMessages: boolean;
   variants: Record<string, MessageMediaVariantUrls>;
   listeners: Set<(variants: Record<string, MessageMediaVariantUrls>) => void>;
-  intervalId: number | null;
-  refreshOnFocus: (() => void) | null;
+  refreshLifecycle: MessageVariantRefreshLifecycle | null;
   debounceTimer: number | null;
   evictionTimer: number | null;
   hasStarted: boolean;
@@ -106,8 +108,7 @@ function getMessageVariantCacheEntry(chatId: string): MessageVariantCacheEntry {
     hasVideoMessages: false,
     variants: {},
     listeners: new Set(),
-    intervalId: null,
-    refreshOnFocus: null,
+    refreshLifecycle: null,
     debounceTimer: null,
     evictionTimer: null,
     hasStarted: false,
@@ -141,23 +142,26 @@ function configureMessageVariantPolling(entry: MessageVariantCacheEntry, hasVide
   stopMessageVariantPolling(entry);
   entry.hasVideoMessages = hasVideoMessages;
   if (!hasVideoMessages) return;
-  const refresh = () => {
-    if (document.visibilityState === "visible") scheduleMessageVariantLoad(entry, 0);
-  };
-  entry.refreshOnFocus = refresh;
-  entry.intervalId = window.setInterval(refresh, VIDEO_VARIANT_REFRESH_INTERVAL_MS);
-  window.addEventListener("focus", refresh);
-  document.addEventListener("visibilitychange", refresh);
+  entry.refreshLifecycle = createMessageVariantRefreshLifecycle({
+    windowTarget: window,
+    documentTarget: document,
+    getVisibilityState: () => document.visibilityState,
+    timer: window,
+    intervalMs: VIDEO_VARIANT_REFRESH_INTERVAL_MS,
+    tabReturnDebounceMs: MESSAGE_VARIANT_TAB_RETURN_DEBOUNCE_MS,
+    onRefresh: () => requestMessageVariantLifecycleRefresh(entry),
+  });
+  entry.refreshLifecycle.start();
 }
 
 function stopMessageVariantPolling(entry: MessageVariantCacheEntry): void {
-  if (entry.intervalId !== null) window.clearInterval(entry.intervalId);
-  if (entry.refreshOnFocus) {
-    window.removeEventListener("focus", entry.refreshOnFocus);
-    document.removeEventListener("visibilitychange", entry.refreshOnFocus);
-  }
-  entry.intervalId = null;
-  entry.refreshOnFocus = null;
+  entry.refreshLifecycle?.stop();
+  entry.refreshLifecycle = null;
+}
+
+function requestMessageVariantLifecycleRefresh(entry: MessageVariantCacheEntry): void {
+  if (entry.refreshState.loading) return;
+  scheduleMessageVariantLoad(entry, 0);
 }
 
 function scheduleMessageVariantLoad(entry: MessageVariantCacheEntry, delay: number): void {

@@ -9,6 +9,7 @@ import {
 } from "../../artifacts/kub/src/lib/mediaQuality";
 import {
   completeMessageVariantRefresh,
+  createMessageVariantRefreshLifecycle,
   getMessageVariantCacheKey,
   queueMessageVariantRefresh,
   selectMessageVariantCacheEvictions,
@@ -34,14 +35,15 @@ test("resolves imported video playback from persisted media quality", () => {
 
 test("wires one batched 720p variant query through persisted quality metadata", () => {
   const mediaVariantsSource = readFileSync(resolve("artifacts/kub/src/hooks/useMediaVariants.ts"), "utf8");
+  const refreshLifecycleSource = readFileSync(resolve("artifacts/kub/src/lib/messageVariantRefresh.ts"), "utf8");
   const chatWindowSource = readFileSync(resolve("artifacts/kub/src/components/chat/ChatWindow.tsx"), "utf8");
   const bubbleSource = readFileSync(resolve("artifacts/kub/src/components/chat/MessageBubble.tsx"), "utf8");
   const inputSource = readFileSync(resolve("artifacts/kub/src/components/chat/MessageInput.tsx"), "utf8");
 
   expect(mediaVariantsSource).toContain('"video_720p"');
   expect(mediaVariantsSource).toContain("video720pUrl");
-  expect(mediaVariantsSource).toContain("setInterval");
-  expect(mediaVariantsSource).toContain("visibilitychange");
+  expect(refreshLifecycleSource).toContain("setInterval");
+  expect(refreshLifecycleSource).toContain("visibilitychange");
   expect(chatWindowSource).toContain("MEDIA_QUALITY_METADATA_KEY");
   expect(chatWindowSource).not.toContain('console.warn("[attachments] upload failed:", error)');
   expect(mediaVariantsSource).not.toContain("error.message");
@@ -74,6 +76,10 @@ test("coalesces a changed batch while a variant refresh is loading", () => {
     state: { messageIds: ["m-1", "m-2"], loading: false, reloadPending: false },
     startNow: true,
   });
+  expect(queueMessageVariantRefresh(loading, ["m-1"])).toEqual({
+    state: loading,
+    startNow: false,
+  });
 });
 
 test("evicts only unused chat cache entries when the bounded cache is full", () => {
@@ -86,6 +92,60 @@ test("evicts only unused chat cache entries when the bounded cache is full", () 
     { chatId: "chat-active", listenerCount: 1 },
     { chatId: "chat-oldest", listenerCount: 0 },
   ], 3)).toEqual([]);
+});
+
+test("coalesces paired tab-return events and removes lifecycle timers and listeners", () => {
+  const windowTarget = new EventTarget();
+  const documentTarget = new EventTarget();
+  const timeouts = new Map<number, () => void>();
+  const intervals = new Map<number, () => void>();
+  let nextTimerId = 1;
+  let loads = 0;
+  const lifecycle = createMessageVariantRefreshLifecycle({
+    windowTarget,
+    documentTarget,
+    getVisibilityState: () => "visible",
+    timer: {
+      setTimeout(callback) {
+        const id = nextTimerId++;
+        timeouts.set(id, callback);
+        return id;
+      },
+      clearTimeout(id) {
+        timeouts.delete(id);
+      },
+      setInterval(callback) {
+        const id = nextTimerId++;
+        intervals.set(id, callback);
+        return id;
+      },
+      clearInterval(id) {
+        intervals.delete(id);
+      },
+    },
+    intervalMs: 60_000,
+    tabReturnDebounceMs: 40,
+    onRefresh: () => { loads += 1; },
+  });
+
+  lifecycle.start();
+  windowTarget.dispatchEvent(new Event("focus"));
+  documentTarget.dispatchEvent(new Event("visibilitychange"));
+  expect(timeouts.size).toBe(1);
+  for (const [timerId, callback] of timeouts) {
+    timeouts.delete(timerId);
+    callback();
+  }
+  expect(loads).toBe(1);
+  for (const callback of intervals.values()) callback();
+  expect(loads).toBe(2);
+
+  lifecycle.stop();
+  expect(intervals.size).toBe(0);
+  windowTarget.dispatchEvent(new Event("focus"));
+  documentTarget.dispatchEvent(new Event("visibilitychange"));
+  expect(timeouts.size).toBe(0);
+  expect(loads).toBe(2);
 });
 
 test("replaces the provider item URL without retaining a failed variant", () => {

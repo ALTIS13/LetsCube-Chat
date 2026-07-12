@@ -22,6 +22,23 @@ export interface MessageVariantCacheCandidate {
   listenerCount: number;
 }
 
+export interface MessageVariantRefreshTimer {
+  setTimeout(callback: () => void, delay: number): number;
+  clearTimeout(timerId: number): void;
+  setInterval(callback: () => void, delay: number): number;
+  clearInterval(timerId: number): void;
+}
+
+export interface MessageVariantRefreshEventTarget {
+  addEventListener(type: string, listener: () => void): void;
+  removeEventListener(type: string, listener: () => void): void;
+}
+
+export interface MessageVariantRefreshLifecycle {
+  start(): void;
+  stop(): void;
+}
+
 export function getMessageVariantCacheKey(messages: readonly MessageVariantSource[]): string | null {
   const chatIds = new Set(messages.map((message) => message.chat_id).filter((chatId): chatId is string => Boolean(chatId)));
   return chatIds.size === 1 ? Array.from(chatIds)[0] : null;
@@ -104,6 +121,56 @@ export function selectMessageVariantCacheEvictions(
     .filter((entry) => entry.listenerCount === 0)
     .slice(0, removalCount)
     .map((entry) => entry.chatId);
+}
+
+export function createMessageVariantRefreshLifecycle({
+  windowTarget,
+  documentTarget,
+  getVisibilityState,
+  timer,
+  intervalMs,
+  tabReturnDebounceMs,
+  onRefresh,
+}: {
+  windowTarget: MessageVariantRefreshEventTarget;
+  documentTarget: MessageVariantRefreshEventTarget;
+  getVisibilityState: () => string;
+  timer: MessageVariantRefreshTimer;
+  intervalMs: number;
+  tabReturnDebounceMs: number;
+  onRefresh: () => void;
+}): MessageVariantRefreshLifecycle {
+  let intervalId: number | null = null;
+  let tabReturnTimerId: number | null = null;
+  let started = false;
+
+  const refreshOnTabReturn = () => {
+    if (getVisibilityState() !== "visible" || tabReturnTimerId !== null) return;
+    tabReturnTimerId = timer.setTimeout(() => {
+      tabReturnTimerId = null;
+      onRefresh();
+    }, tabReturnDebounceMs);
+  };
+
+  return {
+    start() {
+      if (started) return;
+      started = true;
+      intervalId = timer.setInterval(onRefresh, intervalMs);
+      windowTarget.addEventListener("focus", refreshOnTabReturn);
+      documentTarget.addEventListener("visibilitychange", refreshOnTabReturn);
+    },
+    stop() {
+      if (!started) return;
+      started = false;
+      if (intervalId !== null) timer.clearInterval(intervalId);
+      if (tabReturnTimerId !== null) timer.clearTimeout(tabReturnTimerId);
+      intervalId = null;
+      tabReturnTimerId = null;
+      windowTarget.removeEventListener("focus", refreshOnTabReturn);
+      documentTarget.removeEventListener("visibilitychange", refreshOnTabReturn);
+    },
+  };
 }
 
 function sameMessageIds(left: readonly string[], right: readonly string[]): boolean {
