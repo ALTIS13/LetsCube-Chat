@@ -789,7 +789,7 @@ export function MessageInput({
         onChange={(e) => { stagePickedFiles(e.target.files); e.target.value = ""; }} />
 
       <CameraCaptureModal
-        key={chatId}
+        key={`camera:${chatId}`}
         open={showCamera}
         onClose={() => {
           if (!renderedDelayedAttachmentScopeToken || !composerSendScope.isActive(renderedDelayedAttachmentScopeToken)) return;
@@ -799,7 +799,7 @@ export function MessageInput({
         onAddFile={(file) => stageCameraFile(file, renderedDelayedAttachmentScopeToken)}
       />
       <VideoMessageRecorderModal
-        key={chatId}
+        key={`video:${chatId}`}
         open={showVideoMessage}
         variant={videoRecorderVariant}
         mediaQuality={mediaQuality}
