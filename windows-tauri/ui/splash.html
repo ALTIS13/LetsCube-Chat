@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LETSCUBE</title>
+    <link rel="stylesheet" href="splash.css" />
+  </head>
+  <body>
+    <main class="splash-shell">
+      <img src="letscube-logo.svg" alt="LETSCUBE" class="brand" />
+      <div class="pulse" aria-hidden="true"><span></span><span></span><span></span></div>
+      <p id="status">Подключаем защищённый клиент...</p>
+      <section id="failed" class="failure" hidden>
+        <p>Не удалось открыть LETSCUBE. Проверьте подключение и повторите попытку.</p>
+        <button id="retry" type="button">Повторить</button>
+      </section>
+    </main>
+    <script src="splash.js"></script>
+  </body>
+</html>

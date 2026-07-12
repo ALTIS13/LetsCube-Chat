@@ -1,0 +1,30 @@
+[package]
+name = "letscube-windows-tauri"
+version = "0.2.0"
+description = "LETSCUBE Windows desktop shell"
+authors = ["LETSCUBE"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "letscube_windows_tauri"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+tauri = { version = "2.11.5", features = ["tray-icon"] }
+tauri-plugin-notification = "2.3.3"
+tauri-plugin-opener = "2.5.4"
+tauri-plugin-single-instance = "2.4.2"
+url = "2.5.8"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

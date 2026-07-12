@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/remote-schema.json",
+  "identifier": "production",
+  "description": "Minimum notification access for the exact LETSCUBE production origin.",
+  "local": false,
+  "windows": ["main"],
+  "platforms": ["windows"],
+  "remote": {
+    "urls": ["https://app.letscube.ru/*"]
+  },
+  "permissions": [
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "notification:allow-notify"
+  ]
+}

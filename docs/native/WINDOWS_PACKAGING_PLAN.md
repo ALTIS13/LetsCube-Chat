@@ -1,86 +1,109 @@
 # Windows Packaging Plan
 
-LETSCUBE now has an internal Windows Electron package. Version `0.1.2`, build
-`3`, is produced as an unsigned x64 NSIS installer. The shell loads only
+LETSCUBE is migrating from the retired Electron experiment to a Tauri 2
+Windows client. The Windows stable release catalog stays unavailable until a
+clean-profile Tauri installer passes physical QA. The shell loads only
 `https://app.letscube.ru` and keeps the production web application as the
 shared product surface.
 
-## Technology comparison
+## Technology decision
 
-| Option | Pros | Cons | Best fit |
+| Option | Pros | Cons | Decision |
 | --- | --- | --- | --- |
-| Tauri | Smaller bundles, native window shell, lower idle footprint | Requires Rust toolchain and Tauri-specific update/signing work | Production desktop client when footprint matters |
-| Electron | Mature ecosystem, broad plugin support, easier web-to-desktop bridge | Larger bundles and higher memory use | Fastest path if team needs desktop APIs quickly |
+| Tauri | Small installer, native window/tray shell, lower idle footprint | Requires Rust/MSVC and separate update/signing work | Selected production direction |
+| Electron | Mature ecosystem and bundled Chromium | Large installer/runtime and unsafe shared QA profile in the experiment | Retired; no longer distributed or tested |
 
-Approved direction: Electron was selected for the first Windows package because
-LETSCUBE depends on Chromium camera, microphone, MediaRecorder, realtime and
-media playback behavior. Tauri remains a later footprint comparison.
+Camera, microphone, MediaRecorder, realtime, geolocation, file selection and
+media playback remain WebView features. They require installed-package QA on
+Windows 10/11 before the public release catalog is opened.
 
-## Current internal package
+## Current Tauri groundwork
 
 - Application ID: `ru.letscube.messenger`.
 - Product/executable name: `LETSCUBE`.
-- Runtime: Electron `43.1.0`, x64.
-- Installer: assisted per-user NSIS setup.
-- Source: `desktop/`; config: `electron-builder.yml`.
-- Prepare the isolated desktop toolchain: `pnpm.cmd windows:prepare`.
-- Build: `pnpm.cmd windows:build:internal` (runs preparation automatically).
-- Output: `dist/windows/LETSCUBE-0.1.2-x64-setup.exe`.
-- Renderer isolation: sandbox and context isolation enabled, Node integration disabled.
-- Navigation and permissions are restricted to the exact production app origin.
-- The preload exposes only validated platform/version/build metadata.
-- Browser Service Worker, PWA installation and Browser Web Push are disabled in
-  the Electron runtime. Native Windows notifications remain a separate stage.
+- Runtime: Tauri 2 + installed Microsoft WebView2 Runtime, x64.
+- Installer: per-user NSIS setup, initially unsigned.
+- Source/config: `windows-tauri/`, outside the root pnpm workspace.
+- Production URL: `https://app.letscube.ru/`.
+- Production WebView profile: `webview-production-v1`.
+- Prepare: `pnpm.cmd windows:tauri:prepare`.
+- Run: `pnpm.cmd windows:tauri:run`.
+- Contract tests: `pnpm.cmd windows:tauri:test`.
+- Build: `pnpm.cmd windows:tauri:build:internal`.
+- Output: `windows-tauri/src-tauri/target/release/bundle/nsis/`.
 
-The internal installer is intentionally unsigned. Windows SmartScreen can warn
-until a trusted code-signing certificate and release signing pipeline are added.
+Automated native QA must set a unique temporary data directory and must never
+reuse the stable production profile. Release builds ignore the QA override and
+never import the old Electron profile.
 
-## Shared requirements
+## Verified local toolchain
 
-- Windows code signing certificate.
-- Decide whether public distribution remains NSIS or later moves to MSIX/MSI.
-- Auto-update channel policy.
-- Crash/error reporting decision; Sentry self-host can be added later.
-- Native notification bridge.
-- Camera/microphone/file permission behavior tested on Windows 10/11.
+- Rust `1.97.0`, target `stable-x86_64-pc-windows-msvc`.
+- Cargo `1.97.0`.
+- Visual Studio Build Tools 2022 MSVC `14.44.35207`.
+- Microsoft Edge WebView2 Runtime `150.0.4078.65`.
+- Java/JDK and Android SDK configuration were not changed.
+
+## Security boundary
+
+- Main navigation accepts only the exact HTTPS origin `app.letscube.ru`.
+- The production remote capability grants only the Tauri notification methods
+  needed by that exact origin.
+- No filesystem, shell, process, generic opener, updater or wildcard HTTP
+  capability is exposed to remote content.
+- The synchronous initialization bridge exposes only validated
+  platform/version/build metadata.
+- The shell contains no Supabase credentials or service-role key.
+
+## Tray and startup
+
+- A bundled animated splash is shown while the production page loads.
+- Closing the main window hides it; the tray menu can reopen it or exit.
+- A second launch focuses the existing process through the single-instance
+  plugin.
+- Reduced-motion preferences disable splash animation.
+
+## Signing and update boundary
+
+The internal installer is unsigned. Windows SmartScreen can warn until a
+trusted Authenticode certificate is configured. Public auto-update remains a
+later gate because it also needs a separate Tauri updater key, signed updater
+artifacts and compatible signed metadata. Neither signing secret belongs in
+Git or in the remote web bundle.
 
 ## Deep links
 
-Future protocol handler candidate:
+Deep links are not implemented in this stage. Future candidates are:
 
 ```text
 letscube://auth/callback
-```
-
-Also keep the HTTPS route:
-
-```text
 https://app.letscube.ru/auth/callback
 ```
 
-Supabase Auth redirect URLs must include the chosen desktop callback model.
+Supabase Auth redirect URLs must be reviewed when that stage starts.
 
 ## Push and notifications
 
-Desktop browser Web Push does not become native Windows push automatically.
-The Windows browser remains usable but is not offered PWA installation.
-Electron must provide native desktop notifications through a restricted
-preload bridge; backend delivery changes are added only if a concrete Windows
-token model is required.
+Browser Web Push does not become killed-process Windows push automatically.
+While the Tauri process/tray is running, foreground realtime events can use the
+restricted native notification plugin. Killed-process delivery needs a
+separate Windows push token/backend design and is not claimed.
 
 ## Release catalog
 
-`https://api.letscube.ru/releases/v1/windows/stable.json` is active with
-`available: false` until an EXE exists. Future NSIS artifacts and updater
-metadata use immutable versioned paths under
+`https://api.letscube.ru/releases/v1/windows/stable.json` remains
+`available: false` until a verified Tauri NSIS artifact is published.
+Artifacts remain immutable under
 `https://api.letscube.ru/releases/files/windows/`.
 
 ## Packaging QA
 
-- Install, uninstall, and upgrade.
-- Auto-update prompt does not force reload during active work.
-- Login/session restore.
-- Deep link opens existing window.
-- Notifications route to chat/task/invite.
-- Camera/microphone/file picker.
+- Clean-profile launch shows login and contains no existing auth state.
+- Install, uninstall and upgrade.
+- Splash, retry state, tray close-to-hide and single instance.
+- Login/session restore without using a QA profile.
+- Notifications route to chat/task/invite while the process is running.
+- Camera/microphone/file picker/video/voice/geolocation/clipboard/fullscreen.
+- Realtime and notifications after the window stays hidden for five minutes.
 - Offline/reconnect banner and long-session sync.
+- Installer size and SHA-256 are recorded before publication.

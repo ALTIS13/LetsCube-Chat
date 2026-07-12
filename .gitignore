@@ -88,3 +88,8 @@ electron-builder.env
 *.spc
 *.blockmap
 latest*.yml
+
+# Standalone Tauri/Rust outputs. Source and Cargo.lock stay tracked.
+windows-tauri/node_modules/
+windows-tauri/src-tauri/target/
+windows-tauri/src-tauri/gen/
