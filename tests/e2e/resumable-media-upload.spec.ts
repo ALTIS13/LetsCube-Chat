@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
   buildResumableUploadEndpoint,
   normalizeUploadProgress,
@@ -18,14 +18,6 @@ import {
 } from "../../artifacts/kub/src/lib/stagedAttachments";
 
 const FILE_SIZE = RESUMABLE_UPLOAD_THRESHOLD_BYTES + 1;
-const CHAT_WINDOW_SOURCE = readFileSync(
-  resolve(process.cwd(), "artifacts/kub/src/components/chat/ChatWindow.tsx"),
-  "utf8",
-);
-const MESSAGE_INPUT_SOURCE = readFileSync(
-  resolve(process.cwd(), "artifacts/kub/src/components/chat/MessageInput.tsx"),
-  "utf8",
-);
 
 test.describe("resumable media upload contracts", () => {
   test("uses TUS only above the exact 6 MiB boundary", () => {
@@ -175,31 +167,120 @@ test.describe("resumable media upload contracts", () => {
     });
   });
 
-  test("renders determinate staged upload progress without replacing sending indeterminate state", () => {
-    expect(MESSAGE_INPUT_SOURCE).toContain('data-testid="staged-attachment-upload-progress"');
-    expect(MESSAGE_INPUT_SOURCE).toContain('role="progressbar"');
-    expect(MESSAGE_INPUT_SOURCE).toContain("aria-valuenow={progress}");
-    expect(MESSAGE_INPUT_SOURCE).toContain("{progress}%");
-    expect(MESSAGE_INPUT_SOURCE).toContain('data-testid="staged-attachment-sending-progress"');
-  });
+  test("renders determinate upload progress and keeps sending indeterminate", async () => {
+    const { StagedAttachmentTransferProgress } = await loadStagedUploadWorkflow();
+    const uploading = attachmentStub({ status: "uploading", progress: 42 });
+    const sending = attachmentStub({ status: "sending", progress: 100 });
 
-  test("owns and terminates active upload handles before removing staged state", () => {
-    expect(CHAT_WINDOW_SOURCE).toContain("useRef<Map<string, ResumableStorageUploadHandle>>(new Map())");
-    expect(CHAT_WINDOW_SOURCE).toContain("await handle.abort(true)");
-    expect(CHAT_WINDOW_SOURCE).toContain(
-      "void abortActiveUploads();\n    setStagedAttachments((current) =>",
+    const uploadingMarkup = renderToStaticMarkup(
+      createElement(StagedAttachmentTransferProgress, { attachment: uploading }),
     );
+    const sendingMarkup = renderToStaticMarkup(
+      createElement(StagedAttachmentTransferProgress, { attachment: sending }),
+    );
+
+    expect(uploadingMarkup).toContain('role="progressbar"');
+    expect(uploadingMarkup).toContain('aria-valuenow="42"');
+    expect(uploadingMarkup).toContain('style="width:42%"');
+    expect(uploadingMarkup).toContain("42%");
+    expect(sendingMarkup).toContain('data-testid="staged-attachment-sending-progress"');
+    expect(sendingMarkup).not.toContain("aria-valuenow");
   });
 
-  test("guards media message creation with the captured source chat", () => {
-    expect(CHAT_WINDOW_SOURCE).toContain("const sourceChatId = chatId;");
-    const loopIndex = CHAT_WINDOW_SOURCE.indexOf("for (const attachment of targets)");
-    const guardIndex = CHAT_WINDOW_SOURCE.indexOf("activeChatIdRef.current !== sourceChatId", loopIndex);
-    const uploadStateIndex = CHAT_WINDOW_SOURCE.indexOf('status: "uploading"', loopIndex);
-    const sendIndex = CHAT_WINDOW_SOURCE.indexOf("const message = await sendMediaMessage({");
-    expect(guardIndex).toBeGreaterThan(-1);
-    expect(guardIndex).toBeLessThan(uploadStateIndex);
-    expect(guardIndex).toBeLessThan(sendIndex);
+  test("terminates registered uploads and releases only the matching handle", async () => {
+    const { createStagedUploadHandleRegistry } = await loadStagedUploadWorkflow();
+    const registry = createStagedUploadHandleRegistry();
+    const abortCalls: boolean[] = [];
+    const firstHandle = { abort: async (terminate = false) => { abortCalls.push(terminate); } };
+    const secondHandle = { abort: async (terminate = false) => { abortCalls.push(terminate); } };
+
+    registry.register("attachment-1", firstHandle);
+    registry.release("attachment-1", secondHandle);
+    expect(registry.has("attachment-1")).toBe(true);
+
+    await registry.abort("attachment-1");
+    expect(abortCalls).toEqual([true]);
+    expect(registry.has("attachment-1")).toBe(false);
+
+    registry.register("attachment-2", secondHandle);
+    await registry.abortAll();
+    expect(abortCalls).toEqual([true, true]);
+    expect(registry.has("attachment-2")).toBe(false);
+  });
+
+  test("invalidates an old chat scope before a completed upload can create a message", async () => {
+    const { createStagedUploadScope, runScopedStagedSendAttempt } = await loadStagedUploadWorkflow();
+    const scope = createStagedUploadScope("chat-a");
+    const token = scope.capture();
+    let resolveUpload: (() => void) | undefined;
+    const upload = new Promise<void>((resolve) => { resolveUpload = resolve; });
+    let sendCalls = 0;
+    const completion = (async () => {
+      await upload;
+      return runScopedStagedSendAttempt(scope, token, async () => {
+        sendCalls += 1;
+        return { id: "message-1" };
+      });
+    })();
+
+    scope.invalidate();
+    scope.activate("chat-b");
+    resolveUpload?.();
+
+    await expect(completion).resolves.toEqual({ status: "stale" });
+    expect(sendCalls).toBe(0);
+  });
+
+  test("converts rejected attachment sends into a friendly failed staged state", async () => {
+    const {
+      createStagedUploadScope,
+      markStagedAttachmentSendFailed,
+      runScopedStagedSendAttempt,
+    } = await loadStagedUploadWorkflow();
+    const scope = createStagedUploadScope("chat-a");
+    const token = scope.capture();
+    const uploaded = {
+      bucket: "media",
+      path: "user/chat-attachment.mp4",
+      publicUrl: "https://example.invalid/media.mp4",
+    };
+
+    const result = await runScopedStagedSendAttempt(scope, token, async () => {
+      throw new Error("raw backend rejection");
+    });
+    const failed = markStagedAttachmentSendFailed(
+      attachmentStub({ status: "sending", progress: 100, uploaded }),
+      uploaded,
+    );
+
+    expect(result).toEqual({ status: "failed" });
+    expect(failed).toMatchObject({
+      status: "failed",
+      progress: 100,
+      uploaded,
+      error: "Не удалось отправить сообщение.",
+    });
+    expect(failed.error).not.toContain("raw backend rejection");
+  });
+
+  test("keeps voice playback progress separate from one sending indicator", async () => {
+    const {
+      StagedAttachmentTransferProgress,
+      VoicePlaybackProgress,
+    } = await loadStagedUploadWorkflow();
+    const markup = renderToStaticMarkup(createElement(
+      "div",
+      null,
+      createElement(VoicePlaybackProgress, { progress: 0.25 }),
+      createElement(StagedAttachmentTransferProgress, {
+        attachment: attachmentStub({ kind: "voice", status: "sending", progress: 100 }),
+      }),
+    ));
+
+    expect(markup).toContain('data-testid="staged-voice-playback-progress"');
+    expect(markup).toContain('aria-valuenow="25"');
+    expect(markup).toContain('data-testid="staged-attachment-sending-progress"');
+    expect(markup.match(/animate-pulse/g)).toHaveLength(1);
   });
 });
 
@@ -277,7 +358,7 @@ function createUploadHarness(options: HarnessOptions = {}) {
   };
 }
 
-function attachmentStub(): StagedAttachment {
+function attachmentStub(overrides: Partial<StagedAttachment> = {}): StagedAttachment {
   return {
     id: "attachment-789",
     file: fileStub(),
@@ -291,7 +372,12 @@ function attachmentStub(): StagedAttachment {
     error: null,
     clientMessageId: "client-message-123",
     uploaded: null,
+    ...overrides,
   };
+}
+
+function loadStagedUploadWorkflow() {
+  return import("../../artifacts/kub/src/lib/stagedUploadWorkflow");
 }
 
 function fileStub(): File {

@@ -1,6 +1,4 @@
 import { expect, test } from "@playwright/test";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { gotoOrSkip, loadQaCredentials, loginIfNeeded } from "./helpers/auth";
 
 test.use({
@@ -10,14 +8,16 @@ test.use({
 });
 
 test.describe("KUB video recorders", () => {
-  test("uses the 250 MB payload-too-large copy for video circles", () => {
-    const chatWindowSource = readFileSync(
-      resolve(process.cwd(), "artifacts/kub/src/components/chat/ChatWindow.tsx"),
-      "utf8",
+  test("uses the 250 MB payload-too-large copy for video circles", async () => {
+    const { getAttachmentUploadErrorMessage } = await import(
+      "../../artifacts/kub/src/lib/stagedUploadWorkflow"
     );
 
-    expect(chatWindowSource).toContain(
-      'kind === "video" || kind === "video_message" ? MAX_VIDEO_ATTACHMENT_SIZE_LABEL',
+    expect(getAttachmentUploadErrorMessage({ status: 413 }, "video_message")).toBe(
+      "Файл слишком большой для загрузки. Максимум 250 МБ.",
+    );
+    expect(getAttachmentUploadErrorMessage(new Error("payload too large"), "video")).toBe(
+      "Файл слишком большой для загрузки. Максимум 250 МБ.",
     );
   });
 
