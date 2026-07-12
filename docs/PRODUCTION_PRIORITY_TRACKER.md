@@ -45,7 +45,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 5. `[~]` Keep iPhone/iPad Home Screen as the only PWA install target. Android browsers use the APK catalog and Windows browsers use the EXE catalog; physical iOS Home Screen/push confirmation remains pending.
 6. `[!]` Keep monitoring/Sentry and backup restore rehearsal deferred until the user confirms the backup environment and restore-test window.
 7. `[~]` Complete the Capacitor Android release candidate. LETSCUBE `0.1.0` production-configured debug APK is published through the self-hosted release catalog with verified size/SHA parity. Remaining: release signing/AAB, app links/recovery callback and broader signed-package QA.
-8. `[ ]` After Android RC, run an Electron capability spike and package an internal Windows NSIS setup executable.
+8. `[~]` Run the Electron capability spike and package an internal Windows x64 NSIS setup executable. Active plan: `docs/superpowers/plans/2026-07-12-windows-electron-internal-release.md`.
 
 ## Last Confirmed Deploy Baseline
 
