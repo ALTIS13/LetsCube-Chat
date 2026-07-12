@@ -14,18 +14,17 @@ test.describe("resumable media upload UI", () => {
     test.skip(!role, "QA credentials or auth state are not configured");
 
     let deleteRequested = false;
-    const uploadLocation = "https://core.letscube.ru/storage/v1/upload/resumable/qa-ui-upload";
-    const corsHeaders = {
-      "access-control-allow-origin": "http://127.0.0.1:5173",
-      "access-control-allow-headers": "*",
-      "access-control-allow-methods": "POST, HEAD, PATCH, OPTIONS, DELETE",
-      "access-control-expose-headers": "Location, Upload-Offset, Tus-Resumable",
-      "tus-resumable": "1.0.0",
-    };
-
     await page.route("**/storage/v1/upload/resumable**", async (route) => {
       const request = route.request();
       const method = request.method();
+      const requestUrl = new URL(request.url());
+      const corsHeaders = {
+        "access-control-allow-origin": request.headers().origin ?? new URL(page.url()).origin,
+        "access-control-allow-headers": "*",
+        "access-control-allow-methods": "POST, HEAD, PATCH, OPTIONS, DELETE",
+        "access-control-expose-headers": "Location, Upload-Offset, Tus-Resumable",
+        "tus-resumable": "1.0.0",
+      };
 
       if (method === "OPTIONS") {
         await route.fulfill({ status: 204, headers: corsHeaders });
@@ -34,7 +33,11 @@ test.describe("resumable media upload UI", () => {
       if (method === "POST") {
         await route.fulfill({
           status: 201,
-          headers: { ...corsHeaders, location: uploadLocation, "upload-offset": "0" },
+          headers: {
+            ...corsHeaders,
+            location: `${requestUrl.origin}${requestUrl.pathname}/qa-ui-upload`,
+            "upload-offset": "0",
+          },
         });
         return;
       }
@@ -62,7 +65,11 @@ test.describe("resumable media upload UI", () => {
     await firstChat.click();
 
     const payload = Buffer.alloc(7 * 1024 * 1024, 0x4c);
-    await page.locator('input[type="file"]').nth(1).setInputFiles({
+    await page.getByRole("button", { name: "Прикрепить" }).click();
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Файл", exact: true }).click();
+    const fileChooser = await fileChooserPromise;
+    await fileChooser.setFiles({
       name: `qa-resumable-${Date.now()}.bin`,
       mimeType: "application/octet-stream",
       buffer: payload,
