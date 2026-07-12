@@ -8,6 +8,7 @@ import test from "node:test";
 
 const root = resolve(".");
 const nginxPath = join(root, "docs/deploy/release-catalog/nginx.conf");
+const nginxMainPath = join(root, "docs/deploy/release-catalog/nginx-main.conf");
 const composePath = join(root, "docs/deploy/release-catalog/docker-compose.yml");
 const dockerfilePath = join(root, "docs/deploy/release-catalog/Dockerfile");
 const publisherPath = join(root, "scripts/publish-native-release.sh");
@@ -30,6 +31,7 @@ test("release catalog nginx is read-only, CORS-enabled and uses distinct cache p
 test("release catalog compose mounts the host catalog once and keeps the container read-only", () => {
   const compose = readFileSync(composePath, "utf8");
   const dockerfile = readFileSync(dockerfilePath, "utf8");
+  const nginxMain = readFileSync(nginxMainPath, "utf8");
   assert.match(compose, /\/srv\/letscube\/releases\/public:\/usr\/share\/nginx\/html:ro/);
   assert.doesNotMatch(compose, /html\/releases/);
   assert.match(compose, /read_only:\s*true/);
@@ -37,6 +39,12 @@ test("release catalog compose mounts the host catalog once and keeps the contain
   assert.match(compose, /wget.*\/healthz/);
   assert.doesNotMatch(compose, /ports:/);
   assert.match(dockerfile, /FROM\s+nginx:/);
+  assert.match(dockerfile, /USER\s+nginx/);
+  assert.match(dockerfile, /EXPOSE\s+8080/);
+  assert.match(compose, /expose:\s*\r?\n\s+-\s+"8080"/);
+  assert.match(compose, /http:\/\/localhost:8080\/healthz/);
+  assert.match(nginxMain, /pid\s+\/tmp\/nginx\.pid/);
+  assert.match(nginxMain, /client_body_temp_path\s+\/tmp\/client_temp/);
   assert.doesNotMatch(dockerfile, /COPY\s+.*\.env|ARG\s+.*SECRET|ENV\s+.*TOKEN/i);
 });
 

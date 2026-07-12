@@ -6,7 +6,7 @@ services:
     image: letscube-releases:latest
     restart: unless-stopped
     expose:
-      - "80"
+      - "8080"
     read_only: true
     tmpfs:
       - /var/cache/nginx
@@ -15,7 +15,7 @@ services:
     volumes:
       - /srv/letscube/releases/public:/usr/share/nginx/html:ro
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3
