@@ -1,8 +1,8 @@
 # Windows Packaging Plan
 
-LETSCUBE is migrating from the retired Electron experiment to a Tauri 2
-Windows client. The Windows stable release catalog stays unavailable until a
-clean-profile Tauri installer passes physical QA. The shell loads only
+LETSCUBE has migrated from the retired Electron experiment to a Tauri 2
+Windows client. The verified internal `0.2.0` build `4` installer is published
+through the Windows stable release catalog. The shell loads only
 `https://app.letscube.ru` and keeps the production web application as the
 shared product surface.
 
@@ -91,9 +91,8 @@ separate Windows push token/backend design and is not claimed.
 
 ## Release catalog
 
-`https://api.letscube.ru/releases/v1/windows/stable.json` remains
-`available: false` until a verified Tauri NSIS artifact is published.
-Artifacts remain immutable under
+`https://api.letscube.ru/releases/v1/windows/stable.json` exposes the verified
+internal `0.2.0` build `4` Tauri NSIS artifact. Artifacts remain immutable under
 `https://api.letscube.ru/releases/files/windows/`.
 
 ## Packaging QA

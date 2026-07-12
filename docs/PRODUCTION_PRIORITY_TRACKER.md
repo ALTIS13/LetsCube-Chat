@@ -49,11 +49,11 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 
 ## Last Confirmed Deploy Baseline
 
-- Production web/release baseline: `491e172ad58dc71e6c53bdedeca693ad9563fb90` (iOS-only PWA install policy, native release status/download UI and hardened release-catalog runtime). Media/upload baseline remains included from `70de36e40ac299b68d0ba83d8fac20c84aa001cb`.
+- Production web baseline: `8d20b89645b9471b4477a8566a5d23ff5cfc9027` (Tauri desktop adapter and hardened Windows shell handoff). The release-catalog runtime baseline remains included from `491e172ad58dc71e6c53bdedeca693ad9563fb90`, and the media/upload baseline remains included from `70de36e40ac299b68d0ba83d8fac20c84aa001cb`.
 - Coolify app: `letscube-web`.
 - Public app: `https://app.letscube.ru`.
-- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; deployment `exe5a6smqbvwpyxj2hxtc0pa` completed exact commit `70de36e` successfully and production reports `running:healthy`. The chat-summary and access-snapshot RPC build flags remain enabled.
-- Worker auto deploy: worker-specific GitHub webhook is verified. Deployment `ayhm60bc1qvuvwe5vjp1vq9w` completed exact commit `70de36e` with `is_webhook=true`, status `finished` and `running:healthy`; it rebuilt because the shared `pnpm-lock.yaml` changed for the frontend TUS dependency. Worker `watch_paths` remain limited to worker/build/runtime paths and shared package manifests. GitHub Actions are intentionally disabled and repo workflow files/secrets were removed to avoid billing-lock email noise.
+- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; deployment `qu9qpxb8d6w1rr04zwgdf20p` completed exact commit `8d20b89645b9471b4477a8566a5d23ff5cfc9027`, passed healthcheck and production reports `running:healthy`. The chat-summary and access-snapshot RPC build flags remain enabled.
+- Worker auto deploy: worker-specific GitHub webhook is verified. Deployment `hjlbhqir375ia6wzmqarhswq` completed exact commit `8d20b89645b9471b4477a8566a5d23ff5cfc9027` with `is_webhook=true`, status `finished` and a healthy `/api/healthz` check. Worker `watch_paths` remain limited to worker/build/runtime paths and shared package manifests. GitHub Actions are intentionally disabled and repo workflow files/secrets were removed to avoid billing-lock email noise.
 - Self-host stack: Coolify proxy, self-hosted Supabase, Mailcow, app and worker deployment are already in place.
 - Production domains verified on 2026-07-09: `app.letscube.ru`, `deploy.letscube.ru`, `core.letscube.ru`, `mailserver.letscube.ru`, `notify.letscube.ru`, and SSH host `ms.letscube.ru` resolve and expose their expected services with valid TLS where applicable.
 - `api.letscube.ru` now serves the read-only native release catalog with valid TLS through Coolify application `letscube-releases`; `status.letscube.ru` and `monitor.letscube.ru` remain reserved future endpoints.
@@ -268,17 +268,17 @@ Candidate work:
 
 ## Native And Desktop Packaging
 
-Status: `[~]` active. Android internal candidate is available; Windows is migrating from the retired Electron spike to Tauri 2.
+Status: `[~]` active. Android and Windows Tauri internal candidates are available; production signing and update gates remain open.
 
 - `[x]` Production debug APK connection and physical launch: the public build allowlist, LETSCUBE adaptive icons/dark splash, Android `0.1.0` versioning, install and first launch were verified on a Nothing/Spacewar A063 running Android 15.
 - `[x]` Native Android FCM foundation: local ignored Firebase client config, Capacitor permission/registration/channels, live auth-scoped device RPCs, RLS-protected device/outbox schema, trusted HTTP v1 delivery and one physical background notification/tap smoke are complete.
-- `[x]` Self-hosted native release catalog: Android `0.1.0` internal APK is available at `api.letscube.ru`; Windows remains a valid `available:false` manifest until an EXE is built.
+- `[x]` Self-hosted native release catalog: Android `0.1.0` internal APK and immutable Windows Tauri `0.2.0` build `4` NSIS are available at `api.letscube.ru`; public size/SHA and cache/CORS headers were verified.
 - `[~]` Native push release QA: real owner-to-client message delivery, sender exclusion, category preference suppression, same-chat collapse, server-backed chat read-sync, cold-start tap routing, killed-process delivery, separate task delivery, location-staff task routing, restart registration recovery and Android 16 Google Play emulator coverage pass. A second Android 15 Realme device passes APK/portrait UI QA, but its custom-ROM microG cannot complete Google Check-in (`AccountDisabled`); broader FCM coverage still needs another device with official Google Play Services.
 - `[ ]` Release signing/AAB with secrets outside Git.
 - `[ ]` Android deep links/app links and recovery callback.
-- `[x]` Retire the Electron spike after QA profile leakage and excessive package weight were confirmed. Windows stable is unavailable during migration; Electron source, installed package and shared QA profile were removed.
-- `[x]` Tauri 2 internal candidate: isolated WebView2 profile, 1.18 MiB NSIS installer, tray/close-to-hide, branded startup, single instance, minimum exact-origin capabilities, clean-profile login and hidden-window foreground notifications.
-- `[~]` Tauri rollout: deploy the frontend adapter, repeat production installed-client QA, then publish the verified immutable `0.2.0` build `4` artifact. Keep Windows stable unavailable until these checks pass.
+- `[x]` Retire the Electron spike after QA profile leakage and excessive package weight were confirmed. Electron source, installed package and shared QA profile were removed before publishing Tauri.
+- `[x]` Tauri 2 internal candidate: isolated WebView2 profile, 1.19 MiB NSIS installer, tray/close-to-hide, branded startup, single instance, minimum exact-origin capabilities, clean-profile login and hidden-window foreground notifications.
+- `[x]` Tauri rollout: frontend adapter deployed, clean installed-client QA repeated, and immutable Windows stable `0.2.0` build `4` published at 1,242,693 bytes with verified SHA-256.
 - `[ ]` Windows public release gate: Authenticode signing/SmartScreen, install-upgrade-uninstall matrix, killed-process notifications and signed auto-update apply.
 - `[!]` SMS provider rollout.
 
