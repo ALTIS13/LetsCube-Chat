@@ -16,6 +16,10 @@ export interface ComposerRestoreActions {
   focus?: () => void;
 }
 
+export type ComposerCompletionResult<T> =
+  | { status: "completed"; value: T }
+  | { status: "stale" };
+
 export function createComposerSendScope(initialChatId: string): ComposerSendScope {
   let active = true;
   let chatId = initialChatId;
@@ -53,4 +57,14 @@ export function restoreComposerTextIfCurrent(
   actions.writeDraft(token.chatId, text);
   actions.focus?.();
   return true;
+}
+
+export async function runComposerCompletionIfCurrent<T>(
+  scope: ComposerSendScope,
+  token: ComposerSendToken,
+  complete: () => T | Promise<T>,
+): Promise<ComposerCompletionResult<T>> {
+  if (!scope.isActive(token)) return { status: "stale" };
+  const value = await complete();
+  return scope.isActive(token) ? { status: "completed", value } : { status: "stale" };
 }

@@ -32,6 +32,8 @@ import { useVoiceRecorder, formatVoiceDuration as formatRecorderDuration } from 
 import {
   createComposerSendScope,
   restoreComposerTextIfCurrent,
+  runComposerCompletionIfCurrent,
+  type ComposerSendToken,
 } from "@/lib/composerSendScope";
 import {
   createRecordedVideoFile,
@@ -144,11 +146,37 @@ export function MessageInput({
   const composerSendScopeRef = useRef<ReturnType<typeof createComposerSendScope> | null>(null);
   if (!composerSendScopeRef.current) composerSendScopeRef.current = createComposerSendScope(chatId);
   const composerSendScope = composerSendScopeRef.current;
+  const voiceRecordingScopeTokenRef = useRef<ComposerSendToken | null>(null);
+  const videoRecordingScopeTokenRef = useRef<ComposerSendToken | null>(null);
+  const delayedAttachmentScopeTokenRef = useRef<ComposerSendToken | null>(null);
 
   useLayoutEffect(() => {
+    voiceHold.cancel();
     composerSendScope.activate(chatId);
-    return () => composerSendScope.invalidate();
-  }, [chatId, composerSendScope]);
+    voiceRecordingScopeTokenRef.current = null;
+    videoRecordingScopeTokenRef.current = null;
+    delayedAttachmentScopeTokenRef.current = null;
+    voiceHoldActiveRef.current = false;
+    videoHoldActiveRef.current = false;
+    holdRecorderStateRef.current = null;
+    setShowVoice(false);
+    setShowCamera(false);
+    setShowVideoMessage(false);
+    setVoiceHoldActive(false);
+    setHoldRecorderState(null);
+    setVideoAutoStart(false);
+    setVideoAutoAddOnStop(false);
+    setLockDragProgress(0);
+    return () => {
+      composerSendScope.invalidate();
+      voiceRecordingScopeTokenRef.current = null;
+      videoRecordingScopeTokenRef.current = null;
+      delayedAttachmentScopeTokenRef.current = null;
+      voiceHoldActiveRef.current = false;
+      videoHoldActiveRef.current = false;
+      holdRecorderStateRef.current = null;
+    };
+  }, [chatId, composerSendScope, voiceHold.cancel]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -235,15 +263,20 @@ export function MessageInput({
 
   const stagePickedFiles = useCallback((fileList: FileList | null) => {
     if (!fileList?.length || !onStageFiles) return;
+    const scopeToken = delayedAttachmentScopeTokenRef.current;
+    if (!scopeToken || !composerSendScope.isActive(scopeToken)) return;
+    delayedAttachmentScopeTokenRef.current = null;
     onStageFiles(Array.from(fileList), "picker");
     setShowAttach(false);
-  }, [onStageFiles]);
+  }, [composerSendScope, onStageFiles]);
 
-  const stageCameraFile = useCallback((file: File) => {
+  const stageCameraFile = useCallback((file: File, scopeToken: ComposerSendToken | null) => {
     if (!onStageFiles) return;
+    if (!scopeToken || !composerSendScope.isActive(scopeToken)) return;
+    delayedAttachmentScopeTokenRef.current = null;
     onStageFiles([file], "camera");
     setShowAttach(false);
-  }, [onStageFiles]);
+  }, [composerSendScope, onStageFiles]);
 
   const stageRecordedVideo = useCallback((blob: Blob, mimeType: string) => {
     if (!onStageFiles) return;
@@ -252,6 +285,7 @@ export function MessageInput({
   }, [onStageFiles]);
 
   const resetVideoRecorderFlags = useCallback(() => {
+    videoRecordingScopeTokenRef.current = null;
     videoHoldActiveRef.current = false;
     setVideoAutoStart(false);
     setVideoAutoAddOnStop(false);
@@ -300,6 +334,7 @@ export function MessageInput({
       showAppAlert("Сначала отправьте или удалите текущее видеосообщение.", "Видеосообщение");
       return;
     }
+    videoRecordingScopeTokenRef.current = composerSendScope.capture();
     videoHoldActiveRef.current = true;
     setActiveHoldRecorder("video");
     setVideoRecorderVariant("round");
@@ -308,7 +343,7 @@ export function MessageInput({
     setShowVideoMessage(true);
     setShowAttach(false);
     setShowEmoji(false);
-  }, [hasStagedVideoMessage, setActiveHoldRecorder]);
+  }, [composerSendScope, hasStagedVideoMessage, setActiveHoldRecorder]);
 
   const stopVideoHoldRecording = useCallback(() => {
     if (!videoHoldActiveRef.current) return;
@@ -321,32 +356,43 @@ export function MessageInput({
       showAppAlert("Сначала отправьте или удалите текущее голосовое сообщение.", "Голосовое сообщение");
       return;
     }
+    const scopeToken = composerSendScope.capture();
+    voiceRecordingScopeTokenRef.current = scopeToken;
     voiceHoldActiveRef.current = true;
     setVoiceHoldActive(true);
     setActiveHoldRecorder("voice");
     setShowAttach(false);
     setShowEmoji(false);
     const started = await voiceHold.start();
+    if (!composerSendScope.isActive(scopeToken)) {
+      return;
+    }
     if (!started) {
+      voiceRecordingScopeTokenRef.current = null;
       voiceHoldActiveRef.current = false;
       setVoiceHoldActive(false);
       clearActiveHoldRecorder();
     }
-  }, [clearActiveHoldRecorder, hasStagedVoice, setActiveHoldRecorder, voiceHold.start]);
+  }, [clearActiveHoldRecorder, composerSendScope, hasStagedVoice, setActiveHoldRecorder, voiceHold.start]);
 
   const stopVoiceHoldRecording = useCallback(async () => {
     if (!voiceHoldActiveRef.current) return;
+    const scopeToken = voiceRecordingScopeTokenRef.current;
     voiceHoldActiveRef.current = false;
     setVoiceHoldActive(false);
     clearActiveHoldRecorder();
     const result = await voiceHold.stop();
+    if (!scopeToken || !composerSendScope.isActive(scopeToken)) return;
     if (!result || result.blob.size === 0 || result.durationMs < 1000) {
       if (!result) voiceHold.cancel();
       showAppAlert("Запись слишком короткая или пустая.", "Голосовое сообщение");
       return;
     }
-    await onSendVoice?.(result.blob, result.durationMs, result.mimeType);
-  }, [clearActiveHoldRecorder, onSendVoice, voiceHold.cancel, voiceHold.stop]);
+    await runComposerCompletionIfCurrent(composerSendScope, scopeToken, () => (
+      onSendVoice?.(result.blob, result.durationMs, result.mimeType)
+    ));
+    if (composerSendScope.isActive(scopeToken)) voiceRecordingScopeTokenRef.current = null;
+  }, [clearActiveHoldRecorder, composerSendScope, onSendVoice, voiceHold.cancel, voiceHold.stop]);
 
   const startRecorderHold = useCallback((mode: "voice" | "video") => {
     if (mode === "video") {
@@ -502,15 +548,23 @@ export function MessageInput({
   }, [stopRecorderHold]);
 
   const handleLocation = useCallback(() => {
+    const scopeToken = composerSendScope.capture();
     setShowAttach(false);
-    void getMessengerPosition()
-      .then(({ latitude, longitude }) => {
-        void onSend(`📍 Местоположение: https://maps.google.com/?q=${latitude},${longitude}`);
-      })
-      .catch((error) => {
+    void (async () => {
+      let position: Awaited<ReturnType<typeof getMessengerPosition>>;
+      try {
+        position = await getMessengerPosition();
+      } catch (error) {
+        if (!composerSendScope.isActive(scopeToken)) return;
         showAppAlert(getMessengerLocationErrorMessage(error), "Геолокация");
-      });
-  }, [onSend]);
+        return;
+      }
+      const { latitude, longitude } = position;
+      await runComposerCompletionIfCurrent(composerSendScope, scopeToken, () => (
+        onSend(`📍 Местоположение: https://maps.google.com/?q=${latitude},${longitude}`)
+      ));
+    })();
+  }, [composerSendScope, onSend]);
 
   const handleSend = useCallback(async () => {
     const sendToken = composerSendScope.capture();
@@ -643,24 +697,50 @@ export function MessageInput({
     );
   }
 
+  const renderedVoiceRecordingScopeToken = voiceRecordingScopeTokenRef.current;
+  const renderedVideoRecordingScopeToken = videoRecordingScopeTokenRef.current;
+  const renderedDelayedAttachmentScopeToken = delayedAttachmentScopeTokenRef.current;
+
   if (showVoice) {
     return (
       <div className="flex-shrink-0 px-3 pb-3 pt-2 bg-[var(--kub-chat-bg)]">
         <VoiceRecorder
+          key={chatId}
           onSend={async (blob, durMs, mime) => {
-            try { await onSendVoice?.(blob, durMs, mime); }
-            finally { setShowVoice(false); }
+            const scopeToken = renderedVoiceRecordingScopeToken;
+            if (!scopeToken) return;
+            try {
+              await runComposerCompletionIfCurrent(composerSendScope, scopeToken, () => (
+                onSendVoice?.(blob, durMs, mime)
+              ));
+            } finally {
+              if (composerSendScope.isActive(scopeToken)) {
+                voiceRecordingScopeTokenRef.current = null;
+                setShowVoice(false);
+              }
+            }
           }}
-          onCancel={() => setShowVoice(false)}
+          onCancel={() => {
+            if (!renderedVoiceRecordingScopeToken || !composerSendScope.isActive(renderedVoiceRecordingScopeToken)) return;
+            voiceRecordingScopeTokenRef.current = null;
+            setShowVoice(false);
+          }}
         />
       </div>
     );
   }
 
   const attachItems: Array<{ icon: KubIconName; label: string; tone: string; action: () => void }> = [
-    { icon: "image",   label: "Фото или видео", tone: "var(--kub-cyan)",   action: () => photoInputRef.current?.click() },
-    { icon: "file",    label: "Файл",            tone: "var(--kub-pink)",   action: () => fileInputRef.current?.click() },
+    { icon: "image",   label: "Фото или видео", tone: "var(--kub-cyan)",   action: () => {
+      delayedAttachmentScopeTokenRef.current = composerSendScope.capture();
+      photoInputRef.current?.click();
+    } },
+    { icon: "file",    label: "Файл",            tone: "var(--kub-pink)",   action: () => {
+      delayedAttachmentScopeTokenRef.current = composerSendScope.capture();
+      fileInputRef.current?.click();
+    } },
     { icon: "camera",  label: "Сделать фото",    tone: "var(--kub-danger)", action: () => {
+      delayedAttachmentScopeTokenRef.current = composerSendScope.capture();
       setShowCamera(true);
       setShowAttach(false);
       setShowEmoji(false);
@@ -670,11 +750,13 @@ export function MessageInput({
         showAppAlert("Удалите текущую запись или используйте «Перезаписать».", "Голосовое сообщение");
         return;
       }
+      voiceRecordingScopeTokenRef.current = composerSendScope.capture();
       setShowVoice(true);
       setShowAttach(false);
       setShowEmoji(false);
     } },
     { icon: "video",   label: "Записать видео",   tone: "var(--kub-pink)",   action: () => {
+      videoRecordingScopeTokenRef.current = composerSendScope.capture();
       setVideoRecorderVariant("regular");
       setVideoAutoStart(false);
       setVideoAutoAddOnStop(false);
@@ -707,11 +789,17 @@ export function MessageInput({
         onChange={(e) => { stagePickedFiles(e.target.files); e.target.value = ""; }} />
 
       <CameraCaptureModal
+        key={chatId}
         open={showCamera}
-        onClose={() => setShowCamera(false)}
-        onAddFile={stageCameraFile}
+        onClose={() => {
+          if (!renderedDelayedAttachmentScopeToken || !composerSendScope.isActive(renderedDelayedAttachmentScopeToken)) return;
+          delayedAttachmentScopeTokenRef.current = null;
+          setShowCamera(false);
+        }}
+        onAddFile={(file) => stageCameraFile(file, renderedDelayedAttachmentScopeToken)}
       />
       <VideoMessageRecorderModal
+        key={chatId}
         open={showVideoMessage}
         variant={videoRecorderVariant}
         mediaQuality={mediaQuality}
@@ -721,16 +809,26 @@ export function MessageInput({
         locked={holdRecorderState?.mode === "video" && holdRecorderState.locked}
         onLockedStop={stopLockedRecording}
         onClose={() => {
+          if (!renderedVideoRecordingScopeToken || !composerSendScope.isActive(renderedVideoRecordingScopeToken)) return;
           setShowVideoMessage(false);
           resetVideoRecorderFlags();
           if (holdRecorderStateRef.current?.mode === "video") clearActiveHoldRecorder();
         }}
         onAddVideo={async (blob, durationMs, mimeType) => {
-          if (videoRecorderVariant === "regular") {
-            stageRecordedVideo(blob, mimeType);
-          } else {
-            await onSendVideoMessage?.(blob, durationMs, mimeType);
-          }
+          const scopeToken = renderedVideoRecordingScopeToken;
+          if (!scopeToken) return;
+          const completion = await runComposerCompletionIfCurrent(
+            composerSendScope,
+            scopeToken,
+            async () => {
+              if (videoRecorderVariant === "regular") {
+                stageRecordedVideo(blob, mimeType);
+              } else {
+                await onSendVideoMessage?.(blob, durationMs, mimeType);
+              }
+            },
+          );
+          if (completion.status === "stale") return;
           setShowVideoMessage(false);
           resetVideoRecorderFlags();
         }}
@@ -820,11 +918,13 @@ export function MessageInput({
                 const target = attachments.find((attachment) => attachment.id === attachmentId);
                 onRemoveAttachment?.(attachmentId);
                 if (target?.kind === "video_message") {
+                  videoRecordingScopeTokenRef.current = composerSendScope.capture();
                   setVideoRecorderVariant("round");
                   setVideoAutoStart(false);
                   setVideoAutoAddOnStop(false);
                   setShowVideoMessage(true);
                 } else {
+                  voiceRecordingScopeTokenRef.current = composerSendScope.capture();
                   setShowVoice(true);
                 }
                 setShowAttach(false);

@@ -90,4 +90,59 @@ test.describe("message send safety", () => {
     expect(restoredText).toEqual([]);
     expect(draftWrites).toEqual([]);
   });
+
+  test("ignores a location result that resolves after the composer changes chat", async () => {
+    const {
+      createComposerSendScope,
+      runComposerCompletionIfCurrent,
+    } = await import("../../artifacts/kub/src/lib/composerSendScope");
+    const scope = createComposerSendScope("chat-a");
+    const token = scope.capture();
+    let resolveLocation: ((position: { latitude: number; longitude: number }) => void) | undefined;
+    const location = new Promise<{ latitude: number; longitude: number }>((resolve) => {
+      resolveLocation = resolve;
+    });
+    const sent: string[] = [];
+    const completion = (async () => {
+      const position = await location;
+      return runComposerCompletionIfCurrent(scope, token, () => {
+        sent.push(`${position.latitude},${position.longitude}`);
+      });
+    })();
+
+    scope.invalidate();
+    scope.activate("chat-b");
+    resolveLocation?.({ latitude: 55.75, longitude: 37.62 });
+
+    await expect(completion).resolves.toEqual({ status: "stale" });
+    expect(sent).toEqual([]);
+  });
+
+  test("ignores voice and video recorder completions from the previous chat", async () => {
+    const {
+      createComposerSendScope,
+      runComposerCompletionIfCurrent,
+    } = await import("../../artifacts/kub/src/lib/composerSendScope");
+    const scope = createComposerSendScope("chat-a");
+    const voiceToken = scope.capture();
+    const roundVideoToken = scope.capture();
+    const regularVideoToken = scope.capture();
+    const staged: string[] = [];
+
+    scope.invalidate();
+    scope.activate("chat-b");
+
+    const results = await Promise.all([
+      runComposerCompletionIfCurrent(scope, voiceToken, () => staged.push("voice")),
+      runComposerCompletionIfCurrent(scope, roundVideoToken, () => staged.push("round-video")),
+      runComposerCompletionIfCurrent(scope, regularVideoToken, () => staged.push("regular-video")),
+    ]);
+
+    expect(results).toEqual([
+      { status: "stale" },
+      { status: "stale" },
+      { status: "stale" },
+    ]);
+    expect(staged).toEqual([]);
+  });
 });
