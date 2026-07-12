@@ -92,5 +92,4 @@ Snapshot updated: 2026-07-09. The detailed execution source of truth is
 - Isolated restore drill.
 - Sentry self-host decision and rollout.
 - Startup permission capability batching: the current app shell issues 33 repeated role/location permission RPCs before the first meaningful chat interaction.
-- Server-side 720p video transcode and large-upload retry/resume UX.
 - Broader installed PWA device/push matrix.
