@@ -992,7 +992,7 @@ Recurring tasks roadmap note:
 
 ## 2026-07-12 - Windows Electron internal package
 
-- Added an Electron `43.1.0` Windows shell and electron-builder `26.15.3` x64 NSIS package for LETSCUBE. The initial immutable `0.1.0` build `1` exposed a first-context stale-cache race during production QA; stable was superseded by `0.1.1` build `2` after shell-level HTTP/Service Worker cache reconciliation was added.
+- Added an Electron `43.1.0` Windows shell and electron-builder `26.15.3` x64 NSIS package for LETSCUBE. The initial immutable `0.1.0` build `1` exposed a first-context stale-cache race during production QA; `0.1.1` build `2` added shell-level HTTP/Service Worker cache reconciliation. Final internal stable `0.1.2` build `3` additionally restores clipboard/fullscreen and safe external HTTP handoff, and shows a local retry screen when production is unreachable.
 - Desktop build dependencies and lockfile are isolated under `desktop/`; normal root workspace/Coolify web and worker installs do not download Electron.
 - The shell loads only `https://app.letscube.ru`, uses a persistent isolated session, disables Node integration, enables context isolation/sandbox/web security, rejects cross-origin navigation and exposes only validated version metadata through preload IPC.
 - Browser PWA installation, Service Worker registration and Browser Web Push are excluded from the Electron runtime. Native Windows notifications, deep links, public signing and automatic update application remain pending.

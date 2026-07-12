@@ -1,7 +1,13 @@
 export const PRODUCTION_APP_ORIGIN = "https://app.letscube.ru";
 
-const ALLOWED_PERMISSIONS = new Set(["media", "geolocation", "notifications"]);
-const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["https:", "mailto:"]);
+const ALLOWED_PERMISSIONS = new Set([
+  "clipboard-sanitized-write",
+  "fullscreen",
+  "geolocation",
+  "media",
+  "notifications",
+]);
+const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 const ALLOWED_MEDIA_TYPES = new Set(["audio", "video"]);
 
 export function isAllowedNavigationUrl(rawUrl) {

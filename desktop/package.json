@@ -1,7 +1,7 @@
 {
   "name": "letscube-desktop",
-  "version": "0.1.1",
-  "desktopBuild": 2,
+  "version": "0.1.2",
+  "desktopBuild": 3,
   "private": true,
   "main": "main.mjs",
   "description": "LETSCUBE desktop messenger for cyber-arena operations.",

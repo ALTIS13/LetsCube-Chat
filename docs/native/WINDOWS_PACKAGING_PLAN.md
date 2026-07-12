@@ -1,7 +1,7 @@
 # Windows Packaging Plan
 
-LETSCUBE now has an internal Windows Electron package. Version `0.1.1`, build
-`2`, is produced as an unsigned x64 NSIS installer. The shell loads only
+LETSCUBE now has an internal Windows Electron package. Version `0.1.2`, build
+`3`, is produced as an unsigned x64 NSIS installer. The shell loads only
 `https://app.letscube.ru` and keeps the production web application as the
 shared product surface.
 
@@ -25,7 +25,7 @@ media playback behavior. Tauri remains a later footprint comparison.
 - Source: `desktop/`; config: `electron-builder.yml`.
 - Prepare the isolated desktop toolchain: `pnpm.cmd windows:prepare`.
 - Build: `pnpm.cmd windows:build:internal` (runs preparation automatically).
-- Output: `dist/windows/LETSCUBE-0.1.1-x64-setup.exe`.
+- Output: `dist/windows/LETSCUBE-0.1.2-x64-setup.exe`.
 - Renderer isolation: sandbox and context isolation enabled, Node integration disabled.
 - Navigation and permissions are restricted to the exact production app origin.
 - The preload exposes only validated platform/version/build metadata.

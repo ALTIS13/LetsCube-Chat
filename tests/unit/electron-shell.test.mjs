@@ -20,6 +20,7 @@ test("Electron shell navigation is restricted to the production app origin", () 
 
 test("External handoff accepts only safe public protocols", () => {
   assert.equal(isAllowedExternalUrl("https://api.letscube.ru/releases/files/windows/0.1.0/letscube-0.1.0.exe"), true);
+  assert.equal(isAllowedExternalUrl("http://example.com/help"), true);
   assert.equal(isAllowedExternalUrl("mailto:admin@example.com"), true);
   assert.equal(isAllowedExternalUrl("javascript:alert(1)"), false);
   assert.equal(isAllowedExternalUrl("file:///C:/secret.txt"), false);
@@ -29,6 +30,10 @@ test("External handoff accepts only safe public protocols", () => {
 test("Permissions are scoped to the production origin and required capabilities", () => {
   for (const permission of ["media", "geolocation", "notifications"]) {
     assert.equal(isAllowedPermission("https://app.letscube.ru/chat", permission, { isMainFrame: true }), true);
+  }
+  for (const permission of ["clipboard-sanitized-write", "fullscreen"]) {
+    assert.equal(isAllowedPermission("https://app.letscube.ru/chat", permission, { isMainFrame: true }), true);
+    assert.equal(isAllowedPermission("https://app.letscube.ru/chat", permission, { isMainFrame: false }), false);
   }
   assert.equal(isAllowedPermission("https://app.letscube.ru/", "media", { isMainFrame: true, mediaTypes: ["audio"] }), true);
   assert.equal(isAllowedPermission("https://app.letscube.ru/", "media", { isMainFrame: true, mediaTypes: ["display"] }), false);
@@ -47,10 +52,20 @@ test("BrowserWindow keeps renderer isolation and navigation guards enabled", () 
   assert.match(main, /window\.webContents\.session/);
   assert.match(main, /clearCache\(\)/);
   assert.match(main, /clearStorageData\(\{\s*storages:\s*\["serviceworkers",\s*"cachestorage"\]/s);
+  assert.match(main, /offline\.html/);
+  assert.match(main, /loadFile/);
   assert.match(main, /will-navigate/);
   assert.match(main, /will-redirect/);
   assert.doesNotMatch(main, /session\.defaultSession/);
   assert.doesNotMatch(main, /webSecurity:\s*false/);
+});
+
+test("Offline shell is local, script-free and retries only the production origin", () => {
+  const offline = readFileSync(new URL("../../desktop/offline.html", import.meta.url), "utf8");
+  assert.match(offline, /LETSCUBE/);
+  assert.match(offline, /https:\/\/app\.letscube\.ru\//);
+  assert.match(offline, /Повторить/);
+  assert.doesNotMatch(offline, /<script/i);
 });
 
 test("Windows package is an x64 NSIS build with a stable desktop identity", () => {
@@ -59,8 +74,8 @@ test("Windows package is an x64 NSIS build with a stable desktop identity", () =
   const builder = readFileSync(new URL("../../electron-builder.yml", import.meta.url), "utf8");
 
   assert.equal(packageJson.main, "desktop/main.mjs");
-  assert.equal(packageJson.version, "0.1.1");
-  assert.equal(packageJson.desktopBuild, 2);
+  assert.equal(packageJson.version, "0.1.2");
+  assert.equal(packageJson.desktopBuild, 3);
   assert.equal(desktopPackage.main, "main.mjs");
   assert.equal(desktopPackage.version, packageJson.version);
   assert.equal(desktopPackage.desktopBuild, packageJson.desktopBuild);
