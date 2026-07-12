@@ -2,6 +2,7 @@ appId: ru.letscube.messenger
 productName: LETSCUBE
 copyright: Copyright © LETSCUBE
 asar: true
+electronVersion: 43.1.0
 electronDist: desktop/node_modules/electron/dist
 compression: maximum
 npmRebuild: false

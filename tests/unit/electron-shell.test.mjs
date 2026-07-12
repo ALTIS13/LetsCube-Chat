@@ -45,6 +45,8 @@ test("BrowserWindow keeps renderer isolation and navigation guards enabled", () 
   assert.match(main, /setWindowOpenHandler/);
   assert.match(main, /setPermissionRequestHandler/);
   assert.match(main, /window\.webContents\.session/);
+  assert.match(main, /clearCache\(\)/);
+  assert.match(main, /clearStorageData\(\{\s*storages:\s*\["serviceworkers",\s*"cachestorage"\]/s);
   assert.match(main, /will-navigate/);
   assert.match(main, /will-redirect/);
   assert.doesNotMatch(main, /session\.defaultSession/);
@@ -57,8 +59,8 @@ test("Windows package is an x64 NSIS build with a stable desktop identity", () =
   const builder = readFileSync(new URL("../../electron-builder.yml", import.meta.url), "utf8");
 
   assert.equal(packageJson.main, "desktop/main.mjs");
-  assert.equal(packageJson.version, "0.1.0");
-  assert.equal(packageJson.desktopBuild, 1);
+  assert.equal(packageJson.version, "0.1.1");
+  assert.equal(packageJson.desktopBuild, 2);
   assert.equal(desktopPackage.main, "main.mjs");
   assert.equal(desktopPackage.version, packageJson.version);
   assert.equal(desktopPackage.desktopBuild, packageJson.desktopBuild);
@@ -74,6 +76,7 @@ test("Windows package is an x64 NSIS build with a stable desktop identity", () =
   assert.match(builder, /target:\s*nsis/);
   assert.match(builder, /-\s*x64/);
   assert.match(builder, /asar:\s*true/);
+  assert.match(builder, /electronVersion:\s*43\.1\.0/);
   assert.match(builder, /electronDist:\s*desktop\/node_modules\/electron\/dist/);
   assert.match(builder, /output:\s*dist\/windows/);
   assert.match(builder, /artifactName:\s*LETSCUBE-\$\{version\}-\$\{arch\}-setup\.\$\{ext\}/);

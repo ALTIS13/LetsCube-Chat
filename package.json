@@ -1,7 +1,7 @@
 {
   "name": "workspace",
-  "version": "0.1.0",
-  "desktopBuild": 1,
+  "version": "0.1.1",
+  "desktopBuild": 2,
   "main": "desktop/main.mjs",
   "description": "LETSCUBE desktop messenger for cyber-arena operations.",
   "author": "LETSCUBE",

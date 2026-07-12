@@ -77,7 +77,16 @@ function createMainWindow() {
   window.on("closed", () => {
     if (mainWindow === window) mainWindow = null;
   });
-  void window.loadURL(START_URL);
+  void resetPackagedWebCaches(window.webContents.session)
+    .then(() => window.loadURL(START_URL))
+    .catch(() => window.show());
+}
+
+async function resetPackagedWebCaches(currentSession) {
+  await Promise.allSettled([
+    currentSession.clearCache(),
+    currentSession.clearStorageData({ storages: ["serviceworkers", "cachestorage"] }),
+  ]);
 }
 
 function configureSessionPermissions(currentSession) {

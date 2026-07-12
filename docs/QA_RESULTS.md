@@ -992,10 +992,10 @@ Recurring tasks roadmap note:
 
 ## 2026-07-12 - Windows Electron internal package
 
-- Added an Electron `43.1.0` Windows shell and electron-builder `26.15.3` x64 NSIS package for LETSCUBE `0.1.0` build `1`.
+- Added an Electron `43.1.0` Windows shell and electron-builder `26.15.3` x64 NSIS package for LETSCUBE. The initial immutable `0.1.0` build `1` exposed a first-context stale-cache race during production QA; stable was superseded by `0.1.1` build `2` after shell-level HTTP/Service Worker cache reconciliation was added.
 - Desktop build dependencies and lockfile are isolated under `desktop/`; normal root workspace/Coolify web and worker installs do not download Electron.
 - The shell loads only `https://app.letscube.ru`, uses a persistent isolated session, disables Node integration, enables context isolation/sandbox/web security, rejects cross-origin navigation and exposes only validated version metadata through preload IPC.
 - Browser PWA installation, Service Worker registration and Browser Web Push are excluded from the Electron runtime. Native Windows notifications, deep links, public signing and automatic update application remain pending.
 - The packaged ASAR contains six expected entries and no application dependencies. Electron fuses disable RunAsNode, Node environment/inspect flags and file-protocol privileges while enabling cookie encryption and ASAR integrity.
-- `pnpm.cmd windows:test` passed 10/10, the Electron Playwright startup check passed, the x64 NSIS installer built and installed silently for the current user, and the installed executable opened a responsive `LETSCUBE` window. Android sync/debug build remained green. The internal installer is unsigned by design.
+- `pnpm.cmd windows:test` passed 10/10. Production Electron QA passed 6/6 across 1440x900, 1920x1080 and 3840x2160, including first-context desktop detection and installed-version state. The x64 NSIS installer built and installed silently for the current user, and the installed executable opened a responsive `LETSCUBE` window. Android sync/debug build remained green. The internal installer is unsigned by design.
 - Web typecheck/build, release catalog tests 18/18, five-viewport authenticated smoke 5/5, RLS smoke and advisory DB type drift check completed. Existing Vite sourcemap/chunk warnings and generated-only search RPC/outbox drift remain unchanged.

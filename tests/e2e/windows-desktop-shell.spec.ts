@@ -35,7 +35,7 @@ test.describe("LETSCUBE Windows desktop shell", () => {
 
     expect(contract.requireType).toBe("undefined");
     expect(contract.platform).toBe("windows");
-    expect(contract.runtime).toEqual({ platform: "windows", version: "0.1.0", build: 1 });
+    expect(contract.runtime).toEqual({ platform: "windows", version: "0.1.1", build: 2 });
     expect(contract.manifestCount).toBe(0);
   });
 
