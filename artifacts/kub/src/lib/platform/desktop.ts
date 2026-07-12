@@ -33,8 +33,6 @@ function parseDesktopRuntimeInfo(value: unknown): DesktopRuntimeInfo | null {
 
 export async function getDesktopRuntimeInfo(): Promise<DesktopRuntimeInfo | null> {
   if (!isDesktopApp()) return null;
-  const syncValue = parseDesktopRuntimeInfo(window.letscubeDesktop);
-  if (syncValue) return syncValue;
   try {
     return parseDesktopRuntimeInfo(await window.letscubeDesktop?.getRuntimeInfo());
   } catch {

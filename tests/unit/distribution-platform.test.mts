@@ -75,7 +75,9 @@ test("Tauri desktop bridge is synchronous and wins over Windows browser heuristi
 
   globalThis.window = {
     letscubeDesktop: {
-      ...runtimeInfo,
+      platform: "windows",
+      version: "9.9.9",
+      build: 999,
       getRuntimeInfo: async () => runtimeInfo,
     },
   } as typeof window;

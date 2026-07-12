@@ -122,7 +122,7 @@ export function usePush() {
     }
     if (isDesktopApp()) {
       setStatus("native_unavailable");
-      setMessage("Системные уведомления Windows будут подключены отдельным этапом.");
+      setMessage("Уведомления Windows работают, пока LETSCUBE запущен. Доставка после полного выхода будет подключена позже.");
       return;
     }
     if (isNativeApp()) {

@@ -24,6 +24,10 @@ type DesktopNotificationApi = {
 
 export type DesktopNotificationApiLoader = () => Promise<DesktopNotificationApi>;
 
+export type DesktopNotificationContext = {
+  visibilityState?: DocumentVisibilityState;
+};
+
 async function loadDesktopNotificationApi(): Promise<DesktopNotificationApi> {
   const plugin = await import("@tauri-apps/plugin-notification");
   return {
@@ -36,8 +40,12 @@ async function loadDesktopNotificationApi(): Promise<DesktopNotificationApi> {
 export async function showDesktopMessageNotification(
   notification: DesktopMessageNotification,
   loadApi: DesktopNotificationApiLoader = loadDesktopNotificationApi,
+  context: DesktopNotificationContext = {},
 ): Promise<boolean> {
   if (!isDesktopApp()) return false;
+  const visibilityState = context.visibilityState
+    ?? (typeof document === "undefined" ? "hidden" : document.visibilityState);
+  if (visibilityState === "visible") return false;
 
   try {
     const api = await loadApi();

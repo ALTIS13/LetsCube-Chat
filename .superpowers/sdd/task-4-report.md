@@ -69,3 +69,11 @@ pnpm.cmd --filter @workspace/kub run typecheck
 ## Concerns
 
 - None from the focused frontend scope.
+
+## Review fixes
+
+- Restored runtime metadata lookup to the existing async `getRuntimeInfo()` contract; synchronous bridge usage remains detection-only.
+- Added an explicit Capacitor Android no-load/no-delivery regression case.
+- Added visibility gating so native Windows toasts are silent while the chat window is visible and appear only while hidden/in tray.
+- Updated Windows settings copy to describe running-process delivery without claiming killed-process push.
+- Re-ran focused tests: 11/11 passed; frontend typecheck passed.
