@@ -11,6 +11,7 @@ import {
   MESSAGE_IMAGE_VARIANTS,
   MESSAGE_VIDEO_VARIANTS,
   VIDEO_POSTER_VARIANT,
+  buildCandidatePageRanges,
   buildMessageVariantPath,
   getExpectedMessageVariantKinds,
   getMissingMessageVariantKinds,
@@ -27,6 +28,7 @@ import {
 
 const DEFAULT_TICK_MS = 60_000;
 const DEFAULT_CANDIDATE_LIMIT = 120;
+const DEFAULT_CANDIDATE_SCAN_LIMIT = 1_200;
 const DEFAULT_PROCESS_LIMIT = 12;
 const DEFAULT_POSTER_FFMPEG_TIMEOUT_MS = 30_000;
 const DEFAULT_VIDEO_TRANSCODE_TIMEOUT_MS = 10 * 60_000;
@@ -137,34 +139,44 @@ async function tick(supabase: SupabaseClient): Promise<void> {
 }
 
 async function loadMessageCandidates(supabase: SupabaseClient): Promise<MessageCandidate[]> {
-  const { data, error } = await supabase
-    .from("messages")
-    .select("id, chat_id, user_id, type, media_bucket, media_path, media_url")
-    .in("type", ["image", "video"])
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    .limit(candidateLimit());
+  const candidates: MessageCandidate[] = [];
+  for (const range of buildCandidatePageRanges(candidateLimit(), candidateScanLimit())) {
+    const { data, error } = await supabase
+      .from("messages")
+      .select("id, chat_id, user_id, type, media_bucket, media_path, media_url")
+      .in("type", ["image", "video"])
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .range(range.from, range.to);
 
-  if (error) {
-    logger.warn({ err: safeStorageFailureDetails(error) }, "mediaVariantsWorker message select failed");
-    return [];
+    if (error) {
+      logger.warn(
+        { err: safeStorageFailureDetails(error) },
+        "mediaVariantsWorker message select failed",
+      );
+      return candidates;
+    }
+
+    const rows = (data ?? []) as MessageCandidate[];
+    const pageCandidates = rows.filter((row) =>
+      Boolean(resolveStoragePath(row.media_bucket, row.media_path, row.media_url)),
+    );
+    if (pageCandidates.length > 0) {
+      const existing = await loadExistingVariants(
+        supabase,
+        "message_id",
+        pageCandidates.map((row) => row.id),
+      );
+      for (const row of pageCandidates) {
+        const kinds = existing.get(row.id) ?? new Set<string>();
+        const missingVariantKinds = getMissingMessageVariantKinds(row, kinds);
+        if (missingVariantKinds.length > 0) candidates.push({ ...row, missingVariantKinds });
+      }
+    }
+
+    if (rows.length < range.to - range.from + 1) break;
   }
-
-  const candidates = ((data ?? []) as MessageCandidate[]).filter((row) =>
-    Boolean(resolveStoragePath(row.media_bucket, row.media_path, row.media_url)),
-  );
-  if (candidates.length === 0) return [];
-
-  const existing = await loadExistingVariants(
-    supabase,
-    "message_id",
-    candidates.map((row) => row.id),
-  );
-  return candidates.flatMap((row) => {
-    const kinds = existing.get(row.id) ?? new Set<string>();
-    const missingVariantKinds = getMissingMessageVariantKinds(row, kinds);
-    return missingVariantKinds.length > 0 ? [{ ...row, missingVariantKinds }] : [];
-  });
+  return candidates;
 }
 
 async function loadProfileCandidates(supabase: SupabaseClient): Promise<ProfileCandidate[]> {
@@ -582,6 +594,13 @@ function errorCode(err: unknown): string {
 
 function candidateLimit(): number {
   return positiveInteger(process.env["MEDIA_VARIANTS_CANDIDATE_LIMIT"], DEFAULT_CANDIDATE_LIMIT);
+}
+
+function candidateScanLimit(): number {
+  return positiveInteger(
+    process.env["MEDIA_VARIANTS_CANDIDATE_SCAN_LIMIT"],
+    DEFAULT_CANDIDATE_SCAN_LIMIT,
+  );
 }
 
 function processLimit(): number {

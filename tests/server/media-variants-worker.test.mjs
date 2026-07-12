@@ -35,6 +35,20 @@ test("media variants worker processes only video variants that are not ready", (
   );
 });
 
+test("media variants worker scans bounded candidate pages beyond the newest page", () => {
+  assert.equal(typeof mediaVariantRules.buildCandidatePageRanges, "function");
+  if (typeof mediaVariantRules.buildCandidatePageRanges !== "function") return;
+  assert.deepEqual(mediaVariantRules.buildCandidatePageRanges(120, 360), [
+    { from: 0, to: 119 },
+    { from: 120, to: 239 },
+    { from: 240, to: 359 },
+  ]);
+  assert.deepEqual(mediaVariantRules.buildCandidatePageRanges(120, 125), [
+    { from: 0, to: 119 },
+    { from: 120, to: 124 },
+  ]);
+});
+
 test("media variants worker uses bounded 720p encoding defaults", () => {
   assert.deepEqual(mediaVariantRules.VIDEO_720P_ENCODING, {
     width: 1280,

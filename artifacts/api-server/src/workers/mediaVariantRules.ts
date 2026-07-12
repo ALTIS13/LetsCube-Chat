@@ -27,6 +27,24 @@ export type MessageImageVariantKind = (typeof MESSAGE_IMAGE_VARIANTS)[number]["k
 export type MessageVideoVariantKind = (typeof MESSAGE_VIDEO_VARIANTS)[number]["kind"];
 export type MessageVariantKind = MessageImageVariantKind | MessageVideoVariantKind;
 
+export interface CandidatePageRange {
+  from: number;
+  to: number;
+}
+
+export function buildCandidatePageRanges(
+  pageSizeValue: number,
+  scanLimitValue: number,
+): CandidatePageRange[] {
+  const pageSize = Math.max(1, Math.floor(pageSizeValue));
+  const scanLimit = Math.max(1, Math.floor(scanLimitValue));
+  const ranges: CandidatePageRange[] = [];
+  for (let from = 0; from < scanLimit; from += pageSize) {
+    ranges.push({ from, to: Math.min(from + pageSize, scanLimit) - 1 });
+  }
+  return ranges;
+}
+
 export function getExpectedMessageVariantKinds(message: { type?: string | null }): MessageVariantKind[] {
   if (message.type === "image") return MESSAGE_IMAGE_VARIANTS.map((variant) => variant.kind);
   if (message.type === "video") return MESSAGE_VIDEO_VARIANTS.map((variant) => variant.kind);
