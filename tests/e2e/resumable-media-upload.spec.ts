@@ -270,15 +270,49 @@ test.describe("resumable media upload contracts", () => {
       },
     };
 
-    const staleAttachments = transitionStagedAttachmentChat(scope, "chat-b", stagedRef);
+    const staleAttachments = transitionStagedAttachmentChat(
+      scope,
+      "chat-b",
+      stagedRef,
+      () => events.push("abort"),
+    );
     const newToken = scope.capture();
 
-    expect(events).toEqual(["invalidate", "clear", "activate:chat-b"]);
+    expect(events).toEqual(["abort", "invalidate", "clear", "activate:chat-b"]);
     expect(staleAttachments).toHaveLength(1);
     expect(stagedRef.current).toEqual([]);
     expect(scope.isActive(oldToken)).toBe(false);
     expect(scope.isActive(newToken)).toBe(true);
     expect(selectStagedAttachmentsForSend(stagedRef.current)).toEqual([]);
+  });
+
+  test("drops file preparation that completes after its chat scope changes", async () => {
+    const {
+      commitPreparedStagedAttachments,
+      createStagedUploadScope,
+      runScopedStagedPreparation,
+    } = await loadStagedUploadWorkflow();
+    const scope = createStagedUploadScope("chat-a");
+    const token = scope.capture();
+    let resolvePreparation: ((file: File) => void) | undefined;
+    const preparation = new Promise<File>((resolve) => { resolvePreparation = resolve; });
+    const prepared = runScopedStagedPreparation(scope, token, () => preparation);
+    const staged: StagedAttachment[] = [];
+
+    scope.invalidate();
+    scope.activate("chat-b");
+    resolvePreparation?.(fileStub());
+
+    const result = await prepared;
+    const committed = result.status === "ready"
+      ? commitPreparedStagedAttachments(scope, token, [attachmentStub()], (attachments) => {
+        staged.push(...attachments);
+      })
+      : false;
+
+    expect(result).toEqual({ status: "stale" });
+    expect(committed).toBe(false);
+    expect(staged).toEqual([]);
   });
 
   test("converts rejected attachment sends into a friendly failed staged state", async () => {

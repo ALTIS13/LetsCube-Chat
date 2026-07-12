@@ -5,6 +5,7 @@ import {
   useRef,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   KeyboardEvent,
   ClipboardEvent,
@@ -28,6 +29,10 @@ import { isNativeApp, microphonePermissionHelp } from "@/lib/platform/capabiliti
 import { getMessengerLocationErrorMessage, getMessengerPosition } from "@/lib/platform/geolocation";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { useVoiceRecorder, formatVoiceDuration as formatRecorderDuration } from "@/hooks/useVoiceRecorder";
+import {
+  createComposerSendScope,
+  restoreComposerTextIfCurrent,
+} from "@/lib/composerSendScope";
 import {
   createRecordedVideoFile,
   formatAttachmentSize,
@@ -136,6 +141,14 @@ export function MessageInput({
   const isEditing = editingMessage !== null && editingMessage.chat_id === chatId;
   const muteState = useMuteState(chatId);
   const preEditTextRef = useRef<string | null>(null);
+  const composerSendScopeRef = useRef<ReturnType<typeof createComposerSendScope> | null>(null);
+  if (!composerSendScopeRef.current) composerSendScopeRef.current = createComposerSendScope(chatId);
+  const composerSendScope = composerSendScopeRef.current;
+
+  useLayoutEffect(() => {
+    composerSendScope.activate(chatId);
+    return () => composerSendScope.invalidate();
+  }, [chatId, composerSendScope]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -500,12 +513,14 @@ export function MessageInput({
   }, [onSend]);
 
   const handleSend = useCallback(async () => {
+    const sendToken = composerSendScope.capture();
     const currentText = textareaRef.current?.value ?? text;
     const trimmed = currentText.trim();
     if (!trimmed && !hasAttachments) return;
     if (isEditing && editingMessage && onEdit) {
       if (!trimmed) return;
       await onEdit(editingMessage.id, trimmed);
+      if (!composerSendScope.isActive(sendToken)) return;
       setEditingMessage(null);
       setText(preEditTextRef.current ?? "");
       preEditTextRef.current = null;
@@ -522,24 +537,33 @@ export function MessageInput({
       try {
         result = await onSend(trimmed);
       } catch (error) {
-        setText(previousText);
-        if (typeof window !== "undefined") localStorage.setItem(draftKey(chatId), previousText);
-        textareaRef.current?.focus();
+        restoreComposerTextIfCurrent(composerSendScope, sendToken, previousText, {
+          restoreText: setText,
+          writeDraft: (sourceChatId, draft) => {
+            if (typeof window !== "undefined") localStorage.setItem(draftKey(sourceChatId), draft);
+          },
+          focus: () => textareaRef.current?.focus(),
+        });
         throw error;
       }
       if (result === false) {
-        setText(previousText);
-        if (typeof window !== "undefined") localStorage.setItem(draftKey(chatId), previousText);
-        textareaRef.current?.focus();
+        restoreComposerTextIfCurrent(composerSendScope, sendToken, previousText, {
+          restoreText: setText,
+          writeDraft: (sourceChatId, draft) => {
+            if (typeof window !== "undefined") localStorage.setItem(draftKey(sourceChatId), draft);
+          },
+          focus: () => textareaRef.current?.focus(),
+        });
         return;
       }
+      if (!composerSendScope.isActive(sendToken)) return;
     }
     setShowEmoji(false);
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
       textareaRef.current.focus();
     }
-  }, [text, hasAttachments, onSend, isEditing, editingMessage, onEdit, setEditingMessage, chatId]);
+  }, [text, hasAttachments, onSend, isEditing, editingMessage, onEdit, setEditingMessage, chatId, composerSendScope]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Escape") {

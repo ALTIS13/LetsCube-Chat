@@ -38,6 +38,10 @@ export type StagedSendAttemptResult<T> =
   | { status: "failed" }
   | { status: "stale" };
 
+export type StagedPreparationResult<T> =
+  | { status: "ready"; value: T }
+  | { status: "stale" };
+
 export function createStagedUploadScope(initialChatId: string): StagedUploadScope {
   let active = true;
   let chatId = initialChatId;
@@ -67,7 +71,9 @@ export function createStagedUploadScope(initialChatId: string): StagedUploadScop
 export function clearStagedAttachmentChat(
   scope: StagedUploadScope,
   stagedRef: MutableStagedAttachmentRef,
+  abortActiveUploads: () => void = () => undefined,
 ): StagedAttachment[] {
+  abortActiveUploads();
   scope.invalidate();
   const staleAttachments = stagedRef.current;
   stagedRef.current = [];
@@ -78,10 +84,32 @@ export function transitionStagedAttachmentChat(
   scope: StagedUploadScope,
   nextChatId: string,
   stagedRef: MutableStagedAttachmentRef,
+  abortActiveUploads: () => void = () => undefined,
 ): StagedAttachment[] {
-  const staleAttachments = clearStagedAttachmentChat(scope, stagedRef);
+  const staleAttachments = clearStagedAttachmentChat(scope, stagedRef, abortActiveUploads);
   scope.activate(nextChatId);
   return staleAttachments;
+}
+
+export async function runScopedStagedPreparation<T>(
+  scope: StagedUploadScope,
+  token: StagedUploadScopeToken,
+  prepare: () => Promise<T>,
+): Promise<StagedPreparationResult<T>> {
+  if (!scope.isActive(token)) return { status: "stale" };
+  const value = await prepare();
+  return scope.isActive(token) ? { status: "ready", value } : { status: "stale" };
+}
+
+export function commitPreparedStagedAttachments(
+  scope: StagedUploadScope,
+  token: StagedUploadScopeToken,
+  attachments: StagedAttachment[],
+  commit: (attachments: StagedAttachment[]) => void,
+): boolean {
+  if (!scope.isActive(token)) return false;
+  commit(attachments);
+  return true;
 }
 
 export function selectStagedAttachmentsForSend(

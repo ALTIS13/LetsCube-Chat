@@ -11,7 +11,11 @@ import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail 
 import { isSavedChat } from "@/lib/chatDisplay";
 import { scheduleMarkChatDelivered, scheduleMarkChatRead } from "@/lib/deliveryReceipts";
 import { isNativeApp } from "@/lib/platform/capabilities";
-import { sanitizeMessageAckError } from "@/lib/messageAckError";
+import {
+  createMessageSendTimeoutContext,
+  getMessageAckUserMessage,
+  sanitizeMessageAckError,
+} from "@/lib/messageAckError";
 
 const MESSAGE_PAGE_SIZE = 100;
 const SEND_ACK_TIMEOUT_MS = 12_000;
@@ -920,12 +924,10 @@ export function useMessages(
     }
 
     if (ack.timedOut) {
-      reportError(new Error("message_send_ack_timeout"), {
-        category: "message_send_timeout",
-        chatId: activeChatId,
-        type: input.type,
-        hasMedia: Boolean(input.mediaUrl),
-      });
+      reportError(
+        new Error("message_send_ack_timeout"),
+        createMessageSendTimeoutContext(input.type, Boolean(input.mediaUrl)),
+      );
       const checkingMessage: MessageWithSender = {
         ...optimistic,
         pending: false,
@@ -955,7 +957,7 @@ export function useMessages(
       return null;
     }
 
-    const friendlySendError = mapPgError(ack.error) || "Не удалось отправить сообщение.";
+    const friendlySendError = getMessageAckUserMessage(ack.error);
     const safeAckError = sanitizeMessageAckError(ack.error);
     console.error("[messages] send failed.", safeAckError.code, safeAckError.name);
     reportError(safeAckError.error, {

@@ -51,8 +51,10 @@ import {
   createStagedUploadHandleRegistry,
   createStagedUploadScope,
   clearStagedAttachmentChat,
+  commitPreparedStagedAttachments,
   getAttachmentUploadErrorMessage,
   markStagedAttachmentSendFailed,
+  runScopedStagedPreparation,
   runScopedStagedSendAttempt,
   selectStagedAttachmentsForSend,
   transitionStagedAttachmentChat,
@@ -214,6 +216,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       uploadScope,
       chatId,
       stagedAttachmentsRef,
+      () => { void uploadRegistry.abortAll(); },
     );
     staleAttachments.forEach(revokeAttachmentPreview);
     setStagedAttachments((current) => current.length ? [] : current);
@@ -222,8 +225,11 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     dragDepthRef.current = 0;
 
     return () => {
-      const abandonedAttachments = clearStagedAttachmentChat(uploadScope, stagedAttachmentsRef);
-      void uploadRegistry.abortAll();
+      const abandonedAttachments = clearStagedAttachmentChat(
+        uploadScope,
+        stagedAttachmentsRef,
+        () => { void uploadRegistry.abortAll(); },
+      );
       abandonedAttachments.forEach(revokeAttachmentPreview);
       cancelledAttachmentIdsRef.current.clear();
     };
@@ -274,6 +280,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
   const stageFiles = useCallback(async (files: File[], _source: "picker" | "paste" | "drop" | "camera") => {
     if (!files.length) return;
+    const scopeToken = uploadScope.capture();
     const existingCount = stagedAttachmentsRef.current.length;
     const availableSlots = Math.max(0, MAX_STAGED_ATTACHMENTS - existingCount);
     const accepted: StagedAttachment[] = [];
@@ -285,15 +292,38 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     }
 
     for (const sourceFile of files.slice(0, availableSlots)) {
-      const file = sourceFile.type.startsWith("image/")
-        ? await prepareChatImageAttachment(sourceFile, mediaQuality)
-        : sourceFile;
+      if (!uploadScope.isActive(scopeToken)) {
+        accepted.forEach(revokeAttachmentPreview);
+        return;
+      }
+      let file = sourceFile;
+      if (sourceFile.type.startsWith("image/")) {
+        const prepared = await runScopedStagedPreparation(
+          uploadScope,
+          scopeToken,
+          () => prepareChatImageAttachment(sourceFile, mediaQuality),
+        );
+        if (prepared.status === "stale") {
+          accepted.forEach(revokeAttachmentPreview);
+          return;
+        }
+        file = prepared.value;
+      }
       const error = validateStagedAttachment(file);
       if (error) {
         errors.push(`${sourceFile.name || file.name || "Файл"}: ${error}`);
         continue;
       }
-      const dimensions = await readMediaDimensions(file);
+      const preparedDimensions = await runScopedStagedPreparation(
+        uploadScope,
+        scopeToken,
+        () => readMediaDimensions(file),
+      );
+      if (preparedDimensions.status === "stale") {
+        accepted.forEach(revokeAttachmentPreview);
+        return;
+      }
+      const dimensions = preparedDimensions.value;
       accepted.push(createStagedAttachment(file, {
         width: dimensions?.width,
         height: dimensions?.height,
@@ -309,12 +339,29 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     }
 
     if (accepted.length) {
-      setStagedAttachments((current) => [...current, ...accepted]);
+      const committed = commitPreparedStagedAttachments(
+        uploadScope,
+        scopeToken,
+        accepted,
+        (attachments) => {
+          setStagedAttachments((current) => {
+            if (!uploadScope.isActive(scopeToken)) {
+              attachments.forEach(revokeAttachmentPreview);
+              return current;
+            }
+            return [...current, ...attachments];
+          });
+        },
+      );
+      if (!committed) {
+        accepted.forEach(revokeAttachmentPreview);
+        return;
+      }
     }
-    if (errors.length) {
+    if (errors.length && uploadScope.isActive(scopeToken)) {
       showAppAlert(errors.slice(0, 3).join("\n"), "Вложения");
     }
-  }, [mediaQuality]);
+  }, [mediaQuality, uploadScope]);
 
   const stageVoiceRecording = useCallback((blob: Blob, durationMs: number, mimeType: string) => {
     const error = validateStagedAttachment(new File([blob], "voice.webm", { type: mimeType || blob.type || "audio/webm" }));

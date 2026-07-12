@@ -13,6 +13,12 @@ export interface SanitizedMessageAckError {
   error: Error;
 }
 
+export type MessageSendTelemetryContext = Record<string, unknown> & {
+  category: "message_send_timeout";
+  type: string;
+  hasMedia: boolean;
+};
+
 const SAFE_ERROR_NAME = "MessageSendAckError" as const;
 
 export function sanitizeMessageAckError(error: unknown): SanitizedMessageAckError {
@@ -23,6 +29,26 @@ export function sanitizeMessageAckError(error: unknown): SanitizedMessageAckErro
     code,
     name: SAFE_ERROR_NAME,
     error: safeError,
+  };
+}
+
+export function getMessageAckUserMessage(error: unknown): string {
+  const code = classifyMessageAckError(error);
+  if (code === "permission_denied") return "Недостаточно прав для отправки сообщения.";
+  if (code === "conflict") return "Сообщение уже было отправлено.";
+  if (code === "constraint_violation") return "Не удалось отправить сообщение. Проверьте данные.";
+  if (code === "network_error") return "Сетевой сбой. Проверьте подключение и попробуйте ещё раз.";
+  return "Не удалось отправить сообщение.";
+}
+
+export function createMessageSendTimeoutContext(
+  type: string,
+  hasMedia: boolean,
+): MessageSendTelemetryContext {
+  return {
+    category: "message_send_timeout",
+    type,
+    hasMedia,
   };
 }
 
