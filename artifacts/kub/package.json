@@ -79,6 +79,7 @@
     "@sentry/react": "^10.53.1",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.1",
+    "@tauri-apps/plugin-notification": "2.3.3",
     "tus-js-client": "4.3.1",
     "zustand": "^5.0.12"
   }

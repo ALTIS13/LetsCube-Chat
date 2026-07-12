@@ -11,6 +11,8 @@ import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail 
 import { isSavedChat } from "@/lib/chatDisplay";
 import { scheduleMarkChatDelivered, scheduleMarkChatRead } from "@/lib/deliveryReceipts";
 import { isWebBrowser } from "@/lib/platform/capabilities";
+import { isDesktopApp } from "@/lib/platform/desktop";
+import { showDesktopMessageNotification } from "@/lib/platform/desktopNotifications";
 import {
   createMessageSendTimeoutContext,
   getMessageAckUserMessage,
@@ -616,15 +618,26 @@ export function useMessages(
           addMessage(payload.new.chat_id, visibleMessage);
           updateChatLastMessage(payload.new.chat_id, visibleMessage);
           const user = currentUserRef.current;
-          if (user && data.user_id !== user.id && isWebBrowser() && document.hidden &&
-              typeof window !== "undefined" && "Notification" in window &&
-              Notification.permission === "granted" && !mutedRef.current.includes(payload.new.chat_id)) {
+          if (user && data.user_id !== user.id && !mutedRef.current.includes(payload.new.chat_id)) {
             const senderName = (data as unknown as MessageWithSender).sender?.full_name ?? "Новое сообщение";
             const body = data.type === "text" ? (data.content ?? "")
               : data.type === "image" ? "🖼 Фото"
               : data.type === "audio" ? "🎤 Голосовое сообщение"
               : data.type === "video" ? "🎬 Видео" : "📎 Файл";
-            new Notification(senderName, { body, icon: "/icons/icon-192.png", tag: payload.new.chat_id });
+            if (isDesktopApp()) {
+              void showDesktopMessageNotification({
+                title: senderName,
+                body,
+                icon: "/icons/icon-192.png",
+                tag: payload.new.chat_id,
+              });
+            } else if (
+              isWebBrowser() && document.hidden &&
+              typeof window !== "undefined" && "Notification" in window &&
+              Notification.permission === "granted"
+            ) {
+              new Notification(senderName, { body, icon: "/icons/icon-192.png", tag: payload.new.chat_id });
+            }
           }
           if (user && data.user_id !== user.id) {
             if (document.visibilityState === "visible") {

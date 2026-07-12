@@ -5,6 +5,10 @@ import {
   detectDistributionTarget,
   supportsPwaInstallForTarget,
 } from "../../artifacts/kub/src/lib/platform/distribution.ts";
+import {
+  getDesktopRuntimeInfo,
+  isDesktopApp,
+} from "../../artifacts/kub/src/lib/platform/desktop.ts";
 
 const IPHONE_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 " +
@@ -49,14 +53,46 @@ test("Windows browser uses EXE distribution and other systems stay web-only", ()
   assert.equal(supportsPwaInstallForTarget("web_only"), false);
 });
 
-test("Electron Windows shell is native and never becomes a PWA target", () => {
+test("Tauri Windows shell is native and never becomes a PWA target", () => {
   const target = detectDistributionTarget({
     desktop: true,
     desktopPlatform: "windows",
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Electron/43.1.0",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Tauri/2.11.5",
     platform: "Win32",
   });
 
   assert.equal(target, "windows_native");
   assert.equal(supportsPwaInstallForTarget(target), false);
+});
+
+test("Tauri desktop bridge is synchronous and wins over Windows browser heuristics", async () => {
+  const previousWindow = globalThis.window;
+  const runtimeInfo = {
+    platform: "windows" as const,
+    version: "0.2.0",
+    build: 4,
+  };
+
+  globalThis.window = {
+    letscubeDesktop: {
+      ...runtimeInfo,
+      getRuntimeInfo: async () => runtimeInfo,
+    },
+  } as typeof window;
+
+  try {
+    assert.equal(isDesktopApp(), true);
+    assert.deepEqual(await getDesktopRuntimeInfo(), runtimeInfo);
+    assert.equal(
+      detectDistributionTarget({
+        desktop: isDesktopApp(),
+        desktopPlatform: window.letscubeDesktop?.platform,
+        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0.0.0 Safari/537.36",
+        platform: "Win32",
+      }),
+      "windows_native",
+    );
+  } finally {
+    globalThis.window = previousWindow;
+  }
 });

@@ -7,6 +7,8 @@ type LetscubeDesktopRuntimeInfo = {
 interface Window {
   letscubeDesktop?: {
     readonly platform: "windows";
+    readonly version: string;
+    readonly build: number;
     getRuntimeInfo(): Promise<LetscubeDesktopRuntimeInfo>;
   };
 }
