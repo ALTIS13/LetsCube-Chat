@@ -26,10 +26,14 @@ const artifact = resolve(
 if (existsSync(artifact)) rmSync(artifact);
 
 run("pnpm", [
+  "--dir",
+  "desktop",
   "exec",
   "electron-builder",
+  "--projectDir",
+  root,
   "--config",
-  "electron-builder.yml",
+  resolve(root, "electron-builder.yml"),
   "--win",
   "nsis",
   "--x64",

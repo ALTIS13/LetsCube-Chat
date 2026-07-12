@@ -1,4 +1,5 @@
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import { resolve } from "node:path";
 import { findFirstAvailableQaRole, loginAsRoleOrSkip } from "./helpers/auth";
 
 const QA_ROLES = ["owner", "tech_admin", "location_admin", "location_staff", "client"] as const;
@@ -9,7 +10,10 @@ test.describe("LETSCUBE Windows desktop shell", () => {
   let page: Page;
 
   test.beforeAll(async () => {
-    desktopApp = await electron.launch({ args: ["."] });
+    desktopApp = await electron.launch({
+      executablePath: resolve("desktop/node_modules/electron/dist/electron.exe"),
+      args: [resolve("desktop")],
+    });
     page = await desktopApp.firstWindow();
     await page.waitForLoadState("domcontentloaded");
   });

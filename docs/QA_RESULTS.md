@@ -993,6 +993,7 @@ Recurring tasks roadmap note:
 ## 2026-07-12 - Windows Electron internal package
 
 - Added an Electron `43.1.0` Windows shell and electron-builder `26.15.3` x64 NSIS package for LETSCUBE `0.1.0` build `1`.
+- Desktop build dependencies and lockfile are isolated under `desktop/`; normal root workspace/Coolify web and worker installs do not download Electron.
 - The shell loads only `https://app.letscube.ru`, uses a persistent isolated session, disables Node integration, enables context isolation/sandbox/web security, rejects cross-origin navigation and exposes only validated version metadata through preload IPC.
 - Browser PWA installation, Service Worker registration and Browser Web Push are excluded from the Electron runtime. Native Windows notifications, deep links, public signing and automatic update application remain pending.
 - The packaged ASAR contains six expected entries and no application dependencies. Electron fuses disable RunAsNode, Node environment/inspect flags and file-protocol privileges while enabling cookie encryption and ASAR integrity.

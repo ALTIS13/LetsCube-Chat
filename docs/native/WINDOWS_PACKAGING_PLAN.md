@@ -23,7 +23,8 @@ media playback behavior. Tauri remains a later footprint comparison.
 - Runtime: Electron `43.1.0`, x64.
 - Installer: assisted per-user NSIS setup.
 - Source: `desktop/`; config: `electron-builder.yml`.
-- Build: `pnpm.cmd windows:build:internal`.
+- Prepare the isolated desktop toolchain: `pnpm.cmd windows:prepare`.
+- Build: `pnpm.cmd windows:build:internal` (runs preparation automatically).
 - Output: `dist/windows/LETSCUBE-0.1.0-x64-setup.exe`.
 - Renderer isolation: sandbox and context isolation enabled, Node integration disabled.
 - Navigation and permissions are restricted to the exact production app origin.

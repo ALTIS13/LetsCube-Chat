@@ -6,5 +6,16 @@
   "main": "main.mjs",
   "description": "LETSCUBE desktop messenger for cyber-arena operations.",
   "author": "LETSCUBE",
-  "license": "MIT"
+  "license": "MIT",
+  "packageManager": "pnpm@10.33.2",
+  "devDependencies": {
+    "@electron/fuses": "2.1.3",
+    "electron": "43.1.0",
+    "electron-builder": "26.15.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron"
+    ]
+  }
 }

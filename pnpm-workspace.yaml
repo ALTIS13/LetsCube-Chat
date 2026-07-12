@@ -161,5 +161,4 @@ overrides:
   esbuild: "0.27.3"
 
 allowBuilds:
-  electron: true
   esbuild: true
