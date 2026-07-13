@@ -404,9 +404,9 @@ export function createDesktopUpdateStore(dependencies: DesktopUpdateStoreDepende
   };
 
   const runCheckCommand = async () => {
+    clearIdleCheck();
     const result = await dependencies.check();
     lastAutomaticCheckAt = now();
-    clearIdleCheck();
     return result;
   };
 

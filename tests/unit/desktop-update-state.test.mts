@@ -434,3 +434,59 @@ test("channel change replaces its early idle timer from the completed check time
   assert.equal(store.getSnapshot().snapshot?.phase, "current");
   release();
 });
+
+test("channel change cancels its one-second timer before awaiting the delayed check", async () => {
+  const sixHours = 6 * 60 * 60 * 1_000;
+  const timers: Array<{ token: number; milliseconds: number; callback: () => void }> = [];
+  const cancelled = new Set<number>();
+  let nextToken = 0;
+  let checkCalls = 0;
+  let resolveCheck!: (snapshot: typeof BASE_SNAPSHOT) => void;
+  const delayedCheck = new Promise<typeof BASE_SNAPSHOT>((resolve) => {
+    resolveCheck = resolve;
+  });
+  const available = {
+    ...BASE_SNAPSHOT,
+    phase: "available",
+    availableVersion: "0.2.1",
+  } as const;
+  const store = createDesktopUpdateStore({
+    isActive: () => true,
+    installedVersion: () => "0.2.0",
+    now: () => sixHours + 10_000,
+    read: async () => available,
+    check: async () => {
+      checkCalls += 1;
+      return delayedCheck;
+    },
+    install: async () => available,
+    setChannel: async () => ({ ...BASE_SNAPSHOT, channel: "test", phase: "idle" }),
+    scheduleTimeout: (callback, milliseconds) => {
+      nextToken += 1;
+      timers.push({ token: nextToken, milliseconds, callback });
+      return nextToken;
+    },
+    cancelTimeout: (token) => {
+      cancelled.add(token as number);
+    },
+  });
+
+  const release = store.acquire();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const channelChange = store.setChannel("test");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  let firedEarlyTimers = 0;
+  for (const timer of timers) {
+    if (timer.milliseconds !== 1_000 || cancelled.has(timer.token)) continue;
+    firedEarlyTimers += 1;
+    timer.callback();
+  }
+  await Promise.resolve();
+
+  assert.equal(firedEarlyTimers, 0);
+  assert.equal(checkCalls, 1);
+  resolveCheck({ ...BASE_SNAPSHOT, channel: "test", phase: "current" });
+  await channelChange;
+  release();
+});
