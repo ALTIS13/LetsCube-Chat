@@ -132,10 +132,10 @@ device-token/backend design and is not claimed.
 
 `https://api.letscube.ru/releases/v1/windows/stable.json` exposes the verified
 `0.2.3` build `7` Tauri NSIS artifact. The default updater Stable channel uses
-the same immutable installer. Signed `0.2.4` build `8` remains the current
-opt-in Test artifact, but physical QA exposed its Windows toast delivery defect.
-Signed `0.2.6` build `10` is the replacement candidate and must pass production
-frontend plus physical tray QA before Test publication or Stable promotion.
+the same immutable installer. Signed `0.2.6` build `10` is the current opt-in
+Test artifact after production frontend and physical hidden-window
+message/task/read-cleanup QA. It must still pass notification-card action
+activation before Stable promotion.
 Artifacts remain immutable under
 `https://api.letscube.ru/releases/files/windows/`.
 
@@ -162,7 +162,7 @@ directory listing, dotfiles, traversal forms and all unlisted updater paths.
 - [x] Production-origin authenticated shell, chat composer, attachment menu, media quality selector, Notification Center and Windows notification settings.
 - [x] WebView2 exposes camera/microphone MediaDevices, MediaRecorder, geolocation, clipboard and fullscreen APIs; the attachment menu exposes photo, camera, voice and video flows.
 - [ ] Hardware capture/permission allow-deny matrix on Windows 10 and Windows 11 devices.
-- [~] Realtime chat/task/system routing, native visibility, stable Windows tag/group replacement and reconnect reconciliation are covered by unit/native lifecycle QA. The native WinRT probe registered `ru.letscube.messenger` and wrote the expected tag/group to Windows Notification Center. A production frontend deploy and physical hidden-window message/task/action pass remain before this item is complete.
+- [~] Realtime chat/task/system routing, native visibility, stable Windows tag/group replacement and reconnect reconciliation are covered by unit/native lifecycle QA. Production hidden-window QA created two same-chat message rows but one `messages` toast, created a separate `tasks` toast, and removed each native history row after its DB notification became read. Notification-card action activation remains before this item is complete.
 - [ ] Offline/reconnect banner and long-session sync.
 - [x] Installer size and SHA-256 are recorded before publication.
 
