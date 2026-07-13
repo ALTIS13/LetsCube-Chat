@@ -1,3 +1,6 @@
+pub mod startup;
+pub mod updater;
+
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
