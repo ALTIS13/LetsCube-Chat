@@ -96,9 +96,17 @@ impl StartupState {
         Ok(())
     }
 
-    pub fn fail(&mut self, error_code: StartupErrorCode) {
+    pub fn fail(&mut self, error_code: StartupErrorCode) -> Result<(), StartupTransitionError> {
+        if self.stage == StartupStage::CriticalUpdateRequired {
+            return Err(StartupTransitionError {
+                from: self.stage,
+                to: StartupStage::RecoverableError,
+            });
+        }
+
         self.stage = StartupStage::RecoverableError;
         self.error_code = Some(error_code);
+        Ok(())
     }
 
     pub fn retry(&mut self) -> Result<(), StartupTransitionError> {
@@ -153,7 +161,7 @@ mod tests {
     #[test]
     fn recoverable_error_never_reports_connected() {
         let mut state = StartupState::new();
-        state.fail(StartupErrorCode::Network);
+        state.fail(StartupErrorCode::Network).unwrap();
         assert_eq!(state.snapshot().stage, StartupStage::RecoverableError);
         assert!(!state.snapshot().connected);
     }
@@ -193,13 +201,26 @@ mod tests {
     }
 
     #[test]
+    fn critical_update_cannot_be_failed_or_retried() {
+        let mut state = state_at_update_check();
+        state
+            .require_critical_update(UpdateChannel::Stable, true, true)
+            .unwrap();
+
+        assert!(state.fail(StartupErrorCode::Network).is_err());
+        assert!(state.retry().is_err());
+        assert_eq!(state.snapshot().stage, StartupStage::CriticalUpdateRequired);
+        assert!(!state.snapshot().connected);
+    }
+
+    #[test]
     fn retry_recovers_only_from_recoverable_error_without_connecting() {
         let mut state = StartupState::new();
         assert!(state.retry().is_err());
         assert_eq!(state.snapshot().stage, StartupStage::Boot);
         assert!(!state.snapshot().connected);
 
-        state.fail(StartupErrorCode::Network);
+        state.fail(StartupErrorCode::Network).unwrap();
         state.retry().unwrap();
         assert_eq!(state.snapshot().stage, StartupStage::NetworkCheck);
         assert_eq!(state.snapshot().error_code, None);
