@@ -56,6 +56,7 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   const buildRsPath = new URL("./build.rs", srcTauriRoot);
   const tauriConfig = readJson("windows-tauri/src-tauri/tauri.conf.json");
   const capability = readJson("windows-tauri/src-tauri/capabilities/production.json");
+  const startupCapability = readJson("windows-tauri/src-tauri/capabilities/startup.json");
   const cargoToml = readFileSync(cargoTomlPath, "utf8");
   const libRs = readFileSync(libRsPath, "utf8");
   const mainRs = readFileSync(mainRsPath, "utf8");
@@ -72,6 +73,9 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.match(cargoToml, /^tauri-plugin-notification = "2\.[^"]+"/m);
   assert.match(cargoToml, /^tauri-plugin-opener = "2\.[^"]+"/m);
   assert.match(cargoToml, /^tauri-plugin-single-instance = "2\.[^"]+"/m);
+  assert.match(cargoToml, /^tauri-plugin-updater = "2\.10\.1"$/m);
+  assert.equal((cargoToml.match(/^reqwest\s*=/gm) ?? []).length, 1);
+  assert.match(cargoToml, /^reqwest = \{[^\n]*version = "0\.13\.4"[^\n]*features = \[[^\]]*"json"[^\]]*\]/m);
 
   assert.match(mainRs, /letscube_windows_tauri::run\(\)/);
   assert.match(buildRs, /tauri_build::build\(\)/);
@@ -100,6 +104,33 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.match(libRs, /opener\(\)\s*\.open_url/);
   assert.match(libRs, /MAIN_READY/);
   assert.match(libRs, /restore_startup_surface/);
+  assert.doesNotMatch(libRs, /dangerous_accept_invalid_certs|dangerous_accept_invalid_hostnames/);
+  assert.match(libRs, /tauri_plugin_updater::Builder::new\(\)\.build\(\)/);
+  const updaterCommands = [
+    "desktop_get_update_state",
+    "desktop_get_update_channel",
+    "desktop_set_update_channel",
+    "desktop_check_update",
+    "desktop_install_update",
+  ];
+  for (const command of updaterCommands) {
+    assert.match(libRs, new RegExp(command));
+    const commandBody = libRs.match(
+      new RegExp(`(?:async\\s+)?fn\\s+${command}[\\s\\S]*?(?=\\n#\\[tauri::command\\]|\\npub fn run)`),
+    )?.[0] ?? "";
+    assert.match(commandBody, /require_production_main\(&window\)/, `${command} must use the production/main guard`);
+  }
+  const productionGuard = libRs.match(
+    /fn require_production_main[\s\S]*?(?=\nfn is_safe_external_url)/,
+  )?.[0] ?? "";
+  assert.match(productionGuard, /window\.label\(\)\s*!=\s*"main"/);
+  assert.match(productionGuard, /window\s*\.url\(\)/);
+  assert.match(productionGuard, /is_allowed_navigation\(&url\)/);
+  assert.match(libRs, /getUpdateState:\s*async/);
+  assert.match(libRs, /getUpdateChannel:\s*async/);
+  assert.match(libRs, /setUpdateChannel:\s*async/);
+  assert.match(libRs, /checkUpdate:\s*async/);
+  assert.match(libRs, /installUpdate:\s*async/);
   assert.match(libRs, /WebviewWindowBuilder::from_config/);
   assert.match(libRs, /StartupState/);
   assert.match(libRs, /letscube:\/\/startup-state/);
@@ -122,6 +153,9 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.equal(tauriConfig.identifier, "ru.letscube.messenger");
   assert.equal(tauriConfig.bundle.active, true);
   assert.deepEqual(tauriConfig.bundle.targets, ["nsis"]);
+  assert.equal(tauriConfig.bundle.createUpdaterArtifacts, true);
+  assert.equal(typeof tauriConfig.plugins.updater.pubkey, "string");
+  assert.ok(tauriConfig.plugins.updater.pubkey.length > 40);
   assert.equal(tauriConfig.bundle.windows.webviewInstallMode.type, "skip");
 
   assert.equal(capability.identifier, "production");
@@ -136,6 +170,11 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
     capability.permissions.some((permission) => /^notification:/.test(permission)),
     "production capability must expose only the notification plugin methods needed by the app origin",
   );
+  assert.ok(
+    capability.permissions.every((permission) => !/^updater:/.test(permission)),
+    "remote production pages must use only the origin-guarded Rust updater commands",
+  );
+  assert.deepEqual(startupCapability.permissions, []);
 });
 
 test("Windows startup uses one main window and a local approved handshake scene", () => {

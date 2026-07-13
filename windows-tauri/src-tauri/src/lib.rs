@@ -12,21 +12,37 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::webview::{NewWindowResponse, PageLoadEvent};
 use tauri::{
-    AppHandle, Emitter, Manager, Runtime, Url, WebviewWindow, WebviewWindowBuilder, WindowEvent,
+    AppHandle, Emitter, Manager, Runtime, State, Url, WebviewWindow, WebviewWindowBuilder,
+    WindowEvent,
 };
 use tauri_plugin_opener::OpenerExt;
-use updater::{update_endpoint, UpdateChannel};
+use tauri_plugin_updater::{Update, UpdaterExt};
+use updater::{
+    load_update_channel, parse_update_metadata, store_update_channel, update_endpoint,
+    DesktopUpdatePhase, DesktopUpdateSnapshot, DesktopUpdateState, UpdateChannel,
+};
 
 const PRODUCTION_ORIGIN: &str = "https://app.letscube.ru";
 const PRODUCTION_URL: &str = "https://app.letscube.ru/";
 const BUNDLED_STARTUP_URL: &str = "http://tauri.localhost/startup.html";
 const PRODUCTION_PROFILE: &str = "webview-production-v1";
+const UPDATE_CHANNEL_FILE: &str = "updater-channel.json";
 const STARTUP_EVENT: &str = "letscube://startup-state";
 const DESKTOP_BUILD: &str = env!("LETSCUBE_DESKTOP_BUILD");
 static MAIN_READY: AtomicBool = AtomicBool::new(false);
 static PREFLIGHT_RUNNING: AtomicBool = AtomicBool::new(false);
 
 struct StartupController(Mutex<StartupState>);
+
+struct NativeUpdateState {
+    state: DesktopUpdateState,
+    pending: Option<Update>,
+}
+
+struct UpdateController {
+    inner: Mutex<NativeUpdateState>,
+    channel_path: PathBuf,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PreflightEntry {
@@ -40,6 +56,18 @@ fn is_allowed_navigation(url: &Url) -> bool {
 
 fn is_local_startup_url(url: &Url) -> bool {
     url.as_str() == BUNDLED_STARTUP_URL
+}
+
+fn require_production_main(window: &WebviewWindow) -> Result<(), &'static str> {
+    if window.label() != "main"
+        || window
+            .url()
+            .map(|url| !is_allowed_navigation(&url))
+            .unwrap_or(true)
+    {
+        return Err("unauthorized");
+    }
+    Ok(())
 }
 
 fn is_safe_external_url(url: &Url) -> bool {
@@ -98,11 +126,20 @@ fn desktop_bridge_script() -> String {
     version: {version:?},
     build: {build}
   }});
+  const invoke = window.__TAURI_INTERNALS__?.invoke;
+  const call = (command, args) => typeof invoke === "function"
+    ? invoke(command, args)
+    : Promise.reject("desktop_runtime_unavailable");
   window.letscubeDesktop = Object.freeze({{
     platform: "windows",
     version: runtimeInfo.version,
     build: runtimeInfo.build,
-    getRuntimeInfo: async () => runtimeInfo
+    getRuntimeInfo: async () => runtimeInfo,
+    getUpdateState: async () => call("desktop_get_update_state"),
+    getUpdateChannel: async () => call("desktop_get_update_channel"),
+    setUpdateChannel: async (channel) => call("desktop_set_update_channel", {{ channel }}),
+    checkUpdate: async () => call("desktop_check_update"),
+    installUpdate: async () => call("desktop_install_update")
   }});
   Object.defineProperty(window, "letscubeDesktop", {{
     configurable: false,
@@ -434,6 +471,208 @@ fn build_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     Ok(())
 }
 
+fn setup_update_controller<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    let channel_path = app.path().app_local_data_dir()?.join(UPDATE_CHANNEL_FILE);
+    let channel = load_update_channel(&channel_path);
+    app.manage(UpdateController {
+        inner: Mutex::new(NativeUpdateState {
+            state: DesktopUpdateState::new(channel, app.package_info().version.to_string()),
+            pending: None,
+        }),
+        channel_path,
+    });
+    Ok(())
+}
+
+fn update_command_error(code: &'static str) -> String {
+    code.to_owned()
+}
+
+fn update_snapshot(controller: &UpdateController) -> Result<DesktopUpdateSnapshot, &'static str> {
+    controller
+        .inner
+        .lock()
+        .map(|native| native.state.snapshot())
+        .map_err(|_| "update_state_unavailable")
+}
+
+fn mark_update_failed(controller: &UpdateController, code: &'static str) {
+    if let Ok(mut native) = controller.inner.lock() {
+        native.state.fail(code);
+    }
+}
+
+#[tauri::command]
+fn desktop_get_update_state(
+    window: WebviewWindow,
+    controller: State<'_, UpdateController>,
+) -> Result<DesktopUpdateSnapshot, String> {
+    require_production_main(&window).map_err(update_command_error)?;
+    update_snapshot(&controller).map_err(update_command_error)
+}
+
+#[tauri::command]
+fn desktop_get_update_channel(
+    window: WebviewWindow,
+    controller: State<'_, UpdateController>,
+) -> Result<UpdateChannel, String> {
+    require_production_main(&window).map_err(update_command_error)?;
+    controller
+        .inner
+        .lock()
+        .map(|native| native.state.channel())
+        .map_err(|_| update_command_error("update_state_unavailable"))
+}
+
+#[tauri::command]
+fn desktop_set_update_channel(
+    window: WebviewWindow,
+    controller: State<'_, UpdateController>,
+    channel: String,
+) -> Result<DesktopUpdateSnapshot, String> {
+    require_production_main(&window).map_err(update_command_error)?;
+    let channel = updater::parse_update_channel_input(&channel)
+        .ok_or_else(|| update_command_error("invalid_update_channel"))?;
+    let mut native = controller
+        .inner
+        .lock()
+        .map_err(|_| update_command_error("update_state_unavailable"))?;
+    if matches!(
+        native.state.snapshot().phase,
+        DesktopUpdatePhase::Checking
+            | DesktopUpdatePhase::Downloading
+            | DesktopUpdatePhase::Installing
+    ) {
+        return Err(update_command_error("update_busy"));
+    }
+    store_update_channel(&controller.channel_path, channel)
+        .map_err(|_| update_command_error("update_channel_store_failed"))?;
+    native.state.set_channel(channel);
+    native.pending = None;
+    Ok(native.state.snapshot())
+}
+
+#[tauri::command]
+async fn desktop_check_update(
+    window: WebviewWindow,
+    app: AppHandle,
+    controller: State<'_, UpdateController>,
+) -> Result<DesktopUpdateSnapshot, String> {
+    require_production_main(&window).map_err(update_command_error)?;
+    let (channel, installed_version) = {
+        let mut native = controller
+            .inner
+            .lock()
+            .map_err(|_| update_command_error("update_state_unavailable"))?;
+        native
+            .state
+            .begin_check()
+            .map_err(|_| update_command_error("update_busy"))?;
+        native.pending = None;
+        let snapshot = native.state.snapshot();
+        (snapshot.channel, snapshot.installed_version)
+    };
+
+    let updater = app
+        .updater_builder()
+        .endpoints(vec![update_endpoint(channel)])
+        .map_err(|_| update_command_error("update_configuration_failed"))?
+        .timeout(Duration::from_secs(8))
+        .build()
+        .map_err(|_| update_command_error("update_configuration_failed"))?;
+    let checked = match updater.check().await {
+        Ok(checked) => checked,
+        Err(_) => {
+            mark_update_failed(&controller, "update_check_failed");
+            return Err(update_command_error("update_check_failed"));
+        }
+    };
+
+    let mut native = controller
+        .inner
+        .lock()
+        .map_err(|_| update_command_error("update_state_unavailable"))?;
+    match checked {
+        Some(update) => {
+            let metadata = parse_update_metadata(&update.raw_json, channel, &installed_version);
+            native.state.set_mandatory(metadata.mandatory);
+            native
+                .state
+                .mark_available(update.version.clone(), metadata.critical, None)
+                .map_err(|_| update_command_error("update_state_unavailable"))?;
+            native.pending = Some(update);
+        }
+        None => {
+            native
+                .state
+                .mark_current()
+                .map_err(|_| update_command_error("update_state_unavailable"))?;
+        }
+    }
+    Ok(native.state.snapshot())
+}
+
+#[tauri::command]
+async fn desktop_install_update(
+    window: WebviewWindow,
+    controller: State<'_, UpdateController>,
+) -> Result<DesktopUpdateSnapshot, String> {
+    require_production_main(&window).map_err(update_command_error)?;
+    let update = {
+        let mut native = controller
+            .inner
+            .lock()
+            .map_err(|_| update_command_error("update_state_unavailable"))?;
+        let update = native
+            .pending
+            .clone()
+            .ok_or_else(|| update_command_error("update_not_available"))?;
+        native
+            .state
+            .begin_download()
+            .map_err(|_| update_command_error("update_not_available"))?;
+        update
+    };
+
+    let bytes = match update
+        .download(
+            |chunk_bytes, total_bytes| {
+                if let Ok(mut native) = controller.inner.lock() {
+                    native.state.record_download_progress(
+                        u64::try_from(chunk_bytes).unwrap_or(u64::MAX),
+                        total_bytes,
+                    );
+                }
+            },
+            || {},
+        )
+        .await
+    {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            mark_update_failed(&controller, "update_download_failed");
+            return Err(update_command_error("update_download_failed"));
+        }
+    };
+
+    {
+        let mut native = controller
+            .inner
+            .lock()
+            .map_err(|_| update_command_error("update_state_unavailable"))?;
+        native
+            .state
+            .finish_verified_download()
+            .map_err(|_| update_command_error("update_state_unavailable"))?;
+    }
+    if update.install(bytes).is_err() {
+        mark_update_failed(&controller, "update_install_failed");
+        return Err(update_command_error("update_install_failed"));
+    }
+
+    update_snapshot(&controller).map_err(update_command_error)
+}
+
 #[tauri::command]
 fn retry_main(window: WebviewWindow, app: AppHandle) {
     if window.label() != "main"
@@ -479,8 +718,18 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![retry_main, begin_startup_qa])
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![
+            retry_main,
+            begin_startup_qa,
+            desktop_get_update_state,
+            desktop_get_update_channel,
+            desktop_set_update_channel,
+            desktop_check_update,
+            desktop_install_update
+        ])
         .setup(|app| {
+            setup_update_controller(app.handle())?;
             setup_tray(app.handle())?;
             build_main_window(app.handle())?;
             show_main(app.handle());
