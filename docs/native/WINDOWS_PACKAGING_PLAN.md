@@ -47,8 +47,8 @@ never import the old Electron profile.
 ## Security boundary
 
 - Main navigation accepts only the exact HTTPS origin `app.letscube.ru`.
-- The production remote capability grants only the Tauri notification methods
-  needed by that exact origin.
+- The production remote capability grants only the exact Tauri notification
+  methods and origin-guarded `desktop_show_main` command needed by that origin.
 - No filesystem, shell, process, generic opener, updater or wildcard HTTP
   capability is exposed to remote content.
 - The synchronous initialization bridge exposes only validated
@@ -110,9 +110,15 @@ Supabase Auth redirect URLs must be reviewed when that stage starts.
 ## Push and notifications
 
 Browser Web Push does not become killed-process Windows push automatically.
-While the Tauri process/tray is running, foreground realtime events can use the
-restricted native notification plugin. Killed-process delivery needs a
-separate Windows push token/backend design and is not claimed.
+While the Tauri process/tray is running, the global in-app notification
+Realtime stream presents native Windows notifications when the main window is
+hidden. Message notifications use a stable numeric id and group derived from
+`chat_id`; task/system notifications have separate groups. Initial unread rows
+form a silent baseline, while reconnect/online refresh presents only rows that
+were missed after that baseline. A notification action accepts only a relative
+same-app route, restores the origin-guarded main window and then reuses the
+authenticated in-app navigation queue. Killed-process delivery still needs a
+separate WNS device-token/backend design and is not claimed.
 
 ## Release catalog
 
@@ -137,13 +143,13 @@ directory listing, dotfiles, traversal forms and all unlisted updater paths.
 
 - [x] Clean-profile launch shows login and contains no existing auth state.
 - [x] Same-version repair, silent uninstall and clean reinstall preserve the user profile while removing/recreating the package and registry entry correctly.
-- [ ] Upgrade between two different signed versions.
+- [x] Upgrade between two different signed versions.
 - [x] Splash, tray close-to-hide and single instance.
 - [x] Login through a temporary isolated profile without importing browser or Electron state.
 - [x] Production-origin authenticated shell, chat composer, attachment menu, media quality selector, Notification Center and Windows notification settings.
 - [x] WebView2 exposes camera/microphone MediaDevices, MediaRecorder, geolocation, clipboard and fullscreen APIs; the attachment menu exposes photo, camera, voice and video flows.
 - [ ] Hardware capture/permission allow-deny matrix on Windows 10 and Windows 11 devices.
-- [ ] Realtime plus chat/task/invite notification routing and reconciliation after the window remains hidden for five minutes.
+- [~] Realtime chat/task/system notification routing, stable message grouping and reconnect reconciliation are covered by unit/native lifecycle QA. A physical hidden-window message/task/action pass remains before this item is complete.
 - [ ] Offline/reconnect banner and long-session sync.
 - [x] Installer size and SHA-256 are recorded before publication.
 

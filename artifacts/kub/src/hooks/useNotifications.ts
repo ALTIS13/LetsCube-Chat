@@ -13,6 +13,8 @@ import {
   notificationPresentationTag,
   updateBrowserAppBadge,
 } from "@/lib/browserNotificationPresentation";
+import { isDesktopApp } from "@/lib/platform/desktop";
+import { showDesktopNotificationForRow } from "@/lib/platform/desktopNotifications";
 import type { Notification } from "@/types/database";
 
 const PAGE_SIZE = 30;
@@ -56,6 +58,8 @@ export function useNotifications() {
   const [error, setError] = useState<string | null>(null);
   const autoMarkingReadRef = useRef<Set<string>>(new Set());
   const unreadPresentationTagsRef = useRef<Map<string, string>>(new Map());
+  const presentedDesktopIdsRef = useRef<Set<string>>(new Set());
+  const desktopBaselineLoadedRef = useRef(false);
 
   const markReadIds = useCallback(async (ids: string[], options: { silent?: boolean } = {}) => {
     const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
@@ -103,7 +107,7 @@ export function useNotifications() {
     return filterRowsForDisplay(rows, userId, mutedChatIds);
   }, [markReadIds, mutedChatIds, userId]);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options: { presentNewDesktop?: boolean } = {}) => {
     if (!userId) {
       setItems([]);
       return;
@@ -123,6 +127,18 @@ export function useNotifications() {
     }
     setError(null);
     const nextRows = normalizeRowsForDisplay((data ?? []) as Notification[]);
+    if (isDesktopApp()) {
+      if (!desktopBaselineLoadedRef.current) {
+        for (const row of nextRows) presentedDesktopIdsRef.current.add(row.id);
+        desktopBaselineLoadedRef.current = true;
+      } else if (options.presentNewDesktop) {
+        for (const row of nextRows) {
+          if (row.read_at || presentedDesktopIdsRef.current.has(row.id)) continue;
+          presentedDesktopIdsRef.current.add(row.id);
+          void showDesktopNotificationForRow(row);
+        }
+      }
+    }
     setItems((prev) => filterRowsForDisplay(mergeRows(prev, nextRows), userId, mutedChatIds));
   }, [userId, supabase, normalizeRowsForDisplay, mutedChatIds]);
 
@@ -132,6 +148,7 @@ export function useNotifications() {
       return;
     }
     let cancelled = false;
+    let subscribedOnce = false;
     void refresh().then(() => {
       if (cancelled) return;
       // Merge — never replace — so any realtime INSERTs that landed before
@@ -159,6 +176,10 @@ export function useNotifications() {
           }
           if (isMutedNotification(row, mutedChatIds)) return;
           setItems((prev) => mergeRows(prev, [row]));
+          if (isDesktopApp() && !row.read_at && !presentedDesktopIdsRef.current.has(row.id)) {
+            presentedDesktopIdsRef.current.add(row.id);
+            void showDesktopNotificationForRow(row);
+          }
         },
       )
       .on(
@@ -169,7 +190,11 @@ export function useNotifications() {
           setItems((prev) => prev.map((n) => (n.id === row.id ? row : n)));
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status !== "SUBSCRIBED") return;
+        if (subscribedOnce) void refresh({ presentNewDesktop: true });
+        subscribedOnce = true;
+      });
 
     return () => {
       cancelled = true;
@@ -209,6 +234,8 @@ export function useNotifications() {
   useEffect(() => {
     if (userId) return;
     unreadPresentationTagsRef.current.clear();
+    presentedDesktopIdsRef.current.clear();
+    desktopBaselineLoadedRef.current = false;
     void updateBrowserAppBadge(0);
   }, [userId]);
 
@@ -247,17 +274,19 @@ export function useNotifications() {
       void markMessageNotificationsForChatRead(detail.chatId, detail.readUntil ?? null);
     };
     const handleFocus = () => {
-      void refresh();
+      void refresh({ presentNewDesktop: true });
     };
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") void refresh();
+      if (document.visibilityState === "visible") void refresh({ presentNewDesktop: true });
     };
     window.addEventListener(KUB_CHAT_NOTIFICATIONS_READ_EVENT, handleChatNotificationsRead);
     window.addEventListener("focus", handleFocus);
+    window.addEventListener("online", handleFocus);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       window.removeEventListener(KUB_CHAT_NOTIFICATIONS_READ_EVENT, handleChatNotificationsRead);
       window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("online", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [markMessageNotificationsForChatRead, refresh]);

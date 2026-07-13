@@ -11,8 +11,6 @@ import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail 
 import { isSavedChat } from "@/lib/chatDisplay";
 import { scheduleMarkChatDelivered, scheduleMarkChatRead } from "@/lib/deliveryReceipts";
 import { isWebBrowser } from "@/lib/platform/capabilities";
-import { isDesktopApp } from "@/lib/platform/desktop";
-import { showDesktopMessageNotification } from "@/lib/platform/desktopNotifications";
 import {
   createMessageSendTimeoutContext,
   getMessageAckUserMessage,
@@ -624,14 +622,7 @@ export function useMessages(
               : data.type === "image" ? "🖼 Фото"
               : data.type === "audio" ? "🎤 Голосовое сообщение"
               : data.type === "video" ? "🎬 Видео" : "📎 Файл";
-            if (isDesktopApp()) {
-              void showDesktopMessageNotification({
-                title: senderName,
-                body,
-                icon: "/icons/icon-192.png",
-                tag: payload.new.chat_id,
-              });
-            } else if (
+            if (
               isWebBrowser() && document.hidden &&
               typeof window !== "undefined" && "Notification" in window &&
               Notification.permission === "granted"

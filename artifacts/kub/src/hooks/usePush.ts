@@ -7,6 +7,7 @@ import { requestChatMessageJump } from "@/lib/chatJumpEvents";
 import { safeOpenChat } from "@/lib/safeOpenChat";
 import { isNativeAndroid, isNativeApp, nativePushPendingMessage, supportsBrowserPush } from "@/lib/platform/capabilities";
 import { isDesktopApp } from "@/lib/platform/desktop";
+import { registerDesktopNotificationNavigationListener } from "@/lib/platform/desktopNotifications";
 import {
   disableNativeAndroidPush,
   enableNativeAndroidPush,
@@ -511,18 +512,21 @@ export function usePushNotificationNavigation() {
   }, []);
 
   useEffect(() => {
-    if (!isNativeAndroid()) return undefined;
+    if (!(isNativeAndroid() || isDesktopApp())) return undefined;
     let cleanup: (() => void) | null = null;
     const targetHandler = deferredNativeTargetRef.current;
     if (!targetHandler) return undefined;
-    void registerNativePushNavigationListeners(targetHandler.handle).then((removeListeners) => {
+    const register = isNativeAndroid()
+      ? registerNativePushNavigationListeners
+      : registerDesktopNotificationNavigationListener;
+    void register(targetHandler.handle).then((removeListeners) => {
       cleanup = removeListeners;
     });
     return () => cleanup?.();
   }, []);
 
   useEffect(() => {
-    if (!currentUserId || !isNativeAndroid()) return;
+    if (!currentUserId || !(isNativeAndroid() || isDesktopApp())) return;
     deferredNativeTargetRef.current?.flush();
   }, [currentUserId]);
 

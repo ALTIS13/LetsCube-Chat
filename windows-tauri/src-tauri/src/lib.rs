@@ -193,7 +193,8 @@ fn desktop_bridge_script() -> String {
     getUpdateChannel: async () => call("desktop_get_update_channel"),
     setUpdateChannel: async (channel) => call("desktop_set_update_channel", {{ channel }}),
     checkUpdate: async () => call("desktop_check_update"),
-    installUpdate: async () => call("desktop_install_update")
+    installUpdate: async () => call("desktop_install_update"),
+    showMain: async () => call("desktop_show_main")
   }});
   Object.defineProperty(window, "letscubeDesktop", {{
     configurable: false,
@@ -270,6 +271,15 @@ fn show_main<R: Runtime>(app: &AppHandle<R>) {
         let _ = main.unminimize();
         let _ = main.set_focus();
     }
+}
+
+#[tauri::command]
+fn desktop_show_main(window: WebviewWindow) -> Result<(), &'static str> {
+    require_production_main(&window)?;
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+    Ok(())
 }
 
 fn restore_startup_surface<R: Runtime>(app: &AppHandle<R>) {
@@ -850,7 +860,8 @@ pub fn run() {
             desktop_get_update_channel,
             desktop_set_update_channel,
             desktop_check_update,
-            desktop_install_update
+            desktop_install_update,
+            desktop_show_main
         ])
         .setup(|app| {
             setup_update_controller(app.handle())?;

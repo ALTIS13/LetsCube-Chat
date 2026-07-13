@@ -12,10 +12,12 @@
     "notification:allow-is-permission-granted",
     "notification:allow-request-permission",
     "notification:allow-notify",
+    "notification:allow-register-listener",
     "allow-desktop-get-update-state",
     "allow-desktop-get-update-channel",
     "allow-desktop-set-update-channel",
     "allow-desktop-check-update",
-    "allow-desktop-install-update"
+    "allow-desktop-install-update",
+    "allow-desktop-show-main"
   ]
 }

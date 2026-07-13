@@ -17,5 +17,6 @@ interface Window {
     setUpdateChannel(channel: LetscubeDesktopUpdateChannel): Promise<unknown>;
     checkUpdate(): Promise<unknown>;
     installUpdate(): Promise<unknown>;
+    showMain(): Promise<void>;
   };
 }

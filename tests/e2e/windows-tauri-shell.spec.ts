@@ -113,9 +113,17 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       expect(new URL(page.url()).origin).toBe(PRODUCTION_ORIGIN);
       const productionOverlay = page.getByTestId("production-startup-overlay");
       await expect(productionOverlay).toBeVisible();
-      await expect(
-        productionOverlay.getByText("Подготавливаем рабочее пространство"),
-      ).toBeVisible();
+      await expect
+        .poll(() =>
+          page.evaluate(() => Reflect.get(window, "__letscubeStartupOverlayHistory")?.[0]),
+        )
+        .toEqual(
+          expect.objectContaining({
+            stage: "production_navigation",
+            connected: false,
+            statusText: "Подготавливаем рабочее пространство",
+          }),
+        );
       const overlayGeometry = await page.evaluate(() => {
         const host = document.querySelector<HTMLElement>(
           '[data-testid="production-startup-overlay"]',
@@ -236,7 +244,6 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
         ).find((entry) => entry.connected),
       );
       expect(connectedHistory?.fadeDuration).toBeLessThanOrEqual(20);
-      await page.waitForTimeout(1_000);
       await expect(productionOverlay).toBeVisible();
       await expect(productionOverlay.getByText("Рабочее пространство готово")).toBeVisible();
       const connectedGeometry = await page.evaluate(() => {

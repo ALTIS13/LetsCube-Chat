@@ -58,8 +58,8 @@ test("Windows release version and build metadata stay aligned", () => {
   const libRs = readText("windows-tauri/src-tauri/src/lib.rs");
   const publisherPublicKey = readText("scripts/windows-updater-public.key").trim();
 
-  assert.equal(shellPackage.version, "0.2.3");
-  assert.equal(shellPackage.desktopBuild, 7);
+  assert.equal(shellPackage.version, "0.2.4");
+  assert.equal(shellPackage.desktopBuild, 8);
   assert.equal(tauriConfig.version, shellPackage.version);
   assert.equal(cargoVersion, shellPackage.version);
   assert.equal(tauriConfig.plugins.updater.pubkey, publisherPublicKey);
@@ -108,6 +108,7 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
     "desktop_set_update_channel",
     "desktop_check_update",
     "desktop_install_update",
+    "desktop_show_main",
   ]) {
     assert.match(
       buildRs,
@@ -125,6 +126,9 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.match(libRs, /https:\/\/app\.letscube\.ru\//);
   assert.match(libRs, /webview-production-v1/);
   assert.match(libRs, /window\.letscubeDesktop/);
+  assert.match(libRs, /desktop_show_main/);
+  assert.match(libRs, /showMain: async \(\) => call\("desktop_show_main"\)/);
+  assert.equal(capability.permissions.includes("allow-desktop-show-main"), true);
   assert.match(libRs, /Object\.freeze/);
   assert.match(libRs, /version:\s*runtimeInfo\.version/);
   assert.match(libRs, /build:\s*runtimeInfo\.build/);
@@ -217,6 +221,16 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
     capability.permissions.some((permission) => /^notification:/.test(permission)),
     "production capability must expose only the notification plugin methods needed by the app origin",
   );
+  assert.deepEqual(
+    capability.permissions.filter((permission) => /^notification:/.test(permission)).sort(),
+    [
+      "notification:allow-is-permission-granted",
+      "notification:allow-notify",
+      "notification:allow-register-listener",
+      "notification:allow-request-permission",
+    ],
+    "remote production origin must receive only the four notification methods used by the app",
+  );
   assert.ok(
     capability.permissions.every((permission) => !/^updater:/.test(permission)),
     "remote production pages must use only the origin-guarded Rust updater commands",
@@ -229,8 +243,9 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
       "allow-desktop-get-update-state",
       "allow-desktop-install-update",
       "allow-desktop-set-update-channel",
+      "allow-desktop-show-main",
     ],
-    "remote production origin must receive only the five guarded desktop updater commands",
+    "remote production origin must receive only the six guarded desktop commands",
   );
   assert.deepEqual(startupCapability.permissions.sort(), ["allow-begin-startup-qa", "allow-retry-main"]);
 });

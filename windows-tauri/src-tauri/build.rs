@@ -8,6 +8,7 @@ const COMMANDS: &[&str] = &[
     "desktop_set_update_channel",
     "desktop_check_update",
     "desktop_install_update",
+    "desktop_show_main",
 ];
 
 fn main() {
