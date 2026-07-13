@@ -1,3 +1,4 @@
+use crate::updater::{is_critical_stable, UpdateChannel};
 use serde::Serialize;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -59,10 +60,6 @@ impl StartupState {
                     StartupStage::ProductionNavigation
                 )
                 | (
-                    StartupStage::UpdateCheck,
-                    StartupStage::CriticalUpdateRequired
-                )
-                | (
                     StartupStage::ProductionNavigation,
                     StartupStage::WorkspaceReady
                 )
@@ -79,9 +76,42 @@ impl StartupState {
         Ok(())
     }
 
+    pub fn require_critical_update(
+        &mut self,
+        channel: UpdateChannel,
+        mandatory: bool,
+        critical: bool,
+    ) -> Result<(), StartupTransitionError> {
+        if self.stage != StartupStage::UpdateCheck
+            || !is_critical_stable(channel, mandatory, critical)
+        {
+            return Err(StartupTransitionError {
+                from: self.stage,
+                to: StartupStage::CriticalUpdateRequired,
+            });
+        }
+
+        self.stage = StartupStage::CriticalUpdateRequired;
+        self.error_code = None;
+        Ok(())
+    }
+
     pub fn fail(&mut self, error_code: StartupErrorCode) {
         self.stage = StartupStage::RecoverableError;
         self.error_code = Some(error_code);
+    }
+
+    pub fn retry(&mut self) -> Result<(), StartupTransitionError> {
+        if self.stage != StartupStage::RecoverableError {
+            return Err(StartupTransitionError {
+                from: self.stage,
+                to: StartupStage::NetworkCheck,
+            });
+        }
+
+        self.stage = StartupStage::NetworkCheck;
+        self.error_code = None;
+        Ok(())
     }
 
     pub fn snapshot(&self) -> StartupSnapshot {
@@ -102,6 +132,7 @@ impl Default for StartupState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::updater::UpdateChannel;
 
     #[test]
     fn startup_only_reaches_connected_after_every_real_stage() {
@@ -125,6 +156,62 @@ mod tests {
         state.fail(StartupErrorCode::Network);
         assert_eq!(state.snapshot().stage, StartupStage::RecoverableError);
         assert!(!state.snapshot().connected);
+    }
+
+    #[test]
+    fn public_transition_cannot_enter_critical_update_required() {
+        let mut state = StartupState::new();
+        state.transition(StartupStage::NetworkCheck).unwrap();
+        state.transition(StartupStage::TlsOriginCheck).unwrap();
+        state.transition(StartupStage::UpdateCheck).unwrap();
+
+        assert!(state
+            .transition(StartupStage::CriticalUpdateRequired)
+            .is_err());
+    }
+
+    #[test]
+    fn critical_update_gate_requires_a_stable_typed_decision() {
+        let mut test_channel_state = state_at_update_check();
+        assert!(test_channel_state
+            .require_critical_update(UpdateChannel::Test, true, true)
+            .is_err());
+        assert_eq!(
+            test_channel_state.snapshot().stage,
+            StartupStage::UpdateCheck
+        );
+
+        let mut stable_channel_state = state_at_update_check();
+        stable_channel_state
+            .require_critical_update(UpdateChannel::Stable, true, true)
+            .unwrap();
+        assert_eq!(
+            stable_channel_state.snapshot().stage,
+            StartupStage::CriticalUpdateRequired
+        );
+        assert!(!stable_channel_state.snapshot().connected);
+    }
+
+    #[test]
+    fn retry_recovers_only_from_recoverable_error_without_connecting() {
+        let mut state = StartupState::new();
+        assert!(state.retry().is_err());
+        assert_eq!(state.snapshot().stage, StartupStage::Boot);
+        assert!(!state.snapshot().connected);
+
+        state.fail(StartupErrorCode::Network);
+        state.retry().unwrap();
+        assert_eq!(state.snapshot().stage, StartupStage::NetworkCheck);
+        assert_eq!(state.snapshot().error_code, None);
+        assert!(!state.snapshot().connected);
+    }
+
+    fn state_at_update_check() -> StartupState {
+        let mut state = StartupState::new();
+        state.transition(StartupStage::NetworkCheck).unwrap();
+        state.transition(StartupStage::TlsOriginCheck).unwrap();
+        state.transition(StartupStage::UpdateCheck).unwrap();
+        state
     }
 
     #[test]
