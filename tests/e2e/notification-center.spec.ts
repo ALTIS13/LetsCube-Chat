@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import {
   findFirstAvailableQaRole,
   gotoOrSkip,
@@ -8,7 +8,7 @@ import {
   loginAsRoleOrSkip,
 } from "./helpers/auth";
 
-test.describe("KUB notification center", () => {
+test.describe("LETSCUBE notification center", () => {
   test("opens with category tabs and keeps messages separate from tasks", async ({ page }) => {
     const consoleErrors: string[] = [];
     page.on("console", (message) => {
@@ -36,11 +36,20 @@ test.describe("KUB notification center", () => {
     }
 
     await page.getByTestId("notification-tab-tasks").click();
-    await expect(page.getByTestId("notification-tab-tasks")).toHaveAttribute("data-state", "active");
+    await expect(page.getByTestId("notification-tab-tasks")).toHaveAttribute(
+      "data-state",
+      "active",
+    );
     await page.getByTestId("notification-tab-messages").click();
-    await expect(page.getByTestId("notification-tab-messages")).toHaveAttribute("data-state", "active");
+    await expect(page.getByTestId("notification-tab-messages")).toHaveAttribute(
+      "data-state",
+      "active",
+    );
     await page.getByTestId("notification-tab-system").click();
-    await expect(page.getByTestId("notification-tab-system")).toHaveAttribute("data-state", "active");
+    await expect(page.getByTestId("notification-tab-system")).toHaveAttribute(
+      "data-state",
+      "active",
+    );
     await page.getByTestId("notification-tab-all").click();
     await expect(page.getByTestId("notification-tab-all")).toHaveAttribute("data-state", "active");
 
@@ -52,15 +61,37 @@ test.describe("KUB notification center", () => {
         !message.includes("Failed to load resource") &&
         !message.includes("Missing Supabase environment variables"),
     );
-    expect(unexpectedConsoleErrors, `Unexpected console errors:\n${unexpectedConsoleErrors.join("\n")}`).toEqual([]);
+    expect(
+      unexpectedConsoleErrors,
+      `Unexpected console errors:\n${unexpectedConsoleErrors.join("\n")}`,
+    ).toEqual([]);
   });
 
-  test("clears recipient message notifications when the chat is read", async ({ browser }, testInfo) => {
-    test.skip(testInfo.project.name !== "chromium-desktop-1440", "mutation read-sync check runs once");
+  test("clears recipient message notifications when the chat is read", async ({
+    browser,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "chromium-desktop-1440",
+      "mutation read-sync check runs once",
+    );
     const env = loadQaEnvValues();
     const allowMutations = process.env.KUB_QA_ALLOW_MUTATIONS || env.get("KUB_QA_ALLOW_MUTATIONS");
-    test.skip(allowMutations !== "1", "KUB_QA_ALLOW_MUTATIONS=1 is required for message notification read-sync QA");
-    test.skip(!hasRoleAuth("owner") || !hasRoleAuth("client"), "owner and client QA auth are required");
+    const supabaseUrl = process.env.KUB_QA_SUPABASE_URL || env.get("KUB_QA_SUPABASE_URL");
+    const supabaseAnonKey =
+      process.env.KUB_QA_SUPABASE_ANON_KEY || env.get("KUB_QA_SUPABASE_ANON_KEY");
+    test.skip(
+      allowMutations !== "1",
+      "KUB_QA_ALLOW_MUTATIONS=1 is required for message notification read-sync QA",
+    );
+    test.skip(!supabaseUrl, "KUB_QA_SUPABASE_URL is required for production-safe read-sync QA");
+    test.skip(
+      !supabaseAnonKey,
+      "KUB_QA_SUPABASE_ANON_KEY is required for production-safe read-sync QA",
+    );
+    test.skip(
+      !hasRoleAuth("owner") || !hasRoleAuth("client"),
+      "owner and client QA auth are required",
+    );
 
     const ownerContext = await browser.newContext();
     const clientContext = await browser.newContext();
@@ -74,27 +105,41 @@ test.describe("KUB notification center", () => {
       await loginAsRoleOrSkip(clientPage, "client");
 
       const clientUserId = await getCurrentUserId(clientPage);
-      const chatId = await openPrivateChatWith(ownerPage, clientUserId);
-      const otherChatId = await findOtherVisibleChat(clientPage, chatId);
-      test.skip(!otherChatId, "client QA account needs another visible chat to keep the target chat unread");
-      await openChat(clientPage, otherChatId);
+      const api = { url: supabaseUrl!, anonKey: supabaseAnonKey! };
+      const chatId = await openPrivateChatWith(ownerPage, api, clientUserId);
+      const otherChat = clientPage
+        .locator(`[data-testid="chat-list-item"]:not([data-chat-id="${chatId}"])`)
+        .first();
+      test.skip(
+        !(await otherChat.isVisible().catch(() => false)),
+        "client QA account needs another visible chat to keep the target chat unread",
+      );
+      await otherChat.click();
 
       const content = `codex notification read ${Date.now()} ${Math.random().toString(36).slice(2)}`;
-      const message = await insertTextMessage(ownerPage, chatId, content);
+      const message = await insertTextMessage(ownerPage, api, chatId, content);
 
       await expect
-        .poll(() => findMessageNotification(clientPage, message.id), { timeout: 15_000 })
+        .poll(() => findMessageNotification(clientPage, api, message.id), { timeout: 15_000 })
         .toMatchObject({ read_at: null });
-      await expect.poll(() => findMessageNotification(ownerPage, message.id), { timeout: 5_000 }).toBeNull();
+      await expect
+        .poll(() => findMessageNotification(ownerPage, api, message.id), { timeout: 5_000 })
+        .toBeNull();
       await clientPage.getByTestId("notification-bell-button").click();
       await expect(clientPage.getByTestId("notification-panel")).toBeVisible();
-      await clientPage.keyboard.press("Escape");
+      const messageGroup = clientPage
+        .getByTestId("notification-message-group")
+        .filter({ hasText: content });
+      await expect(messageGroup).toBeVisible({ timeout: 15_000 });
+      await messageGroup.click();
 
-      await openChat(clientPage, chatId);
       await expect
-        .poll(async () => (await findMessageNotification(clientPage, message.id))?.read_at ?? null, {
-          timeout: 15_000,
-        })
+        .poll(
+          async () => (await findMessageNotification(clientPage, api, message.id))?.read_at ?? null,
+          {
+            timeout: 15_000,
+          },
+        )
         .not.toBeNull();
     } finally {
       await clientContext.close().catch(() => null);
@@ -108,90 +153,101 @@ function hasRoleAuth(role: "owner" | "client") {
 }
 
 async function getCurrentUserId(page: Page): Promise<string> {
-  return page.evaluate(async () => {
-    const { createClient } = await import("/src/lib/supabase/client.ts");
-    const { data, error } = await createClient().auth.getUser();
-    if (error || !data.user?.id) throw new Error("qa_user_not_available");
-    return data.user.id;
+  return (await getQaSession(page)).userId;
+}
+
+type QaSupabaseConfig = { url: string; anonKey: string };
+
+async function openPrivateChatWith(
+  page: Page,
+  api: QaSupabaseConfig,
+  targetUserId: string,
+): Promise<string> {
+  const data = await qaSupabaseRequest(page, api, "/rest/v1/rpc/open_or_create_private_chat", {
+    method: "POST",
+    body: { target_user_id: targetUserId },
   });
+  if (!data) throw new Error("qa_private_chat_not_available");
+  return String(data);
 }
 
-async function openPrivateChatWith(page: Page, targetUserId: string): Promise<string> {
-  return page.evaluate(async (userId) => {
-    const { createClient } = await import("/src/lib/supabase/client.ts");
-    const { data, error } = await createClient().rpc("open_or_create_private_chat", {
-      target_user_id: userId,
-    });
-    if (error || !data) throw new Error("qa_private_chat_not_available");
-    return String(data);
-  }, targetUserId);
-}
-
-async function findOtherVisibleChat(page: Page, excludedChatId: string): Promise<string | null> {
-  return page.evaluate(async (chatId) => {
-    const { createClient } = await import("/src/lib/supabase/client.ts");
-    const { data: userData, error: userError } = await createClient().auth.getUser();
-    if (userError || !userData.user?.id) throw new Error("qa_user_not_available");
-    const { data, error } = await createClient()
-      .from("chat_members")
-      .select("chat_id")
-      .eq("user_id", userData.user.id)
-      .neq("chat_id", chatId)
-      .limit(1);
-    if (error) throw new Error("qa_other_chat_lookup_failed");
-    return data?.[0]?.chat_id ?? null;
-  }, excludedChatId);
-}
-
-async function openChat(page: Page, chatId: string) {
-  await page.evaluate(async (targetChatId) => {
-    const { safeOpenChat } = await import("/src/lib/safeOpenChat.ts");
-    const opened = await safeOpenChat(targetChatId);
-    if (!opened) throw new Error("qa_chat_not_opened");
-  }, chatId);
-}
-
-async function insertTextMessage(page: Page, chatId: string, content: string): Promise<{ id: string; created_at: string }> {
-  return page.evaluate(async ({ targetChatId, text }) => {
-    const { createClient } = await import("/src/lib/supabase/client.ts");
-    const supabase = createClient();
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError || !userData.user?.id) throw new Error("qa_user_not_available");
-    const { data, error } = await supabase
-      .from("messages")
-      .insert({
-        chat_id: targetChatId,
-        user_id: userData.user.id,
-        type: "text",
-        content: text,
-        client_message_id: crypto.randomUUID(),
-        client_sent_at: new Date().toISOString(),
-      })
-      .select("id,created_at")
-      .single();
-    if (error || !data) throw new Error("qa_message_insert_failed");
-    return data;
-  }, { targetChatId: chatId, text: content });
+async function insertTextMessage(
+  page: Page,
+  api: QaSupabaseConfig,
+  chatId: string,
+  content: string,
+): Promise<{ id: string; created_at: string }> {
+  const session = await getQaSession(page);
+  const data = await qaSupabaseRequest(page, api, "/rest/v1/messages?select=id,created_at", {
+    method: "POST",
+    prefer: "return=representation",
+    body: {
+      chat_id: chatId,
+      user_id: session.userId,
+      type: "text",
+      content,
+      client_message_id: crypto.randomUUID(),
+      client_sent_at: new Date().toISOString(),
+    },
+  });
+  const row = Array.isArray(data) ? data[0] : null;
+  if (!row || typeof row.id !== "string" || typeof row.created_at !== "string") {
+    throw new Error("qa_message_insert_failed");
+  }
+  return { id: row.id, created_at: row.created_at };
 }
 
 async function findMessageNotification(
   page: Page,
+  api: QaSupabaseConfig,
   messageId: string,
 ): Promise<{ id: string; read_at: string | null } | null> {
-  return page.evaluate(async (targetMessageId) => {
-    const { createClient } = await import("/src/lib/supabase/client.ts");
-    const { data, error } = await createClient()
-      .from("notifications")
-      .select("id,kind,payload,read_at,created_at")
-      .order("created_at", { ascending: false })
-      .limit(50);
-    if (error) throw new Error("qa_notifications_lookup_failed");
-    const row = data?.find((item) => {
-      const payload = item.payload && typeof item.payload === "object" && !Array.isArray(item.payload)
-        ? item.payload as Record<string, unknown>
+  const data = await qaSupabaseRequest(
+    page,
+    api,
+    "/rest/v1/notifications?select=id,kind,payload,read_at,created_at&order=created_at.desc&limit=50",
+  );
+  const rows = Array.isArray(data) ? data : [];
+  const row = rows.find((item) => {
+    const payload =
+      item.payload && typeof item.payload === "object" && !Array.isArray(item.payload)
+        ? (item.payload as Record<string, unknown>)
         : {};
-      return String(item.kind).includes("message") && payload.message_id === targetMessageId;
-    });
-    return row ? { id: row.id, read_at: row.read_at } : null;
-  }, messageId);
+    return String(item.kind).includes("message") && payload.message_id === messageId;
+  });
+  return row ? { id: row.id, read_at: row.read_at } : null;
+}
+
+type QaSession = { accessToken: string; userId: string };
+
+async function getQaSession(page: Page): Promise<QaSession> {
+  const raw = await page.evaluate(() => window.localStorage.getItem("kub-auth"));
+  if (!raw) throw new Error("qa_session_not_available");
+  const parsed = JSON.parse(raw) as { access_token?: unknown; user?: { id?: unknown } };
+  if (typeof parsed.access_token !== "string" || typeof parsed.user?.id !== "string") {
+    throw new Error("qa_session_not_available");
+  }
+  return { accessToken: parsed.access_token, userId: parsed.user.id };
+}
+
+async function qaSupabaseRequest(
+  page: Page,
+  api: QaSupabaseConfig,
+  path: string,
+  options: { method?: string; prefer?: string; body?: Record<string, unknown> } = {},
+): Promise<any> {
+  const session = await getQaSession(page);
+  const response = await page.request.fetch(`${api.url.replace(/\/$/, "")}${path}`, {
+    method: options.method ?? "GET",
+    headers: {
+      apikey: api.anonKey,
+      Authorization: `Bearer ${session.accessToken}`,
+      "Content-Type": "application/json",
+      ...(options.prefer ? { Prefer: options.prefer } : {}),
+    },
+    data: options.body,
+  });
+  if (!response.ok()) throw new Error(`qa_supabase_request_failed_${response.status()}`);
+  if (response.status() === 204) return null;
+  return response.json();
 }

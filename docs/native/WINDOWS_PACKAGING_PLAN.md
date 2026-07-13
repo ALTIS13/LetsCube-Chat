@@ -123,7 +123,10 @@ separate WNS device-token/backend design and is not claimed.
 ## Release catalog
 
 `https://api.letscube.ru/releases/v1/windows/stable.json` exposes the verified
-internal `0.2.0` build `4` Tauri NSIS artifact. Artifacts remain immutable under
+`0.2.3` build `7` Tauri NSIS artifact. The default updater Stable channel uses
+the same immutable installer. Signed `0.2.4` build `8` is available only in the
+opt-in Test updater channel until its physical tray notification pass completes.
+Artifacts remain immutable under
 `https://api.letscube.ru/releases/files/windows/`.
 
 The signed native updater uses separate manifests and does not replace that

@@ -148,6 +148,7 @@ export function ChatListItem({
         onPinnedDrop?.();
       }}
       data-testid="chat-list-item"
+      data-chat-id={chat.id}
       data-unread-count={chat.unread_count ?? 0}
       data-has-messages={lastMsg ? "true" : "false"}
       className={cn(
