@@ -1,4 +1,5 @@
 import { chromium, expect, test } from "@playwright/test";
+import { findFirstAvailableQaRole, loginAsRoleOrSkip } from "./helpers/auth";
 
 const PRODUCTION_ORIGIN = "https://app.letscube.ru";
 const QA_MODES = new Set([
@@ -49,6 +50,11 @@ test("covers the injected Windows startup and updater lifecycle", async ({}, tes
         fingerprintClearance: true,
         fingerprintStylesMatch: true,
         statusClearance: true,
+        endpointTextClearance: true,
+        fingerprintLineClearance: true,
+        statusStageLabelClearance: true,
+        retryLabelClearance: true,
+        textPairwiseClear: true,
       });
     }
 
@@ -75,7 +81,19 @@ test("covers the injected Windows startup and updater lifecycle", async ({}, tes
       await expect(page.getByText("Сервер LETSCUBE недоступен")).toBeVisible();
       const retry = page.getByRole("button", { name: "Повторить" });
       await expect(retry).toBeVisible();
-      await page.screenshot({ path: testInfo.outputPath("startup-offline-retry.png") });
+      await expect(retry).toHaveText("Повторить");
+      for (const viewport of VIEWPORTS) {
+        await page.setViewportSize(viewport);
+        await expect(measureStartupGeometry(page)).resolves.toMatchObject({
+          endpointTextClearance: true,
+          fingerprintLineClearance: true,
+          statusStageLabelClearance: true,
+          retryLabelClearance: true,
+        });
+        await page.screenshot({
+          path: testInfo.outputPath(`startup-offline-retry-${viewport.width}x${viewport.height}.png`),
+        });
+      }
       await retry.click();
     }
 
@@ -104,6 +122,7 @@ test("covers the injected Windows startup and updater lifecycle", async ({}, tes
         ]),
       );
     }
+    await assertNativeInjectedUpdateUi(page, mode, testInfo);
     await page.screenshot({ path: testInfo.outputPath(`production-handoff-${mode}.png`) });
   } finally {
     await browser.close();
@@ -140,15 +159,52 @@ function expectedUpdateState(mode: string) {
   }
 }
 
+async function assertNativeInjectedUpdateUi(
+  page: import("@playwright/test").Page,
+  mode: string,
+  testInfo: import("@playwright/test").TestInfo,
+) {
+  if (mode !== "normal_update" && mode !== "critical_update") return;
+
+  const role = findFirstAvailableQaRole(["owner", "tech_admin", "location_admin"], {
+    includeDefault: true,
+  });
+  expect(role, "Native updater UI requires a configured QA authenticated state or credentials.").not.toBeNull();
+  if (!role) throw new Error("native_updater_ui_auth_missing");
+  await loginAsRoleOrSkip(page, role);
+  await expect(page.getByTestId("sidebar-brand-strip")).toBeVisible({ timeout: 20_000 });
+
+  if (mode === "normal_update") {
+    const pill = page.getByTestId("desktop-update-pill");
+    await expect(pill).toHaveAttribute("data-phase", "available");
+    const pillBox = await pill.boundingBox();
+    expect(pillBox, "native normal-update pill must have a stable compact box").toBeTruthy();
+    expect(pillBox!.width).toBeLessThanOrEqual(300);
+    expect(pillBox!.height).toBeLessThanOrEqual(80);
+    await expect(page.getByTestId("desktop-app-shell")).not.toHaveAttribute("inert", "");
+    await page.screenshot({ path: testInfo.outputPath("native-normal-update-pill.png") });
+    return;
+  }
+
+  const gate = page.getByTestId("desktop-critical-update-gate");
+  await expect(gate).toBeVisible();
+  await expect(page.getByTestId("desktop-app-shell")).toHaveAttribute("inert", "");
+  await expect(page.getByTestId("desktop-critical-update-install")).toBeEnabled();
+  await page.screenshot({ path: testInfo.outputPath("native-critical-update-gate.png") });
+}
+
 async function measureStartupGeometry(page: import("@playwright/test").Page) {
   return page.evaluate(() => {
     const box = (selector: string) =>
       document.querySelector<HTMLElement>(selector)?.getBoundingClientRect() ?? null;
+    const boxes = (selector: string) =>
+      [...document.querySelectorAll<HTMLElement>(selector)].map((element) => element.getBoundingClientRect());
     const leftRail = box(".rail-left");
     const rightRail = box(".rail-right");
     const seal = box('[data-testid="startup-center-seal"]');
     const status = box("#startup-status");
     const stages = box(".stages");
+    const stageLabels = boxes(".stages li");
     const versionPill = box(".version-pill");
     const client = box(".endpoint-client");
     const server = box(".endpoint-server");
@@ -156,6 +212,14 @@ async function measureStartupGeometry(page: import("@playwright/test").Page) {
     const serverFingerprint = box('[data-testid="startup-server-fingerprint"]');
     const computer = box(".computer");
     const serverRack = box(".server");
+    const clientHeading = box(".endpoint-client h2");
+    const clientSubtitle = box(".endpoint-client p");
+    const serverHeading = box(".endpoint-server h2");
+    const serverSubtitle = box(".endpoint-server p");
+    const clientFingerprintLines = boxes('[data-testid="startup-client-fingerprint"] span');
+    const serverFingerprintLines = boxes('[data-testid="startup-server-fingerprint"] span');
+    const retry = box("#startup-retry");
+    const failureText = box("#startup-error");
     if (
       !leftRail ||
       !rightRail ||
@@ -168,7 +232,14 @@ async function measureStartupGeometry(page: import("@playwright/test").Page) {
       !clientFingerprint ||
       !serverFingerprint ||
       !computer ||
-      !serverRack
+      !serverRack ||
+      !clientHeading ||
+      !clientSubtitle ||
+      !serverHeading ||
+      !serverSubtitle ||
+      stageLabels.length !== 4 ||
+      clientFingerprintLines.length !== 4 ||
+      serverFingerprintLines.length !== 4
     ) {
       throw new Error("startup_geometry_missing");
     }
@@ -189,6 +260,33 @@ async function measureStartupGeometry(page: import("@playwright/test").Page) {
       first.right > second.left &&
       first.top < second.bottom &&
       first.bottom > second.top;
+    const visible = (entry: DOMRect | null): entry is DOMRect =>
+      Boolean(entry && entry.width > 0 && entry.height > 0);
+    const pairwiseClear = (entries: Array<DOMRect | null>) => {
+      const visibleEntries = entries.filter(visible);
+      return visibleEntries.every((entry, index) =>
+        visibleEntries.slice(index + 1).every((other) => !overlaps(entry, other)));
+    };
+    const textEntries = [
+      ...clientFingerprintLines,
+      clientHeading,
+      clientSubtitle,
+      ...serverFingerprintLines,
+      serverHeading,
+      serverSubtitle,
+      status,
+      ...stageLabels,
+      retry,
+      failureText,
+    ];
+    const endpointTextEntries = [
+      ...clientFingerprintLines,
+      clientHeading,
+      clientSubtitle,
+      ...serverFingerprintLines,
+      serverHeading,
+      serverSubtitle,
+    ];
 
     return {
       horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth,
@@ -206,6 +304,23 @@ async function measureStartupGeometry(page: import("@playwright/test").Page) {
         !overlaps(status, versionPill) &&
         !overlaps(status, computer) &&
         !overlaps(status, serverRack),
+      endpointTextClearance:
+        pairwiseClear(endpointTextEntries) &&
+        !overlaps(clientHeading, computer) &&
+        !overlaps(clientSubtitle, computer) &&
+        !overlaps(serverHeading, serverRack) &&
+        !overlaps(serverSubtitle, serverRack),
+      fingerprintLineClearance:
+        pairwiseClear([...clientFingerprintLines, ...serverFingerprintLines]) &&
+        clientFingerprintLines.every((line) => !overlaps(line, computer)) &&
+        serverFingerprintLines.every((line) => !overlaps(line, serverRack)),
+      statusStageLabelClearance:
+        pairwiseClear([status, ...stageLabels]) &&
+        stageLabels.every((label) => !overlaps(label, versionPill)),
+      retryLabelClearance:
+        !visible(retry) ||
+        pairwiseClear([retry, failureText, status, ...stageLabels, ...endpointTextEntries]),
+      textPairwiseClear: pairwiseClear(textEntries),
     };
   });
 }

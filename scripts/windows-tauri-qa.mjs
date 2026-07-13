@@ -83,59 +83,60 @@ for (const scenario of scenarios) {
 async function runScenario({ name, mode, spec }) {
   const debugPort = await reserveLoopbackPort();
   const profilePath = mkdtempSync(path.join(os.tmpdir(), `letscube-tauri-qa-${name}-`));
-  const outputPath = path.join("output", "playwright-test", "windows-tauri-qa", name);
-  const cdpUrl = `http://127.0.0.1:${debugPort}`;
-  const qaEnv = {
-    ...process.env,
-    LETSCUBE_TAURI_CDP_URL: cdpUrl,
-  };
-  const clientEnv = {
-    ...process.env,
-    LETSCUBE_WEBVIEW2_DATA_DIR: profilePath,
-    LETSCUBE_WEBVIEW2_DEBUG_PORT: String(debugPort),
-    LETSCUBE_TAURI_QA_HOLD_PREFLIGHT: "1",
-  };
-  if (mode) {
-    qaEnv.LETSCUBE_TAURI_QA_STARTUP_MODE = mode;
-    clientEnv.LETSCUBE_TAURI_QA_STARTUP_MODE = mode;
-  } else {
-    delete qaEnv.LETSCUBE_TAURI_QA_STARTUP_MODE;
-    delete clientEnv.LETSCUBE_TAURI_QA_STARTUP_MODE;
-  }
-
-  const qaProcess = spawn(
-    process.env.ComSpec || "cmd.exe",
-    [
-      "/d",
-      "/s",
-      "/c",
-      "pnpm.cmd",
-      "exec",
-      "playwright",
-      "test",
-      spec,
-      "--project",
-      "chromium-desktop-1440",
-      "--output",
-      outputPath,
-    ],
-    { cwd: root, env: qaEnv, stdio: "inherit" },
-  );
-  const client = spawn(executablePath, [], {
-    cwd: root,
-    env: clientEnv,
-    stdio: "ignore",
-  });
-  client.once("error", (error) => {
-    console.error(`Windows Tauri QA client failed to start: ${error.message}`);
-  });
-  activeScenario = { qaProcess, client, profilePath, cleanupPromise: null };
+  const scenario = { profilePath, qaProcess: null, client: null, cleanupPromise: null };
+  activeScenario = scenario;
 
   try {
-    return await waitForExit(qaProcess);
+    const outputPath = path.join("output", "playwright-test", "windows-tauri-qa", name);
+    const cdpUrl = `http://127.0.0.1:${debugPort}`;
+    const qaEnv = {
+      ...process.env,
+      LETSCUBE_TAURI_CDP_URL: cdpUrl,
+    };
+    const clientEnv = {
+      ...process.env,
+      LETSCUBE_WEBVIEW2_DATA_DIR: profilePath,
+      LETSCUBE_WEBVIEW2_DEBUG_PORT: String(debugPort),
+      LETSCUBE_TAURI_QA_HOLD_PREFLIGHT: "1",
+    };
+    if (mode) {
+      qaEnv.LETSCUBE_TAURI_QA_STARTUP_MODE = mode;
+      clientEnv.LETSCUBE_TAURI_QA_STARTUP_MODE = mode;
+    } else {
+      delete qaEnv.LETSCUBE_TAURI_QA_STARTUP_MODE;
+      delete clientEnv.LETSCUBE_TAURI_QA_STARTUP_MODE;
+    }
+
+    scenario.qaProcess = spawn(
+      process.env.ComSpec || "cmd.exe",
+      [
+        "/d",
+        "/s",
+        "/c",
+        "pnpm.cmd",
+        "exec",
+        "playwright",
+        "test",
+        spec,
+        "--project",
+        "chromium-desktop-1440",
+        "--output",
+        outputPath,
+      ],
+      { cwd: root, env: qaEnv, stdio: "inherit" },
+    );
+    scenario.client = spawn(executablePath, [], {
+      cwd: root,
+      env: clientEnv,
+      stdio: "ignore",
+    });
+    scenario.client.once("error", (error) => {
+      console.error(`Windows Tauri QA client failed to start: ${error.message}`);
+    });
+    return await waitForExit(scenario.qaProcess);
   } finally {
-    const clean = await cleanupOwnedResources(activeScenario);
-    activeScenario = null;
+    const clean = await cleanupOwnedResources(scenario);
+    if (activeScenario === scenario) activeScenario = null;
     if (!clean) process.exitCode = 1;
   }
 }

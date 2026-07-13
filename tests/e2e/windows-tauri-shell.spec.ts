@@ -303,6 +303,7 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
         updateState = { ...next };
       });
       Reflect.set(window, "__getQaDesktopUpdateCalls", () => [...updateCalls]);
+      Reflect.set(window, "__getQaDesktopUpdateState", () => ({ ...updateState }));
       Reflect.set(window, "__clearQaDesktopUpdateCalls", () => {
         updateCalls.length = 0;
       });
@@ -423,6 +424,18 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       ]);
       await expect(testChannel).toHaveAttribute("aria-checked", "true");
       await expect(pill).toHaveAttribute("data-channel", "test");
+      await stableChannel.click();
+      await expect.poll(() => page.evaluate(() => Reflect.get(window, "__getQaDesktopUpdateCalls")())).toEqual([
+        "set:test",
+        "check",
+        "set:stable",
+        "check",
+      ]);
+      await expect
+        .poll(() => page.evaluate(() => Reflect.get(window, "__getQaDesktopUpdateState")()))
+        .toMatchObject({ channel: "stable", phase: "current", mandatory: false });
+      await expect(stableChannel).toHaveAttribute("aria-checked", "true");
+      await expect(testChannel).toHaveAttribute("aria-checked", "false");
       await page.keyboard.press("Escape");
 
       const notificationButton = page.getByTestId("notification-bell-button");

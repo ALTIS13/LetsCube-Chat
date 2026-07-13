@@ -381,3 +381,49 @@ test("Windows lifecycle fixtures are deterministic and cleanup remains single-fl
     "signal and finally cleanup must converge on the same promise",
   );
 });
+
+test("Windows lifecycle wrapper owns a profile before either child can exist", () => {
+  const wrapper = readText("scripts/windows-tauri-qa.mjs");
+  const scenarioSetup = wrapper.match(
+    /async function runScenario[\s\S]*?(?=\nfunction hasRunningClient)/,
+  )?.[0] ?? "";
+
+  assert.match(
+    scenarioSetup,
+    /const profilePath = mkdtempSync\([^\n]+\);\s*const scenario = \{\s*profilePath,\s*qaProcess: null,\s*client: null,\s*cleanupPromise: null,?\s*\};\s*activeScenario = scenario;\s*try \{/,
+    "profile ownership must be registered immediately before setup or a child spawn can race a signal",
+  );
+  assert.match(scenarioSetup, /scenario\.qaProcess = spawn\(/);
+  assert.match(scenarioSetup, /scenario\.client = spawn\(/);
+  assert.match(scenarioSetup, /cleanupOwnedResources\(scenario\)/);
+});
+
+test("Windows lifecycle spec observes real native updater UI and all startup text geometry", () => {
+  const spec = readText("tests/e2e/windows-tauri-startup.spec.ts");
+
+  assert.match(spec, /loginAsRoleOrSkip/);
+  assert.match(spec, /desktop-update-pill/);
+  assert.match(spec, /desktop-critical-update-gate/);
+  assert.match(spec, /startup-client-fingerprint.*span/);
+  assert.match(spec, /startup-server-fingerprint.*span/);
+  assert.match(spec, /\.endpoint-client h2/);
+  assert.match(spec, /\.endpoint-client p/);
+  assert.match(spec, /\.endpoint-server h2/);
+  assert.match(spec, /\.endpoint-server p/);
+  assert.match(spec, /\.stages li/);
+  assert.match(spec, /startup-offline-retry-\$\{viewport\.width\}x\$\{viewport\.height\}/);
+});
+
+test("Windows update UI contract confirms Test to Stable reversal", () => {
+  const spec = readText("tests/e2e/windows-tauri-shell.spec.ts");
+
+  assert.match(spec, /set:stable/);
+  assert.match(
+    spec,
+    /\[\s*"set:test",\s*"check",\s*"set:stable",\s*"check",?\s*\]/,
+  );
+  assert.match(
+    spec,
+    /toMatchObject\(\{\s*channel: "stable",\s*phase: "current",\s*mandatory: false,?\s*\}\)/,
+  );
+});
