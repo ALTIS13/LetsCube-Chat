@@ -58,8 +58,8 @@ test("Windows release version and build metadata stay aligned", () => {
   const libRs = readText("windows-tauri/src-tauri/src/lib.rs");
   const publisherPublicKey = readText("scripts/windows-updater-public.key").trim();
 
-  assert.equal(shellPackage.version, "0.2.1");
-  assert.equal(shellPackage.desktopBuild, 5);
+  assert.equal(shellPackage.version, "0.2.2");
+  assert.equal(shellPackage.desktopBuild, 6);
   assert.equal(tauriConfig.version, shellPackage.version);
   assert.equal(cargoVersion, shellPackage.version);
   assert.equal(tauriConfig.plugins.updater.pubkey, publisherPublicKey);
@@ -268,6 +268,23 @@ test("Windows startup uses one main window and a local approved handshake scene"
   const iconNames = readdirSync(iconsDir).map((entry) => path.basename(entry).toLowerCase());
   assert.ok(iconNames.some((entry) => entry.endsWith(".ico")), "Windows icon asset is missing");
   assert.ok(iconNames.some((entry) => entry.endsWith(".png")), "PNG icon asset is missing");
+});
+
+test("production startup handoff keeps one stable scene long enough to read", () => {
+  const html = readText("windows-tauri/ui/startup-overlay.html");
+  const css = readText("windows-tauri/ui/startup-overlay.css");
+  const script = readText("windows-tauri/ui/startup-overlay.js");
+
+  assert.match(html, /startup-overlay-endpoint-client/);
+  assert.match(html, /startup-overlay-endpoint-server/);
+  assert.match(html, /__LETSCUBE_LOGO_SVG__/);
+  assert.match(html, /startup-overlay-stages/);
+  assert.match(css, /\.startup-overlay-endpoint-client\s*\{\s*grid-column:\s*1;/);
+  assert.match(css, /\.startup-overlay-endpoint-server\s*\{\s*grid-column:\s*3;/);
+  assert.match(css, /\.startup-overlay-fingerprint\s*\{[^}]*height:\s*74px;/s);
+  assert.match(script, /minimumVisibleDuration\s*=\s*2_200/);
+  assert.match(script, /successHoldDuration\s*=\s*900/);
+  assert.match(script, /Math\.max\(minimumVisibleDuration[^)]*successHoldDuration/s);
 });
 
 test("Windows Tauri exposes main-WebView automation only through a debug-only opt-in port", () => {

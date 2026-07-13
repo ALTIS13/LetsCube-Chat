@@ -1,13 +1,40 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { KubButton, KubIcon } from "@/components/kub";
 import { useDesktopUpdate } from "@/hooks/useDesktopUpdate";
 import { cn } from "@/lib/utils";
 
+const DESKTOP_VERSION_STORAGE_KEY = "letscube:desktop:last-installed-version";
+const UPDATE_SUCCESS_VISIBLE_MS = 4_200;
+
 export function DesktopUpdatePill() {
   const update = useDesktopUpdate();
+  const [showUpdateSuccess, setShowUpdateSuccess] = useState(false);
+  const snapshot = update?.snapshot ?? null;
+
+  useEffect(() => {
+    if (snapshot?.channel !== "stable" || snapshot.phase !== "current") {
+      setShowUpdateSuccess(false);
+      return undefined;
+    }
+
+    try {
+      const previousVersion = window.localStorage.getItem(DESKTOP_VERSION_STORAGE_KEY);
+      window.localStorage.setItem(DESKTOP_VERSION_STORAGE_KEY, snapshot.installedVersion);
+      const versionChanged = Boolean(previousVersion && previousVersion !== snapshot.installedVersion);
+      setShowUpdateSuccess(versionChanged);
+      if (!versionChanged) return undefined;
+
+      const timeout = window.setTimeout(() => setShowUpdateSuccess(false), UPDATE_SUCCESS_VISIBLE_MS);
+      return () => window.clearTimeout(timeout);
+    } catch {
+      setShowUpdateSuccess(false);
+      return undefined;
+    }
+  }, [snapshot?.channel, snapshot?.installedVersion, snapshot?.phase]);
+
   if (!update?.snapshot || !update.presentation) return null;
 
-  const { snapshot, presentation, commandPending } = update;
+  const { snapshot: activeSnapshot, presentation, commandPending } = update;
   if (presentation.blocking) {
     return (
       <CriticalUpdateGate
@@ -20,34 +47,42 @@ export function DesktopUpdatePill() {
   }
 
   if (!presentation.persistent) {
+    if (!showUpdateSuccess) return null;
     return (
-      <button
-        type="button"
-        className="desktop-update-pill desktop-update-pill--collapsed"
-        onClick={() => void update.check()}
-        disabled={commandPending}
-        aria-label="Проверить обновления LETSCUBE"
-        title="LETSCUBE обновлён"
+      <aside
+        className="desktop-update-pill desktop-update-pill--success"
+        role="status"
+        aria-live="polite"
         data-testid="desktop-update-pill"
-        data-collapsed="true"
+        data-update-success="true"
       >
-        <KubIcon name={commandPending ? "spinner" : "checkCircle"} size={17} />
-      </button>
+        <span className="desktop-update-pill__icon" aria-hidden="true">
+          <KubIcon name="checkCircle" size={17} />
+        </span>
+        <span className="min-w-0">
+          <strong className="block truncate text-xs font-semibold text-[color:var(--kub-text)]">
+            Обновление установлено
+          </strong>
+          <span className="block truncate text-[11px] text-[color:var(--kub-muted)]">
+            Версия {activeSnapshot.installedVersion} готова к работе
+          </span>
+        </span>
+      </aside>
     );
   }
 
   const action = presentation.action;
   return (
     <aside
-      className={cn("desktop-update-pill", snapshot.channel === "test" && "desktop-update-pill--test")}
+      className={cn("desktop-update-pill", activeSnapshot.channel === "test" && "desktop-update-pill--test")}
       aria-live="polite"
       data-testid="desktop-update-pill"
-      data-phase={snapshot.phase}
-      data-channel={snapshot.channel}
+      data-phase={activeSnapshot.phase}
+      data-channel={activeSnapshot.channel}
     >
       <span className="desktop-update-pill__icon" aria-hidden="true">
         <KubIcon
-          name={snapshot.phase === "failed" ? "warning" : snapshot.phase === "downloading" ? "cloud" : "zap"}
+          name={activeSnapshot.phase === "failed" ? "warning" : activeSnapshot.phase === "downloading" ? "cloud" : "zap"}
           size={17}
         />
       </span>

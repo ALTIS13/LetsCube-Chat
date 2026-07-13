@@ -1,30 +1,42 @@
 <main class="startup-overlay-scene" aria-live="polite">
   <header class="startup-overlay-header">
-    <strong>LETSCUBE</strong>
-    <span>Защищённое подключение</span>
+    <span class="startup-overlay-brand" role="img" aria-label="LETSCUBE">__LETSCUBE_LOGO_SVG__</span>
+    <span class="startup-overlay-connection-pill"><i aria-hidden="true"></i>Защищённое подключение</span>
   </header>
   <section class="startup-overlay-handshake" id="production-startup-handshake">
-    <article class="startup-overlay-endpoint">
+    <article class="startup-overlay-endpoint startup-overlay-endpoint-client">
       <div class="startup-overlay-fingerprint" aria-hidden="true">
         <span>4E 1A 90</span><span>C8 72 B4</span><span>0F 6D A2</span><span>91 3C E7</span>
       </div>
-      <div class="startup-overlay-computer" aria-hidden="true"><i></i><b></b></div>
+      <div class="startup-overlay-computer" aria-hidden="true">
+        <div class="startup-overlay-screen"><i></i></div><div class="startup-overlay-stand"></div>
+      </div>
       <h2>Этот компьютер</h2>
       <p>Защищённый клиент</p>
     </article>
     <div class="startup-overlay-rail-wrap" aria-hidden="true">
-      <div class="startup-overlay-rail"></div>
+      <div class="startup-overlay-rail"><i></i></div>
       <div id="production-startup-center-seal" data-testid="production-startup-center-seal" class="startup-overlay-seal" aria-hidden="true"><span></span></div>
-      <div class="startup-overlay-rail"></div>
+      <div class="startup-overlay-rail"><i></i></div>
     </div>
-    <article class="startup-overlay-endpoint">
+    <article class="startup-overlay-endpoint startup-overlay-endpoint-server">
       <div class="startup-overlay-fingerprint" aria-hidden="true">
         <span>72 B9 0D</span><span>18 E4 C3</span><span>A6 2F 81</span><span>3D C0 57</span>
       </div>
-      <div class="startup-overlay-server" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="startup-overlay-server" aria-hidden="true">
+        <div><i></i><b></b><b></b></div><div><i></i><b></b><b></b></div><div><i></i><b></b><b></b></div>
+      </div>
       <h2>LETSCUBE Secure Node</h2>
       <p>Проверенный сервер</p>
     </article>
   </section>
-  <p id="production-startup-status" class="startup-overlay-status">Подготавливаем рабочее пространство</p>
+  <section class="startup-overlay-state">
+    <p id="production-startup-status" class="startup-overlay-status">Подготавливаем рабочее пространство</p>
+    <ol class="startup-overlay-stages" aria-label="Этапы подключения">
+      <li class="is-done">Сеть</li>
+      <li class="is-done">Сертификат</li>
+      <li class="is-done">Версия</li>
+      <li class="is-active">Рабочее пространство</li>
+    </ol>
+  </section>
 </main>

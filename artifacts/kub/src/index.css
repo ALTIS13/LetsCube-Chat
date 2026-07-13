@@ -736,6 +736,12 @@ textarea::placeholder, input::placeholder {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+@keyframes desktop-update-success {
+  0% { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  10%, 82% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-4px) scale(0.98); }
+}
+
 .desktop-update-pill {
   position: fixed;
   top: max(0.75rem, env(safe-area-inset-top));
@@ -758,17 +764,16 @@ textarea::placeholder, input::placeholder {
   animation: desktop-update-enter 180ms ease-out both;
 }
 
-.desktop-update-pill--collapsed {
-  width: 2.25rem;
-  min-height: 2.25rem;
-  justify-content: center;
-  border-radius: 0.65rem;
-  padding: 0;
-  color: var(--kub-online);
-  cursor: pointer;
+.desktop-update-pill--success {
+  width: auto;
+  min-height: 2.5rem;
+  max-width: min(14rem, calc(100vw - 1.5rem));
+  padding: 0.4rem 0.55rem;
+  pointer-events: none;
+  border-color: color-mix(in srgb, var(--kub-online) 38%, var(--kub-border-color));
+  animation: desktop-update-success 4.2s ease both;
 }
 
-.desktop-update-pill--collapsed:focus-visible,
 .desktop-update-pill__action:focus-visible,
 .desktop-update-channel-control__option:focus-visible {
   outline: 2px solid var(--kub-cyan);
@@ -790,6 +795,13 @@ textarea::placeholder, input::placeholder {
   border-radius: 0.6rem;
   background: color-mix(in srgb, var(--kub-cyan) 12%, var(--kub-surface-2));
   color: var(--kub-cyan);
+}
+
+.desktop-update-pill--success .desktop-update-pill__icon {
+  height: 1.8rem;
+  width: 1.8rem;
+  background: color-mix(in srgb, var(--kub-online) 14%, var(--kub-surface-2));
+  color: var(--kub-online);
 }
 
 .desktop-update-pill__action {

@@ -231,6 +231,10 @@ fn startup_runtime_script() -> String {
 }
 
 fn production_overlay_script() -> String {
+    let overlay_html = include_str!("../../ui/startup-overlay.html").replace(
+        "__LETSCUBE_LOGO_SVG__",
+        include_str!("../../ui/letscube-logo.svg"),
+    );
     include_str!("../../ui/startup-overlay.js")
         .replace(
             "__LETSCUBE_PRODUCTION_ORIGIN__",
@@ -247,8 +251,7 @@ fn production_overlay_script() -> String {
         )
         .replace(
             "__LETSCUBE_OVERLAY_HTML__",
-            &serde_json::to_string(include_str!("../../ui/startup-overlay.html"))
-                .expect("overlay HTML serializes"),
+            &serde_json::to_string(&overlay_html).expect("overlay HTML serializes"),
         )
 }
 

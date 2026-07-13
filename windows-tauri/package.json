@@ -1,7 +1,7 @@
 {
   "name": "@letscube/windows-tauri",
-  "version": "0.2.1",
-  "desktopBuild": 5,
+  "version": "0.2.2",
+  "desktopBuild": 6,
   "private": true,
   "scripts": {
     "tauri": "tauri"

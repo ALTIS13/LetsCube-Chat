@@ -72,6 +72,30 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       const productionOverlay = page.getByTestId("production-startup-overlay");
       await expect(productionOverlay).toBeVisible();
       await expect(productionOverlay.getByText("Подготавливаем рабочее пространство")).toBeVisible();
+      const overlayGeometry = await page.evaluate(() => {
+        const host = document.querySelector<HTMLElement>('[data-testid="production-startup-overlay"]');
+        const shadow = host?.shadowRoot;
+        const endpoints = [...(shadow?.querySelectorAll<HTMLElement>(".startup-overlay-endpoint") ?? [])]
+          .map((element) => element.getBoundingClientRect());
+        const seal = shadow
+          ?.querySelector<HTMLElement>('[data-testid="production-startup-center-seal"]')
+          ?.getBoundingClientRect();
+        if (endpoints.length !== 2 || !seal) throw new Error("production_overlay_geometry_missing");
+        const center = (box: DOMRect) => box.left + box.width / 2;
+        return {
+          clientBeforeSeal: endpoints[0].right <= seal.left + 1,
+          serverAfterSeal: endpoints[1].left >= seal.right - 1,
+          symmetric:
+            Math.abs((center(seal) - center(endpoints[0])) - (center(endpoints[1]) - center(seal))) <= 2,
+          endpointsAligned: Math.abs(endpoints[0].top - endpoints[1].top) <= 1,
+        };
+      });
+      expect(overlayGeometry).toEqual({
+        clientBeforeSeal: true,
+        serverAfterSeal: true,
+        symmetric: true,
+        endpointsAligned: true,
+      });
       await expect
         .poll(() =>
           page.evaluate(() =>
@@ -81,6 +105,8 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
               sealConnected: boolean;
               statusText: string;
               fadeDuration: number;
+              minimumVisibleDuration: number;
+              successHoldDuration: number;
               removed?: boolean;
             }>,
           ),
@@ -93,6 +119,8 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
               sealConnected: true,
               statusText: "Рабочее пространство готово",
               fadeDuration: expect.any(Number),
+              minimumVisibleDuration: 2_200,
+              successHoldDuration: 900,
             }),
           ]),
         );
@@ -103,7 +131,11 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
         }>).find((entry) => entry.connected),
       );
       expect(connectedHistory?.fadeDuration).toBeLessThanOrEqual(20);
-      await expect(productionOverlay).toHaveCount(0, { timeout: 2_000 });
+      await page.waitForTimeout(1_000);
+      await expect(productionOverlay).toBeVisible();
+      await expect(productionOverlay.getByText("Рабочее пространство готово")).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath("tauri-connected-hold.png") });
+      await expect(productionOverlay).toHaveCount(0, { timeout: 3_000 });
       await expect
         .poll(() => page.evaluate(() => Reflect.get(window, "__letscubeStartupOverlayHistory")))
         .toEqual(expect.arrayContaining([expect.objectContaining({ removed: true })]));
@@ -258,6 +290,7 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
     });
     page.on("pageerror", (error) => consoleErrors.push(error.message));
     await page.addInitScript(() => {
+      localStorage.setItem("letscube:desktop:last-installed-version", "0.1.9");
       const updateCalls: string[] = [];
       let updateState = {
         channel: "stable",
@@ -334,11 +367,14 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
 
       const pill = page.getByTestId("desktop-update-pill");
       await expect(pill).toBeVisible();
-      await expect(pill).toHaveAttribute("data-collapsed", "true");
+      await expect(pill).toHaveAttribute("data-update-success", "true");
+      await expect(pill.getByText("Обновление установлено")).toBeVisible();
       const pillBox = await pill.boundingBox();
       expect(pillBox).toBeTruthy();
-      expect(pillBox!.width).toBeLessThanOrEqual(40);
-      expect(pillBox!.height).toBeLessThanOrEqual(40);
+      expect(pillBox!.width).toBeLessThanOrEqual(240);
+      expect(pillBox!.height).toBeLessThanOrEqual(56);
+      await page.screenshot({ path: testInfo.outputPath("desktop-update-success.png") });
+      await expect(pill).toHaveCount(0, { timeout: 7_000 });
 
       await page.evaluate(() => {
         const setState = Reflect.get(window, "__setQaDesktopUpdateState") as (value: unknown) => void;

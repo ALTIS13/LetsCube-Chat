@@ -1,6 +1,6 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-07-12.
+Status: active production-hardening tracker, updated 2026-07-13.
 
 This file is the working source of truth for the next production stages. Before starting any new production task, read this file first, then update the relevant checkboxes/status when work is completed, blocked, or intentionally deferred.
 
@@ -19,7 +19,7 @@ Legend:
 4. `[x]` Priority 4 - Operator security observability.
 5. `[~]` Priority 5 - Installed web/PWA production shell.
 6. `[!]` Priority 6 - Monitoring and self-hosted Sentry.
-7. `[~]` Native/mobile packaging resumed: Android release candidate first, then compact Windows Tauri packaging.
+7. `[~]` Native/mobile packaging resumed: Windows Tauri secure startup and signed updater are complete; Android release signing and the remaining platform release gates stay active.
 
 ## Next Execution Queue
 
@@ -45,14 +45,15 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 5. `[~]` Keep iPhone/iPad Home Screen as the only PWA install target. Android browsers use the APK catalog and Windows browsers use the EXE catalog; physical iOS Home Screen/push confirmation remains pending.
 6. `[!]` Keep monitoring/Sentry and backup restore rehearsal deferred until the user confirms the backup environment and restore-test window.
 7. `[~]` Complete the Capacitor Android release candidate. LETSCUBE `0.1.0` production-configured debug APK is published through the self-hosted release catalog with verified size/SHA parity. Remaining: release signing/AAB, app links/recovery callback and broader signed-package QA.
-8. `[~]` Replace the retired Electron spike with a clean-profile Tauri 2 Windows client. Active plan: `docs/superpowers/plans/2026-07-12-windows-tauri-migration.md`.
+8. `[x]` Replace the retired Electron spike with a clean-profile Tauri 2 Windows client. The one-window secure startup, tray/single-instance behavior, Stable/Test channels, signed Tauri updater and physical `0.2.0 -> 0.2.1` rehearsal are complete. Stable download/updater catalogs publish `0.2.1` build `5` from the same immutable artifact. A successful version change shows a compact four-second confirmation and then frees the top-right area for future call controls.
+9. `[ ]` Complete the external Windows release gates: Authenticode/SmartScreen reputation, a broader Windows 10/11 device matrix and killed-process native notification delivery. These do not reopen the completed signed-updater foundation.
 
 ## Last Confirmed Deploy Baseline
 
-- Production web baseline: `8d20b89645b9471b4477a8566a5d23ff5cfc9027` (Tauri desktop adapter and hardened Windows shell handoff). The release-catalog runtime baseline remains included from `491e172ad58dc71e6c53bdedeca693ad9563fb90`, and the media/upload baseline remains included from `70de36e40ac299b68d0ba83d8fac20c84aa001cb`.
+- Production web baseline: `3fcea10c0d6147e60ec55aaafac9b655a39fea0d` (Windows startup/update UI plus cryptographically verified release publication). The later `337b2f85c89022307c690679ff0d7fdf8c9a42e9` changes only lifecycle QA expectations and does not alter the deployed frontend runtime.
 - Coolify app: `letscube-web`.
 - Public app: `https://app.letscube.ru`.
-- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; deployment `qu9qpxb8d6w1rr04zwgdf20p` completed exact commit `8d20b89645b9471b4477a8566a5d23ff5cfc9027`, passed healthcheck and production reports `running:healthy`. The chat-summary and access-snapshot RPC build flags remain enabled.
+- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; deployment `nf6d0ykn8nnp5cpp0sbgfdf4` completed the exact Windows runtime commit `3fcea10c0d6147e60ec55aaafac9b655a39fea0d` and production reports healthy. The chat-summary and access-snapshot RPC build flags remain enabled.
 - Worker auto deploy: worker-specific GitHub webhook is verified. Deployment `hjlbhqir375ia6wzmqarhswq` completed exact commit `8d20b89645b9471b4477a8566a5d23ff5cfc9027` with `is_webhook=true`, status `finished` and a healthy `/api/healthz` check. Worker `watch_paths` remain limited to worker/build/runtime paths and shared package manifests. GitHub Actions are intentionally disabled and repo workflow files/secrets were removed to avoid billing-lock email noise.
 - Self-host stack: Coolify proxy, self-hosted Supabase, Mailcow, app and worker deployment are already in place.
 - Production domains verified on 2026-07-09: `app.letscube.ru`, `deploy.letscube.ru`, `core.letscube.ru`, `mailserver.letscube.ru`, `notify.letscube.ru`, and SSH host `ms.letscube.ru` resolve and expose their expected services with valid TLS where applicable.
@@ -229,6 +230,7 @@ Current baseline:
 - `artifacts/kub/public/manifest.json` uses `LETSCUBE`, `display: standalone`, and `display_override` fallbacks.
 - The iPhone home-screen icon uses a dedicated 180x180 LETSCUBE club asset; 192/512/maskable PWA icons use the same official mark, and the service worker precaches the complete icon set.
 - Settings distribution block shows `iPhone/iPad / iOS PWA`, `Android APK`, `Windows EXE` or web-only status. Native manifests refresh on Settings open/resume without blocking app startup.
+- The Windows stable download catalog now offers LETSCUBE `0.2.1` build `5`. The Tauri Stable and Test updater manifests reference the same immutable 2,324,540-byte installer with SHA-256 `157aa2bbb7688ce309177d58f2dd1cbe5a4e76aa49f8c1313dd8ddc6c73299d3`; the installer is updater-signed and physically accepted by Tauri.
 - `letscube-releases` deployment `x11jjzh6qbcnszndx5av5paj` finished exact commit `491e172`; TLS/health, 404 listing denial, POST denial, CORS/cache headers and Android artifact size/SHA parity passed.
 - `tests/e2e/pwa.spec.ts` covers PWA shell metadata, service worker safety, offline/reconnect banner, and SPA direct routes on 1440, 1920, 3840, 390 and 412 viewports.
 - `tests/e2e/pwa-install-settings.spec.ts` covers desktop install variant and iPhone Safari home-screen guidance from the Settings install button.
