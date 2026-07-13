@@ -49,6 +49,22 @@ test("Windows Tauri shell stays isolated from the root workspace and exposes onl
   }
 });
 
+test("Windows release version and build metadata stay aligned", () => {
+  const shellPackage = readJson("windows-tauri/package.json");
+  const tauriConfig = readJson("windows-tauri/src-tauri/tauri.conf.json");
+  const cargoToml = readText("windows-tauri/src-tauri/Cargo.toml");
+  const cargoVersion = cargoToml.match(/^version = "([^"]+)"$/m)?.[1] ?? null;
+  const startupHtml = readText("windows-tauri/ui/startup.html");
+  const libRs = readText("windows-tauri/src-tauri/src/lib.rs");
+
+  assert.equal(shellPackage.version, "0.2.1");
+  assert.equal(shellPackage.desktopBuild, 5);
+  assert.equal(tauriConfig.version, shellPackage.version);
+  assert.equal(cargoVersion, shellPackage.version);
+  assert.doesNotMatch(startupHtml, /Desktop\s+\d+\.\d+\.\d+/);
+  assert.match(libRs, /startup_runtime_script[\s\S]*CARGO_PKG_VERSION/);
+});
+
 test("Windows Tauri shell files encode the minimum-capability production contract", () => {
   const cargoTomlPath = new URL("./Cargo.toml", srcTauriRoot);
   const libRsPath = new URL("./src/lib.rs", srcTauriRoot);

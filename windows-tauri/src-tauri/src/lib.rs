@@ -209,6 +209,27 @@ fn desktop_bridge_script() -> String {
     )
 }
 
+fn startup_runtime_script() -> String {
+    format!(
+        r#"
+(() => {{
+  if (window.location.href !== {startup_url:?}) return;
+  const applyVersion = () => {{
+    const label = document.querySelector("[data-desktop-version]");
+    if (label) label.textContent = `Desktop ${{{version:?}}}`;
+  }};
+  if (document.readyState === "loading") {{
+    document.addEventListener("DOMContentLoaded", applyVersion, {{ once: true }});
+  }} else {{
+    applyVersion();
+  }}
+}})();
+"#,
+        startup_url = BUNDLED_STARTUP_URL,
+        version = env!("CARGO_PKG_VERSION"),
+    )
+}
+
 fn production_overlay_script() -> String {
     include_str!("../../ui/startup-overlay.js")
         .replace(
@@ -233,7 +254,8 @@ fn production_overlay_script() -> String {
 
 fn initialization_script() -> String {
     format!(
-        "{}\n{}",
+        "{}\n{}\n{}",
+        startup_runtime_script(),
         desktop_bridge_script(),
         production_overlay_script()
     )
