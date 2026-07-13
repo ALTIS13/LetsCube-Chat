@@ -59,6 +59,7 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   const startupCapability = readJson("windows-tauri/src-tauri/capabilities/startup.json");
   const cargoToml = readFileSync(cargoTomlPath, "utf8");
   const libRs = readFileSync(libRsPath, "utf8");
+  const updaterRs = readText("windows-tauri/src-tauri/src/updater.rs");
   const mainRs = readFileSync(mainRsPath, "utf8");
   const buildRs = readFileSync(buildRsPath, "utf8");
 
@@ -73,9 +74,9 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.match(cargoToml, /^tauri-plugin-notification = "2\.[^"]+"/m);
   assert.match(cargoToml, /^tauri-plugin-opener = "2\.[^"]+"/m);
   assert.match(cargoToml, /^tauri-plugin-single-instance = "2\.[^"]+"/m);
-  assert.match(cargoToml, /^tauri-plugin-updater = "2\.10\.1"$/m);
+  assert.match(cargoToml, /^tauri-plugin-updater = "=2\.10\.1"$/m);
   assert.equal((cargoToml.match(/^reqwest\s*=/gm) ?? []).length, 1);
-  assert.match(cargoToml, /^reqwest = \{[^\n]*version = "0\.13\.4"[^\n]*features = \[[^\]]*"json"[^\]]*\]/m);
+  assert.match(cargoToml, /^reqwest = \{[^\n]*version = "=0\.13\.4"[^\n]*features = \[[^\]]*"json"[^\]]*\]/m);
 
   assert.match(mainRs, /letscube_windows_tauri::run\(\)/);
   assert.match(buildRs, /tauri_build::build\(\)/);
@@ -106,6 +107,13 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.match(libRs, /restore_startup_surface/);
   assert.doesNotMatch(libRs, /dangerous_accept_invalid_certs|dangerous_accept_invalid_hostnames/);
   assert.match(libRs, /tauri_plugin_updater::Builder::new\(\)\.build\(\)/);
+  assert.match(libRs, /update\.timeout\s*=\s*Some\(UPDATE_TIMEOUT\)/);
+  assert.match(libRs, /transition_update_failed/);
+  assert.match(updaterRs, /File::open\(path\)/);
+  assert.match(updaterRs, /file\.metadata\(\)/);
+  assert.match(updaterRs, /take\(MAX_CHANNEL_FILE_BYTES\s*\+\s*1\)/);
+  assert.match(updaterRs, /read_to_end/);
+  assert.doesNotMatch(updaterRs, /fs::metadata\(path\)|fs::read\(path\)/);
   const updaterCommands = [
     "desktop_get_update_state",
     "desktop_get_update_channel",

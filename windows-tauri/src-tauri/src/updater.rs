@@ -1,7 +1,7 @@
 use semver::Version;
 use serde::{Deserialize, Serialize};
-use std::fs::{self, OpenOptions};
-use std::io::{self, Write};
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, Read, Write};
 use std::path::Path;
 use url::Url;
 
@@ -211,13 +211,32 @@ struct ChannelPreference {
 }
 
 pub fn load_update_channel(path: &Path) -> UpdateChannel {
-    let bytes = fs::metadata(path)
-        .ok()
-        .filter(|metadata| metadata.len() <= MAX_CHANNEL_FILE_BYTES)
-        .and_then(|_| fs::read(path).ok());
+    let Ok(mut file) = File::open(path) else {
+        return UpdateChannel::default();
+    };
+    let Ok(metadata) = file.metadata() else {
+        return UpdateChannel::default();
+    };
+    if !metadata.is_file() || metadata.len() > MAX_CHANNEL_FILE_BYTES {
+        return UpdateChannel::default();
+    }
 
-    bytes
-        .and_then(|bytes| serde_json::from_slice::<ChannelPreference>(&bytes).ok())
+    read_update_channel(&mut file)
+}
+
+fn read_update_channel(reader: &mut impl Read) -> UpdateChannel {
+    let mut bytes = Vec::with_capacity(MAX_CHANNEL_FILE_BYTES as usize + 1);
+    if reader
+        .take(MAX_CHANNEL_FILE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .is_err()
+        || bytes.len() as u64 > MAX_CHANNEL_FILE_BYTES
+    {
+        return UpdateChannel::default();
+    }
+
+    serde_json::from_slice::<ChannelPreference>(&bytes)
+        .ok()
         .map(|preference| preference.channel)
         .unwrap_or_default()
 }
@@ -345,6 +364,7 @@ pub fn parse_update_channel_input(value: &str) -> Option<UpdateChannel> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::io::Cursor;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn isolated_channel_path(name: &str) -> std::path::PathBuf {
@@ -459,6 +479,16 @@ mod tests {
         assert_eq!(load_update_channel(&path), UpdateChannel::Stable);
 
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn bounded_channel_reader_stops_after_max_plus_one_bytes() {
+        let mut payload = br#"{"channel":"test"}"#.to_vec();
+        payload.resize(MAX_CHANNEL_FILE_BYTES as usize + 1, b' ');
+        let mut reader = Cursor::new(payload);
+
+        assert_eq!(read_update_channel(&mut reader), UpdateChannel::Stable);
+        assert_eq!(reader.position(), MAX_CHANNEL_FILE_BYTES + 1);
     }
 
     #[test]

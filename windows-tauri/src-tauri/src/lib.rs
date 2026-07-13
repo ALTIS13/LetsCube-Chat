@@ -27,6 +27,7 @@ const PRODUCTION_URL: &str = "https://app.letscube.ru/";
 const BUNDLED_STARTUP_URL: &str = "http://tauri.localhost/startup.html";
 const PRODUCTION_PROFILE: &str = "webview-production-v1";
 const UPDATE_CHANNEL_FILE: &str = "updater-channel.json";
+const UPDATE_TIMEOUT: Duration = Duration::from_secs(8);
 const STARTUP_EVENT: &str = "letscube://startup-state";
 const DESKTOP_BUILD: &str = env!("LETSCUBE_DESKTOP_BUILD");
 static MAIN_READY: AtomicBool = AtomicBool::new(false);
@@ -496,9 +497,19 @@ fn update_snapshot(controller: &UpdateController) -> Result<DesktopUpdateSnapsho
         .map_err(|_| "update_state_unavailable")
 }
 
-fn mark_update_failed(controller: &UpdateController, code: &'static str) {
+fn transition_update_failed(controller: &UpdateController, code: &'static str) -> String {
     if let Ok(mut native) = controller.inner.lock() {
         native.state.fail(code);
+    }
+    update_command_error(code)
+}
+
+fn download_error_code(error: &tauri_plugin_updater::Error) -> &'static str {
+    match error {
+        tauri_plugin_updater::Error::Reqwest(error) if error.is_timeout() => {
+            "update_download_timeout"
+        }
+        _ => "update_download_failed",
     }
 }
 
@@ -576,15 +587,14 @@ async fn desktop_check_update(
     let updater = app
         .updater_builder()
         .endpoints(vec![update_endpoint(channel)])
-        .map_err(|_| update_command_error("update_configuration_failed"))?
-        .timeout(Duration::from_secs(8))
+        .map_err(|_| transition_update_failed(&controller, "update_configuration_failed"))?
+        .timeout(UPDATE_TIMEOUT)
         .build()
-        .map_err(|_| update_command_error("update_configuration_failed"))?;
+        .map_err(|_| transition_update_failed(&controller, "update_configuration_failed"))?;
     let checked = match updater.check().await {
         Ok(checked) => checked,
         Err(_) => {
-            mark_update_failed(&controller, "update_check_failed");
-            return Err(update_command_error("update_check_failed"));
+            return Err(transition_update_failed(&controller, "update_check_failed"));
         }
     };
 
@@ -593,7 +603,8 @@ async fn desktop_check_update(
         .lock()
         .map_err(|_| update_command_error("update_state_unavailable"))?;
     match checked {
-        Some(update) => {
+        Some(mut update) => {
+            update.timeout = Some(UPDATE_TIMEOUT);
             let metadata = parse_update_metadata(&update.raw_json, channel, &installed_version);
             native.state.set_mandatory(metadata.mandatory);
             native
@@ -649,9 +660,9 @@ async fn desktop_install_update(
         .await
     {
         Ok(bytes) => bytes,
-        Err(_) => {
-            mark_update_failed(&controller, "update_download_failed");
-            return Err(update_command_error("update_download_failed"));
+        Err(error) => {
+            let code = download_error_code(&error);
+            return Err(transition_update_failed(&controller, code));
         }
     };
 
@@ -666,8 +677,10 @@ async fn desktop_install_update(
             .map_err(|_| update_command_error("update_state_unavailable"))?;
     }
     if update.install(bytes).is_err() {
-        mark_update_failed(&controller, "update_install_failed");
-        return Err(update_command_error("update_install_failed"));
+        return Err(transition_update_failed(
+            &controller,
+            "update_install_failed",
+        ));
     }
 
     update_snapshot(&controller).map_err(update_command_error)
@@ -753,6 +766,52 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn update_controller_with_state(state: DesktopUpdateState) -> UpdateController {
+        UpdateController {
+            inner: Mutex::new(NativeUpdateState {
+                state,
+                pending: None,
+            }),
+            channel_path: PathBuf::new(),
+        }
+    }
+
+    #[test]
+    fn asset_timeout_failure_releases_downloading_state_for_retry() {
+        let mut state = DesktopUpdateState::new(UpdateChannel::Stable, "0.2.0");
+        state.begin_check().unwrap();
+        state.mark_available("0.2.1", false, None).unwrap();
+        state.begin_download().unwrap();
+        let controller = update_controller_with_state(state);
+
+        let code = transition_update_failed(&controller, "update_download_timeout");
+        assert_eq!(code, "update_download_timeout");
+        let mut native = controller.inner.lock().unwrap();
+        assert_eq!(native.state.snapshot().phase, DesktopUpdatePhase::Failed);
+        assert_eq!(
+            native.state.snapshot().error_code.as_deref(),
+            Some("update_download_timeout")
+        );
+        native.state.begin_check().unwrap();
+        assert_eq!(native.state.snapshot().phase, DesktopUpdatePhase::Checking);
+    }
+
+    #[test]
+    fn check_setup_failure_never_leaves_state_checking() {
+        let mut state = DesktopUpdateState::new(UpdateChannel::Stable, "0.2.0");
+        state.begin_check().unwrap();
+        let controller = update_controller_with_state(state);
+
+        let code = transition_update_failed(&controller, "update_configuration_failed");
+        assert_eq!(code, "update_configuration_failed");
+        let snapshot = controller.inner.lock().unwrap().state.snapshot();
+        assert_eq!(snapshot.phase, DesktopUpdatePhase::Failed);
+        assert_eq!(
+            snapshot.error_code.as_deref(),
+            Some("update_configuration_failed")
+        );
+    }
 
     #[test]
     fn navigation_is_limited_to_exact_production_origin() {
