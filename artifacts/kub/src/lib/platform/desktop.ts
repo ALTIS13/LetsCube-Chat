@@ -10,6 +10,10 @@ export function isDesktopApp(): boolean {
   return typeof window !== "undefined" && window.letscubeDesktop?.platform === "windows";
 }
 
+export function getDesktopBridge(): NonNullable<Window["letscubeDesktop"]> | null {
+  return isDesktopApp() ? window.letscubeDesktop ?? null : null;
+}
+
 function parseDesktopRuntimeInfo(value: unknown): DesktopRuntimeInfo | null {
   const candidate = value as Partial<DesktopRuntimeInfo> | null | undefined;
   const version = candidate?.version;

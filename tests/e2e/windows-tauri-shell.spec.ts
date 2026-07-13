@@ -1,4 +1,7 @@
 import { chromium, expect, test } from "@playwright/test";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { createServer } from "node:http";
+import path from "node:path";
 import { loadQaCredentials } from "./helpers/auth";
 
 const PRODUCTION_ORIGIN = "https://app.letscube.ru";
@@ -153,9 +156,16 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
             platform: window.letscubeDesktop?.platform,
             version: window.letscubeDesktop?.version,
             build: window.letscubeDesktop?.build,
+            updater: [
+              window.letscubeDesktop?.getUpdateState,
+              window.letscubeDesktop?.getUpdateChannel,
+              window.letscubeDesktop?.setUpdateChannel,
+              window.letscubeDesktop?.checkUpdate,
+              window.letscubeDesktop?.installUpdate,
+            ].every((method) => typeof method === "function"),
           })),
         )
-        .toEqual({ platform: "windows", version: "0.2.0", build: 4 });
+        .toEqual({ platform: "windows", version: "0.2.0", build: 4, updater: true });
       await expect
         .poll(() =>
           page.evaluate(() => ({
@@ -223,6 +233,133 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       await browser.close();
     }
   });
+
+  test("renders local Windows update controls without changing browser distribution", async ({ page }, testInfo) => {
+    test.skip(process.platform !== "win32", "Windows desktop UI QA is Windows-only");
+    test.skip(
+      testInfo.project.name !== "chromium-desktop-1440",
+      "the Windows desktop UI scenario owns one viewport",
+    );
+    const credentials = loadQaCredentials("owner") ?? loadQaCredentials("default");
+    test.skip(!credentials, "Owner/default QA credentials are not configured");
+
+    const localFrontend = await startLocalFrontendServer();
+    const consoleErrors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") consoleErrors.push(message.text());
+    });
+    page.on("pageerror", (error) => consoleErrors.push(error.message));
+    await page.addInitScript(() => {
+      let updateState = {
+        channel: "stable",
+        phase: "current",
+        installedVersion: "0.2.0",
+        availableVersion: null,
+        downloadedBytes: 0,
+        totalBytes: null,
+        mandatory: false,
+        errorCode: null,
+      };
+      const runtimeInfo = Object.freeze({ platform: "windows" as const, version: "0.2.0", build: 4 });
+      const bridge = Object.freeze({
+        platform: "windows" as const,
+        version: runtimeInfo.version,
+        build: runtimeInfo.build,
+        getRuntimeInfo: async () => runtimeInfo,
+        getUpdateState: async () => ({ ...updateState }),
+        getUpdateChannel: async () => updateState.channel,
+        setUpdateChannel: async (channel: "stable" | "test") => {
+          updateState = { ...updateState, channel, phase: "idle" };
+          return { ...updateState };
+        },
+        checkUpdate: async () => ({ ...updateState }),
+        installUpdate: async () => ({ ...updateState }),
+      });
+      Object.defineProperty(window, "letscubeDesktop", {
+        configurable: false,
+        enumerable: false,
+        writable: false,
+        value: bridge,
+      });
+      Reflect.set(window, "__setQaDesktopUpdateState", (next: typeof updateState) => {
+        updateState = { ...next };
+      });
+    });
+
+    try {
+      await page.goto(localFrontend.url, { waitUntil: "domcontentloaded" });
+      await page.locator('input[type="email"]').fill(credentials!.email);
+      await page.locator('input[type="password"]').fill(credentials!.password);
+      await page.locator('button[type="submit"]').click();
+      await expect(page.getByTestId("sidebar-brand-strip")).toBeVisible({ timeout: 20_000 });
+
+      const pill = page.getByTestId("desktop-update-pill");
+      await expect(pill).toBeVisible();
+      await expect(pill).toHaveAttribute("data-collapsed", "true");
+      const pillBox = await pill.boundingBox();
+      expect(pillBox).toBeTruthy();
+      expect(pillBox!.width).toBeLessThanOrEqual(40);
+      expect(pillBox!.height).toBeLessThanOrEqual(40);
+
+      await page.evaluate(() => {
+        const setState = Reflect.get(window, "__setQaDesktopUpdateState") as (value: unknown) => void;
+        setState({
+          channel: "stable",
+          phase: "available",
+          installedVersion: "0.2.0",
+          availableVersion: "0.2.1",
+          downloadedBytes: 0,
+          totalBytes: 1_200_000,
+          mandatory: false,
+          errorCode: null,
+        });
+        window.dispatchEvent(new Event("focus"));
+      });
+      await expect(pill).toHaveAttribute("data-phase", "available");
+      await expect.poll(() => pill.evaluate((element) => getComputedStyle(element).opacity)).toBe("1");
+      const availablePillBox = await pill.boundingBox();
+      expect(availablePillBox).toBeTruthy();
+      expect(availablePillBox!.width).toBeLessThanOrEqual(300);
+      expect(availablePillBox!.height).toBeLessThanOrEqual(80);
+      await page.screenshot({ path: testInfo.outputPath("desktop-update-pill.png") });
+
+      await page.getByRole("button", { name: "Меню" }).click();
+      await page.getByRole("button", { name: "Настройки" }).click();
+      await expect(page.getByTestId("desktop-update-settings")).toBeVisible();
+      await expect(page.getByTestId("release-download-button")).toHaveCount(0);
+      const channelControl = page.getByTestId("desktop-update-channel-control");
+      await expect(channelControl.getByRole("button", { name: "Stable" })).toBeVisible();
+      await channelControl.getByRole("button", { name: "Test" }).click();
+      const confirmation = page.getByTestId("desktop-test-channel-confirmation");
+      await expect(confirmation).toBeVisible();
+      await expect(confirmation.getByText(/могут быть нестабильными/i)).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath("desktop-update-settings.png") });
+      await confirmation.getByRole("button", { name: "Отмена" }).click();
+      await expect(confirmation).toHaveCount(0);
+      await page.keyboard.press("Escape");
+
+      await page.evaluate(() => {
+        const setState = Reflect.get(window, "__setQaDesktopUpdateState") as (value: unknown) => void;
+        setState({
+          channel: "stable",
+          phase: "critical_update_required",
+          installedVersion: "0.2.0",
+          availableVersion: "0.3.0",
+          downloadedBytes: 0,
+          totalBytes: null,
+          mandatory: true,
+          errorCode: null,
+        });
+        window.dispatchEvent(new Event("focus"));
+      });
+      await expect(page.getByTestId("desktop-critical-update-gate")).toBeVisible();
+      await expect(page.getByTestId("sidebar-brand-strip")).toHaveCount(1);
+      await page.screenshot({ path: testInfo.outputPath("desktop-critical-update-gate.png") });
+      expect(consoleErrors, `Unexpected console errors:\n${consoleErrors.join("\n")}`).toEqual([]);
+    } finally {
+      await localFrontend.close();
+    }
+  });
 });
 
 function validateCdpUrl(value: string) {
@@ -243,6 +380,58 @@ function validateCdpUrl(value: string) {
     throw new Error("LETSCUBE_TAURI_CDP_URL must be an uncredentialed loopback HTTP origin.");
   }
   return url.origin;
+}
+
+async function startLocalFrontendServer() {
+  const publicRoot = path.resolve(process.cwd(), "artifacts", "kub", "dist", "public");
+  const indexPath = path.join(publicRoot, "index.html");
+  expect(existsSync(indexPath), "build the local frontend before Tauri QA").toBe(true);
+  const server = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://127.0.0.1");
+    const relative = decodeURIComponent(url.pathname).replace(/^\/+/, "") || "index.html";
+    const candidate = path.resolve(publicRoot, relative);
+    if (
+      candidate !== publicRoot
+      && candidate.startsWith(`${publicRoot}${path.sep}`)
+      && existsSync(candidate)
+      && statSync(candidate).isFile()
+    ) {
+      response.writeHead(200, { "Content-Type": contentTypeFor(candidate) });
+      response.end(readFileSync(candidate));
+      return;
+    }
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(readFileSync(indexPath));
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Local frontend server did not bind.");
+  return {
+    url: `http://127.0.0.1:${address.port}`,
+    close: () => new Promise<void>((resolve, reject) => {
+      server.close((error) => error ? reject(error) : resolve());
+    }),
+  };
+}
+
+function contentTypeFor(filePath: string) {
+  const extension = path.extname(filePath).toLowerCase();
+  return ({
+    ".css": "text/css; charset=utf-8",
+    ".html": "text/html; charset=utf-8",
+    ".ico": "image/x-icon",
+    ".jpeg": "image/jpeg",
+    ".jpg": "image/jpeg",
+    ".js": "text/javascript; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".webmanifest": "application/manifest+json; charset=utf-8",
+    ".webp": "image/webp",
+  } as Record<string, string>)[extension] ?? "application/octet-stream";
 }
 
 async function connectToTauri(cdpUrl: string) {

@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/sidebar/Sidebar";
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { BottomNav } from "./BottomNav";
+import { DesktopUpdatePill } from "@/components/desktop/DesktopUpdatePill";
 import { cn } from "@/lib/utils";
 
 /**
@@ -60,6 +61,7 @@ export function MainLayout() {
 
   return (
     <div className="flex flex-col h-[100dvh] w-screen overflow-hidden bg-[var(--kub-bg)]">
+      <DesktopUpdatePill />
       <div className="flex flex-1 overflow-hidden">
         <div
           className={cn(

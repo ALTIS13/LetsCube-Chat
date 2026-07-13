@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { KubButton, KubIcon } from "@/components/kub";
 import { usePwaInstall } from "@/hooks/usePwa";
 import { useReleaseCatalog, type ReleaseCatalogUiState } from "@/hooks/useReleaseCatalog";
+import { useDesktopUpdate } from "@/hooks/useDesktopUpdate";
 import { getBuildMetadata } from "@/lib/monitoring";
 import { getCurrentDistributionTarget } from "@/lib/platform/capabilities";
 
@@ -24,8 +25,10 @@ export function ReleaseDistributionSection() {
     promptInstall,
   } = usePwaInstall();
   const release = useReleaseCatalog(target);
+  const desktopUpdate = useDesktopUpdate();
   const buildMetadata = getBuildMetadata();
   const [handoff, setHandoff] = useState(false);
+  const [confirmTestChannel, setConfirmTestChannel] = useState(false);
 
   useEffect(() => {
     if (!handoff) return;
@@ -36,6 +39,7 @@ export function ReleaseDistributionSection() {
   const manifest = release.snapshot?.manifest ?? null;
   const artifact = manifest?.available ? manifest.artifact : null;
   const nativePackage = release.platform !== null;
+  const windowsNative = target === "windows_native";
 
   return (
     <div
@@ -69,7 +73,104 @@ export function ReleaseDistributionSection() {
               Режим: {installCopy.modeLabel}
             </span>
           </div>
-          {nativePackage && (
+          {windowsNative && desktopUpdate && (
+            <div
+              className="release-status-enter mt-3 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2"
+              data-testid="desktop-update-settings"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 text-xs text-[color:var(--kub-text)]">
+                  {desktopUpdate.presentation?.title ?? "Подготавливаем проверку обновлений"}
+                  <span className="mt-0.5 block text-[11px] text-[color:var(--kub-muted)]">
+                    Версия {desktopUpdate.snapshot?.installedVersion ?? buildMetadata.version}
+                  </span>
+                </div>
+                <div
+                  className="desktop-update-channel-control"
+                  role="group"
+                  aria-label="Канал обновлений"
+                  data-testid="desktop-update-channel-control"
+                >
+                  {(["stable", "test"] as const).map((channel) => (
+                    <button
+                      key={channel}
+                      type="button"
+                      className="desktop-update-channel-control__option"
+                      data-active={desktopUpdate.snapshot?.channel === channel ? "true" : "false"}
+                      disabled={desktopUpdate.commandPending}
+                      onClick={() => {
+                        if (desktopUpdate.snapshot?.channel === channel) return;
+                        if (channel === "test") {
+                          setConfirmTestChannel(true);
+                          return;
+                        }
+                        setConfirmTestChannel(false);
+                        void desktopUpdate.setChannel(channel);
+                      }}
+                    >
+                      {channel === "stable" ? "Stable" : "Test"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {desktopUpdate.presentation?.description && (
+                <p className="mt-2 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+                  {desktopUpdate.presentation.description}
+                </p>
+              )}
+              {confirmTestChannel && (
+                <div
+                  className="mt-2 rounded-lg border border-[color:var(--kub-warn)]/40 bg-[color-mix(in_srgb,var(--kub-warn)_9%,var(--kub-surface))] p-2"
+                  data-testid="desktop-test-channel-confirmation"
+                >
+                  <p className="text-[11px] leading-relaxed text-[color:var(--kub-text)]">
+                    Тестовые сборки могут быть нестабильными. Перейти на канал Test?
+                  </p>
+                  <div className="mt-2 flex justify-end gap-2">
+                    <KubButton size="sm" variant="ghost" onClick={() => setConfirmTestChannel(false)}>
+                      Отмена
+                    </KubButton>
+                    <KubButton
+                      size="sm"
+                      variant="secondary"
+                      loading={desktopUpdate.commandPending}
+                      onClick={() => {
+                        setConfirmTestChannel(false);
+                        void desktopUpdate.setChannel("test");
+                      }}
+                    >
+                      Перейти
+                    </KubButton>
+                  </div>
+                </div>
+              )}
+              <div className="mt-2 flex justify-end">
+                {desktopUpdate.presentation?.action === "install" ? (
+                  <KubButton
+                    size="sm"
+                    loading={desktopUpdate.commandPending}
+                    leftIcon={<KubIcon name="cloud" size={13} />}
+                    onClick={() => void desktopUpdate.install()}
+                    data-testid="desktop-update-install-button"
+                  >
+                    Установить
+                  </KubButton>
+                ) : (
+                  <KubButton
+                    size="sm"
+                    variant="ghost"
+                    loading={desktopUpdate.commandPending}
+                    leftIcon={<KubIcon name="rotate" size={13} />}
+                    onClick={() => void desktopUpdate.check()}
+                    data-testid="desktop-update-check-button"
+                  >
+                    Проверить
+                  </KubButton>
+                )}
+              </div>
+            </div>
+          )}
+          {nativePackage && !windowsNative && (
             <div
               className="release-status-enter mt-3 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2"
               data-testid="release-catalog-state"
@@ -102,7 +203,7 @@ export function ReleaseDistributionSection() {
             {installCopy.buttonLabel}
           </KubButton>
         )}
-        {artifact && release.state !== "current" && (
+        {artifact && release.state !== "current" && !windowsNative && (
           <a
             href={artifact.url}
             download
@@ -116,7 +217,7 @@ export function ReleaseDistributionSection() {
             Скачать
           </a>
         )}
-        {release.state === "unavailable" && (
+        {release.state === "unavailable" && !windowsNative && (
           <KubButton
             size="sm"
             variant="secondary"
