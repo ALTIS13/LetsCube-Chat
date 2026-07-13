@@ -1009,11 +1009,16 @@ mod tests {
         assert!(script.contains("is-connected"));
         assert!(script.contains("320"));
         assert!(html.contains("Подготавливаем рабочее пространство"));
+        assert!(html.contains("production-startup-client-port"));
+        assert!(html.contains("production-startup-server-port"));
         assert!(!html.contains("Рабочее пространство готово"));
         assert!(script.contains("status.textContent = successText"));
         assert!(script.contains("statusText: status.textContent"));
         assert!(css.contains("prefers-reduced-motion: reduce"));
         assert!(css.contains("transition-duration: 1ms"));
+        assert!(css.contains("grid-template-rows: 74px 20px 126px 20px 19px 4px 14px"));
+        assert!(css.contains("left: calc(25% + 83.5px)"));
+        assert!(css.contains("right: calc(25% + 75.5px)"));
         assert!(script.contains("matchMedia"));
         assert!(script.contains("reducedMotion ? 1 : 320"));
         assert!(script.contains("fadeDuration"));

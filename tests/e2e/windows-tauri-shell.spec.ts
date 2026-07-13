@@ -1,7 +1,7 @@
-import { chromium, expect, test } from "@playwright/test";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import path from "node:path";
+import { chromium, expect, test } from "@playwright/test";
 import { loadQaCredentials } from "./helpers/auth";
 
 const PRODUCTION_ORIGIN = "https://app.letscube.ru";
@@ -39,23 +39,65 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       await page.evaluate(() => {
         const record = Reflect.get(window, "__recordStartupStage") as (stage?: string) => void;
         record(document.body.dataset.stage);
-        new MutationObserver(() => record(document.body.dataset.stage)).observe(
-          document.body,
-          { attributes: true, attributeFilter: ["data-stage"] },
-        );
+        new MutationObserver(() => record(document.body.dataset.stage)).observe(document.body, {
+          attributes: true,
+          attributeFilter: ["data-stage"],
+        });
       });
 
       const geometry = await page.evaluate(() => {
-        const seal = document.querySelector<HTMLElement>('[data-testid="startup-center-seal"]')!.getBoundingClientRect();
-        const status = document.querySelector<HTMLElement>("#startup-status")!.getBoundingClientRect();
+        const seal = document
+          .querySelector<HTMLElement>('[data-testid="startup-center-seal"]')!
+          .getBoundingClientRect();
+        const status = document
+          .querySelector<HTMLElement>("#startup-status")!
+          .getBoundingClientRect();
         const left = document.querySelector<HTMLElement>(".rail-left")!.getBoundingClientRect();
         const right = document.querySelector<HTMLElement>(".rail-right")!.getBoundingClientRect();
+        const computer = document.querySelector<HTMLElement>(".computer")!.getBoundingClientRect();
+        const server = document.querySelector<HTMLElement>(".server")!.getBoundingClientRect();
+        const clientPort = document
+          .querySelector<HTMLElement>('[data-testid="startup-client-port"]')!
+          .getBoundingClientRect();
+        const serverPort = document
+          .querySelector<HTMLElement>('[data-testid="startup-server-port"]')!
+          .getBoundingClientRect();
+        const snapshot = (box: DOMRect) => ({
+          left: box.left,
+          top: box.top,
+          width: box.width,
+          height: box.height,
+        });
         return {
           statusBelowRail: status.top > seal.bottom,
           halvesCappedAtSeal: left.right <= seal.left + 0.5 && right.left >= seal.right - 0.5,
+          railsMeetPorts:
+            Math.abs(left.left - clientPort.right) <= 0.5 &&
+            Math.abs(right.right - serverPort.left) <= 0.5,
+          railsClearDevices: left.left >= computer.right && right.right <= server.left,
+          portsClearDevices: clientPort.left >= computer.right && serverPort.right <= server.left,
+          snapshot: {
+            computer: snapshot(computer),
+            server: snapshot(server),
+            seal: snapshot(seal),
+            clientPort: snapshot(clientPort),
+            serverPort: snapshot(serverPort),
+          },
         };
       });
-      expect(geometry).toEqual({ statusBelowRail: true, halvesCappedAtSeal: true });
+      expect({
+        statusBelowRail: geometry.statusBelowRail,
+        halvesCappedAtSeal: geometry.halvesCappedAtSeal,
+        railsMeetPorts: geometry.railsMeetPorts,
+        railsClearDevices: geometry.railsClearDevices,
+        portsClearDevices: geometry.portsClearDevices,
+      }).toEqual({
+        statusBelowRail: true,
+        halvesCappedAtSeal: true,
+        railsMeetPorts: true,
+        railsClearDevices: true,
+        portsClearDevices: true,
+      });
       await page.screenshot({ path: testInfo.outputPath("tauri-approved-startup.png") });
 
       await page.emulateMedia({ reducedMotion: "reduce" });
@@ -71,44 +113,105 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       expect(new URL(page.url()).origin).toBe(PRODUCTION_ORIGIN);
       const productionOverlay = page.getByTestId("production-startup-overlay");
       await expect(productionOverlay).toBeVisible();
-      await expect(productionOverlay.getByText("Подготавливаем рабочее пространство")).toBeVisible();
+      await expect(
+        productionOverlay.getByText("Подготавливаем рабочее пространство"),
+      ).toBeVisible();
       const overlayGeometry = await page.evaluate(() => {
-        const host = document.querySelector<HTMLElement>('[data-testid="production-startup-overlay"]');
+        const host = document.querySelector<HTMLElement>(
+          '[data-testid="production-startup-overlay"]',
+        );
         const shadow = host?.shadowRoot;
-        const endpoints = [...(shadow?.querySelectorAll<HTMLElement>(".startup-overlay-endpoint") ?? [])]
-          .map((element) => element.getBoundingClientRect());
+        const endpoints = [
+          ...(shadow?.querySelectorAll<HTMLElement>(".startup-overlay-endpoint") ?? []),
+        ].map((element) => element.getBoundingClientRect());
+        const computer = shadow
+          ?.querySelector<HTMLElement>(".startup-overlay-computer")
+          ?.getBoundingClientRect();
+        const server = shadow
+          ?.querySelector<HTMLElement>(".startup-overlay-server")
+          ?.getBoundingClientRect();
+        const clientPort = shadow
+          ?.querySelector<HTMLElement>('[data-testid="production-startup-client-port"]')
+          ?.getBoundingClientRect();
+        const serverPort = shadow
+          ?.querySelector<HTMLElement>('[data-testid="production-startup-server-port"]')
+          ?.getBoundingClientRect();
+        const rails = [
+          ...(shadow?.querySelectorAll<HTMLElement>(".startup-overlay-rail") ?? []),
+        ].map((element) => element.getBoundingClientRect());
         const seal = shadow
           ?.querySelector<HTMLElement>('[data-testid="production-startup-center-seal"]')
           ?.getBoundingClientRect();
-        if (endpoints.length !== 2 || !seal) throw new Error("production_overlay_geometry_missing");
+        if (
+          endpoints.length !== 2 ||
+          rails.length !== 2 ||
+          !computer ||
+          !server ||
+          !clientPort ||
+          !serverPort ||
+          !seal
+        )
+          throw new Error("production_overlay_geometry_missing");
         const center = (box: DOMRect) => box.left + box.width / 2;
+        const snapshot = (box: DOMRect) => ({
+          left: box.left,
+          top: box.top,
+          width: box.width,
+          height: box.height,
+        });
         return {
           clientBeforeSeal: endpoints[0].right <= seal.left + 1,
           serverAfterSeal: endpoints[1].left >= seal.right - 1,
           symmetric:
-            Math.abs((center(seal) - center(endpoints[0])) - (center(endpoints[1]) - center(seal))) <= 2,
+            Math.abs(center(seal) - center(endpoints[0]) - (center(endpoints[1]) - center(seal))) <=
+            2,
           endpointsAligned: Math.abs(endpoints[0].top - endpoints[1].top) <= 1,
+          railsMeetPorts:
+            Math.abs(rails[0].left - clientPort.right) <= 0.5 &&
+            Math.abs(rails[1].right - serverPort.left) <= 0.5,
+          railsClearDevices: rails[0].left >= computer.right && rails[1].right <= server.left,
+          portsClearDevices: clientPort.left >= computer.right && serverPort.right <= server.left,
+          snapshot: {
+            computer: snapshot(computer),
+            server: snapshot(server),
+            seal: snapshot(seal),
+            clientPort: snapshot(clientPort),
+            serverPort: snapshot(serverPort),
+          },
         };
       });
-      expect(overlayGeometry).toEqual({
+      expect({
+        clientBeforeSeal: overlayGeometry.clientBeforeSeal,
+        serverAfterSeal: overlayGeometry.serverAfterSeal,
+        symmetric: overlayGeometry.symmetric,
+        endpointsAligned: overlayGeometry.endpointsAligned,
+        railsMeetPorts: overlayGeometry.railsMeetPorts,
+        railsClearDevices: overlayGeometry.railsClearDevices,
+        portsClearDevices: overlayGeometry.portsClearDevices,
+      }).toEqual({
         clientBeforeSeal: true,
         serverAfterSeal: true,
         symmetric: true,
         endpointsAligned: true,
+        railsMeetPorts: true,
+        railsClearDevices: true,
+        portsClearDevices: true,
       });
+      expect(overlayGeometry.snapshot).toEqual(geometry.snapshot);
       await expect
         .poll(() =>
-          page.evaluate(() =>
-            Reflect.get(window, "__letscubeStartupOverlayHistory") as Array<{
-              stage: string;
-              connected: boolean;
-              sealConnected: boolean;
-              statusText: string;
-              fadeDuration: number;
-              minimumVisibleDuration: number;
-              successHoldDuration: number;
-              removed?: boolean;
-            }>,
+          page.evaluate(
+            () =>
+              Reflect.get(window, "__letscubeStartupOverlayHistory") as Array<{
+                stage: string;
+                connected: boolean;
+                sealConnected: boolean;
+                statusText: string;
+                fadeDuration: number;
+                minimumVisibleDuration: number;
+                successHoldDuration: number;
+                removed?: boolean;
+              }>,
           ),
         )
         .toEqual(
@@ -125,15 +228,35 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
           ]),
         );
       const connectedHistory = await page.evaluate(() =>
-        (Reflect.get(window, "__letscubeStartupOverlayHistory") as Array<{
-          connected: boolean;
-          fadeDuration: number;
-        }>).find((entry) => entry.connected),
+        (
+          Reflect.get(window, "__letscubeStartupOverlayHistory") as Array<{
+            connected: boolean;
+            fadeDuration: number;
+          }>
+        ).find((entry) => entry.connected),
       );
       expect(connectedHistory?.fadeDuration).toBeLessThanOrEqual(20);
       await page.waitForTimeout(1_000);
       await expect(productionOverlay).toBeVisible();
       await expect(productionOverlay.getByText("Рабочее пространство готово")).toBeVisible();
+      const connectedGeometry = await page.evaluate(() => {
+        const shadow = document.querySelector<HTMLElement>(
+          '[data-testid="production-startup-overlay"]',
+        )?.shadowRoot;
+        const snapshot = (selector: string) => {
+          const box = shadow?.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+          if (!box) throw new Error(`production_overlay_connected_geometry_missing:${selector}`);
+          return { left: box.left, top: box.top, width: box.width, height: box.height };
+        };
+        return {
+          computer: snapshot(".startup-overlay-computer"),
+          server: snapshot(".startup-overlay-server"),
+          seal: snapshot('[data-testid="production-startup-center-seal"]'),
+          clientPort: snapshot('[data-testid="production-startup-client-port"]'),
+          serverPort: snapshot('[data-testid="production-startup-server-port"]'),
+        };
+      });
+      expect(connectedGeometry).toEqual(overlayGeometry.snapshot);
       await page.screenshot({ path: testInfo.outputPath("tauri-connected-hold.png") });
       await expect(productionOverlay).toHaveCount(0, { timeout: 3_000 });
       await expect
@@ -274,7 +397,9 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
     }
   });
 
-  test("renders local Windows update controls without changing browser distribution", async ({ page }, testInfo) => {
+  test("renders local Windows update controls without changing browser distribution", async ({
+    page,
+  }, testInfo) => {
     test.skip(process.platform !== "win32", "Windows desktop UI QA is Windows-only");
     test.skip(
       testInfo.project.name !== "chromium-desktop-1440",
@@ -302,7 +427,11 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
         mandatory: false,
         errorCode: null,
       };
-      const runtimeInfo = Object.freeze({ platform: "windows" as const, version: "0.2.0", build: 4 });
+      const runtimeInfo = Object.freeze({
+        platform: "windows" as const,
+        version: "0.2.0",
+        build: 4,
+      });
       const bridge = Object.freeze({
         platform: "windows" as const,
         version: runtimeInfo.version,
@@ -358,7 +487,10 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       await expect(page.getByTestId("sidebar-brand-strip")).toBeVisible({ timeout: 20_000 });
 
       const selectedChatRows = page.getByTestId("chat-list-item");
-      await expect(selectedChatRows.first(), "a chat is required for the Escape state guard").toBeVisible({
+      await expect(
+        selectedChatRows.first(),
+        "a chat is required for the Escape state guard",
+      ).toBeVisible({
         timeout: 20_000,
       });
       await selectedChatRows.first().click();
@@ -377,7 +509,9 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       await expect(pill).toHaveCount(0, { timeout: 7_000 });
 
       await page.evaluate(() => {
-        const setState = Reflect.get(window, "__setQaDesktopUpdateState") as (value: unknown) => void;
+        const setState = Reflect.get(window, "__setQaDesktopUpdateState") as (
+          value: unknown,
+        ) => void;
         setState({
           channel: "stable",
           phase: "available",
@@ -391,7 +525,9 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
         window.dispatchEvent(new Event("focus"));
       });
       await expect(pill).toHaveAttribute("data-phase", "available");
-      await expect.poll(() => pill.evaluate((element) => getComputedStyle(element).opacity)).toBe("1");
+      await expect
+        .poll(() => pill.evaluate((element) => getComputedStyle(element).opacity))
+        .toBe("1");
       const availablePillBox = await pill.boundingBox();
       expect(availablePillBox).toBeTruthy();
       expect(availablePillBox!.width).toBeLessThanOrEqual(300);
@@ -400,7 +536,9 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       await page.screenshot({ path: testInfo.outputPath("desktop-update-pill.png") });
 
       await page.evaluate(() => {
-        const setState = Reflect.get(window, "__setQaDesktopUpdateState") as (value: unknown) => void;
+        const setState = Reflect.get(window, "__setQaDesktopUpdateState") as (
+          value: unknown,
+        ) => void;
         setState({
           channel: "stable",
           phase: "downloading",
@@ -419,7 +557,9 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       await expect(progress).toHaveAttribute("aria-valuenow", "25");
 
       await page.evaluate(() => {
-        const setState = Reflect.get(window, "__setQaDesktopUpdateState") as (value: unknown) => void;
+        const setState = Reflect.get(window, "__setQaDesktopUpdateState") as (
+          value: unknown,
+        ) => void;
         setState({
           channel: "stable",
           phase: "available",
@@ -449,32 +589,32 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       const confirmation = page.getByTestId("desktop-test-channel-confirmation");
       await expect(confirmation).toBeVisible();
       await expect(confirmation.getByText(/могут быть нестабильными/i)).toBeVisible();
-      await expect.poll(() => page.evaluate(() => Reflect.get(window, "__getQaDesktopUpdateCalls")())).toEqual([]);
+      await expect
+        .poll(() => page.evaluate(() => Reflect.get(window, "__getQaDesktopUpdateCalls")()))
+        .toEqual([]);
       await page.keyboard.press("ArrowLeft");
       await expect(stableChannel).toBeFocused();
       await expect(confirmation).toHaveCount(0);
       await expect(stableChannel).toHaveAttribute("aria-checked", "true");
       await expect(testChannel).toHaveAttribute("aria-checked", "false");
-      await expect.poll(() => page.evaluate(() => Reflect.get(window, "__getQaDesktopUpdateCalls")())).toEqual([]);
+      await expect
+        .poll(() => page.evaluate(() => Reflect.get(window, "__getQaDesktopUpdateCalls")()))
+        .toEqual([]);
       await page.keyboard.press("ArrowRight");
       await expect(testChannel).toBeFocused();
       await expect(confirmation).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath("desktop-update-settings.png") });
       await confirmation.getByRole("button", { name: "Перейти" }).click();
       await expect(confirmation).toHaveCount(0);
-      await expect.poll(() => page.evaluate(() => Reflect.get(window, "__getQaDesktopUpdateCalls")())).toEqual([
-        "set:test",
-        "check",
-      ]);
+      await expect
+        .poll(() => page.evaluate(() => Reflect.get(window, "__getQaDesktopUpdateCalls")()))
+        .toEqual(["set:test", "check"]);
       await expect(testChannel).toHaveAttribute("aria-checked", "true");
       await expect(pill).toHaveAttribute("data-channel", "test");
       await stableChannel.click();
-      await expect.poll(() => page.evaluate(() => Reflect.get(window, "__getQaDesktopUpdateCalls")())).toEqual([
-        "set:test",
-        "check",
-        "set:stable",
-        "check",
-      ]);
+      await expect
+        .poll(() => page.evaluate(() => Reflect.get(window, "__getQaDesktopUpdateCalls")()))
+        .toEqual(["set:test", "check", "set:stable", "check"]);
       await expect
         .poll(() => page.evaluate(() => Reflect.get(window, "__getQaDesktopUpdateState")()))
         .toMatchObject({ channel: "stable", phase: "current", mandatory: false });
@@ -487,7 +627,9 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       await expect(notificationButton).toBeFocused();
 
       await page.evaluate(() => {
-        const setState = Reflect.get(window, "__setQaDesktopUpdateState") as (value: unknown) => void;
+        const setState = Reflect.get(window, "__setQaDesktopUpdateState") as (
+          value: unknown,
+        ) => void;
         setState({
           channel: "stable",
           phase: "critical_update_required",
@@ -515,7 +657,9 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       await page.screenshot({ path: testInfo.outputPath("desktop-critical-update-gate.png") });
 
       await page.evaluate(() => {
-        const setState = Reflect.get(window, "__setQaDesktopUpdateState") as (value: unknown) => void;
+        const setState = Reflect.get(window, "__setQaDesktopUpdateState") as (
+          value: unknown,
+        ) => void;
         setState({
           channel: "stable",
           phase: "current",
@@ -569,10 +713,10 @@ async function startLocalFrontendServer() {
     const relative = decodeURIComponent(url.pathname).replace(/^\/+/, "") || "index.html";
     const candidate = path.resolve(publicRoot, relative);
     if (
-      candidate !== publicRoot
-      && candidate.startsWith(`${publicRoot}${path.sep}`)
-      && existsSync(candidate)
-      && statSync(candidate).isFile()
+      candidate !== publicRoot &&
+      candidate.startsWith(`${publicRoot}${path.sep}`) &&
+      existsSync(candidate) &&
+      statSync(candidate).isFile()
     ) {
       response.writeHead(200, { "Content-Type": contentTypeFor(candidate) });
       response.end(readFileSync(candidate));
@@ -586,30 +730,36 @@ async function startLocalFrontendServer() {
     server.listen(0, "127.0.0.1", resolve);
   });
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("Local frontend server did not bind.");
+  if (!address || typeof address === "string")
+    throw new Error("Local frontend server did not bind.");
   return {
     url: `http://127.0.0.1:${address.port}`,
-    close: () => new Promise<void>((resolve, reject) => {
-      server.close((error) => error ? reject(error) : resolve());
-    }),
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      }),
   };
 }
 
 function contentTypeFor(filePath: string) {
   const extension = path.extname(filePath).toLowerCase();
-  return ({
-    ".css": "text/css; charset=utf-8",
-    ".html": "text/html; charset=utf-8",
-    ".ico": "image/x-icon",
-    ".jpeg": "image/jpeg",
-    ".jpg": "image/jpeg",
-    ".js": "text/javascript; charset=utf-8",
-    ".json": "application/json; charset=utf-8",
-    ".png": "image/png",
-    ".svg": "image/svg+xml",
-    ".webmanifest": "application/manifest+json; charset=utf-8",
-    ".webp": "image/webp",
-  } as Record<string, string>)[extension] ?? "application/octet-stream";
+  return (
+    (
+      {
+        ".css": "text/css; charset=utf-8",
+        ".html": "text/html; charset=utf-8",
+        ".ico": "image/x-icon",
+        ".jpeg": "image/jpeg",
+        ".jpg": "image/jpeg",
+        ".js": "text/javascript; charset=utf-8",
+        ".json": "application/json; charset=utf-8",
+        ".png": "image/png",
+        ".svg": "image/svg+xml",
+        ".webmanifest": "application/manifest+json; charset=utf-8",
+        ".webp": "image/webp",
+      } as Record<string, string>
+    )[extension] ?? "application/octet-stream"
+  );
 }
 
 async function connectToTauri(cdpUrl: string) {

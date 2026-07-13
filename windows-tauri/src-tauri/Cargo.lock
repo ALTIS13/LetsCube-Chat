@@ -2008,7 +2008,7 @@ dependencies = [
 
 [[package]]
 name = "letscube-windows-tauri"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "reqwest",
  "semver",

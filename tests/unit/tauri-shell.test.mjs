@@ -58,8 +58,8 @@ test("Windows release version and build metadata stay aligned", () => {
   const libRs = readText("windows-tauri/src-tauri/src/lib.rs");
   const publisherPublicKey = readText("scripts/windows-updater-public.key").trim();
 
-  assert.equal(shellPackage.version, "0.2.2");
-  assert.equal(shellPackage.desktopBuild, 6);
+  assert.equal(shellPackage.version, "0.2.3");
+  assert.equal(shellPackage.desktopBuild, 7);
   assert.equal(tauriConfig.version, shellPackage.version);
   assert.equal(cargoVersion, shellPackage.version);
   assert.equal(tauriConfig.plugins.updater.pubkey, publisherPublicKey);
@@ -252,12 +252,19 @@ test("Windows startup uses one main window and a local approved handshake scene"
   const script = readText("windows-tauri/ui/startup.js");
   assert.match(html, /data-testid="startup-client-fingerprint"/);
   assert.match(html, /data-testid="startup-server-fingerprint"/);
+  assert.match(html, /data-testid="startup-client-port"/);
+  assert.match(html, /data-testid="startup-server-port"/);
   assert.match(html, /data-testid="startup-center-seal"/);
   assert.match(html, /id="startup-status"/);
   assert.match(html, /id="startup-retry"/);
   assert.match(css, /grid-template-columns:\s*1fr\s+34px\s+1fr/);
   assert.match(css, /\.endpoint-client\s*\{\s*grid-column:\s*1;/);
   assert.match(css, /\.endpoint-server\s*\{\s*grid-column:\s*3;/);
+  assert.match(css, /grid-template-rows:\s*74px\s+20px\s+126px\s+20px\s+19px\s+4px\s+14px/);
+  assert.match(css, /\.connection-port-client\s*\{\s*right:\s*-18px;/);
+  assert.match(css, /\.connection-port-server\s*\{\s*top:\s*53px;\s*left:\s*-22px;/);
+  assert.match(css, /\.rail-left\s*\{\s*left:\s*calc\(25% \+ 83\.5px\);/);
+  assert.match(css, /\.rail-right\s*\{[^}]*right:\s*calc\(25% \+ 75\.5px\);/s);
   assert.match(css, /prefers-reduced-motion/);
   assert.match(script, /letscube:\/\/startup-state/);
   assert.match(script, /snapshot\.stage\s*===\s*"complete"\s*&&\s*snapshot\.connected\s*===\s*true/);
@@ -277,11 +284,17 @@ test("production startup handoff keeps one stable scene long enough to read", ()
 
   assert.match(html, /startup-overlay-endpoint-client/);
   assert.match(html, /startup-overlay-endpoint-server/);
+  assert.match(html, /data-testid="production-startup-client-port"/);
+  assert.match(html, /data-testid="production-startup-server-port"/);
   assert.match(html, /__LETSCUBE_LOGO_SVG__/);
   assert.match(html, /startup-overlay-stages/);
   assert.match(css, /\.startup-overlay-endpoint-client\s*\{\s*grid-column:\s*1;/);
   assert.match(css, /\.startup-overlay-endpoint-server\s*\{\s*grid-column:\s*3;/);
   assert.match(css, /\.startup-overlay-fingerprint\s*\{[^}]*height:\s*74px;/s);
+  assert.match(css, /grid-template-rows:\s*74px\s+20px\s+126px\s+20px\s+19px\s+4px\s+14px/);
+  assert.match(css, /\.startup-overlay-port-server\s*\{\s*top:\s*53px;\s*left:\s*-22px;/);
+  assert.match(css, /\.startup-overlay-rail:first-child\s*\{[^}]*left:\s*calc\(25% \+ 83\.5px\);/s);
+  assert.match(css, /\.startup-overlay-rail:last-child\s*\{[^}]*right:\s*calc\(25% \+ 75\.5px\);/s);
   assert.match(script, /minimumVisibleDuration\s*=\s*2_200/);
   assert.match(script, /successHoldDuration\s*=\s*900/);
   assert.match(script, /Math\.max\(minimumVisibleDuration[^)]*successHoldDuration/s);
