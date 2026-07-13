@@ -52,6 +52,7 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       expect(geometry).toEqual({ statusBelowRail: true, halvesCappedAtSeal: true });
       await page.screenshot({ path: testInfo.outputPath("tauri-approved-startup.png") });
 
+      await page.emulateMedia({ reducedMotion: "reduce" });
       await page.evaluate(async () => {
         await window.__TAURI_INTERNALS__?.invoke("begin_startup_qa");
       });
@@ -64,6 +65,7 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       expect(new URL(page.url()).origin).toBe(PRODUCTION_ORIGIN);
       const productionOverlay = page.getByTestId("production-startup-overlay");
       await expect(productionOverlay).toBeVisible();
+      await expect(productionOverlay.getByText("Подготавливаем рабочее пространство")).toBeVisible();
       await expect
         .poll(() =>
           page.evaluate(() =>
@@ -71,6 +73,8 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
               stage: string;
               connected: boolean;
               sealConnected: boolean;
+              statusText: string;
+              fadeDuration: number;
               removed?: boolean;
             }>,
           ),
@@ -81,9 +85,18 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
               stage: "complete",
               connected: true,
               sealConnected: true,
+              statusText: "Рабочее пространство готово",
+              fadeDuration: expect.any(Number),
             }),
           ]),
         );
+      const connectedHistory = await page.evaluate(() =>
+        (Reflect.get(window, "__letscubeStartupOverlayHistory") as Array<{
+          connected: boolean;
+          fadeDuration: number;
+        }>).find((entry) => entry.connected),
+      );
+      expect(connectedHistory?.fadeDuration).toBeLessThanOrEqual(20);
       await expect(productionOverlay).toHaveCount(0, { timeout: 2_000 });
       await expect
         .poll(() => page.evaluate(() => Reflect.get(window, "__letscubeStartupOverlayHistory")))

@@ -32,4 +32,4 @@
 .is-connected .startup-overlay-seal { border-color: #28b783; box-shadow: 0 0 18px #28b78355; }
 .is-connected .startup-overlay-seal span { background: #28b783; }
 .startup-overlay-status { align-self: start; margin: 0; padding-top: 28px; border-top: 1px solid #1d3140; color: #dbe5eb; font-size: 14px; text-align: center; }
-@media (prefers-reduced-motion: reduce) { :host { transition-duration: 320ms; } }
+@media (prefers-reduced-motion: reduce) { :host { transition-duration: 1ms; } }

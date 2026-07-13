@@ -106,6 +106,17 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.match(libRs, /PageLoadEvent::Finished/);
   assert.match(libRs, /is_allowed_navigation\([^)]*url/);
   assert.doesNotMatch(libRs, /thread::sleep|letscube:\/\/load-timeout/);
+  const retryMain = libRs.match(/fn retry_main[\s\S]*?#\[tauri::command\]\s*fn begin_startup_qa/)?.[0] ?? "";
+  assert.match(
+    retryMain,
+    /window\s*\.url\(\)[\s\S]*is_local_startup_url/,
+    "retry_main must positively require the exact bundled startup URL",
+  );
+  assert.doesNotMatch(
+    retryMain,
+    /window\s*\.url\(\)[\s\S]*is_allowed_navigation/,
+    "retry_main must not authorize every URL that is merely non-production",
+  );
 
   assert.equal(tauriConfig.productName, "LETSCUBE");
   assert.equal(tauriConfig.identifier, "ru.letscube.messenger");

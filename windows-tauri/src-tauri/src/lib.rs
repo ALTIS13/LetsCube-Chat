@@ -439,7 +439,7 @@ fn retry_main(window: WebviewWindow, app: AppHandle) {
     if window.label() != "main"
         || window
             .url()
-            .map(|url| is_allowed_navigation(&url))
+            .map(|url| !is_local_startup_url(&url))
             .unwrap_or(true)
     {
         return;
@@ -574,6 +574,8 @@ mod tests {
     #[test]
     fn production_overlay_is_origin_guarded_and_records_connected_fade_lifecycle() {
         let script = production_overlay_script();
+        let html = include_str!("../../ui/startup-overlay.html");
+        let css = include_str!("../../ui/startup-overlay.css");
         assert!(script.contains(PRODUCTION_ORIGIN));
         assert!(script.contains("window.location.origin"));
         assert!(script.contains("production-startup-overlay"));
@@ -583,6 +585,15 @@ mod tests {
         assert!(script.contains("letscube:startup-overlay-complete"));
         assert!(script.contains("is-connected"));
         assert!(script.contains("320"));
+        assert!(html.contains("Подготавливаем рабочее пространство"));
+        assert!(!html.contains("Рабочее пространство готово"));
+        assert!(script.contains("status.textContent = successText"));
+        assert!(script.contains("statusText: status.textContent"));
+        assert!(css.contains("prefers-reduced-motion: reduce"));
+        assert!(css.contains("transition-duration: 1ms"));
+        assert!(script.contains("matchMedia"));
+        assert!(script.contains("reducedMotion ? 1 : 320"));
+        assert!(script.contains("fadeDuration"));
         assert!(!script.contains("service_role"));
     }
 

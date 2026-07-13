@@ -173,3 +173,63 @@ GREEN:
 - The QA hold remains debug/env/local-URL gated and does not inject failures.
 - The earlier concern that a same-WebView transition could not show the post-load connected fade is resolved by the exact-origin initialization overlay; no second window or WebView is created.
 - Existing Cargo PDB/linker informational warnings remain the only known warning.
+
+## Remaining P2 Review Fixes
+
+Date: 2026-07-13
+
+### Findings
+
+1. `retry_main` rejected the production origin but did not positively require the exact bundled startup URL.
+2. The production overlay displayed `Рабочее пространство готово` before native `Complete`.
+3. `prefers-reduced-motion` retained the full 320 ms CSS transition and JavaScript removal delay.
+
+### TDD Evidence
+
+#### Positive Retry URL Guard
+
+RED:
+
+- Added a focused static regression extracting the real `retry_main` body and requiring `window.url() -> is_local_startup_url` while rejecting the previous `is_allowed_navigation` negative guard.
+- `node --test tests/unit/tauri-shell.test.mjs`: 4 passed, 1 failed with `retry_main must positively require the exact bundled startup URL`.
+
+GREEN:
+
+- `retry_main` now uses the same positive exact predicate as `begin_startup_qa`: any URL other than `http://tauri.localhost/startup.html` returns before state mutation or preflight spawn.
+- Focused Node result: 5 passed, 0 failed.
+
+#### Overlay Copy Follows Native Complete
+
+RED:
+
+- Added Rust assertions requiring neutral bundled copy, forbidding success copy in initial HTML, and requiring JS to update and record status text.
+- Added Playwright assertions for neutral text before complete and success text in the connected event-history entry.
+- `cargo test production_overlay_is_origin_guarded_and_records_connected_fade_lifecycle` failed because initial HTML did not contain `Подготавливаем рабочее пространство`.
+
+GREEN:
+
+- Initial bundled text is `Подготавливаем рабочее пространство`.
+- JS changes it to `Рабочее пространство готово` only when `snapshot.stage === "complete" && snapshot.connected === true`, in the same render step that applies the connected seal.
+- Focused Rust result: 1 passed, 0 failed.
+
+#### Reduced Motion Fade
+
+RED:
+
+- Added static assertions requiring `transition-duration: 1ms`, `matchMedia`, and a reduced/normal delay selection.
+- Added physical Playwright reduced-motion emulation and a `fadeDuration <= 20ms` history assertion instead of expecting 320 ms.
+- Focused Rust test failed because reduced-motion CSS still contained `transition-duration: 320ms`.
+
+GREEN:
+
+- Reduced-motion CSS uses a 1 ms transition.
+- Initialization JS evaluates `matchMedia("(prefers-reduced-motion: reduce)")` and uses a 1 ms removal delay when reduced motion is active; normal mode retains the approved 320 ms fade.
+- Physical QA with `reducedMotion: "reduce"` passed without relying on an exact 320 ms delay.
+
+### Verification
+
+- Focused Node: 5 passed, 0 failed.
+- Focused overlay Rust test: 1 passed, 0 failed.
+- Physical Tauri/WebView2 QA: 2 passed, 0 failed.
+- Physical checks retained one page/window, exact local URL, neutral-before-complete, complete/connected success text and seal history, reduced delay `<=20ms`, overlay removal, authenticated production reload, and isolated-process/profile cleanup.
+- No remote capability or unrelated file was changed.
