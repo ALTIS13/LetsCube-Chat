@@ -41,6 +41,42 @@ export function ReleaseDistributionSection() {
   const nativePackage = release.platform !== null;
   const windowsNative = target === "windows_native";
 
+  const selectDesktopChannel = (channel: "stable" | "test") => {
+    if (desktopUpdate?.snapshot?.channel === channel) return;
+    if (channel === "test") {
+      setConfirmTestChannel(true);
+      return;
+    }
+    setConfirmTestChannel(false);
+    void desktopUpdate?.setChannel(channel);
+  };
+
+  const handleDesktopChannelKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    channel: "stable" | "test",
+  ) => {
+    const channels = ["stable", "test"] as const;
+    let nextChannel: (typeof channels)[number] | null = null;
+
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      nextChannel = channels[(channels.indexOf(channel) + 1) % channels.length];
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      nextChannel = channels[(channels.indexOf(channel) - 1 + channels.length) % channels.length];
+    } else if (event.key === "Home") {
+      nextChannel = channels[0];
+    } else if (event.key === "End") {
+      nextChannel = channels[channels.length - 1];
+    }
+
+    if (!nextChannel) return;
+    event.preventDefault();
+    const nextButton = event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(
+      `[data-update-channel="${nextChannel}"]`,
+    );
+    nextButton?.focus();
+    selectDesktopChannel(nextChannel);
+  };
+
   return (
     <div
       className="release-distribution-card rounded-xl overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]"
@@ -98,18 +134,12 @@ export function ReleaseDistributionSection() {
                       role="radio"
                       aria-checked={desktopUpdate.snapshot?.channel === channel}
                       tabIndex={desktopUpdate.snapshot?.channel === channel ? 0 : -1}
+                      data-update-channel={channel}
                       className="desktop-update-channel-control__option"
                       data-active={desktopUpdate.snapshot?.channel === channel ? "true" : "false"}
                       disabled={desktopUpdate.commandPending}
-                      onClick={() => {
-                        if (desktopUpdate.snapshot?.channel === channel) return;
-                        if (channel === "test") {
-                          setConfirmTestChannel(true);
-                          return;
-                        }
-                        setConfirmTestChannel(false);
-                        void desktopUpdate.setChannel(channel);
-                      }}
+                      onClick={() => selectDesktopChannel(channel)}
+                      onKeyDown={(event) => handleDesktopChannelKeyDown(event, channel)}
                     >
                       {channel === "stable" ? "Stable" : "Test"}
                     </button>

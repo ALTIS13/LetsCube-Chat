@@ -39,6 +39,7 @@ export function MainLayout() {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
+      if (updateBlocking) return;
 
       const target = event.target as HTMLElement | null;
       const tagName = target?.tagName;
@@ -60,7 +61,7 @@ export function MainLayout() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedChatId, setSelectedChatId]);
+  }, [selectedChatId, setSelectedChatId, updateBlocking]);
 
   return (
     <div className="flex flex-col h-[100dvh] w-screen overflow-hidden bg-[var(--kub-bg)]">

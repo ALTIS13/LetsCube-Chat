@@ -363,3 +363,35 @@ test("invalid active refresh becomes failed and stops the fast poll", async () =
   assert.equal(cancelledPolls, 1);
   release();
 });
+
+test("stale initial idle check replaces the one-second timer with one six-hour timer", async () => {
+  const sixHours = 6 * 60 * 60 * 1_000;
+  const scheduled: Array<{ token: number; milliseconds: number }> = [];
+  const cancelled = new Set<number>();
+  let nextToken = 0;
+  const store = createDesktopUpdateStore({
+    isActive: () => true,
+    installedVersion: () => "0.2.0",
+    now: () => sixHours + 10_000,
+    read: async () => ({ ...BASE_SNAPSHOT, phase: "idle" }),
+    check: async () => ({ ...BASE_SNAPSHOT, phase: "current" }),
+    install: async () => BASE_SNAPSHOT,
+    setChannel: async () => BASE_SNAPSHOT,
+    scheduleTimeout: (_callback, milliseconds) => {
+      nextToken += 1;
+      scheduled.push({ token: nextToken, milliseconds });
+      return nextToken;
+    },
+    cancelTimeout: (token) => {
+      cancelled.add(token as number);
+    },
+  });
+
+  const release = store.acquire();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const activeTimers = scheduled.filter(({ token }) => !cancelled.has(token));
+  assert.deepEqual(activeTimers, [{ token: 2, milliseconds: sixHours }]);
+  assert.equal(store.getSnapshot().snapshot?.phase, "current");
+  release();
+});

@@ -315,6 +315,14 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       await page.locator('button[type="submit"]').click();
       await expect(page.getByTestId("sidebar-brand-strip")).toBeVisible({ timeout: 20_000 });
 
+      const selectedChatRows = page.getByTestId("chat-list-item");
+      await expect(selectedChatRows.first(), "a chat is required for the Escape state guard").toBeVisible({
+        timeout: 20_000,
+      });
+      await selectedChatRows.first().click();
+      const selectedChatComposer = page.locator("textarea").first();
+      await expect(selectedChatComposer).toBeVisible();
+
       const pill = page.getByTestId("desktop-update-pill");
       await expect(pill).toBeVisible();
       await expect(pill).toHaveAttribute("data-collapsed", "true");
@@ -390,7 +398,9 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       const stableChannel = channelControl.getByRole("radio", { name: "Stable" });
       const testChannel = channelControl.getByRole("radio", { name: "Test" });
       await expect(stableChannel).toHaveAttribute("aria-checked", "true");
-      await testChannel.click();
+      await stableChannel.focus();
+      await page.keyboard.press("ArrowRight");
+      await expect(testChannel).toBeFocused();
       const confirmation = page.getByTestId("desktop-test-channel-confirmation");
       await expect(confirmation).toBeVisible();
       await expect(confirmation.getByText(/могут быть нестабильными/i)).toBeVisible();
@@ -434,6 +444,8 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       await expect(criticalInstall).toBeFocused();
       await page.keyboard.press("Shift+Tab");
       await expect(criticalInstall).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(selectedChatComposer).toHaveCount(1);
       await page.screenshot({ path: testInfo.outputPath("desktop-critical-update-gate.png") });
 
       await page.evaluate(() => {
@@ -454,6 +466,7 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       await expect(appShell).not.toHaveAttribute("inert", "");
       await expect(appShell).not.toHaveAttribute("aria-hidden", "true");
       await expect(notificationButton).toBeFocused();
+      await expect(selectedChatComposer).toBeVisible();
       expect(consoleErrors, `Unexpected console errors:\n${consoleErrors.join("\n")}`).toEqual([]);
     } finally {
       await localFrontend.close();
