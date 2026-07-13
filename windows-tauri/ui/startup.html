@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LETSCUBE</title>
+    <link rel="stylesheet" href="startup.css" />
+  </head>
+  <body data-stage="boot">
+    <main class="startup-shell" aria-live="polite">
+      <header class="startup-header">
+        <img src="letscube-logo.svg" alt="LETSCUBE" class="brand" />
+        <div class="version-pill"><span class="version-dot"></span>Desktop 0.2.0</div>
+      </header>
+
+      <section class="handshake" id="startup-handshake" aria-labelledby="startup-status">
+        <article class="endpoint endpoint-client">
+          <div class="fingerprints" data-testid="startup-client-fingerprint" aria-hidden="true">
+            <span>4E 1A 90</span><span>C8 72 B4</span><span>0F 6D A2</span><span>91 3C E7</span>
+          </div>
+          <div class="computer" aria-hidden="true"><div class="screen"><i></i></div><div class="stand"></div></div>
+          <h2>Этот компьютер</h2>
+          <p>Защищённый клиент</p>
+        </article>
+
+        <div class="rail-wrap">
+          <div class="rail rail-left"><i></i></div>
+          <div id="startup-center-seal" data-testid="startup-center-seal" class="center-seal" aria-hidden="true">
+            <span></span>
+          </div>
+          <div class="rail rail-right"><i></i></div>
+        </div>
+
+        <article class="endpoint endpoint-server">
+          <div class="fingerprints" data-testid="startup-server-fingerprint" aria-hidden="true">
+            <span>72 B9 0D</span><span>18 E4 C3</span><span>A6 2F 81</span><span>3D C0 57</span>
+          </div>
+          <div class="server" aria-hidden="true">
+            <div><i></i><b></b><b></b></div><div><i></i><b></b><b></b></div><div><i></i><b></b><b></b></div>
+          </div>
+          <h2>LETSCUBE Secure Node</h2>
+          <p>Проверенный сервер</p>
+        </article>
+      </section>
+
+      <section class="startup-state">
+        <p id="startup-status">Подготавливаем защищённое соединение</p>
+        <ol class="stages" aria-label="Этапы подключения">
+          <li data-stage-name="network_check">Сеть</li>
+          <li data-stage-name="tls_origin_check">Сертификат</li>
+          <li data-stage-name="update_check">Версия</li>
+          <li data-stage-name="production_navigation">Рабочее пространство</li>
+        </ol>
+        <div id="startup-failure" class="failure" hidden>
+          <p id="startup-error">Не удалось установить защищённое соединение.</p>
+          <button id="startup-retry" type="button">Повторить</button>
+        </div>
+      </section>
+    </main>
+    <script src="startup.js"></script>
+  </body>
+</html>

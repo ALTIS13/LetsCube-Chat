@@ -11,22 +11,23 @@
     "withGlobalTauri": false,
     "windows": [
       {
-        "label": "splash",
+        "label": "main",
         "title": "LETSCUBE",
-        "url": "splash.html",
-        "width": 460,
-        "height": 300,
+        "url": "startup.html",
+        "width": 1360,
+        "height": 860,
+        "minWidth": 960,
+        "minHeight": 640,
         "center": true,
-        "decorations": false,
-        "resizable": false,
-        "maximizable": false,
-        "minimizable": false,
-        "alwaysOnTop": true,
-        "skipTaskbar": true
+        "visible": true,
+        "decorations": true,
+        "resizable": true,
+        "create": false,
+        "dataDirectory": "webview-production-v1"
       }
     ],
     "security": {
-      "capabilities": ["production", "splash"],
+      "capabilities": ["production", "startup"],
       "freezePrototype": true,
       "csp": "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'"
     }

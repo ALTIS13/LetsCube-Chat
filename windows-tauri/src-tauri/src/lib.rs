@@ -3,25 +3,37 @@ pub mod updater;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::time::Duration;
 
+use startup::{StartupErrorCode, StartupSnapshot, StartupStage, StartupState};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::webview::{NewWindowResponse, PageLoadEvent};
 use tauri::{
-    AppHandle, Emitter, Manager, Runtime, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-    WindowEvent,
+    AppHandle, Emitter, Manager, Runtime, Url, WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 use tauri_plugin_opener::OpenerExt;
+use updater::{update_endpoint, UpdateChannel};
 
 const PRODUCTION_ORIGIN: &str = "https://app.letscube.ru";
 const PRODUCTION_URL: &str = "https://app.letscube.ru/";
 const PRODUCTION_PROFILE: &str = "webview-production-v1";
+const STARTUP_EVENT: &str = "letscube://startup-state";
 const DESKTOP_BUILD: &str = env!("LETSCUBE_DESKTOP_BUILD");
 static MAIN_READY: AtomicBool = AtomicBool::new(false);
+static PREFLIGHT_RUNNING: AtomicBool = AtomicBool::new(false);
+
+struct StartupController(Mutex<StartupState>);
 
 fn is_allowed_navigation(url: &Url) -> bool {
-    url.origin().ascii_serialization() == PRODUCTION_ORIGIN
+    url.scheme() == "https" && url.origin().ascii_serialization() == PRODUCTION_ORIGIN
+}
+
+fn is_local_startup_url(url: &Url) -> bool {
+    matches!(url.scheme(), "tauri" | "http" | "https")
+        && matches!(url.host_str(), Some("localhost" | "tauri.localhost"))
+        && url.path().ends_with("/startup.html")
 }
 
 fn is_safe_external_url(url: &Url) -> bool {
@@ -53,6 +65,16 @@ fn debug_browser_args() -> Option<String> {
     Some(format!(
         "--remote-debugging-port={port} --remote-allow-origins=http://127.0.0.1:{port}"
     ))
+}
+
+#[cfg(debug_assertions)]
+fn qa_holds_preflight() -> bool {
+    std::env::var("LETSCUBE_TAURI_QA_HOLD_PREFLIGHT").as_deref() == Ok("1")
+}
+
+#[cfg(not(debug_assertions))]
+fn qa_holds_preflight() -> bool {
+    false
 }
 
 #[cfg(not(debug_assertions))]
@@ -98,19 +120,8 @@ fn show_main<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-fn show_splash<R: Runtime>(app: &AppHandle<R>) {
-    if let Some(splash) = app.get_webview_window("splash") {
-        let _ = splash.show();
-        let _ = splash.set_focus();
-    }
-}
-
 fn restore_startup_surface<R: Runtime>(app: &AppHandle<R>) {
-    if MAIN_READY.load(Ordering::Acquire) {
-        show_main(app);
-    } else {
-        show_splash(app);
-    }
+    show_main(app);
 }
 
 fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
@@ -146,18 +157,156 @@ fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     Ok(())
 }
 
+fn current_snapshot<R: Runtime>(app: &AppHandle<R>) -> Option<StartupSnapshot> {
+    app.state::<StartupController>()
+        .0
+        .lock()
+        .ok()
+        .map(|state| state.snapshot())
+}
+
+fn emit_startup_snapshot<R: Runtime>(app: &AppHandle<R>) {
+    let Some(snapshot) = current_snapshot(app) else {
+        return;
+    };
+    let _ = app.emit_to("main", STARTUP_EVENT, &snapshot);
+    if let (Some(main), Ok(payload)) = (
+        app.get_webview_window("main"),
+        serde_json::to_string(&snapshot),
+    ) {
+        let _ = main.eval(format!(
+            "window.dispatchEvent(new CustomEvent({STARTUP_EVENT:?}, {{ detail: {payload} }}));"
+        ));
+    }
+}
+
+fn transition_startup<R: Runtime>(app: &AppHandle<R>, next: StartupStage) -> bool {
+    let transitioned = app
+        .state::<StartupController>()
+        .0
+        .lock()
+        .ok()
+        .is_some_and(|mut state| state.transition(next).is_ok());
+    if transitioned {
+        emit_startup_snapshot(app);
+    }
+    transitioned
+}
+
+fn fail_startup<R: Runtime>(app: &AppHandle<R>, error: StartupErrorCode) {
+    if let Ok(mut state) = app.state::<StartupController>().0.lock() {
+        let _ = state.fail(error);
+    }
+    PREFLIGHT_RUNNING.store(false, Ordering::Release);
+    emit_startup_snapshot(app);
+}
+
+fn classify_request_error(error: &reqwest::Error) -> StartupErrorCode {
+    let detail = error.to_string().to_ascii_lowercase();
+    if detail.contains("certificate")
+        || detail.contains("tls")
+        || detail.contains("ssl")
+        || detail.contains("unknown issuer")
+    {
+        StartupErrorCode::TlsOrigin
+    } else {
+        StartupErrorCode::Network
+    }
+}
+
+async fn run_preflight<R: Runtime>(app: AppHandle<R>) {
+    if PREFLIGHT_RUNNING
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return;
+    }
+
+    if !transition_startup(&app, StartupStage::NetworkCheck) {
+        PREFLIGHT_RUNNING.store(false, Ordering::Release);
+        return;
+    }
+
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if is_allowed_navigation(attempt.url()) {
+                attempt.follow()
+            } else {
+                attempt.stop()
+            }
+        }))
+        .build()
+    {
+        Ok(client) => client,
+        Err(_) => {
+            fail_startup(&app, StartupErrorCode::Network);
+            return;
+        }
+    };
+
+    if !transition_startup(&app, StartupStage::TlsOriginCheck) {
+        PREFLIGHT_RUNNING.store(false, Ordering::Release);
+        return;
+    }
+
+    let response = match client.get(PRODUCTION_URL).send().await {
+        Ok(response) => response,
+        Err(error) => {
+            fail_startup(&app, classify_request_error(&error));
+            return;
+        }
+    };
+    if !response.status().is_success()
+        || response.status().is_redirection()
+        || !is_allowed_navigation(response.url())
+    {
+        fail_startup(&app, StartupErrorCode::TlsOrigin);
+        return;
+    }
+
+    if !transition_startup(&app, StartupStage::UpdateCheck) {
+        PREFLIGHT_RUNNING.store(false, Ordering::Release);
+        return;
+    }
+
+    // Catalog availability is informative for Task 2 and must not block the installed client.
+    let _ = client
+        .get(update_endpoint(UpdateChannel::default()))
+        .timeout(Duration::from_secs(8))
+        .send()
+        .await;
+
+    if !transition_startup(&app, StartupStage::ProductionNavigation) {
+        PREFLIGHT_RUNNING.store(false, Ordering::Release);
+        return;
+    }
+    let Some(main) = app.get_webview_window("main") else {
+        fail_startup(&app, StartupErrorCode::Network);
+        return;
+    };
+    if main
+        .navigate(Url::parse(PRODUCTION_URL).expect("production URL is valid"))
+        .is_err()
+    {
+        fail_startup(&app, StartupErrorCode::Network);
+    }
+}
+
 fn build_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    let production_url = Url::parse(PRODUCTION_URL).expect("production URL is static and valid");
+    let config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|window| window.label == "main")
+        .expect("tauri.conf.json must define the main window")
+        .clone();
     let profile_dir = production_profile_dir(app)?;
     let navigation_handle = app.clone();
     let new_window_handle = app.clone();
 
-    let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(production_url))
-        .title("LETSCUBE")
-        .inner_size(1360.0, 860.0)
-        .min_inner_size(960.0, 640.0)
-        .center()
-        .visible(false)
+    let mut builder = WebviewWindowBuilder::from_config(app, &config)?
         .data_directory(profile_dir)
         .initialization_script(desktop_bridge_script());
 
@@ -167,7 +316,7 @@ fn build_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 
     builder
         .on_navigation(move |url| {
-            if is_allowed_navigation(url) {
+            if is_local_startup_url(url) || is_allowed_navigation(url) {
                 true
             } else {
                 if is_safe_external_url(url) {
@@ -187,13 +336,22 @@ fn build_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
             NewWindowResponse::Deny
         })
         .on_page_load(|window, payload| {
-            if payload.event() == PageLoadEvent::Finished {
+            let app = window.app_handle();
+            if payload.event() != PageLoadEvent::Finished {
+                return;
+            }
+            if is_local_startup_url(payload.url()) {
+                emit_startup_snapshot(app);
+                return;
+            }
+            if !is_allowed_navigation(payload.url()) {
+                return;
+            }
+            if transition_startup(app, StartupStage::WorkspaceReady)
+                && transition_startup(app, StartupStage::Complete)
+            {
                 MAIN_READY.store(true, Ordering::Release);
-                let app = window.app_handle();
-                show_main(app);
-                if let Some(splash) = app.get_webview_window("splash") {
-                    let _ = splash.close();
-                }
+                PREFLIGHT_RUNNING.store(false, Ordering::Release);
             }
         })
         .build()?;
@@ -203,36 +361,57 @@ fn build_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 
 #[tauri::command]
 fn retry_main(window: WebviewWindow, app: AppHandle) {
-    if window.label() != "splash" {
+    if window.label() != "main"
+        || window
+            .url()
+            .map(|url| is_allowed_navigation(&url))
+            .unwrap_or(true)
+    {
         return;
     }
-    MAIN_READY.store(false, Ordering::Release);
-    show_splash(&app);
-    if let Some(main) = app.get_webview_window("main") {
-        let _ = main.hide();
+    let retried = app
+        .state::<StartupController>()
+        .0
+        .lock()
+        .ok()
+        .is_some_and(|mut state| state.retry().is_ok());
+    if !retried {
+        return;
     }
-    if let Some(main) = app.get_webview_window("main") {
-        let _ = main.navigate(Url::parse(PRODUCTION_URL).expect("production URL is valid"));
+    emit_startup_snapshot(&app);
+    tauri::async_runtime::spawn(run_preflight(app));
+}
+
+#[tauri::command]
+fn begin_startup_qa(window: WebviewWindow, app: AppHandle) {
+    if !qa_holds_preflight()
+        || window.label() != "main"
+        || window
+            .url()
+            .map(|url| !is_local_startup_url(&url))
+            .unwrap_or(true)
+    {
+        return;
     }
+    tauri::async_runtime::spawn(run_preflight(app));
 }
 
 pub fn run() {
     tauri::Builder::default()
+        .manage(StartupController(Mutex::new(StartupState::new())))
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             restore_startup_surface(app);
         }))
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![retry_main])
+        .invoke_handler(tauri::generate_handler![retry_main, begin_startup_qa])
         .setup(|app| {
             setup_tray(app.handle())?;
             build_main_window(app.handle())?;
-
-            let splash_handle = app.handle().clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(Duration::from_secs(15));
-                let _ = splash_handle.emit("letscube://load-timeout", ());
-            });
+            show_main(app.handle());
+            if !qa_holds_preflight() {
+                tauri::async_runtime::spawn(run_preflight(app.handle().clone()));
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -264,6 +443,16 @@ mod tests {
         ));
         assert!(!is_allowed_navigation(
             &Url::parse("https://deploy.letscube.ru/").unwrap()
+        ));
+    }
+
+    #[test]
+    fn only_the_bundled_startup_document_is_allowed_before_production() {
+        assert!(is_local_startup_url(
+            &Url::parse("http://tauri.localhost/startup.html").unwrap()
+        ));
+        assert!(!is_local_startup_url(
+            &Url::parse("http://tauri.localhost/admin.html").unwrap()
         ));
     }
 

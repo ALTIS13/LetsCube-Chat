@@ -19,6 +19,7 @@ pub enum StartupStage {
 #[serde(rename_all = "snake_case")]
 pub enum StartupErrorCode {
     Network,
+    TlsOrigin,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -164,6 +165,24 @@ mod tests {
         state.fail(StartupErrorCode::Network).unwrap();
         assert_eq!(state.snapshot().stage, StartupStage::RecoverableError);
         assert!(!state.snapshot().connected);
+    }
+
+    #[test]
+    fn tls_origin_failure_is_retryable_without_connecting() {
+        let mut state = StartupState::new();
+        state.transition(StartupStage::NetworkCheck).unwrap();
+        state
+            .fail(StartupErrorCode::TlsOrigin)
+            .expect("TLS/origin failures must enter the retryable state");
+        assert_eq!(state.snapshot().stage, StartupStage::RecoverableError);
+        assert_eq!(
+            state.snapshot().error_code,
+            Some(StartupErrorCode::TlsOrigin)
+        );
+        assert!(!state.snapshot().connected);
+
+        state.retry().unwrap();
+        assert_eq!(state.snapshot().stage, StartupStage::NetworkCheck);
     }
 
     #[test]

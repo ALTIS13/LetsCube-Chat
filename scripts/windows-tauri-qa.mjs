@@ -19,7 +19,6 @@ const executablePath = path.join(
 );
 const cargoPath = path.join(os.homedir(), ".cargo", "bin", "cargo.exe");
 const processImage = "letscube-windows-tauri.exe";
-const PRODUCTION_ORIGIN = "https://app.letscube.ru";
 
 if (process.platform !== "win32") {
   console.error("Windows Tauri QA can run only on Windows.");
@@ -46,15 +45,7 @@ if (build.status !== 0 || !existsSync(executablePath)) {
 const debugPort = await reserveLoopbackPort();
 const profilePath = mkdtempSync(path.join(os.tmpdir(), "letscube-tauri-qa-"));
 const cdpUrl = `http://127.0.0.1:${debugPort}`;
-const client = spawn(executablePath, [], {
-  cwd: root,
-  env: {
-    ...process.env,
-    LETSCUBE_WEBVIEW2_DATA_DIR: profilePath,
-    LETSCUBE_WEBVIEW2_DEBUG_PORT: String(debugPort),
-  },
-  stdio: "ignore",
-});
+let client = null;
 let qaProcess = null;
 let cleanupPromise = null;
 let signalHandled = false;
@@ -63,7 +54,6 @@ process.on("SIGINT", () => handleSignal(130));
 process.on("SIGTERM", () => handleSignal(143));
 
 try {
-  await waitForProductionTarget(cdpUrl, client);
   qaProcess = spawn(
     process.env.ComSpec || "cmd.exe",
     [
@@ -84,6 +74,16 @@ try {
       stdio: "inherit",
     },
   );
+  client = spawn(executablePath, [], {
+    cwd: root,
+    env: {
+      ...process.env,
+      LETSCUBE_WEBVIEW2_DATA_DIR: profilePath,
+      LETSCUBE_WEBVIEW2_DEBUG_PORT: String(debugPort),
+      LETSCUBE_TAURI_QA_HOLD_PREFLIGHT: "1",
+    },
+    stdio: "ignore",
+  });
   process.exitCode = await waitForExit(qaProcess);
 } finally {
   if (!(await cleanupOwnedResources())) process.exitCode = 1;
@@ -112,34 +112,6 @@ function reserveLoopbackPort() {
       });
     });
   });
-}
-
-async function waitForProductionTarget(cdpUrl, client) {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    if (client.exitCode !== null) throw new Error("Tauri client exited before WebView2 was ready.");
-    try {
-      const response = await fetch(`${cdpUrl}/json/list`, { signal: AbortSignal.timeout(2_000) });
-      if (response.ok) {
-        const targets = await response.json();
-        if (Array.isArray(targets) && targets.some((target) => hasProductionOrigin(target?.url))) {
-          return;
-        }
-      }
-    } catch {
-      // The main WebView starts after the local splash closes.
-    }
-    await delay(250);
-  }
-  throw new Error("Timed out waiting for the production Tauri WebView CDP target.");
-}
-
-function hasProductionOrigin(value) {
-  try {
-    return new URL(value).origin === PRODUCTION_ORIGIN;
-  } catch {
-    return false;
-  }
 }
 
 function waitForExit(child) {

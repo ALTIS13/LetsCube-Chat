@@ -4,6 +4,77 @@ import { loadQaCredentials } from "./helpers/auth";
 const PRODUCTION_ORIGIN = "https://app.letscube.ru";
 
 test.describe("LETSCUBE Windows Tauri shell", () => {
+  test.describe.configure({ mode: "serial" });
+
+  test("keeps the approved startup scene and production navigation in one WebView", async ({}, testInfo) => {
+    test.skip(process.platform !== "win32", "Tauri WebView2 QA is Windows-only");
+    test.skip(
+      testInfo.project.name !== "chromium-desktop-1440",
+      "the native shell owns its viewport and runs once",
+    );
+
+    const cdpUrlValue = process.env.LETSCUBE_TAURI_CDP_URL;
+    test.skip(!cdpUrlValue, "LETSCUBE_TAURI_CDP_URL is not configured");
+    const browser = await connectToTauri(validateCdpUrl(cdpUrlValue ?? ""));
+    try {
+      const pages = browser.contexts().flatMap((context) => context.pages());
+      expect(pages, "startup must expose exactly one native WebView page").toHaveLength(1);
+      const page = pages[0];
+      expect(new URL(page.url()).pathname).toMatch(/\/startup\.html$/);
+      await expect(page).toHaveTitle("LETSCUBE");
+      await expect(page.getByTestId("startup-client-fingerprint")).toBeVisible();
+      await expect(page.getByTestId("startup-server-fingerprint")).toBeVisible();
+
+      const startupStages: string[] = [];
+      await page.exposeFunction("__recordStartupStage", (stage: string | undefined) => {
+        if (stage) startupStages.push(stage);
+      });
+      await page.evaluate(() => {
+        const record = Reflect.get(window, "__recordStartupStage") as (stage?: string) => void;
+        record(document.body.dataset.stage);
+        new MutationObserver(() => record(document.body.dataset.stage)).observe(
+          document.body,
+          { attributes: true, attributeFilter: ["data-stage"] },
+        );
+      });
+
+      const geometry = await page.evaluate(() => {
+        const seal = document.querySelector<HTMLElement>('[data-testid="startup-center-seal"]')!.getBoundingClientRect();
+        const status = document.querySelector<HTMLElement>("#startup-status")!.getBoundingClientRect();
+        const left = document.querySelector<HTMLElement>(".rail-left")!.getBoundingClientRect();
+        const right = document.querySelector<HTMLElement>(".rail-right")!.getBoundingClientRect();
+        return {
+          statusBelowRail: status.top > seal.bottom,
+          halvesCappedAtSeal: left.right <= seal.left + 0.5 && right.left >= seal.right - 0.5,
+        };
+      });
+      expect(geometry).toEqual({ statusBelowRail: true, halvesCappedAtSeal: true });
+      await page.screenshot({ path: testInfo.outputPath("tauri-approved-startup.png") });
+
+      await page.evaluate(async () => {
+        await window.__TAURI_INTERNALS__?.invoke("begin_startup_qa");
+      });
+
+      await page.waitForURL((url) => url.origin === PRODUCTION_ORIGIN, {
+        timeout: 30_000,
+        waitUntil: "domcontentloaded",
+      });
+      expect(browser.contexts().flatMap((context) => context.pages())).toHaveLength(1);
+      expect(new URL(page.url()).origin).toBe(PRODUCTION_ORIGIN);
+      expect(startupStages).toEqual(
+        expect.arrayContaining([
+          "boot",
+          "network_check",
+          "tls_origin_check",
+          "update_check",
+          "production_navigation",
+        ]),
+      );
+    } finally {
+      await browser.close();
+    }
+  });
+
   test("loads the production app with desktop capabilities and authenticated core UI", async ({}, testInfo) => {
     test.skip(process.platform !== "win32", "Tauri WebView2 QA is Windows-only");
     test.skip(
@@ -131,4 +202,18 @@ function validateCdpUrl(value: string) {
     throw new Error("LETSCUBE_TAURI_CDP_URL must be an uncredentialed loopback HTTP origin.");
   }
   return url.origin;
+}
+
+async function connectToTauri(cdpUrl: string) {
+  const deadline = Date.now() + 30_000;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      return await chromium.connectOverCDP(cdpUrl);
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }
+  throw new Error(`Timed out connecting to the loopback Tauri CDP endpoint: ${String(lastError)}`);
 }

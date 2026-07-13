@@ -88,6 +88,7 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.match(libRs, /build:/);
   assert.match(libRs, /is_dev\(\)|cfg!\(debug_assertions\)/);
   assert.match(libRs, /LETSCUBE_WEBVIEW2_DATA_DIR/);
+  assert.match(libRs, /#\[cfg\(debug_assertions\)\][\s\S]*LETSCUBE_TAURI_QA_HOLD_PREFLIGHT/);
   assert.match(libRs, /single_instance/);
   assert.match(libRs, /Открыть LETSCUBE/);
   assert.match(libRs, /Выйти/);
@@ -99,11 +100,12 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.match(libRs, /opener\(\)\s*\.open_url/);
   assert.match(libRs, /MAIN_READY/);
   assert.match(libRs, /restore_startup_surface/);
-  assert.match(
-    libRs,
-    /window\.label\(\)\s*!=\s*"splash"/,
-    "the retry command must reject calls from the remote production window",
-  );
+  assert.match(libRs, /WebviewWindowBuilder::from_config/);
+  assert.match(libRs, /StartupState/);
+  assert.match(libRs, /letscube:\/\/startup-state/);
+  assert.match(libRs, /PageLoadEvent::Finished/);
+  assert.match(libRs, /is_allowed_navigation\([^)]*url/);
+  assert.doesNotMatch(libRs, /thread::sleep|letscube:\/\/load-timeout/);
 
   assert.equal(tauriConfig.productName, "LETSCUBE");
   assert.equal(tauriConfig.identifier, "ru.letscube.messenger");
@@ -125,16 +127,31 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   );
 });
 
-test("Windows Tauri splash and icons exist as local bundled assets", () => {
-  const splashPath = new URL("../../windows-tauri/ui/splash.html", import.meta.url);
-  assert.equal(existsSync(splashPath), true, "splash.html is missing");
+test("Windows startup uses one main window and a local approved handshake scene", () => {
+  const config = readJson("windows-tauri/src-tauri/tauri.conf.json");
+  assert.deepEqual(config.app.windows.map((window) => window.label), ["main"]);
+  assert.equal(config.app.windows[0].url, "startup.html");
+  assert.equal(config.app.windows[0].visible, true);
+  assert.equal(config.app.windows[0].decorations, true);
+  assert.equal(config.app.windows[0].resizable, true);
+  assert.equal(config.app.windows[0].center, true);
+  assert.equal(config.app.windows[0].minWidth, 960);
+  assert.equal(config.app.windows[0].minHeight, 640);
+  assert.equal(existsSync(new URL("../../windows-tauri/ui/splash.html", import.meta.url)), false);
 
-  const splashHtml = readFileSync(splashPath, "utf8");
-  const splashCss = readText("windows-tauri/ui/splash.css");
-  assert.match(splashHtml, /LETSCUBE/);
-  assert.match(splashHtml, /retry|повтор/i);
-  assert.match(splashHtml, /failed|ошиб/i);
-  assert.match(splashCss, /prefers-reduced-motion/);
+  const html = readText("windows-tauri/ui/startup.html");
+  const css = readText("windows-tauri/ui/startup.css");
+  const script = readText("windows-tauri/ui/startup.js");
+  assert.match(html, /data-testid="startup-client-fingerprint"/);
+  assert.match(html, /data-testid="startup-server-fingerprint"/);
+  assert.match(html, /data-testid="startup-center-seal"/);
+  assert.match(html, /id="startup-status"/);
+  assert.match(html, /id="startup-retry"/);
+  assert.match(css, /grid-template-columns:\s*1fr\s+34px\s+1fr/);
+  assert.match(css, /prefers-reduced-motion/);
+  assert.match(script, /letscube:\/\/startup-state/);
+  assert.match(script, /snapshot\.stage\s*===\s*"complete"\s*&&\s*snapshot\.connected\s*===\s*true/);
+  assert.doesNotMatch(script, /setTimeout|setInterval/);
 
   const iconsDir = new URL("../../windows-tauri/icons/", import.meta.url);
   assert.equal(existsSync(iconsDir), true, "icons directory is missing");
@@ -168,13 +185,14 @@ test("Windows Tauri QA wrapper owns an isolated process, profile and loopback CD
 
   assert.match(script, /LETSCUBE_WEBVIEW2_DATA_DIR/);
   assert.match(script, /LETSCUBE_WEBVIEW2_DEBUG_PORT/);
+  assert.match(script, /LETSCUBE_TAURI_QA_HOLD_PREFLIGHT/);
   assert.match(script, /LETSCUBE_TAURI_CDP_URL/);
   assert.match(script, /windows-tauri-shell\.spec\.ts/);
   assert.match(script, /chromium-desktop-1440/);
   assert.match(script, /mkdtemp/);
   assert.match(script, /rmSync/);
   assert.match(script, /tasklist/i);
-  assert.match(script, /\.origin\s*===\s*PRODUCTION_ORIGIN/);
+  assert.match(script, /qaProcess\s*=\s*spawn[\s\S]*client\s*=\s*spawn/);
   assert.doesNotMatch(script, /startsWith\("https:\/\/app\.letscube\.ru/);
   assert.match(script, /process\.on\("SIGINT"/);
   assert.match(script, /process\.on\("SIGTERM"/);
@@ -189,4 +207,9 @@ test("Windows Tauri QA wrapper owns an isolated process, profile and loopback CD
   assert.match(spec, /hostname\s*!==\s*"127\.0\.0\.1"/);
   assert.match(spec, /protocol\s*!==\s*"http:"/);
   assert.match(spec, /await page\.reload/);
+  assert.match(spec, /startup-center-seal/);
+  assert.match(spec, /startup-status/);
+  assert.match(spec, /contexts\(\)\.flatMap/);
+  assert.match(spec, /waitForURL/);
+  assert.match(spec, /connectToTauri/);
 });

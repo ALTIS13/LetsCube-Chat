@@ -1,9 +1,9 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "splash",
-  "description": "Local splash retry control only.",
+  "identifier": "startup",
+  "description": "Local startup retry control only.",
   "local": true,
-  "windows": ["splash"],
+  "windows": ["main"],
   "platforms": ["windows"],
   "permissions": []
 }
