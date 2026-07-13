@@ -68,12 +68,12 @@ Electron wrapper exist; iOS remains PWA-only.
 
 ## Windows internal gate
 
-- `pnpm.cmd windows:test` passes shell security and distribution contracts.
-- `pnpm.cmd windows:build:internal` creates the expected x64 NSIS installer.
-- Packaged ASAR contains only the desktop main/preload/security files and icon.
-- Electron fuses disable RunAsNode, Node options/inspect and extra file-protocol privileges.
+- `pnpm.cmd windows:tauri:test` passes shell security and distribution contracts.
+- `pnpm.cmd windows:tauri:qa` builds a debug shell, creates an isolated temporary WebView2 profile and runs the production-origin Tauri smoke through a loopback-only CDP endpoint.
+- `pnpm.cmd windows:tauri:build:internal` creates the expected x64 NSIS installer.
+- Release builds ignore both `LETSCUBE_WEBVIEW2_DATA_DIR` and `LETSCUBE_WEBVIEW2_DEBUG_PORT`; the QA port exists only in debug builds and never allows wildcard origins.
 - Fresh packaged runtime opens only `https://app.letscube.ru`.
-- Preload exposes no `require`, tokens, filesystem or arbitrary IPC surface.
+- The remote production capability exposes notification methods only, with no filesystem, shell, process, updater, generic opener or arbitrary IPC surface.
 - Camera, microphone and geolocation prompts work through the packaged session.
 - Browser PWA install and Browser Web Push controls are absent in the EXE.
 - Install, uninstall and upgrade are tested before a public release.

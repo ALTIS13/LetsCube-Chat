@@ -97,12 +97,18 @@ internal `0.2.0` build `4` Tauri NSIS artifact. Artifacts remain immutable under
 
 ## Packaging QA
 
-- Clean-profile launch shows login and contains no existing auth state.
-- Install, uninstall and upgrade.
-- Splash, retry state, tray close-to-hide and single instance.
-- Login/session restore without using a QA profile.
-- Notifications route to chat/task/invite while the process is running.
-- Camera/microphone/file picker/video/voice/geolocation/clipboard/fullscreen.
-- Realtime and notifications after the window stays hidden for five minutes.
-- Offline/reconnect banner and long-session sync.
-- Installer size and SHA-256 are recorded before publication.
+- [x] Clean-profile launch shows login and contains no existing auth state.
+- [x] Same-version repair, silent uninstall and clean reinstall preserve the user profile while removing/recreating the package and registry entry correctly.
+- [ ] Upgrade between two different signed versions.
+- [x] Splash, tray close-to-hide and single instance.
+- [x] Login through a temporary isolated profile without importing browser or Electron state.
+- [x] Production-origin authenticated shell, chat composer, attachment menu, media quality selector, Notification Center and Windows notification settings.
+- [x] WebView2 exposes camera/microphone MediaDevices, MediaRecorder, geolocation, clipboard and fullscreen APIs; the attachment menu exposes photo, camera, voice and video flows.
+- [ ] Hardware capture/permission allow-deny matrix on Windows 10 and Windows 11 devices.
+- [ ] Realtime plus chat/task/invite notification routing and reconciliation after the window remains hidden for five minutes.
+- [ ] Offline/reconnect banner and long-session sync.
+- [x] Installer size and SHA-256 are recorded before publication.
+
+Run repeatable native-shell QA with `pnpm.cmd windows:tauri:qa`. The wrapper
+refuses to terminate an existing user-owned LETSCUBE process, owns only its
+debug child process, uses a unique temporary profile and removes it after QA.

@@ -28,6 +28,7 @@ test("Windows Tauri shell stays isolated from the root workspace and exposes onl
   assert.match(rootPackage.scripts["windows:tauri:build:internal"], /windows-tauri/);
   assert.match(rootPackage.scripts["windows:tauri:build:internal"], /tauri build/);
   assert.match(rootPackage.scripts["windows:tauri:build:internal"], /\.cargo\\bin/);
+  assert.equal(rootPackage.scripts["windows:tauri:qa"], "node scripts/windows-tauri-qa.mjs");
 
   const shellPackage = readJson("windows-tauri/package.json");
   assert.equal(shellPackage.private, true);
@@ -140,4 +141,52 @@ test("Windows Tauri splash and icons exist as local bundled assets", () => {
   const iconNames = readdirSync(iconsDir).map((entry) => path.basename(entry).toLowerCase());
   assert.ok(iconNames.some((entry) => entry.endsWith(".ico")), "Windows icon asset is missing");
   assert.ok(iconNames.some((entry) => entry.endsWith(".png")), "PNG icon asset is missing");
+});
+
+test("Windows Tauri exposes main-WebView automation only through a debug-only opt-in port", () => {
+  const libRs = readText("windows-tauri/src-tauri/src/lib.rs");
+
+  assert.match(libRs, /LETSCUBE_WEBVIEW2_DEBUG_PORT/);
+  assert.match(libRs, /additional_browser_args/);
+  assert.match(
+    libRs,
+    /#\[cfg\(debug_assertions\)\]\s*fn debug_browser_args\(\)/,
+    "release builds must ignore the WebView2 automation port",
+  );
+  assert.match(libRs, /#\[cfg\(not\(debug_assertions\)\)\]\s*fn debug_browser_args\(\)/);
+  assert.doesNotMatch(
+    libRs,
+    /--remote-allow-origins=\*/,
+    "debug automation must not allow arbitrary remote origins",
+  );
+});
+
+test("Windows Tauri QA wrapper owns an isolated process, profile and loopback CDP endpoint", () => {
+  const scriptPath = new URL("../../scripts/windows-tauri-qa.mjs", import.meta.url);
+  assert.equal(existsSync(scriptPath), true, "Windows Tauri QA wrapper is missing");
+  const script = readFileSync(scriptPath, "utf8");
+
+  assert.match(script, /LETSCUBE_WEBVIEW2_DATA_DIR/);
+  assert.match(script, /LETSCUBE_WEBVIEW2_DEBUG_PORT/);
+  assert.match(script, /LETSCUBE_TAURI_CDP_URL/);
+  assert.match(script, /windows-tauri-shell\.spec\.ts/);
+  assert.match(script, /chromium-desktop-1440/);
+  assert.match(script, /mkdtemp/);
+  assert.match(script, /rmSync/);
+  assert.match(script, /tasklist/i);
+  assert.match(script, /\.origin\s*===\s*PRODUCTION_ORIGIN/);
+  assert.doesNotMatch(script, /startsWith\("https:\/\/app\.letscube\.ru/);
+  assert.match(script, /process\.on\("SIGINT"/);
+  assert.match(script, /process\.on\("SIGTERM"/);
+  assert.doesNotMatch(script, /process\.once\("SIG(?:INT|TERM)"/);
+  assert.match(script, /cleanupOwnedResources/);
+  assert.match(script, /process\.exitCode\s*=\s*1/);
+  assert.match(script, /existsSync\(profilePath\)/);
+  assert.doesNotMatch(script, /remote-allow-origins=\*/);
+
+  const spec = readText("tests/e2e/windows-tauri-shell.spec.ts");
+  assert.match(spec, /validateCdpUrl/);
+  assert.match(spec, /hostname\s*!==\s*"127\.0\.0\.1"/);
+  assert.match(spec, /protocol\s*!==\s*"http:"/);
+  assert.match(spec, /await page\.reload/);
 });

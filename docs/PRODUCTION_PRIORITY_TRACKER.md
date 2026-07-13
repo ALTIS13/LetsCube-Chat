@@ -279,7 +279,7 @@ Status: `[~]` active. Android and Windows Tauri internal candidates are availabl
 - `[x]` Retire the Electron spike after QA profile leakage and excessive package weight were confirmed. Electron source, installed package and shared QA profile were removed before publishing Tauri.
 - `[x]` Tauri 2 internal candidate: isolated WebView2 profile, 1.19 MiB NSIS installer, tray/close-to-hide, branded startup, single instance, minimum exact-origin capabilities, clean-profile login and hidden-window foreground notifications.
 - `[x]` Tauri rollout: frontend adapter deployed, clean installed-client QA repeated, and immutable Windows stable `0.2.0` build `4` published at 1,242,693 bytes with verified SHA-256.
-- `[ ]` Windows public release gate: Authenticode signing/SmartScreen, install-upgrade-uninstall matrix, killed-process notifications and signed auto-update apply.
+- `[~]` Windows public release gate: repeatable isolated Tauri/WebView2 QA, same-version repair, silent uninstall and clean reinstall pass. A real cross-version upgrade, Authenticode/SmartScreen, killed-process notifications and signed auto-update apply remain open.
 - `[!]` SMS provider rollout.
 
 ## Deferred Phone Verification Rollout

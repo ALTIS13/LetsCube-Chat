@@ -37,6 +37,26 @@ fn production_profile_dir<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathB
     Ok(app.path().app_local_data_dir()?.join(PRODUCTION_PROFILE))
 }
 
+#[cfg(debug_assertions)]
+fn debug_browser_args() -> Option<String> {
+    let port = std::env::var("LETSCUBE_WEBVIEW2_DEBUG_PORT")
+        .ok()?
+        .parse::<u16>()
+        .ok()?;
+    if port < 1024 {
+        return None;
+    }
+
+    Some(format!(
+        "--remote-debugging-port={port} --remote-allow-origins=http://127.0.0.1:{port}"
+    ))
+}
+
+#[cfg(not(debug_assertions))]
+fn debug_browser_args() -> Option<String> {
+    None
+}
+
 fn desktop_bridge_script() -> String {
     format!(
         r#"
@@ -129,14 +149,20 @@ fn build_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let navigation_handle = app.clone();
     let new_window_handle = app.clone();
 
-    WebviewWindowBuilder::new(app, "main", WebviewUrl::External(production_url))
+    let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::External(production_url))
         .title("LETSCUBE")
         .inner_size(1360.0, 860.0)
         .min_inner_size(960.0, 640.0)
         .center()
         .visible(false)
         .data_directory(profile_dir)
-        .initialization_script(desktop_bridge_script())
+        .initialization_script(desktop_bridge_script());
+
+    if let Some(args) = debug_browser_args() {
+        builder = builder.additional_browser_args(&args);
+    }
+
+    builder
         .on_navigation(move |url| {
             if is_allowed_navigation(url) {
                 true

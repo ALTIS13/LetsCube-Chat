@@ -25,6 +25,7 @@
     "windows:tauri:prepare": "pnpm.cmd --dir windows-tauri --ignore-workspace install",
     "windows:tauri:run": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH%&& pnpm.cmd --dir windows-tauri --ignore-workspace exec tauri dev",
     "windows:tauri:test": "node --test tests/unit/tauri-shell.test.mjs",
+    "windows:tauri:qa": "node scripts/windows-tauri-qa.mjs",
     "windows:tauri:build:internal": "pnpm.cmd windows:tauri:prepare && set PATH=%USERPROFILE%\\.cargo\\bin;%PATH%&& pnpm.cmd --dir windows-tauri --ignore-workspace exec tauri build",
     "format": "biome format --write package.json biome.json playwright.config.ts tests/e2e tests/rls tests/security scripts/supabase-typegen.mjs scripts/rls-smoke.mjs scripts/rls-anon-rest-probe.mjs scripts/auth-anti-abuse-smoke.mjs scripts/e2e-auth-states.mjs supabase/functions/auth-yandex-gateway/rateLimit.mjs supabase/functions/auth-yandex-gateway/inviteCode.mjs",
     "format:check": "biome format package.json biome.json playwright.config.ts tests/e2e tests/rls tests/security scripts/supabase-typegen.mjs scripts/rls-smoke.mjs scripts/rls-anon-rest-probe.mjs scripts/auth-anti-abuse-smoke.mjs scripts/e2e-auth-states.mjs supabase/functions/auth-yandex-gateway/rateLimit.mjs supabase/functions/auth-yandex-gateway/inviteCode.mjs",
