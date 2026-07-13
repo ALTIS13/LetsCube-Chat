@@ -463,7 +463,7 @@ git commit -m "Add Windows desktop update controls"
 
 **Files:**
 - Modify: `scripts/publish-native-release.sh`
-- Modify: `deploy/release-catalog/nginx.conf`
+- Modify: `docs/deploy/release-catalog/nginx.conf`
 - Modify: `tests/unit/release-catalog-deploy.test.mjs`
 - Modify: `tests/unit/release-catalog.test.mts`
 - Modify: `docs/native/WINDOWS_PACKAGING_PLAN.md`
@@ -517,7 +517,7 @@ git diff --check
 ```
 
 ```powershell
-git add scripts/publish-native-release.sh deploy/release-catalog/nginx.conf tests/unit/release-catalog* docs/native/WINDOWS_PACKAGING_PLAN.md docs/infra/SECRETS_MATRIX.md
+git add scripts/publish-native-release.sh docs/deploy/release-catalog/nginx.conf tests/unit/release-catalog* docs/native/WINDOWS_PACKAGING_PLAN.md docs/infra/SECRETS_MATRIX.md
 git commit -m "Publish signed Windows update channels"
 ```
 
