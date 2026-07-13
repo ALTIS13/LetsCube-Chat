@@ -22,7 +22,11 @@ strict_semver() {
   [[ "$1" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
 }
 
-valid_channel() {
+valid_download_channel() {
+  [[ "$1" == "stable" ]]
+}
+
+valid_updater_channel() {
   [[ "$1" == "stable" || "$1" == "test" ]]
 }
 
@@ -37,6 +41,29 @@ normalize_windows_path() {
 
 require_regular_file() {
   [[ -f "$1" && ! -L "$1" ]] || fail "$2 must be a regular file"
+}
+
+require_confined_path() {
+  local path="$1"
+  local label="$2"
+  local lexical_path
+  local resolved_path
+  lexical_path="$(realpath -s -m -- "$path")"
+  resolved_path="$(realpath -m -- "$path")"
+  case "$lexical_path" in
+    "$release_root"|"$release_root"/*) ;;
+    *) fail "$label violates release root confinement" ;;
+  esac
+  [[ "$lexical_path" == "$resolved_path" ]] || fail "$label contains a symlinked path"
+}
+
+load_validated_signature() {
+  local path="$1"
+  require_regular_file "$path" "immutable updater signature"
+  signature="$(tr -d '\r\n' < "$path")"
+  [[ "$signature" =~ [^[:space:]] ]] || fail "updater signature must be non-empty"
+  [[ ${#signature} -ge 16 && ${#signature} -le 8192 ]] \
+    || fail "updater signature length is invalid"
 }
 
 find_json_writer() {
@@ -57,12 +84,15 @@ find_json_writer() {
 
 acquire_publish_lock() {
   install -d -m 0755 "$release_root"
+  require_confined_path "$release_root" "release root"
   lock_directory=""
   if command -v flock >/dev/null 2>&1; then
+    require_confined_path "$release_root/.publish.lock" "publish lock path"
     exec 9>"$release_root/.publish.lock"
     flock -x 9
   else
     lock_directory="$release_root/.publish.lock.d"
+    require_confined_path "$lock_directory" "publish lock path"
     mkdir "$lock_directory" 2>/dev/null || fail "another release publish is running"
   fi
 }
@@ -204,7 +234,7 @@ publish_download_catalog() {
     windows) extension="exe" ;;
     *) fail "unsupported platform" ;;
   esac
-  valid_channel "$channel" || fail "unsupported channel"
+  valid_download_channel "$channel" || fail "unsupported legacy channel"
   strict_semver "$version" || fail "version must be strict SemVer"
   [[ "$build" =~ ^(0|[1-9][0-9]*)$ ]] || fail "build must be a non-negative integer"
   require_regular_file "$artifact" "artifact"
@@ -219,8 +249,17 @@ publish_download_catalog() {
   public_url="https://api.letscube.ru/releases/files/$platform/$version/$filename"
   [[ "$public_url" == https://api.letscube.ru/releases/files/* ]] || fail "artifact URL must use HTTPS"
 
+  require_confined_path "$files_root" "download files path"
+  require_confined_path "$manifest_root" "download manifest path"
+  require_confined_path "$version_root" "download version path"
   install -d -m 0755 "$files_root" "$manifest_root"
+  require_confined_path "$files_root" "download files path"
+  require_confined_path "$manifest_root" "download manifest path"
   acquire_publish_lock
+  require_confined_path "$files_root" "download files path"
+  require_confined_path "$manifest_root" "download manifest path"
+  require_confined_path "$version_root" "download version path"
+  require_regular_file "$artifact" "artifact"
   [[ ! -e "$version_root" ]] || fail "release version already exists"
 
   temp_root="$(mktemp -d "$files_root/.publish-$version.XXXXXX")"
@@ -276,7 +315,7 @@ publish_signed_updater() {
   done
 
   [[ "$platform" == "windows" ]] || fail "signed updater supports windows only"
-  valid_channel "$channel" || fail "unsupported channel"
+  valid_updater_channel "$channel" || fail "unsupported updater channel"
   strict_semver "$version" || fail "version must be strict SemVer"
   require_regular_file "$installer" "installer"
   [[ "${installer,,}" == *.exe ]] || fail "installer extension must be .exe"
@@ -284,11 +323,6 @@ publish_signed_updater() {
   [[ "${updater_artifact,,}" == *.nsis.zip ]] || fail "updater artifact extension must be .nsis.zip"
   require_regular_file "$signature_file" "signature file"
   [[ ${#notes} -le 500 ]] || fail "notes exceed 500 characters"
-
-  signature="$(tr -d '\r\n' < "$signature_file")"
-  [[ "$signature" =~ [^[:space:]] ]] || fail "updater signature must be non-empty"
-  [[ ${#signature} -ge 16 && ${#signature} -le 8192 ]] \
-    || fail "updater signature length is invalid"
 
   local updater_files_root="$release_root/releases/updater/files/windows"
   local updater_version_root="$updater_files_root/$version"
@@ -302,8 +336,18 @@ publish_signed_updater() {
   [[ "$updater_public_url" == "https://api.letscube.ru/releases/updater/files/windows/$version/$updater_filename" ]] \
     || fail "updater artifact URL must use the exact immutable HTTPS path"
 
+  require_confined_path "$updater_files_root" "updater files path"
+  require_confined_path "$updater_manifest_root" "updater manifest path"
+  require_confined_path "$updater_version_root" "updater version path"
   install -d -m 0755 "$updater_files_root" "$updater_manifest_root"
+  require_confined_path "$updater_files_root" "updater files path"
+  require_confined_path "$updater_manifest_root" "updater manifest path"
   acquire_publish_lock
+  require_confined_path "$updater_files_root" "updater files path"
+  require_confined_path "$updater_manifest_root" "updater manifest path"
+  require_confined_path "$updater_version_root" "updater version path"
+  require_regular_file "$updater_artifact" "updater artifact"
+  require_regular_file "$signature_file" "signature file"
 
   if [[ -e "$updater_version_root" ]]; then
     require_regular_file "$updater_target" "immutable updater artifact"
@@ -312,13 +356,19 @@ publish_signed_updater() {
       || fail "immutable updater artifact already exists with different content"
     cmp -s -- "$signature_file" "$updater_signature_target" \
       || fail "immutable updater signature already exists with different content"
+    load_validated_signature "$updater_signature_target"
   else
     temp_updater_root="$(mktemp -d "$updater_files_root/.publish-$version.XXXXXX")"
+    require_confined_path "$temp_updater_root" "temporary updater path"
     install -m 0644 "$updater_artifact" "$temp_updater_root/$updater_filename"
     install -m 0644 "$signature_file" "$temp_updater_root/$updater_signature_filename"
+    load_validated_signature "$temp_updater_root/$updater_signature_filename"
     chmod 0755 "$temp_updater_root"
+    require_confined_path "$updater_version_root" "updater version path"
     mv -- "$temp_updater_root" "$updater_version_root"
     temp_updater_root=""
+    require_confined_path "$updater_version_root" "updater version path"
+    load_validated_signature "$updater_signature_target"
   fi
 
   updater_sha256="$(sha256sum "$updater_target" | awk '{print $1}')"
@@ -336,7 +386,13 @@ publish_signed_updater() {
 }
 
 release_root="$(normalize_windows_path "${RELEASE_ROOT:-/srv/letscube/releases/public}")"
-for command_name in sha256sum stat install mktemp awk cmp tr; do
+command -v realpath >/dev/null 2>&1 || fail "missing command: realpath"
+release_root_lexical="$(realpath -s -m -- "$release_root")"
+release_root_resolved="$(realpath -m -- "$release_root")"
+[[ "$release_root_lexical" == "$release_root_resolved" ]] \
+  || fail "release root contains a symlinked path"
+release_root="$release_root_lexical"
+for command_name in sha256sum stat install mktemp awk cmp tr realpath; do
   command -v "$command_name" >/dev/null 2>&1 || fail "missing command: $command_name"
 done
 json_writer="$(find_json_writer)"
