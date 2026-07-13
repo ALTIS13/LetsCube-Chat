@@ -5,6 +5,9 @@ import path from "node:path";
 import { loadQaCredentials } from "./helpers/auth";
 
 const PRODUCTION_ORIGIN = "https://app.letscube.ru";
+const WINDOWS_RELEASE = JSON.parse(
+  readFileSync(path.resolve("windows-tauri/package.json"), "utf8"),
+) as { version: string; desktopBuild: number };
 
 test.describe("LETSCUBE Windows Tauri shell", () => {
   test.describe.configure({ mode: "serial" });
@@ -165,7 +168,12 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
             ].every((method) => typeof method === "function"),
           })),
         )
-        .toEqual({ platform: "windows", version: "0.2.0", build: 4, updater: true });
+        .toEqual({
+          platform: "windows",
+          version: WINDOWS_RELEASE.version,
+          build: WINDOWS_RELEASE.desktopBuild,
+          updater: true,
+        });
       await expect
         .poll(() =>
           page.evaluate(() => ({
@@ -216,7 +224,7 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       ).toBeVisible();
       await expect(page.getByRole("button", { name: "Записать видео" })).toBeVisible();
       await expect(page.getByTestId("media-quality-selector")).toBeVisible();
-      await page.locator("div.fixed.inset-0.z-10").click({ position: { x: 1_200, y: 40 } });
+      await page.locator("div.fixed.inset-0.z-10").click({ position: { x: 12, y: 200 } });
 
       await page.getByTestId("notification-bell-button").click();
       await expect(page.getByTestId("notification-panel")).toBeVisible();
