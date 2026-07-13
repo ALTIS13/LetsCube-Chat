@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -22,6 +23,7 @@ const dockerfilePath = join(root, "docs/deploy/release-catalog/Dockerfile");
 const publisherPath = join(root, "scripts/publish-native-release.sh");
 const bash = process.env.KUB_BASH
   || (process.platform === "win32" ? "C:\\Program Files\\Git\\bin\\bash.exe" : "bash");
+const encodeTauriSignature = (value) => Buffer.from(value, "utf8").toString("base64");
 function toBashPath(path) {
   if (process.platform !== "win32") return path;
   const converted = spawnSync(
@@ -32,6 +34,24 @@ function toBashPath(path) {
   assert.equal(converted.status, 0, converted.stderr);
   return converted.stdout.trim();
 }
+
+const fakeMinisignRoot = mkdtempSync(join(tmpdir(), "letscube-fake-minisign-"));
+const fakeMinisign = join(fakeMinisignRoot, "minisign");
+writeFileSync(fakeMinisign, `#!/usr/bin/env bash
+set -eu
+[[ "$#" -eq 6 ]]
+[[ "$1" == "-Vm" && -f "$2" ]]
+[[ "$3" == "-p" && -f "$4" ]]
+[[ "$5" == "-x" && -f "$6" ]]
+[[ "\${FAKE_MINISIGN_FAIL:-0}" != "1" ]]
+`);
+chmodSync(fakeMinisign, 0o755);
+const signedPublisherEnv = (releaseRoot, overrides = {}) => ({
+  ...process.env,
+  PATH: `${toBashPath(fakeMinisignRoot)}:${process.env.PATH ?? ""}`,
+  RELEASE_ROOT: releaseRoot,
+  ...overrides,
+});
 
 function nginxSection(source, start, end) {
   const startIndex = source.indexOf(start);
@@ -89,7 +109,7 @@ test("signed updater publication is atomic, channel-safe and reusable for promot
   const updaterArtifact = join(workspace, "LETSCUBE_0.2.1_x64-setup.exe");
   const signatureFile = join(workspace, "LETSCUBE_0.2.1_x64-setup.exe.sig");
   const updaterBytes = Buffer.from("LETSCUBE signed updater fixture");
-  const signature = "RWQ-test-signature-fixture-not-a-private-key";
+  const signature = encodeTauriSignature("untrusted comment: test signature fixture\nnot-a-real-signature\n");
   writeFileSync(installer, updaterBytes);
   writeFileSync(updaterArtifact, updaterBytes);
   writeFileSync(signatureFile, `${signature}\n`);
@@ -109,7 +129,7 @@ test("signed updater publication is atomic, channel-safe and reusable for promot
       "--signature-file",
       signatureFile,
     ],
-    { encoding: "utf8", env: { ...process.env, RELEASE_ROOT: publicRoot } },
+    { encoding: "utf8", env: signedPublisherEnv(publicRoot) },
   );
 
   const testPublish = publish("test");
@@ -149,11 +169,11 @@ test("signed updater publisher rejects invalid channels, empty signatures and im
   const signatureFile = join(workspace, "bundle.exe.sig");
   writeFileSync(installer, "first updater");
   writeFileSync(updaterArtifact, "first updater");
-  writeFileSync(signatureFile, "signature-fixture");
+  writeFileSync(signatureFile, encodeTauriSignature("test signature fixture"));
   const base = [publisherPath, "windows", "0.2.1", installer, "Notes"];
   const run = (args) => spawnSync(bash, args, {
     encoding: "utf8",
-    env: { ...process.env, RELEASE_ROOT: publicRoot },
+    env: signedPublisherEnv(publicRoot),
   });
 
   const invalidChannel = run([...base, "--channel", "preview", "--updater-artifact", updaterArtifact, "--signature-file", signatureFile]);
@@ -165,7 +185,7 @@ test("signed updater publisher rejects invalid channels, empty signatures and im
   assert.notEqual(emptySignature.status, 0);
   assert.match(emptySignature.stderr, /signature/i);
 
-  writeFileSync(signatureFile, "signature-fixture");
+  writeFileSync(signatureFile, encodeTauriSignature("test signature fixture"));
   const first = run([...base, "--channel", "test", "--updater-artifact", updaterArtifact, "--signature-file", signatureFile]);
   assert.equal(first.status, 0, first.stderr);
   writeFileSync(updaterArtifact, "different updater bytes");
@@ -175,14 +195,54 @@ test("signed updater publisher rejects invalid channels, empty signatures and im
   assert.match(replacement.stderr, /immutable|already exists/i);
 });
 
+test("signed updater publisher rejects a failed cryptographic verification", () => {
+  const workspace = mkdtempSync(join(tmpdir(), "letscube-updater-verification-"));
+  const publicRoot = join(workspace, "public");
+  const artifact = join(workspace, "bundle.exe");
+  const signatureFile = join(workspace, "bundle.exe.sig");
+  writeFileSync(artifact, "signed updater bytes");
+  writeFileSync(signatureFile, encodeTauriSignature("invalid cryptographic signature"));
+
+  const result = spawnSync(
+    bash,
+    [
+      publisherPath,
+      "windows",
+      "0.2.1",
+      artifact,
+      "Verification failure",
+      "--channel",
+      "test",
+      "--updater-artifact",
+      artifact,
+      "--signature-file",
+      signatureFile,
+    ],
+    {
+      encoding: "utf8",
+      env: signedPublisherEnv(publicRoot, { FAKE_MINISIGN_FAIL: "1" }),
+    },
+  );
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /signature verification failed/i);
+  assert.equal(
+    existsSync(join(publicRoot, "releases/updater/v1/windows/test.json")),
+    false,
+  );
+  assert.equal(
+    existsSync(join(publicRoot, "releases/updater/files/windows/0.2.1")),
+    false,
+  );
+});
+
 test("signed updater manifest reads the validated immutable signature copy", () => {
   const workspace = mkdtempSync(join(tmpdir(), "letscube-updater-signature-copy-"));
   const publicRoot = join(workspace, "public");
   const installer = join(workspace, "installer.exe");
   const updaterArtifact = join(workspace, "bundle.exe");
   const signatureFile = join(workspace, "bundle.exe.sig");
-  const sourceSignature = "source-signature-before-copy";
-  const immutableSignature = "immutable-signature-after-copy";
+  const sourceSignature = encodeTauriSignature("source-signature-before-copy");
+  const immutableSignature = encodeTauriSignature("immutable-signature-after-copy");
   writeFileSync(installer, "updater");
   writeFileSync(updaterArtifact, "updater");
   writeFileSync(signatureFile, `${sourceSignature}\n`);
@@ -213,11 +273,9 @@ test("signed updater manifest reads the validated immutable signature copy", () 
     ],
     {
       encoding: "utf8",
-      env: {
-        ...process.env,
+      env: signedPublisherEnv(publicRoot, {
         BASH_ENV: toBashPath(installHook),
-        RELEASE_ROOT: publicRoot,
-      },
+      }),
     },
   );
   assert.equal(result.status, 0, result.stderr);
@@ -254,7 +312,7 @@ test("publisher rejects symlinked updater parent and version paths", () => {
     const signatureFile = join(workspace, "bundle.exe.sig");
     writeFileSync(installer, "updater");
     writeFileSync(updaterArtifact, "updater");
-    writeFileSync(signatureFile, "signature-fixture");
+    writeFileSync(signatureFile, encodeTauriSignature("test signature fixture"));
     return { installer, updaterArtifact, signatureFile };
   };
   const run = (publicRoot, inputs) => spawnSync(
@@ -272,7 +330,7 @@ test("publisher rejects symlinked updater parent and version paths", () => {
       "--signature-file",
       inputs.signatureFile,
     ],
-    { encoding: "utf8", env: { ...process.env, RELEASE_ROOT: publicRoot } },
+    { encoding: "utf8", env: signedPublisherEnv(publicRoot) },
   );
   const linkType = process.platform === "win32" ? "junction" : "dir";
 

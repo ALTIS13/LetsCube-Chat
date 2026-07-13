@@ -56,11 +56,13 @@ test("Windows release version and build metadata stay aligned", () => {
   const cargoVersion = cargoToml.match(/^version = "([^"]+)"$/m)?.[1] ?? null;
   const startupHtml = readText("windows-tauri/ui/startup.html");
   const libRs = readText("windows-tauri/src-tauri/src/lib.rs");
+  const publisherPublicKey = readText("scripts/windows-updater-public.key").trim();
 
   assert.equal(shellPackage.version, "0.2.1");
   assert.equal(shellPackage.desktopBuild, 5);
   assert.equal(tauriConfig.version, shellPackage.version);
   assert.equal(cargoVersion, shellPackage.version);
+  assert.equal(tauriConfig.plugins.updater.pubkey, publisherPublicKey);
   assert.doesNotMatch(startupHtml, /Desktop\s+\d+\.\d+\.\d+/);
   assert.match(libRs, /startup_runtime_script[\s\S]*CARGO_PKG_VERSION/);
 });

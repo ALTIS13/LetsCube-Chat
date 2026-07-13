@@ -66,6 +66,28 @@ load_validated_signature() {
     || fail "updater signature length is invalid"
 }
 
+verify_updater_signature() {
+  local artifact_path="$1"
+  local signature_path="$2"
+  local public_key_path
+  public_key_path="$(dirname "${BASH_SOURCE[0]}")/windows-updater-public.key"
+  require_regular_file "$public_key_path" "updater public key"
+  command -v minisign >/dev/null 2>&1 || fail "missing command: minisign"
+
+  temp_verification_root="$(mktemp -d)"
+  base64 --decode "$public_key_path" > "$temp_verification_root/public.key" 2>/dev/null \
+    || fail "updater public key encoding is invalid"
+  base64 --decode "$signature_path" > "$temp_verification_root/artifact.sig" 2>/dev/null \
+    || fail "updater signature encoding is invalid"
+  if ! minisign -Vm "$artifact_path" \
+    -p "$temp_verification_root/public.key" \
+    -x "$temp_verification_root/artifact.sig" >/dev/null 2>&1; then
+    fail "updater signature verification failed"
+  fi
+  rm -rf -- "$temp_verification_root"
+  temp_verification_root=""
+}
+
 find_json_writer() {
   local candidate
   if command -v jq >/dev/null 2>&1; then
@@ -322,8 +344,6 @@ publish_signed_updater() {
   require_regular_file "$updater_artifact" "updater artifact"
   [[ "${updater_artifact,,}" == *.exe ]] || fail "updater artifact extension must be .exe"
   require_regular_file "$signature_file" "signature file"
-  cmp -s -- "$installer" "$updater_artifact" \
-    || fail "installer and updater artifact must contain identical bytes"
   [[ ${#notes} -le 500 ]] || fail "notes exceed 500 characters"
 
   local updater_files_root="$release_root/releases/updater/files/windows"
@@ -359,12 +379,20 @@ publish_signed_updater() {
     cmp -s -- "$signature_file" "$updater_signature_target" \
       || fail "immutable updater signature already exists with different content"
     load_validated_signature "$updater_signature_target"
+    cmp -s -- "$installer" "$updater_target" \
+      || fail "installer and immutable updater artifact must contain identical bytes"
+    verify_updater_signature "$updater_target" "$updater_signature_target"
   else
     temp_updater_root="$(mktemp -d "$updater_files_root/.publish-$version.XXXXXX")"
     require_confined_path "$temp_updater_root" "temporary updater path"
     install -m 0644 "$updater_artifact" "$temp_updater_root/$updater_filename"
     install -m 0644 "$signature_file" "$temp_updater_root/$updater_signature_filename"
     load_validated_signature "$temp_updater_root/$updater_signature_filename"
+    cmp -s -- "$installer" "$temp_updater_root/$updater_filename" \
+      || fail "installer and updater artifact must contain identical bytes"
+    verify_updater_signature \
+      "$temp_updater_root/$updater_filename" \
+      "$temp_updater_root/$updater_signature_filename"
     chmod 0755 "$temp_updater_root"
     require_confined_path "$updater_version_root" "updater version path"
     mv -- "$temp_updater_root" "$updater_version_root"
@@ -394,7 +422,7 @@ release_root_resolved="$(realpath -m -- "$release_root")"
 [[ "$release_root_lexical" == "$release_root_resolved" ]] \
   || fail "release root contains a symlinked path"
 release_root="$release_root_lexical"
-for command_name in sha256sum stat install mktemp awk cmp tr realpath; do
+for command_name in sha256sum stat install mktemp awk cmp tr realpath base64; do
   command -v "$command_name" >/dev/null 2>&1 || fail "missing command: $command_name"
 done
 json_writer="$(find_json_writer)"
@@ -404,11 +432,13 @@ temp_root=""
 temp_manifest=""
 temp_updater_root=""
 temp_updater_manifest=""
+temp_verification_root=""
 cleanup() {
   [[ -z "$temp_root" ]] || rm -rf -- "$temp_root" 2>/dev/null || true
   [[ -z "$temp_manifest" ]] || rm -f -- "$temp_manifest" 2>/dev/null || true
   [[ -z "$temp_updater_root" ]] || rm -rf -- "$temp_updater_root" 2>/dev/null || true
   [[ -z "$temp_updater_manifest" ]] || rm -f -- "$temp_updater_manifest" 2>/dev/null || true
+  [[ -z "$temp_verification_root" ]] || rm -rf -- "$temp_verification_root" 2>/dev/null || true
   release_publish_lock
 }
 trap cleanup EXIT
