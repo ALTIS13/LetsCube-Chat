@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-is-main-foreground"
+description = "Enables the desktop_is_main_foreground command without any pre-configured scope."
+commands.allow = ["desktop_is_main_foreground"]
+
+[[permission]]
+identifier = "deny-desktop-is-main-foreground"
+description = "Denies the desktop_is_main_foreground command without any pre-configured scope."
+commands.deny = ["desktop_is_main_foreground"]

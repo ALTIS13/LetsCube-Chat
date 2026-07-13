@@ -14,6 +14,11 @@ type LetscubeDesktopNotification = {
   route: string;
 };
 
+type LetscubeDesktopNotificationIdentity = Pick<
+  LetscubeDesktopNotification,
+  "id" | "kind"
+>;
+
 interface Window {
   letscubeDesktop?: {
     readonly platform: "windows";
@@ -26,7 +31,9 @@ interface Window {
     checkUpdate(): Promise<unknown>;
     installUpdate(): Promise<unknown>;
     showMain(): Promise<void>;
-    isMainVisible(): Promise<boolean>;
+    isMainForeground(): Promise<boolean>;
     notify(notification: LetscubeDesktopNotification): Promise<boolean>;
+    removeNotification(notification: LetscubeDesktopNotificationIdentity): Promise<boolean>;
+    takePendingNotificationRoute(): Promise<string | null>;
   };
 }

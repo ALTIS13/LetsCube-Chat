@@ -21,6 +21,7 @@ type DesktopNotificationPayload = {
 
 type DesktopNotificationApi = {
   sendNotification(notification: DesktopNotificationPayload): Promise<boolean>;
+  removeNotification?(notification: Pick<DesktopNotificationPayload, "id" | "kind">): Promise<boolean>;
 };
 
 type DesktopNotificationActionListener = {
@@ -31,6 +32,7 @@ type DesktopNotificationActionApi = {
   onAction(
     callback: (route: unknown) => void,
   ): Promise<DesktopNotificationActionListener>;
+  takePendingRoute?(): Promise<unknown>;
 };
 
 export type DesktopNotificationApiLoader =
@@ -38,7 +40,7 @@ export type DesktopNotificationApiLoader =
 
 export type DesktopNotificationContext = {
   visibilityState?: DocumentVisibilityState;
-  isMainVisible?: () => Promise<boolean | null>;
+  isMainForeground?: () => Promise<boolean | null>;
 };
 
 async function loadDesktopNotificationApi(): Promise<DesktopNotificationApi> {
@@ -46,15 +48,21 @@ async function loadDesktopNotificationApi(): Promise<DesktopNotificationApi> {
   if (!bridge) throw new Error("desktop_runtime_unavailable");
   return {
     sendNotification: (notification) => bridge.notify(notification),
+    removeNotification: (notification) => bridge.removeNotification(notification),
   };
 }
 
 async function loadDesktopNotificationActionApi(): Promise<DesktopNotificationActionApi> {
-  if (typeof window === "undefined") throw new Error("desktop_runtime_unavailable");
+  const bridge = getDesktopBridge();
+  if (typeof window === "undefined" || !bridge) throw new Error("desktop_runtime_unavailable");
   return {
     async onAction(callback) {
-      const listener = (event: Event) => {
-        callback((event as CustomEvent<{ route?: unknown }>).detail?.route);
+      const listener = () => {
+        void bridge.takePendingNotificationRoute()
+          .then((route) => {
+            if (route != null) callback(route);
+          })
+          .catch(() => undefined);
       };
       window.addEventListener("letscube:desktop-notification-action", listener);
       return {
@@ -63,6 +71,7 @@ async function loadDesktopNotificationActionApi(): Promise<DesktopNotificationAc
         },
       };
     },
+    takePendingRoute: () => bridge.takePendingNotificationRoute(),
   };
 }
 
@@ -77,7 +86,7 @@ export async function showDesktopMessageNotification(
     (typeof document === "undefined" ? "hidden" : document.visibilityState);
   let nativeVisibility: boolean | null = null;
   const resolveNativeVisibility =
-    context.isMainVisible ?? getDesktopBridge()?.isMainVisible;
+    context.isMainForeground ?? getDesktopBridge()?.isMainForeground;
   if (resolveNativeVisibility) {
     try {
       nativeVisibility = await resolveNativeVisibility();
@@ -97,6 +106,25 @@ export async function showDesktopMessageNotification(
       route: notification.route ?? "/",
     };
     return await api.sendNotification(payload);
+  } catch {
+    return false;
+  }
+}
+
+export async function closeDesktopNotificationForRow(
+  item: Notification,
+  loadApi: DesktopNotificationApiLoader = loadDesktopNotificationApi,
+): Promise<boolean> {
+  if (!isDesktopApp()) return false;
+  const presentation = desktopPresentation(item);
+  if (!presentation) return false;
+  try {
+    const api = await loadApi();
+    if (!api.removeNotification) return false;
+    return await api.removeNotification({
+      id: stableDesktopNotificationId(presentation.tag),
+      kind: presentation.kind ?? "system",
+    });
   } catch {
     return false;
   }
@@ -124,13 +152,16 @@ export async function registerDesktopNotificationNavigationListener(
   if (!isDesktopApp()) return () => undefined;
   try {
     const api = await loadApi();
-    const listener = await api.onAction((rawRoute) => {
+    const openRoute = (rawRoute: unknown) => {
       const route = safeDesktopRoute(rawRoute);
       if (!route) return;
       void restoreMain()
         .then(() => openTarget(route))
         .catch(() => undefined);
-    });
+    };
+    const listener = await api.onAction(openRoute);
+    const pendingRoute = await api.takePendingRoute?.();
+    if (pendingRoute != null) openRoute(pendingRoute);
     return () => {
       void listener.unregister();
     };

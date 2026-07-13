@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-take-pending-notification-route"
+description = "Enables the desktop_take_pending_notification_route command without any pre-configured scope."
+commands.allow = ["desktop_take_pending_notification_route"]
+
+[[permission]]
+identifier = "deny-desktop-take-pending-notification-route"
+description = "Denies the desktop_take_pending_notification_route command without any pre-configured scope."
+commands.deny = ["desktop_take_pending_notification_route"]

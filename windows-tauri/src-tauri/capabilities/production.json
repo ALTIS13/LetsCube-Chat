@@ -15,7 +15,9 @@
     "allow-desktop-check-update",
     "allow-desktop-install-update",
     "allow-desktop-show-main",
-    "allow-desktop-is-main-visible",
-    "allow-desktop-notify"
+    "allow-desktop-is-main-foreground",
+    "allow-desktop-notify",
+    "allow-desktop-remove-notification",
+    "allow-desktop-take-pending-notification-route"
   ]
 }

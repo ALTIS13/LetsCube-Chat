@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { showDesktopMessageNotification } from "../../artifacts/kub/src/lib/platform/desktopNotifications.ts";
+import {
+  closeDesktopNotificationForRow,
+  showDesktopMessageNotification,
+} from "../../artifacts/kub/src/lib/platform/desktopNotifications.ts";
 import * as desktopNotifications from "../../artifacts/kub/src/lib/platform/desktopNotifications.ts";
 
 type WindowWithDesktopBridge = typeof window & {
@@ -150,7 +153,7 @@ test("desktop notification adapter stays silent while the app window is visible"
   }
 });
 
-test("desktop notification adapter trusts the native hidden-window state over WebView visibility", async () => {
+test("desktop notification adapter trusts the native background-window state over WebView visibility", async () => {
   const previousWindow = installDesktopBridge();
   let sent = false;
 
@@ -165,7 +168,7 @@ test("desktop notification adapter trusts the native hidden-window state over We
       }),
       {
         visibilityState: "visible",
-        isMainVisible: async () => false,
+        isMainForeground: async () => false,
       },
     );
 
@@ -199,6 +202,45 @@ test("desktop notification adapter reports a sanitized native delivery failure",
   }
 });
 
+test("desktop notification adapter removes a read notification by the same stable tag and group", async () => {
+  const previousWindow = installDesktopBridge();
+  const removed: Array<Record<string, unknown>> = [];
+  try {
+    const row = {
+      id: "notification-1",
+      user_id: "user-2",
+      kind: "message",
+      read_at: "2026-07-13T18:05:00.000Z",
+      created_at: "2026-07-13T18:00:00.000Z",
+      payload: {
+        chat_id: "chat-1",
+        message_id: "message-1",
+        chat_type: "private",
+        sender_name: "Никита",
+        preview: "Привет",
+      },
+    };
+
+    const removedNative = await closeDesktopNotificationForRow(
+      row,
+      async () => ({
+        sendNotification: async () => true,
+        removeNotification: async (notification) => {
+          removed.push(notification);
+          return true;
+        },
+      }),
+    );
+
+    assert.equal(removedNative, true);
+    assert.equal(removed.length, 1);
+    assert.equal(Number.isInteger(removed[0]?.id), true);
+    assert.equal(removed[0]?.kind, "message");
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
 test("Windows settings copy describes tray delivery without claiming killed-process push", () => {
   const source = readFileSync(
     new URL("../../artifacts/kub/src/hooks/usePush.ts", import.meta.url),
@@ -226,9 +268,11 @@ test("desktop notification delivery is owned by Notification Center realtime, no
   );
 
   assert.match(notificationHook, /showDesktopNotificationForRow/);
-  assert.match(notificationHook, /isDesktopApp\(\)[\s\S]*showDesktopNotificationForRow/);
+  assert.match(notificationHook, /isDesktopApp\(\)[\s\S]*presentDesktopNotification/);
   assert.match(notificationHook, /desktopBaselineLoadedRef/);
   assert.match(notificationHook, /refresh\(\{ presentNewDesktop: true \}\)/);
+  assert.match(notificationHook, /closeDesktopNotificationForRow/);
+  assert.match(notificationHook, /presentedDesktopIdsRef\.current\.delete/);
   assert.doesNotMatch(messagesHook, /showDesktopMessageNotification/);
 });
 
@@ -241,6 +285,7 @@ test("desktop notification action restores the main window before opening a safe
           onAction: (callback: (route: unknown) => void) => Promise<{
             unregister(): Promise<void>;
           }>;
+          takePendingRoute?: () => Promise<unknown>;
         }>,
         restoreMain: () => Promise<void>,
       ) => Promise<() => void>;
@@ -264,20 +309,34 @@ test("desktop notification action restores the main window before opening a safe
             },
           };
         },
+        takePendingRoute: async () => "/tasks?task=pending-task",
       }),
       async () => {
         events.push("restore");
       },
     );
 
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(events, ["restore", "open:/tasks?task=pending-task"]);
+
     action?.("/?chat=chat-1&message=message-1");
     await new Promise((resolve) => setTimeout(resolve, 0));
-    assert.deepEqual(events, ["restore", "open:/?chat=chat-1&message=message-1"]);
+    assert.deepEqual(events, [
+      "restore",
+      "open:/tasks?task=pending-task",
+      "restore",
+      "open:/?chat=chat-1&message=message-1",
+    ]);
 
     action?.("https://evil.example/chat");
     action?.("//evil.example/chat");
     await new Promise((resolve) => setTimeout(resolve, 0));
-    assert.deepEqual(events, ["restore", "open:/?chat=chat-1&message=message-1"]);
+    assert.deepEqual(events, [
+      "restore",
+      "open:/tasks?task=pending-task",
+      "restore",
+      "open:/?chat=chat-1&message=message-1",
+    ]);
 
     cleanup();
     await new Promise((resolve) => setTimeout(resolve, 0));

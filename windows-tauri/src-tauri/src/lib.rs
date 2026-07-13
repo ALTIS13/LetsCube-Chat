@@ -40,6 +40,8 @@ static QA_OFFLINE_FAILURE_EMITTED: AtomicBool = AtomicBool::new(false);
 
 struct StartupController(Mutex<StartupState>);
 
+struct PendingNotificationRoute(Mutex<Option<String>>);
+
 struct NativeUpdateState {
     state: DesktopUpdateState,
     pending: Option<Update>,
@@ -58,6 +60,13 @@ struct DesktopNotificationRequest {
     body: String,
     kind: String,
     route: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct DesktopNotificationIdentity {
+    id: u32,
+    kind: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -208,8 +217,10 @@ fn desktop_bridge_script() -> String {
     checkUpdate: async () => call("desktop_check_update"),
     installUpdate: async () => call("desktop_install_update"),
     showMain: async () => call("desktop_show_main"),
-    isMainVisible: async () => call("desktop_is_main_visible"),
-    notify: async (notification) => call("desktop_notify", {{ notification }})
+    isMainForeground: async () => call("desktop_is_main_foreground"),
+    notify: async (notification) => call("desktop_notify", {{ notification }}),
+    removeNotification: async (notification) => call("desktop_remove_notification", {{ notification }}),
+    takePendingNotificationRoute: async () => call("desktop_take_pending_notification_route")
   }});
   Object.defineProperty(window, "letscubeDesktop", {{
     configurable: false,
@@ -298,9 +309,18 @@ fn desktop_show_main(window: WebviewWindow) -> Result<(), &'static str> {
 }
 
 #[tauri::command]
-fn desktop_is_main_visible(window: WebviewWindow) -> Result<bool, &'static str> {
+fn desktop_is_main_foreground(window: WebviewWindow) -> Result<bool, &'static str> {
     require_production_main(&window)?;
-    window.is_visible().map_err(|_| "window_state_unavailable")
+    let visible = window
+        .is_visible()
+        .map_err(|_| "window_state_unavailable")?;
+    let minimized = window
+        .is_minimized()
+        .map_err(|_| "window_state_unavailable")?;
+    let focused = window
+        .is_focused()
+        .map_err(|_| "window_state_unavailable")?;
+    Ok(visible && !minimized && focused)
 }
 
 fn is_safe_notification_route(route: &str) -> bool {
@@ -348,7 +368,9 @@ fn show_windows_notification(
     use windows::core::HSTRING;
     use windows::Data::Xml::Dom::XmlDocument;
     use windows::Foundation::TypedEventHandler;
-    use windows::UI::Notifications::{ToastNotification, ToastNotificationManager};
+    use windows::UI::Notifications::{
+        NotificationSetting, ToastNotification, ToastNotificationManager,
+    };
 
     let group = notification_group(&notification.kind).ok_or("notification_invalid")?;
     let tag = format!("{:08x}", notification.id);
@@ -371,16 +393,17 @@ fn show_windows_notification(
         .map_err(|_| "notification_unavailable")?;
 
     let action_window = window.clone();
-    let route_json =
-        serde_json::to_string(&notification.route).map_err(|_| "notification_invalid")?;
+    let action_route = notification.route.clone();
     let activated = TypedEventHandler::new(move |_, _| {
+        if let Ok(mut pending_route) = action_window.state::<PendingNotificationRoute>().0.lock() {
+            *pending_route = Some(action_route.clone());
+        }
         let _ = action_window.show();
         let _ = action_window.unminimize();
         let _ = action_window.set_focus();
         let script = format!(
-            "window.dispatchEvent(new CustomEvent({event:?}, {{ detail: {{ route: {route} }} }}));",
+            "window.dispatchEvent(new CustomEvent({event:?}));",
             event = DESKTOP_NOTIFICATION_ACTION_EVENT,
-            route = route_json,
         );
         let _ = action_window.eval(script);
         Ok(())
@@ -392,10 +415,39 @@ fn show_windows_notification(
     let notifier =
         ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(WINDOWS_APP_ID))
             .map_err(|_| "notification_unavailable")?;
+    if notifier.Setting().map_err(|_| "notification_unavailable")? != NotificationSetting::Enabled {
+        return Err("notification_disabled");
+    }
     notifier
         .Show(&toast)
         .map_err(|_| "notification_unavailable")?;
     Ok(())
+}
+
+#[cfg(windows)]
+fn remove_windows_notification(
+    notification: &DesktopNotificationIdentity,
+) -> Result<(), &'static str> {
+    use windows::core::HSTRING;
+    use windows::UI::Notifications::ToastNotificationManager;
+
+    let group = notification_group(&notification.kind).ok_or("notification_invalid")?;
+    let tag = format!("{:08x}", notification.id);
+    let history = ToastNotificationManager::History().map_err(|_| "notification_unavailable")?;
+    history
+        .RemoveGroupedTagWithId(
+            &HSTRING::from(tag),
+            &HSTRING::from(group),
+            &HSTRING::from(WINDOWS_APP_ID),
+        )
+        .map_err(|_| "notification_unavailable")
+}
+
+#[cfg(not(windows))]
+fn remove_windows_notification(
+    _notification: &DesktopNotificationIdentity,
+) -> Result<(), &'static str> {
+    Err("notification_unavailable")
 }
 
 #[cfg(not(windows))]
@@ -422,6 +474,29 @@ fn desktop_notify(
     }
     show_windows_notification(&window, &notification)?;
     Ok(true)
+}
+
+#[tauri::command]
+fn desktop_remove_notification(
+    window: WebviewWindow,
+    notification: DesktopNotificationIdentity,
+) -> Result<bool, &'static str> {
+    require_production_main(&window)?;
+    if notification.id == 0 || notification_group(&notification.kind).is_none() {
+        return Err("notification_invalid");
+    }
+    remove_windows_notification(&notification)?;
+    Ok(true)
+}
+
+#[tauri::command]
+fn desktop_take_pending_notification_route(
+    window: WebviewWindow,
+    pending: State<'_, PendingNotificationRoute>,
+) -> Result<Option<String>, &'static str> {
+    require_production_main(&window)?;
+    let mut route = pending.0.lock().map_err(|_| "notification_unavailable")?;
+    Ok(route.take())
 }
 
 fn restore_startup_surface<R: Runtime>(app: &AppHandle<R>) {
@@ -989,6 +1064,7 @@ fn begin_startup_qa(window: WebviewWindow, app: AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .manage(StartupController(Mutex::new(StartupState::new())))
+        .manage(PendingNotificationRoute(Mutex::new(None)))
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             restore_startup_surface(app);
         }))
@@ -1003,8 +1079,10 @@ pub fn run() {
             desktop_check_update,
             desktop_install_update,
             desktop_show_main,
-            desktop_is_main_visible,
-            desktop_notify
+            desktop_is_main_foreground,
+            desktop_notify,
+            desktop_remove_notification,
+            desktop_take_pending_notification_route
         ])
         .setup(|app| {
             setup_update_controller(app.handle())?;

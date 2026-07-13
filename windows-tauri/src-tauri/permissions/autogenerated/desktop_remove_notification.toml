@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-remove-notification"
+description = "Enables the desktop_remove_notification command without any pre-configured scope."
+commands.allow = ["desktop_remove_notification"]
+
+[[permission]]
+identifier = "deny-desktop-remove-notification"
+description = "Denies the desktop_remove_notification command without any pre-configured scope."
+commands.deny = ["desktop_remove_notification"]

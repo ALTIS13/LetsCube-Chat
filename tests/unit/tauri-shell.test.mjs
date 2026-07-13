@@ -110,8 +110,10 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
     "desktop_check_update",
     "desktop_install_update",
     "desktop_show_main",
-    "desktop_is_main_visible",
+    "desktop_is_main_foreground",
     "desktop_notify",
+    "desktop_remove_notification",
+    "desktop_take_pending_notification_route",
   ]) {
     assert.match(
       buildRs,
@@ -131,13 +133,25 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.match(libRs, /window\.letscubeDesktop/);
   assert.match(libRs, /desktop_show_main/);
   assert.match(libRs, /showMain: async \(\) => call\("desktop_show_main"\)/);
-  assert.match(libRs, /desktop_is_main_visible/);
-  assert.match(libRs, /isMainVisible: async \(\) => call\("desktop_is_main_visible"\)/);
+  assert.match(libRs, /desktop_is_main_foreground/);
+  assert.match(libRs, /isMainForeground: async \(\) => call\("desktop_is_main_foreground"\)/);
   assert.match(libRs, /desktop_notify/);
   assert.match(libRs, /notify: async \(notification\) => call\("desktop_notify"/);
+  assert.match(libRs, /desktop_remove_notification/);
+  assert.match(libRs, /removeNotification: async \(notification\) => call\("desktop_remove_notification"/);
+  assert.match(libRs, /desktop_take_pending_notification_route/);
+  assert.match(libRs, /takePendingNotificationRoute: async \(\) => call\("desktop_take_pending_notification_route"\)/);
   assert.equal(capability.permissions.includes("allow-desktop-show-main"), true);
-  assert.equal(capability.permissions.includes("allow-desktop-is-main-visible"), true);
+  assert.equal(capability.permissions.includes("allow-desktop-is-main-foreground"), true);
   assert.equal(capability.permissions.includes("allow-desktop-notify"), true);
+  assert.equal(capability.permissions.includes("allow-desktop-remove-notification"), true);
+  assert.equal(capability.permissions.includes("allow-desktop-take-pending-notification-route"), true);
+  assert.match(libRs, /window\s*\.is_visible\(\)/);
+  assert.match(libRs, /window\s*\.is_minimized\(\)/);
+  assert.match(libRs, /window\s*\.is_focused\(\)/);
+  assert.match(libRs, /NotificationSetting::Enabled/);
+  assert.match(libRs, /RemoveGroupedTagWithId/);
+  assert.match(libRs, /PendingNotificationRoute/);
   assert.match(libRs, /Object\.freeze/);
   assert.match(libRs, /version:\s*runtimeInfo\.version/);
   assert.match(libRs, /build:\s*runtimeInfo\.build/);
@@ -241,12 +255,14 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
       "allow-desktop-get-update-channel",
       "allow-desktop-get-update-state",
       "allow-desktop-install-update",
-      "allow-desktop-is-main-visible",
+      "allow-desktop-is-main-foreground",
       "allow-desktop-notify",
+      "allow-desktop-remove-notification",
       "allow-desktop-set-update-channel",
       "allow-desktop-show-main",
+      "allow-desktop-take-pending-notification-route",
     ],
-    "remote production origin must receive only the eight guarded desktop commands",
+    "remote production origin must receive only the ten guarded desktop commands",
   );
   assert.deepEqual(startupCapability.permissions.sort(), ["allow-begin-startup-qa", "allow-retry-main"]);
 });

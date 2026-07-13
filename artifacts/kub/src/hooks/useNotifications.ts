@@ -14,7 +14,10 @@ import {
   updateBrowserAppBadge,
 } from "@/lib/browserNotificationPresentation";
 import { isDesktopApp } from "@/lib/platform/desktop";
-import { showDesktopNotificationForRow } from "@/lib/platform/desktopNotifications";
+import {
+  closeDesktopNotificationForRow,
+  showDesktopNotificationForRow,
+} from "@/lib/platform/desktopNotifications";
 import type { Notification } from "@/types/database";
 
 const PAGE_SIZE = 30;
@@ -60,6 +63,13 @@ export function useNotifications() {
   const unreadPresentationTagsRef = useRef<Map<string, string>>(new Map());
   const presentedDesktopIdsRef = useRef<Set<string>>(new Set());
   const desktopBaselineLoadedRef = useRef(false);
+
+  const presentDesktopNotification = useCallback((row: Notification) => {
+    presentedDesktopIdsRef.current.add(row.id);
+    void showDesktopNotificationForRow(row).then((delivered) => {
+      if (!delivered) presentedDesktopIdsRef.current.delete(row.id);
+    });
+  }, []);
 
   const markReadIds = useCallback(async (ids: string[], options: { silent?: boolean } = {}) => {
     const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
@@ -134,13 +144,12 @@ export function useNotifications() {
       } else if (options.presentNewDesktop) {
         for (const row of nextRows) {
           if (row.read_at || presentedDesktopIdsRef.current.has(row.id)) continue;
-          presentedDesktopIdsRef.current.add(row.id);
-          void showDesktopNotificationForRow(row);
+          presentDesktopNotification(row);
         }
       }
     }
     setItems((prev) => filterRowsForDisplay(mergeRows(prev, nextRows), userId, mutedChatIds));
-  }, [userId, supabase, normalizeRowsForDisplay, mutedChatIds]);
+  }, [userId, supabase, normalizeRowsForDisplay, mutedChatIds, presentDesktopNotification]);
 
   useEffect(() => {
     if (!userId) {
@@ -177,8 +186,7 @@ export function useNotifications() {
           if (isMutedNotification(row, mutedChatIds)) return;
           setItems((prev) => mergeRows(prev, [row]));
           if (isDesktopApp() && !row.read_at && !presentedDesktopIdsRef.current.has(row.id)) {
-            presentedDesktopIdsRef.current.add(row.id);
-            void showDesktopNotificationForRow(row);
+            presentDesktopNotification(row);
           }
         },
       )
@@ -201,7 +209,7 @@ export function useNotifications() {
       supabase.removeChannel(ch);
       unregisterChannel(channelName);
     };
-  }, [userId, supabase, mutedChatIds, refresh]);
+  }, [userId, supabase, mutedChatIds, refresh, presentDesktopNotification]);
 
   useEffect(() => {
     setItems((prev) => normalizeRowsForDisplay(prev));
@@ -225,6 +233,7 @@ export function useNotifications() {
       const previousTag = previousUnread.get(item.id);
       if (previousTag && !currentUnreadTagCounts.has(previousTag)) {
         void closeBrowserNotification(previousTag);
+        void closeDesktopNotificationForRow(item);
       }
     }
     unreadPresentationTagsRef.current = currentUnread;

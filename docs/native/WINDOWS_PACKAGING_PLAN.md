@@ -112,16 +112,20 @@ Supabase Auth redirect URLs must be reviewed when that stage starts.
 Browser Web Push does not become killed-process Windows push automatically.
 While the Tauri process/tray is running, the global in-app notification
 Realtime stream presents native Windows notifications when the main window is
-hidden. Native visibility comes from the exact-origin Rust bridge because
-WebView2 keeps `document.visibilityState` visible after `window.hide()`. The
+hidden or backgrounded. Native foreground state comes from the exact-origin
+Rust bridge because WebView2 keeps `document.visibilityState` visible after
+`window.hide()`. A window is foreground only while visible, focused and not
+minimized. The
 guarded `desktop_notify` command writes a bounded Windows toast with a stable
 hashed tag per chat and separate `messages`, `tasks` and `system` groups. The
 generic desktop backend of `@tauri-apps/plugin-notification` is not used because
 it drops id/group/action data on Windows. Initial unread rows form a silent
 baseline, while reconnect/online refresh presents only rows missed after that
-baseline. A notification action accepts only a relative same-app route,
-restores the origin-guarded main window and reuses the authenticated in-app
-navigation queue. Killed-process delivery still needs a separate WNS
+baseline. Notification policy is checked before submission. Read-sync removes
+the matching `tag/group` from native Windows history. A notification action
+accepts only a relative same-app route, stores it in native state until the
+frontend listener consumes it, restores the origin-guarded main window and
+reuses the authenticated in-app navigation queue. Killed-process delivery still needs a separate WNS
 device-token/backend design and is not claimed.
 
 ## Release catalog
