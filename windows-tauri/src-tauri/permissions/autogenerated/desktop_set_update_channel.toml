@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-set-update-channel"
+description = "Enables the desktop_set_update_channel command without any pre-configured scope."
+commands.allow = ["desktop_set_update_channel"]
+
+[[permission]]
+identifier = "deny-desktop-set-update-channel"
+description = "Denies the desktop_set_update_channel command without any pre-configured scope."
+commands.deny = ["desktop_set_update_channel"]

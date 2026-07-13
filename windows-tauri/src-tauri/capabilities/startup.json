@@ -5,5 +5,8 @@
   "local": true,
   "windows": ["main"],
   "platforms": ["windows"],
-  "permissions": []
+  "permissions": [
+    "allow-retry-main",
+    "allow-begin-startup-qa"
+  ]
 }
