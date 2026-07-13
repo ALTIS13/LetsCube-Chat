@@ -19,6 +19,8 @@ real values.
 | `SMS_PROVIDER_SECRET` | Phone OTP | Supabase runtime env | Never | Provider-specific |
 | `VITE_SENTRY_DSN` | Frontend monitoring | Coolify env | No values | Optional, postponed |
 | Code signing keys | Native release | Password manager/CI secret | Never | Android/iOS/Windows |
+| `TAURI_SIGNING_PRIVATE_KEY` | Tauri Windows updater artifact signing | Local encrypted release host or dedicated secret manager | Never | Private updater identity; never available to publisher, frontend or Coolify public env |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Unlock Tauri updater signing key | Password manager or protected release-host process environment | Never | Inject only for the bounded signing process; never pass as a publisher argument |
 
 ## Rules
 
@@ -28,3 +30,5 @@ real values.
   dedicated secret manager.
 - Rotate secrets after any suspected exposure.
 - Do not paste secrets into tickets, docs, screenshots, or logs.
+- The release catalog publisher consumes only the already-signed updater bundle
+  and public `.sig` sidecar. It must not receive signing key/password values.

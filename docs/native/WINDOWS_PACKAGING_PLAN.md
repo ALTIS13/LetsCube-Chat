@@ -66,10 +66,35 @@ never import the old Electron profile.
 ## Signing and update boundary
 
 The internal installer is unsigned. Windows SmartScreen can warn until a
-trusted Authenticode certificate is configured. Public auto-update remains a
-later gate because it also needs a separate Tauri updater key, signed updater
-artifacts and compatible signed metadata. Neither signing secret belongs in
-Git or in the remote web bundle.
+trusted Authenticode certificate is configured. Tauri updater signing is a
+separate trust boundary: release builds produce a signed `.nsis.zip` bundle and
+its `.sig`, while the matching public verification key is embedded in the
+desktop client. Neither the Tauri signing private key/password nor an
+Authenticode secret belongs in Git, documentation, Coolify public variables or
+the remote web bundle.
+
+The publisher keeps the existing download-catalog interface intact:
+
+```text
+publish-native-release.sh PLATFORM CHANNEL VERSION BUILD ARTIFACT [NOTES]
+```
+
+Signed Windows updater publication uses an explicit channel and consumes only
+already-built artifacts:
+
+```text
+publish-native-release.sh windows VERSION INSTALLER NOTES \
+  --channel stable|test \
+  --updater-artifact SIGNED_BUNDLE.nsis.zip \
+  --signature-file SIGNED_BUNDLE.nsis.zip.sig
+```
+
+The script never signs a bundle and never reads the updater private key. It
+copies the signed bundle and signature to the immutable version path, verifies
+their exact bytes on later promotion, calculates SHA-256, then atomically
+renames the selected channel manifest. Publish to `test` first; promote to
+`stable` by running the same command with the same immutable bundle and
+signature. Any byte difference for an existing version is rejected.
 
 ## Deep links
 
@@ -94,6 +119,19 @@ separate Windows push token/backend design and is not claimed.
 `https://api.letscube.ru/releases/v1/windows/stable.json` exposes the verified
 internal `0.2.0` build `4` Tauri NSIS artifact. Artifacts remain immutable under
 `https://api.letscube.ru/releases/files/windows/`.
+
+The signed native updater uses separate manifests and does not replace that
+download catalog:
+
+- `https://api.letscube.ru/releases/updater/v1/windows/stable.json` is the
+  default production channel;
+- `https://api.letscube.ru/releases/updater/v1/windows/test.json` is opt-in;
+- updater bundles are immutable under
+  `https://api.letscube.ru/releases/updater/files/windows/VERSION/`.
+
+Channel manifests are served with `no-store`; immutable bundles use a one-year
+cache lifetime. Only `GET` and `HEAD` are accepted. The release host blocks
+directory listing, dotfiles, traversal forms and all unlisted updater paths.
 
 ## Packaging QA
 

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -115,6 +116,19 @@ test("getReleaseManifestUrl uses the fixed release catalog path", () => {
     getReleaseManifestUrl("windows", "stable"),
     "https://api.letscube.ru/releases/v1/windows/stable.json",
   );
+});
+
+test("Windows native updater endpoints are exact channel manifests", () => {
+  const updaterSource = readFileSync("windows-tauri/src-tauri/src/updater.rs", "utf8");
+  assert.match(
+    updaterSource,
+    /https:\/\/api\.letscube\.ru\/releases\/updater\/v1\/windows\/stable\.json/,
+  );
+  assert.match(
+    updaterSource,
+    /https:\/\/api\.letscube\.ru\/releases\/updater\/v1\/windows\/test\.json/,
+  );
+  assert.doesNotMatch(updaterSource, /releases\/updater\/v1\/windows\/\$\{|custom_endpoint/);
 });
 
 test("release client reuses a fresh six-hour cache", async () => {
