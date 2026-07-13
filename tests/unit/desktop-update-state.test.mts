@@ -395,3 +395,42 @@ test("stale initial idle check replaces the one-second timer with one six-hour t
   assert.equal(store.getSnapshot().snapshot?.phase, "current");
   release();
 });
+
+test("channel change replaces its early idle timer from the completed check timestamp", async () => {
+  const sixHours = 6 * 60 * 60 * 1_000;
+  const scheduled: Array<{ token: number; milliseconds: number }> = [];
+  const cancelled = new Set<number>();
+  let nextToken = 0;
+  const available = {
+    ...BASE_SNAPSHOT,
+    phase: "available",
+    availableVersion: "0.2.1",
+  } as const;
+  const store = createDesktopUpdateStore({
+    isActive: () => true,
+    installedVersion: () => "0.2.0",
+    now: () => sixHours + 10_000,
+    read: async () => available,
+    check: async () => ({ ...BASE_SNAPSHOT, channel: "test", phase: "current" }),
+    install: async () => available,
+    setChannel: async () => ({ ...BASE_SNAPSHOT, channel: "test", phase: "idle" }),
+    scheduleTimeout: (_callback, milliseconds) => {
+      nextToken += 1;
+      scheduled.push({ token: nextToken, milliseconds });
+      return nextToken;
+    },
+    cancelTimeout: (token) => {
+      cancelled.add(token as number);
+    },
+  });
+
+  const release = store.acquire();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await store.setChannel("test");
+
+  const activeTimers = scheduled.filter(({ token }) => !cancelled.has(token));
+  assert.deepEqual(activeTimers, [{ token: 2, milliseconds: sixHours }]);
+  assert.equal(store.getSnapshot().snapshot?.channel, "test");
+  assert.equal(store.getSnapshot().snapshot?.phase, "current");
+  release();
+});

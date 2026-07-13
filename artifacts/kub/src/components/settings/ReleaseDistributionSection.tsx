@@ -42,6 +42,7 @@ export function ReleaseDistributionSection() {
   const windowsNative = target === "windows_native";
 
   const selectDesktopChannel = (channel: "stable" | "test") => {
+    if (channel === "stable") setConfirmTestChannel(false);
     if (desktopUpdate?.snapshot?.channel === channel) return;
     if (channel === "test") {
       setConfirmTestChannel(true);
@@ -138,6 +139,9 @@ export function ReleaseDistributionSection() {
                       className="desktop-update-channel-control__option"
                       data-active={desktopUpdate.snapshot?.channel === channel ? "true" : "false"}
                       disabled={desktopUpdate.commandPending}
+                      onFocus={() => {
+                        if (channel === "stable") setConfirmTestChannel(false);
+                      }}
                       onClick={() => selectDesktopChannel(channel)}
                       onKeyDown={(event) => handleDesktopChannelKeyDown(event, channel)}
                     >

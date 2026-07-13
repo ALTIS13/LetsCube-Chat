@@ -403,18 +403,20 @@ export function createDesktopUpdateStore(dependencies: DesktopUpdateStoreDepende
     }
   };
 
-  const check = () => {
+  const runCheckCommand = async () => {
+    const result = await dependencies.check();
     lastAutomaticCheckAt = now();
     clearIdleCheck();
-    return run("check", dependencies.check);
+    return result;
   };
+
+  const check = () => run("check", runCheckCommand);
 
   const install = () => run("install", dependencies.install);
 
   const setChannel = (channel: DesktopUpdateChannel) => run("channel", async () => {
     accept(await dependencies.setChannel(channel));
-    lastAutomaticCheckAt = now();
-    return dependencies.check();
+    return runCheckCommand();
   });
 
   const handleFocus = async () => {

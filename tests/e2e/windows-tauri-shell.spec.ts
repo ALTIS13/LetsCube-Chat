@@ -405,6 +405,15 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       await expect(confirmation).toBeVisible();
       await expect(confirmation.getByText(/могут быть нестабильными/i)).toBeVisible();
       await expect.poll(() => page.evaluate(() => Reflect.get(window, "__getQaDesktopUpdateCalls")())).toEqual([]);
+      await page.keyboard.press("ArrowLeft");
+      await expect(stableChannel).toBeFocused();
+      await expect(confirmation).toHaveCount(0);
+      await expect(stableChannel).toHaveAttribute("aria-checked", "true");
+      await expect(testChannel).toHaveAttribute("aria-checked", "false");
+      await expect.poll(() => page.evaluate(() => Reflect.get(window, "__getQaDesktopUpdateCalls")())).toEqual([]);
+      await page.keyboard.press("ArrowRight");
+      await expect(testChannel).toBeFocused();
+      await expect(confirmation).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath("desktop-update-settings.png") });
       await confirmation.getByRole("button", { name: "Перейти" }).click();
       await expect(confirmation).toHaveCount(0);
