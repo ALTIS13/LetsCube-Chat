@@ -20,7 +20,8 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       const pages = browser.contexts().flatMap((context) => context.pages());
       expect(pages, "startup must expose exactly one native WebView page").toHaveLength(1);
       const page = pages[0];
-      expect(new URL(page.url()).pathname).toMatch(/\/startup\.html$/);
+      await page.waitForURL("http://tauri.localhost/startup.html");
+      expect(page.url()).toBe("http://tauri.localhost/startup.html");
       await expect(page).toHaveTitle("LETSCUBE");
       await expect(page.getByTestId("startup-client-fingerprint")).toBeVisible();
       await expect(page.getByTestId("startup-server-fingerprint")).toBeVisible();
@@ -61,6 +62,32 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       });
       expect(browser.contexts().flatMap((context) => context.pages())).toHaveLength(1);
       expect(new URL(page.url()).origin).toBe(PRODUCTION_ORIGIN);
+      const productionOverlay = page.getByTestId("production-startup-overlay");
+      await expect(productionOverlay).toBeVisible();
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            Reflect.get(window, "__letscubeStartupOverlayHistory") as Array<{
+              stage: string;
+              connected: boolean;
+              sealConnected: boolean;
+              removed?: boolean;
+            }>,
+          ),
+        )
+        .toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              stage: "complete",
+              connected: true,
+              sealConnected: true,
+            }),
+          ]),
+        );
+      await expect(productionOverlay).toHaveCount(0, { timeout: 2_000 });
+      await expect
+        .poll(() => page.evaluate(() => Reflect.get(window, "__letscubeStartupOverlayHistory")))
+        .toEqual(expect.arrayContaining([expect.objectContaining({ removed: true })]));
       expect(startupStages).toEqual(
         expect.arrayContaining([
           "boot",
@@ -105,6 +132,7 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
 
       await page.reload({ waitUntil: "domcontentloaded" });
       await expect(page).toHaveTitle("LETSCUBE");
+      await expect(page.getByTestId("production-startup-overlay")).toHaveCount(0);
       await expect(page.locator('input[type="password"]')).toHaveCount(1);
       await expect
         .poll(() =>

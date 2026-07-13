@@ -1,6 +1,7 @@
 pub mod startup;
 pub mod updater;
 
+use std::future::Future;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -18,6 +19,7 @@ use updater::{update_endpoint, UpdateChannel};
 
 const PRODUCTION_ORIGIN: &str = "https://app.letscube.ru";
 const PRODUCTION_URL: &str = "https://app.letscube.ru/";
+const BUNDLED_STARTUP_URL: &str = "http://tauri.localhost/startup.html";
 const PRODUCTION_PROFILE: &str = "webview-production-v1";
 const STARTUP_EVENT: &str = "letscube://startup-state";
 const DESKTOP_BUILD: &str = env!("LETSCUBE_DESKTOP_BUILD");
@@ -26,14 +28,18 @@ static PREFLIGHT_RUNNING: AtomicBool = AtomicBool::new(false);
 
 struct StartupController(Mutex<StartupState>);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PreflightEntry {
+    RunHttps,
+    Reject,
+}
+
 fn is_allowed_navigation(url: &Url) -> bool {
     url.scheme() == "https" && url.origin().ascii_serialization() == PRODUCTION_ORIGIN
 }
 
 fn is_local_startup_url(url: &Url) -> bool {
-    matches!(url.scheme(), "tauri" | "http" | "https")
-        && matches!(url.host_str(), Some("localhost" | "tauri.localhost"))
-        && url.path().ends_with("/startup.html")
+    url.as_str() == BUNDLED_STARTUP_URL
 }
 
 fn is_safe_external_url(url: &Url) -> bool {
@@ -109,6 +115,36 @@ fn desktop_bridge_script() -> String {
         origin = PRODUCTION_ORIGIN,
         version = env!("CARGO_PKG_VERSION"),
         build = DESKTOP_BUILD,
+    )
+}
+
+fn production_overlay_script() -> String {
+    include_str!("../../ui/startup-overlay.js")
+        .replace(
+            "__LETSCUBE_PRODUCTION_ORIGIN__",
+            &serde_json::to_string(PRODUCTION_ORIGIN).expect("production origin serializes"),
+        )
+        .replace(
+            "__LETSCUBE_STARTUP_EVENT__",
+            &serde_json::to_string(STARTUP_EVENT).expect("startup event serializes"),
+        )
+        .replace(
+            "__LETSCUBE_OVERLAY_CSS__",
+            &serde_json::to_string(include_str!("../../ui/startup-overlay.css"))
+                .expect("overlay CSS serializes"),
+        )
+        .replace(
+            "__LETSCUBE_OVERLAY_HTML__",
+            &serde_json::to_string(include_str!("../../ui/startup-overlay.html"))
+                .expect("overlay HTML serializes"),
+        )
+}
+
+fn initialization_script() -> String {
+    format!(
+        "{}\n{}",
+        desktop_bridge_script(),
+        production_overlay_script()
     )
 }
 
@@ -193,6 +229,43 @@ fn transition_startup<R: Runtime>(app: &AppHandle<R>, next: StartupStage) -> boo
     transitioned
 }
 
+fn enter_preflight(state: &mut StartupState) -> PreflightEntry {
+    match state.snapshot().stage {
+        StartupStage::Boot => match state.transition(StartupStage::NetworkCheck) {
+            Ok(()) => PreflightEntry::RunHttps,
+            Err(_) => PreflightEntry::Reject,
+        },
+        StartupStage::NetworkCheck => PreflightEntry::RunHttps,
+        _ => PreflightEntry::Reject,
+    }
+}
+
+fn prepare_preflight<R: Runtime>(app: &AppHandle<R>) -> PreflightEntry {
+    let entry = app
+        .state::<StartupController>()
+        .0
+        .lock()
+        .ok()
+        .map_or(PreflightEntry::Reject, |mut state| {
+            enter_preflight(&mut state)
+        });
+    if entry == PreflightEntry::RunHttps {
+        emit_startup_snapshot(app);
+    }
+    entry
+}
+
+async fn launch_https_path<T, F, Fut>(entry: PreflightEntry, request: F) -> Option<T>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = T>,
+{
+    if entry != PreflightEntry::RunHttps {
+        return None;
+    }
+    Some(request().await)
+}
+
 fn fail_startup<R: Runtime>(app: &AppHandle<R>, error: StartupErrorCode) {
     if let Ok(mut state) = app.state::<StartupController>().0.lock() {
         let _ = state.fail(error);
@@ -222,7 +295,8 @@ async fn run_preflight<R: Runtime>(app: AppHandle<R>) {
         return;
     }
 
-    if !transition_startup(&app, StartupStage::NetworkCheck) {
+    let entry = prepare_preflight(&app);
+    if entry != PreflightEntry::RunHttps {
         PREFLIGHT_RUNNING.store(false, Ordering::Release);
         return;
     }
@@ -250,12 +324,13 @@ async fn run_preflight<R: Runtime>(app: AppHandle<R>) {
         return;
     }
 
-    let response = match client.get(PRODUCTION_URL).send().await {
-        Ok(response) => response,
-        Err(error) => {
+    let response = match launch_https_path(entry, || client.get(PRODUCTION_URL).send()).await {
+        Some(Ok(response)) => response,
+        Some(Err(error)) => {
             fail_startup(&app, classify_request_error(&error));
             return;
         }
+        None => return,
     };
     if !response.status().is_success()
         || response.status().is_redirection()
@@ -308,7 +383,7 @@ fn build_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 
     let mut builder = WebviewWindowBuilder::from_config(app, &config)?
         .data_directory(profile_dir)
-        .initialization_script(desktop_bridge_script());
+        .initialization_script(initialization_script());
 
     if let Some(args) = debug_browser_args() {
         builder = builder.additional_browser_args(&args);
@@ -452,8 +527,39 @@ mod tests {
             &Url::parse("http://tauri.localhost/startup.html").unwrap()
         ));
         assert!(!is_local_startup_url(
-            &Url::parse("http://tauri.localhost/admin.html").unwrap()
+            &Url::parse("http://localhost:4317/startup.html").unwrap()
         ));
+        assert!(!is_local_startup_url(
+            &Url::parse("http://tauri.localhost/nested/startup.html").unwrap()
+        ));
+        assert!(!is_local_startup_url(
+            &Url::parse("https://tauri.localhost/startup.html").unwrap()
+        ));
+        assert!(!is_local_startup_url(
+            &Url::parse("http://tauri.localhost/startup.html?retry=1").unwrap()
+        ));
+    }
+
+    #[test]
+    fn retry_entry_continues_into_the_https_preflight_path() {
+        use std::sync::atomic::AtomicUsize;
+
+        let mut state = StartupState::new();
+        state.transition(StartupStage::NetworkCheck).unwrap();
+        state.fail(StartupErrorCode::Network).unwrap();
+        state.retry().unwrap();
+
+        let entry = enter_preflight(&mut state);
+        assert_eq!(entry, PreflightEntry::RunHttps);
+        assert_eq!(state.snapshot().stage, StartupStage::NetworkCheck);
+
+        let launches = AtomicUsize::new(0);
+        let result = tauri::async_runtime::block_on(launch_https_path(entry, || async {
+            launches.fetch_add(1, Ordering::SeqCst);
+            "https-request-started"
+        }));
+        assert_eq!(result, Some("https-request-started"));
+        assert_eq!(launches.load(Ordering::SeqCst), 1);
     }
 
     #[test]
@@ -463,6 +569,21 @@ mod tests {
         assert!(script.contains("Object.freeze"));
         assert!(!script.to_ascii_lowercase().contains("service_role"));
         assert!(!script.to_ascii_lowercase().contains("supabase_key"));
+    }
+
+    #[test]
+    fn production_overlay_is_origin_guarded_and_records_connected_fade_lifecycle() {
+        let script = production_overlay_script();
+        assert!(script.contains(PRODUCTION_ORIGIN));
+        assert!(script.contains("window.location.origin"));
+        assert!(script.contains("production-startup-overlay"));
+        assert!(script.contains("letscube://startup-state"));
+        assert!(script.contains("__letscubeStartupOverlayHistory"));
+        assert!(script.contains("sessionStorage"));
+        assert!(script.contains("letscube:startup-overlay-complete"));
+        assert!(script.contains("is-connected"));
+        assert!(script.contains("320"));
+        assert!(!script.contains("service_role"));
     }
 
     #[test]

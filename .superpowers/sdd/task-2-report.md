@@ -97,3 +97,79 @@ Screenshots:
 - Cargo emits the repository's existing debug PDB output-filename collision and localized linker informational warnings; tests/build still exit successfully.
 - A same-WebView navigation replaces the bundled startup document before `WorkspaceReady/Complete` can be rendered there. Therefore the local scene reaches full rails at `production_navigation`, while the exact-origin `PageLoadEvent::Finished` transition is recorded natively after the production document replaces it. A true 250-400 ms post-load local-layer fade/green-seal reveal would require a production-page/native overlay contract beyond Task 2 and would conflict with the stated one-WebView/local-document transition model.
 - Offline/TLS retry UI is covered by state/unit contracts and production code paths, but Task 2 intentionally adds no physical failure injection; those physical error scenarios remain for the later failure-injection task.
+
+## Review Fixes
+
+Date: 2026-07-13
+
+### Review Notification: Full Findings List
+
+1. **Retry preflight entry:** `StartupState::retry()` already moved `RecoverableError` to `NetworkCheck`, but `run_preflight()` attempted the same `NetworkCheck` transition again and returned before creating/sending the HTTPS request.
+2. **Local startup guard:** `is_local_startup_url()` accepted broad `http`/`https` localhost and any path ending in `/startup.html`, so the navigation and local-only commands were not restricted to the exact bundled Tauri document.
+3. **Connected seal lifecycle:** the local document was replaced before `WorkspaceReady -> Complete`, leaving no production-origin listener to render the connected green seal and approved 250-400 ms fade in the same WebView.
+
+All three findings are fixed in the follow-up commit described by this appended section.
+
+### Finding 1: Retry And Repeated HTTPS Path
+
+RED:
+
+- Added `retry_entry_continues_into_the_https_preflight_path` against the production-used preflight entry API.
+- `cargo test retry_entry_continues_into_the_https_preflight_path` failed because `enter_preflight` / `PreflightEntry` did not exist.
+- Strengthened the regression with a real async request closure.
+- The focused test failed because `launch_https_path` did not exist.
+
+GREEN:
+
+- `enter_preflight` transitions `Boot -> NetworkCheck`, accepts an already prepared retry `NetworkCheck`, and rejects all other stages.
+- `run_preflight` calls `prepare_preflight`, then uses the same generic `launch_https_path` exercised by the regression for the real `reqwest` send future.
+- The regression executes the request closure exactly once after `fail -> retry` and observes `https-request-started`.
+- `cargo test retry_entry_continues_into_the_https_preflight_path`: 1 passed, 0 failed.
+
+### Finding 2: Exact Bundled Startup Guard
+
+RED:
+
+- Expanded `only_the_bundled_startup_document_is_allowed_before_production` with `http://localhost:4317/startup.html`, nested path, HTTPS scheme, and query-string rejection.
+- The focused test failed on the arbitrary localhost URL, proving the old predicate was broad.
+
+GREEN:
+
+- The single predicate now accepts only `http://tauri.localhost/startup.html` byte-for-byte.
+- `on_navigation`, local page-load handling, `retry_main`, and `begin_startup_qa` all use that same predicate.
+- Physical Playwright waits for and then asserts the exact bundled URL before starting preflight.
+- `cargo test only_the_bundled_startup_document_is_allowed_before_production`: 1 passed, 0 failed.
+
+### Finding 3: Production Connected Overlay
+
+RED:
+
+- Added `production_overlay_is_origin_guarded_and_records_connected_fade_lifecycle`; it failed because `production_overlay_script` did not exist.
+- Added physical assertions requiring a production overlay, a `complete/connected/sealConnected` history entry, removal after fade, and no overlay after production reload.
+- First physical run exposed a reload regression: the overlay remounted after native state was already `Complete` and intercepted login clicks.
+- Added a session completion-marker assertion; the focused Rust test failed because no `sessionStorage` lifecycle marker existed.
+
+GREEN:
+
+- Added bundled `startup-overlay.html`, `startup-overlay.css`, and `startup-overlay.js` templates to the origin-guarded initialization script.
+- Overlay is mounted only when `window.location.origin === https://app.letscube.ru` and uses open Shadow DOM plus a constructable stylesheet, without remote capability changes.
+- The existing Rust state events deliver `WorkspaceReady -> Complete`; the overlay records a safe event history, applies `is-connected`, exposes the green seal, fades for 320 ms, then removes its host.
+- `sessionStorage` marks successful removal so ordinary production reloads do not remount a completed startup overlay.
+- Physical QA observes one page before and after navigation, complete/connected seal history before removal, overlay removal, exact production origin, no overlay after reload, and the authenticated production flow.
+
+### Final Verification Commands
+
+- `node --test tests/unit/tauri-shell.test.mjs`: 5 passed, 0 failed.
+- `cargo fmt --check`: exit 0.
+- `cargo test`: 18 passed, 0 failed.
+- `pnpm.cmd windows:tauri:qa`: 2 passed, 0 failed.
+- Physical QA wrapper cleanup completed: owned Tauri/Playwright processes terminated and the isolated temporary profile was removed.
+- `git diff --check`: exit 0 before report append.
+
+### Review Self-Check
+
+- One configured `main` window and one WebView page remain throughout startup and production navigation.
+- No remote capability, frontend application, SQL, secrets, updater plugin, or Task 3 files changed.
+- The QA hold remains debug/env/local-URL gated and does not inject failures.
+- The earlier concern that a same-WebView transition could not show the post-load connected fade is resolved by the exact-origin initialization overlay; no second window or WebView is created.
+- Existing Cargo PDB/linker informational warnings remain the only known warning.
