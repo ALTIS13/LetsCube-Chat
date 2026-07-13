@@ -86,11 +86,11 @@ test("signed updater publication is atomic, channel-safe and reusable for promot
   const workspace = mkdtempSync(join(tmpdir(), "letscube-updater-"));
   const publicRoot = join(workspace, "public");
   const installer = join(workspace, "LETSCUBE_0.2.1_x64-setup.exe");
-  const updaterArtifact = join(workspace, "LETSCUBE_0.2.1_x64-setup.nsis.zip");
-  const signatureFile = join(workspace, "LETSCUBE_0.2.1_x64-setup.nsis.zip.sig");
+  const updaterArtifact = join(workspace, "LETSCUBE_0.2.1_x64-setup.exe");
+  const signatureFile = join(workspace, "LETSCUBE_0.2.1_x64-setup.exe.sig");
   const updaterBytes = Buffer.from("LETSCUBE signed updater fixture");
   const signature = "RWQ-test-signature-fixture-not-a-private-key";
-  writeFileSync(installer, "LETSCUBE installer fixture");
+  writeFileSync(installer, updaterBytes);
   writeFileSync(updaterArtifact, updaterBytes);
   writeFileSync(signatureFile, `${signature}\n`);
 
@@ -117,7 +117,7 @@ test("signed updater publication is atomic, channel-safe and reusable for promot
   const stablePublish = publish("stable");
   assert.equal(stablePublish.status, 0, stablePublish.stderr);
 
-  const immutableRelative = "releases/updater/files/windows/0.2.1/letscube-0.2.1.nsis.zip";
+  const immutableRelative = "releases/updater/files/windows/0.2.1/letscube-0.2.1-setup.exe";
   const immutablePath = join(publicRoot, immutableRelative);
   assert.deepEqual(readFileSync(immutablePath), updaterBytes);
   const expectedUrl = `https://api.letscube.ru/${immutableRelative.replaceAll("\\", "/")}`;
@@ -145,9 +145,9 @@ test("signed updater publisher rejects invalid channels, empty signatures and im
   const workspace = mkdtempSync(join(tmpdir(), "letscube-updater-invalid-"));
   const publicRoot = join(workspace, "public");
   const installer = join(workspace, "installer.exe");
-  const updaterArtifact = join(workspace, "bundle.nsis.zip");
-  const signatureFile = join(workspace, "bundle.nsis.zip.sig");
-  writeFileSync(installer, "installer");
+  const updaterArtifact = join(workspace, "bundle.exe");
+  const signatureFile = join(workspace, "bundle.exe.sig");
+  writeFileSync(installer, "first updater");
   writeFileSync(updaterArtifact, "first updater");
   writeFileSync(signatureFile, "signature-fixture");
   const base = [publisherPath, "windows", "0.2.1", installer, "Notes"];
@@ -169,6 +169,7 @@ test("signed updater publisher rejects invalid channels, empty signatures and im
   const first = run([...base, "--channel", "test", "--updater-artifact", updaterArtifact, "--signature-file", signatureFile]);
   assert.equal(first.status, 0, first.stderr);
   writeFileSync(updaterArtifact, "different updater bytes");
+  writeFileSync(installer, "different updater bytes");
   const replacement = run([...base, "--channel", "stable", "--updater-artifact", updaterArtifact, "--signature-file", signatureFile]);
   assert.notEqual(replacement.status, 0);
   assert.match(replacement.stderr, /immutable|already exists/i);
@@ -178,11 +179,11 @@ test("signed updater manifest reads the validated immutable signature copy", () 
   const workspace = mkdtempSync(join(tmpdir(), "letscube-updater-signature-copy-"));
   const publicRoot = join(workspace, "public");
   const installer = join(workspace, "installer.exe");
-  const updaterArtifact = join(workspace, "bundle.nsis.zip");
-  const signatureFile = join(workspace, "bundle.nsis.zip.sig");
+  const updaterArtifact = join(workspace, "bundle.exe");
+  const signatureFile = join(workspace, "bundle.exe.sig");
   const sourceSignature = "source-signature-before-copy";
   const immutableSignature = "immutable-signature-after-copy";
-  writeFileSync(installer, "installer");
+  writeFileSync(installer, "updater");
   writeFileSync(updaterArtifact, "updater");
   writeFileSync(signatureFile, `${sourceSignature}\n`);
   const installHook = join(workspace, "install-hook.sh");
@@ -223,7 +224,7 @@ test("signed updater manifest reads the validated immutable signature copy", () 
 
   const immutableSidecar = join(
     publicRoot,
-    "releases/updater/files/windows/0.2.2/letscube-0.2.2.nsis.zip.sig",
+    "releases/updater/files/windows/0.2.2/letscube-0.2.2-setup.exe.sig",
   );
   const manifest = JSON.parse(readFileSync(
     join(publicRoot, "releases/updater/v1/windows/test.json"),
@@ -249,9 +250,9 @@ test("legacy download catalog publisher remains stable-only", () => {
 test("publisher rejects symlinked updater parent and version paths", () => {
   const makeInputs = (workspace) => {
     const installer = join(workspace, "installer.exe");
-    const updaterArtifact = join(workspace, "bundle.nsis.zip");
-    const signatureFile = join(workspace, "bundle.nsis.zip.sig");
-    writeFileSync(installer, "installer");
+    const updaterArtifact = join(workspace, "bundle.exe");
+    const signatureFile = join(workspace, "bundle.exe.sig");
+    writeFileSync(installer, "updater");
     writeFileSync(updaterArtifact, "updater");
     writeFileSync(signatureFile, "signature-fixture");
     return { installer, updaterArtifact, signatureFile };
@@ -293,8 +294,8 @@ test("publisher rejects symlinked updater parent and version paths", () => {
   const externalVersionRoot = join(versionWorkspace, "external-version");
   mkdirSync(versionFilesRoot, { recursive: true });
   mkdirSync(externalVersionRoot, { recursive: true });
-  writeFileSync(join(externalVersionRoot, "letscube-0.2.3.nsis.zip"), "updater");
-  writeFileSync(join(externalVersionRoot, "letscube-0.2.3.nsis.zip.sig"), "signature-fixture");
+  writeFileSync(join(externalVersionRoot, "letscube-0.2.3-setup.exe"), "updater");
+  writeFileSync(join(externalVersionRoot, "letscube-0.2.3-setup.exe.sig"), "signature-fixture");
   symlinkSync(externalVersionRoot, join(versionFilesRoot, "0.2.3"), linkType);
   const versionResult = run(versionPublicRoot, versionInputs);
   assert.notEqual(versionResult.status, 0);

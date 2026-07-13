@@ -67,7 +67,7 @@ never import the old Electron profile.
 
 The internal installer is unsigned. Windows SmartScreen can warn until a
 trusted Authenticode certificate is configured. Tauri updater signing is a
-separate trust boundary: release builds produce a signed `.nsis.zip` bundle and
+separate trust boundary: Tauri 2 release builds reuse the signed NSIS `.exe` installer and
 its `.sig`, while the matching public verification key is embedded in the
 desktop client. Neither the Tauri signing private key/password nor an
 Authenticode secret belongs in Git, documentation, Coolify public variables or
@@ -85,8 +85,8 @@ already-built artifacts:
 ```text
 publish-native-release.sh windows VERSION INSTALLER NOTES \
   --channel stable|test \
-  --updater-artifact SIGNED_BUNDLE.nsis.zip \
-  --signature-file SIGNED_BUNDLE.nsis.zip.sig
+  --updater-artifact LETSCUBE_VERSION_x64-setup.exe \
+  --signature-file LETSCUBE_VERSION_x64-setup.exe.sig
 ```
 
 The script never signs a bundle and never reads the updater private key. It

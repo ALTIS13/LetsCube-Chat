@@ -320,14 +320,16 @@ publish_signed_updater() {
   require_regular_file "$installer" "installer"
   [[ "${installer,,}" == *.exe ]] || fail "installer extension must be .exe"
   require_regular_file "$updater_artifact" "updater artifact"
-  [[ "${updater_artifact,,}" == *.nsis.zip ]] || fail "updater artifact extension must be .nsis.zip"
+  [[ "${updater_artifact,,}" == *.exe ]] || fail "updater artifact extension must be .exe"
   require_regular_file "$signature_file" "signature file"
+  cmp -s -- "$installer" "$updater_artifact" \
+    || fail "installer and updater artifact must contain identical bytes"
   [[ ${#notes} -le 500 ]] || fail "notes exceed 500 characters"
 
   local updater_files_root="$release_root/releases/updater/files/windows"
   local updater_version_root="$updater_files_root/$version"
   local updater_manifest_root="$release_root/releases/updater/v1/windows"
-  local updater_filename="letscube-$version.nsis.zip"
+  local updater_filename="letscube-$version-setup.exe"
   local updater_signature_filename="$updater_filename.sig"
   local updater_target="$updater_version_root/$updater_filename"
   local updater_signature_target="$updater_version_root/$updater_signature_filename"
