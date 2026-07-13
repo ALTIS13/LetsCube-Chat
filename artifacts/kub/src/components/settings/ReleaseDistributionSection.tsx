@@ -87,7 +87,7 @@ export function ReleaseDistributionSection() {
                 </div>
                 <div
                   className="desktop-update-channel-control"
-                  role="group"
+                  role="radiogroup"
                   aria-label="Канал обновлений"
                   data-testid="desktop-update-channel-control"
                 >
@@ -95,6 +95,9 @@ export function ReleaseDistributionSection() {
                     <button
                       key={channel}
                       type="button"
+                      role="radio"
+                      aria-checked={desktopUpdate.snapshot?.channel === channel}
+                      tabIndex={desktopUpdate.snapshot?.channel === channel ? 0 : -1}
                       className="desktop-update-channel-control__option"
                       data-active={desktopUpdate.snapshot?.channel === channel ? "true" : "false"}
                       disabled={desktopUpdate.commandPending}

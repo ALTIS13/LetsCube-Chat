@@ -4,9 +4,12 @@ import test from "node:test";
 import {
   checkDesktopUpdate,
   createDesktopUpdateFailureSnapshot,
+  createDesktopUpdateStore,
   getDesktopUpdatePresentation,
+  installDesktopUpdate,
   readDesktopUpdateSnapshot,
   parseDesktopUpdateSnapshot,
+  setDesktopUpdateChannel,
   type DesktopUpdateSnapshot,
 } from "../../artifacts/kub/src/lib/platform/desktopUpdates.ts";
 
@@ -128,6 +131,18 @@ test("parser enforces phase invariants and stable-only critical state", () => {
     phase: "current",
     availableVersion: "0.2.1",
   }), null);
+  assert.equal(parseDesktopUpdateSnapshot({
+    ...BASE_SNAPSHOT,
+    phase: "available",
+    availableVersion: "0.2.1",
+    mandatory: true,
+  }), null);
+  assert.equal(parseDesktopUpdateSnapshot({
+    ...BASE_SNAPSHOT,
+    phase: "critical_update_required",
+    availableVersion: "0.3.0",
+    mandatory: false,
+  }), null);
 });
 
 test("browser update adapter is inert without the frozen desktop bridge", async () => {
@@ -162,6 +177,7 @@ test("concurrent desktop commands coalesce and parse the bridge result", async (
 
     const first = checkDesktopUpdate();
     const second = checkDesktopUpdate();
+    assert.equal(first, second);
     assert.equal(calls, 1);
     release?.({
       ...BASE_SNAPSHOT,
@@ -170,6 +186,80 @@ test("concurrent desktop commands coalesce and parse the bridge result", async (
     });
     assert.deepEqual(await first, await second);
     assert.equal((await first)?.availableVersion, "0.2.1");
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+test("distinct desktop commands serialize and keep their own results", async () => {
+  const previousWindow = globalThis.window;
+  const events: string[] = [];
+  let releaseCheck: ((value: unknown) => void) | null = null;
+  const pendingCheck = new Promise<unknown>((resolve) => {
+    releaseCheck = resolve;
+  });
+  try {
+    globalThis.window = {
+      letscubeDesktop: {
+        platform: "windows",
+        getRuntimeInfo: async () => ({ platform: "windows", version: "0.2.0", build: 4 }),
+        checkUpdate: async () => {
+          events.push("check");
+          return pendingCheck;
+        },
+        installUpdate: async () => {
+          events.push("install");
+          return {
+            ...BASE_SNAPSHOT,
+            phase: "installing",
+            availableVersion: "0.2.1",
+          };
+        },
+      },
+    } as typeof window;
+
+    const checked = checkDesktopUpdate();
+    const installed = installDesktopUpdate();
+    assert.notEqual(checked, installed);
+    assert.deepEqual(events, ["check"]);
+    releaseCheck?.({
+      ...BASE_SNAPSHOT,
+      phase: "available",
+      availableVersion: "0.2.1",
+    });
+
+    assert.equal((await checked)?.phase, "available");
+    assert.equal((await installed)?.phase, "installing");
+    assert.deepEqual(events, ["check", "install"]);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+test("distinct channel and check commands never alias results", async () => {
+  const previousWindow = globalThis.window;
+  const events: string[] = [];
+  try {
+    globalThis.window = {
+      letscubeDesktop: {
+        platform: "windows",
+        getRuntimeInfo: async () => ({ platform: "windows", version: "0.2.0", build: 4 }),
+        setUpdateChannel: async (channel: "stable" | "test") => {
+          events.push(`set:${channel}`);
+          return { ...BASE_SNAPSHOT, channel, phase: "idle" };
+        },
+        checkUpdate: async () => {
+          events.push("check");
+          return { ...BASE_SNAPSHOT, channel: "test", phase: "current" };
+        },
+      },
+    } as typeof window;
+
+    const selected = setDesktopUpdateChannel("test");
+    const checked = checkDesktopUpdate();
+    assert.equal((await selected)?.phase, "idle");
+    assert.equal((await checked)?.phase, "current");
+    assert.deepEqual(events, ["set:test", "check"]);
   } finally {
     globalThis.window = previousWindow;
   }
@@ -206,4 +296,70 @@ test("native bridge failure has a bounded discoverable fallback state", () => {
     errorCode: "desktop_update_unavailable",
   });
   assert.equal(getDesktopUpdatePresentation(fallback).persistent, true);
+});
+
+test("one external store snapshot notifies every subscriber", async () => {
+  const next = { ...BASE_SNAPSHOT, phase: "available", availableVersion: "0.2.1" } as const;
+  const store = createDesktopUpdateStore({
+    isActive: () => true,
+    installedVersion: () => "0.2.0",
+    read: async () => next,
+    check: async () => next,
+    install: async () => next,
+    setChannel: async () => next,
+  });
+  const observed: unknown[] = [];
+  const unsubscribeA = store.subscribe(() => observed.push(store.getSnapshot()));
+  const unsubscribeB = store.subscribe(() => observed.push(store.getSnapshot()));
+
+  await store.refresh();
+
+  assert.equal(observed.length, 2);
+  assert.equal(observed[0], observed[1]);
+  assert.equal(store.getSnapshot().snapshot?.availableVersion, "0.2.1");
+  unsubscribeA();
+  unsubscribeB();
+});
+
+test("invalid active refresh becomes failed and stops the fast poll", async () => {
+  let reads = 0;
+  let activePolls = 0;
+  let cancelledPolls = 0;
+  const store = createDesktopUpdateStore({
+    isActive: () => true,
+    installedVersion: () => "0.2.0",
+    read: async () => {
+      reads += 1;
+      if (reads === 1) {
+        return {
+          ...BASE_SNAPSHOT,
+          phase: "downloading",
+          availableVersion: "0.2.1",
+          downloadedBytes: 10,
+          totalBytes: 100,
+        };
+      }
+      throw new Error("desktop_update_state_invalid");
+    },
+    check: async () => null,
+    install: async () => null,
+    setChannel: async () => null,
+    scheduleInterval: () => {
+      activePolls += 1;
+      return 7;
+    },
+    cancelInterval: () => {
+      cancelledPolls += 1;
+    },
+  });
+
+  const release = store.acquire();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(store.getSnapshot().snapshot?.phase, "downloading");
+  assert.equal(activePolls, 1);
+  await store.refresh();
+  assert.equal(store.getSnapshot().snapshot?.phase, "failed");
+  assert.equal(store.getSnapshot().snapshot?.errorCode, "desktop_update_unavailable");
+  assert.equal(cancelledPolls, 1);
+  release();
 });

@@ -7,6 +7,7 @@ import { ChatWindow } from "@/components/chat/ChatWindow";
 import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { BottomNav } from "./BottomNav";
 import { DesktopUpdatePill } from "@/components/desktop/DesktopUpdatePill";
+import { useDesktopUpdate } from "@/hooks/useDesktopUpdate";
 import { cn } from "@/lib/utils";
 
 /**
@@ -24,6 +25,8 @@ export function MainLayout() {
   const setSelectedChatId = useAppStore((s) => s.setSelectedChatId);
   const setShowSidebar = useAppStore((s) => s.setShowSidebar);
   const isMobileChatOpen = !!selectedChatId;
+  const desktopUpdate = useDesktopUpdate();
+  const updateBlocking = desktopUpdate?.presentation?.blocking === true;
 
   useEffect(() => {
     const handleResize = () => {
@@ -62,28 +65,35 @@ export function MainLayout() {
   return (
     <div className="flex flex-col h-[100dvh] w-screen overflow-hidden bg-[var(--kub-bg)]">
       <DesktopUpdatePill />
-      <div className="flex flex-1 overflow-hidden">
-        <div
-          className={cn(
-            "h-full flex-shrink-0 flex-col border-r border-[color:var(--kub-border-color)]",
-            "md:flex md:w-[360px] lg:w-[380px] xl:w-[400px]",
-            isMobileChatOpen ? "hidden" : "flex w-full",
-          )}
-        >
-          <Sidebar />
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        data-testid="desktop-app-shell"
+        aria-hidden={updateBlocking ? true : undefined}
+        inert={updateBlocking ? true : undefined}
+      >
+        <div className="flex flex-1 overflow-hidden">
+          <div
+            className={cn(
+              "h-full flex-shrink-0 flex-col border-r border-[color:var(--kub-border-color)]",
+              "md:flex md:w-[360px] lg:w-[380px] xl:w-[400px]",
+              isMobileChatOpen ? "hidden" : "flex w-full",
+            )}
+          >
+            <Sidebar />
+          </div>
+
+          <div
+            className={cn(
+              "flex-1 h-full overflow-hidden",
+              isMobileChatOpen ? "flex" : "hidden md:flex",
+            )}
+          >
+            {selectedChatId ? <ChatWindow chatId={selectedChatId} /> : <WelcomeScreen />}
+          </div>
         </div>
 
-        <div
-          className={cn(
-            "flex-1 h-full overflow-hidden",
-            isMobileChatOpen ? "flex" : "hidden md:flex",
-          )}
-        >
-          {selectedChatId ? <ChatWindow chatId={selectedChatId} /> : <WelcomeScreen />}
-        </div>
+        {!isMobileChatOpen && <BottomNav />}
       </div>
-
-      {!isMobileChatOpen && <BottomNav />}
     </div>
   );
 }

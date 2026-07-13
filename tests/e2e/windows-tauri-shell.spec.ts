@@ -250,6 +250,7 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
     });
     page.on("pageerror", (error) => consoleErrors.push(error.message));
     await page.addInitScript(() => {
+      const updateCalls: string[] = [];
       let updateState = {
         channel: "stable",
         phase: "current",
@@ -269,11 +270,28 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
         getUpdateState: async () => ({ ...updateState }),
         getUpdateChannel: async () => updateState.channel,
         setUpdateChannel: async (channel: "stable" | "test") => {
-          updateState = { ...updateState, channel, phase: "idle" };
+          updateCalls.push(`set:${channel}`);
+          updateState = {
+            ...updateState,
+            channel,
+            phase: "idle",
+            availableVersion: null,
+            downloadedBytes: 0,
+            totalBytes: null,
+            mandatory: false,
+            errorCode: null,
+          };
           return { ...updateState };
         },
-        checkUpdate: async () => ({ ...updateState }),
-        installUpdate: async () => ({ ...updateState }),
+        checkUpdate: async () => {
+          updateCalls.push("check");
+          updateState = { ...updateState, phase: "current" };
+          return { ...updateState };
+        },
+        installUpdate: async () => {
+          updateCalls.push("install");
+          return { ...updateState };
+        },
       });
       Object.defineProperty(window, "letscubeDesktop", {
         configurable: false,
@@ -283,6 +301,10 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       });
       Reflect.set(window, "__setQaDesktopUpdateState", (next: typeof updateState) => {
         updateState = { ...next };
+      });
+      Reflect.set(window, "__getQaDesktopUpdateCalls", () => [...updateCalls]);
+      Reflect.set(window, "__clearQaDesktopUpdateCalls", () => {
+        updateCalls.length = 0;
       });
     });
 
@@ -321,22 +343,72 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       expect(availablePillBox).toBeTruthy();
       expect(availablePillBox!.width).toBeLessThanOrEqual(300);
       expect(availablePillBox!.height).toBeLessThanOrEqual(80);
+      await page.evaluate(() => Reflect.get(window, "__clearQaDesktopUpdateCalls")());
       await page.screenshot({ path: testInfo.outputPath("desktop-update-pill.png") });
+
+      await page.evaluate(() => {
+        const setState = Reflect.get(window, "__setQaDesktopUpdateState") as (value: unknown) => void;
+        setState({
+          channel: "stable",
+          phase: "downloading",
+          installedVersion: "0.2.0",
+          availableVersion: "0.2.1",
+          downloadedBytes: 300_000,
+          totalBytes: 1_200_000,
+          mandatory: false,
+          errorCode: null,
+        });
+        window.dispatchEvent(new Event("focus"));
+      });
+      const progress = pill.getByRole("progressbar");
+      await expect(progress).toHaveAttribute("aria-valuemin", "0");
+      await expect(progress).toHaveAttribute("aria-valuemax", "100");
+      await expect(progress).toHaveAttribute("aria-valuenow", "25");
+
+      await page.evaluate(() => {
+        const setState = Reflect.get(window, "__setQaDesktopUpdateState") as (value: unknown) => void;
+        setState({
+          channel: "stable",
+          phase: "available",
+          installedVersion: "0.2.0",
+          availableVersion: "0.2.1",
+          downloadedBytes: 0,
+          totalBytes: 1_200_000,
+          mandatory: false,
+          errorCode: null,
+        });
+        window.dispatchEvent(new Event("focus"));
+      });
+      await expect(pill).toHaveAttribute("data-phase", "available");
 
       await page.getByRole("button", { name: "Меню" }).click();
       await page.getByRole("button", { name: "Настройки" }).click();
       await expect(page.getByTestId("desktop-update-settings")).toBeVisible();
       await expect(page.getByTestId("release-download-button")).toHaveCount(0);
       const channelControl = page.getByTestId("desktop-update-channel-control");
-      await expect(channelControl.getByRole("button", { name: "Stable" })).toBeVisible();
-      await channelControl.getByRole("button", { name: "Test" }).click();
+      await expect(channelControl).toHaveAttribute("role", "radiogroup");
+      const stableChannel = channelControl.getByRole("radio", { name: "Stable" });
+      const testChannel = channelControl.getByRole("radio", { name: "Test" });
+      await expect(stableChannel).toHaveAttribute("aria-checked", "true");
+      await testChannel.click();
       const confirmation = page.getByTestId("desktop-test-channel-confirmation");
       await expect(confirmation).toBeVisible();
       await expect(confirmation.getByText(/могут быть нестабильными/i)).toBeVisible();
+      await expect.poll(() => page.evaluate(() => Reflect.get(window, "__getQaDesktopUpdateCalls")())).toEqual([]);
       await page.screenshot({ path: testInfo.outputPath("desktop-update-settings.png") });
-      await confirmation.getByRole("button", { name: "Отмена" }).click();
+      await confirmation.getByRole("button", { name: "Перейти" }).click();
       await expect(confirmation).toHaveCount(0);
+      await expect.poll(() => page.evaluate(() => Reflect.get(window, "__getQaDesktopUpdateCalls")())).toEqual([
+        "set:test",
+        "check",
+      ]);
+      await expect(testChannel).toHaveAttribute("aria-checked", "true");
+      await expect(pill).toHaveAttribute("data-channel", "test");
       await page.keyboard.press("Escape");
+
+      const notificationButton = page.getByTestId("notification-bell-button");
+      await notificationButton.focus();
+      await expect(notificationButton).toBeFocused();
 
       await page.evaluate(() => {
         const setState = Reflect.get(window, "__setQaDesktopUpdateState") as (value: unknown) => void;
@@ -353,8 +425,35 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
         window.dispatchEvent(new Event("focus"));
       });
       await expect(page.getByTestId("desktop-critical-update-gate")).toBeVisible();
-      await expect(page.getByTestId("sidebar-brand-strip")).toHaveCount(1);
+      const appShell = page.getByTestId("desktop-app-shell");
+      await expect(appShell).toHaveAttribute("inert", "");
+      await expect(appShell).toHaveAttribute("aria-hidden", "true");
+      const criticalInstall = page.getByTestId("desktop-critical-update-install");
+      await expect(criticalInstall).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(criticalInstall).toBeFocused();
+      await page.keyboard.press("Shift+Tab");
+      await expect(criticalInstall).toBeFocused();
       await page.screenshot({ path: testInfo.outputPath("desktop-critical-update-gate.png") });
+
+      await page.evaluate(() => {
+        const setState = Reflect.get(window, "__setQaDesktopUpdateState") as (value: unknown) => void;
+        setState({
+          channel: "stable",
+          phase: "current",
+          installedVersion: "0.3.0",
+          availableVersion: null,
+          downloadedBytes: 0,
+          totalBytes: null,
+          mandatory: false,
+          errorCode: null,
+        });
+        window.dispatchEvent(new Event("focus"));
+      });
+      await expect(page.getByTestId("desktop-critical-update-gate")).toHaveCount(0);
+      await expect(appShell).not.toHaveAttribute("inert", "");
+      await expect(appShell).not.toHaveAttribute("aria-hidden", "true");
+      await expect(notificationButton).toBeFocused();
       expect(consoleErrors, `Unexpected console errors:\n${consoleErrors.join("\n")}`).toEqual([]);
     } finally {
       await localFrontend.close();
