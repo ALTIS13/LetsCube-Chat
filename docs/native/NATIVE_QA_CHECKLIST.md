@@ -70,8 +70,13 @@ Electron wrapper exist; iOS remains PWA-only.
 
 - `pnpm.cmd windows:tauri:test` passes shell security and distribution contracts.
 - `pnpm.cmd windows:tauri:qa` builds a debug shell, creates an isolated temporary WebView2 profile and runs the production-origin Tauri smoke through a loopback-only CDP endpoint.
+- Tauri QA exercises `success`, `offline`, `catalog_failure`, `normal_update` and `critical_update` in separate fresh profiles, retaining screenshots per scenario.
+- Startup geometry passes at `1920x1080`, `1440x900` and the `960x640` minimum: one WebView, converged fingerprints, center-bounded rails and no endpoint/status/fingerprint overlap.
+- Offline mode presents Retry and then performs one exact-origin handoff; normal-update pill, critical gate and explicit reversible Test-channel opt-in are covered by the native-shell suite.
+- QA cleanup removes every owned client/test process tree and its temporary WebView2 profile on pass, failure or signal.
 - `pnpm.cmd windows:tauri:build:internal` creates the expected x64 NSIS installer.
 - Release builds ignore both `LETSCUBE_WEBVIEW2_DATA_DIR` and `LETSCUBE_WEBVIEW2_DEBUG_PORT`; the QA port exists only in debug builds and never allows wildcard origins.
+- A release executable scan finds no startup-mode env/string, WebView2 debug/CDP hook, service-role secret name or PEM private-key marker.
 - Fresh packaged runtime opens only `https://app.letscube.ru`.
 - The remote production capability exposes notification methods only, with no filesystem, shell, process, updater, generic opener or arbitrary IPC surface.
 - Camera, microphone and geolocation prompts work through the packaged session.

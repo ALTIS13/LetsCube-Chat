@@ -112,7 +112,7 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.match(libRs, /build:\s*runtimeInfo\.build/);
   assert.match(libRs, /platform:\s*"windows"/);
   assert.match(libRs, /build:/);
-  assert.match(libRs, /is_dev\(\)|cfg!\(debug_assertions\)/);
+  assert.match(libRs, /#\[cfg\(debug_assertions\)\]/);
   assert.match(libRs, /LETSCUBE_WEBVIEW2_DATA_DIR/);
   assert.match(libRs, /#\[cfg\(debug_assertions\)\][\s\S]*LETSCUBE_TAURI_QA_HOLD_PREFLIGHT/);
   assert.match(libRs, /single_instance/);
@@ -238,6 +238,8 @@ test("Windows startup uses one main window and a local approved handshake scene"
   assert.match(html, /id="startup-status"/);
   assert.match(html, /id="startup-retry"/);
   assert.match(css, /grid-template-columns:\s*1fr\s+34px\s+1fr/);
+  assert.match(css, /\.endpoint-client\s*\{\s*grid-column:\s*1;/);
+  assert.match(css, /\.endpoint-server\s*\{\s*grid-column:\s*3;/);
   assert.match(css, /prefers-reduced-motion/);
   assert.match(script, /letscube:\/\/startup-state/);
   assert.match(script, /snapshot\.stage\s*===\s*"complete"\s*&&\s*snapshot\.connected\s*===\s*true/);
@@ -260,7 +262,11 @@ test("Windows Tauri exposes main-WebView automation only through a debug-only op
     /#\[cfg\(debug_assertions\)\]\s*fn debug_browser_args\(\)/,
     "release builds must ignore the WebView2 automation port",
   );
-  assert.match(libRs, /#\[cfg\(not\(debug_assertions\)\)\]\s*fn debug_browser_args\(\)/);
+  assert.doesNotMatch(
+    libRs,
+    /#\[cfg\(not\(debug_assertions\)\)\]\s*fn debug_browser_args\(\)/,
+    "release builds must not compile a debug browser helper",
+  );
   assert.doesNotMatch(
     libRs,
     /--remote-allow-origins=\*/,
@@ -279,6 +285,8 @@ test("Windows Tauri QA wrapper owns an isolated process, profile and loopback CD
   assert.match(script, /LETSCUBE_TAURI_CDP_URL/);
   assert.match(script, /windows-tauri-shell\.spec\.ts/);
   assert.match(script, /chromium-desktop-1440/);
+  assert.match(script, /--output/);
+  assert.match(script, /windows-tauri-qa/);
   assert.match(script, /mkdtemp/);
   assert.match(script, /rmSync/);
   assert.match(script, /tasklist/i);
@@ -302,4 +310,74 @@ test("Windows Tauri QA wrapper owns an isolated process, profile and loopback CD
   assert.match(spec, /contexts\(\)\.flatMap/);
   assert.match(spec, /waitForURL/);
   assert.match(spec, /connectToTauri/);
+});
+
+test("Windows lifecycle QA modes are bounded to debug state sources", () => {
+  const wrapper = readText("scripts/windows-tauri-qa.mjs");
+  const startupSpecPath = new URL("../../tests/e2e/windows-tauri-startup.spec.ts", import.meta.url);
+  const libRs = readText("windows-tauri/src-tauri/src/lib.rs");
+  const tauriConfig = readJson("windows-tauri/src-tauri/tauri.conf.json");
+  const modes = [
+    "success",
+    "offline",
+    "catalog_failure",
+    "normal_update",
+    "critical_update",
+  ];
+
+  assert.equal(existsSync(startupSpecPath), true, "dedicated startup lifecycle spec is missing");
+  assert.match(wrapper, /LETSCUBE_TAURI_QA_STARTUP_MODE/);
+  assert.match(wrapper, /windows-tauri-startup\.spec\.ts/);
+  for (const mode of modes) {
+    assert.match(wrapper, new RegExp(`["']${mode}["']`), `${mode} QA mode is not orchestrated`);
+  }
+
+  assert.match(
+    libRs,
+    /#\[cfg\(debug_assertions\)\][\s\S]*fn qa_startup_mode\(\)[\s\S]*LETSCUBE_TAURI_QA_STARTUP_MODE/,
+    "QA mode lookup must compile only in debug builds",
+  );
+  assert.doesNotMatch(
+    libRs,
+    /#\[cfg\(not\(debug_assertions\)\)\][\s\S]*fn qa_startup_mode/,
+    "release builds must not compile a startup QA mode helper",
+  );
+  assert.match(libRs, /QaStartupMode::Offline/);
+  assert.match(libRs, /QaStartupMode::CatalogFailure/);
+  assert.match(libRs, /QaStartupMode::NormalUpdate/);
+  assert.match(libRs, /QaStartupMode::CriticalUpdate/);
+  assert.doesNotMatch(
+    libRs,
+    /qa_startup_mode[\s\S]{0,900}(PRODUCTION_ORIGIN|update_endpoint|updater_builder|pubkey)/,
+    "debug injection must not replace production origin, updater endpoint, or signing key",
+  );
+
+  assert.equal(tauriConfig.app.windows[0].url, "startup.html");
+  assert.deepEqual(tauriConfig.plugins.updater.endpoints ?? [], []);
+  assert.equal(typeof tauriConfig.plugins.updater.pubkey, "string");
+  assert.ok(tauriConfig.plugins.updater.pubkey.length > 40);
+});
+
+test("Windows lifecycle fixtures are deterministic and cleanup remains single-flight", () => {
+  const wrapper = readText("scripts/windows-tauri-qa.mjs");
+  const libRs = readText("windows-tauri/src-tauri/src/lib.rs");
+  const fixtureState = libRs.match(
+    /#\[cfg\(debug_assertions\)\]\s*fn apply_qa_update_state[\s\S]*?(?=\nfn desktop_bridge_script)/,
+  )?.[0] ?? "";
+
+  assert.match(
+    fixtureState,
+    /state\.set_channel\(UpdateChannel::Stable\)/,
+    "debug fixture state must not inherit a persisted Test channel",
+  );
+  assert.match(
+    wrapper,
+    /cleanupPromise:\s*null/,
+    "each spawned scenario must retain one shared cleanup promise",
+  );
+  assert.match(
+    wrapper,
+    /scenario\.cleanupPromise/,
+    "signal and finally cleanup must converge on the same promise",
+  );
 });

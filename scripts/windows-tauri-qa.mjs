@@ -19,6 +19,14 @@ const executablePath = path.join(
 );
 const cargoPath = path.join(os.homedir(), ".cargo", "bin", "cargo.exe");
 const processImage = "letscube-windows-tauri.exe";
+const lifecycleModes = Object.freeze([
+  "success",
+  "offline",
+  "catalog_failure",
+  "normal_update",
+  "critical_update",
+]);
+const requestedMode = process.env.LETSCUBE_TAURI_QA_STARTUP_MODE;
 
 if (process.platform !== "win32") {
   console.error("Windows Tauri QA can run only on Windows.");
@@ -26,6 +34,10 @@ if (process.platform !== "win32") {
 }
 if (!existsSync(cargoPath)) {
   console.error("Rust/Cargo is not installed at the expected user toolchain path.");
+  process.exit(1);
+}
+if (requestedMode && !lifecycleModes.includes(requestedMode)) {
+  console.error("LETSCUBE_TAURI_QA_STARTUP_MODE is invalid.");
   process.exit(1);
 }
 if (hasRunningClient()) {
@@ -42,19 +54,56 @@ if (build.status !== 0 || !existsSync(executablePath)) {
   process.exit(build.status ?? 1);
 }
 
-const debugPort = await reserveLoopbackPort();
-const profilePath = mkdtempSync(path.join(os.tmpdir(), "letscube-tauri-qa-"));
-const cdpUrl = `http://127.0.0.1:${debugPort}`;
-let client = null;
-let qaProcess = null;
-let cleanupPromise = null;
+let activeScenario = null;
 let signalHandled = false;
 
 process.on("SIGINT", () => handleSignal(130));
 process.on("SIGTERM", () => handleSignal(143));
 
-try {
-  qaProcess = spawn(
+const scenarios = requestedMode
+  ? [{ name: requestedMode, mode: requestedMode, spec: "tests/e2e/windows-tauri-startup.spec.ts" }]
+  : [
+      { name: "baseline", mode: null, spec: "tests/e2e/windows-tauri-shell.spec.ts" },
+      ...lifecycleModes.map((mode) => ({
+        name: mode,
+        mode,
+        spec: "tests/e2e/windows-tauri-startup.spec.ts",
+      })),
+    ];
+
+for (const scenario of scenarios) {
+  console.log(`\n[windows-tauri-qa] Running ${scenario.name}...`);
+  const result = await runScenario(scenario);
+  if (result !== 0) {
+    process.exitCode = result;
+    break;
+  }
+}
+
+async function runScenario({ name, mode, spec }) {
+  const debugPort = await reserveLoopbackPort();
+  const profilePath = mkdtempSync(path.join(os.tmpdir(), `letscube-tauri-qa-${name}-`));
+  const outputPath = path.join("output", "playwright-test", "windows-tauri-qa", name);
+  const cdpUrl = `http://127.0.0.1:${debugPort}`;
+  const qaEnv = {
+    ...process.env,
+    LETSCUBE_TAURI_CDP_URL: cdpUrl,
+  };
+  const clientEnv = {
+    ...process.env,
+    LETSCUBE_WEBVIEW2_DATA_DIR: profilePath,
+    LETSCUBE_WEBVIEW2_DEBUG_PORT: String(debugPort),
+    LETSCUBE_TAURI_QA_HOLD_PREFLIGHT: "1",
+  };
+  if (mode) {
+    qaEnv.LETSCUBE_TAURI_QA_STARTUP_MODE = mode;
+    clientEnv.LETSCUBE_TAURI_QA_STARTUP_MODE = mode;
+  } else {
+    delete qaEnv.LETSCUBE_TAURI_QA_STARTUP_MODE;
+    delete clientEnv.LETSCUBE_TAURI_QA_STARTUP_MODE;
+  }
+
+  const qaProcess = spawn(
     process.env.ComSpec || "cmd.exe",
     [
       "/d",
@@ -64,29 +113,31 @@ try {
       "exec",
       "playwright",
       "test",
-      "tests/e2e/windows-tauri-shell.spec.ts",
+      spec,
       "--project",
       "chromium-desktop-1440",
+      "--output",
+      outputPath,
     ],
-    {
-      cwd: root,
-      env: { ...process.env, LETSCUBE_TAURI_CDP_URL: cdpUrl },
-      stdio: "inherit",
-    },
+    { cwd: root, env: qaEnv, stdio: "inherit" },
   );
-  client = spawn(executablePath, [], {
+  const client = spawn(executablePath, [], {
     cwd: root,
-    env: {
-      ...process.env,
-      LETSCUBE_WEBVIEW2_DATA_DIR: profilePath,
-      LETSCUBE_WEBVIEW2_DEBUG_PORT: String(debugPort),
-      LETSCUBE_TAURI_QA_HOLD_PREFLIGHT: "1",
-    },
+    env: clientEnv,
     stdio: "ignore",
   });
-  process.exitCode = await waitForExit(qaProcess);
-} finally {
-  if (!(await cleanupOwnedResources())) process.exitCode = 1;
+  client.once("error", (error) => {
+    console.error(`Windows Tauri QA client failed to start: ${error.message}`);
+  });
+  activeScenario = { qaProcess, client, profilePath, cleanupPromise: null };
+
+  try {
+    return await waitForExit(qaProcess);
+  } finally {
+    const clean = await cleanupOwnedResources(activeScenario);
+    activeScenario = null;
+    if (!clean) process.exitCode = 1;
+  }
 }
 
 function hasRunningClient() {
@@ -124,34 +175,44 @@ function waitForExit(child) {
 function handleSignal(exitCode) {
   if (signalHandled) return;
   signalHandled = true;
-  void cleanupOwnedResources().then((clean) => process.exit(clean ? exitCode : 1));
+  void cleanupOwnedResources(activeScenario).then((clean) => process.exit(clean ? exitCode : 1));
 }
 
-function cleanupOwnedResources() {
-  if (cleanupPromise) return cleanupPromise;
-  cleanupPromise = (async () => {
+async function cleanupOwnedResources(scenario) {
+  if (!scenario) return true;
+  if (scenario.cleanupPromise) return scenario.cleanupPromise;
+
+  scenario.cleanupPromise = (async () => {
+    const { qaProcess, client, profilePath } = scenario;
     let clean = await terminateOwnedProcess(qaProcess);
     clean = (await terminateOwnedProcess(client)) && clean;
-    await delay(750);
-    try {
-      rmSync(profilePath, { recursive: true, force: true, maxRetries: 40, retryDelay: 250 });
-    } catch {
-      clean = false;
-    }
-    if (existsSync(profilePath)) clean = false;
+    clean = (await removeProfile(profilePath)) && clean;
     if (!clean) console.error("Windows Tauri QA cleanup did not complete safely.");
     return clean;
   })();
-  return cleanupPromise;
+  return scenario.cleanupPromise;
 }
 
 async function terminateOwnedProcess(child) {
   if (!child?.pid || !isPidRunning(child.pid)) return true;
-  const result = spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
+  spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
     stdio: "ignore",
   });
   await delay(500);
-  return result.status === 0 && !isPidRunning(child.pid);
+  return !isPidRunning(child.pid);
+}
+
+async function removeProfile(profilePath) {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      rmSync(profilePath, { recursive: true, force: true, maxRetries: 40, retryDelay: 250 });
+    } catch {
+      // A just-killed WebView2 child can briefly retain a profile handle.
+    }
+    if (!existsSync(profilePath)) return true;
+    await delay(750);
+  }
+  return false;
 }
 
 function isPidRunning(pid) {

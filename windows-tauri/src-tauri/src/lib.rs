@@ -32,6 +32,8 @@ const STARTUP_EVENT: &str = "letscube://startup-state";
 const DESKTOP_BUILD: &str = env!("LETSCUBE_DESKTOP_BUILD");
 static MAIN_READY: AtomicBool = AtomicBool::new(false);
 static PREFLIGHT_RUNNING: AtomicBool = AtomicBool::new(false);
+#[cfg(debug_assertions)]
+static QA_OFFLINE_FAILURE_EMITTED: AtomicBool = AtomicBool::new(false);
 
 struct StartupController(Mutex<StartupState>);
 
@@ -78,10 +80,9 @@ fn is_safe_external_url(url: &Url) -> bool {
 }
 
 fn production_profile_dir<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
-    if cfg!(debug_assertions) {
-        if let Some(path) = std::env::var_os("LETSCUBE_WEBVIEW2_DATA_DIR") {
-            return Ok(PathBuf::from(path));
-        }
+    #[cfg(debug_assertions)]
+    if let Some(path) = std::env::var_os("LETSCUBE_WEBVIEW2_DATA_DIR") {
+        return Ok(PathBuf::from(path));
     }
 
     Ok(app.path().app_local_data_dir()?.join(PRODUCTION_PROFILE))
@@ -107,14 +108,66 @@ fn qa_holds_preflight() -> bool {
     std::env::var("LETSCUBE_TAURI_QA_HOLD_PREFLIGHT").as_deref() == Ok("1")
 }
 
-#[cfg(not(debug_assertions))]
-fn qa_holds_preflight() -> bool {
-    false
+#[cfg(debug_assertions)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum QaStartupMode {
+    Success,
+    Offline,
+    CatalogFailure,
+    NormalUpdate,
+    CriticalUpdate,
 }
 
-#[cfg(not(debug_assertions))]
-fn debug_browser_args() -> Option<String> {
-    None
+#[cfg(debug_assertions)]
+fn qa_startup_mode() -> Option<QaStartupMode> {
+    match std::env::var("LETSCUBE_TAURI_QA_STARTUP_MODE").as_deref() {
+        Ok("success") => Some(QaStartupMode::Success),
+        Ok("offline") => Some(QaStartupMode::Offline),
+        Ok("catalog_failure") => Some(QaStartupMode::CatalogFailure),
+        Ok("normal_update") => Some(QaStartupMode::NormalUpdate),
+        Ok("critical_update") => Some(QaStartupMode::CriticalUpdate),
+        _ => None,
+    }
+}
+
+#[cfg(debug_assertions)]
+fn qa_should_fail_network_once() -> bool {
+    matches!(qa_startup_mode(), Some(QaStartupMode::Offline))
+        && !QA_OFFLINE_FAILURE_EMITTED.swap(true, Ordering::AcqRel)
+}
+
+#[cfg(debug_assertions)]
+fn qa_skips_catalog_source() -> bool {
+    matches!(qa_startup_mode(), Some(QaStartupMode::CatalogFailure))
+}
+
+#[cfg(debug_assertions)]
+fn apply_qa_update_state(state: &mut DesktopUpdateState) {
+    let Some(mode) = qa_startup_mode() else {
+        return;
+    };
+
+    // QA fixtures replace only the observed state and never inherit a user's channel choice.
+    state.set_channel(UpdateChannel::Stable);
+    match mode {
+        QaStartupMode::Success => {
+            let _ = state.begin_check();
+            let _ = state.mark_current();
+        }
+        QaStartupMode::CatalogFailure => {
+            state.fail("update_check_failed");
+        }
+        QaStartupMode::NormalUpdate => {
+            let _ = state.begin_check();
+            let _ = state.mark_available("0.2.1", false, Some(1_572_864));
+        }
+        QaStartupMode::CriticalUpdate => {
+            let _ = state.begin_check();
+            state.set_mandatory(true);
+            let _ = state.mark_available("0.3.0", true, Some(1_835_008));
+        }
+        QaStartupMode::Offline => {}
+    }
 }
 
 fn desktop_bridge_script() -> String {
@@ -338,6 +391,11 @@ async fn run_preflight<R: Runtime>(app: AppHandle<R>) {
         PREFLIGHT_RUNNING.store(false, Ordering::Release);
         return;
     }
+    #[cfg(debug_assertions)]
+    if qa_should_fail_network_once() {
+        fail_startup(&app, StartupErrorCode::Network);
+        return;
+    }
 
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
@@ -383,12 +441,19 @@ async fn run_preflight<R: Runtime>(app: AppHandle<R>) {
         return;
     }
 
-    // Catalog availability is informative for Task 2 and must not block the installed client.
-    let _ = client
-        .get(update_endpoint(UpdateChannel::default()))
-        .timeout(Duration::from_secs(8))
-        .send()
-        .await;
+    #[cfg(debug_assertions)]
+    let checks_catalog = !qa_skips_catalog_source();
+    #[cfg(not(debug_assertions))]
+    let checks_catalog = true;
+
+    // Catalog availability is informative and must not block the installed client.
+    if checks_catalog {
+        let _ = client
+            .get(update_endpoint(UpdateChannel::default()))
+            .timeout(Duration::from_secs(8))
+            .send()
+            .await;
+    }
 
     if !transition_startup(&app, StartupStage::ProductionNavigation) {
         PREFLIGHT_RUNNING.store(false, Ordering::Release);
@@ -419,13 +484,18 @@ fn build_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let navigation_handle = app.clone();
     let new_window_handle = app.clone();
 
-    let mut builder = WebviewWindowBuilder::from_config(app, &config)?
+    let builder = WebviewWindowBuilder::from_config(app, &config)?
         .data_directory(profile_dir)
         .initialization_script(initialization_script());
 
-    if let Some(args) = debug_browser_args() {
-        builder = builder.additional_browser_args(&args);
-    }
+    #[cfg(debug_assertions)]
+    let builder = {
+        let mut builder = builder;
+        if let Some(args) = debug_browser_args() {
+            builder = builder.additional_browser_args(&args);
+        }
+        builder
+    };
 
     builder
         .on_navigation(move |url| {
@@ -475,9 +545,16 @@ fn build_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 fn setup_update_controller<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let channel_path = app.path().app_local_data_dir()?.join(UPDATE_CHANNEL_FILE);
     let channel = load_update_channel(&channel_path);
+    let state = DesktopUpdateState::new(channel, app.package_info().version.to_string());
+    #[cfg(debug_assertions)]
+    let state = {
+        let mut state = state;
+        apply_qa_update_state(&mut state);
+        state
+    };
     app.manage(UpdateController {
         inner: Mutex::new(NativeUpdateState {
-            state: DesktopUpdateState::new(channel, app.package_info().version.to_string()),
+            state,
             pending: None,
         }),
         channel_path,
@@ -711,16 +788,25 @@ fn retry_main(window: WebviewWindow, app: AppHandle) {
 
 #[tauri::command]
 fn begin_startup_qa(window: WebviewWindow, app: AppHandle) {
-    if !qa_holds_preflight()
-        || window.label() != "main"
-        || window
-            .url()
-            .map(|url| !is_local_startup_url(&url))
-            .unwrap_or(true)
+    #[cfg(not(debug_assertions))]
     {
+        let _ = (window, app);
         return;
     }
-    tauri::async_runtime::spawn(run_preflight(app));
+
+    #[cfg(debug_assertions)]
+    {
+        if !qa_holds_preflight()
+            || window.label() != "main"
+            || window
+                .url()
+                .map(|url| !is_local_startup_url(&url))
+                .unwrap_or(true)
+        {
+            return;
+        }
+        tauri::async_runtime::spawn(run_preflight(app));
+    }
 }
 
 pub fn run() {
@@ -746,7 +832,11 @@ pub fn run() {
             setup_tray(app.handle())?;
             build_main_window(app.handle())?;
             show_main(app.handle());
-            if !qa_holds_preflight() {
+            #[cfg(debug_assertions)]
+            let hold_preflight = qa_holds_preflight();
+            #[cfg(not(debug_assertions))]
+            let hold_preflight = false;
+            if !hold_preflight {
                 tauri::async_runtime::spawn(run_preflight(app.handle().clone()));
             }
             Ok(())

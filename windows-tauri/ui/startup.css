@@ -20,6 +20,8 @@ body { background: #071019; }
 
 .handshake { display: grid; grid-template-columns: 1fr 34px 1fr; align-items: center; position: relative; max-width: 980px; width: 100%; margin: 0 auto; }
 .endpoint { display: grid; justify-items: center; align-content: center; min-width: 0; }
+.endpoint-client { grid-column: 1; }
+.endpoint-server { grid-column: 3; }
 .endpoint h2 { margin: 20px 0 4px; font-size: 16px; font-weight: 650; letter-spacing: 0; }
 .endpoint p { margin: 0; color: #718797; font-size: 12px; }
 .fingerprints { height: 74px; display: grid; gap: 4px; margin-bottom: 20px; color: #6c8799; font: 11px/1.25 Consolas, monospace; text-align: center; }
