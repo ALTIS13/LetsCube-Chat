@@ -9,6 +9,8 @@ const COMMANDS: &[&str] = &[
     "desktop_check_update",
     "desktop_install_update",
     "desktop_show_main",
+    "desktop_is_main_visible",
+    "desktop_notify",
 ];
 
 fn main() {

@@ -6,6 +6,14 @@ type LetscubeDesktopRuntimeInfo = {
 
 type LetscubeDesktopUpdateChannel = "stable" | "test";
 
+type LetscubeDesktopNotification = {
+  id: number;
+  title: string;
+  body: string;
+  kind: "message" | "task" | "system";
+  route: string;
+};
+
 interface Window {
   letscubeDesktop?: {
     readonly platform: "windows";
@@ -18,5 +26,7 @@ interface Window {
     checkUpdate(): Promise<unknown>;
     installUpdate(): Promise<unknown>;
     showMain(): Promise<void>;
+    isMainVisible(): Promise<boolean>;
+    notify(notification: LetscubeDesktopNotification): Promise<boolean>;
   };
 }

@@ -46,9 +46,7 @@ test("desktop notification adapter stays inert for a regular browser", async () 
       async () => {
         loaderCalls += 1;
         return {
-          isPermissionGranted: async () => true,
-          requestPermission: async () => "granted" as const,
-          sendNotification: () => undefined,
+          sendNotification: async () => true,
         };
       },
     );
@@ -105,10 +103,9 @@ test("desktop notification adapter maps a stable tag and route to native Windows
       async () => {
         loaderCalls += 1;
         return {
-          isPermissionGranted: async () => true,
-          requestPermission: async () => "granted" as const,
-          sendNotification: (notification) => {
+          sendNotification: async (notification) => {
             notifications.push(notification);
+            return true;
           },
         };
       },
@@ -124,11 +121,8 @@ test("desktop notification adapter maps a stable tag and route to native Windows
     assert.deepEqual(nativeOptions, {
       title: "LETSCUBE",
       body: "Новое сообщение",
-      group: "message:chat:chat-1",
-      extra: {
-        kind: "message",
-        route: "/?chat=chat-1&message=message-1",
-      },
+      kind: "message",
+      route: "/?chat=chat-1&message=message-1",
     });
   } finally {
     globalThis.window = previousWindow;
@@ -156,7 +150,33 @@ test("desktop notification adapter stays silent while the app window is visible"
   }
 });
 
-test("desktop notification adapter does not send when native permission is denied", async () => {
+test("desktop notification adapter trusts the native hidden-window state over WebView visibility", async () => {
+  const previousWindow = installDesktopBridge();
+  let sent = false;
+
+  try {
+    const delivered = await showDesktopMessageNotification(
+      { title: "LETSCUBE", body: "Новое сообщение", tag: "chat-native-hidden" },
+      async () => ({
+        sendNotification: async () => {
+          sent = true;
+          return true;
+        },
+      }),
+      {
+        visibilityState: "visible",
+        isMainVisible: async () => false,
+      },
+    );
+
+    assert.equal(delivered, true);
+    assert.equal(sent, true);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+test("desktop notification adapter reports a sanitized native delivery failure", async () => {
   const previousWindow = installDesktopBridge();
   let sent = false;
 
@@ -164,17 +184,16 @@ test("desktop notification adapter does not send when native permission is denie
     const delivered = await showDesktopMessageNotification(
       { title: "LETSCUBE", body: "Новое сообщение", tag: "chat-1" },
       async () => ({
-        isPermissionGranted: async () => false,
-        requestPermission: async () => "denied" as const,
-        sendNotification: () => {
+        sendNotification: async () => {
           sent = true;
+          return false;
         },
       }),
       { visibilityState: "hidden" },
     );
 
     assert.equal(delivered, false);
-    assert.equal(sent, false);
+    assert.equal(sent, true);
   } finally {
     globalThis.window = previousWindow;
   }
@@ -219,7 +238,7 @@ test("desktop notification action restores the main window before opening a safe
       registerDesktopNotificationNavigationListener?: (
         openTarget: (target: string) => void,
         loadApi: () => Promise<{
-          onAction: (callback: (notification: { extra?: Record<string, unknown> }) => void) => Promise<{
+          onAction: (callback: (route: unknown) => void) => Promise<{
             unregister(): Promise<void>;
           }>;
         }>,
@@ -231,7 +250,7 @@ test("desktop notification action restores the main window before opening a safe
 
   const previousWindow = installDesktopBridge();
   const events: string[] = [];
-  let action: ((notification: { extra?: Record<string, unknown> }) => void) | null = null;
+  let action: ((route: unknown) => void) | null = null;
   let unregistered = false;
   try {
     const cleanup = await register!(
@@ -251,12 +270,12 @@ test("desktop notification action restores the main window before opening a safe
       },
     );
 
-    action?.({ extra: { kind: "message", route: "/?chat=chat-1&message=message-1" } });
+    action?.("/?chat=chat-1&message=message-1");
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.deepEqual(events, ["restore", "open:/?chat=chat-1&message=message-1"]);
 
-    action?.({ extra: { kind: "message", route: "https://evil.example/chat" } });
-    action?.({ extra: { kind: "message", route: "//evil.example/chat" } });
+    action?.("https://evil.example/chat");
+    action?.("//evil.example/chat");
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.deepEqual(events, ["restore", "open:/?chat=chat-1&message=message-1"]);
 
@@ -281,9 +300,10 @@ test("notification rows collapse messages by chat, isolate tasks and sanitize me
   const previousWindow = installDesktopBridge();
   const sent: Array<Record<string, unknown>> = [];
   const loader = async () => ({
-    isPermissionGranted: async () => true,
-    requestPermission: async () => "granted" as const,
-    sendNotification: (notification: Record<string, unknown>) => sent.push(notification),
+    sendNotification: async (notification: Record<string, unknown>) => {
+      sent.push(notification);
+      return true;
+    },
   });
   const context = { visibilityState: "hidden" as const };
   try {
@@ -328,12 +348,11 @@ test("notification rows collapse messages by chat, isolate tasks and sanitize me
     assert.notEqual(sent[0]?.id, sent[2]?.id);
     assert.equal(sent[0]?.title, "Никита");
     assert.equal(sent[0]?.body, "Фото вложение");
-    assert.deepEqual(sent[0]?.extra, {
-      kind: "message",
-      route: "/?chat=chat-1&message=message-1",
-    });
+    assert.equal(sent[0]?.kind, "message");
+    assert.equal(sent[0]?.route, "/?chat=chat-1&message=message-1");
     assert.equal(sent[2]?.title, "Новая задача");
-    assert.deepEqual(sent[2]?.extra, { kind: "task", route: "/tasks?task=task-1" });
+    assert.equal(sent[2]?.kind, "task");
+    assert.equal(sent[2]?.route, "/tasks?task=task-1");
   } finally {
     globalThis.window = previousWindow;
   }

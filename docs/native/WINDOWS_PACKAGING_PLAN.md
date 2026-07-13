@@ -112,20 +112,26 @@ Supabase Auth redirect URLs must be reviewed when that stage starts.
 Browser Web Push does not become killed-process Windows push automatically.
 While the Tauri process/tray is running, the global in-app notification
 Realtime stream presents native Windows notifications when the main window is
-hidden. Message notifications use a stable numeric id and group derived from
-`chat_id`; task/system notifications have separate groups. Initial unread rows
-form a silent baseline, while reconnect/online refresh presents only rows that
-were missed after that baseline. A notification action accepts only a relative
-same-app route, restores the origin-guarded main window and then reuses the
-authenticated in-app navigation queue. Killed-process delivery still needs a
-separate WNS device-token/backend design and is not claimed.
+hidden. Native visibility comes from the exact-origin Rust bridge because
+WebView2 keeps `document.visibilityState` visible after `window.hide()`. The
+guarded `desktop_notify` command writes a bounded Windows toast with a stable
+hashed tag per chat and separate `messages`, `tasks` and `system` groups. The
+generic desktop backend of `@tauri-apps/plugin-notification` is not used because
+it drops id/group/action data on Windows. Initial unread rows form a silent
+baseline, while reconnect/online refresh presents only rows missed after that
+baseline. A notification action accepts only a relative same-app route,
+restores the origin-guarded main window and reuses the authenticated in-app
+navigation queue. Killed-process delivery still needs a separate WNS
+device-token/backend design and is not claimed.
 
 ## Release catalog
 
 `https://api.letscube.ru/releases/v1/windows/stable.json` exposes the verified
 `0.2.3` build `7` Tauri NSIS artifact. The default updater Stable channel uses
-the same immutable installer. Signed `0.2.4` build `8` is available only in the
-opt-in Test updater channel until its physical tray notification pass completes.
+the same immutable installer. Signed `0.2.4` build `8` remains the current
+opt-in Test artifact, but physical QA exposed its Windows toast delivery defect.
+Signed `0.2.6` build `10` is the replacement candidate and must pass production
+frontend plus physical tray QA before Test publication or Stable promotion.
 Artifacts remain immutable under
 `https://api.letscube.ru/releases/files/windows/`.
 
@@ -152,7 +158,7 @@ directory listing, dotfiles, traversal forms and all unlisted updater paths.
 - [x] Production-origin authenticated shell, chat composer, attachment menu, media quality selector, Notification Center and Windows notification settings.
 - [x] WebView2 exposes camera/microphone MediaDevices, MediaRecorder, geolocation, clipboard and fullscreen APIs; the attachment menu exposes photo, camera, voice and video flows.
 - [ ] Hardware capture/permission allow-deny matrix on Windows 10 and Windows 11 devices.
-- [~] Realtime chat/task/system notification routing, stable message grouping and reconnect reconciliation are covered by unit/native lifecycle QA. A physical hidden-window message/task/action pass remains before this item is complete.
+- [~] Realtime chat/task/system routing, native visibility, stable Windows tag/group replacement and reconnect reconciliation are covered by unit/native lifecycle QA. The native WinRT probe registered `ru.letscube.messenger` and wrote the expected tag/group to Windows Notification Center. A production frontend deploy and physical hidden-window message/task/action pass remain before this item is complete.
 - [ ] Offline/reconnect banner and long-session sync.
 - [x] Installer size and SHA-256 are recorded before publication.
 

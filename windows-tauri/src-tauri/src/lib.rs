@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
+use serde::Deserialize;
 use startup::{StartupErrorCode, StartupSnapshot, StartupStage, StartupState};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -29,6 +30,8 @@ const PRODUCTION_PROFILE: &str = "webview-production-v1";
 const UPDATE_CHANNEL_FILE: &str = "updater-channel.json";
 const UPDATE_TIMEOUT: Duration = Duration::from_secs(8);
 const STARTUP_EVENT: &str = "letscube://startup-state";
+const DESKTOP_NOTIFICATION_ACTION_EVENT: &str = "letscube:desktop-notification-action";
+const WINDOWS_APP_ID: &str = "ru.letscube.messenger";
 const DESKTOP_BUILD: &str = env!("LETSCUBE_DESKTOP_BUILD");
 static MAIN_READY: AtomicBool = AtomicBool::new(false);
 static PREFLIGHT_RUNNING: AtomicBool = AtomicBool::new(false);
@@ -45,6 +48,16 @@ struct NativeUpdateState {
 struct UpdateController {
     inner: Mutex<NativeUpdateState>,
     channel_path: PathBuf,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct DesktopNotificationRequest {
+    id: u32,
+    title: String,
+    body: String,
+    kind: String,
+    route: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -194,7 +207,9 @@ fn desktop_bridge_script() -> String {
     setUpdateChannel: async (channel) => call("desktop_set_update_channel", {{ channel }}),
     checkUpdate: async () => call("desktop_check_update"),
     installUpdate: async () => call("desktop_install_update"),
-    showMain: async () => call("desktop_show_main")
+    showMain: async () => call("desktop_show_main"),
+    isMainVisible: async () => call("desktop_is_main_visible"),
+    notify: async (notification) => call("desktop_notify", {{ notification }})
   }});
   Object.defineProperty(window, "letscubeDesktop", {{
     configurable: false,
@@ -280,6 +295,133 @@ fn desktop_show_main(window: WebviewWindow) -> Result<(), &'static str> {
     let _ = window.unminimize();
     let _ = window.set_focus();
     Ok(())
+}
+
+#[tauri::command]
+fn desktop_is_main_visible(window: WebviewWindow) -> Result<bool, &'static str> {
+    require_production_main(&window)?;
+    window.is_visible().map_err(|_| "window_state_unavailable")
+}
+
+fn is_safe_notification_route(route: &str) -> bool {
+    if route.len() > 512
+        || !route.starts_with('/')
+        || route.starts_with("//")
+        || route.chars().any(char::is_control)
+    {
+        return false;
+    }
+    Url::parse(&format!("{PRODUCTION_ORIGIN}{route}"))
+        .map(|url| is_allowed_navigation(&url))
+        .unwrap_or(false)
+}
+
+fn is_safe_notification_text(value: &str, max_chars: usize) -> bool {
+    !value.trim().is_empty()
+        && value.chars().count() <= max_chars
+        && !value.chars().any(|character| character == '\0')
+}
+
+fn notification_group(kind: &str) -> Option<&'static str> {
+    match kind {
+        "message" => Some("messages"),
+        "task" => Some("tasks"),
+        "system" => Some("system"),
+        _ => None,
+    }
+}
+
+fn escape_xml(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+#[cfg(windows)]
+fn show_windows_notification(
+    window: &WebviewWindow,
+    notification: &DesktopNotificationRequest,
+) -> Result<(), &'static str> {
+    use windows::core::HSTRING;
+    use windows::Data::Xml::Dom::XmlDocument;
+    use windows::Foundation::TypedEventHandler;
+    use windows::UI::Notifications::{ToastNotification, ToastNotificationManager};
+
+    let group = notification_group(&notification.kind).ok_or("notification_invalid")?;
+    let tag = format!("{:08x}", notification.id);
+    let xml = format!(
+        r#"<toast duration="short"><visual><binding template="ToastGeneric"><text>{}</text><text>{}</text></binding></visual></toast>"#,
+        escape_xml(notification.title.trim()),
+        escape_xml(notification.body.trim()),
+    );
+    let document = XmlDocument::new().map_err(|_| "notification_unavailable")?;
+    document
+        .LoadXml(&HSTRING::from(xml))
+        .map_err(|_| "notification_invalid")?;
+    let toast = ToastNotification::CreateToastNotification(&document)
+        .map_err(|_| "notification_unavailable")?;
+    toast
+        .SetTag(&HSTRING::from(tag))
+        .map_err(|_| "notification_unavailable")?;
+    toast
+        .SetGroup(&HSTRING::from(group))
+        .map_err(|_| "notification_unavailable")?;
+
+    let action_window = window.clone();
+    let route_json =
+        serde_json::to_string(&notification.route).map_err(|_| "notification_invalid")?;
+    let activated = TypedEventHandler::new(move |_, _| {
+        let _ = action_window.show();
+        let _ = action_window.unminimize();
+        let _ = action_window.set_focus();
+        let script = format!(
+            "window.dispatchEvent(new CustomEvent({event:?}, {{ detail: {{ route: {route} }} }}));",
+            event = DESKTOP_NOTIFICATION_ACTION_EVENT,
+            route = route_json,
+        );
+        let _ = action_window.eval(script);
+        Ok(())
+    });
+    toast
+        .Activated(&activated)
+        .map_err(|_| "notification_unavailable")?;
+
+    let notifier =
+        ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(WINDOWS_APP_ID))
+            .map_err(|_| "notification_unavailable")?;
+    notifier
+        .Show(&toast)
+        .map_err(|_| "notification_unavailable")?;
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn show_windows_notification(
+    _window: &WebviewWindow,
+    _notification: &DesktopNotificationRequest,
+) -> Result<(), &'static str> {
+    Err("notification_unavailable")
+}
+
+#[tauri::command]
+fn desktop_notify(
+    window: WebviewWindow,
+    notification: DesktopNotificationRequest,
+) -> Result<bool, &'static str> {
+    require_production_main(&window)?;
+    if notification.id == 0
+        || notification_group(&notification.kind).is_none()
+        || !is_safe_notification_route(&notification.route)
+        || !is_safe_notification_text(&notification.title, 120)
+        || !is_safe_notification_text(&notification.body, 280)
+    {
+        return Err("notification_invalid");
+    }
+    show_windows_notification(&window, &notification)?;
+    Ok(true)
 }
 
 fn restore_startup_surface<R: Runtime>(app: &AppHandle<R>) {
@@ -850,7 +992,6 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             restore_startup_surface(app);
         }))
-        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
@@ -861,7 +1002,9 @@ pub fn run() {
             desktop_set_update_channel,
             desktop_check_update,
             desktop_install_update,
-            desktop_show_main
+            desktop_show_main,
+            desktop_is_main_visible,
+            desktop_notify
         ])
         .setup(|app| {
             setup_update_controller(app.handle())?;
@@ -953,6 +1096,36 @@ mod tests {
         assert!(!is_allowed_navigation(
             &Url::parse("https://deploy.letscube.ru/").unwrap()
         ));
+    }
+
+    #[test]
+    fn notification_routes_remain_inside_the_production_app() {
+        assert!(is_safe_notification_route(
+            "/?chat=chat-1&message=message-1"
+        ));
+        assert!(is_safe_notification_route("/tasks?task=task-1"));
+        assert!(!is_safe_notification_route("https://evil.example/chat"));
+        assert!(!is_safe_notification_route("//evil.example/chat"));
+        assert!(!is_safe_notification_route("/chat\nforged"));
+    }
+
+    #[test]
+    fn notification_payloads_use_bounded_text_and_isolated_groups() {
+        assert!(is_safe_notification_text("Новое сообщение", 120));
+        assert!(!is_safe_notification_text("   ", 120));
+        assert!(!is_safe_notification_text(&"x".repeat(121), 120));
+        assert_eq!(notification_group("message"), Some("messages"));
+        assert_eq!(notification_group("task"), Some("tasks"));
+        assert_eq!(notification_group("system"), Some("system"));
+        assert_eq!(notification_group("unknown"), None);
+    }
+
+    #[test]
+    fn notification_xml_escapes_untrusted_preview_text() {
+        assert_eq!(
+            escape_xml("<b title=\"x\">A&B's</b>"),
+            "&lt;b title=&quot;x&quot;&gt;A&amp;B&apos;s&lt;/b&gt;"
+        );
     }
 
     #[test]

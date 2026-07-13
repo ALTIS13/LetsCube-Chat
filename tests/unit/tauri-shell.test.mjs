@@ -58,8 +58,8 @@ test("Windows release version and build metadata stay aligned", () => {
   const libRs = readText("windows-tauri/src-tauri/src/lib.rs");
   const publisherPublicKey = readText("scripts/windows-updater-public.key").trim();
 
-  assert.equal(shellPackage.version, "0.2.4");
-  assert.equal(shellPackage.desktopBuild, 8);
+  assert.equal(shellPackage.version, "0.2.6");
+  assert.equal(shellPackage.desktopBuild, 10);
   assert.equal(tauriConfig.version, shellPackage.version);
   assert.equal(cargoVersion, shellPackage.version);
   assert.equal(tauriConfig.plugins.updater.pubkey, publisherPublicKey);
@@ -89,7 +89,8 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.match(cargoToml, /^name = "letscube-windows-tauri"$/m);
   assert.match(cargoToml, /^tauri = \{ version = "2\.11\.[^"]+"/m);
   assert.match(cargoToml, /^tauri-build = \{ version = "2\.[^"]+"/m);
-  assert.match(cargoToml, /^tauri-plugin-notification = "2\.[^"]+"/m);
+  assert.doesNotMatch(cargoToml, /^tauri-plugin-notification\s*=/m);
+  assert.match(cargoToml, /^windows = \{ version = "0\.61", features = \[[^\]]*"UI_Notifications"/m);
   assert.match(cargoToml, /^tauri-plugin-opener = "2\.[^"]+"/m);
   assert.match(cargoToml, /^tauri-plugin-single-instance = "2\.[^"]+"/m);
   assert.match(cargoToml, /^tauri-plugin-updater = "=2\.10\.1"$/m);
@@ -109,6 +110,8 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
     "desktop_check_update",
     "desktop_install_update",
     "desktop_show_main",
+    "desktop_is_main_visible",
+    "desktop_notify",
   ]) {
     assert.match(
       buildRs,
@@ -128,7 +131,13 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.match(libRs, /window\.letscubeDesktop/);
   assert.match(libRs, /desktop_show_main/);
   assert.match(libRs, /showMain: async \(\) => call\("desktop_show_main"\)/);
+  assert.match(libRs, /desktop_is_main_visible/);
+  assert.match(libRs, /isMainVisible: async \(\) => call\("desktop_is_main_visible"\)/);
+  assert.match(libRs, /desktop_notify/);
+  assert.match(libRs, /notify: async \(notification\) => call\("desktop_notify"/);
   assert.equal(capability.permissions.includes("allow-desktop-show-main"), true);
+  assert.equal(capability.permissions.includes("allow-desktop-is-main-visible"), true);
+  assert.equal(capability.permissions.includes("allow-desktop-notify"), true);
   assert.match(libRs, /Object\.freeze/);
   assert.match(libRs, /version:\s*runtimeInfo\.version/);
   assert.match(libRs, /build:\s*runtimeInfo\.build/);
@@ -218,18 +227,8 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
     "production capability must not expose filesystem, shell, process, updater, generic opener or wildcard HTTP access",
   );
   assert.ok(
-    capability.permissions.some((permission) => /^notification:/.test(permission)),
-    "production capability must expose only the notification plugin methods needed by the app origin",
-  );
-  assert.deepEqual(
-    capability.permissions.filter((permission) => /^notification:/.test(permission)).sort(),
-    [
-      "notification:allow-is-permission-granted",
-      "notification:allow-notify",
-      "notification:allow-register-listener",
-      "notification:allow-request-permission",
-    ],
-    "remote production origin must receive only the four notification methods used by the app",
+    capability.permissions.every((permission) => !/^notification:/.test(permission)),
+    "remote production origin must use the guarded native toast command instead of plugin-wide notification access",
   );
   assert.ok(
     capability.permissions.every((permission) => !/^updater:/.test(permission)),
@@ -242,10 +241,12 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
       "allow-desktop-get-update-channel",
       "allow-desktop-get-update-state",
       "allow-desktop-install-update",
+      "allow-desktop-is-main-visible",
+      "allow-desktop-notify",
       "allow-desktop-set-update-channel",
       "allow-desktop-show-main",
     ],
-    "remote production origin must receive only the six guarded desktop commands",
+    "remote production origin must receive only the eight guarded desktop commands",
   );
   assert.deepEqual(startupCapability.permissions.sort(), ["allow-begin-startup-qa", "allow-retry-main"]);
 });

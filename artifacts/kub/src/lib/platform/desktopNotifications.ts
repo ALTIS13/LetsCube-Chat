@@ -2,8 +2,6 @@ import { getDesktopBridge, isDesktopApp } from "./desktop.ts";
 import { notificationPresentationTag } from "../browserNotificationPresentation.ts";
 import type { Notification } from "../../types/database.ts";
 
-type DesktopNotificationPermission = "default" | "denied" | "granted";
-
 export type DesktopMessageNotification = {
   title: string;
   body: string;
@@ -17,22 +15,12 @@ type DesktopNotificationPayload = {
   id: number;
   title: string;
   body: string;
-  group: string;
-  icon?: string;
-  extra?: {
-    kind: "message" | "task" | "system";
-    route: string;
-  };
+  kind: "message" | "task" | "system";
+  route: string;
 };
 
 type DesktopNotificationApi = {
-  isPermissionGranted(): Promise<boolean>;
-  requestPermission(): Promise<DesktopNotificationPermission>;
-  sendNotification(notification: DesktopNotificationPayload): void;
-};
-
-type DesktopNotificationAction = {
-  extra?: Record<string, unknown>;
+  sendNotification(notification: DesktopNotificationPayload): Promise<boolean>;
 };
 
 type DesktopNotificationActionListener = {
@@ -41,7 +29,7 @@ type DesktopNotificationActionListener = {
 
 type DesktopNotificationActionApi = {
   onAction(
-    callback: (notification: DesktopNotificationAction) => void,
+    callback: (route: unknown) => void,
   ): Promise<DesktopNotificationActionListener>;
 };
 
@@ -50,20 +38,32 @@ export type DesktopNotificationApiLoader =
 
 export type DesktopNotificationContext = {
   visibilityState?: DocumentVisibilityState;
+  isMainVisible?: () => Promise<boolean | null>;
 };
 
 async function loadDesktopNotificationApi(): Promise<DesktopNotificationApi> {
-  const plugin = await import("@tauri-apps/plugin-notification");
+  const bridge = getDesktopBridge();
+  if (!bridge) throw new Error("desktop_runtime_unavailable");
   return {
-    isPermissionGranted: plugin.isPermissionGranted,
-    requestPermission: plugin.requestPermission,
-    sendNotification: plugin.sendNotification,
+    sendNotification: (notification) => bridge.notify(notification),
   };
 }
 
 async function loadDesktopNotificationActionApi(): Promise<DesktopNotificationActionApi> {
-  const plugin = await import("@tauri-apps/plugin-notification");
-  return { onAction: plugin.onAction };
+  if (typeof window === "undefined") throw new Error("desktop_runtime_unavailable");
+  return {
+    async onAction(callback) {
+      const listener = (event: Event) => {
+        callback((event as CustomEvent<{ route?: unknown }>).detail?.route);
+      };
+      window.addEventListener("letscube:desktop-notification-action", listener);
+      return {
+        async unregister() {
+          window.removeEventListener("letscube:desktop-notification-action", listener);
+        },
+      };
+    },
+  };
 }
 
 export async function showDesktopMessageNotification(
@@ -75,30 +75,28 @@ export async function showDesktopMessageNotification(
   const visibilityState =
     context.visibilityState ??
     (typeof document === "undefined" ? "hidden" : document.visibilityState);
-  if (visibilityState === "visible") return false;
+  let nativeVisibility: boolean | null = null;
+  const resolveNativeVisibility =
+    context.isMainVisible ?? getDesktopBridge()?.isMainVisible;
+  if (resolveNativeVisibility) {
+    try {
+      nativeVisibility = await resolveNativeVisibility();
+    } catch {
+      nativeVisibility = null;
+    }
+  }
+  if (nativeVisibility ?? visibilityState === "visible") return false;
 
   try {
     const api = await loadApi();
-    const granted = await api.isPermissionGranted();
-    if (!granted) {
-      const permission = await api.requestPermission();
-      if (permission !== "granted") return false;
-    }
     const payload: DesktopNotificationPayload = {
       id: stableDesktopNotificationId(notification.tag),
       title: notification.title,
       body: notification.body,
-      group: notification.tag,
+      kind: notification.kind ?? "system",
+      route: notification.route ?? "/",
     };
-    if (notification.icon) payload.icon = notification.icon;
-    if (notification.kind && notification.route) {
-      payload.extra = {
-        kind: notification.kind,
-        route: notification.route,
-      };
-    }
-    api.sendNotification(payload);
-    return true;
+    return await api.sendNotification(payload);
   } catch {
     return false;
   }
@@ -126,8 +124,8 @@ export async function registerDesktopNotificationNavigationListener(
   if (!isDesktopApp()) return () => undefined;
   try {
     const api = await loadApi();
-    const listener = await api.onAction((notification) => {
-      const route = safeDesktopRoute(notification.extra?.route);
+    const listener = await api.onAction((rawRoute) => {
+      const route = safeDesktopRoute(rawRoute);
       if (!route) return;
       void restoreMain()
         .then(() => openTarget(route))
