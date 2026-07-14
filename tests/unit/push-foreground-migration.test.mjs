@@ -7,6 +7,11 @@ const migrationUrl = new URL(
   import.meta.url,
 );
 
+const currentChatIndexMigrationUrl = new URL(
+  "../../.migration-backup/supabase/migrations/20260714055443_push_foreground_sessions_current_chat_index.sql",
+  import.meta.url,
+);
+
 test("foreground push migration isolates sessions and atomically claims the outbox", async () => {
   const sql = await readFile(migrationUrl, "utf8");
 
@@ -53,4 +58,13 @@ test("foreground push migration restores chat read sync and hardens internal hel
       new RegExp(`revoke all on function public\\.${helper.replaceAll("_", "_")}\\(`, "i"),
     );
   }
+});
+
+test("foreground session current-chat foreign key has a covering index", async () => {
+  const sql = await readFile(currentChatIndexMigrationUrl, "utf8");
+
+  assert.match(
+    sql,
+    /create index if not exists push_foreground_sessions_current_chat_idx\s+on public\.push_foreground_sessions \(current_chat_id\)/i,
+  );
 });
