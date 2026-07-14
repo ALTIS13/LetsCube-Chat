@@ -151,6 +151,48 @@ export type Database = {
           },
         ]
       }
+      chat_notification_preferences: {
+        Row: {
+          chat_id: string
+          created_at: string
+          muted_until: string | null
+          push_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          chat_id: string
+          created_at?: string
+          muted_until?: string | null
+          push_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          chat_id?: string
+          created_at?: string
+          muted_until?: string | null
+          push_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_notification_preferences_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_notification_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chats: {
         Row: {
           avatar_url: string | null
@@ -611,6 +653,44 @@ export type Database = {
           },
         ]
       }
+      notification_preferences: {
+        Row: {
+          created_at: string
+          invite_push_enabled: boolean
+          message_push_enabled: boolean
+          push_enabled: boolean
+          task_push_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          invite_push_enabled?: boolean
+          message_push_enabled?: boolean
+          push_enabled?: boolean
+          task_push_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          invite_push_enabled?: boolean
+          message_push_enabled?: boolean
+          push_enabled?: boolean
+          task_push_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           created_at: string
@@ -649,6 +729,8 @@ export type Database = {
       notifications_push_outbox: {
         Row: {
           attempt_count: number
+          claim_token: string | null
+          claimed_until: string | null
           created_at: string
           id: string
           last_error: string | null
@@ -656,10 +738,14 @@ export type Database = {
           payload: Json
           sent_at: string | null
           subscription_id: string
+          suppressed_at: string | null
+          suppression_reason: string | null
           user_id: string
         }
         Insert: {
           attempt_count?: number
+          claim_token?: string | null
+          claimed_until?: string | null
           created_at?: string
           id?: string
           last_error?: string | null
@@ -667,10 +753,14 @@ export type Database = {
           payload: Json
           sent_at?: string | null
           subscription_id: string
+          suppressed_at?: string | null
+          suppression_reason?: string | null
           user_id: string
         }
         Update: {
           attempt_count?: number
+          claim_token?: string | null
+          claimed_until?: string | null
           created_at?: string
           id?: string
           last_error?: string | null
@@ -678,6 +768,8 @@ export type Database = {
           payload?: Json
           sent_at?: string | null
           subscription_id?: string
+          suppressed_at?: string | null
+          suppression_reason?: string | null
           user_id?: string
         }
         Relationships: [
@@ -722,18 +814,21 @@ export type Database = {
         Row: {
           phone: string | null
           phone_verified: boolean
+          phone_verified_at: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           phone?: string | null
           phone_verified?: boolean
+          phone_verified_at?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           phone?: string | null
           phone_verified?: boolean
+          phone_verified_at?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -783,13 +878,55 @@ export type Database = {
         }
         Relationships: []
       }
+      push_foreground_sessions: {
+        Row: {
+          client_id: string
+          current_chat_id: string | null
+          expires_at: string
+          last_seen_at: string
+          user_id: string
+        }
+        Insert: {
+          client_id: string
+          current_chat_id?: string | null
+          expires_at: string
+          last_seen_at?: string
+          user_id: string
+        }
+        Update: {
+          client_id?: string
+          current_chat_id?: string | null
+          expires_at?: string
+          last_seen_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_foreground_sessions_current_chat_id_fkey"
+            columns: ["current_chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_foreground_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       push_subscriptions: {
         Row: {
           auth: string
           created_at: string
           endpoint: string
           id: string
+          is_active: boolean
+          last_seen_at: string
           p256dh: string
+          platform: string | null
           updated_at: string
           user_agent: string | null
           user_id: string
@@ -799,7 +936,10 @@ export type Database = {
           created_at?: string
           endpoint: string
           id?: string
+          is_active?: boolean
+          last_seen_at?: string
           p256dh: string
+          platform?: string | null
           updated_at?: string
           user_agent?: string | null
           user_id: string
@@ -809,7 +949,10 @@ export type Database = {
           created_at?: string
           endpoint?: string
           id?: string
+          is_active?: boolean
+          last_seen_at?: string
           p256dh?: string
+          platform?: string | null
           updated_at?: string
           user_agent?: string | null
           user_id?: string
@@ -1359,6 +1502,10 @@ export type Database = {
         Returns: undefined
       }
       _normalize_phone_e164: { Args: { p: string }; Returns: string }
+      _notification_push_allowed: {
+        Args: { p_kind: string; p_payload: Json; p_user_id: string }
+        Returns: boolean
+      }
       _notification_push_payload: {
         Args: { p_kind: string; p_payload: Json }
         Returns: Json
@@ -1691,7 +1838,7 @@ export type Database = {
       mark_chat_read: { Args: { p_chat_id: string }; Returns: undefined }
       notifications_mark_all_read: { Args: never; Returns: undefined }
       notifications_mark_chat_messages_read: {
-        Args: { p_chat_id: string; p_read_until?: string | null }
+        Args: { p_chat_id: string; p_read_until?: string }
         Returns: undefined
       }
       notifications_mark_read: { Args: { p_id: string }; Returns: undefined }
@@ -1730,6 +1877,23 @@ export type Database = {
         }
       }
       profile_phone_mark_verified: { Args: never; Returns: undefined }
+      push_foreground_session_close: {
+        Args: { p_client_id: string }
+        Returns: undefined
+      }
+      push_foreground_session_touch: {
+        Args: { p_client_id: string; p_current_chat_id?: string }
+        Returns: undefined
+      }
+      push_outbox_claim: {
+        Args: { p_claim_token: string; p_limit: number }
+        Returns: {
+          attempt_count: number
+          id: string
+          payload: Json
+          subscription_id: string
+        }[]
+      }
       role_create: {
         Args: {
           p_description?: string
