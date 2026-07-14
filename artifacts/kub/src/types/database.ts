@@ -1595,6 +1595,14 @@ export interface Database {
         Args: { p_chat_id: string; p_read_until?: string | null }
         Returns: void
       }
+      push_foreground_session_touch: {
+        Args: { p_client_id: string; p_current_chat_id?: string | null }
+        Returns: void
+      }
+      push_foreground_session_close: {
+        Args: { p_client_id: string }
+        Returns: void
+      }
       group_invite_create: {
         Args: { p_chat_id: string; p_invitee_id: string }
         Returns: Database['public']['Tables']['group_invites']['Row']
