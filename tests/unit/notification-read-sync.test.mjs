@@ -5,6 +5,7 @@ import { markChatMessageNotificationsRead } from "../../artifacts/kub/src/lib/no
 
 test("chat notification read sync calls the server even without locally loaded notification rows", async () => {
   const calls = [];
+  const closedChats = [];
   const client = {
     async rpc(name, args) {
       calls.push({ name, args });
@@ -16,6 +17,9 @@ test("chat notification read sync calls the server even without locally loaded n
     client,
     "chat-1",
     "2026-07-11T21:30:00.000Z",
+    async (chatId) => {
+      closedChats.push(chatId);
+    },
   );
 
   assert.equal(error, null);
@@ -28,4 +32,27 @@ test("chat notification read sync calls the server even without locally loaded n
       },
     },
   ]);
+  assert.deepEqual(closedChats, ["chat-1"]);
+});
+
+test("chat notification read sync keeps the OS card when the server update fails", async () => {
+  const closedChats = [];
+  const expectedError = { message: "offline" };
+  const client = {
+    async rpc() {
+      return { error: expectedError };
+    },
+  };
+
+  const error = await markChatMessageNotificationsRead(
+    client,
+    "chat-2",
+    null,
+    async (chatId) => {
+      closedChats.push(chatId);
+    },
+  );
+
+  assert.equal(error, expectedError);
+  assert.deepEqual(closedChats, []);
 });

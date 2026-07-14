@@ -128,8 +128,7 @@ self.addEventListener("push", (event) => {
 });
 
 async function showPushNotification(data) {
-  const existing = await self.registration.getNotifications({ tag: data.tag });
-  existing.forEach((notification) => notification.close());
+  await closePushNotificationTag(data.tag);
   return self.registration.showNotification(data.title, {
     body: data.body,
     tag: data.tag,
@@ -145,6 +144,11 @@ async function showPushNotification(data) {
       messageId: data.messageId,
     },
   });
+}
+
+async function closePushNotificationTag(tag) {
+  const existing = await self.registration.getNotifications({ tag });
+  existing.forEach((notification) => notification.close());
 }
 
 self.addEventListener("notificationclick", (event) => {

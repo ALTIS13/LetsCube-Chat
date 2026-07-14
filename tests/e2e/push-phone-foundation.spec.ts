@@ -135,7 +135,8 @@ test.describe("LETSCUBE push and phone production foundation", () => {
     expect(swSource).toContain("message_id");
     expect(swSource).toContain("message:chat:");
     expect(swSource).toContain("isMessagePush");
-    expect(swSource).toContain("getNotifications({ tag: data.tag })");
+    expect(swSource).toContain("closePushNotificationTag(data.tag)");
+    expect(swSource).toContain("getNotifications({ tag })");
     expect(swSource).toContain('event.data?.type === "KUB_CLOSE_NOTIFICATION"');
     expect(swSource).toContain('self.addEventListener("pushsubscriptionchange"');
     expect(swSource).toContain("KUB_PUSH_SUBSCRIPTION_CHANGED");

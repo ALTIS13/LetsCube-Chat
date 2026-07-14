@@ -10,7 +10,6 @@ import { reportError } from "@/lib/monitoring";
 import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 import { isSavedChat } from "@/lib/chatDisplay";
 import { scheduleMarkChatDelivered, scheduleMarkChatRead } from "@/lib/deliveryReceipts";
-import { isWebBrowser } from "@/lib/platform/capabilities";
 import {
   createMessageSendTimeoutContext,
   getMessageAckUserMessage,
@@ -75,7 +74,7 @@ export function useMessages(
   const [clearedAt, setClearedAt] = useState<string | null>(null);
   const [hiddenMessageIds, setHiddenMessageIds] = useState<Set<string>>(() => new Set());
   // Per-slice selectors: не подписываемся на весь store (раньше любая
-  // мутация — chats, selectedChatId, mutedChatIds — ререндерила хук). Сами
+  // мутация — chats, selectedChatId — ререндерила хук). Сами
   // setMessages/addMessage/replaceMessage в zustand стабильны по ссылке.
   // NB: removeMessage intentionally not used — soft-deletes keep the row
   // in store so the bubble can render a "сообщение удалено" placeholder.
@@ -87,7 +86,6 @@ export function useMessages(
   const updateChat = useAppStore((s) => s.updateChat);
   const updateChatLastMessage = useAppStore((s) => s.updateChatLastMessage);
   const currentUser = useAppStore((s) => s.currentUser);
-  const mutedChatIds = useAppStore((s) => s.mutedChatIds);
   const userId = currentUser?.id ?? null;
 
   const supabase = createClient(); // REST-операции
@@ -98,8 +96,6 @@ export function useMessages(
 
   const currentUserRef = useRef(currentUser);
   currentUserRef.current = currentUser;
-  const mutedRef = useRef(mutedChatIds);
-  useEffect(() => { mutedRef.current = mutedChatIds; }, [mutedChatIds]);
   const chatIdRef = useRef(chatId);
   useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
   const clearedAtRef = useRef(clearedAt);
@@ -616,20 +612,6 @@ export function useMessages(
           addMessage(payload.new.chat_id, visibleMessage);
           updateChatLastMessage(payload.new.chat_id, visibleMessage);
           const user = currentUserRef.current;
-          if (user && data.user_id !== user.id && !mutedRef.current.includes(payload.new.chat_id)) {
-            const senderName = (data as unknown as MessageWithSender).sender?.full_name ?? "Новое сообщение";
-            const body = data.type === "text" ? (data.content ?? "")
-              : data.type === "image" ? "🖼 Фото"
-              : data.type === "audio" ? "🎤 Голосовое сообщение"
-              : data.type === "video" ? "🎬 Видео" : "📎 Файл";
-            if (
-              isWebBrowser() && document.hidden &&
-              typeof window !== "undefined" && "Notification" in window &&
-              Notification.permission === "granted"
-            ) {
-              new Notification(senderName, { body, icon: "/icons/icon-192.png", tag: payload.new.chat_id });
-            }
-          }
           if (user && data.user_id !== user.id) {
             if (document.visibilityState === "visible") {
               scheduleMarkChatRead(supabase, payload.new.chat_id, data.created_at);

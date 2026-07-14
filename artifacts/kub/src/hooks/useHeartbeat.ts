@@ -17,6 +17,7 @@ const WARN_THROTTLE_MS = 60_000;
  *     случайно смонтирован в нескольких местах (ref-counting);
  *   – `lastPingAt`-throttle: реальный пинг не чаще раза в HEARTBEAT_MS,
  *     даже если эффект перезапустился или visibility-обработчик дёрнулся;
+ *     восстановление сети намеренно обходит throttle один раз;
  *   – exponential backoff (30s → 60s → 120s → cap 5 min) при сетевом сбое,
  *     счётчик сбрасывается после успешного запроса;
  *   – throttled `console.warn` (1 раз в WARN_THROTTLE_MS), чтобы лавина
@@ -48,26 +49,37 @@ function startRunner(userId: string): HeartbeatRunner {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let lastPingAt = 0;
   let backoffMs = HEARTBEAT_MS;
+  let pingInFlight: Promise<void> | null = null;
 
-  const ping = async (): Promise<void> => {
-    if (cancelled) return;
+  const ping = (force = false): Promise<void> => {
+    if (cancelled) return Promise.resolve();
+    if (pingInFlight) {
+      return force ? pingInFlight.then(() => ping(true)) : pingInFlight;
+    }
     const now = Date.now();
     // Защитный throttle на случай гонки visibility/timer.
-    if (now - lastPingAt < HEARTBEAT_MS - 1_000) return;
+    if (!force && now - lastPingAt < HEARTBEAT_MS - 1_000) {
+      return Promise.resolve();
+    }
     lastPingAt = now;
     bumpHeartbeat();
-    try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ online_at: new Date().toISOString() })
-        .eq("id", userId);
-      if (error) throw new Error(error.message);
-      backoffMs = HEARTBEAT_MS;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      warnThrottled(`heartbeat update failed: ${msg}`);
-      backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
-    }
+    pingInFlight = (async () => {
+      try {
+        const { error } = await supabase
+          .from("profiles")
+          .update({ online_at: new Date().toISOString() })
+          .eq("id", userId);
+        if (error) throw new Error(error.message);
+        backoffMs = HEARTBEAT_MS;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        warnThrottled(`heartbeat update failed: ${msg}`);
+        backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
+      }
+    })().finally(() => {
+      pingInFlight = null;
+    });
+    return pingInFlight;
   };
 
   const schedule = (delay: number): void => {
@@ -100,10 +112,17 @@ function startRunner(userId: string): HeartbeatRunner {
     }
   };
 
+  const handleOnline = (): void => {
+    if (cancelled || document.visibilityState !== "visible") return;
+    backoffMs = HEARTBEAT_MS;
+    void ping(true).then(() => schedule(backoffMs));
+  };
+
   if (document.visibilityState === "visible") {
     void ping().then(() => schedule(backoffMs));
   }
   document.addEventListener("visibilitychange", handleVisibility);
+  window.addEventListener("online", handleOnline);
 
   return {
     userId,
@@ -115,6 +134,7 @@ function startRunner(userId: string): HeartbeatRunner {
         timer = null;
       }
       document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("online", handleOnline);
     },
   };
 }

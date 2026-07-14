@@ -72,10 +72,11 @@ Deno.serve(async (request: Request) => {
 
   const body = await readBody(request);
   const limit = normalizeLimit(body?.limit);
+  const claimToken = crypto.randomUUID();
   webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
 
   const [rows, nativeRows] = await Promise.all([
-    selectOutbox(supabaseUrl, secretKey, limit),
+    claimOutbox(supabaseUrl, secretKey, limit, claimToken),
     selectNativeOutbox(supabaseUrl, secretKey, limit),
   ]);
   if (!rows.ok) return json(rows.body, rows.status);
@@ -90,7 +91,14 @@ Deno.serve(async (request: Request) => {
   let failed = 0;
   let pruned = 0;
   for (const row of rows.data) {
-    const result = await deliver(supabaseUrl, secretKey, row, byId.get(row.subscription_id), webPushAppOrigin);
+    const result = await deliver(
+      supabaseUrl,
+      secretKey,
+      claimToken,
+      row,
+      byId.get(row.subscription_id),
+      webPushAppOrigin,
+    );
     if (result === "sent") sent += 1;
     else if (result === "pruned") pruned += 1;
     else failed += 1;
@@ -140,14 +148,21 @@ function normalizeLimit(value: unknown) {
   return Math.max(1, Math.min(Math.trunc(value), MAX_LIMIT));
 }
 
-async function selectOutbox(supabaseUrl: string, secretKey: string, limit: number) {
-  const url = new URL("/rest/v1/notifications_push_outbox", supabaseUrl);
-  url.searchParams.set("select", "id,subscription_id,payload,attempt_count");
-  url.searchParams.set("sent_at", "is.null");
-  url.searchParams.set("attempt_count", `lt.${MAX_ATTEMPTS}`);
-  url.searchParams.set("order", "created_at.asc");
-  url.searchParams.set("limit", String(limit));
-  const response = await restFetch(url, secretKey);
+async function claimOutbox(
+  supabaseUrl: string,
+  secretKey: string,
+  limit: number,
+  claimToken: string,
+) {
+  const url = new URL("/rest/v1/rpc/push_outbox_claim", supabaseUrl);
+  const response = await restFetch(url, secretKey, {
+    method: "POST",
+    headers: { prefer: "return=representation" },
+    body: JSON.stringify({
+      p_limit: limit,
+      p_claim_token: claimToken,
+    }),
+  });
   if (!response.ok) return { ok: false as const, status: 500, body: await summarizeResponse(response) };
   return { ok: true as const, data: (await response.json()) as OutboxRow[] };
 }
@@ -164,9 +179,13 @@ async function selectSubscriptions(supabaseUrl: string, secretKey: string, ids: 
 
 async function selectNativeOutbox(supabaseUrl: string, secretKey: string, limit: number) {
   const url = new URL("/rest/v1/notifications_native_push_outbox", supabaseUrl);
-  url.searchParams.set("select", "id,device_id,payload,attempt_count");
+  url.searchParams.set(
+    "select",
+    "id,device_id,payload,attempt_count,notifications!inner(read_at)",
+  );
   url.searchParams.set("sent_at", "is.null");
   url.searchParams.set("attempt_count", `lt.${MAX_ATTEMPTS}`);
+  url.searchParams.set("notifications.read_at", "is.null");
   url.searchParams.set("order", "created_at.asc");
   url.searchParams.set("limit", String(limit));
   const response = await restFetch(url, secretKey);
@@ -314,12 +333,19 @@ async function deliverFcm(
 async function deliver(
   supabaseUrl: string,
   secretKey: string,
+  claimToken: string,
   row: OutboxRow,
   subscription: SubscriptionRow | undefined,
   webPushAppOrigin: string | undefined,
 ): Promise<"sent" | "failed" | "pruned"> {
   if (!subscription || subscription.is_active === false) {
-    await markOutbox(supabaseUrl, secretKey, row.id, { sent_at: new Date().toISOString(), last_error: "subscription_missing" });
+    await markOutbox(supabaseUrl, secretKey, claimToken, row.id, {
+      suppressed_at: new Date().toISOString(),
+      suppression_reason: "subscription_inactive",
+      claim_token: null,
+      claimed_until: null,
+      last_error: "subscription_missing",
+    });
     return "pruned";
   }
 
@@ -338,7 +364,12 @@ async function deliver(
         ...(topic ? { topic } : {}),
       },
     );
-    await markOutbox(supabaseUrl, secretKey, row.id, { sent_at: new Date().toISOString(), last_error: null });
+    await markOutbox(supabaseUrl, secretKey, claimToken, row.id, {
+      sent_at: new Date().toISOString(),
+      claim_token: null,
+      claimed_until: null,
+      last_error: null,
+    });
     return "sent";
   } catch (error) {
     const status = typeof error === "object" && error ? (error as { statusCode?: number }).statusCode : undefined;
@@ -348,15 +379,20 @@ async function deliver(
         is_active: false,
         updated_at: new Date().toISOString(),
       });
-      await markOutbox(supabaseUrl, secretKey, row.id, {
-        sent_at: new Date().toISOString(),
+      await markOutbox(supabaseUrl, secretKey, claimToken, row.id, {
+        suppressed_at: new Date().toISOString(),
+        suppression_reason: "subscription_inactive",
+        claim_token: null,
+        claimed_until: null,
         last_error: `gone:${status ?? "unknown"}:${reason ?? "subscription_invalid"}`,
       });
       return "pruned";
     }
 
-    await markOutbox(supabaseUrl, secretKey, row.id, {
+    await markOutbox(supabaseUrl, secretKey, claimToken, row.id, {
       attempt_count: row.attempt_count + 1,
+      claim_token: null,
+      claimed_until: null,
       last_error: `webpush:${status ?? "unknown"}:${reason ?? "unknown"}`,
     });
     return "failed";
@@ -404,8 +440,21 @@ function looksSensitive(value: string) {
   );
 }
 
-async function markOutbox(supabaseUrl: string, secretKey: string, id: string, patch: Record<string, unknown>) {
-  await patchRow(supabaseUrl, secretKey, "notifications_push_outbox", id, patch);
+async function markOutbox(
+  supabaseUrl: string,
+  secretKey: string,
+  claimToken: string,
+  id: string,
+  patch: Record<string, unknown>,
+) {
+  await patchRow(
+    supabaseUrl,
+    secretKey,
+    "notifications_push_outbox",
+    id,
+    patch,
+    claimToken,
+  );
 }
 
 async function markNativeOutbox(supabaseUrl: string, secretKey: string, id: string, patch: Record<string, unknown>) {
@@ -422,9 +471,13 @@ async function patchRow(
     | "user_push_devices",
   id: string,
   patch: Record<string, unknown>,
+  claimToken?: string,
 ) {
   const url = new URL(`/rest/v1/${table}`, supabaseUrl);
   url.searchParams.set("id", `eq.${id}`);
+  if (table === "notifications_push_outbox" && claimToken) {
+    url.searchParams.set("claim_token", `eq.${claimToken}`);
+  }
   await restFetch(url, secretKey, {
     method: "PATCH",
     body: JSON.stringify(patch),

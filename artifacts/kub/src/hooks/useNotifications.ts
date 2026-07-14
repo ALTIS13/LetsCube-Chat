@@ -293,7 +293,18 @@ export function useNotifications() {
     const matchingIds = items
       .filter((item) => !item.read_at && isMessageNotification(item) && payloadString(item.payload, "chat_id") === chatId)
       .map((item) => item.id);
-    const rpcError = await markChatMessageNotificationsRead(supabase, chatId, readUntil);
+    const rpcError = await markChatMessageNotificationsRead(
+      supabase,
+      chatId,
+      readUntil,
+      async (markedChatId) => {
+        const tag = notificationPresentationTag({
+          kind: "message",
+          payload: { chat_id: markedChatId },
+        });
+        if (tag) await closeBrowserNotification(tag);
+      },
+    );
     if (!rpcError) {
       const nowIso = new Date().toISOString();
       setItems((prev) => prev.map((item) =>
