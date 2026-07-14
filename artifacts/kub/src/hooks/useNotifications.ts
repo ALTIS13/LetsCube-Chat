@@ -16,6 +16,7 @@ import {
 import { isDesktopApp } from "@/lib/platform/desktop";
 import {
   closeDesktopNotificationForRow,
+  desktopMessageOverflowRows,
   showDesktopNotificationForRow,
 } from "@/lib/platform/desktopNotifications";
 import type { Notification } from "@/types/database";
@@ -61,6 +62,8 @@ export function useNotifications() {
   const [error, setError] = useState<string | null>(null);
   const autoMarkingReadRef = useRef<Set<string>>(new Set());
   const unreadPresentationTagsRef = useRef<Map<string, string>>(new Map());
+  const unreadDesktopIdsRef = useRef<Map<string, Notification>>(new Map());
+  const trimmedDesktopIdsRef = useRef<Set<string>>(new Set());
   const presentedDesktopIdsRef = useRef<Set<string>>(new Set());
   const desktopBaselineLoadedRef = useRef(false);
 
@@ -233,16 +236,47 @@ export function useNotifications() {
       const previousTag = previousUnread.get(item.id);
       if (previousTag && !currentUnreadTagCounts.has(previousTag)) {
         void closeBrowserNotification(previousTag);
-        void closeDesktopNotificationForRow(item);
+        if (isDesktopApp() && !isMessageNotification(item)) {
+          void closeDesktopNotificationForRow(item);
+        }
       }
     }
     unreadPresentationTagsRef.current = currentUnread;
+
+    if (isDesktopApp()) {
+      const previousDesktopUnread = unreadDesktopIdsRef.current;
+      const currentDesktopUnread = new Map<string, Notification>();
+      for (const item of items) {
+        if (!item.read_at && isMessageNotification(item)) {
+          currentDesktopUnread.set(item.id, item);
+        }
+      }
+      for (const [id, previousItem] of previousDesktopUnread) {
+        if (!currentDesktopUnread.has(id)) {
+          void closeDesktopNotificationForRow(previousItem);
+        }
+      }
+
+      const overflowRows = desktopMessageOverflowRows(items, 5);
+      const overflowIds = new Set(overflowRows.map((item) => item.id));
+      for (const item of overflowRows) {
+        if (trimmedDesktopIdsRef.current.has(item.id)) continue;
+        trimmedDesktopIdsRef.current.add(item.id);
+        void closeDesktopNotificationForRow(item);
+      }
+      for (const id of trimmedDesktopIdsRef.current) {
+        if (!overflowIds.has(id)) trimmedDesktopIdsRef.current.delete(id);
+      }
+      unreadDesktopIdsRef.current = currentDesktopUnread;
+    }
     void updateBrowserAppBadge(unreadCount);
   }, [items, unreadCount]);
 
   useEffect(() => {
     if (userId) return;
     unreadPresentationTagsRef.current.clear();
+    unreadDesktopIdsRef.current.clear();
+    trimmedDesktopIdsRef.current.clear();
     presentedDesktopIdsRef.current.clear();
     desktopBaselineLoadedRef.current = false;
     void updateBrowserAppBadge(0);

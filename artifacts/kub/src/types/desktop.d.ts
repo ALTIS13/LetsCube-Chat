@@ -11,12 +11,18 @@ type LetscubeDesktopNotification = {
   title: string;
   body: string;
   kind: "message" | "task" | "system";
+  group: string;
+  header?: {
+    id: string;
+    title: string;
+    route: string;
+  };
   route: string;
 };
 
 type LetscubeDesktopNotificationIdentity = Pick<
   LetscubeDesktopNotification,
-  "id" | "kind"
+  "id" | "kind" | "group"
 >;
 
 interface Window {

@@ -16,6 +16,7 @@ use tauri::{
     AppHandle, Emitter, Manager, Runtime, State, Url, WebviewWindow, WebviewWindowBuilder,
     WindowEvent,
 };
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_updater::{Update, UpdaterExt};
 use updater::{
@@ -31,6 +32,7 @@ const UPDATE_CHANNEL_FILE: &str = "updater-channel.json";
 const UPDATE_TIMEOUT: Duration = Duration::from_secs(8);
 const STARTUP_EVENT: &str = "letscube://startup-state";
 const DESKTOP_NOTIFICATION_ACTION_EVENT: &str = "letscube:desktop-notification-action";
+const WINDOWS_NOTIFICATION_SCHEME: &str = "letscube-notification";
 const WINDOWS_APP_ID: &str = "ru.letscube.messenger";
 const DESKTOP_BUILD: &str = env!("LETSCUBE_DESKTOP_BUILD");
 static MAIN_READY: AtomicBool = AtomicBool::new(false);
@@ -59,6 +61,16 @@ struct DesktopNotificationRequest {
     title: String,
     body: String,
     kind: String,
+    group: String,
+    header: Option<DesktopNotificationHeader>,
+    route: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct DesktopNotificationHeader {
+    id: String,
+    title: String,
     route: String,
 }
 
@@ -67,6 +79,7 @@ struct DesktopNotificationRequest {
 struct DesktopNotificationIdentity {
     id: u32,
     kind: String,
+    group: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -351,6 +364,99 @@ fn notification_group(kind: &str) -> Option<&'static str> {
     }
 }
 
+fn is_safe_notification_group(kind: &str, group: &str) -> bool {
+    if notification_group(kind).is_none() {
+        return false;
+    }
+    let expected_prefix = format!("{kind}:");
+    group.len() > expected_prefix.len()
+        && group.len() <= 64
+        && group.starts_with(&expected_prefix)
+        && group.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, ':' | '_' | '-')
+        })
+}
+
+fn validate_desktop_notification(
+    notification: &DesktopNotificationRequest,
+) -> Result<(), &'static str> {
+    if notification.id == 0
+        || !is_safe_notification_group(&notification.kind, &notification.group)
+        || !is_safe_notification_route(&notification.route)
+        || !is_safe_notification_text(&notification.title, 120)
+        || !is_safe_notification_text(&notification.body, 280)
+    {
+        return Err("notification_invalid");
+    }
+
+    match (&*notification.kind, &notification.header) {
+        ("message", Some(header))
+            if header.id == notification.group
+                && is_safe_notification_text(&header.title, 120)
+                && is_safe_notification_route(&header.route) =>
+        {
+            Ok(())
+        }
+        ("task" | "system", None) => Ok(()),
+        _ => Err("notification_invalid"),
+    }
+}
+
+fn notification_activation_url(route: &str) -> Result<String, &'static str> {
+    if !is_safe_notification_route(route) {
+        return Err("notification_invalid");
+    }
+    let mut activation = Url::parse(&format!("{WINDOWS_NOTIFICATION_SCHEME}://open"))
+        .map_err(|_| "notification_invalid")?;
+    activation.query_pairs_mut().append_pair("route", route);
+    Ok(activation.into())
+}
+
+fn notification_route_from_activation_url(value: &str) -> Option<String> {
+    let activation = Url::parse(value).ok()?;
+    if activation.scheme() != WINDOWS_NOTIFICATION_SCHEME
+        || activation.host_str() != Some("open")
+        || !activation.username().is_empty()
+        || activation.password().is_some()
+        || activation.port().is_some()
+        || !matches!(activation.path(), "" | "/")
+        || activation.fragment().is_some()
+    {
+        return None;
+    }
+    let mut routes = activation
+        .query_pairs()
+        .filter(|(key, _)| key == "route")
+        .map(|(_, route)| route.into_owned());
+    let route = routes.next()?;
+    if routes.next().is_some() || !is_safe_notification_route(&route) {
+        return None;
+    }
+    Some(route)
+}
+
+fn notification_route_from_args(args: &[String]) -> Option<String> {
+    args.iter()
+        .find_map(|arg| notification_route_from_activation_url(arg))
+}
+
+fn activate_notification_route<R: Runtime>(window: &WebviewWindow<R>, route: String) {
+    if !is_safe_notification_route(&route) {
+        return;
+    }
+    if let Ok(mut pending_route) = window.state::<PendingNotificationRoute>().0.lock() {
+        *pending_route = Some(route);
+    }
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+    let script = format!(
+        "window.dispatchEvent(new CustomEvent({event:?}));",
+        event = DESKTOP_NOTIFICATION_ACTION_EVENT,
+    );
+    let _ = window.eval(script);
+}
+
 fn escape_xml(value: &str) -> String {
     value
         .replace('&', "&amp;")
@@ -360,25 +466,43 @@ fn escape_xml(value: &str) -> String {
         .replace('\'', "&apos;")
 }
 
+fn windows_notification_xml(
+    notification: &DesktopNotificationRequest,
+) -> Result<String, &'static str> {
+    let activation_url = notification_activation_url(&notification.route)?;
+    let header = match &notification.header {
+        Some(header) => {
+            let header_activation_url = notification_activation_url(&header.route)?;
+            format!(
+                r#"<header id="{}" title="{}" arguments="{}" activationType="protocol"/>"#,
+                escape_xml(&header.id),
+                escape_xml(header.title.trim()),
+                escape_xml(&header_activation_url),
+            )
+        }
+        None => String::new(),
+    };
+    Ok(format!(
+        r#"<toast duration="short" activationType="protocol" launch="{}">{}<visual><binding template="ToastGeneric"><text>{}</text><text>{}</text></binding></visual></toast>"#,
+        escape_xml(&activation_url),
+        header,
+        escape_xml(notification.title.trim()),
+        escape_xml(notification.body.trim()),
+    ))
+}
+
 #[cfg(windows)]
 fn show_windows_notification(
-    window: &WebviewWindow,
     notification: &DesktopNotificationRequest,
 ) -> Result<(), &'static str> {
     use windows::core::HSTRING;
     use windows::Data::Xml::Dom::XmlDocument;
-    use windows::Foundation::TypedEventHandler;
     use windows::UI::Notifications::{
         NotificationSetting, ToastNotification, ToastNotificationManager,
     };
 
-    let group = notification_group(&notification.kind).ok_or("notification_invalid")?;
     let tag = format!("{:08x}", notification.id);
-    let xml = format!(
-        r#"<toast duration="short"><visual><binding template="ToastGeneric"><text>{}</text><text>{}</text></binding></visual></toast>"#,
-        escape_xml(notification.title.trim()),
-        escape_xml(notification.body.trim()),
-    );
+    let xml = windows_notification_xml(notification)?;
     let document = XmlDocument::new().map_err(|_| "notification_unavailable")?;
     document
         .LoadXml(&HSTRING::from(xml))
@@ -389,27 +513,7 @@ fn show_windows_notification(
         .SetTag(&HSTRING::from(tag))
         .map_err(|_| "notification_unavailable")?;
     toast
-        .SetGroup(&HSTRING::from(group))
-        .map_err(|_| "notification_unavailable")?;
-
-    let action_window = window.clone();
-    let action_route = notification.route.clone();
-    let activated = TypedEventHandler::new(move |_, _| {
-        if let Ok(mut pending_route) = action_window.state::<PendingNotificationRoute>().0.lock() {
-            *pending_route = Some(action_route.clone());
-        }
-        let _ = action_window.show();
-        let _ = action_window.unminimize();
-        let _ = action_window.set_focus();
-        let script = format!(
-            "window.dispatchEvent(new CustomEvent({event:?}));",
-            event = DESKTOP_NOTIFICATION_ACTION_EVENT,
-        );
-        let _ = action_window.eval(script);
-        Ok(())
-    });
-    toast
-        .Activated(&activated)
+        .SetGroup(&HSTRING::from(&notification.group))
         .map_err(|_| "notification_unavailable")?;
 
     let notifier =
@@ -431,17 +535,30 @@ fn remove_windows_notification(
     use windows::core::HSTRING;
     use windows::UI::Notifications::ToastNotificationManager;
 
-    let group = notification_group(&notification.kind).ok_or("notification_invalid")?;
     let tag = format!("{:08x}", notification.id);
     let history = ToastNotificationManager::History().map_err(|_| "notification_unavailable")?;
     history
         .RemoveGroupedTagWithId(
             &HSTRING::from(tag),
-            &HSTRING::from(group),
+            &HSTRING::from(&notification.group),
             &HSTRING::from(WINDOWS_APP_ID),
         )
         .map_err(|_| "notification_unavailable")
 }
+
+#[cfg(windows)]
+fn clear_legacy_windows_message_notifications() {
+    use windows::core::HSTRING;
+    use windows::UI::Notifications::ToastNotificationManager;
+
+    if let Ok(history) = ToastNotificationManager::History() {
+        let _ =
+            history.RemoveGroupWithId(&HSTRING::from("messages"), &HSTRING::from(WINDOWS_APP_ID));
+    }
+}
+
+#[cfg(not(windows))]
+fn clear_legacy_windows_message_notifications() {}
 
 #[cfg(not(windows))]
 fn remove_windows_notification(
@@ -452,7 +569,6 @@ fn remove_windows_notification(
 
 #[cfg(not(windows))]
 fn show_windows_notification(
-    _window: &WebviewWindow,
     _notification: &DesktopNotificationRequest,
 ) -> Result<(), &'static str> {
     Err("notification_unavailable")
@@ -464,15 +580,8 @@ fn desktop_notify(
     notification: DesktopNotificationRequest,
 ) -> Result<bool, &'static str> {
     require_production_main(&window)?;
-    if notification.id == 0
-        || notification_group(&notification.kind).is_none()
-        || !is_safe_notification_route(&notification.route)
-        || !is_safe_notification_text(&notification.title, 120)
-        || !is_safe_notification_text(&notification.body, 280)
-    {
-        return Err("notification_invalid");
-    }
-    show_windows_notification(&window, &notification)?;
+    validate_desktop_notification(&notification)?;
+    show_windows_notification(&notification)?;
     Ok(true)
 }
 
@@ -482,7 +591,8 @@ fn desktop_remove_notification(
     notification: DesktopNotificationIdentity,
 ) -> Result<bool, &'static str> {
     require_production_main(&window)?;
-    if notification.id == 0 || notification_group(&notification.kind).is_none() {
+    if notification.id == 0 || !is_safe_notification_group(&notification.kind, &notification.group)
+    {
         return Err("notification_invalid");
     }
     remove_windows_notification(&notification)?;
@@ -1065,9 +1175,16 @@ pub fn run() {
     tauri::Builder::default()
         .manage(StartupController(Mutex::new(StartupState::new())))
         .manage(PendingNotificationRoute(Mutex::new(None)))
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if let Some(route) = notification_route_from_args(&args) {
+                if let Some(main) = app.get_webview_window("main") {
+                    activate_notification_route(&main, route);
+                    return;
+                }
+            }
             restore_startup_surface(app);
         }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
@@ -1088,7 +1205,26 @@ pub fn run() {
             setup_update_controller(app.handle())?;
             setup_tray(app.handle())?;
             build_main_window(app.handle())?;
+            clear_legacy_windows_message_notifications();
+            let notification_app = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                let route = event
+                    .urls()
+                    .iter()
+                    .find_map(|url| notification_route_from_activation_url(url.as_str()));
+                if let Some(route) = route {
+                    if let Some(main) = notification_app.get_webview_window("main") {
+                        activate_notification_route(&main, route);
+                    }
+                }
+            });
             show_main(app.handle());
+            let startup_args = std::env::args().collect::<Vec<_>>();
+            if let Some(route) = notification_route_from_args(&startup_args) {
+                if let Some(main) = app.get_webview_window("main") {
+                    activate_notification_route(&main, route);
+                }
+            }
             #[cfg(debug_assertions)]
             let hold_preflight = qa_holds_preflight();
             #[cfg(not(debug_assertions))]
@@ -1188,6 +1324,43 @@ mod tests {
     }
 
     #[test]
+    fn notification_protocol_round_trips_only_safe_relative_routes() {
+        let route = "/?chat=chat-1&message=message-1";
+        let activation = notification_activation_url(route).unwrap();
+        assert_eq!(
+            notification_route_from_activation_url(&activation).as_deref(),
+            Some(route)
+        );
+        assert_eq!(
+            notification_route_from_args(&["letscube.exe".into(), activation]),
+            Some(route.into())
+        );
+        assert_eq!(
+            notification_route_from_activation_url(
+                "letscube-notification://open/?route=%2F%3Fchat%3Dchat-1%26message%3Dmessage-1"
+            )
+            .as_deref(),
+            Some(route)
+        );
+        assert_eq!(
+            notification_route_from_activation_url(
+                "letscube-notification://open?route=https%3A%2F%2Fevil.example"
+            ),
+            None
+        );
+        assert_eq!(
+            notification_route_from_activation_url(
+                "letscube-notification://open?route=%2Ftasks&route=%2F"
+            ),
+            None
+        );
+        assert_eq!(
+            notification_route_from_activation_url("https://app.letscube.ru/?chat=chat-1"),
+            None
+        );
+    }
+
+    #[test]
     fn notification_payloads_use_bounded_text_and_isolated_groups() {
         assert!(is_safe_notification_text("Новое сообщение", 120));
         assert!(!is_safe_notification_text("   ", 120));
@@ -1196,6 +1369,59 @@ mod tests {
         assert_eq!(notification_group("task"), Some("tasks"));
         assert_eq!(notification_group("system"), Some("system"));
         assert_eq!(notification_group("unknown"), None);
+    }
+
+    #[test]
+    fn message_notification_xml_uses_a_protocol_header_and_exact_card_route() {
+        let notification = DesktopNotificationRequest {
+            id: 17,
+            title: "Никита".into(),
+            body: "Первое сообщение".into(),
+            kind: "message".into(),
+            group: "message:0123abcd".into(),
+            header: Some(DesktopNotificationHeader {
+                id: "message:0123abcd".into(),
+                title: "Никита".into(),
+                route: "/?chat=chat-1".into(),
+            }),
+            route: "/?chat=chat-1&message=message-1".into(),
+        };
+
+        validate_desktop_notification(&notification).unwrap();
+        let xml = windows_notification_xml(&notification).unwrap();
+        assert!(xml.contains("activationType=\"protocol\""));
+        assert!(xml.contains("<header id=\"message:0123abcd\""));
+        assert!(xml.contains("title=\"Никита\""));
+        assert!(xml.contains("route=%2F%3Fchat%3Dchat-1"));
+        assert!(xml.contains("route=%2F%3Fchat%3Dchat-1%26message%3Dmessage-1"));
+    }
+
+    #[test]
+    fn notification_groups_and_headers_are_bounded_and_kind_isolated() {
+        assert!(is_safe_notification_group("message", "message:0123abcd"));
+        assert!(is_safe_notification_group("task", "task:0123abcd"));
+        assert!(is_safe_notification_group("system", "system:0123abcd"));
+        assert!(!is_safe_notification_group("message", "task:0123abcd"));
+        assert!(!is_safe_notification_group("message", "message:bad/group"));
+        assert!(!is_safe_notification_group("message", &"m".repeat(65)));
+
+        let task_with_header = DesktopNotificationRequest {
+            id: 18,
+            title: "Новая задача".into(),
+            body: "Проверить компьютеры".into(),
+            kind: "task".into(),
+            group: "task:0123abcd".into(),
+            header: Some(DesktopNotificationHeader {
+                id: "task:0123abcd".into(),
+                title: "Задачи".into(),
+                route: "/tasks".into(),
+            }),
+            route: "/tasks?task=task-1".into(),
+        };
+        assert_eq!(
+            validate_desktop_notification(&task_with_header),
+            Err("notification_invalid")
+        );
     }
 
     #[test]

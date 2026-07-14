@@ -6,9 +6,20 @@ export type DesktopMessageNotification = {
   title: string;
   body: string;
   tag: string;
+  groupTag?: string;
+  header?: {
+    title: string;
+    route: string;
+  };
   icon?: string;
   kind?: "message" | "task" | "system";
   route?: string;
+};
+
+type DesktopNotificationHeader = {
+  id: string;
+  title: string;
+  route: string;
 };
 
 type DesktopNotificationPayload = {
@@ -16,12 +27,16 @@ type DesktopNotificationPayload = {
   title: string;
   body: string;
   kind: "message" | "task" | "system";
+  group: string;
+  header?: DesktopNotificationHeader;
   route: string;
 };
 
 type DesktopNotificationApi = {
   sendNotification(notification: DesktopNotificationPayload): Promise<boolean>;
-  removeNotification?(notification: Pick<DesktopNotificationPayload, "id" | "kind">): Promise<boolean>;
+  removeNotification?(
+    notification: Pick<DesktopNotificationPayload, "id" | "kind" | "group">,
+  ): Promise<boolean>;
 };
 
 type DesktopNotificationActionListener = {
@@ -98,11 +113,23 @@ export async function showDesktopMessageNotification(
 
   try {
     const api = await loadApi();
+    const kind = notification.kind ?? "system";
+    const group = nativeNotificationGroup(kind, notification.groupTag ?? notification.tag);
     const payload: DesktopNotificationPayload = {
       id: stableDesktopNotificationId(notification.tag),
       title: notification.title,
       body: notification.body,
-      kind: notification.kind ?? "system",
+      kind,
+      group,
+      ...(notification.header
+        ? {
+            header: {
+              id: group,
+              title: notification.header.title,
+              route: notification.header.route,
+            },
+          }
+        : {}),
       route: notification.route ?? "/",
     };
     return await api.sendNotification(payload);
@@ -124,6 +151,10 @@ export async function closeDesktopNotificationForRow(
     return await api.removeNotification({
       id: stableDesktopNotificationId(presentation.tag),
       kind: presentation.kind ?? "system",
+      group: nativeNotificationGroup(
+        presentation.kind ?? "system",
+        presentation.groupTag ?? presentation.tag,
+      ),
     });
   } catch {
     return false;
@@ -140,6 +171,32 @@ export async function showDesktopNotificationForRow(
   return presentation
     ? showDesktopMessageNotification(presentation, loadApi, context)
     : false;
+}
+
+export function desktopMessageOverflowRows(
+  items: Notification[],
+  limit = 5,
+): Notification[] {
+  const boundedLimit = Math.max(0, Math.floor(limit));
+  const byChat = new Map<string, Notification[]>();
+  for (const item of items) {
+    if (item.read_at || !item.kind.includes("message")) continue;
+    const chatId = payloadValue(asPayload(item.payload), "chat_id");
+    if (!chatId) continue;
+    const rows = byChat.get(chatId) ?? [];
+    rows.push(item);
+    byChat.set(chatId, rows);
+  }
+
+  const overflow: Notification[] = [];
+  for (const rows of byChat.values()) {
+    rows.sort((left, right) => {
+      const createdOrder = right.created_at.localeCompare(left.created_at);
+      return createdOrder || right.id.localeCompare(left.id);
+    });
+    overflow.push(...rows.slice(boundedLimit));
+  }
+  return overflow;
 }
 
 export async function registerDesktopNotificationNavigationListener(
@@ -203,7 +260,16 @@ function desktopPresentation(
             ? `${sender}: ${preview}`
             : preview || "Откройте чат, чтобы посмотреть сообщение.",
       ),
-      tag,
+      tag: item.id,
+      groupTag: tag,
+      header: {
+        title: truncateDesktopText(
+          privateChat
+            ? (sender ?? "Сообщения")
+            : (chatName ?? "Сообщения"),
+        ),
+        route: `/?chat=${encodeURIComponent(chatId)}`,
+      },
       kind: "message",
       route: `/?chat=${encodeURIComponent(chatId)}${messageId ? `&message=${encodeURIComponent(messageId)}` : ""}`,
     };
@@ -217,6 +283,7 @@ function desktopPresentation(
         ? truncateDesktopText(taskTitle)
         : "Откройте LETSCUBE, чтобы посмотреть задачу.",
       tag,
+      groupTag: tag,
       kind: "task",
       route: taskId ? `/tasks?task=${encodeURIComponent(taskId)}` : "/tasks",
     };
@@ -230,6 +297,7 @@ function desktopPresentation(
         ? truncateDesktopText(chatName)
         : "Откройте LETSCUBE, чтобы посмотреть детали.",
       tag: inviteId ? `invite:${inviteId}` : tag,
+      groupTag: inviteId ? `invite:${inviteId}` : tag,
       kind: "system",
       route: chatId ? `/?chat=${encodeURIComponent(chatId)}` : "/",
     };
@@ -239,6 +307,7 @@ function desktopPresentation(
     title: "LETSCUBE",
     body: preview || "Новое системное уведомление.",
     tag,
+    groupTag: tag,
     kind: "system",
     route: "/",
   };
@@ -251,6 +320,13 @@ function stableDesktopNotificationId(tag: string): number {
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0) & 0x7fffffff || 1;
+}
+
+function nativeNotificationGroup(
+  kind: "message" | "task" | "system",
+  groupTag: string,
+): string {
+  return `${kind}:${stableDesktopNotificationId(groupTag).toString(16).padStart(8, "0")}`;
 }
 
 function safeDesktopRoute(value: unknown): string | null {

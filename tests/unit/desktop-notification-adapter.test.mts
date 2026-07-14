@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   closeDesktopNotificationForRow,
+  desktopMessageOverflowRows,
   showDesktopMessageNotification,
 } from "../../artifacts/kub/src/lib/platform/desktopNotifications.ts";
 import * as desktopNotifications from "../../artifacts/kub/src/lib/platform/desktopNotifications.ts";
@@ -99,7 +100,12 @@ test("desktop notification adapter maps a stable tag and route to native Windows
       {
         title: "LETSCUBE",
         body: "Новое сообщение",
-        tag: "message:chat:chat-1",
+        tag: "notification-message-1",
+        groupTag: "message:chat:chat-1",
+        header: {
+          title: "Никита",
+          route: "/?chat=chat-1",
+        },
         kind: "message",
         route: "/?chat=chat-1&message=message-1",
       },
@@ -125,8 +131,15 @@ test("desktop notification adapter maps a stable tag and route to native Windows
       title: "LETSCUBE",
       body: "Новое сообщение",
       kind: "message",
+      group: nativeOptions.group,
+      header: {
+        id: nativeOptions.group,
+        title: "Никита",
+        route: "/?chat=chat-1",
+      },
       route: "/?chat=chat-1&message=message-1",
     });
+    assert.match(String(nativeOptions.group), /^message:[0-9a-f]{8}$/);
   } finally {
     globalThis.window = previousWindow;
   }
@@ -355,7 +368,7 @@ test("push navigation registers the desktop action listener and shares the authe
   assert.match(source, /isNativeAndroid\(\) \|\| isDesktopApp\(\)/);
 });
 
-test("notification rows collapse messages by chat, isolate tasks and sanitize media URLs", async () => {
+test("notification rows keep exact message cards under one chat group and isolate tasks", async () => {
   const previousWindow = installDesktopBridge();
   const sent: Array<Record<string, unknown>> = [];
   const loader = async () => ({
@@ -403,8 +416,20 @@ test("notification rows collapse messages by chat, isolate tasks and sanitize me
     assert.equal(await desktopNotifications.showDesktopNotificationForRow(task, loader, context), true);
 
     assert.equal(sent.length, 3);
-    assert.equal(sent[0]?.id, sent[1]?.id);
+    assert.notEqual(sent[0]?.id, sent[1]?.id);
+    assert.equal(sent[0]?.group, sent[1]?.group);
     assert.notEqual(sent[0]?.id, sent[2]?.id);
+    assert.notEqual(sent[0]?.group, sent[2]?.group);
+    assert.deepEqual(sent[0]?.header, {
+      id: sent[0]?.group,
+      title: "Никита",
+      route: "/?chat=chat-1",
+    });
+    assert.deepEqual(sent[1]?.header, {
+      id: sent[1]?.group,
+      title: "Никита",
+      route: "/?chat=chat-1",
+    });
     assert.equal(sent[0]?.title, "Никита");
     assert.equal(sent[0]?.body, "Фото вложение");
     assert.equal(sent[0]?.kind, "message");
@@ -415,4 +440,52 @@ test("notification rows collapse messages by chat, isolate tasks and sanitize me
   } finally {
     globalThis.window = previousWindow;
   }
+});
+
+test("desktop message retention trims only unread cards beyond five per chat", () => {
+  const rows = Array.from({ length: 6 }, (_, index) => ({
+    id: `notification-${index + 1}`,
+    user_id: "user-2",
+    kind: "message",
+    read_at: null,
+    created_at: `2026-07-14T12:00:0${index}.000Z`,
+    payload: {
+      chat_id: "chat-1",
+      message_id: `message-${index + 1}`,
+    },
+  }));
+  rows.push({
+    ...rows[0]!,
+    id: "notification-other-chat",
+    created_at: "2026-07-14T12:00:06.000Z",
+    payload: { chat_id: "chat-2", message_id: "message-other" },
+  });
+  rows.push({
+    ...rows[0]!,
+    id: "notification-read",
+    read_at: "2026-07-14T12:00:07.000Z",
+    created_at: "2026-07-14T12:00:07.000Z",
+  });
+  rows.push({
+    ...rows[0]!,
+    id: "notification-task",
+    kind: "task_assigned",
+    created_at: "2026-07-14T12:00:08.000Z",
+    payload: { task_id: "task-1" },
+  });
+
+  assert.deepEqual(
+    desktopMessageOverflowRows(rows, 5).map((row) => row.id),
+    ["notification-1"],
+  );
+});
+
+test("notification hook reconciles native read cards and five-card overflow independently", () => {
+  const source = readFileSync(
+    new URL("../../artifacts/kub/src/hooks/useNotifications.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /desktopMessageOverflowRows/);
+  assert.match(source, /unreadDesktopIdsRef/);
+  assert.match(source, /trimmedDesktopIdsRef/);
 });

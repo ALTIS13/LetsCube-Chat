@@ -58,8 +58,8 @@ test("Windows release version and build metadata stay aligned", () => {
   const libRs = readText("windows-tauri/src-tauri/src/lib.rs");
   const publisherPublicKey = readText("scripts/windows-updater-public.key").trim();
 
-  assert.equal(shellPackage.version, "0.2.6");
-  assert.equal(shellPackage.desktopBuild, 10);
+  assert.equal(shellPackage.version, "0.2.7");
+  assert.equal(shellPackage.desktopBuild, 11);
   assert.equal(tauriConfig.version, shellPackage.version);
   assert.equal(cargoVersion, shellPackage.version);
   assert.equal(tauriConfig.plugins.updater.pubkey, publisherPublicKey);
@@ -92,7 +92,11 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.doesNotMatch(cargoToml, /^tauri-plugin-notification\s*=/m);
   assert.match(cargoToml, /^windows = \{ version = "0\.61", features = \[[^\]]*"UI_Notifications"/m);
   assert.match(cargoToml, /^tauri-plugin-opener = "2\.[^"]+"/m);
-  assert.match(cargoToml, /^tauri-plugin-single-instance = "2\.[^"]+"/m);
+  assert.match(cargoToml, /^tauri-plugin-deep-link = "=?2\.[^"]+"/m);
+  assert.match(
+    cargoToml,
+    /^tauri-plugin-single-instance = \{[^\n]*features = \["deep-link"\][^\n]*\}$/m,
+  );
   assert.match(cargoToml, /^tauri-plugin-updater = "=2\.10\.1"$/m);
   assert.equal((cargoToml.match(/^reqwest\s*=/gm) ?? []).length, 1);
   assert.match(cargoToml, /^reqwest = \{[^\n]*version = "=0\.13\.4"[^\n]*features = \[[^\]]*"json"[^\]]*\]/m);
@@ -151,7 +155,29 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.match(libRs, /window\s*\.is_focused\(\)/);
   assert.match(libRs, /NotificationSetting::Enabled/);
   assert.match(libRs, /RemoveGroupedTagWithId/);
+  assert.match(
+    libRs,
+    /RemoveGroupWithId[\s\S]*"messages"/,
+    "the first grouped build must remove legacy per-chat replacement cards",
+  );
   assert.match(libRs, /PendingNotificationRoute/);
+  assert.match(
+    libRs,
+    /activationType="protocol"[\s\S]*launch="\{\}"/,
+    "Windows toast cards must use durable protocol activation from Notification Center",
+  );
+  assert.match(libRs, /notification_route_from_activation_url/);
+  assert.match(libRs, /notification_route_from_args/);
+  assert.match(libRs, /tauri_plugin_deep_link::init\(\)/);
+  assert.match(
+    libRs,
+    /DeepLinkExt[\s\S]*\.deep_link\(\)\.on_open_url/,
+    "the running Windows instance must consume protocol URLs emitted by the deep-link bridge",
+  );
+  assert.doesNotMatch(libRs, /ActiveWindowsNotifications/);
+  assert.deepEqual(tauriConfig.plugins["deep-link"].desktop.schemes, [
+    "letscube-notification",
+  ]);
   assert.match(libRs, /Object\.freeze/);
   assert.match(libRs, /version:\s*runtimeInfo\.version/);
   assert.match(libRs, /build:\s*runtimeInfo\.build/);
