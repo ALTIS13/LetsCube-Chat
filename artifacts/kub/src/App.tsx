@@ -7,6 +7,7 @@ import { RegisterForm } from "@/components/auth/RegisterForm";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useUser } from "@/hooks/useUser";
 import { useHeartbeat } from "@/hooks/useHeartbeat";
+import { usePushForegroundSession } from "@/hooks/usePushForegroundSession";
 import { useBanState } from "@/hooks/useBanState";
 import { usePushNotificationNavigation } from "@/hooks/usePush";
 import { supportsBrowserPush } from "@/lib/platform/capabilities";
@@ -339,6 +340,7 @@ function AppRoutes() {
 
   // Keep the user's online_at fresh while a session exists.
   useHeartbeat();
+  usePushForegroundSession();
   usePushNotificationNavigation();
 
   useEffect(() => {
