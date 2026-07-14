@@ -596,6 +596,17 @@ export function useMessages(
           // active chat from missing a message that the sidebar already saw.
           addMessage(payload.new.chat_id, provisional);
           updateChatLastMessage(payload.new.chat_id, provisional);
+          const user = currentUserRef.current;
+          if (user && payload.new.user_id !== user.id) {
+            // Receipt state follows what was rendered, not the optional joined
+            // enrichment below. That fetch can legitimately lag Realtime under
+            // rapid sends, especially while a PWA is resuming on iOS.
+            if (document.visibilityState === "visible") {
+              scheduleMarkChatRead(supabase, payload.new.chat_id, payload.new.created_at);
+            } else if (shouldMarkDeliveredForPrivateChat(payload.new.chat_id, user.id)) {
+              scheduleMarkChatDelivered(supabase, payload.new.chat_id, payload.new.created_at);
+            }
+          }
           const { data } = await supabase
             .from("messages")
             .select(MESSAGE_SELECT_WITH_JOINS)
@@ -611,14 +622,6 @@ export function useMessages(
           const visibleMessage = sanitizeHiddenReply(nextMessage, effectiveHiddenIds);
           addMessage(payload.new.chat_id, visibleMessage);
           updateChatLastMessage(payload.new.chat_id, visibleMessage);
-          const user = currentUserRef.current;
-          if (user && data.user_id !== user.id) {
-            if (document.visibilityState === "visible") {
-              scheduleMarkChatRead(supabase, payload.new.chat_id, data.created_at);
-            } else if (shouldMarkDeliveredForPrivateChat(payload.new.chat_id, user.id)) {
-              scheduleMarkChatDelivered(supabase, payload.new.chat_id, data.created_at);
-            }
-          }
         }
       )
       .on(
