@@ -482,12 +482,20 @@ fn windows_notification_xml(
         }
         None => String::new(),
     };
+    let content = if notification.header.is_some() {
+        format!(r#"<text>{}</text>"#, escape_xml(notification.body.trim()))
+    } else {
+        format!(
+            r#"<text>{}</text><text>{}</text>"#,
+            escape_xml(notification.title.trim()),
+            escape_xml(notification.body.trim()),
+        )
+    };
     Ok(format!(
-        r#"<toast duration="short" activationType="protocol" launch="{}">{}<visual><binding template="ToastGeneric"><text>{}</text><text>{}</text></binding></visual></toast>"#,
+        r#"<toast duration="short" activationType="protocol" launch="{}">{}<visual><binding template="ToastGeneric">{}</binding></visual></toast>"#,
         escape_xml(&activation_url),
         header,
-        escape_xml(notification.title.trim()),
-        escape_xml(notification.body.trim()),
+        content,
     ))
 }
 
@@ -1392,6 +1400,8 @@ mod tests {
         assert!(xml.contains("activationType=\"protocol\""));
         assert!(xml.contains("<header id=\"message:0123abcd\""));
         assert!(xml.contains("title=\"Никита\""));
+        assert!(!xml.contains("<text>Никита</text>"));
+        assert!(xml.contains("<text>Первое сообщение</text>"));
         assert!(xml.contains("route=%2F%3Fchat%3Dchat-1"));
         assert!(xml.contains("route=%2F%3Fchat%3Dchat-1%26message%3Dmessage-1"));
     }
@@ -1422,6 +1432,24 @@ mod tests {
             validate_desktop_notification(&task_with_header),
             Err("notification_invalid")
         );
+    }
+
+    #[test]
+    fn task_notification_without_header_keeps_title_and_body() {
+        let notification = DesktopNotificationRequest {
+            id: 19,
+            title: "Новая задача".into(),
+            body: "Проверить компьютеры".into(),
+            kind: "task".into(),
+            group: "task:0123abcd".into(),
+            header: None,
+            route: "/tasks?task=task-1".into(),
+        };
+
+        validate_desktop_notification(&notification).unwrap();
+        let xml = windows_notification_xml(&notification).unwrap();
+        assert!(xml.contains("<text>Новая задача</text>"));
+        assert!(xml.contains("<text>Проверить компьютеры</text>"));
     }
 
     #[test]
