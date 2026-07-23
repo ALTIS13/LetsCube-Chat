@@ -1130,3 +1130,33 @@ Recurring tasks roadmap note:
 - Windows 10 22H2, alternate WebView2, a real signing identity/SmartScreen
   reputation, package identity/PFN onboarding, WNS device registration and
   physical killed-process delivery remain external gates.
+
+## 2026-07-24 - Windows sparse identity preflight
+
+- Added a fail-closed Windows sparse-package identity renderer. It validates
+  the production package name, publisher, application ID, four-part version
+  and Entra remote GUID without printing those values.
+- The generated `AppxManifest.xml` and executable side-by-side manifest use
+  the same package/publisher/application identifiers. A public-only WNS client
+  config is generated beside them; no client secret or channel URI is stored.
+- The preflight locates the newest installed Windows SDK outside `PATH`,
+  requires Windows build 19041 or newer and checks for Windows App Runtime.
+  This host has Windows SDK `10.0.26100.0` and Windows App Runtime packages.
+- A disposable test identity produced a 1,756-byte unsigned package through
+  `MakeAppx`. The package contains only sparse identity metadata and its
+  generated block map; executable metadata and WNS client configuration stay
+  outside it. All output remains under ignored `.local` storage and is
+  explicitly not deployable or publishable.
+- Package identity contract tests passed `4/4`, including missing-config
+  fail-closed behavior, aligned manifest rendering and package-content
+  isolation. The normal internal NSIS build remains independent of package
+  identity.
+- The native long-session runner connected to its isolated WebView2 instance
+  but did not reach the authenticated sidebar after the configured QA login.
+  The offline/reconnect cycle therefore did not run and is not counted as a
+  pass. The local trace remains ignored; login was not retried to avoid
+  anti-abuse side effects.
+- Real Microsoft identity/publisher/PFN/Entra mapping, package signing, NSIS
+  registration hooks, Windows App SDK channel/COM activation and
+  killed-process physical QA remain blocked by external onboarding. No SQL,
+  schema or WNS client registration was applied.

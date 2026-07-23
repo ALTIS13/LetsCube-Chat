@@ -27,6 +27,12 @@ existing Tauri executable and NSIS lifecycle can remain in place:
 Package identity values are public metadata, but they must be stable. Do not
 invent or change them independently of the Microsoft registration.
 
+The repository now has a fail-closed renderer and SDK preflight for this
+contract. Follow `docs/native/WINDOWS_PACKAGE_IDENTITY_RUNBOOK.md`; generated
+manifests and the unsigned validation package stay under ignored `.local`
+storage. The renderer deliberately cannot supply the Microsoft-issued package
+name, publisher, application ID, Entra remote ID or PFN.
+
 ## Microsoft application registration
 
 1. Create an Entra application for LETSCUBE Windows push.
