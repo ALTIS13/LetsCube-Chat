@@ -86,6 +86,13 @@ The value must be an HTTPS origin. It is deployment configuration, not a fronten
 - In-app Notification Center groups message rows by chat/dialog so tasks stay visible. Opening a chat marks loaded message notifications for that chat read immediately; after applying `20260531_notification_center_read_sync_native_push.sql`, the server RPC can mark all matching unread message notifications for the user.
 - When a notification becomes read on an active browser/PWA client, the client asks its service worker to close the matching OS card and updates the app badge. Database `read_at` remains the cross-device source of truth. A browser cannot guarantee immediate removal of an already displayed OS card on a sleeping device; cleanup occurs when that client receives realtime state or resumes.
 - Native Android push is separate from browser Web Push. The client uses Capacitor Push Notifications and the same in-app notification semantics; FCM credentials and delivery stay in the trusted Edge Function runtime. Do not commit `google-services.json`, Firebase credentials, private keys, raw device tokens, or signing files.
+- Windows WNS is also a separate provider. The dispatcher can authenticate to
+  WNS and send only to validated Microsoft HTTPS channel URIs without affecting
+  FCM or Web Push. It remains dormant until a reviewed Windows device schema,
+  package identity/PFN onboarding, client channel registration and server-only
+  `WNS_TENANT_ID`, `WNS_CLIENT_ID`, `WNS_CLIENT_SECRET` are configured.
+- Killed-process Windows delivery is not ready or advertised. Current Windows
+  notifications still require the LETSCUBE process/tray to be running.
 
 ## Native Android push status
 
@@ -113,6 +120,23 @@ Verified foundation:
 5. A physical Android background delivery and notification tap smoke passed.
 
 Still required before release readiness: real multi-account message/task delivery, sender exclusion, mutes/preferences, semantic chat/task routing, killed-app delivery and a broader device matrix.
+
+## Native Windows WNS status
+
+The backend foundation is provider-aware:
+
+- FCM and WNS use separate OAuth credentials and delivery endpoints.
+- Missing WNS credentials leave WNS rows pending without consuming retry attempts.
+- WNS channel URIs are accepted only from `https://*.notify.windows.com`.
+- `404`/`410` channels are revoked; raw channel URIs and access tokens are not logged.
+- Message toast XML keeps exact relative chat/message routing and one sender/chat
+  header; task/system notifications remain separate.
+
+No SQL was applied for this foundation. Before WNS can be enabled, a reviewed
+migration must extend `user_push_devices`/native outbox fan-out for provider
+`wns`, and the identified Windows client must register its channel through an
+authenticated self-service RPC/Edge Function. See
+`docs/native/WINDOWS_WNS_RUNBOOK.md`.
 
 ## Manual QA
 

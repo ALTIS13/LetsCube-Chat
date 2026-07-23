@@ -53,6 +53,9 @@ Snapshot updated: 2026-07-23. The detailed execution source of truth is
 - Global search v2 with filters is implemented.
 - In-chat full-history search is implemented.
 - Jump/highlight behavior is implemented.
+- Remaining: harden message search for large histories and add permission-aware
+  people lookup by normalized verified profile phone. Phone search must not
+  expose raw contact data or create an account-enumeration path.
 
 ## PWA
 
@@ -83,9 +86,13 @@ Snapshot updated: 2026-07-23. The detailed execution source of truth is
 - Tauri 2 is the selected Windows client. Secure startup, tray/single-instance,
   updater signing, cross-version updates and exact native notification routing
   are physically verified through `0.2.7/11`.
+- Windows has a fail-closed Authenticode build path, provider-isolated WNS
+  backend delivery helper, sanitized capability matrix and isolated native
+  offline/long-session QA runner.
 - Android release signing/AAB, Android app links/recovery callback,
-  Authenticode/SmartScreen, killed-process Windows WNS delivery and broader
-  device matrices remain open.
+  a real Authenticode publisher/SmartScreen reputation, Windows package
+  identity/PFN/client WNS registration, killed-process Windows delivery and
+  broader device matrices remain open.
 - iPhone/iPad PWA and iOS work are owned by a separate execution stream and
   must not be duplicated from the backend/interface/Windows/Android stream.
 
@@ -94,6 +101,7 @@ Snapshot updated: 2026-07-23. The detailed execution source of truth is
 - Real SMS provider setup and device QA.
 - Android release signing/AAB and broader official Google Play Services QA.
 - Windows Authenticode/SmartScreen and killed-process WNS delivery.
+- Large-history message search and privacy-safe user search by verified phone.
 - Isolated restore drill.
 - Sentry self-host decision and rollout.
 - Startup permission capability batching: the current app shell issues 33 repeated role/location permission RPCs before the first meaningful chat interaction.

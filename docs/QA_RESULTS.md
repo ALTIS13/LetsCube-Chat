@@ -1098,3 +1098,35 @@ Recurring tasks roadmap note:
 ## 2026-07-23 - Windows 0.2.7 Test-to-Stable promotion
 
 - The exact physically tested artifact was published to Test, verified publicly, and then promoted unchanged to Stable. Test and Stable updater manifests share the same signed immutable URL and SHA-256; the Stable fresh-install catalog reports `0.2.7` build `11`. Fresh updater and download requests both returned 2,318,468 bytes with SHA-256 `408c238d0eae67471c6fb9b8ae95a1c9bb54640912883d86d7ae390a414d65e1`. Manifests use `no-cache, no-store`, while the versioned artifact uses immutable one-year caching.
+
+## 2026-07-23 - Windows external release-gate foundation
+
+- Added a dedicated fail-closed Authenticode production path. It supports
+  Microsoft Artifact Signing or a valid current-user code-signing certificate,
+  verifies the final NSIS installer independently and does not alter the
+  unsigned internal QA path. Preflight stopped as designed because no signing
+  provider/account or certificate is configured.
+- Split internal NSIS packaging from updater publication. The internal config
+  no longer requires the Tauri updater private key and produced
+  a 2,319,055-byte `LETSCUBE_0.2.7_x64-setup.exe`; the local matrix reports
+  `NotSigned`, so this artifact is not a public release candidate.
+- Added provider-aware WNS backend delivery with Microsoft OAuth, strict
+  `*.notify.windows.com` SSRF protection, bounded/escaped toast XML, exact
+  message routes and permanent channel cleanup. FCM and Browser Web Push
+  regression tests passed. No Windows device schema or SQL was added/applied.
+- Added an isolated Tauri long-session/offline runner and sanitized Windows
+  capability report. The local environment is Windows 11 Pro build `26200`
+  x64 with WebView2 `150.0.4078.83`. The native 60-second soak was correctly
+  blocked because a user-owned LETSCUBE process was running; the runner did not
+  terminate or reuse it. Browser long-session and authenticated smoke were
+  skipped because their QA auth state was unavailable in this shell.
+- Windows/Tauri contracts passed `12/12`, Rust passed `32/32`, release-security,
+  WNS and long-session contract tests passed, Deno checked the complete Edge
+  Function successfully, web typecheck/build passed, and the internal NSIS
+  build passed. Existing Vite sourcemap/chunk-size and Cargo linker/PDB warnings
+  remain advisory. DB type drift retains the known missing manual search RPC
+  declarations. RLS smoke completed with the existing broad-list diagnostic
+  rows still visible for dedicated security follow-up.
+- Windows 10 22H2, alternate WebView2, a real signing identity/SmartScreen
+  reputation, package identity/PFN onboarding, WNS device registration and
+  physical killed-process delivery remain external gates.

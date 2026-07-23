@@ -31,6 +31,10 @@ Windows 10/11 before the public release catalog is opened.
 - Run: `pnpm.cmd windows:tauri:run`.
 - Contract tests: `pnpm.cmd windows:tauri:test`.
 - Build: `pnpm.cmd windows:tauri:build:internal`.
+- Authenticode preflight: `pnpm.cmd windows:tauri:signing:preflight`.
+- Signed build: `pnpm.cmd windows:tauri:build:signed`.
+- Native long-session QA: `pnpm.cmd windows:tauri:qa:long-session`.
+- Sanitized Windows matrix: `pnpm.cmd windows:matrix`.
 - Output: `windows-tauri/src-tauri/target/release/bundle/nsis/`.
 
 Automated native QA must set a unique temporary data directory and must never
@@ -66,8 +70,11 @@ never import the old Electron profile.
 
 ## Signing and update boundary
 
-The internal installer is unsigned. Windows SmartScreen can warn until a
-trusted Authenticode certificate is configured. Tauri updater signing is a
+The currently published installer is not Authenticode-signed. A dedicated
+fail-closed signing path now supports Microsoft Artifact Signing or a valid
+current-user code-signing certificate. Windows SmartScreen can still warn
+until the stable publisher/download builds reputation; current Microsoft
+guidance does not guarantee an automatic EV bypass. Tauri updater signing is a
 separate trust boundary: Tauri 2 release builds reuse the signed NSIS `.exe` installer and
 its `.sig`, while the matching public verification key is embedded in the
 desktop client. Neither the Tauri signing private key/password nor an
@@ -126,8 +133,10 @@ baseline. Notification policy is checked before submission. Read-sync removes
 the matching `tag/group` from native Windows history. A notification action
 accepts only a relative same-app route, stores it in native state until the
 frontend listener consumes it, restores the origin-guarded main window and
-reuses the authenticated in-app navigation queue. Killed-process delivery still needs a separate WNS
-device-token/backend design and is not claimed.
+reuses the authenticated in-app navigation queue. A provider-isolated WNS
+backend sender is prepared, but killed-process delivery is not claimed: package
+identity/PFN onboarding, device schema/RPC, Windows App SDK client channel
+registration, WNS secrets and physical terminated-process QA remain.
 
 ## Release catalog
 
@@ -170,9 +179,17 @@ directory listing, dotfiles, traversal forms and all unlisted updater paths.
 - [x] WebView2 exposes camera/microphone MediaDevices, MediaRecorder, geolocation, clipboard and fullscreen APIs; the attachment menu exposes photo, camera, voice and video flows.
 - [ ] Hardware capture/permission allow-deny matrix on Windows 10 and Windows 11 devices.
 - [x] Realtime chat/task/system routing, native visibility, stable per-chat Windows Toast Headers, five-card unread retention, reconnect reconciliation and chat-scoped read cleanup are covered by unit/native lifecycle and physical QA. Fresh and historical cards open their exact message; cards from another chat remain independently actionable.
-- [ ] Offline/reconnect banner and long-session sync.
+- [~] Offline/reconnect and long-session sync have a repeatable isolated Tauri
+  soak suite. The bounded short run is part of local validation; a one-hour
+  installed release rehearsal remains required.
 - [x] Installer size and SHA-256 are recorded before publication.
 
 Run repeatable native-shell QA with `pnpm.cmd windows:tauri:qa`. The wrapper
 refuses to terminate an existing user-owned LETSCUBE process, owns only its
 debug child process, uses a unique temporary profile and removes it after QA.
+
+See:
+
+- [Windows Authenticode runbook](./WINDOWS_AUTHENTICODE_RUNBOOK.md)
+- [Windows WNS runbook](./WINDOWS_WNS_RUNBOOK.md)
+- [Windows QA matrix](./WINDOWS_QA_MATRIX.md)

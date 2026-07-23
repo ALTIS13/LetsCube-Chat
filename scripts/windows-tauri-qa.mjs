@@ -8,7 +8,12 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const manifestPath = path.join(root, "windows-tauri", "src-tauri", "Cargo.toml");
+const manifestPath = path.join(
+  root,
+  "windows-tauri",
+  "src-tauri",
+  "Cargo.toml",
+);
 const executablePath = path.join(
   root,
   "windows-tauri",
@@ -27,21 +32,37 @@ const lifecycleModes = Object.freeze([
   "critical_update",
 ]);
 const requestedMode = process.env.LETSCUBE_TAURI_QA_STARTUP_MODE;
+const requestedSuite = process.env.LETSCUBE_TAURI_QA_SUITE || "standard";
+const supportedSuites = Object.freeze(["standard", "long-session"]);
 
 if (process.platform !== "win32") {
   console.error("Windows Tauri QA can run only on Windows.");
   process.exit(1);
 }
 if (!existsSync(cargoPath)) {
-  console.error("Rust/Cargo is not installed at the expected user toolchain path.");
+  console.error(
+    "Rust/Cargo is not installed at the expected user toolchain path.",
+  );
   process.exit(1);
 }
 if (requestedMode && !lifecycleModes.includes(requestedMode)) {
   console.error("LETSCUBE_TAURI_QA_STARTUP_MODE is invalid.");
   process.exit(1);
 }
+if (!supportedSuites.includes(requestedSuite)) {
+  console.error("LETSCUBE_TAURI_QA_SUITE is invalid.");
+  process.exit(1);
+}
+if (requestedSuite === "long-session" && requestedMode) {
+  console.error(
+    "A startup mode cannot be combined with the long-session suite.",
+  );
+  process.exit(1);
+}
 if (hasRunningClient()) {
-  console.error("Close the running LETSCUBE Windows client before starting isolated Tauri QA.");
+  console.error(
+    "Close the running LETSCUBE Windows client before starting isolated Tauri QA.",
+  );
   process.exit(1);
 }
 
@@ -60,16 +81,35 @@ let signalHandled = false;
 process.on("SIGINT", () => handleSignal(130));
 process.on("SIGTERM", () => handleSignal(143));
 
-const scenarios = requestedMode
-  ? [{ name: requestedMode, mode: requestedMode, spec: "tests/e2e/windows-tauri-startup.spec.ts" }]
-  : [
-      { name: "baseline", mode: null, spec: "tests/e2e/windows-tauri-shell.spec.ts" },
-      ...lifecycleModes.map((mode) => ({
-        name: mode,
-        mode,
-        spec: "tests/e2e/windows-tauri-startup.spec.ts",
-      })),
-    ];
+const scenarios =
+  requestedSuite === "long-session"
+    ? [
+        {
+          name: "long-session",
+          mode: null,
+          spec: "tests/e2e/windows-tauri-long-session.spec.ts",
+        },
+      ]
+    : requestedMode
+      ? [
+          {
+            name: requestedMode,
+            mode: requestedMode,
+            spec: "tests/e2e/windows-tauri-startup.spec.ts",
+          },
+        ]
+      : [
+          {
+            name: "baseline",
+            mode: null,
+            spec: "tests/e2e/windows-tauri-shell.spec.ts",
+          },
+          ...lifecycleModes.map((mode) => ({
+            name: mode,
+            mode,
+            spec: "tests/e2e/windows-tauri-startup.spec.ts",
+          })),
+        ];
 
 for (const scenario of scenarios) {
   console.log(`\n[windows-tauri-qa] Running ${scenario.name}...`);
@@ -83,11 +123,21 @@ for (const scenario of scenarios) {
 async function runScenario({ name, mode, spec }) {
   const debugPort = await reserveLoopbackPort();
   const profilePath = mkdtempSync(path.join(os.tmpdir(), `letscube-tauri-qa-${name}-`));
-  const scenario = { profilePath, qaProcess: null, client: null, cleanupPromise: null };
+  const scenario = {
+    profilePath,
+    qaProcess: null,
+    client: null,
+    cleanupPromise: null,
+  };
   activeScenario = scenario;
 
   try {
-    const outputPath = path.join("output", "playwright-test", "windows-tauri-qa", name);
+    const outputPath = path.join(
+      "output",
+      "playwright-test",
+      "windows-tauri-qa",
+      name,
+    );
     const cdpUrl = `http://127.0.0.1:${debugPort}`;
     const qaEnv = {
       ...process.env,
@@ -131,7 +181,9 @@ async function runScenario({ name, mode, spec }) {
       stdio: "ignore",
     });
     scenario.client.once("error", (error) => {
-      console.error(`Windows Tauri QA client failed to start: ${error.message}`);
+      console.error(
+        `Windows Tauri QA client failed to start: ${error.message}`,
+      );
     });
     return await waitForExit(scenario.qaProcess);
   } finally {
@@ -147,7 +199,9 @@ function hasRunningClient() {
     ["/FI", `IMAGENAME eq ${processImage}`, "/FO", "CSV", "/NH"],
     { encoding: "utf8" },
   );
-  return result.status === 0 && result.stdout.toLowerCase().includes(processImage);
+  return (
+    result.status === 0 && result.stdout.toLowerCase().includes(processImage)
+  );
 }
 
 function reserveLoopbackPort() {
@@ -176,7 +230,9 @@ function waitForExit(child) {
 function handleSignal(exitCode) {
   if (signalHandled) return;
   signalHandled = true;
-  void cleanupOwnedResources(activeScenario).then((clean) => process.exit(clean ? exitCode : 1));
+  void cleanupOwnedResources(activeScenario).then((clean) =>
+    process.exit(clean ? exitCode : 1),
+  );
 }
 
 async function cleanupOwnedResources(scenario) {
@@ -188,7 +244,8 @@ async function cleanupOwnedResources(scenario) {
     let clean = await terminateOwnedProcess(qaProcess);
     clean = (await terminateOwnedProcess(client)) && clean;
     clean = (await removeProfile(profilePath)) && clean;
-    if (!clean) console.error("Windows Tauri QA cleanup did not complete safely.");
+    if (!clean)
+      console.error("Windows Tauri QA cleanup did not complete safely.");
     return clean;
   })();
   return scenario.cleanupPromise;
@@ -206,7 +263,12 @@ async function terminateOwnedProcess(child) {
 async function removeProfile(profilePath) {
   for (let attempt = 0; attempt < 4; attempt += 1) {
     try {
-      rmSync(profilePath, { recursive: true, force: true, maxRetries: 40, retryDelay: 250 });
+      rmSync(profilePath, {
+        recursive: true,
+        force: true,
+        maxRetries: 40,
+        retryDelay: 250,
+      });
     } catch {
       // A just-killed WebView2 child can briefly retain a profile handle.
     }
@@ -217,9 +279,13 @@ async function removeProfile(profilePath) {
 }
 
 function isPidRunning(pid) {
-  const result = spawnSync("tasklist.exe", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
-    encoding: "utf8",
-  });
+  const result = spawnSync(
+    "tasklist.exe",
+    ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"],
+    {
+      encoding: "utf8",
+    },
+  );
   if (result.status !== 0) return true;
   return result.stdout.includes(`"${pid}"`);
 }

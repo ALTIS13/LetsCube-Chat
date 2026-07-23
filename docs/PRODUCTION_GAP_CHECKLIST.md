@@ -36,6 +36,12 @@ self-host cutover.
 - [ ] iOS TestFlight build tested.
 - [x] Windows packaging technology selected: Tauri 2.
 - [x] Windows updater-signed installer and physical cross-version update tested.
+- [x] Windows Authenticode production build path fails closed without a signing identity.
+- [ ] Windows installer signed with a real Authenticode publisher and SmartScreen checked.
+- [ ] Windows sparse package identity/PFN and WNS client channel registration completed.
+- [ ] Windows killed-process WNS delivery physically tested.
+- [ ] Windows 10 22H2 and alternate Windows 11/WebView2 matrix completed.
+- [~] Native Windows offline/long-session runner added; one-hour installed-package run pending.
 - [ ] Deep links tested on all target platforms.
 - [x] Native permissions copy reviewed.
 - [ ] Store privacy metadata prepared.
@@ -59,3 +65,4 @@ self-host cutover.
 - [x] Long-session QA.
 - [ ] Performance pass on low-end devices.
 - [ ] Accessibility pass on high-traffic flows.
+- [ ] Large-history message search and permission-aware people search by normalized verified phone.

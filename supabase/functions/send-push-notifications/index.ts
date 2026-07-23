@@ -7,6 +7,12 @@ import {
   isPermanentWebPushSubscriptionError,
   readWebPushErrorReason,
 } from "./webpush.ts";
+import {
+  buildWnsToast,
+  isAllowedWnsChannelUrl,
+  isPermanentWnsChannelError,
+  readWnsResponseStatus,
+} from "./wns.ts";
 
 type OutboxRow = {
   id: string;
@@ -33,6 +39,7 @@ type NativeOutboxRow = {
 type PushDeviceRow = {
   id: string;
   token: string;
+  provider: "fcm" | "apns" | "wns";
   enabled: boolean;
   revoked_at?: string | null;
 };
@@ -41,6 +48,12 @@ type FcmConfig = {
   projectId: string;
   clientEmail: string;
   privateKey: string;
+};
+
+type WnsConfig = {
+  tenantId: string;
+  clientId: string;
+  clientSecret: string;
 };
 
 const DEFAULT_LIMIT = 50;
@@ -215,7 +228,7 @@ async function selectNativeOutbox(supabaseUrl: string, secretKey: string, limit:
 async function selectPushDevices(supabaseUrl: string, secretKey: string, ids: string[]) {
   if (ids.length === 0) return { ok: true as const, data: [] as PushDeviceRow[] };
   const url = new URL("/rest/v1/user_push_devices", supabaseUrl);
-  url.searchParams.set("select", "id,token,enabled,revoked_at");
+  url.searchParams.set("select", "id,token,provider,enabled,revoked_at");
   url.searchParams.set("id", `in.(${ids.join(",")})`);
   const response = await restFetch(url, secretKey);
   if (!response.ok) return { ok: false as const, status: response.status };
@@ -235,42 +248,108 @@ async function dispatchNativePush(
     return { sent: 0, failed: 0, pruned: 0, pending: 0, status: "idle" };
   }
 
-  const config = readFcmConfig();
-  if (!config) {
-    return { sent: 0, failed: 0, pruned: 0, pending: rows.length, status: "credentials_pending" };
-  }
-
   const deviceIds = Array.from(new Set(rows.map((row) => row.device_id)));
   const devices = await selectPushDevices(supabaseUrl, secretKey, deviceIds);
   if (!devices.ok) {
     return { sent: 0, failed: rows.length, pruned: 0, pending: rows.length, status: "device_query_failed" };
   }
 
-  let accessToken: string;
-  try {
-    accessToken = await getGoogleAccessToken(config);
-  } catch {
-    return { sent: 0, failed: rows.length, pruned: 0, pending: rows.length, status: "fcm_auth_failed" };
-  }
-
+  const fcmConfig = readFcmConfig();
+  const wnsConfig = readWnsConfig();
   const byId = new Map(devices.data.map((device) => [device.id, device]));
+  let fcmAccessToken: string | null | undefined;
+  let wnsAccessToken: string | null | undefined;
   let sent = 0;
   let failed = 0;
   let pruned = 0;
+  let pending = 0;
+  let authenticationFailed = false;
   for (const row of rows) {
-    const result = await deliverFcm(
-      supabaseUrl,
-      secretKey,
-      config.projectId,
-      accessToken,
-      row,
-      byId.get(row.device_id),
-    );
+    const device = byId.get(row.device_id);
+    if (!device || !device.enabled || device.revoked_at) {
+      await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+        sent_at: new Date().toISOString(),
+        last_error: "device_missing",
+      });
+      pruned += 1;
+      continue;
+    }
+
+    let result: "sent" | "failed" | "pruned";
+    if (device.provider === "wns") {
+      if (!wnsConfig) {
+        pending += 1;
+        continue;
+      }
+      if (wnsAccessToken === undefined) {
+        try {
+          wnsAccessToken = await getWnsAccessToken(wnsConfig);
+        } catch {
+          wnsAccessToken = null;
+          authenticationFailed = true;
+        }
+      }
+      if (!wnsAccessToken) {
+        failed += 1;
+        pending += 1;
+        continue;
+      }
+      result = await deliverWns(
+        supabaseUrl,
+        secretKey,
+        wnsAccessToken,
+        row,
+        device,
+      );
+    } else if (device.provider === "fcm") {
+      if (!fcmConfig) {
+        pending += 1;
+        continue;
+      }
+      if (fcmAccessToken === undefined) {
+        try {
+          fcmAccessToken = await getGoogleAccessToken(fcmConfig);
+        } catch {
+          fcmAccessToken = null;
+          authenticationFailed = true;
+        }
+      }
+      if (!fcmAccessToken) {
+        failed += 1;
+        pending += 1;
+        continue;
+      }
+      result = await deliverFcm(
+        supabaseUrl,
+        secretKey,
+        fcmConfig.projectId,
+        fcmAccessToken,
+        row,
+        device,
+      );
+    } else {
+      pending += 1;
+      continue;
+    }
+
     if (result === "sent") sent += 1;
     else if (result === "pruned") pruned += 1;
-    else failed += 1;
+    else {
+      failed += 1;
+      pending += 1;
+    }
   }
-  return { sent, failed, pruned, pending: failed, status: "ready" };
+  return {
+    sent,
+    failed,
+    pruned,
+    pending,
+    status: authenticationFailed
+      ? "provider_auth_failed"
+      : pending > 0
+        ? "credentials_pending"
+        : "ready",
+  };
 }
 
 async function deliverFcm(
@@ -279,16 +358,8 @@ async function deliverFcm(
   projectId: string,
   accessToken: string,
   row: NativeOutboxRow,
-  device: PushDeviceRow | undefined,
+  device: PushDeviceRow,
 ): Promise<"sent" | "failed" | "pruned"> {
-  if (!device || !device.enabled || device.revoked_at) {
-    await markNativeOutbox(supabaseUrl, secretKey, row.id, {
-      sent_at: new Date().toISOString(),
-      last_error: "device_missing",
-    });
-    return "pruned";
-  }
-
   const response = await fetch(
     `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/messages:send`,
     {
@@ -326,6 +397,78 @@ async function deliverFcm(
   await markNativeOutbox(supabaseUrl, secretKey, row.id, {
     attempt_count: row.attempt_count + 1,
     last_error: `fcm:${response.status}:${readFcmErrorStatus(body)}`.slice(0, 160),
+  });
+  return "failed";
+}
+
+async function deliverWns(
+  supabaseUrl: string,
+  secretKey: string,
+  accessToken: string,
+  row: NativeOutboxRow,
+  device: PushDeviceRow,
+): Promise<"sent" | "failed" | "pruned"> {
+  if (!isAllowedWnsChannelUrl(device.token)) {
+    const revokedAt = new Date().toISOString();
+    await patchRow(supabaseUrl, secretKey, "user_push_devices", device.id, {
+      enabled: false,
+      revoked_at: revokedAt,
+      updated_at: revokedAt,
+    });
+    await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+      sent_at: revokedAt,
+      last_error: "invalid_channel",
+    });
+    return "pruned";
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(device.token, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        "content-type": "text/xml; charset=utf-8",
+        "x-wns-cache-policy": "no-cache",
+        "x-wns-requestforstatus": "true",
+        "x-wns-type": "wns/toast",
+      },
+      body: buildWnsToast(safePayload(row.payload)),
+    });
+  } catch {
+    await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+      attempt_count: row.attempt_count + 1,
+      last_error: "wns:network_error",
+    });
+    return "failed";
+  }
+
+  if (response.ok) {
+    await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+      sent_at: new Date().toISOString(),
+      last_error: null,
+    });
+    return "sent";
+  }
+
+  const reason = readWnsResponseStatus(response);
+  if (isPermanentWnsChannelError(response.status, reason)) {
+    const revokedAt = new Date().toISOString();
+    await patchRow(supabaseUrl, secretKey, "user_push_devices", device.id, {
+      enabled: false,
+      revoked_at: revokedAt,
+      updated_at: revokedAt,
+    });
+    await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+      sent_at: revokedAt,
+      last_error: `gone:${response.status}:${reason}`.slice(0, 160),
+    });
+    return "pruned";
+  }
+
+  await markNativeOutbox(supabaseUrl, secretKey, row.id, {
+    attempt_count: row.attempt_count + 1,
+    last_error: `wns:${response.status}:${reason}`.slice(0, 160),
   });
   return "failed";
 }
@@ -490,6 +633,41 @@ function readFcmConfig(): FcmConfig | null {
   const privateKey = Deno.env.get("FCM_PRIVATE_KEY")?.replace(/\\n/g, "\n").trim();
   if (!projectId || !clientEmail || !privateKey) return null;
   return { projectId, clientEmail, privateKey };
+}
+
+function readWnsConfig(): WnsConfig | null {
+  const tenantId = Deno.env.get("WNS_TENANT_ID")?.trim();
+  const clientId = Deno.env.get("WNS_CLIENT_ID")?.trim();
+  const clientSecret = Deno.env.get("WNS_CLIENT_SECRET")?.trim();
+  if (!tenantId || !clientId || !clientSecret) return null;
+  if (!isSafeWnsIdentifier(tenantId) || !isSafeWnsIdentifier(clientId)) return null;
+  return { tenantId, clientId, clientSecret };
+}
+
+async function getWnsAccessToken(config: WnsConfig): Promise<string> {
+  const body = new URLSearchParams({
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    grant_type: "client_credentials",
+    scope: "https://wns.windows.com/.default",
+  });
+  const response = await fetch(
+    `https://login.microsoftonline.com/${encodeURIComponent(config.tenantId)}/oauth2/v2.0/token`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body,
+    },
+  );
+  const payload = await readJson(response) as { access_token?: unknown } | null;
+  if (!response.ok || typeof payload?.access_token !== "string") {
+    throw new Error("wns_oauth_failed");
+  }
+  return payload.access_token;
+}
+
+function isSafeWnsIdentifier(value: string): boolean {
+  return /^[A-Za-z0-9._-]{1,128}$/.test(value);
 }
 
 async function getGoogleAccessToken(config: FcmConfig): Promise<string> {
