@@ -3,7 +3,7 @@
 This is a snapshot of the current production-readiness state. It is not a
 replacement for release QA.
 
-Snapshot updated: 2026-07-09. The detailed execution source of truth is
+Snapshot updated: 2026-07-23. The detailed execution source of truth is
 `docs/PRODUCTION_PRIORITY_TRACKER.md`.
 
 ## Chat/messaging
@@ -78,17 +78,22 @@ Snapshot updated: 2026-07-09. The detailed execution source of truth is
 
 ## Native readiness
 
-- Capacitor Android groundwork and a debug APK exist and were physically
-  exercised for auth, media recording and geolocation.
-- Product delivery is intentionally focused on installed Web/PWA clients for
-  desktop and mobile; APK release work is deferred.
-- Native push, signing, app store metadata and deep links remain future work.
+- Capacitor Android groundwork, production-configured internal APK, FCM
+  registration/delivery foundation and physical auth/media/geolocation QA exist.
+- Tauri 2 is the selected Windows client. Secure startup, tray/single-instance,
+  updater signing, cross-version updates and exact native notification routing
+  are physically verified through `0.2.7/11`.
+- Android release signing/AAB, Android app links/recovery callback,
+  Authenticode/SmartScreen, killed-process Windows WNS delivery and broader
+  device matrices remain open.
+- iPhone/iPad PWA and iOS work are owned by a separate execution stream and
+  must not be duplicated from the backend/interface/Windows/Android stream.
 
 ## Known gaps
 
 - Real SMS provider setup and device QA.
-- Native push token/device model.
-- App signing for Android/iOS/Windows.
+- Android release signing/AAB and broader official Google Play Services QA.
+- Windows Authenticode/SmartScreen and killed-process WNS delivery.
 - Isolated restore drill.
 - Sentry self-host decision and rollout.
 - Startup permission capability batching: the current app shell issues 33 repeated role/location permission RPCs before the first meaningful chat interaction.

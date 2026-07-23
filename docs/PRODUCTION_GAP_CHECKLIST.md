@@ -34,8 +34,8 @@ self-host cutover.
 - [ ] Android release signing configured outside repo.
 - [ ] iOS Capacitor wrapper added.
 - [ ] iOS TestFlight build tested.
-- [ ] Windows packaging technology selected.
-- [ ] Windows signed installer tested.
+- [x] Windows packaging technology selected: Tauri 2.
+- [x] Windows updater-signed installer and physical cross-version update tested.
 - [ ] Deep links tested on all target platforms.
 - [x] Native permissions copy reviewed.
 - [ ] Store privacy metadata prepared.

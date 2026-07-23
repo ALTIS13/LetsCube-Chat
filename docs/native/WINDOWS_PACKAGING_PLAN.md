@@ -1,8 +1,9 @@
 # Windows Packaging Plan
 
 LETSCUBE has migrated from the retired Electron experiment to a Tauri 2
-Windows client. The verified internal `0.2.0` build `4` installer is published
-through the Windows stable release catalog. The shell loads only
+Windows client. The verified `0.2.7` build `11` candidate has passed physical
+notification grouping/action/read-cleanup QA, was verified in Test and was
+promoted unchanged to Stable. The shell loads only
 `https://app.letscube.ru` and keeps the production web application as the
 shared product surface.
 
@@ -130,14 +131,20 @@ device-token/backend design and is not claimed.
 
 ## Release catalog
 
-`https://api.letscube.ru/releases/v1/windows/stable.json` exposes the verified
-`0.2.3` build `7` Tauri NSIS artifact. The default updater Stable channel uses
-the same immutable installer. Signed `0.2.6` build `10` is the current opt-in
-Test artifact after production frontend and physical hidden-window
-message/task/read-cleanup QA. It must still pass notification-card action
-activation before Stable promotion.
+`https://api.letscube.ru/releases/v1/windows/stable.json` and both Tauri updater
+channels expose the physically tested `0.2.7` build `11` artifact. Test was
+verified first, then the exact same immutable installer and adjacent updater
+signature were promoted to Stable. The release adds one
+Toast Header per chat, retains up to five unread cards, opens the exact message
+from fresh and historical cards, removes only the opened chat's history after
+reading and avoids duplicate sender text.
 Artifacts remain immutable under
 `https://api.letscube.ru/releases/files/windows/`.
+Public Test, Stable updater and Stable download manifests resolve to the same
+2,318,468-byte artifact with SHA-256
+`408c238d0eae67471c6fb9b8ae95a1c9bb54640912883d86d7ae390a414d65e1`.
+Manifest responses use `no-cache, no-store`; the versioned installer uses
+`public, max-age=31536000, immutable`.
 
 The signed native updater uses separate manifests and does not replace that
 download catalog:
@@ -162,7 +169,7 @@ directory listing, dotfiles, traversal forms and all unlisted updater paths.
 - [x] Production-origin authenticated shell, chat composer, attachment menu, media quality selector, Notification Center and Windows notification settings.
 - [x] WebView2 exposes camera/microphone MediaDevices, MediaRecorder, geolocation, clipboard and fullscreen APIs; the attachment menu exposes photo, camera, voice and video flows.
 - [ ] Hardware capture/permission allow-deny matrix on Windows 10 and Windows 11 devices.
-- [~] Realtime chat/task/system routing, native visibility, stable Windows tag/group replacement and reconnect reconciliation are covered by unit/native lifecycle QA. Production hidden-window QA created two same-chat message rows but one `messages` toast, created a separate `tasks` toast, and removed each native history row after its DB notification became read. Notification-card action activation remains before this item is complete.
+- [x] Realtime chat/task/system routing, native visibility, stable per-chat Windows Toast Headers, five-card unread retention, reconnect reconciliation and chat-scoped read cleanup are covered by unit/native lifecycle and physical QA. Fresh and historical cards open their exact message; cards from another chat remain independently actionable.
 - [ ] Offline/reconnect banner and long-session sync.
 - [x] Installer size and SHA-256 are recorded before publication.
 

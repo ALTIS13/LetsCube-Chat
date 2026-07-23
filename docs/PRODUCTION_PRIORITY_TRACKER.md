@@ -1,8 +1,13 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-07-13.
+Status: active production-hardening tracker, updated 2026-07-23.
 
 This file is the working source of truth for the next production stages. Before starting any new production task, read this file first, then update the relevant checkboxes/status when work is completed, blocked, or intentionally deferred.
+
+Execution ownership:
+
+- This tracker/chat owns the shared backend and web interface plus Windows and Android applications.
+- iPhone/iPad PWA implementation and physical QA are owned by a separate agent. Do not modify or repeat that work from this execution stream; only consume its committed `main` baseline after checking `git status` and `git log`.
 
 Legend:
 
@@ -17,7 +22,7 @@ Legend:
 2. `[x]` Priority 2 - RLS and security audit baseline.
 3. `[!]` Priority 3 - Backup and restore drill follow-ups.
 4. `[x]` Priority 4 - Operator security observability.
-5. `[~]` Priority 5 - Installed web/PWA production shell.
+5. `[~]` Priority 5 - Installed web/PWA production shell. iPhone/iPad-specific implementation and QA are externally owned.
 6. `[!]` Priority 6 - Monitoring and self-hosted Sentry.
 7. `[~]` Native/mobile packaging resumed: Windows Tauri secure startup and signed updater are complete; Android release signing and the remaining platform release gates stay active.
 
@@ -42,11 +47,11 @@ Use this queue before starting the next production-hardening turn. Do not repeat
    - `[x]` Replaced the startup permission fan-out with one authenticated access snapshot. `.migration-backup/supabase/migrations/20260710_current_user_access_snapshot.sql` was applied manually on 2026-07-11 after verified backup `/srv/letscube/backups/pre-migrations/20260711-105607-before-access-snapshot.dump`. Full parity covered all 12 profiles with zero global-role, global-permission or location-permission mismatches. `anon` has no execute grant, `authenticated` does. `VITE_ACCESS_SNAPSHOT_RPC_ENABLED=1` is active in production; live Playwright observed exactly one `current_user_access_snapshot` request and zero legacy `has_permission`, `has_location_permission` or `has_global_role` requests.
 3. `[x]` Add a bounded 720p video transcode worker path and upload/playback quality selection. The trusted worker now creates H.264/AAC MP4 variants at up to 1280x720 without upscaling, with two ffmpeg threads and a ten-minute timeout. A production-runtime benchmark converted a 10-second 1080p/9 MB sample to approximately 1 MB in 1.55 seconds; landscape, portrait, audio and no-upscale contracts passed. Compact/standard playback prefers the ready 720p derivative, high quality and explicit original-file opening keep the original. Existing originals are retained. Production backfill is complete for all 26 non-deleted videos with a valid Storage source; five older videos initially outside the newest 120 media rows were recovered after adding bounded pagination.
 4. `[x]` Added hybrid media upload progress, retry and current-session resume. Files above 6 MiB use TUS with exact 6 MiB chunks and bounded retries; smaller files keep the standard Storage path. Cancellation terminates partial uploads, retry keeps a stable object path, and chat/composer scopes prevent delayed files, recordings, location results or failed captions from crossing into another chat. A disposable 7 MiB production object was uploaded, read back at the exact size and deleted.
-5. `[~]` Keep iPhone/iPad Home Screen as the only PWA install target. Android browsers use the APK catalog and Windows browsers use the EXE catalog; physical iOS Home Screen/push confirmation remains pending.
+5. `[!]` Keep iPhone/iPad Home Screen as the only PWA install target. Android browsers use the APK catalog and Windows browsers use the EXE catalog. Further iPhone/iPad PWA implementation and physical QA are owned by a separate agent and are out of scope for this execution stream.
 6. `[!]` Keep monitoring/Sentry and backup restore rehearsal deferred until the user confirms the backup environment and restore-test window.
 7. `[~]` Complete the Capacitor Android release candidate. LETSCUBE `0.1.0` production-configured debug APK is published through the self-hosted release catalog with verified size/SHA parity. Remaining: release signing/AAB, app links/recovery callback and broader signed-package QA.
-8. `[x]` Replace the retired Electron spike with a clean-profile Tauri 2 Windows client. The one-window secure startup, tray/single-instance behavior, Stable/Test channels and signed Tauri updater are complete. Physical `0.2.0 -> 0.2.1`, `0.2.1 -> 0.2.2` and `0.2.2 -> 0.2.3` production-update rehearsals passed. Stable download/updater catalogs publish `0.2.3` build `7` from the same immutable artifact. A successful version change shows a compact four-second confirmation and then frees the top-right area for future call controls.
-9. `[~]` Complete the external Windows release gates. Physical `0.2.4/8` QA exposed two Windows-specific gaps: WebView2 remains DOM-visible after the native window is hidden, and the desktop backend of the Tauri notification plugin discards `id/group/extra` while swallowing the asynchronous toast error. Signed `0.2.6/10` replaces that path with exact-origin foreground/toast/history commands, native Windows `tag/group`, bounded content and a pending safe relative action route. Production commit `b665848` is deployed, and physical hidden-window QA now passes same-chat replacement, separate task grouping and native history removal after server-backed `read_at`. The signed artifact replaced `0.2.4/8` in the opt-in Test updater channel; Stable remains `0.2.3/7`. Notification-card action activation remains the promotion gate. Remaining external work is Authenticode/SmartScreen reputation, a broader Windows 10/11 device matrix and true killed-process delivery through a separate WNS/device-token/backend design.
+8. `[x]` Replace the retired Electron spike with a clean-profile Tauri 2 Windows client. The one-window secure startup, tray/single-instance behavior, Stable/Test channels and signed Tauri updater are complete. Physical `0.2.0 -> 0.2.1`, `0.2.1 -> 0.2.2` and `0.2.2 -> 0.2.3` production-update rehearsals passed. A successful version change shows a compact four-second confirmation and then frees the top-right area for future call controls.
+9. `[~]` Complete the external Windows release gates. LETSCUBE `0.2.7/11` replaces the failed generic notification plugin path with exact-origin native Windows toast/history/action commands. Physical QA confirms one stable Toast Header per chat, up to five unread message cards, exact per-message routing from both fresh and historical cards, independent routing for other chats, and chat-scoped history removal after reading. Sender duplication was removed by keeping the sender/chat name only in the native header. The physically tested immutable artifact was verified in Test and then promoted unchanged to Stable. Remaining external work is Authenticode/SmartScreen reputation, a broader Windows 10/11 device matrix and true killed-process delivery through a separate WNS/device-token/backend design.
 
 ## Last Confirmed Deploy Baseline
 
@@ -203,7 +208,7 @@ Current baseline:
 
 ## Priority 5 - Installed Web/PWA Production Shell
 
-Status: `[~]` active. iOS-only install policy and the Android/Windows release catalog were deployed on 2026-07-12; physical iPhone Home Screen/push checks remain.
+Status: `[~]` active. The iOS-only install policy and Android/Windows release catalogs are deployed. iPhone/iPad-specific implementation and physical QA are owned by a separate agent and must not be duplicated here.
 
 Goal: retain the full browser client on every platform, expose PWA installation only on iPhone/iPad, and direct Android/Windows users to dedicated native packages.
 
@@ -230,7 +235,7 @@ Current baseline:
 - `artifacts/kub/public/manifest.json` uses `LETSCUBE`, `display: standalone`, and `display_override` fallbacks.
 - The iPhone home-screen icon uses a dedicated 180x180 LETSCUBE club asset; 192/512/maskable PWA icons use the same official mark, and the service worker precaches the complete icon set.
 - Settings distribution block shows `iPhone/iPad / iOS PWA`, `Android APK`, `Windows EXE` or web-only status. Native manifests refresh on Settings open/resume without blocking app startup.
-- The Windows stable download catalog now offers LETSCUBE `0.2.3` build `7`. The Tauri Stable and Test updater manifests reference the same immutable 2,328,922-byte installer with SHA-256 `7e3ab643bfa0b589e2b4a853cf163e819c69459b267ee218ce2c97206c249a58`; the installer is updater-signed and physically accepted by Tauri. The production handoff keeps one fixed scene across navigation, remains readable for at least 2.2 seconds and holds the confirmed state for at least 0.9 seconds before fading. Explicit client/server ports now bound the two rail halves outside both device bodies, and font loading or the connected state cannot change endpoint geometry.
+- The Windows stable download catalog and both Tauri updater channels now offer LETSCUBE `0.2.7` build `11`. Test was verified first, then the exact same immutable 2,318,468-byte installer and adjacent updater signature were promoted to Stable. Public manifests and fresh artifact downloads agree on SHA-256 `408c238d0eae67471c6fb9b8ae95a1c9bb54640912883d86d7ae390a414d65e1`; manifests are non-cacheable and versioned artifacts are immutable. The production handoff keeps one fixed scene across navigation, remains readable for at least 2.2 seconds and holds the confirmed state for at least 0.9 seconds before fading. Explicit client/server ports bound the two rail halves outside both device bodies, and font loading or the connected state cannot change endpoint geometry.
 - `letscube-releases` deployment `x11jjzh6qbcnszndx5av5paj` finished exact commit `491e172`; TLS/health, 404 listing denial, POST denial, CORS/cache headers and Android artifact size/SHA parity passed.
 - `tests/e2e/pwa.spec.ts` covers PWA shell metadata, service worker safety, offline/reconnect banner, and SPA direct routes on 1440, 1920, 3840, 390 and 412 viewports.
 - `tests/e2e/pwa-install-settings.spec.ts` covers desktop install variant and iPhone Safari home-screen guidance from the Settings install button.
@@ -281,7 +286,7 @@ Status: `[~]` active. Android and Windows Tauri internal candidates are availabl
 - `[x]` Retire the Electron spike after QA profile leakage and excessive package weight were confirmed. Electron source, installed package and shared QA profile were removed before publishing Tauri.
 - `[x]` Tauri 2 internal candidate: isolated WebView2 profile, 1.19 MiB NSIS installer, tray/close-to-hide, branded startup, single instance, minimum exact-origin capabilities, clean-profile login and hidden-window foreground notifications.
 - `[x]` Tauri rollout: frontend adapter deployed, clean installed-client QA repeated, and immutable Windows stable `0.2.0` build `4` published at 1,242,693 bytes with verified SHA-256.
-- `[~]` Windows public release gate: repeatable isolated Tauri/WebView2 QA, same-version repair, silent uninstall, clean reinstall and real signed cross-version updater application pass. Signed `0.2.6/10` contains the native Windows toast replacement; production deployment plus physical hidden-window message replacement, task isolation and read cleanup pass. It is published only to Test and remains outside Stable pending notification-card action activation. Authenticode/SmartScreen and killed-process notifications remain open.
+- `[~]` Windows public release gate: repeatable isolated Tauri/WebView2 QA, same-version repair, silent uninstall, clean reinstall and real signed cross-version updater application pass. `0.2.7/11` passes physical hidden-window message/task isolation, five-card per-chat retention, exact fresh/history notification-card routing and chat-scoped read cleanup. Its immutable signed updater artifact was verified in Test and promoted unchanged to Stable. Authenticode/SmartScreen, broader Windows 10/11 hardware QA and killed-process WNS delivery remain open.
 - `[!]` SMS provider rollout.
 
 ## Deferred Phone Verification Rollout
