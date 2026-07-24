@@ -29,6 +29,18 @@ The script locates `MakeAppx.exe` and `SignTool.exe` under the newest installed
 Windows 10 SDK even when those tools are not in `PATH`. It also verifies
 Windows build 19041 or newer and an installed Windows App Runtime.
 
+The WNS database delta is prepared separately as a proposal:
+
+```text
+.migration-backup/supabase/migrations/20260724_windows_wns_push_devices.sql
+```
+
+It preserves Android/FCM, adds the exact Windows/WNS provider pair, validates
+Microsoft channel URI hosts server-side and includes Windows devices in the
+existing semantic native-push outbox. The proposal is contract-tested but is
+not applied to production. The live database remains Android/FCM-only until a
+manual migration approval.
+
 ## Required public metadata
 
 Set these only in the controlled Windows release shell:
@@ -94,12 +106,20 @@ The production installer must fail and roll back if identity registration
 fails. It must not silently launch an unidentified executable and claim
 killed-process push support.
 
+As of July 2026, Microsoft Artifact Signing Public Trust lists organizational
+onboarding only for the United States, Canada, the European Union and the
+United Kingdom, with individual onboarding limited to the United States and
+Canada. A Russian entity therefore needs either an eligible publisher entity
+or another publicly trusted code-signing CA that accepts and verifies it.
+Private Trust is not a substitute for public SmartScreen trust.
+
 ## Remaining WNS gates
 
 Package identity alone does not complete WNS:
 
 - Microsoft must approve the PFN-to-Entra mapping.
-- A reviewed `windows`/`wns` device schema and authenticated RPC are required.
+- The contract-tested `windows`/`wns` device/RPC proposal must receive manual
+  approval and be applied to self-hosted Supabase.
 - The client needs Windows App SDK channel acquisition and COM activation.
 - The Edge Function needs WNS credentials in server secrets.
 - Foreground, tray, terminated-process, reboot and notification-action routing
