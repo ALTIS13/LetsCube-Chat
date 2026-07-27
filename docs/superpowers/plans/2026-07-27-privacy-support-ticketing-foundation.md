@@ -66,12 +66,12 @@
 - Test: `tests/unit/support-validation.test.mjs`
 - Test: `tests/unit/support-guest-session.test.mjs`
 
-- [ ] Write failing tests for required name/email/E.164 phone/category/subject/message/privacy version fields and bounded lengths.
-- [ ] Write failing tests for gateway error sanitization and guest secret persistence rules.
-- [ ] Implement pure validators and Russian-friendly error mapping.
-- [ ] Implement an IndexedDB guest-session store that never places the raw secret in URL, logs, or localStorage.
-- [ ] Implement a typed gateway client that sends the guest secret only in a dedicated header and handles unavailable backend gracefully.
-- [ ] Run unit tests and typecheck.
+- [x] Write failing tests for required name/email/E.164 phone/category/subject/message/privacy version fields and bounded lengths.
+- [x] Write failing tests for gateway error sanitization and guest secret persistence rules.
+- [x] Implement pure validators and Russian-friendly error mapping.
+- [x] Implement an IndexedDB guest-session store that never places the raw secret in URL, logs, or localStorage.
+- [x] Implement a typed gateway client that sends the guest secret only in a dedicated header and handles unavailable backend gracefully.
+- [x] Run unit tests and typecheck.
 - [ ] Commit: `Add secure support client foundation`.
 
 ## Task 4: Shared Human Verification and Public Support UI

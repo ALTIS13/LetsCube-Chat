@@ -28,6 +28,13 @@ export function getSupabasePublicUrl(): string {
   return SUPABASE_URL
 }
 
+export function getSupabasePublishableKey(): string {
+  if (!SUPABASE_KEY) {
+    throw new Error(MISSING_SUPABASE_CONFIG_ERROR)
+  }
+  return SUPABASE_KEY
+}
+
 let instance: SupabaseClient<Database> | null = null
 
 export function createClient(): SupabaseClient<Database> {
