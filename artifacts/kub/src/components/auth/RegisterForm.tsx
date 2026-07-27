@@ -323,6 +323,16 @@ export function RegisterForm() {
             Восстановить доступ
           </Link>
         </p>
+        <p className="mt-3 text-center text-[11px] leading-5 text-[color:var(--kub-muted)]">
+          Перед созданием аккаунта ознакомьтесь с{" "}
+          <Link
+            href="/privacy"
+            className="font-semibold text-[color:var(--kub-cyan)] hover:text-[color:var(--kub-cyan-hover)]"
+          >
+            Политикой конфиденциальности
+          </Link>
+          .
+        </p>
       </div>
     </div>
   );

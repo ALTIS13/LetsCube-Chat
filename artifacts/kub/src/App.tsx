@@ -20,6 +20,7 @@ import { GlobalSearchPalette } from "@/components/search/GlobalSearchPalette";
 import { BannedScreen } from "@/components/BannedScreen";
 import { AdminLayout } from "@/pages/admin/AdminLayout";
 import { TasksPage } from "@/pages/tasks/TasksPage";
+import { PrivacyPage } from "@/pages/public/PrivacyPage";
 import NotFound from "@/pages/not-found";
 import { ThemeSync } from "@/hooks/useTheme";
 import { KubBrandLogo, KubButton, KubIcon, KubInput, KubLogo, KubPanel } from "@/components/kub";
@@ -338,6 +339,7 @@ function AppRoutes() {
   const userId = user?.id ?? null;
   const [location] = useLocation();
   const banState = useBanState();
+  const authRoute = isAuthRoute(location);
 
   // Keep the user's online_at fresh while a session exists.
   useHeartbeat();
@@ -370,9 +372,6 @@ function AppRoutes() {
     return <LoadingScreen error={loadingError} onRetry={retry} onSignOut={user ? signOut : undefined} />;
   }
 
-  const authRoute = isAuthRoute(location);
-  const publicRoute = isPublicRoute(location);
-
   // Auth callback always renders so it can exchange the code, regardless of session state.
   if (location.startsWith("/auth/callback")) {
     return <AuthCallback />;
@@ -385,7 +384,7 @@ function AppRoutes() {
     return <AuthCallback />;
   }
 
-  if (!user && !authRoute && !publicRoute) {
+  if (!user && !authRoute) {
     return <Redirect to="/login" />;
   }
 
@@ -416,9 +415,26 @@ function AppRoutes() {
   );
 }
 
-function App() {
-  const supabaseConfigured = isSupabaseConfigured();
+function RootRoutes() {
+  const [location] = useLocation();
 
+  if (isPublicRoute(location)) {
+    return (
+      <Switch>
+        <Route path="/privacy" component={PrivacyPage} />
+        <Route component={NotFound} />
+      </Switch>
+    );
+  }
+
+  if (!isSupabaseConfigured()) {
+    return <RuntimeConfigurationScreen />;
+  }
+
+  return <AppRoutes />;
+}
+
+function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
@@ -427,13 +443,9 @@ function App() {
         <IframeAuthBanner />
         <AppUpdateBanner />
         <AppDialogs />
-        {supabaseConfigured ? (
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <AppRoutes />
-          </WouterRouter>
-        ) : (
-          <RuntimeConfigurationScreen />
-        )}
+        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+          <RootRoutes />
+        </WouterRouter>
       </TooltipProvider>
     </QueryClientProvider>
   );

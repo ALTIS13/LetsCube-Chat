@@ -28,12 +28,12 @@
 - Modify: `artifacts/kub/src/App.tsx`
 - Test: `tests/unit/public-routes.test.mjs`
 
-- [ ] Write a failing Node contract test asserting `/privacy` and `/support` are public while `/`, `/admin`, and `/tasks` remain protected.
-- [ ] Run `node --test tests/unit/public-routes.test.mjs` and confirm the missing-module failure.
-- [ ] Implement `isPublicRoute()` and `isAuthRoute()` as exact/prefix-safe route predicates.
-- [ ] Render public routes before the unauthenticated redirect without bypassing auth callback/recovery behavior.
-- [ ] Run the unit test and KUB typecheck.
-- [ ] Commit: `Add public legal and support route contract`.
+- [x] Write a failing Node contract test asserting `/privacy` and `/support` are public while `/`, `/admin`, and `/tasks` remain protected.
+- [x] Run `node --test tests/unit/public-routes.test.mjs` and confirm the missing-module failure.
+- [x] Implement `isPublicRoute()` and `isAuthRoute()` as exact/prefix-safe route predicates.
+- [x] Render public routes before the unauthenticated redirect without bypassing auth callback/recovery behavior.
+- [x] Run the unit test and KUB typecheck.
+- [x] Commit: `Add public legal and support route contract`.
 
 ## Task 2: Privacy Policy Content and UI
 
@@ -47,12 +47,12 @@
 - Test: `tests/unit/privacy-policy-contract.test.mjs`
 - Test: `tests/e2e/privacy-support-public.spec.ts`
 
-- [ ] Write a failing policy contract test for operator identity, address, contacts, effective/version dates, data categories, recipients, retention, rights, minors, geolocation, push, and deletion sections.
-- [ ] Write a failing Playwright test proving `/privacy` loads without auth, has one H1, a table of contents, print action, and no horizontal overflow at desktop/mobile widths.
-- [ ] Implement versioned Russian policy content using structured sections rather than one uneditable HTML blob.
-- [ ] Implement the public LETSCUBE shell with bounded header, accessible navigation, print styling, and links to `/support`, `/login`, and the main application.
-- [ ] Add concise privacy links to login, registration, and recovery surfaces.
-- [ ] Run unit, Playwright, typecheck, and build checks.
+- [x] Write a failing policy contract test for operator identity, address, contacts, effective/version dates, data categories, recipients, retention, rights, minors, geolocation, push, and deletion sections.
+- [x] Write a failing Playwright test proving `/privacy` loads without auth, has one H1, a table of contents, print action, and no horizontal overflow at desktop/mobile widths.
+- [x] Implement versioned Russian policy content using structured sections rather than one uneditable HTML blob.
+- [x] Implement the public LETSCUBE shell with bounded header, accessible navigation, print styling, and links to `/support`, `/login`, and the main application.
+- [x] Add concise privacy links to login, registration, and recovery surfaces.
+- [x] Run unit, Playwright, typecheck, and build checks.
 - [ ] Commit: `Publish LETSCUBE privacy policy`.
 
 ## Task 3: Support Domain Model and Client Safety

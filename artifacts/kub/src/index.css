@@ -72,6 +72,29 @@
   user-select: none !important;
 }
 
+@media print {
+  .public-page-print-hide {
+    display: none !important;
+  }
+
+  .public-policy {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .public-policy,
+  .public-policy * {
+    color: #111827 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  .public-policy section {
+    break-inside: avoid-page;
+  }
+}
+
 /* ───────────────────────────────────────────────────────────────────────────
  * Theme-agnostic root: typography, radius, shadow scale, spacing.
  * Per-theme color tokens live in `.dark` and `.light` blocks below.
