@@ -10,8 +10,8 @@
 
 ## Global Constraints
 
-- Do not apply SQL until the user explicitly approves the proposal.
-- Do not deploy an Edge Function that depends on unapplied schema.
+- SQL may be applied under the user's standing approval only after a read-only live-schema audit, confirmation of a current backup/restore point, source/RLS tests, and a transactional safety review.
+- Do not deploy an Edge Function before its required schema has passed post-apply smoke checks.
 - Do not use `service_role` in frontend code. Trusted keys remain in Edge Function secrets.
 - Do not log guest secrets, contact data, CAPTCHA tokens, message bodies, or raw provider errors.
 - Do not add SMTP/IMAP integration in this plan. Mailcow delivery follows after DNS validation.
@@ -112,7 +112,9 @@
 - [ ] Add indexes for pool/status/assignee/activity/session expiry and bounded retention helpers.
 - [ ] Add RLS smoke scenarios for guest denial, user ownership, operator pool visibility, contact masking, claim race, and unauthorized transitions.
 - [ ] Run source contract test and `git diff --check`.
-- [ ] Do not apply the migration.
+- [ ] Before apply, verify the latest usable backup/restore point and record its timestamp without exposing credentials.
+- [ ] Inspect live schema/migration history read-only, review the proposal for destructive statements and lock risk, then apply transactionally under the user's standing approval.
+- [ ] Run post-apply schema, RPC, RLS, and existing auth/chat/push smoke checks; stop and rollback on regression.
 - [ ] Commit: `Propose privacy and support ticket schema`.
 
 ## Task 6: Support Gateway Edge Function
@@ -133,7 +135,7 @@
 - [ ] Use a trusted server client only inside the Edge Function.
 - [ ] Return bounded public ticket/message projections with no internal IDs beyond ticket/message IDs needed by the client.
 - [ ] Run security/unit tests.
-- [ ] Do not deploy until the migration is explicitly approved and applied.
+- [ ] Deploy only after the migration is safely applied and post-apply checks pass.
 - [ ] Commit: `Add support gateway edge function`.
 
 ## Task 7: Operator Workspace and Permissions
@@ -200,8 +202,7 @@
   - `pnpm.cmd exec playwright test tests/e2e/pwa.spec.ts`
 - [ ] Run secret/service-role/raw-error guard scans and confirm `service_role` appears only in trusted backend/docs contexts.
 - [ ] Use Playwright at 3840x2160, 1920x1080, 1440x900, 390x844, and 412x915 for public pages and the operator workspace.
-- [ ] Review the SQL proposal with the user; apply only after explicit approval.
-- [ ] After migration approval: apply migration, generate DB types, deploy `support-gateway`, set secrets, rerun RLS/multi-account/production QA.
+- [ ] Record the migration safety review and backup checkpoint, apply under the user's standing approval, generate DB types, deploy `support-gateway`, set secrets, and rerun RLS/multi-account/production QA.
 - [ ] Commit: `Document privacy and support operations`.
 - [ ] Push `main` only when the current DNS-independent stage passes validation.
 

@@ -33,6 +33,7 @@ import {
   isPasswordRecoveryUrl,
   markPasswordRecoveryFlow,
 } from "@/lib/authRecovery";
+import { isAuthRoute, isPublicRoute } from "@/lib/publicRoutes";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -369,10 +370,8 @@ function AppRoutes() {
     return <LoadingScreen error={loadingError} onRetry={retry} onSignOut={user ? signOut : undefined} />;
   }
 
-  const isAuthRoute =
-    location.startsWith("/login") ||
-    location.startsWith("/register") ||
-    location.startsWith("/auth");
+  const authRoute = isAuthRoute(location);
+  const publicRoute = isPublicRoute(location);
 
   // Auth callback always renders so it can exchange the code, regardless of session state.
   if (location.startsWith("/auth/callback")) {
@@ -386,11 +385,11 @@ function AppRoutes() {
     return <AuthCallback />;
   }
 
-  if (!user && !isAuthRoute) {
+  if (!user && !authRoute && !publicRoute) {
     return <Redirect to="/login" />;
   }
 
-  if (user && isAuthRoute) {
+  if (user && authRoute) {
     return <Redirect to="/" />;
   }
 
