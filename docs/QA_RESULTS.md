@@ -1211,6 +1211,10 @@ Recurring tasks roadmap note:
   and missing manual typings for `global_search_v2` and
   `search_chat_messages`. General RLS smoke passed with its pre-existing fake-ID
   mutation skips and broad-storage visibility diagnostics reported separately.
+- Pushed `main` and completed Coolify deployment
+  `fm5kg13xryald1w97djq233m` for exact commit `a4f6978`. Production
+  `https://app.letscube.ru` then passed public privacy/support 6/6 and operator
+  authorization/workspace 6/6 on desktop 1440x900 and mobile 390x844.
 - Self-hosted Kong currently emits a shared wildcard CORS response header, but
   `support-gateway` independently rejects an unapproved request Origin before
   data access. Broad Kong reconfiguration is deferred until all Edge Functions

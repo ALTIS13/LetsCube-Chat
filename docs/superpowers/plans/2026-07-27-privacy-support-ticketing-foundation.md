@@ -203,8 +203,8 @@
 - [x] Run secret/service-role/raw-error guard scans and confirm `service_role` appears only in trusted backend/docs contexts.
 - [x] Use Playwright at 3840x2160, 1920x1080, 1440x900, 390x844, and 412x915 for public pages and the operator workspace.
 - [x] Record the migration safety review and backup checkpoint, apply under the user's standing approval, generate DB types, deploy `support-gateway`, set secrets, and rerun RLS/multi-account/production QA.
-- [ ] Commit: `Document privacy and support operations`.
-- [ ] Push `main` only when the current DNS-independent stage passes validation.
+- [x] Commit: `Document privacy and support operations`.
+- [x] Push `main` only when the current DNS-independent stage passes validation.
 
 ## Deferred Plans
 

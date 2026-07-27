@@ -33,7 +33,7 @@ self-host cutover.
   atomic claim race.
 - [x] Operator workspace and Notification Center support UX complete; local
   five-viewport browser QA passed.
-- [ ] Production browser QA passed after the frontend deployment.
+- [x] Production browser QA passed after the frontend deployment.
 - [ ] `support@app.letscube.ru` Mailcow mailbox and DNS delivery validated.
 - [ ] Support attachment quarantine and malware scanning implemented.
 - [ ] Retention/anonymization scheduler and restore drill completed.
