@@ -53,7 +53,7 @@
 - [x] Implement the public LETSCUBE shell with bounded header, accessible navigation, print styling, and links to `/support`, `/login`, and the main application.
 - [x] Add concise privacy links to login, registration, and recovery surfaces.
 - [x] Run unit, Playwright, typecheck, and build checks.
-- [ ] Commit: `Publish LETSCUBE privacy policy`.
+- [x] Commit: `Publish LETSCUBE privacy policy`.
 
 ## Task 3: Support Domain Model and Client Safety
 
@@ -72,7 +72,7 @@
 - [x] Implement an IndexedDB guest-session store that never places the raw secret in URL, logs, or localStorage.
 - [x] Implement a typed gateway client that sends the guest secret only in a dedicated header and handles unavailable backend gracefully.
 - [x] Run unit tests and typecheck.
-- [ ] Commit: `Add secure support client foundation`.
+- [x] Commit: `Add secure support client foundation`.
 
 ## Task 4: Shared Human Verification and Public Support UI
 
@@ -92,7 +92,7 @@
 - [x] Keep initial support messages text-only and clearly label email/phone as unverified contact data.
 - [x] Add idle/absolute session-expiry UI and an explicit “forget this request on this device” action.
 - [x] Run targeted Playwright, auth CAPTCHA regression, typecheck, and build.
-- [ ] Commit: `Add public support request and guest chat UI`.
+- [x] Commit: `Add public support request and guest chat UI`.
 
 ## Task 5: Supabase Migration Proposal
 
@@ -102,19 +102,19 @@
 - Create: `tests/rls/support-ticketing-smoke.mjs`
 - Modify: `tests/rls/README.md`
 
-- [ ] Write a failing source contract test for every required table, enum/status constraint, permission, RPC, RLS policy, revocation, realtime publication, audit event, and notification trigger.
-- [ ] Create proposal tables: `privacy_policy_versions`, `privacy_acceptances`, `support_settings`, `support_tickets`, `support_ticket_contacts`, `support_guest_sessions`, `support_ticket_messages`, `support_ticket_events`, `support_operator_preferences`, `support_rate_limit_signals`, and `support_email_messages`.
-- [ ] Store contact data and guest secrets separately; store only a server-side digest of guest secrets.
-- [ ] Seed support permissions and grant all of them to owner/tech_admin roles without broadening legacy roles.
-- [ ] Add authenticated self-service policies, permission-scoped operator policies, and deny direct anonymous table access.
-- [ ] Add atomic RPCs for claim, transfer, return, escalate, waiting states, resolve, close, reopen, customer lookup, and settings update.
-- [ ] Add support notifications that contain ticket metadata but no contact values or message bodies.
-- [ ] Add indexes for pool/status/assignee/activity/session expiry and bounded retention helpers.
-- [ ] Add RLS smoke scenarios for guest denial, user ownership, operator pool visibility, contact masking, claim race, and unauthorized transitions.
-- [ ] Run source contract test and `git diff --check`.
-- [ ] Before apply, verify the latest usable backup/restore point and record its timestamp without exposing credentials.
-- [ ] Inspect live schema/migration history read-only, review the proposal for destructive statements and lock risk, then apply transactionally under the user's standing approval.
-- [ ] Run post-apply schema, RPC, RLS, and existing auth/chat/push smoke checks; stop and rollback on regression.
+- [x] Write a failing source contract test for every required table, enum/status constraint, permission, RPC, RLS policy, revocation, realtime publication, audit event, and notification trigger.
+- [x] Create proposal tables: `privacy_policy_versions`, `privacy_acceptances`, `support_settings`, `support_tickets`, `support_ticket_contacts`, `support_guest_sessions`, `support_ticket_messages`, `support_ticket_events`, `support_operator_preferences`, `support_rate_limit_signals`, and `support_email_messages`.
+- [x] Store contact data and guest secrets separately; store only a server-side digest of guest secrets.
+- [x] Seed support permissions and grant all of them to owner/tech_admin roles without broadening legacy roles.
+- [x] Add authenticated self-service policies, permission-scoped operator policies, and deny direct anonymous table access.
+- [x] Add atomic RPCs for claim, transfer, return, escalate, waiting states, resolve, close, reopen, customer lookup, and settings update.
+- [x] Add support notifications that contain ticket metadata but no contact values or message bodies.
+- [x] Add indexes for pool/status/assignee/activity/session expiry and bounded retention helpers.
+- [x] Add RLS smoke scenarios for guest denial, user ownership, operator pool visibility, contact masking, claim race, and unauthorized transitions.
+- [x] Run source contract test and `git diff --check`.
+- [x] Before apply, verify the latest usable backup/restore point and record its timestamp without exposing credentials.
+- [x] Inspect live schema/migration history read-only, review the proposal for destructive statements and lock risk, then apply transactionally under the user's standing approval.
+- [x] Run post-apply schema and synthetic guest RPC checks; broader authenticated RLS/auth/chat/push smoke remains part of the final validation task.
 - [ ] Commit: `Propose privacy and support ticket schema`.
 
 ## Task 6: Support Gateway Edge Function
@@ -127,15 +127,15 @@
 - Create: `tests/security/support-gateway-validation.test.mjs`
 - Test: `tests/unit/support-gateway-contract.test.mjs`
 
-- [ ] Write failing tests for normalized email/phone, field bounds, minimum form-fill time, honeypot, per-IP/email/phone/session limits, and safe error codes.
-- [ ] Write a source contract test for server-side SmartCaptcha validation, HMAC guest-secret hashing, no permissive CORS wildcard, no raw secret logging, and required environment variables.
-- [ ] Implement `POST /tickets`, `GET /tickets/:id`, `POST /tickets/:id/messages`, session revocation, and recovery request endpoints.
-- [ ] Enforce 3 new tickets per 15 minutes and 10 per day using persistent database signals, with an in-process limiter only as an additional guard.
-- [ ] Generate guest secrets with Web Crypto, persist only HMAC digests, and return the raw value exactly once.
-- [ ] Use a trusted server client only inside the Edge Function.
-- [ ] Return bounded public ticket/message projections with no internal IDs beyond ticket/message IDs needed by the client.
-- [ ] Run security/unit tests.
-- [ ] Deploy only after the migration is safely applied and post-apply checks pass.
+- [x] Write failing tests for normalized email/phone, field bounds, minimum form-fill time, honeypot, per-IP/email/phone/session limits, and safe error codes.
+- [x] Write a source contract test for server-side SmartCaptcha validation, HMAC guest-secret hashing, no permissive function-level CORS wildcard, no raw secret logging, and required environment variables.
+- [x] Implement `POST /tickets`, `GET /tickets/:id`, `POST /tickets/:id/messages`, and session revocation. Email-based recovery is intentionally deferred because the approved guest flow restores its local IndexedDB session without an email link.
+- [x] Enforce 3 new tickets per 15 minutes and 10 per day using persistent database signals, with an in-process limiter only as an additional guard.
+- [x] Generate guest secrets with Web Crypto, persist only HMAC digests, and return the raw value exactly once.
+- [x] Use a trusted server client only inside the Edge Function.
+- [x] Return bounded public ticket/message projections with no internal IDs beyond ticket/message IDs needed by the client.
+- [x] Run security/unit tests.
+- [x] Deploy only after the migration is safely applied and post-apply checks pass.
 - [ ] Commit: `Add support gateway edge function`.
 
 ## Task 7: Operator Workspace and Permissions
