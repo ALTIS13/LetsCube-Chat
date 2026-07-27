@@ -1,6 +1,12 @@
 import { getDesktopBridge, isDesktopApp } from "./desktop.ts";
 import { notificationPresentationTag } from "../browserNotificationPresentation.ts";
 import type { Notification } from "../../types/database.ts";
+import {
+  formatSupportNotification,
+  isSupportNotification,
+  supportNotificationTarget,
+  supportNotificationTargetsRequester,
+} from "../support/notifications.ts";
 
 export type DesktopMessageNotification = {
   title: string;
@@ -244,6 +250,24 @@ function desktopPresentation(
       payloadText(payload, "message") ??
       payloadText(payload, "content"),
   );
+
+  if (isSupportNotification(item)) {
+    const display = formatSupportNotification(item);
+    const target = supportNotificationTarget(
+      item.payload,
+      !supportNotificationTargetsRequester(item),
+    );
+    if (!target) return null;
+    const ticketId = payloadValue(payload, "ticket_id");
+    return {
+      title: display.title,
+      body: display.body,
+      tag: ticketId ? `support:${ticketId}` : tag,
+      groupTag: ticketId ? `support:${ticketId}` : tag,
+      kind: "system",
+      route: target.route,
+    };
+  }
 
   if (item.kind.includes("message") && chatId) {
     const privateChat = payloadText(payload, "chat_type") === "private";

@@ -442,6 +442,47 @@ test("notification rows keep exact message cards under one chat group and isolat
   }
 });
 
+test("support rows use bounded copy and a validated ticket route", async () => {
+  const previousWindow = installDesktopBridge();
+  const sent: Array<Record<string, unknown>> = [];
+  const ticketId = "2ab5bc76-751d-4b40-b868-805b07356886";
+  try {
+    const delivered = await desktopNotifications.showDesktopNotificationForRow(
+      {
+        id: "support-notification-1",
+        user_id: "support-operator-1",
+        kind: "support_ticket_created",
+        read_at: null,
+        created_at: "2026-07-27T10:00:00.000Z",
+        payload: {
+          ticket_id: ticketId,
+          support_event: "ticket_created",
+          route: "https://evil.example/redirect",
+          email: "private@example.invalid",
+          phone: "+79990000000",
+          body: "private support text",
+        },
+      },
+      async () => ({
+        sendNotification: async (notification: Record<string, unknown>) => {
+          sent.push(notification);
+          return true;
+        },
+      }),
+      { visibilityState: "hidden" },
+    );
+
+    assert.equal(delivered, true);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0]?.title, "Новое обращение");
+    assert.equal(sent[0]?.body, "В очереди поддержки появилось новое обращение.");
+    assert.equal(sent[0]?.route, `/admin/support?ticket=${ticketId}`);
+    assert.doesNotMatch(JSON.stringify(sent[0]), /private|7999|evil\.example/i);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
 test("desktop message retention trims only unread cards beyond five per chat", () => {
   const rows = Array.from({ length: 6 }, (_, index) => ({
     id: `notification-${index + 1}`,

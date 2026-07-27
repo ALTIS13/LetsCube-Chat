@@ -12,6 +12,12 @@ import { showAppAlert } from "@/lib/appDialogs";
 import { cn } from "@/lib/utils";
 import { acceptGroupInvite, declineGroupInvite, parseGroupInvitePayload } from "@/lib/groupInvites";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
+import { usePermissionAccess } from "@/hooks/useRole";
+import {
+  formatSupportNotification,
+  isSupportNotification,
+  supportNotificationTarget,
+} from "@/lib/support/notifications";
 import type { GroupInviteStatus } from "@/lib/groupInvites";
 import type { Notification } from "@/types/database";
 
@@ -20,6 +26,7 @@ type NotificationTarget =
   | { kind: "message"; chatId: string; messageId: string }
   | { kind: "tasks"; taskId?: string }
   | { kind: "admin" }
+  | { kind: "route"; route: string }
   | { kind: "group_invite"; status: GroupInviteStatus; chatId?: string }
   | null;
 
@@ -30,7 +37,7 @@ type NotificationDisplay = {
   typeLabel: string;
 };
 
-type NotificationCategory = "all" | "tasks" | "messages" | "system";
+type NotificationCategory = "all" | "tasks" | "messages" | "support" | "system";
 
 type NotificationEntry =
   | { kind: "single"; category: Exclude<NotificationCategory, "all">; item: Notification }
@@ -56,6 +63,7 @@ const NOTIFICATION_TABS: Array<{ id: NotificationCategory; label: string }> = [
   { id: "all", label: "Все" },
   { id: "tasks", label: "Задачи" },
   { id: "messages", label: "Сообщения" },
+  { id: "support", label: "Поддержка" },
   { id: "system", label: "Системные" },
 ];
 
@@ -64,6 +72,8 @@ type NotificationPanelStyle = Pick<CSSProperties, "left" | "top" | "width" | "he
 export function NotificationBell() {
   const [, setLocation] = useLocation();
   const { items, loading, error, markRead, markReadIds, markMessageNotificationsForChatRead, markAllRead, refresh } = useNotifications();
+  const supportAccess = usePermissionAccess(["support.view"]);
+  const canViewSupport = supportAccess.hasPermission("support.view");
   const supabase = useMemo(() => createClient(), []);
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<NotificationCategory>("all");
@@ -163,7 +173,14 @@ export function NotificationBell() {
     void refresh();
   }, [open, refresh]);
 
-  const entries = useMemo(() => buildNotificationEntries(items), [items]);
+  const tabs = useMemo(
+    () => NOTIFICATION_TABS.filter((tab) => tab.id !== "support" || canViewSupport),
+    [canViewSupport],
+  );
+  const entries = useMemo(
+    () => buildNotificationEntries(items, canViewSupport),
+    [canViewSupport, items],
+  );
   const visibleEntries = useMemo(
     () => entries.filter((entry) => activeTab === "all" || entry.category === activeTab),
     [activeTab, entries],
@@ -172,9 +189,13 @@ export function NotificationBell() {
   const activeUnreadCount = useMemo(() => countUnreadEntries(visibleEntries), [visibleEntries]);
   const activeUnreadIds = useMemo(() => collectUnreadIds(visibleEntries), [visibleEntries]);
 
+  useEffect(() => {
+    if (activeTab === "support" && !canViewSupport) setActiveTab("all");
+  }, [activeTab, canViewSupport]);
+
   const handleNotificationClick = async (item: Notification) => {
     if (!item.read_at) await markRead(item.id);
-    const target = navigateTarget(item, inviteStatuses);
+    const target = navigateTarget(item, inviteStatuses, canViewSupport);
 
     if (target?.kind === "chat" || target?.kind === "message") {
       setOpen(false);
@@ -195,6 +216,12 @@ export function NotificationBell() {
     if (target?.kind === "admin") {
       setOpen(false);
       setLocation("/admin");
+      return;
+    }
+
+    if (target?.kind === "route") {
+      setOpen(false);
+      setLocation(target.route);
       return;
     }
 
@@ -339,7 +366,7 @@ export function NotificationBell() {
             className="no-scrollbar relative z-10 flex max-w-full shrink-0 gap-1 overflow-x-auto overflow-y-hidden border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-2"
             data-testid="notification-tabs"
           >
-            {NOTIFICATION_TABS.map((tab) => {
+            {tabs.map((tab) => {
               const tabEntries = entries.filter((entry) => tab.id === "all" || entry.category === tab.id);
               const tabUnread = countUnreadEntries(tabEntries);
               return (
@@ -620,7 +647,10 @@ function NotificationState({ icon, title, body }: { icon: KubIconName; title: st
   );
 }
 
-function buildNotificationEntries(items: Notification[]): NotificationEntry[] {
+function buildNotificationEntries(
+  items: Notification[],
+  canViewSupport: boolean,
+): NotificationEntry[] {
   const messageGroups = new Map<string, Extract<NotificationEntry, { kind: "message_group" }>>();
   const singles: NotificationEntry[] = [];
 
@@ -651,13 +681,21 @@ function buildNotificationEntries(items: Notification[]): NotificationEntry[] {
         continue;
       }
     }
-    singles.push({ kind: "single", category: notificationCategory(item), item });
+    singles.push({
+      kind: "single",
+      category: notificationCategory(item, canViewSupport),
+      item,
+    });
   }
 
   return [...singles, ...messageGroups.values()].sort(compareNotificationEntries);
 }
 
-function notificationCategory(item: Notification): Exclude<NotificationCategory, "all"> {
+function notificationCategory(
+  item: Notification,
+  canViewSupport: boolean,
+): Exclude<NotificationCategory, "all"> {
+  if (isSupportNotification(item)) return canViewSupport ? "support" : "system";
   if (isMessageNotification(item)) return "messages";
   if (item.kind.includes("task")) return "tasks";
   if (item.kind === "group_invite") return "system";
@@ -707,6 +745,15 @@ function payloadString(p: unknown, key: string): string | undefined {
 }
 
 function formatNotification(item: Notification, inviteStatus?: GroupInviteStatus): NotificationDisplay {
+  if (isSupportNotification(item)) {
+    const display = formatSupportNotification(item);
+    return {
+      icon: "help",
+      typeLabel: display.typeLabel,
+      title: display.title,
+      body: display.body,
+    };
+  }
   const title = payloadString(item.payload, "title");
   const chatName = payloadString(item.payload, "chat_name");
   const reason = payloadString(item.payload, "reason");
@@ -825,7 +872,15 @@ function formatNotification(item: Notification, inviteStatus?: GroupInviteStatus
   }
 }
 
-function navigateTarget(item: Notification, localStatuses: Record<string, GroupInviteStatus>): NotificationTarget {
+function navigateTarget(
+  item: Notification,
+  localStatuses: Record<string, GroupInviteStatus>,
+  canViewSupport: boolean,
+): NotificationTarget {
+  if (isSupportNotification(item)) {
+    const target = supportNotificationTarget(item.payload, canViewSupport);
+    return target ? { kind: "route", route: target.route } : null;
+  }
   switch (item.kind) {
     case "task_assigned":
     case "task_waiting_confirmation":
