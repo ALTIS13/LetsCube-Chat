@@ -1,7 +1,7 @@
 "use client";
 
 import { Link, useLocation, Route, Switch, Redirect } from "wouter";
-import { useRoleAccess } from "@/hooks/useRole";
+import { usePermissionAccess, useRoleAccess } from "@/hooks/useRole";
 import { useAppStore } from "@/store/app.store";
 import { KubIcon, KubLogo, type KubIconName } from "@/components/kub";
 import { cn } from "@/lib/utils";
@@ -13,8 +13,16 @@ import { LocationsTab } from "./LocationsTab";
 import { RolesPermissionsTab } from "./RolesPermissionsTab";
 import { InvitesTab } from "./InvitesTab";
 import { OpsReportTab } from "./OpsReportTab";
+import { SupportTab } from "./SupportTab";
 
-type TabDef = { id: string; label: string; icon: KubIconName; path: string; adminOnly?: boolean };
+type TabDef = {
+  id: string;
+  label: string;
+  icon: KubIconName;
+  path: string;
+  adminOnly?: boolean;
+  supportOnly?: boolean;
+};
 
 const TABS: ReadonlyArray<TabDef> = [
   { id: "dashboard", label: "Сводка",       icon: "dashboard",  path: "/admin" },
@@ -24,6 +32,7 @@ const TABS: ReadonlyArray<TabDef> = [
   { id: "roles",     label: "Роли и права", icon: "shield",     path: "/admin/roles", adminOnly: true },
   { id: "bans",      label: "Блокировки",   icon: "shieldOff",  path: "/admin/bans" },
   { id: "ops",       label: "Операции",      icon: "activity",   path: "/admin/ops", adminOnly: true },
+  { id: "support",   label: "Поддержка",      icon: "help",       path: "/admin/support", supportOnly: true },
   // Audit log is admin-only at the RLS layer (managers see no rows);
   // hide the tab from managers entirely so they don't get sent to a
   // permission-denied empty state.
@@ -34,6 +43,9 @@ export function AdminLayout() {
   const [location] = useLocation();
   const currentUser = useAppStore((s) => s.currentUser);
   const { isStaff, isAdmin, checking } = useRoleAccess();
+  const supportAccess = usePermissionAccess(["support.view"]);
+  const canViewSupport = supportAccess.hasPermission("support.view");
+  const accessChecking = checking || supportAccess.checking;
 
   if (!currentUser) {
     return (
@@ -43,7 +55,7 @@ export function AdminLayout() {
     );
   }
 
-  if (checking) {
+  if (accessChecking) {
     return (
       <div className="flex items-center justify-center h-screen bg-[var(--kub-bg)] kub-grid-bg">
         <KubIcon name="spinner" size={24} tone="accent" label="Проверка ролей" />
@@ -51,7 +63,14 @@ export function AdminLayout() {
     );
   }
 
-  if (!isStaff) return <Redirect to="/" />;
+  if (!isStaff && !canViewSupport) return <Redirect to="/" />;
+
+  const visibleTabs = TABS.filter((tab) => {
+    if (tab.supportOnly) return canViewSupport;
+    if (!isStaff) return false;
+    return !tab.adminOnly || isAdmin;
+  });
+  const supportOnlyOperator = canViewSupport && !isStaff;
 
   return (
     <div className="flex h-screen min-h-0 flex-col bg-[var(--kub-bg)] text-[color:var(--kub-text)]">
@@ -72,14 +91,19 @@ export function AdminLayout() {
             </span>
           </div>
           <div className="text-xs text-[color:var(--kub-muted)] truncate">
-            {isAdmin ? "Администратор" : "Менеджер"} · {currentUser.full_name ?? "Без имени"}
+            {isAdmin
+              ? "Администратор"
+              : supportOnlyOperator
+                ? "Оператор поддержки"
+                : "Менеджер"}{" "}
+            · {currentUser.full_name ?? "Без имени"}
           </div>
         </div>
       </div>
 
       <div className="flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 overflow-x-auto no-scrollbar flex-shrink-0 bg-[var(--kub-surface)] border-b border-[color:var(--kub-border-color)]">
-        {TABS.filter((t) => !t.adminOnly || isAdmin).map((t) => {
-          const active = location === t.path;
+        {visibleTabs.map((t) => {
+          const active = location === t.path || location.startsWith(`${t.path}?`);
           return (
             <Link
               key={t.id}
@@ -100,8 +124,16 @@ export function AdminLayout() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto kub-grid-subtle">
-        <div className="mx-auto max-w-5xl p-3 pb-24 sm:p-4 sm:pb-8 md:p-6">
+        <div
+          className={cn(
+            "mx-auto p-3 pb-24 sm:p-4 sm:pb-8 md:p-6",
+            location.startsWith("/admin/support") ? "max-w-[1600px]" : "max-w-5xl",
+          )}
+        >
           <Switch>
+            <Route path="/admin/support">
+              {canViewSupport ? <SupportTab /> : <Redirect to={isStaff ? "/admin" : "/"} />}
+            </Route>
             <Route path="/admin" component={DashboardTab} />
             <Route path="/admin/users" component={UsersTab} />
             <Route path="/admin/locations">

@@ -45,6 +45,7 @@ export const PERMISSION_CATEGORY_LABEL: Record<string, string> = {
   locations: "Локации",
   tasks: "Задачи",
   chats: "Чаты и приглашения",
+  support: "Поддержка",
   security: "Аудит / безопасность",
   system: "Система",
   media: "Система",
@@ -57,11 +58,12 @@ export const PERMISSION_CATEGORY_DESCRIPTION: Record<string, string> = {
   locations: "Клубы, сотрудники локаций и основной администратор работника.",
   tasks: "Создание, назначение и маршрутизация задач по клубам.",
   chats: "Приглашения, модерация и роли в групповых чатах.",
+  support: "Приём обращений, ответы, передача, эскалация и настройки службы поддержки.",
   security: "Журнал действий и контроль чувствительных операций.",
   system: "Технические настройки, общие папки и служебные действия.",
 };
 
-export const PERMISSION_CATEGORY_ORDER = ["users", "roles", "locations", "tasks", "chats", "security", "system"];
+export const PERMISSION_CATEGORY_ORDER = ["users", "roles", "locations", "tasks", "chats", "support", "security", "system"];
 
 const PERMISSION_CATEGORY_BY_KEY: Record<string, string> = {
   "roles.view": "roles",
@@ -72,6 +74,14 @@ const PERMISSION_CATEGORY_BY_KEY: Record<string, string> = {
   "system.manage": "system",
   "folders.manage_shared": "system",
   "media.moderate": "system",
+  "support.view": "support",
+  "support.claim": "support",
+  "support.reply": "support",
+  "support.transfer": "support",
+  "support.escalate": "support",
+  "support.lookup_customer": "support",
+  "support.manage": "support",
+  "support.settings": "support",
 };
 
 export const PERMISSION_LABEL: Record<string, string> = {
@@ -105,6 +115,14 @@ export const PERMISSION_LABEL: Record<string, string> = {
   "chats.manage_roles": "Управление ролями чата",
   "media.moderate": "Модерация медиа",
   "folders.manage_shared": "Управление общими папками",
+  "support.view": "Просмотр поддержки",
+  "support.claim": "Принятие обращений",
+  "support.reply": "Ответы поддержки",
+  "support.transfer": "Передача обращений",
+  "support.escalate": "Эскалация обращений",
+  "support.lookup_customer": "Поиск клиента",
+  "support.manage": "Управление поддержкой",
+  "support.settings": "Настройки поддержки",
 };
 
 export const PERMISSION_DESCRIPTION: Record<string, string> = {
@@ -138,6 +156,14 @@ export const PERMISSION_DESCRIPTION: Record<string, string> = {
   "chats.manage_roles": "Повышать и понижать роли участников чата.",
   "media.moderate": "Модерировать пользовательские вложения.",
   "folders.manage_shared": "Управлять общими папками.",
+  "support.view": "Просматривать очередь и обращения поддержки.",
+  "support.claim": "Принимать обращение из общего пула.",
+  "support.reply": "Вести переписку по принятому обращению.",
+  "support.transfer": "Передавать обращение коллеге и возвращать его в общий пул.",
+  "support.escalate": "Передавать обращение старшему оператору.",
+  "support.lookup_customer": "Выполнять ограниченный и аудируемый поиск клиента.",
+  "support.manage": "Управлять всеми обращениями и видеть полные контакты.",
+  "support.settings": "Управлять режимом приёма и лимитами поддержки.",
 };
 
 type ErrorLike = {
@@ -182,7 +208,13 @@ export function isCriticalRoleKey(key: string | null | undefined): boolean {
 }
 
 function normalizePermissionCategory(category: string | null | undefined): string {
-  if (category === "users" || category === "locations" || category === "tasks" || category === "chats") return category;
+  if (
+    category === "users" ||
+    category === "locations" ||
+    category === "tasks" ||
+    category === "chats" ||
+    category === "support"
+  ) return category;
   if (category === "system") return "system";
   return "system";
 }
