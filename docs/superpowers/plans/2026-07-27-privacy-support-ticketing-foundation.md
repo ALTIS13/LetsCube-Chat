@@ -4,7 +4,7 @@
 
 **Goal:** Publish a complete LETSCUBE privacy policy and deliver a secure, DNS-independent support ticket/chat foundation for guests, users, and authorized operators.
 
-**Architecture:** Public `/privacy` and `/support` routes render before the authenticated application gate. Anonymous support traffic goes only through a new `support-gateway` Edge Function that validates Yandex SmartCaptcha, rate limits requests, and uses trusted server credentials; browsers never insert support rows directly. A proposal-only Supabase migration provides ticket, guest-session, message, event, policy-acceptance, operator-preference, and settings storage with permission-aware RPCs and RLS. Authorized operators work from `/admin/support`; Notification Center receives support events without exposing private contact data.
+**Architecture:** Public `/privacy` and `/support` routes render before the authenticated application gate. Anonymous support traffic goes only through a `support-gateway` Edge Function that validates Yandex SmartCaptcha, rate limits requests, and uses trusted server credentials; browsers never insert support rows directly. Applied Supabase migrations provide ticket, guest-session, message, event, policy-acceptance, operator-preference, settings and delivery-hardening storage/functions with permission-aware RPCs and RLS. Authorized operators work from `/admin/support`; Notification Center receives support events without exposing private contact data.
 
 **Tech Stack:** React 19, TypeScript, Wouter, Tailwind/KUB components, Supabase Postgres/Auth/Realtime/Edge Functions, Yandex SmartCaptcha, Node test runner, Playwright.
 
@@ -115,7 +115,7 @@
 - [x] Before apply, verify the latest usable backup/restore point and record its timestamp without exposing credentials.
 - [x] Inspect live schema/migration history read-only, review the proposal for destructive statements and lock risk, then apply transactionally under the user's standing approval.
 - [x] Run post-apply schema and synthetic guest RPC checks; broader authenticated RLS/auth/chat/push smoke remains part of the final validation task.
-- [ ] Commit: `Propose privacy and support ticket schema`.
+- [x] Commit: `Propose privacy and support ticket schema`.
 
 ## Task 6: Support Gateway Edge Function
 
@@ -136,7 +136,7 @@
 - [x] Return bounded public ticket/message projections with no internal IDs beyond ticket/message IDs needed by the client.
 - [x] Run security/unit tests.
 - [x] Deploy only after the migration is safely applied and post-apply checks pass.
-- [ ] Commit: `Add support gateway edge function`.
+- [x] Commit: `Add support gateway edge function`.
 
 ## Task 7: Operator Workspace and Permissions
 
@@ -150,14 +150,14 @@
 - Modify: `artifacts/kub/src/lib/rolePermissions.ts`
 - Test: `tests/e2e/support-operator.spec.ts`
 
-- [ ] Write a failing multi-role Playwright test for hidden unauthorized tab, operator pool, atomic claim conflict, assigned conversation, transfer/return/escalate reasons, resolve/close/reopen, and settings gating.
-- [ ] Add Russian labels/descriptions for all support permission keys and the support permission category.
-- [ ] Gate `/admin/support` by `support.view`, actions by their specific permissions, and settings by `support.settings`.
-- [ ] Implement pool/mine/urgent/waiting/resolved/spam tabs with bounded internal scrolling and mobile-safe layout.
-- [ ] Display masked contacts in the pool and full contacts only after claim or `support.manage`.
-- [ ] Implement ticket chat, immutable event timeline, close summary, and safe customer lookup with visible audit notice.
-- [ ] Run targeted Playwright and role visibility regression tests.
-- [ ] Commit: `Add support operator workspace`.
+- [x] Write a failing multi-role Playwright test for hidden unauthorized tab, operator pool, atomic claim conflict, assigned conversation, transfer/return/escalate reasons, resolve/close/reopen, and settings gating.
+- [x] Add Russian labels/descriptions for all support permission keys and the support permission category.
+- [x] Gate `/admin/support` by `support.view`, actions by their specific permissions, and settings by `support.settings`.
+- [x] Implement pool/mine/urgent/waiting/resolved/spam tabs with bounded internal scrolling and mobile-safe layout.
+- [x] Display masked contacts in the pool and full contacts only after claim or `support.manage`.
+- [x] Implement ticket chat, immutable event timeline, close summary, and safe customer lookup with visible audit notice.
+- [x] Run targeted Playwright and role visibility regression tests.
+- [x] Commit: `Add support operator workspace`.
 
 ## Task 8: Notification Center Integration
 
@@ -169,13 +169,13 @@
 - Test: `tests/e2e/notification-center.spec.ts`
 - Test: `tests/e2e/support-operator.spec.ts`
 
-- [ ] Write failing tests for support category visibility, ticket route parsing, permission gating, no private preview data, and pool notification removal after claim.
-- [ ] Add a “Поддержка” category for authorized operators only.
-- [ ] Route support notifications to `/admin/support?ticket=<id>` and preserve malformed-payload safety.
-- [ ] Keep message grouping, task visibility, read-sync, desktop native notifications, and browser push behavior unchanged.
-- [ ] Add operator preference controls for new-pool, assigned, transfer, escalation, and reply events.
-- [ ] Run notification, push, and support tests.
-- [ ] Commit: `Integrate support notifications`.
+- [x] Write failing tests for support category visibility, ticket route parsing, permission gating, no private preview data, and pool notification removal after claim.
+- [x] Add a “Поддержка” category for authorized operators only.
+- [x] Route support notifications to `/admin/support?ticket=<id>` and preserve malformed-payload safety.
+- [x] Keep message grouping, task visibility, read-sync, desktop native notifications, and browser push behavior unchanged.
+- [x] Add operator preference controls for new-pool, assigned, transfer, escalation, and reply events.
+- [x] Run notification, push, and support tests.
+- [x] Commit: `Integrate support notifications`.
 
 ## Task 9: Documentation, Validation, and Release Gate
 
@@ -185,10 +185,10 @@
 - Modify: `docs/PRODUCTION_GAP_CHECKLIST.md`
 - Modify: `docs/PROJECT_COMPLETION_STATUS.md`
 
-- [ ] Document support roles, queue workflow, guest recovery, abuse controls, retention, incident handling, and the no-attachment limitation.
-- [ ] Document manual migration review/apply/rollback steps, Edge Function secrets, and deploy order.
-- [ ] Record deferred Mailcow DNS/SMTP/IMAP, malware scanning, retention scheduler, and legal review.
-- [ ] Run:
+- [x] Document support roles, queue workflow, guest recovery, abuse controls, retention, incident handling, and the no-attachment limitation.
+- [x] Document manual migration review/apply/rollback steps, Edge Function secrets, and deploy order.
+- [x] Record deferred Mailcow DNS/SMTP/IMAP, malware scanning, retention scheduler, and legal review.
+- [x] Run:
   - `git diff --check`
   - `pnpm.cmd --filter @workspace/kub run typecheck`
   - `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"`
@@ -200,9 +200,9 @@
   - `pnpm.cmd exec playwright test tests/e2e/support-operator.spec.ts`
   - `pnpm.cmd exec playwright test tests/e2e/notification-center.spec.ts`
   - `pnpm.cmd exec playwright test tests/e2e/pwa.spec.ts`
-- [ ] Run secret/service-role/raw-error guard scans and confirm `service_role` appears only in trusted backend/docs contexts.
-- [ ] Use Playwright at 3840x2160, 1920x1080, 1440x900, 390x844, and 412x915 for public pages and the operator workspace.
-- [ ] Record the migration safety review and backup checkpoint, apply under the user's standing approval, generate DB types, deploy `support-gateway`, set secrets, and rerun RLS/multi-account/production QA.
+- [x] Run secret/service-role/raw-error guard scans and confirm `service_role` appears only in trusted backend/docs contexts.
+- [x] Use Playwright at 3840x2160, 1920x1080, 1440x900, 390x844, and 412x915 for public pages and the operator workspace.
+- [x] Record the migration safety review and backup checkpoint, apply under the user's standing approval, generate DB types, deploy `support-gateway`, set secrets, and rerun RLS/multi-account/production QA.
 - [ ] Commit: `Document privacy and support operations`.
 - [ ] Push `main` only when the current DNS-independent stage passes validation.
 

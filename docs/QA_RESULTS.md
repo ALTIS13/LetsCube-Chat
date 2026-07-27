@@ -1160,3 +1160,61 @@ Recurring tasks roadmap note:
   registration hooks, Windows App SDK channel/COM activation and
   killed-process physical QA remain blocked by external onboarding. No SQL,
   schema or WNS client registration was applied.
+## 2026-07-27 - Privacy and support foundation
+
+- Published public `/privacy` and `/support` routes before the authenticated
+  application gate. The support form requires contact data, category, subject,
+  message, privacy acceptance and Yandex SmartCaptcha, then opens the guest
+  chat immediately without an email-link round trip.
+- Guest session secrets remain raw only in IndexedDB. The deployed
+  `support-gateway` stores an HMAC digest, validates allowed origin and CAPTCHA,
+  applies persistent and in-process rate limits and returns bounded projections
+  without raw provider errors.
+- Created a verified pre-migration dump at
+  `/srv/letscube/backups/pre-migrations/20260727-100210-before-support-ticketing.dump`.
+  The migration passed an isolated restore rehearsal, transactional production
+  apply and synthetic guest RPC smoke. Production reports 11 support/privacy
+  tables with RLS enabled and no anonymous direct table privileges.
+- Production multi-role RLS smoke passed: requester ownership, unrelated-user
+  isolation, masked contact data before claim, full contact visibility after
+  assignment, denied requester transitions, one-winner atomic claim race and
+  operator-only lifecycle history. Its temporary least-privilege QA role and
+  synthetic tickets were removed; follow-up counts were both zero.
+- Support Notification Center routing uses only validated ticket UUIDs and
+  bounded Russian copy. Email, phone, request text and untrusted payload routes
+  are excluded from in-app and Windows native cards. Unit/adapter tests passed
+  20/20, and web typecheck passed at this checkpoint.
+- Added the permission-gated `/admin/support` operator workspace with bounded
+  pool/mine/urgent/waiting/resolved/spam queues, atomic workflow actions,
+  assigned conversation, masked/full contact boundary, audited customer lookup,
+  immutable event history, intake limits and per-operator notification
+  preferences.
+- Applied the additive delivery-hardening migration after a verified
+  `/srv/letscube/backups/pre-migrations/20260727-105107-before-support-delivery-hardening.dump`
+  checkpoint and successful transactional rollback rehearsal. Transfer targets
+  now come only from eligible support operators, message and ticket limits are
+  edited together, transfer preferences are enforced, and disabling support
+  OS push does not remove the in-app notification.
+- Production support RLS smoke passed again after the forward migration; the
+  temporary QA role and synthetic tickets were removed. Public privacy/support
+  Playwright passed 15/15 and operator workspace Playwright passed 15/15 across
+  3840x2160, 1920x1080, 1440x900, 390x844 and 412x915.
+- Final local regression checkpoint: support/privacy/unit contracts passed
+  38/38, support gateway security tests passed 7/7, authenticated smoke passed
+  5/5, Notification Center layout/grouping passed 5/5, and PWA passed 10/10.
+  Five cross-account notification read-sync cases were skipped because that
+  spec did not resolve a second receiver auth pair in this run; the dedicated
+  production support RLS smoke still passed.
+- KUB typecheck and production Vite build passed. The existing Vite sourcemap,
+  mixed dynamic/static import and large-chunk warnings remain advisory.
+  `db:types:check` passed with the known generated-only outbox/session tables
+  and missing manual typings for `global_search_v2` and
+  `search_chat_messages`. General RLS smoke passed with its pre-existing fake-ID
+  mutation skips and broad-storage visibility diagnostics reported separately.
+- Self-hosted Kong currently emits a shared wildcard CORS response header, but
+  `support-gateway` independently rejects an unapproved request Origin before
+  data access. Broad Kong reconfiguration is deferred until all Edge Functions
+  can be regression-tested together.
+- Mailcow integration for `support@app.letscube.ru`, support attachments and
+  malware scanning, automated retention/anonymization and final legal review
+  remain release gates.

@@ -21,6 +21,24 @@ self-host cutover.
 - [x] Password recovery checked after domain change.
 - [x] Auth callback checked after domain change.
 
+## Privacy and support
+
+- [x] Public `/privacy` and `/support` routes implemented without auth bypass.
+- [x] Privacy policy covers accounts, messages, media, voice/video, explicit
+  geolocation, recipients, retention principles and user rights.
+- [x] Support schema/RLS/RPC migration rehearsed, backed up and applied.
+- [x] Guest support gateway deployed with Yandex SmartCaptcha, HMAC guest
+  sessions, origin validation and persistent rate limits.
+- [x] Multi-role production RLS smoke passed, including masked contacts and
+  atomic claim race.
+- [x] Operator workspace and Notification Center support UX complete; local
+  five-viewport browser QA passed.
+- [ ] Production browser QA passed after the frontend deployment.
+- [ ] `support@app.letscube.ru` Mailcow mailbox and DNS delivery validated.
+- [ ] Support attachment quarantine and malware scanning implemented.
+- [ ] Retention/anonymization scheduler and restore drill completed.
+- [ ] Russian legal review completed before mass release/store certification.
+
 ## Monitoring
 
 - [ ] Sentry/self-host decision completed.

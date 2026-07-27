@@ -3,7 +3,7 @@
 This is a snapshot of the current production-readiness state. It is not a
 replacement for release QA.
 
-Snapshot updated: 2026-07-23. The detailed execution source of truth is
+Snapshot updated: 2026-07-27. The detailed execution source of truth is
 `docs/PRODUCTION_PRIORITY_TRACKER.md`.
 
 ## Chat/messaging
@@ -71,6 +71,24 @@ Snapshot updated: 2026-07-23. The detailed execution source of truth is
 - Frontend monitoring foundation exists.
 - Sentry/self-host rollout is postponed until pre-packaging review.
 
+## Privacy and support
+
+- Public privacy policy and support routes are implemented.
+- The guest support flow opens a chat immediately after name/email/phone,
+  category, subject, message, consent and CAPTCHA validation.
+- The guest secret is device-local in IndexedDB; only an HMAC digest is stored
+  server-side.
+- Support schema, RLS, permission-scoped RPCs, immutable events, notification
+  fan-out and abuse limits are applied in production after backup/rehearsal.
+- The `support-gateway` Edge Function is deployed and rejects unapproved
+  origins before processing.
+- Operator workspace, permission-gated queue/actions/settings, per-operator
+  notification preferences and support Notification Center integration are
+  implemented. Public and operator Playwright matrices pass locally at five
+  required desktop/mobile viewports.
+- Mailcow support mailbox, support attachments/malware scanning, scheduled
+  retention and legal review remain open.
+
 ## Self-host readiness
 
 - Production currently runs through Coolify with self-hosted Supabase, Storage,
@@ -106,3 +124,5 @@ Snapshot updated: 2026-07-23. The detailed execution source of truth is
 - Sentry self-host decision and rollout.
 - Startup permission capability batching: the current app shell issues 33 repeated role/location permission RPCs before the first meaningful chat interaction.
 - Broader installed PWA device/push matrix.
+- Support email ingestion/replies, safe attachment pipeline and automated
+  retention/restore rehearsal.
