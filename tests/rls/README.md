@@ -85,13 +85,17 @@ these QA accounts:
 
 - `KUB_QA_CLIENT_EMAIL` plus its matching password;
 - `KUB_QA_LOCATION_STAFF_EMAIL` plus its matching password;
-- `KUB_QA_SUPPORT_OPERATOR_EMAIL` plus its matching password;
+- `KUB_QA_SUPPORT_OPERATOR_EMAIL` plus its matching password, when a permanent
+  least-privilege support QA account exists;
 - `KUB_QA_TECH_ADMIN_EMAIL` plus its matching password.
 
 Role-specific passwords may use `KUB_QA_<ROLE>_PASSWORD`; otherwise the smoke
-falls back to `KUB_QA_PASSWORD`. The support operator fixture must have
-`support.view` and `support.claim`, but must not have `support.manage`, so the
-masked-contact boundary is meaningful.
+falls back to `KUB_QA_PASSWORD`. When the dedicated support account is absent,
+the smoke temporarily assigns the location-staff QA account a unique global
+role containing only `support.view` and `support.claim`; the role and assignment
+are removed in `finally`. In this fallback mode a location-admin QA account is
+also required as the unrelated outsider. The operator must not have
+`support.manage`, so the masked-contact boundary is meaningful.
 
 The smoke verifies:
 

@@ -42,16 +42,22 @@ if (!supabaseUrl || !publicKey || !serviceKey) {
   process.exit(0);
 }
 
+const configuredSupportOperator = readAccount("SUPPORT_OPERATOR");
+const temporaryOperatorFallback = !configuredSupportOperator;
 const accounts = {
   requester: readAccount("CLIENT"),
-  outsider: readAccount("LOCATION_STAFF"),
-  operator: readAccount("SUPPORT_OPERATOR"),
+  outsider: temporaryOperatorFallback
+    ? readAccount("LOCATION_ADMIN")
+    : readAccount("LOCATION_STAFF"),
+  operator: configuredSupportOperator ?? readAccount("LOCATION_STAFF"),
   peer: readAccount("TECH_ADMIN"),
 };
 
 if (Object.values(accounts).some((account) => !account)) {
   console.log(
-    "Support RLS smoke skipped: client, location_staff, support_operator and tech_admin QA accounts are required.",
+    temporaryOperatorFallback
+      ? "Support RLS smoke skipped: client, location_admin, location_staff and tech_admin QA accounts are required for the temporary operator fixture."
+      : "Support RLS smoke skipped: client, location_staff, support_operator and tech_admin QA accounts are required.",
   );
   process.exit(0);
 }
@@ -59,10 +65,18 @@ if (Object.values(accounts).some((account) => !account)) {
 const sessions = {};
 const fixtureIds = [];
 const notificationTicketIds = [];
+const temporaryRoleIds = [];
 
 try {
   for (const [name, account] of Object.entries(accounts)) {
     sessions[name] = await signIn(account);
+  }
+
+  if (temporaryOperatorFallback) {
+    await createTemporaryOperatorRole(
+      sessions.operator.user.id,
+      sessions.peer.user.id,
+    );
   }
 
   await assertPermission(sessions.operator, "support.view", true);
@@ -163,6 +177,53 @@ try {
       `/rest/v1/support_tickets?id=eq.${ticketId}`,
     ).catch(() => undefined);
   }
+  for (const roleId of temporaryRoleIds.reverse()) {
+    await deleteRoleFixture(roleId).catch(() => undefined);
+  }
+}
+
+async function createTemporaryOperatorRole(operatorUserId, assignedByUserId) {
+  const roleId = randomUUID();
+  const roleKey = `qa_support_${Date.now().toString(36)}_${roleId.slice(0, 6)}`;
+  temporaryRoleIds.push(roleId);
+  await serviceRest(
+    "POST",
+    "/rest/v1/roles",
+    {
+      id: roleId,
+      key: roleKey,
+      name: "QA support operator",
+      description: "Temporary role created by the support RLS smoke.",
+      scope: "global",
+      is_system: false,
+      is_active: true,
+    },
+    true,
+  );
+  await serviceRest(
+    "POST",
+    "/rest/v1/role_permissions",
+    [
+      { role_id: roleId, permission_key: "support.view" },
+      { role_id: roleId, permission_key: "support.claim" },
+    ],
+    true,
+  );
+  await serviceRest(
+    "POST",
+    "/rest/v1/user_global_roles",
+    {
+      user_id: operatorUserId,
+      role_id: roleId,
+      assigned_by: assignedByUserId,
+    },
+    true,
+  );
+  return roleId;
+}
+
+async function deleteRoleFixture(roleId) {
+  await serviceRest("DELETE", `/rest/v1/roles?id=eq.${roleId}`);
 }
 
 async function createTicketFixture(requesterUserId) {
