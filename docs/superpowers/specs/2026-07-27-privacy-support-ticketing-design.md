@@ -1,6 +1,7 @@
 # LETSCUBE Privacy Policy And Support Ticketing Design
 
-Date: 2026-07-27  
+Date: 2026-07-27
+
 Status: approved product design; implementation plan pending
 
 ## 1. Purpose
