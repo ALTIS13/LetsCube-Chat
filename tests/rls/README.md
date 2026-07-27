@@ -63,3 +63,49 @@ Current authenticated boundary coverage:
 - normal non-mutating mode additionally checks existing `chat-media` objects when a stable
   object/non-member pair is available;
 - legacy public `media` bucket root listing is reported as an informational count only.
+
+## Support ticketing smoke
+
+`node tests/rls/support-ticketing-smoke.mjs` validates the proposal from
+`.migration-backup/supabase/migrations/20260727_privacy_support_ticketing_foundation.sql`
+after that proposal has been reviewed and applied to a target environment.
+
+The support smoke is deliberately opt-in because it creates temporary support
+tickets:
+
+```powershell
+$env:SUPPORT_RLS_SMOKE = "1"
+$env:KUB_QA_ALLOW_MUTATIONS = "1"
+node tests/rls/support-ticketing-smoke.mjs
+```
+
+It requires the normal Supabase URL/public key, a backend-only
+`SELFHOST_SERVICE_ROLE_KEY` for creating and removing synthetic fixtures, and
+these QA accounts:
+
+- `KUB_QA_CLIENT_EMAIL` plus its matching password;
+- `KUB_QA_LOCATION_STAFF_EMAIL` plus its matching password;
+- `KUB_QA_SUPPORT_OPERATOR_EMAIL` plus its matching password;
+- `KUB_QA_TECH_ADMIN_EMAIL` plus its matching password.
+
+Role-specific passwords may use `KUB_QA_<ROLE>_PASSWORD`; otherwise the smoke
+falls back to `KUB_QA_PASSWORD`. The support operator fixture must have
+`support.view` and `support.claim`, but must not have `support.manage`, so the
+masked-contact boundary is meaningful.
+
+The smoke verifies:
+
+- direct anonymous reads of tickets, contacts and guest sessions are denied;
+- a registered requester sees only their own ticket;
+- an unrelated normal user does not see that ticket;
+- a support operator sees pool metadata but not raw contact data before claim;
+- the assigned operator can read contact data after an atomic claim;
+- a normal requester cannot call operator transition RPCs;
+- two concurrent claims produce exactly one winner;
+- operators can read the resulting append-only lifecycle event while the
+  requester cannot read operator-only claim history.
+
+Only synthetic `example.invalid` contact data is used. Cleanup runs in `finally`
+and removes fixture tickets plus any ticket-scoped test notifications. The
+script never prints passwords, API keys, access tokens, contact values or
+guest-session digests.
