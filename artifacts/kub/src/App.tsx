@@ -21,6 +21,7 @@ import { BannedScreen } from "@/components/BannedScreen";
 import { AdminLayout } from "@/pages/admin/AdminLayout";
 import { TasksPage } from "@/pages/tasks/TasksPage";
 import { PrivacyPage } from "@/pages/public/PrivacyPage";
+import { SupportPage } from "@/pages/public/SupportPage";
 import NotFound from "@/pages/not-found";
 import { ThemeSync } from "@/hooks/useTheme";
 import { KubBrandLogo, KubButton, KubIcon, KubInput, KubLogo, KubPanel } from "@/components/kub";
@@ -422,6 +423,7 @@ function RootRoutes() {
     return (
       <Switch>
         <Route path="/privacy" component={PrivacyPage} />
+        <Route path="/support" component={SupportPage} />
         <Route component={NotFound} />
       </Switch>
     );

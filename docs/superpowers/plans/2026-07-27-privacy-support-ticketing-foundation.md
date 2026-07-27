@@ -85,13 +85,13 @@
 - Modify: `artifacts/kub/src/App.tsx`
 - Test: `tests/e2e/privacy-support-public.spec.ts`
 
-- [ ] Extend the Playwright test with a mocked Yandex widget and mocked support-gateway.
-- [ ] Assert all required fields, privacy acceptance, honeypot behavior, CAPTCHA enforcement, immediate chat opening, message sending, reload recovery, responsive layout, and no raw technical errors.
-- [ ] Extract the existing theme-aware CAPTCHA runtime into a shared component while retaining `AuthCaptcha` compatibility.
-- [ ] Implement the support form and immediate guest chat state.
-- [ ] Keep initial support messages text-only and clearly label email/phone as unverified contact data.
-- [ ] Add idle/absolute session-expiry UI and an explicit “forget this request on this device” action.
-- [ ] Run targeted Playwright, auth CAPTCHA regression, typecheck, and build.
+- [x] Extend the Playwright test with a mocked Yandex widget and mocked support-gateway.
+- [x] Assert all required fields, privacy acceptance, honeypot behavior, CAPTCHA enforcement, immediate chat opening, message sending, reload recovery, responsive layout, and no raw technical errors.
+- [x] Extract the existing theme-aware CAPTCHA runtime into a shared component while retaining `AuthCaptcha` compatibility.
+- [x] Implement the support form and immediate guest chat state.
+- [x] Keep initial support messages text-only and clearly label email/phone as unverified contact data.
+- [x] Add idle/absolute session-expiry UI and an explicit “forget this request on this device” action.
+- [x] Run targeted Playwright, auth CAPTCHA regression, typecheck, and build.
 - [ ] Commit: `Add public support request and guest chat UI`.
 
 ## Task 5: Supabase Migration Proposal
