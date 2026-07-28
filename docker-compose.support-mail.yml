@@ -4,7 +4,7 @@
 services:
   letscube-support-mail:
     build:
-      context: ../..
+      context: .
       dockerfile: docs/deploy/Dockerfile.support-mail
     image: letscube-support-mail:latest
     restart: unless-stopped

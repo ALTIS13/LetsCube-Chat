@@ -32,7 +32,7 @@ Functions и Browser/PWA push от него не зависят.
 6. Watch paths:
    - `artifacts/api-server/**`
    - `docs/deploy/Dockerfile.support-mail`
-   - `docs/deploy/docker-compose.support-mail.yml`
+   - `docker-compose.support-mail.yml`
    - `package.json`
    - `pnpm-lock.yaml`
    - `pnpm-workspace.yaml`
