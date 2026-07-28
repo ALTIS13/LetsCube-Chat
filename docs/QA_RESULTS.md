@@ -1160,6 +1160,7 @@ Recurring tasks roadmap note:
   registration hooks, Windows App SDK channel/COM activation and
   killed-process physical QA remain blocked by external onboarding. No SQL,
   schema or WNS client registration was applied.
+
 ## 2026-07-27 - Privacy and support foundation
 
 - Published public `/privacy` and `/support` routes before the authenticated
@@ -1267,6 +1268,12 @@ Recurring tasks roadmap note:
   transferring roughly 23 GiB of unrelated build artifacts. The disabled
   container ran as `node` with read-only filesystem, dropped capabilities and
   successful `/healthz` and `/readyz` responses without opening IMAP/SMTP.
+- Deployed the non-public Coolify resource `letscube-support-mail` from exact
+  commit `a149ff9` using the root Git-backed Compose file. The resource has no
+  FQDN or host port bindings and is `running:healthy` with
+  `SUPPORT_MAIL_ENABLED=0`. Runtime inspection confirmed UID 1000, read-only
+  root filesystem, `cap_drop=ALL`, `NoNewPrivs=1` and both health endpoints
+  reporting `enabled=false`.
 - `db:types:check` passed with the known advisory drift for
   `global_search_v2` and `search_chat_messages`. `rls:smoke` completed with the
   existing fake-ID mutation skips and broad-storage diagnostics. Authenticated

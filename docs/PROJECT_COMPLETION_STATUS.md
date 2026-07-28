@@ -3,7 +3,7 @@
 This is a snapshot of the current production-readiness state. It is not a
 replacement for release QA.
 
-Snapshot updated: 2026-07-27. The detailed execution source of truth is
+Snapshot updated: 2026-07-28. The detailed execution source of truth is
 `docs/PRODUCTION_PRIORITY_TRACKER.md`.
 
 ## Chat/messaging
@@ -89,9 +89,9 @@ Snapshot updated: 2026-07-27. The detailed execution source of truth is
 - Mailcow domain/mailbox/aliases and the server-only IMAP/SMTP bridge are
   prepared. The atomic queue/RPC, intake guard, delivery hardening and
   idempotent acknowledgement migrations are applied after restore rehearsal
-  and rollback-safe production smoke. DNS publication, disabled Coolify
-  deployment, worker enablement and physical inbound/outbound/reply smoke
-  remain open.
+  and rollback-safe production smoke. A hardened non-public Coolify worker is
+  deployed healthy with mail processing disabled. DNS publication, worker
+  enablement and physical inbound/outbound/reply smoke remain open.
 - Support attachments/malware scanning, scheduled retention and final legal
   review remain open.
 

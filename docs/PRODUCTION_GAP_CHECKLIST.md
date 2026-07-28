@@ -25,26 +25,27 @@ self-host cutover.
 
 - [x] Public `/privacy` and `/support` routes implemented without auth bypass.
 - [x] Privacy policy covers accounts, messages, media, voice/video, explicit
-  geolocation, recipients, retention principles and user rights.
+      geolocation, recipients, retention principles and user rights.
 - [x] Support schema/RLS/RPC migration rehearsed, backed up and applied.
 - [x] Guest support gateway deployed with Yandex SmartCaptcha, HMAC guest
-  sessions, origin validation and persistent rate limits.
+      sessions, origin validation and persistent rate limits.
 - [x] Multi-role production RLS smoke passed, including masked contacts and
-  atomic claim race.
+      atomic claim race.
 - [x] Operator workspace and Notification Center support UX complete; local
-  five-viewport browser QA passed.
+      five-viewport browser QA passed.
 - [x] Production browser QA passed after the frontend deployment.
 - [x] `support@app.letscube.ru` Mailcow mailbox and aliases provisioned.
 - [x] Server-only IMAP/SMTP bridge, atomic email queue/RPC and retry/dedupe
-  schema implemented and production migration applied after backup/rehearsal.
+      schema implemented and production migration applied after backup/rehearsal.
 - [x] Direct-email intake closure/rate limits, closed-ticket quarantine,
-  final-attempt sweep, bounded email ledger cleanup and idempotent SMTP
-  acknowledgement applied and rollback-smoked in production.
+      final-attempt sweep, bounded email ledger cleanup and idempotent SMTP
+      acknowledgement applied and rollback-smoked in production.
 - [ ] MX/SPF/DKIM/DMARC for `app.letscube.ru` published and externally
-  validated.
-- [ ] Support mail worker deployed disabled in Coolify.
+      validated.
+- [x] Support mail worker deployed disabled and healthy in Coolify without a
+      public domain or host port binding.
 - [ ] Support mail worker enabled after DNS validation and
-  inbound/outbound/reply/dedupe physical delivery smoke passed.
+      inbound/outbound/reply/dedupe physical delivery smoke passed.
 - [ ] Support attachment quarantine and malware scanning implemented.
 - [ ] Retention/anonymization scheduler and restore drill completed.
 - [ ] Russian legal review completed before mass release/store certification.
