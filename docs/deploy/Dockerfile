@@ -119,6 +119,21 @@ EXPOSE 8096
 
 CMD ["sh", "-lc", "if [ -f /run/secrets/letscube-infra.env ]; then set -a; . /run/secrets/letscube-infra.env; set +a; fi; PORT=8096; : ${MEDIA_VARIANTS_WORKER_ENABLED:=1}; export PORT MEDIA_VARIANTS_WORKER_ENABLED; exec node --enable-source-maps artifacts/api-server/dist/index.mjs"]
 
+# ---------- Dedicated support mail runtime ----------
+FROM base AS support-mail-runtime
+
+ENV NODE_ENV=production \
+    PORT=8097 \
+    SUPPORT_MAIL_PORT=8097
+
+COPY --chown=node:node --from=build /app/ ./
+
+USER node
+
+EXPOSE 8097
+
+CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/supportMailIndex.mjs"]
+
 # ---------- Stage 3: runtime ----------
 FROM nginx:alpine AS runtime
 

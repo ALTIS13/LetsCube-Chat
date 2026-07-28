@@ -1222,3 +1222,59 @@ Recurring tasks roadmap note:
 - Mailcow integration for `support@app.letscube.ru`, support attachments and
   malware scanning, automated retention/anonymization and final legal review
   remain release gates.
+
+## 2026-07-28 - Support mail bridge foundation
+
+- Provisioned Mailcow domain `app.letscube.ru`, mailbox
+  `support@app.letscube.ru` and privacy/postmaster/DMARC aliases. Mailbox and
+  SMTP authentication passed without exposing credentials or sending a
+  production message.
+- Added a separate non-public IMAP/SMTP worker runtime with fail-closed
+  configuration, bounded parsing, auto-reply quarantine, deterministic
+  Message-ID, opaque reply routes, lease/retry handling and sanitized logs.
+  Disabled runtime health/readiness returned HTTP 200 and opened no mail
+  connection.
+- Created and verified the pre-migration custom dump at
+  `/srv/letscube/backups/pre-migrations/20260728-before-support-mail-bridge.dump`.
+  A second 3,029,132-byte checkpoint was created before intake/delivery
+  hardening at
+  `/srv/letscube/backups/pre-migrations/20260728-before-support-mail-intake-hardening.dump`.
+  `pg_restore -l` passed for the checkpoints.
+- Restored the production schema into an isolated database. The migration
+  parsed successfully there. A transactional enqueue/claim/inbound-reply test
+  found and fixed the partial-index `ON CONFLICT` predicate before production.
+- Applied the bridge, intake guard, delivery hardening and idempotent
+  acknowledgement migrations from `20260728082213` through `20260728093755`.
+  A synthetic end-to-end database scenario covered grants, open/closed intake,
+  reply ownership, closed/spam quarantine, persistent limits, final-attempt
+  sweep, idempotent acknowledgement and retention inside
+  `BEGIN ... ROLLBACK`; follow-up production counts remained zero.
+- Support mail rules/schema/packaging contracts passed 18/18. API server
+  typecheck and build passed, including the separate worker bundle.
+- Support gateway/schema/RLS/operator security contracts passed 45/45. KUB
+  typecheck and production Vite build passed with the existing sourcemap,
+  dynamic-import and chunk-size warnings.
+- Production dependency audit still reports broader workspace advisories, but
+  reports zero findings on the support-mail
+  `imapflow@1.5.0`/`mailparser@3.9.13`/`nodemailer@9.0.3` dependency paths.
+- Runtime hardening uses strict TLS, a trusted local Mailcow
+  `Authentication-Results`, IMAP `UIDVALIDITY:UID` dedupe, per-message poison
+  isolation, one-row/300-second leases, SMTP 4xx/5xx classification,
+  idempotent post-SMTP acknowledgement, readiness reset and a non-root,
+  read-only Compose boundary.
+- The production Docker target built from a clean context. `.dockerignore`
+  now excludes generated Rust/Tauri `target` and local QA outputs instead of
+  transferring roughly 23 GiB of unrelated build artifacts. The disabled
+  container ran as `node` with read-only filesystem, dropped capabilities and
+  successful `/healthz` and `/readyz` responses without opening IMAP/SMTP.
+- `db:types:check` passed with the known advisory drift for
+  `global_search_v2` and `search_chat_messages`. `rls:smoke` completed with the
+  existing fake-ID mutation skips and broad-storage diagnostics. Authenticated
+  Playwright smoke was skipped because reusable auth states were unavailable.
+- DNS remained the activation gate at this checkpoint: MX, SPF and DMARC for
+  `app.letscube.ru` were absent, so `SUPPORT_MAIL_ENABLED` remained `0`.
+  Exact records are stored at
+  `/srv/letscube/ops/support-mail-dns-records.md`.
+- The corporate email from the ООО «КУБ» company card is business-only and is
+  intentionally not used as the support mailbox. The privacy policy retains
+  the current legal address at Димитрова, 51/3, office 3.

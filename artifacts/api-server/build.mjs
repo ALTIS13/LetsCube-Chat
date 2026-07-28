@@ -17,6 +17,7 @@ async function buildAll() {
   await esbuild({
     entryPoints: [
       path.resolve(artifactDir, "src/index.ts"),
+      path.resolve(artifactDir, "src/supportMailIndex.ts"),
       path.resolve(artifactDir, "src/workers/mediaVariantRules.ts"),
     ],
     platform: "node",
@@ -57,6 +58,8 @@ async function buildAll() {
       "oracledb",
       "mongodb-client-encryption",
       "nodemailer",
+      "imapflow",
+      "mailparser",
       "handlebars",
       "knex",
       "typeorm",

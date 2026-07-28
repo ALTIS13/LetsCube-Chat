@@ -1,6 +1,6 @@
 # Эксплуатация поддержки LETSCUBE
 
-Актуально на 27 июля 2026 года.
+Актуально на 28 июля 2026 года.
 
 Документ описывает публичную форму поддержки, гостевой чат и операторскую
 очередь. Он не содержит паролей, ключей, CAPTCHA secrets или контактных данных
@@ -13,8 +13,10 @@
 - `https://app.letscube.ru/privacy` — действующая политика
   конфиденциальности.
 - `/admin/support` — рабочее место авторизованного оператора.
-- `support@app.letscube.ru` — планируемый адрес входящей почты. Почтовая
-  доставка не считается включённой до отдельной настройки Mailcow и DNS.
+- `support@app.letscube.ru` — созданный Mailcow mailbox. Внешняя почтовая
+  доставка не считается включённой до публикации и проверки DNS.
+- `privacy@app.letscube.ru`, `postmaster@app.letscube.ru` и
+  `dmarc@app.letscube.ru` — aliases в этот mailbox.
 
 In-app уведомления являются источником состояния. Системные уведомления не
 содержат имя, email, телефон или текст обращения: только идентификатор тикета
@@ -152,17 +154,24 @@ Edge Functions.
 Применённые migration sources:
 
 - `.migration-backup/supabase/migrations/20260727_privacy_support_ticketing_foundation.sql`;
-- `.migration-backup/supabase/migrations/20260727_support_operator_delivery_hardening.sql`.
+- `.migration-backup/supabase/migrations/20260727_support_operator_delivery_hardening.sql`;
+- `.migration-backup/supabase/migrations/20260728082213_support_mail_bridge.sql`;
+- `.migration-backup/supabase/migrations/20260728085924_support_mail_intake_guard.sql`;
+- `.migration-backup/supabase/migrations/20260728092354_support_mail_delivery_hardening.sql`;
+- `.migration-backup/supabase/migrations/20260728093755_support_mail_idempotent_delivery_ack.sql`.
 
 Перед production apply были созданы и проверены dumps:
 
 - `/srv/letscube/backups/pre-migrations/20260727-100210-before-support-ticketing.dump`;
-- `/srv/letscube/backups/pre-migrations/20260727-105107-before-support-delivery-hardening.dump`.
+- `/srv/letscube/backups/pre-migrations/20260727-105107-before-support-delivery-hardening.dump`;
+- `/srv/letscube/backups/pre-migrations/20260728-before-support-mail-bridge.dump`;
+- `/srv/letscube/backups/pre-migrations/20260728-before-support-mail-intake-hardening.dump`.
 
-Второй forward migration прошёл `BEGIN ... ROLLBACK` rehearsal на действующей
-схеме, затем был применён одной транзакцией. Он не удаляет строки и добавляет
-permission-scoped каталог операторов, полные настройки ticket/message limits,
-учёт transfer preferences и OS push guard для двух outbox.
+Все support-mail forward migrations прошли восстановление/rehearsal и
+production smoke внутри `BEGIN ... ROLLBACK`, затем были применены
+транзакционно. Они не удаляют пользовательские строки. Hardening добавляет
+persistent direct-email intake limits, закрытие lease на исчерпанной попытке,
+bounded retention и идемпотентный SMTP acknowledgement.
 
 Безопасный порядок повторного развёртывания:
 
@@ -188,12 +197,46 @@ commit транзакция откатывается. После появлен�
 анонимизация/удаление, взаимодействие с backup retention и restore rehearsal
 остаются отдельным production этапом.
 
+## Почтовый мост
+
+Mailcow domain `app.letscube.ru`, mailbox и aliases созданы. Отдельный
+server-only runtime использует `imapflow`, `mailparser` и `nodemailer`. Он
+отделён от API/media worker и запускается через
+`docs/deploy/docker-compose.support-mail.yml`.
+
+Семантика:
+
+- операторский ответ атомарно создаёт одну outbound queue row;
+- worker регистрирует непрозрачный `support+<token>` reply alias;
+- входящий ответ сопоставляется по route token или `In-Reply-To`;
+- sender HMAC обязан совпасть с контактом тикета;
+- sender auth принимается только из локального `Authentication-Results` Mailcow
+  с DMARC pass или domain-aligned DKIM/SPF;
+- direct email создаёт email-only тикет без ложной phone verification;
+- direct email соблюдает состояние приёма заявок и persistent rate limits;
+- dedupe использует IMAP `UIDVALIDITY:UID`, а не контролируемый отправителем
+  `Message-ID`;
+- SMTP 4xx повторяется, SMTP 5xx завершается как permanent failure;
+- закрытые/spam тикеты quarantine-ятся без блокировки следующего IMAP batch;
+- lease, retry, dead/quarantine и bounded ledger retention хранятся server-side;
+- SMTP acknowledgement идемпотентен при потере ответа БД;
+- Browser/Android/Windows in-app уведомления остаются источником состояния.
+
+Полный Coolify/DNS runbook:
+`docs/deploy/SUPPORT_MAIL_COOLIFY.md`.
+
+Корпоративный email из карточки ООО используется только как деловой реквизит
+организации и намеренно не является адресом продуктовой поддержки.
+
 ## Ограничения текущей версии
 
 - Вложения в support-чате отключены до quarantine bucket, проверки сигнатур,
   MIME, размера и malware scanning.
-- SMTP/IMAP ingestion и ответы через `support@app.letscube.ru` не включены.
-- Автоматический retention scheduler не включён.
+- SMTP/IMAP worker подготовлен и migration применена, но worker остаётся
+  выключенным до публикации MX/SPF/DKIM/DMARC и внешнего delivery smoke.
+- Общий ticket retention/anonymization scheduler не включён. Email worker при
+  включении выполняет bounded cleanup старых `quarantined`/`dead` ledger rows
+  не чаще одного раза в сутки.
 - Политика требует итоговой юридической проверки перед Microsoft Store и
   публичным массовым запуском.
 - Guest session восстанавливается только на том устройстве, где сохранён

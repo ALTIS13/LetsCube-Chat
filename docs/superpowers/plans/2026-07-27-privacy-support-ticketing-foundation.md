@@ -208,7 +208,12 @@
 
 ## Deferred Plans
 
-- **Mailcow support mail integration:** provision `support@app.letscube.ru`, `privacy@app.letscube.ru`, `postmaster@app.letscube.ru`, and `dmarc@app.letscube.ru`; validate MX/SPF/DKIM/DMARC; implement sanitized SMTP/IMAP worker and Message-ID deduplication.
+- [~] **Mailcow support mail integration:** mailbox/aliases, additive queue/RPC,
+  intake guard, delivery hardening, idempotent acknowledgement and sanitized
+  separate SMTP/IMAP worker are complete and production migrations are applied
+  after restore rehearsal. DNS publication, disabled Coolify deployment,
+  worker enablement and physical inbound/outbound/reply/dedupe delivery QA
+  remain.
 - **Support attachments and malware scanning:** isolated quarantine bucket, MIME/signature verification, size limits, antivirus scan, safe promotion, and download authorization.
 - **Retention automation and restore rehearsal:** scheduled deletion/anonymization, backup interaction, evidence log, and audited restore drill.
 - **Legal release gate:** qualified Russian legal review of the published policy, consent wording, minors flow, data-localization disclosures, and Microsoft Store metadata before certification.

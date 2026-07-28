@@ -86,8 +86,14 @@ Snapshot updated: 2026-07-27. The detailed execution source of truth is
   notification preferences and support Notification Center integration are
   implemented. Public and operator Playwright matrices pass locally at five
   required desktop/mobile viewports.
-- Mailcow support mailbox, support attachments/malware scanning, scheduled
-  retention and legal review remain open.
+- Mailcow domain/mailbox/aliases and the server-only IMAP/SMTP bridge are
+  prepared. The atomic queue/RPC, intake guard, delivery hardening and
+  idempotent acknowledgement migrations are applied after restore rehearsal
+  and rollback-safe production smoke. DNS publication, disabled Coolify
+  deployment, worker enablement and physical inbound/outbound/reply smoke
+  remain open.
+- Support attachments/malware scanning, scheduled retention and final legal
+  review remain open.
 
 ## Self-host readiness
 
@@ -124,5 +130,5 @@ Snapshot updated: 2026-07-27. The detailed execution source of truth is
 - Sentry self-host decision and rollout.
 - Startup permission capability batching: the current app shell issues 33 repeated role/location permission RPCs before the first meaningful chat interaction.
 - Broader installed PWA device/push matrix.
-- Support email ingestion/replies, safe attachment pipeline and automated
-  retention/restore rehearsal.
+- Physical support email ingestion/reply delivery, safe attachment pipeline
+  and full ticket retention/restore rehearsal.

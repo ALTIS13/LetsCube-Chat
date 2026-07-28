@@ -8,6 +8,7 @@
 **/.next
 **/.turbo
 **/.cache
+**/target
 *.tsbuildinfo
 
 .git
@@ -27,6 +28,11 @@ replit.md
 .upm
 .breakpoints
 attached_assets
+.playwright-mcp
+.qa-screenshots
+playwright-report
+test-results
+output
 
 # SQL migration source backup is not needed in the web image.
 .migration-backup

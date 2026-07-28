@@ -1,0 +1,50 @@
+# Dedicated, non-public LETSCUBE support mail worker.
+# Configure values in Coolify. Never commit a populated env file.
+
+services:
+  letscube-support-mail:
+    build:
+      context: ../..
+      dockerfile: docs/deploy/Dockerfile
+      target: support-mail-runtime
+    image: letscube-support-mail:latest
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 75s
+    environment:
+      PORT: 8097
+      SUPPORT_MAIL_PORT: 8097
+      SUPPORT_MAIL_ENABLED: ${SUPPORT_MAIL_ENABLED:-0}
+      SUPPORT_MAIL_HOST: ${SUPPORT_MAIL_HOST:-}
+      SUPPORT_MAIL_IMAP_PORT: ${SUPPORT_MAIL_IMAP_PORT:-993}
+      SUPPORT_MAIL_SMTP_PORT: ${SUPPORT_MAIL_SMTP_PORT:-465}
+      SUPPORT_MAIL_TLS: ${SUPPORT_MAIL_TLS:-1}
+      SUPPORT_MAIL_USER: ${SUPPORT_MAIL_USER:-}
+      SUPPORT_MAIL_PASSWORD: ${SUPPORT_MAIL_PASSWORD:-}
+      SUPPORT_MAIL_FROM: ${SUPPORT_MAIL_FROM:-}
+      SUPPORT_MAIL_FROM_NAME: ${SUPPORT_MAIL_FROM_NAME:-LETSCUBE Support}
+      SUPPORT_MAIL_TRUSTED_AUTH_SERVER: ${SUPPORT_MAIL_TRUSTED_AUTH_SERVER:-}
+      SUPPORT_MAIL_POLL_MS: ${SUPPORT_MAIL_POLL_MS:-30000}
+      SUPPORT_MAIL_HMAC_SECRET: ${SUPPORT_MAIL_HMAC_SECRET:-}
+      SUPPORT_MAIL_CONTACT_HMAC_SECRET: ${SUPPORT_MAIL_CONTACT_HMAC_SECRET:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SELFHOST_SERVICE_ROLE_KEY: ${SELFHOST_SERVICE_ROLE_KEY:-}
+    expose:
+      - "8097"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "fetch(''http://127.0.0.1:8097/readyz'').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

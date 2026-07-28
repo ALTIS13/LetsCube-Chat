@@ -34,7 +34,17 @@ self-host cutover.
 - [x] Operator workspace and Notification Center support UX complete; local
   five-viewport browser QA passed.
 - [x] Production browser QA passed after the frontend deployment.
-- [ ] `support@app.letscube.ru` Mailcow mailbox and DNS delivery validated.
+- [x] `support@app.letscube.ru` Mailcow mailbox and aliases provisioned.
+- [x] Server-only IMAP/SMTP bridge, atomic email queue/RPC and retry/dedupe
+  schema implemented and production migration applied after backup/rehearsal.
+- [x] Direct-email intake closure/rate limits, closed-ticket quarantine,
+  final-attempt sweep, bounded email ledger cleanup and idempotent SMTP
+  acknowledgement applied and rollback-smoked in production.
+- [ ] MX/SPF/DKIM/DMARC for `app.letscube.ru` published and externally
+  validated.
+- [ ] Support mail worker deployed disabled in Coolify.
+- [ ] Support mail worker enabled after DNS validation and
+  inbound/outbound/reply/dedupe physical delivery smoke passed.
 - [ ] Support attachment quarantine and malware scanning implemented.
 - [ ] Retention/anonymization scheduler and restore drill completed.
 - [ ] Russian legal review completed before mass release/store certification.
