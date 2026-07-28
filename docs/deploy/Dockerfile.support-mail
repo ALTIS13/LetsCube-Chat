@@ -1,0 +1,53 @@
+# syntax=docker/dockerfile:1.7
+
+# Dedicated Git-backed image for the non-public support mail bridge.
+# Coolify's public application API does not accept dockerfile_target_build,
+# so this file keeps the deployment reproducible without an inline Dockerfile.
+
+ARG NODE_VERSION=24-bookworm-slim
+
+FROM node:${NODE_VERSION} AS base
+
+ENV PNPM_HOME=/root/.local/share/pnpm \
+    PATH=/root/.local/share/pnpm:$PATH \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+
+WORKDIR /app
+
+RUN corepack enable
+
+FROM base AS deps
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY artifacts/kub/package.json            artifacts/kub/package.json
+COPY artifacts/api-server/package.json     artifacts/api-server/package.json
+COPY artifacts/mockup-sandbox/package.json artifacts/mockup-sandbox/package.json
+COPY lib/api-client-react/package.json     lib/api-client-react/package.json
+COPY lib/api-spec/package.json             lib/api-spec/package.json
+COPY lib/api-zod/package.json              lib/api-zod/package.json
+COPY lib/db/package.json                   lib/db/package.json
+COPY scripts/package.json                  scripts/package.json
+
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+    pnpm --version && pnpm install --frozen-lockfile
+
+FROM base AS build
+
+COPY --from=deps /app/ ./
+COPY . .
+
+RUN pnpm --filter @workspace/api-server run build
+
+FROM base AS runtime
+
+ENV NODE_ENV=production \
+    PORT=8097 \
+    SUPPORT_MAIL_PORT=8097
+
+COPY --chown=node:node --from=build /app/ ./
+
+USER node
+
+EXPOSE 8097
+
+CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/supportMailIndex.mjs"]

@@ -5,8 +5,7 @@ services:
   letscube-support-mail:
     build:
       context: ../..
-      dockerfile: docs/deploy/Dockerfile
-      target: support-mail-runtime
+      dockerfile: docs/deploy/Dockerfile.support-mail
     image: letscube-support-mail:latest
     restart: unless-stopped
     read_only: true

@@ -22,16 +22,16 @@ Functions и Browser/PWA push от него не зависят.
 
 ## Coolify resource
 
-1. Создать отдельный Docker Compose resource из репозитория
+1. Создать отдельный Git-backed Dockerfile resource из репозитория
    `ALTIS13/LetsCube-Chat`, ветка `main`.
-2. Compose path:
-   `docs/deploy/docker-compose.support-mail.yml`.
+2. Dockerfile path:
+   `docs/deploy/Dockerfile.support-mail`.
 3. Имя resource: `letscube-support-mail`.
 4. Не назначать domain/proxy route.
 5. Включить automatic deployment только после первого ручного healthy deploy.
 6. Watch paths:
    - `artifacts/api-server/**`
-   - `docs/deploy/Dockerfile`
+   - `docs/deploy/Dockerfile.support-mail`
    - `docs/deploy/docker-compose.support-mail.yml`
    - `package.json`
    - `pnpm-lock.yaml`
