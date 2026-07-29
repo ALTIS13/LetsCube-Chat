@@ -44,6 +44,131 @@ export interface SupportMailTransport {
   close(): Promise<void>;
 }
 
+interface ImapErrorEmitter {
+  on(event: "error", listener: (error: Error) => void): unknown;
+}
+
+export function observeImapClientErrors(client: ImapErrorEmitter): void {
+  client.on("error", () => undefined);
+}
+
+export async function processSupportInboxFetch(
+  client: ImapFlow,
+  selected: number[],
+  handler: (message: TransportInboundMail) => Promise<boolean>,
+): Promise<number> {
+  const seenUids: number[] = [];
+  const uidValidity =
+    client.mailbox && typeof client.mailbox === "object"
+      ? String(client.mailbox.uidValidity)
+      : "unknown";
+
+  for await (const item of client.fetch(
+    selected,
+    {
+      uid: true,
+      envelope: true,
+      size: true,
+      source: { maxLength: MAX_INBOUND_SOURCE_BYTES + 1 },
+    },
+    { uid: true },
+  )) {
+    const providerReference = `${uidValidity}:${item.uid}`;
+    const oversized =
+      (item.size ?? 0) > MAX_INBOUND_SOURCE_BYTES ||
+      (item.source?.byteLength ?? 0) > MAX_INBOUND_SOURCE_BYTES;
+    let message: TransportInboundMail;
+
+    if (oversized || !item.source) {
+      const sender = item.envelope?.from?.[0];
+      const recipient = item.envelope?.to?.[0];
+      message = {
+        providerReference,
+        messageId: item.envelope?.messageId ?? null,
+        inReplyTo: item.envelope?.inReplyTo ?? null,
+        fromName: sender?.name ?? null,
+        fromAddress: sender?.address?.toLowerCase() ?? null,
+        recipientAddress: recipient?.address?.toLowerCase() ?? null,
+        subject: item.envelope?.subject ?? null,
+        textBody: null,
+        htmlBody: null,
+        autoSubmitted: null,
+        precedence: null,
+        authenticationResults: [],
+        attachmentCount: 0,
+        quarantineCode: oversized ? "message_too_large" : "missing_source",
+      };
+    } else {
+      try {
+        const parsed = await simpleParser(item.source, {
+          maxHtmlLengthToParse: 512 * 1024,
+          skipImageLinks: true,
+          skipTextToHtml: true,
+          skipTextLinks: true,
+        });
+        const sender = firstAddress(parsed.from);
+        const recipient = firstAddress(parsed.to);
+        message = {
+          providerReference,
+          messageId: parsed.messageId ?? item.envelope?.messageId ?? null,
+          inReplyTo: parsed.inReplyTo ?? item.envelope?.inReplyTo ?? null,
+          fromName: sender.name,
+          fromAddress: sender.address,
+          recipientAddress: recipient.address,
+          subject: parsed.subject ?? item.envelope?.subject ?? null,
+          textBody: parsed.text ?? null,
+          htmlBody: typeof parsed.html === "string" ? parsed.html : null,
+          autoSubmitted: headerString(parsed.headers.get("auto-submitted")),
+          precedence: headerString(parsed.headers.get("precedence")),
+          authenticationResults: authenticationResultLines(parsed.headerLines),
+          attachmentCount: parsed.attachments.length,
+          quarantineCode: null,
+        };
+      } catch {
+        const sender = item.envelope?.from?.[0];
+        const recipient = item.envelope?.to?.[0];
+        message = {
+          providerReference,
+          messageId: item.envelope?.messageId ?? null,
+          inReplyTo: item.envelope?.inReplyTo ?? null,
+          fromName: sender?.name ?? null,
+          fromAddress: sender?.address?.toLowerCase() ?? null,
+          recipientAddress: recipient?.address?.toLowerCase() ?? null,
+          subject: item.envelope?.subject ?? null,
+          textBody: null,
+          htmlBody: null,
+          autoSubmitted: null,
+          precedence: null,
+          authenticationResults: [],
+          attachmentCount: 0,
+          quarantineCode: "message_parse_failed",
+        };
+      }
+    }
+
+    try {
+      if (await handler(message)) {
+        seenUids.push(item.uid);
+      }
+    } catch {
+      // Keep this UID unseen for a later retry without blocking the remaining
+      // bounded batch.
+    }
+  }
+
+  let processed = 0;
+  for (const uid of seenUids) {
+    try {
+      await client.messageFlagsAdd(uid, ["\\Seen"], { uid: true });
+      processed += 1;
+    } catch {
+      // Core ingestion is idempotent. Leaving the UID unseen is safer than
+      // losing a message when the flag update fails.
+    }
+  }
+  return processed;
+}
+
 function firstAddress(value: AddressObject | AddressObject[] | undefined): {
   name: string | null;
   address: string | null;
@@ -113,6 +238,7 @@ export function createSupportMailTransport(
         greetingTimeout: 20_000,
         socketTimeout: 60_000,
       });
+      observeImapClientErrors(client);
 
       let processed = 0;
       try {
@@ -122,115 +248,11 @@ export function createSupportMailTransport(
           const unseen = await client.search({ seen: false }, { uid: true });
           if (!unseen || unseen.length === 0) return 0;
           const selected = unseen.slice(0, MAX_MESSAGES_PER_POLL);
-          const uidValidity =
-            client.mailbox && typeof client.mailbox === "object"
-              ? String(client.mailbox.uidValidity)
-              : "unknown";
-
-          for await (const item of client.fetch(
+          processed = await processSupportInboxFetch(
+            client,
             selected,
-            {
-              uid: true,
-              envelope: true,
-              size: true,
-              source: { maxLength: MAX_INBOUND_SOURCE_BYTES + 1 },
-            },
-            { uid: true },
-          )) {
-            const providerReference = `${uidValidity}:${item.uid}`;
-            const oversized =
-              (item.size ?? 0) > MAX_INBOUND_SOURCE_BYTES ||
-              (item.source?.byteLength ?? 0) > MAX_INBOUND_SOURCE_BYTES;
-            let message: TransportInboundMail;
-
-            if (oversized || !item.source) {
-              const sender = item.envelope?.from?.[0];
-              const recipient = item.envelope?.to?.[0];
-              message = {
-                providerReference,
-                messageId: item.envelope?.messageId ?? null,
-                inReplyTo: item.envelope?.inReplyTo ?? null,
-                fromName: sender?.name ?? null,
-                fromAddress: sender?.address?.toLowerCase() ?? null,
-                recipientAddress: recipient?.address?.toLowerCase() ?? null,
-                subject: item.envelope?.subject ?? null,
-                textBody: null,
-                htmlBody: null,
-                autoSubmitted: null,
-                precedence: null,
-                authenticationResults: [],
-                attachmentCount: 0,
-                quarantineCode: oversized
-                  ? "message_too_large"
-                  : "missing_source",
-              };
-            } else {
-              try {
-                const parsed = await simpleParser(item.source, {
-                  maxHtmlLengthToParse: 512 * 1024,
-                  skipImageLinks: true,
-                  skipTextToHtml: true,
-                  skipTextLinks: true,
-                });
-                const sender = firstAddress(parsed.from);
-                const recipient = firstAddress(parsed.to);
-                message = {
-                  providerReference,
-                  messageId:
-                    parsed.messageId ?? item.envelope?.messageId ?? null,
-                  inReplyTo:
-                    parsed.inReplyTo ?? item.envelope?.inReplyTo ?? null,
-                  fromName: sender.name,
-                  fromAddress: sender.address,
-                  recipientAddress: recipient.address,
-                  subject: parsed.subject ?? item.envelope?.subject ?? null,
-                  textBody: parsed.text ?? null,
-                  htmlBody:
-                    typeof parsed.html === "string" ? parsed.html : null,
-                  autoSubmitted: headerString(
-                    parsed.headers.get("auto-submitted"),
-                  ),
-                  precedence: headerString(parsed.headers.get("precedence")),
-                  authenticationResults: authenticationResultLines(
-                    parsed.headerLines,
-                  ),
-                  attachmentCount: parsed.attachments.length,
-                  quarantineCode: null,
-                };
-              } catch {
-                const sender = item.envelope?.from?.[0];
-                const recipient = item.envelope?.to?.[0];
-                message = {
-                  providerReference,
-                  messageId: item.envelope?.messageId ?? null,
-                  inReplyTo: item.envelope?.inReplyTo ?? null,
-                  fromName: sender?.name ?? null,
-                  fromAddress: sender?.address?.toLowerCase() ?? null,
-                  recipientAddress: recipient?.address?.toLowerCase() ?? null,
-                  subject: item.envelope?.subject ?? null,
-                  textBody: null,
-                  htmlBody: null,
-                  autoSubmitted: null,
-                  precedence: null,
-                  authenticationResults: [],
-                  attachmentCount: 0,
-                  quarantineCode: "message_parse_failed",
-                };
-              }
-            }
-
-            try {
-              if (await handler(message)) {
-                await client.messageFlagsAdd(item.uid, ["\\Seen"], {
-                  uid: true,
-                });
-                processed += 1;
-              }
-            } catch {
-              // Keep this UID unseen for a later retry without blocking the
-              // remaining bounded batch.
-            }
-          }
+            handler,
+          );
         } finally {
           lock.release();
         }

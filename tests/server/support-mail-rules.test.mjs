@@ -1,15 +1,98 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import test from "node:test";
 
 const rules =
   await import("../../artifacts/api-server/src/workers/supportMailRules.ts").catch(
     () => ({}),
   );
+const transport =
+  await import(
+    "../../artifacts/api-server/src/workers/supportMailTransport.ts"
+  ).catch(() => ({}));
 
 function requireRule(name) {
   assert.equal(typeof rules[name], "function", `missing ${name}`);
   return rules[name];
 }
+
+test("IMAP socket errors are observed instead of terminating the worker", () => {
+  assert.equal(
+    typeof transport.observeImapClientErrors,
+    "function",
+    "missing observeImapClientErrors",
+  );
+  const client = new EventEmitter();
+  transport.observeImapClientErrors(client);
+
+  assert.doesNotThrow(() => {
+    client.emit("error", Object.assign(new Error("Socket timeout"), {
+      code: "ETIMEOUT",
+    }));
+  });
+});
+
+test("IMAP messages are marked seen only after the fetch iterator completes", async () => {
+  assert.equal(
+    typeof transport.processSupportInboxFetch,
+    "function",
+    "missing processSupportInboxFetch",
+  );
+
+  class FakeImapClient extends EventEmitter {
+    usable = true;
+    mailbox = { uidValidity: "42" };
+    fetching = false;
+    markedSeen = [];
+
+    async connect() {}
+    async getMailboxLock() {
+      return { release() {} };
+    }
+    async search() {
+      return [7];
+    }
+    async *fetch() {
+      this.fetching = true;
+      try {
+        yield {
+          uid: 7,
+          size: 0,
+          source: undefined,
+          envelope: {
+            messageId: "<test@example.test>",
+            inReplyTo: null,
+            subject: "Test",
+            from: [{ name: "QA", address: "qa@example.test" }],
+            to: [{ address: "support@app.example.test" }],
+          },
+        };
+      } finally {
+        this.fetching = false;
+      }
+    }
+    async messageFlagsAdd(uid) {
+      assert.equal(this.fetching, false, "nested IMAP command during fetch");
+      this.markedSeen.push(uid);
+    }
+    async logout() {
+      this.usable = false;
+    }
+    close() {
+      this.usable = false;
+    }
+  }
+
+  const client = new FakeImapClient();
+  const processed = await transport.processSupportInboxFetch(
+    client,
+    [7],
+    async () => true,
+  );
+
+  assert.equal(processed, 1);
+  assert.deepEqual(client.markedSeen, [7]);
+});
 
 test("support mail config is fail-closed and does not expose credentials", () => {
   const readConfig = requireRule("readSupportMailConfig");
