@@ -108,6 +108,26 @@ TLS обязателен. Worker fail-closed отклоняет конфигур
 12. Проверить ежедневную очистку только старых `quarantined`/`dead` email
     ledger rows.
 
+## Production activation 2026-07-29
+
+- MX, SPF, DKIM and DMARC passed on both REG.RU authoritative nameservers and
+  the Google and Cloudflare public resolvers.
+- A full pre-enable backup was created at
+  `/srv/letscube/backups/automated/20260729-134340`; its `SHA256SUMS` and the
+  three database dumps were verified.
+- The production environment has `SUPPORT_MAIL_ENABLED=1`; preview remains
+  disabled.
+- Coolify deployment `t62rj4zw12jp7jgomlfru4va` finished for application
+  `letscube-support-mail`. The non-public container is healthy and still runs
+  as `node` with a read-only root filesystem, all capabilities dropped and
+  `no-new-privileges`.
+- One QA operator response traversed the real database trigger, leased outbox,
+  worker, Mailcow and Gmail MX path. The ledger reached `sent` in one attempt,
+  Gmail returned SMTP `250 2.0.0 OK`, and the local Mailcow queue was empty.
+- User confirmation and the reply-to-ticket IMAP intake check remain pending.
+  Do not describe the bidirectional mail bridge as fully accepted until that
+  reply is attached to the original QA ticket.
+
 ## Откат
 
 При проблеме сначала вернуть `SUPPORT_MAIL_ENABLED=0` и redeploy. Тикеты и

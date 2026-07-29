@@ -1285,3 +1285,25 @@ Recurring tasks roadmap note:
 - The corporate email from the ООО «КУБ» company card is business-only and is
   intentionally not used as the support mailbox. The privacy policy retains
   the current legal address at Димитрова, 51/3, office 3.
+
+## 2026-07-29 - Support mail production activation
+
+- Verified MX, SPF, DKIM and DMARC for `app.letscube.ru` against both REG.RU
+  authoritative nameservers plus Google and Cloudflare public resolvers.
+- Created the full pre-enable backup
+  `/srv/letscube/backups/automated/20260729-134340`. Database dumps, Storage,
+  Mailcow volumes and configuration archives were written; `SHA256SUMS` and
+  the required database dump files passed verification.
+- Confirmed an empty mail ledger/open-ticket baseline, one active support
+  mailbox and three active support aliases before enabling delivery.
+- Enabled only the production `letscube-support-mail` environment. Coolify
+  deployment `t62rj4zw12jp7jgomlfru4va` finished, the container became healthy,
+  and `/healthz` plus `/readyz` returned `enabled=true`.
+- Rechecked the runtime boundary after deployment: non-root Node user,
+  read-only root filesystem, `cap_drop=ALL` and `no-new-privileges`.
+- Created one explicitly labelled QA support ticket and operator reply. The
+  real trigger/outbox/worker path reached `sent` in one attempt with no stored
+  error. Mailcow delivered it to Gmail MX over the normal outbound path, Gmail
+  returned `250 2.0.0 OK`, and the local mail queue was empty.
+- External receipt confirmation and the inbound reply/IMAP routing check are
+  pending user confirmation. No production customer content was inspected.

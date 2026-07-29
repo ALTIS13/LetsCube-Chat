@@ -1,6 +1,6 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-07-23.
+Status: active production-hardening tracker, updated 2026-07-29.
 
 This file is the working source of truth for the next production stages. Before starting any new production task, read this file first, then update the relevant checkboxes/status when work is completed, blocked, or intentionally deferred.
 
@@ -62,6 +62,12 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 - Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; deployment `w85ts4luj9w561qaphsu2jm3` completed exact commit `b66584808ae50e288d9f93e111856f8f60bb9e5b`, passed its first healthcheck and completed the rolling update. The chat-summary and access-snapshot RPC build flags remain enabled.
 - Worker auto deploy: worker-specific GitHub webhook is verified. Deployment `hjlbhqir375ia6wzmqarhswq` completed exact commit `8d20b89645b9471b4477a8566a5d23ff5cfc9027` with `is_webhook=true`, status `finished` and a healthy `/api/healthz` check. Worker `watch_paths` remain limited to worker/build/runtime paths and shared package manifests. GitHub Actions are intentionally disabled and repo workflow files/secrets were removed to avoid billing-lock email noise.
 - Self-host stack: Coolify proxy, self-hosted Supabase, Mailcow, app and worker deployment are already in place.
+- Support mail bridge: MX/SPF/DKIM/DMARC passed on authoritative and public
+  resolvers. The non-public `letscube-support-mail` worker is enabled and
+  healthy after verified backup
+  `/srv/letscube/backups/automated/20260729-134340`. A real outbox delivery was
+  accepted by Gmail MX; external receipt confirmation and inbound reply
+  attachment to the same ticket are the remaining activation checks.
 - Production domains verified on 2026-07-09: `app.letscube.ru`, `deploy.letscube.ru`, `core.letscube.ru`, `mailserver.letscube.ru`, `notify.letscube.ru`, and SSH host `ms.letscube.ru` resolve and expose their expected services with valid TLS where applicable.
 - `api.letscube.ru` now serves the read-only native release catalog with valid TLS through Coolify application `letscube-releases`; `status.letscube.ru` and `monitor.letscube.ru` remain reserved future endpoints.
 - The installed Supabase MCP connector still targets the legacy cloud project. Production self-host checks must use `core.letscube.ru`, the local secret-safe env file, or read-only SSH/database inspection.

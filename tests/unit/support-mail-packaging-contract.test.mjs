@@ -13,7 +13,7 @@ test("support mail bridge has a separate entrypoint and hardened runtime boundar
     await Promise.all([
       source("artifacts/api-server/build.mjs"),
       source("docs/deploy/Dockerfile"),
-      source("docs/deploy/docker-compose.support-mail.yml"),
+      source("docker-compose.support-mail.yml"),
       source("artifacts/api-server/src/supportMailIndex.ts"),
       source("artifacts/api-server/package.json"),
     ]);
