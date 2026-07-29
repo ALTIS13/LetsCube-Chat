@@ -1323,6 +1323,23 @@ Recurring tasks roadmap note:
 - The repaired production worker stayed healthy, ready and restart-free for
   more than two previous timeout intervals. The original reply remained one
   quarantined ledger row and was marked seen without duplication.
+- The second physical reply passed the corrected sender HMAC, resolved the
+  existing opaque route and was accepted into the same ticket. Production
+  metadata showed exactly one received inbound ledger row, one requester email
+  message and one requester event; a later poll did not increase any count.
+  The original `sender_mismatch` quarantine row remained as an immutable audit
+  record, the route `last_used_at` advanced, and Mailcow reported zero unseen
+  support messages.
+- Live Playwright QA with the saved owner auth state opened the production
+  support workspace. The two-message conversation rendered the new reply with
+  zero console errors and zero failed requests. The manually seeded ticket had
+  no assigned operator, so the assignment-scoped notification trigger
+  correctly produced no personal `support_requester_message` row for this
+  synthetic case.
+- After the second reply the worker remained enabled, ready and healthy with
+  zero restarts and no recent socket-timeout, unhandled-error or ingestion
+  failure logs. Bidirectional SMTP/IMAP delivery is accepted.
 - Added the previously missing repository push webhook for
-  `letscube-support-mail`; the GitHub ping completed with HTTP 200. A later
-  matching source push still needs to prove automatic deployment.
+  `letscube-support-mail`; the GitHub ping completed with HTTP 200 and auto
+  deploy is enabled on the Coolify resource. A later matching source push still
+  needs to prove automatic deployment with `is_webhook=true`.

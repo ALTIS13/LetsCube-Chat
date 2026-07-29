@@ -133,11 +133,20 @@ TLS обязателен. Worker fail-closed отклоняет конфигур
 - The manually seeded QA contact originally used SHA-256 instead of the
   production contact HMAC, so the first reply was correctly quarantined as
   `sender_mismatch`. The QA hash was corrected without deleting the audit row.
-  A second physical reply is required before declaring the bidirectional
-  bridge fully accepted.
+  The second physical reply was accepted through the same opaque route and
+  appended to the original ticket exactly once. A later poll kept one received
+  ledger row, one requester email message and one requester event, while the
+  original quarantine audit row remained intact. Mailcow had zero unseen
+  support messages after acknowledgement.
+- Production UI QA opened the ticket through an owner auth state and displayed
+  the inbound reply in the two-message operator conversation. The page had no
+  console errors or failed requests. The synthetic ticket was intentionally
+  not assigned to an operator, so no personal `support_requester_message`
+  notification was expected from the assignment-scoped notification trigger.
 - A dedicated GitHub push webhook now targets the support-mail Coolify
-  resource. Its initial ping returned HTTP 200; the next matching source push
-  must still confirm an automatic deployment with `is_webhook=true`.
+  resource. Its initial ping returned HTTP 200 and automatic deployment is
+  enabled on the resource. The next matching source push must still confirm an
+  automatic deployment with `is_webhook=true`.
 
 ## Откат
 

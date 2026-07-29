@@ -69,9 +69,12 @@ Use this queue before starting the next production-hardening turn. Do not repeat
   accepted by Gmail MX and external receipt was confirmed. Commit `8c1f5fa`
   fixed the IMAP fetch/flag deadlock found by the first reply; production is
   restart-free after the repair. The manually seeded QA contact HMAC was
-  corrected, and a second reply attachment to the same ticket remains the last
-  bidirectional acceptance check. A dedicated GitHub push webhook was added
-  for this resource and passed its initial ping.
+  corrected. A second physical reply was attached to the same ticket exactly
+  once, acknowledged in Mailcow and displayed in the production operator UI
+  without console/network errors, completing bidirectional acceptance. A
+  dedicated GitHub push webhook was added for this resource, passed its initial
+  ping and has auto deploy enabled; the next matching support-mail source push
+  still needs to prove a deployment with `is_webhook=true`.
 - Production domains verified on 2026-07-09: `app.letscube.ru`, `deploy.letscube.ru`, `core.letscube.ru`, `mailserver.letscube.ru`, `notify.letscube.ru`, and SSH host `ms.letscube.ru` resolve and expose their expected services with valid TLS where applicable.
 - `api.letscube.ru` now serves the read-only native release catalog with valid TLS through Coolify application `letscube-releases`; `status.letscube.ru` and `monitor.letscube.ru` remain reserved future endpoints.
 - The installed Supabase MCP connector still targets the legacy cloud project. Production self-host checks must use `core.letscube.ru`, the local secret-safe env file, or read-only SSH/database inspection.
