@@ -1307,3 +1307,22 @@ Recurring tasks roadmap note:
   returned `250 2.0.0 OK`, and the local mail queue was empty.
 - External receipt confirmation and the inbound reply/IMAP routing check are
   pending user confirmation. No production customer content was inspected.
+- The recipient confirmed external receipt. Their first reply reached the
+  opaque route but was quarantined as `sender_mismatch` because the manually
+  seeded QA contact used plain SHA-256 instead of the production email HMAC.
+  The production gateway path was not affected; the QA contact hash was
+  corrected using the server-side key without exposing it.
+- Processing that reply revealed a real ImapFlow deadlock: the worker attempted
+  `messageFlagsAdd` inside an active fetch iterator, timed out after 60 seconds
+  and restarted. Delivery was fail-safe because the email remained unseen and
+  the database ledger deduplicated repeated intake.
+- The worker was disabled before repair and stayed healthy with zero restarts.
+  A failing behavioral test reproduced the nested-command ordering. Commit
+  `8c1f5fa` added an error observer and moved `\Seen` updates after fetch
+  completion; 69 support/privacy/security tests, API typecheck and build passed.
+- The repaired production worker stayed healthy, ready and restart-free for
+  more than two previous timeout intervals. The original reply remained one
+  quarantined ledger row and was marked seen without duplication.
+- Added the previously missing repository push webhook for
+  `letscube-support-mail`; the GitHub ping completed with HTTP 200. A later
+  matching source push still needs to prove automatic deployment.

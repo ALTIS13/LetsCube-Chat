@@ -124,9 +124,20 @@ TLS обязателен. Worker fail-closed отклоняет конфигур
 - One QA operator response traversed the real database trigger, leased outbox,
   worker, Mailcow and Gmail MX path. The ledger reached `sent` in one attempt,
   Gmail returned SMTP `250 2.0.0 OK`, and the local Mailcow queue was empty.
-- User confirmation and the reply-to-ticket IMAP intake check remain pending.
-  Do not describe the bidirectional mail bridge as fully accepted until that
-  reply is attached to the original QA ticket.
+- The first physical reply exposed an IMAP fetch deadlock: `messageFlagsAdd`
+  was invoked while the ImapFlow fetch iterator was still active. The worker
+  was disabled through Coolify before repair, leaving mailbox data intact.
+- Commit `8c1f5fa` observes asynchronous client errors and defers `\Seen` flag
+  updates until after fetch completion. Production remained healthy and
+  restart-free for more than two former timeout intervals after deployment.
+- The manually seeded QA contact originally used SHA-256 instead of the
+  production contact HMAC, so the first reply was correctly quarantined as
+  `sender_mismatch`. The QA hash was corrected without deleting the audit row.
+  A second physical reply is required before declaring the bidirectional
+  bridge fully accepted.
+- A dedicated GitHub push webhook now targets the support-mail Coolify
+  resource. Its initial ping returned HTTP 200; the next matching source push
+  must still confirm an automatic deployment with `is_webhook=true`.
 
 ## Откат
 

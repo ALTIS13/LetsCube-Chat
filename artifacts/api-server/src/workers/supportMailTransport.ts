@@ -157,6 +157,8 @@ export async function processSupportInboxFetch(
   }
 
   let processed = 0;
+  // ImapFlow cannot run another command while a fetch iterator is active.
+  // Apply flags only after the iterator has completed to avoid a deadlock.
   for (const uid of seenUids) {
     try {
       await client.messageFlagsAdd(uid, ["\\Seen"], { uid: true });
