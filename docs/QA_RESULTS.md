@@ -1399,3 +1399,51 @@ Recurring tasks roadmap note:
   version and Entra WNS Remote ID have not been provided. No Publisher/PFN
   mapping, production package identity, signing configuration, WNS server
   secret or database proposal was applied.
+
+## 2026-08-01 - Privacy-safe verified-phone search
+
+- Audited the current search model and live self-hosted schema without exposing
+  profile contacts or message bodies. Existing message search uses bounded
+  `global_search_v2` / `search_chat_messages` RPCs plus trigram and active-chat
+  indexes. On the current largest 236-message chat, 20 in-chat search runs
+  averaged 33.221 ms; 20 global searches over 816 RLS-visible active messages
+  averaged 90.244 ms. No search-function rewrite was justified by this data.
+- Added `search_profiles_by_phone(text, integer)` as a narrow, stable
+  `SECURITY DEFINER` RPC because the frontend must not receive direct contact
+  table access. The function checks `auth.uid()`, ban state and `users.view`,
+  accepts only an explicit complete `+E.164`, matches only `phone_verified=true`
+  rows, limits output to 10 profiles and never returns a phone value.
+- Revoked execute from `PUBLIC`, `anon`, `authenticated` and `service_role`,
+  then granted only `authenticated`; live verification returned
+  `security_definer=true`, `authenticated=true`, `anon=false` and
+  `service_role=false`. The in-function permission check remains mandatory.
+- Rehearsed the migration and authorization smoke together in one production
+  transaction with rollback. Created and validated backup
+  `/srv/letscube/backups/pre-migrations/20260801-113105-before-privacy-safe-phone-search.dump`,
+  applied `20260801112259_privacy_safe_phone_search.sql`, then passed the same
+  smoke again inside `BEGIN ... ROLLBACK`. It covers exact authorized lookup,
+  partial/no-country rejection, unauthorized empty results and grants.
+- The frontend normalizes formatted international input, invokes only the new
+  RPC, merges the profile with existing search results and never queries
+  `profile_contacts`. Search hints now explain the permission-aware full-number
+  behavior. Manual/generated app RPC typings now cover both existing search
+  RPCs and the new phone RPC, removing the old search-function drift warnings.
+- Production currently contains zero non-null verified phone contacts. This is
+  expected while real SMS OTP is not configured: no phone result is fabricated.
+- Contract tests passed 3/3. KUB typecheck and production build passed. The
+  build retains the existing sourcemap and large-chunk warnings. Initial local
+  Playwright login failed because the ignored `.env.local` pointed Supabase at
+  Vite itself; only public Supabase browser settings were refreshed from the
+  protected server env without printing values, then all five role auth states
+  regenerated successfully.
+- Real Playwright QA passed 5/5 at 3840x2160, 1920x1080, 1440x900, 390x844 and
+  412x915. It verifies formatted-number normalization before RPC, a rendered
+  profile result without the raw number, existing username/filter behavior,
+  no ErrorBoundary and no unexpected console errors. A later repeat hit the
+  existing long-bootstrap recovery screen once at 390x844; the isolated
+  390x844 rerun passed in 9.9 seconds without a code or environment change.
+- Final validation passed `git diff --check`, the 3/3 phone-search contract,
+  KUB typecheck/build, 5/5 authenticated smoke, anonymous REST RLS probe,
+  authenticated multi-role RLS smoke and the database type-drift check. The
+  build retains existing sourcemap/large-chunk warnings; RLS smoke retains its
+  existing informational broad-storage rows for privileged/fixture clients.

@@ -53,9 +53,11 @@ Snapshot updated: 2026-07-28. The detailed execution source of truth is
 - Global search v2 with filters is implemented.
 - In-chat full-history search is implemented.
 - Jump/highlight behavior is implemented.
-- Remaining: harden message search for large histories and add permission-aware
-  people lookup by normalized verified profile phone. Phone search must not
-  expose raw contact data or create an account-enumeration path.
+- Message search remains bounded and indexed; the current largest production
+  chat averaged 33.221 ms over 20 full-history RPC runs.
+- Permission-aware people lookup accepts only a complete normalized `+E.164`
+  query, requires `users.view`, matches a verified contact exactly and returns
+  profile metadata without exposing the phone value.
 
 ## PWA
 
@@ -125,7 +127,6 @@ Snapshot updated: 2026-07-28. The detailed execution source of truth is
 - Real SMS provider setup and device QA.
 - Android release signing/AAB and broader official Google Play Services QA.
 - Windows Authenticode/SmartScreen and killed-process WNS delivery.
-- Large-history message search and privacy-safe user search by verified phone.
 - Isolated restore drill.
 - Sentry self-host decision and rollout.
 - Startup permission capability batching: the current app shell issues 33 repeated role/location permission RPCs before the first meaningful chat interaction.

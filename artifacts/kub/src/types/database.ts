@@ -1279,6 +1279,62 @@ export interface Database {
           rank: number | null
         }[]
       }
+      global_search_v2: {
+        Args: {
+          p_query: string
+          p_filters?: Json
+          p_limit?: number
+        }
+        Returns: {
+          result_type: string
+          id: string
+          title: string
+          subtitle: string | null
+          snippet: string | null
+          avatar_url: string | null
+          chat_id: string | null
+          message_id: string | null
+          task_id: string | null
+          location_id: string | null
+          created_at: string | null
+          rank: number | null
+        }[]
+      }
+      search_profiles_by_phone: {
+        Args: {
+          p_query: string
+          p_limit?: number
+        }
+        Returns: {
+          id: string
+          title: string
+          subtitle: string | null
+          avatar_url: string | null
+          created_at: string | null
+        }[]
+      }
+      search_chat_messages: {
+        Args: {
+          p_chat_id: string
+          p_query: string
+          p_filters?: Json
+          p_limit?: number
+          p_topic_id?: string | null
+          p_all_topics?: boolean
+        }
+        Returns: {
+          message_id: string
+          chat_id: string
+          topic_id: string | null
+          sender_name: string | null
+          snippet: string | null
+          message_type: string | null
+          media_url: string | null
+          mime_type: string | null
+          created_at: string
+          rank: number | null
+        }[]
+      }
       chat_list_summaries: {
         Args: { p_chat_ids?: string[] | null }
         Returns: {

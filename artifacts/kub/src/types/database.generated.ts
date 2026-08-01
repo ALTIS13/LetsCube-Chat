@@ -1695,6 +1695,16 @@ export type Database = {
           title: string
         }[]
       }
+      search_profiles_by_phone: {
+        Args: { p_limit?: number; p_query: string }
+        Returns: {
+          avatar_url: string | null
+          created_at: string | null
+          id: string
+          subtitle: string | null
+          title: string
+        }[]
+      }
       group_invite_accept: { Args: { p_invite_id: string }; Returns: string }
       group_invite_cancel: {
         Args: { p_invite_id: string }

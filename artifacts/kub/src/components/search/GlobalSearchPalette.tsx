@@ -164,7 +164,7 @@ export function GlobalSearchPalette() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Поиск по людям, чатам, сообщениям, задачам…"
+              placeholder="Поиск по людям, чатам, сообщениям, задачам или +номеру…"
               className="min-w-0 flex-1 bg-transparent text-sm text-[color:var(--kub-text)] outline-none placeholder:text-[color:var(--kub-muted)]"
               aria-label="Глобальный поиск"
             />
@@ -227,7 +227,7 @@ export function GlobalSearchPalette() {
               <div className="rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-4">
                 <div className="text-sm font-semibold text-[color:var(--kub-text)]">Быстрый поиск</div>
                 <div className="mt-1 text-xs leading-relaxed text-[color:var(--kub-muted)]">
-                  Начните вводить имя, @никнейм, чат, сообщение, задачу или локацию. Для фильтра можно набрать `type:user`, `type:message` или выбрать чип сверху.
+                  Начните вводить имя, @никнейм, чат, сообщение, задачу или локацию. Сотрудники с доступом к пользователям могут найти профиль по полному подтверждённому +номеру. Для фильтра можно набрать `type:user`, `type:message` или выбрать чип сверху.
                 </div>
               </div>
               <SearchResultsList

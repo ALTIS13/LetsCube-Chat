@@ -94,4 +94,4 @@ self-host cutover.
 - [x] Long-session QA.
 - [ ] Performance pass on low-end devices.
 - [ ] Accessibility pass on high-traffic flows.
-- [ ] Large-history message search and permission-aware people search by normalized verified phone.
+- [x] Large-history message search and permission-aware people search by normalized verified phone.

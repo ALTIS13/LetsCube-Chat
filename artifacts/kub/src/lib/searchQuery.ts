@@ -1,3 +1,5 @@
+import type { Json } from "@/types/database";
+
 export type SearchEntityFilter = "all" | "user" | "chat" | "message" | "task" | "location" | "command" | "media";
 export type SearchHasFilter = "file" | "link" | "image" | "video" | "audio";
 
@@ -129,7 +131,7 @@ export function removeSearchChip(rawQuery: string, chip: ParsedSearchChip): stri
   return `${rawQuery.slice(0, chip.start)} ${rawQuery.slice(chip.end)}`.trim().replace(/\s+/g, " ");
 }
 
-export function searchFiltersToRpc(filters: ParsedSearchFilters): Record<string, unknown> {
+export function searchFiltersToRpc(filters: ParsedSearchFilters): Json {
   return {
     type: filters.type === "all" ? null : filters.type,
     from: filters.from,

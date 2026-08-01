@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getChatDisplayInfo } from "@/lib/chatDisplay";
+import { normalizePhoneSearchQuery } from "@/lib/phoneSearch";
 import {
   hasLink,
   mediaLabelForMessage,
@@ -50,6 +51,14 @@ type RpcGlobalSearchRow = {
   rank: number | null;
 };
 
+type RpcPhoneSearchRow = {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  avatar_url: string | null;
+  created_at: string | null;
+};
+
 type FallbackTaskRow = {
   id: string;
   title: string;
@@ -85,6 +94,7 @@ interface UseGlobalSearchResult {
 
 let rpcAvailability: "unknown" | "available" | "missing" = "unknown";
 let rpcV2Availability: "unknown" | "available" | "missing" = "unknown";
+let phoneRpcAvailability: "unknown" | "available" | "missing" = "unknown";
 
 const DATA_TYPES: GlobalSearchDataType[] = ["user", "chat", "message", "task", "location"];
 
@@ -137,9 +147,15 @@ export function useGlobalSearch({
         currentUserId,
         limit,
       });
+      const phone = await fetchPhoneSearchResults({
+        supabase,
+        query: searchQuery,
+        type: activeType,
+        limit,
+      });
 
       if (requestIdRef.current !== currentRequestId) return;
-      setResults(applyResultFilters(mergeResults([...local, ...remote], limit), filters).slice(0, limit));
+      setResults(applyResultFilters(mergeResults([...local, ...remote, ...phone], limit), filters).slice(0, limit));
       setUsedFallback(true);
       setMigrationMissing(rpcAvailability === "missing");
       setFiltersLimited(hasAdvancedSearchFilters(filters));
@@ -179,23 +195,35 @@ export function useGlobalSearch({
     void (async () => {
       try {
         if (hasAdvanced || rpcV2Availability !== "missing") {
-          const { data, error } = await supabase.rpc("global_search_v2" as never, {
+          const { data, error } = await supabase.rpc("global_search_v2", {
             p_query: searchQuery,
             p_filters: searchFiltersToRpc(filters ?? emptyFilters(type)),
             p_limit: limit,
-          } as never);
+          });
           if (requestIdRef.current !== currentRequestId) return;
 
           if (!error) {
+            const phone = await fetchPhoneSearchResults({
+              supabase,
+              query: searchQuery,
+              type,
+              limit,
+            });
+            if (requestIdRef.current !== currentRequestId) return;
             rpcV2Availability = "available";
             setMigrationMissing(false);
             setFiltersLimited(false);
             setUsedFallback(false);
             setResults(
-              ((data ?? []) as RpcGlobalSearchRow[])
-                .map(mapRpcRow)
-                .filter((result) => type === "all" || result.resultType === type || filters?.type === "media")
-                .slice(0, limit),
+              mergeResults(
+                [
+                  ...((data ?? []) as RpcGlobalSearchRow[])
+                    .map(mapRpcRow)
+                    .filter((result) => type === "all" || result.resultType === type || filters?.type === "media"),
+                  ...phone,
+                ],
+                limit,
+              ),
             );
             setLoading(false);
             return;
@@ -241,6 +269,13 @@ export function useGlobalSearch({
         }
 
         rpcAvailability = "available";
+        const phone = await fetchPhoneSearchResults({
+          supabase,
+          query: searchQuery,
+          type,
+          limit,
+        });
+        if (requestIdRef.current !== currentRequestId) return;
         setMigrationMissing(false);
         setFiltersLimited(hasAdvanced);
         setUsedFallback(false);
@@ -248,9 +283,12 @@ export function useGlobalSearch({
           applyResultFilters(
             ((data ?? []) as RpcGlobalSearchRow[])
               .map(mapRpcRow)
-              .filter((result) => type === "all" || result.resultType === type),
+              .filter((result) => type === "all" || result.resultType === type)
+              .concat(phone),
             filters,
-          ).slice(0, limit),
+          )
+            .sort(compareResults)
+            .slice(0, limit),
         );
         setLoading(false);
       } catch (error) {
@@ -289,6 +327,50 @@ function mapRpcRow(row: RpcGlobalSearchRow): GlobalSearchResult {
     rank: row.rank,
     source: "rpc",
   };
+}
+
+async function fetchPhoneSearchResults({
+  supabase,
+  query,
+  type,
+  limit,
+}: {
+  supabase: ReturnType<typeof createClient>;
+  query: string;
+  type: GlobalSearchDataType | "all";
+  limit: number;
+}): Promise<GlobalSearchResult[]> {
+  if (type !== "all" && type !== "user") return [];
+  if (phoneRpcAvailability === "missing") return [];
+
+  const phone = normalizePhoneSearchQuery(query);
+  if (!phone) return [];
+
+  const { data, error } = await supabase.rpc("search_profiles_by_phone", {
+    p_query: phone,
+    p_limit: Math.min(limit, 10),
+  });
+
+  if (error) {
+    if (isMissingSearchFunctionError(error, "search_profiles_by_phone")) {
+      phoneRpcAvailability = "missing";
+    } else if (import.meta.env.DEV) {
+      console.warn("[global-search] phone rpc failed", error);
+    }
+    return [];
+  }
+
+  phoneRpcAvailability = "available";
+  return ((data ?? []) as RpcPhoneSearchRow[]).map((row) => ({
+    resultType: "user",
+    id: row.id,
+    title: row.title,
+    subtitle: row.subtitle,
+    avatarUrl: row.avatar_url,
+    createdAt: row.created_at,
+    rank: 250,
+    source: "rpc",
+  }));
 }
 
 function normalizeResultType(value: string): GlobalSearchDataType {

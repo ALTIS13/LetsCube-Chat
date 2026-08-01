@@ -222,7 +222,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
             ref={searchInputRef}
             data-testid="sidebar-search-input"
             type="text"
-            placeholder="Поиск людей, чатов, сообщений…"
+            placeholder="Поиск людей, чатов, сообщений или +номера…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setIsSearchFocused(true)}

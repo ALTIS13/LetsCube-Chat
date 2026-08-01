@@ -90,14 +90,14 @@ export function ChatSearchBar({ chatId, currentTopicId, isForum = false, message
     setLoading(true);
     const timer = window.setTimeout(() => {
       void (async () => {
-        const { data, error } = await supabase.rpc("search_chat_messages" as never, {
+        const { data, error } = await supabase.rpc("search_chat_messages", {
           p_chat_id: chatId,
           p_query: parsed.query,
           p_filters: searchFiltersToRpc(parsed.filters),
           p_limit: 80,
           p_topic_id: isForum && !allTopics ? currentTopicId ?? null : null,
           p_all_topics: !isForum || allTopics,
-        } as never);
+        });
         if (requestIdRef.current !== requestId) return;
         setLoading(false);
 

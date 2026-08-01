@@ -5,6 +5,25 @@ test.describe("KUB global search", () => {
   test("uses the sidebar search on desktop and the sheet on mobile", async ({ page }, testInfo) => {
     const consoleErrors: string[] = [];
     let expectedMissingRpcResponses = 0;
+    const phoneQueries: Array<{ p_query?: string; p_limit?: number }> = [];
+    await page.route("**/rest/v1/rpc/search_profiles_by_phone", async (route) => {
+      phoneQueries.push(
+        (route.request().postDataJSON() ?? {}) as { p_query?: string; p_limit?: number },
+      );
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          {
+            id: "00000000-0000-4000-8000-000000000101",
+            title: "Тестовый профиль по номеру",
+            subtitle: "@phone_search_qa",
+            avatar_url: null,
+            created_at: "2026-08-01T00:00:00.000Z",
+          },
+        ]),
+      });
+    });
     page.on("console", (message) => {
       if (message.type() === "error") consoleErrors.push(message.text());
     });
@@ -21,7 +40,10 @@ test.describe("KUB global search", () => {
     });
 
     const qaRole = findFirstAvailableQaRole(QA_ROLES, { includeDefault: true });
-    test.skip(!qaRole, "QA credentials or auth states are not configured in env or output/playwright-auth");
+    test.skip(
+      !qaRole,
+      "QA credentials or auth states are not configured in env or output/playwright-auth",
+    );
 
     await gotoOrSkip(page, "/");
     await loginAsRoleOrSkip(page, qaRole);
@@ -37,10 +59,13 @@ test.describe("KUB global search", () => {
       await expect(input).toBeFocused();
       await input.fill("@te");
       await expect(input).toHaveValue("@te");
-      await input.fill('from:@te has:image after:2026-05-01');
+      await input.fill("from:@te has:image after:2026-05-01");
       await expect(page.getByTestId("search-filter-chip-from")).toBeVisible();
       await expect(page.getByTestId("search-filter-chip-has")).toBeVisible();
       await expect(page.getByTestId("search-filter-chip-after")).toBeVisible();
+      await input.fill("+7 (999) 123-45-67");
+      await expect(palette.getByText("Тестовый профиль по номеру")).toBeVisible();
+      await expect(palette).not.toContainText("+79991234567");
       await page.keyboard.press("Escape");
       await expect(palette).toHaveCount(0);
     } else {
@@ -49,8 +74,13 @@ test.describe("KUB global search", () => {
       await expect(input).toBeFocused();
       await input.fill("@te");
       await expect(page.getByTestId("sidebar-global-search-results")).toBeVisible();
-      await expect(page.getByTestId("sidebar-global-search-results").getByText(/Люди|Чаты|Сообщения|Задачи|Локации/i).first()).toBeVisible();
-      await input.fill('type:task after:2026-05-01 TestLocationCodex');
+      await expect(
+        page
+          .getByTestId("sidebar-global-search-results")
+          .getByText(/Люди|Чаты|Сообщения|Задачи|Локации/i)
+          .first(),
+      ).toBeVisible();
+      await input.fill("type:task after:2026-05-01 TestLocationCodex");
       await expect(page.getByTestId("search-filter-chip-type")).toBeVisible();
       await expect(page.getByTestId("search-filter-chip-after")).toBeVisible();
       await page.getByTestId("search-filter-chip-after").click();
@@ -67,10 +97,20 @@ test.describe("KUB global search", () => {
         await expect(page.getByRole("button", { name: /^Скопировать$/ })).toHaveCount(0);
         await page.getByTestId("global-search-profile-back").click();
       }
+      await input.fill("+7 (999) 123-45-67");
+      await expect(
+        page.getByTestId("sidebar-global-search-results").getByText("Тестовый профиль по номеру"),
+      ).toBeVisible();
+      await expect(page.getByTestId("sidebar-global-search-results")).not.toContainText(
+        "+79991234567",
+      );
       await input.click();
       await page.keyboard.press("Escape");
       await expect(input).toHaveValue("");
     }
+
+    expect(phoneQueries.length).toBeGreaterThan(0);
+    expect(phoneQueries.at(-1)).toEqual({ p_query: "+79991234567", p_limit: 10 });
 
     await expect(page.getByText("Произошла ошибка интерфейса")).toHaveCount(0);
     let remainingExpected404 = expectedMissingRpcResponses;
@@ -81,6 +121,9 @@ test.describe("KUB global search", () => {
       }
       return true;
     });
-    expect(unexpectedConsoleErrors, `Unexpected console errors:\n${unexpectedConsoleErrors.join("\n")}`).toEqual([]);
+    expect(
+      unexpectedConsoleErrors,
+      `Unexpected console errors:\n${unexpectedConsoleErrors.join("\n")}`,
+    ).toEqual([]);
   });
 });

@@ -31,5 +31,6 @@ export type GeneratedLocationRow = GeneratedTableRow<"locations">;
 export type GeneratedTaskRecurrenceRow = GeneratedTableRow<"task_recurrences">;
 
 export type GeneratedGlobalSearchV2Row = GeneratedRpcReturns<"global_search_v2">[number];
+export type GeneratedPhoneSearchRow = GeneratedRpcReturns<"search_profiles_by_phone">[number];
 export type GeneratedSearchChatMessagesRow =
   GeneratedRpcReturns<"search_chat_messages">[number];
