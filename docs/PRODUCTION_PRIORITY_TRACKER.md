@@ -1,6 +1,6 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-07-29.
+Status: active production-hardening tracker, updated 2026-08-01.
 
 This file is the working source of truth for the next production stages. Before starting any new production task, read this file first, then update the relevant checkboxes/status when work is completed, blocked, or intentionally deferred.
 
@@ -52,7 +52,8 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 7. `[~]` Complete the Capacitor Android release candidate. LETSCUBE `0.1.0` production-configured debug APK is published through the self-hosted release catalog with verified size/SHA parity. Remaining: release signing/AAB, app links/recovery callback and broader signed-package QA.
 8. `[x]` Replace the retired Electron spike with a clean-profile Tauri 2 Windows client. The one-window secure startup, tray/single-instance behavior, Stable/Test channels and signed Tauri updater are complete. Physical `0.2.0 -> 0.2.1`, `0.2.1 -> 0.2.2` and `0.2.2 -> 0.2.3` production-update rehearsals passed. A successful version change shows a compact four-second confirmation and then frees the top-right area for future call controls.
 9. `[~]` Complete the external Windows release gates. LETSCUBE `0.2.7/11` replaces the failed generic notification plugin path with exact-origin native Windows toast/history/action commands. Physical QA confirms one stable Toast Header per chat, up to five unread message cards, exact per-message routing from both fresh and historical cards, independent routing for other chats, and chat-scoped history removal after reading. Sender duplication was removed by keeping the sender/chat name only in the native header. The physically tested immutable artifact was verified in Test and then promoted unchanged to Stable. A fail-closed Authenticode path, provider-isolated WNS sender, sanitized Windows matrix and native offline/long-session suite are prepared. A second fail-closed tool now validates Microsoft package metadata, renders matching sparse-package/executable manifests and builds a local unsigned `MakeAppx` validation artifact without changing the internal NSIS path. The live Supabase schema was audited read-only and a contract-tested `windows/wns` device/RPC/outbox proposal now preserves the existing Android/FCM path while rejecting invalid provider pairs and non-Microsoft channel hosts; it remains unapplied. Remaining external work is the real Microsoft package identity/publisher/PFN/Entra mapping, production signing and SmartScreen reputation, Windows 10 and alternate WebView2 device runs, manual approval/application of the WNS proposal, Windows App SDK channel/COM registration and true killed-process physical delivery.
-10. `[ ]` Improve global search for messages and people. Message search must remain useful on large histories, and people search must support a normalized phone number from the profile/contact model only when current privacy and role permissions allow that profile/contact to be discovered. Phone lookup must not expose raw numbers, bypass RLS or turn unauthenticated search into an account-enumeration channel.
+10. `[x]` Harden direct-email support notifications. New inbound email tickets now create the same PII-free `ticket_created` event as web tickets, eligible pool operators receive one creation notification, and later requester replies notify the pool while the ticket remains unassigned. The first email message does not create a duplicate requester notification. The production migration was applied after a verified dump and passed a transactional live-DB fanout smoke.
+11. `[ ]` Improve global search for messages and people. Message search must remain useful on large histories, and people search must support a normalized phone number from the profile/contact model only when current privacy and role permissions allow that profile/contact to be discovered. Phone lookup must not expose raw numbers, bypass RLS or turn unauthenticated search into an account-enumeration channel.
 
 ## Last Confirmed Deploy Baseline
 
@@ -75,6 +76,14 @@ Use this queue before starting the next production-hardening turn. Do not repeat
   dedicated GitHub push webhook was added for this resource, passed its initial
   ping and has auto deploy enabled; the next matching support-mail source push
   still needs to prove a deployment with `is_webhook=true`.
+- Support notification fanout: migration
+  `.migration-backup/supabase/migrations/20260801100856_support_email_pool_notifications.sql`
+  is active after verified backup
+  `/srv/letscube/backups/pre-migrations/20260801-101035-before-support-email-pool-notifications.dump`.
+  The production DB smoke covers creation fanout, first-message dedupe and
+  later unassigned requester replies inside `BEGIN ... ROLLBACK`. Client roles
+  cannot execute the internal trigger helper. No support-mail source changed in
+  this stage, so a webhook deployment was intentionally not manufactured.
 - Production domains verified on 2026-07-09: `app.letscube.ru`, `deploy.letscube.ru`, `core.letscube.ru`, `mailserver.letscube.ru`, `notify.letscube.ru`, and SSH host `ms.letscube.ru` resolve and expose their expected services with valid TLS where applicable.
 - `api.letscube.ru` now serves the read-only native release catalog with valid TLS through Coolify application `letscube-releases`; `status.letscube.ru` and `monitor.letscube.ru` remain reserved future endpoints.
 - The installed Supabase MCP connector still targets the legacy cloud project. Production self-host checks must use `core.letscube.ru`, the local secret-safe env file, or read-only SSH/database inspection.

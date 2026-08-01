@@ -147,6 +147,15 @@ TLS обязателен. Worker fail-closed отклоняет конфигур
   resource. Its initial ping returned HTTP 200 and automatic deployment is
   enabled on the resource. The next matching source push must still confirm an
   automatic deployment with `is_webhook=true`.
+- Direct inbound email tickets now append a PII-free `ticket_created` event.
+  Eligible support operators receive one pool notification for a new ticket;
+  the first email body does not duplicate it as `requester_message`. Later
+  requester replies notify the eligible pool until an operator claims the
+  ticket, after which the existing assignee notification path applies.
+- The production change was applied after the verified dump
+  `/srv/letscube/backups/pre-migrations/20260801-101035-before-support-email-pool-notifications.dump`.
+  The live transactional fanout smoke passed and rolled back all QA rows. The
+  worker stayed healthy with zero restarts or recent timeout/ingest errors.
 
 ## Откат
 
@@ -159,12 +168,14 @@ Migration sources:
 - `.migration-backup/supabase/migrations/20260728082213_support_mail_bridge.sql`;
 - `.migration-backup/supabase/migrations/20260728085924_support_mail_intake_guard.sql`;
 - `.migration-backup/supabase/migrations/20260728092354_support_mail_delivery_hardening.sql`;
-- `.migration-backup/supabase/migrations/20260728093755_support_mail_idempotent_delivery_ack.sql`.
+- `.migration-backup/supabase/migrations/20260728093755_support_mail_idempotent_delivery_ack.sql`;
+- `.migration-backup/supabase/migrations/20260801100856_support_email_pool_notifications.sql`.
 
 Проверенные pre-migration dumps:
 
 - `/srv/letscube/backups/pre-migrations/20260728-before-support-mail-bridge.dump`;
-- `/srv/letscube/backups/pre-migrations/20260728-before-support-mail-intake-hardening.dump`.
+- `/srv/letscube/backups/pre-migrations/20260728-before-support-mail-intake-hardening.dump`;
+- `/srv/letscube/backups/pre-migrations/20260801-101035-before-support-email-pool-notifications.dump`.
 
 Потеря ответа БД после принятия письма SMTP обрабатывается повторным
 идемпотентным acknowledgement с тем же provider hash. Остаётся узкое

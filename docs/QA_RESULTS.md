@@ -1343,3 +1343,36 @@ Recurring tasks roadmap note:
   `letscube-support-mail`; the GitHub ping completed with HTTP 200 and auto
   deploy is enabled on the Coolify resource. A later matching source push still
   needs to prove automatic deployment with `is_webhook=true`.
+
+## 2026-08-01 - Direct-email support notification fanout
+
+- A production audit found that `_support_email_ingest_inbound_core` created a
+  ticket and requester message but no `ticket_created` event. The notification
+  trigger also skipped requester messages for unassigned tickets. Therefore a
+  new direct-email ticket, and later replies before claim, could notify no
+  operator.
+- A failing transactional smoke reproduced the gap on the live schema with
+  `email_ticket_created_event_count:0`; the transaction rolled back and left no
+  QA rows.
+- Created and verified the custom-format pre-migration dump at
+  `/srv/letscube/backups/pre-migrations/20260801-101035-before-support-email-pool-notifications.dump`.
+  `pg_restore --list` passed and a SHA-256 sidecar was stored with root-only
+  permissions.
+- Applied
+  `.migration-backup/supabase/migrations/20260801100856_support_email_pool_notifications.sql`.
+  Direct-email inserts now append one PII-free `ticket_created` event. Eligible
+  pool operators receive one creation notification, the first requester body
+  is deduplicated, and later requester replies notify the pool while the ticket
+  remains unassigned. Assigned-ticket behavior is unchanged.
+- The post-apply production DB smoke passed inside `BEGIN ... ROLLBACK`. The
+  internal trigger helper exists, its trigger is enabled, and `anon`,
+  `authenticated` and `service_role` have no direct execute privilege.
+- The support-mail worker remained healthy with zero restarts and no recent
+  timeout, unhandled or ingestion failure logs. A `support -> support` SMTP
+  message was intentionally not used as an external-delivery substitute: it
+  follows local mailbox semantics and would leave avoidable production QA
+  data. The already completed Gmail/Mailcow physical SMTP/IMAP test remains the
+  delivery proof; this stage validates the corrected DB notification contract.
+- This stage did not change support-mail worker source or matching watch paths,
+  so no artificial webhook deployment was triggered. The next genuine worker
+  source change remains the auto-deploy proof point.
