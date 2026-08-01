@@ -310,16 +310,24 @@ Status: `[~]` active. Android and Windows Tauri internal candidates are availabl
 - `[x]` Tauri 2 internal candidate: isolated WebView2 profile, 1.19 MiB NSIS installer, tray/close-to-hide, branded startup, single instance, minimum exact-origin capabilities, clean-profile login and hidden-window foreground notifications.
 - `[x]` Tauri rollout: frontend adapter deployed, clean installed-client QA repeated, and immutable Windows stable `0.2.0` build `4` published at 1,242,693 bytes with verified SHA-256.
 - `[~]` Windows public release gate: repeatable isolated Tauri/WebView2 QA, same-version repair, silent uninstall, clean reinstall and real signed cross-version updater application pass. `0.2.7/11` passes physical hidden-window message/task isolation, five-card per-chat retention, exact fresh/history notification-card routing and chat-scoped read cleanup. Its immutable signed updater artifact was verified in Test and promoted unchanged to Stable. Sparse identity tooling now renders aligned package/executable metadata and passes `MakeAppx` validation locally. The live native-device schema is still Android/FCM-only; `.migration-backup/supabase/migrations/20260724_windows_wns_push_devices.sql` is a contract-tested, unapplied delta for authenticated Windows/WNS registration and shared native outbox enqueue. Real Microsoft identity/PFN onboarding, signed NSIS integration, Authenticode/SmartScreen, broader Windows 10/11 hardware QA and killed-process WNS delivery remain open.
-- `[!]` SMS provider rollout.
+- `[~]` SMS provider rollout is the next backend/auth stage after the current audit.
 
-## Deferred Phone Verification Rollout
+## Next Phone Verification Rollout
 
-Status: `[!]` explicitly deferred on 2026-07-12 until push/PWA reliability and packaging gates are complete.
+Status: `[~]` production search is complete; real SMS delivery and physical OTP QA are next.
 
 - Keep the current no-fake-verification fallback and never mark a number verified before a real OTP succeeds.
-- Later select a stable provider reachable from the Russian self-hosted infrastructure, connect Supabase Auth phone OTP, and keep provider credentials only in backend/Supabase secrets.
+- `[x]` Privacy-safe exact phone search is deployed through `search_profiles_by_phone(text, integer)`. It accepts only normalized `+E.164`, requires `users.view`, returns profile fields without the phone number, and includes only `phone_verified = true` contacts.
+- `[x]` The profile flow already uses `auth.updateUser({ phone })`, `verifyOtp(..., type: "phone_change")`, and `profile_phone_mark_verified()`. The database RPC re-checks `auth.users.phone_confirmed_at`, so the client cannot mark a number verified directly.
+- `[x]` 2026-08-01 production audit: Supabase Auth `v2.189.0`, phone provider disabled, SMS autoconfirm disabled, Send SMS Hook not configured, zero verified phone contacts, and zero pending/duplicate/stale `phone_change` rows.
+- `[ ]` Recommended delivery path: Supabase Auth HTTP Send SMS Hook -> a server-side LETSCUBE SMS adapter -> Yandex Cloud Notification Service. Keep OTP generation/verification in Supabase Auth; the adapter only delivers the generated OTP and never exposes or stores it in frontend data.
+- `[ ]` Provider onboarding: activate Yandex Cloud Notification Service, create the SMS channel, register an individual sender name for production, and keep static access credentials only in server/Coolify secrets. SMSC.ru, SMS Aero, or MTS Exolve remain fallback adapters behind the same hook contract.
+- `[ ]` Add the hook endpoint with Standard Webhooks signature verification, strict timeout/error mapping, no raw OTP/phone logging, idempotency where supported, provider health metrics, and a safe test/sandbox mode.
+- `[ ]` Configure `GOTRUE_EXTERNAL_PHONE_ENABLED`, `GOTRUE_HOOK_SEND_SMS_ENABLED`, hook URI and hook secret in the self-hosted Auth runtime; do not use SMS autoconfirm.
+- `[ ]` Use the dedicated `auth.resend({ type: "phone_change" })` path for resend, preserve UI cooldown, and add server-side Auth/provider rate limits, CAPTCHA/abuse controls and cost alerts.
+- `[ ]` Guard the Supabase `phone_change` ambiguity documented in July 2026: reject concurrent pending claims for the same normalized phone and clear stale abandoned `phone_change` values on a bounded schedule before enabling production OTP.
 - Decide separately where verified phone is required: profile contact, account recovery, sensitive admin actions, or optional MFA. Do not silently require phone verification for existing users without a migration and rollout plan.
-- Add anti-abuse limits, OTP resend cooldowns, audit events and real-device delivery QA before enabling enforcement.
+- `[ ]` Complete real-device delivery QA for correct/wrong/expired/resend codes, provider outage, duplicate-number attempts, number changes, audit events, privacy-safe phone search, and recovery/MFA decisions before enabling enforcement.
 
 The browser client remains the universal fallback and iPhone/iPad PWA remains the only web-installed target until Android and Windows release gates pass. Packaging must reuse the same validated frontend and may not weaken browser behavior.
 
