@@ -31,7 +31,9 @@ The repository now has a fail-closed renderer and SDK preflight for this
 contract. Follow `docs/native/WINDOWS_PACKAGE_IDENTITY_RUNBOOK.md`; generated
 manifests and the unsigned validation package stay under ignored `.local`
 storage. The renderer deliberately cannot supply the Microsoft-issued package
-name, publisher, application ID, Entra remote ID or PFN.
+name, publisher, application ID, Entra remote ID or PFN. Preflight reports all
+missing public metadata in one pass and the generated client contract includes
+the expected PFN for a fail-closed runtime identity check.
 
 ## Microsoft application registration
 

@@ -50,6 +50,7 @@ WINDOWS_PACKAGE_NAME
 WINDOWS_PACKAGE_PUBLISHER
 WINDOWS_PACKAGE_PUBLISHER_DISPLAY_NAME
 WINDOWS_PACKAGE_APPLICATION_ID
+WINDOWS_PACKAGE_FAMILY_NAME
 WINDOWS_PACKAGE_VERSION
 WINDOWS_WNS_REMOTE_ID
 ```
@@ -64,6 +65,10 @@ from the real production registrations:
   publisher.
 - `WINDOWS_PACKAGE_APPLICATION_ID`: the stable application ID inside the
   package manifest.
+- `WINDOWS_PACKAGE_FAMILY_NAME`: the exact Package Family Name shown by
+  Partner Center. It must start with `WINDOWS_PACKAGE_NAME` followed by the
+  Microsoft publisher-id suffix and is included in the public runtime contract
+  so the client can fail closed on an unexpected identity.
 - `WINDOWS_PACKAGE_VERSION`: four numeric parts, aligned with the Windows
   release being packaged.
 - `WINDOWS_WNS_REMOTE_ID`: the Microsoft Entra application GUID approved for
@@ -81,7 +86,8 @@ client build.
 - `AppxManifest.xml` for the sparse identity package;
 - `letscube-windows-tauri.exe.manifest` with matching `publisher`,
   `packageName` and `applicationId`;
-- `wns-client-config.json` with only the public package/application/remote IDs.
+- `wns-client-config.json` with only the public package/application/PFN/remote
+  IDs.
 
 The two manifests intentionally use the same values. A mismatch causes Windows
 registration to succeed without granting identity to the executable

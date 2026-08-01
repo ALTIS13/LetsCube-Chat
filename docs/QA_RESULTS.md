@@ -1376,3 +1376,26 @@ Recurring tasks roadmap note:
 - This stage did not change support-mail worker source or matching watch paths,
   so no artificial webhook deployment was triggered. The next genuine worker
   source change remains the auto-deploy proof point.
+
+## 2026-08-01 - Windows identity and WNS gate re-audit
+
+- The local release host has `MakeAppx.exe`, `SignTool.exe`, 19 installed
+  Windows App Runtime packages and Windows build 26200. Tooling is not the
+  current blocker.
+- WNS delivery, device-schema, sparse identity and Tauri shell contracts passed
+  24/24. The live self-hosted schema has the existing native device/outbox
+  tables and registration RPCs, no registered native-device rows, and still
+  permits only Android/FCM plus the reserved iOS/APNS pair.
+- Rehearsed `20260724_windows_wns_push_devices.sql` against the live production
+  schema inside one transaction. Constraints, RPC replacements and native
+  enqueue function compiled, postconditions passed, and the transaction ended
+  with `ROLLBACK`; production schema was not changed.
+- Strengthened the package identity preflight through a RED/GREEN contract.
+  It now reports all missing Microsoft metadata in one run, requires the exact
+  Partner Center Package Family Name and places that public PFN in
+  `wns-client-config.json` for future runtime identity comparison.
+- The real preflight remains correctly fail-closed because Package Name,
+  Publisher, Publisher Display Name, Application ID, PFN, four-part package
+  version and Entra WNS Remote ID have not been provided. No Publisher/PFN
+  mapping, production package identity, signing configuration, WNS server
+  secret or database proposal was applied.

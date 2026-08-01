@@ -12,6 +12,26 @@ Set-StrictMode -Version Latest
 
 $executableName = "letscube-windows-tauri.exe"
 $minimumWindowsBuild = 19041
+$requiredIdentityNames = @(
+  "WINDOWS_PACKAGE_NAME",
+  "WINDOWS_PACKAGE_PUBLISHER",
+  "WINDOWS_PACKAGE_PUBLISHER_DISPLAY_NAME",
+  "WINDOWS_PACKAGE_APPLICATION_ID",
+  "WINDOWS_PACKAGE_FAMILY_NAME",
+  "WINDOWS_PACKAGE_VERSION",
+  "WINDOWS_WNS_REMOTE_ID"
+)
+
+function Assert-RequiredIdentityValues {
+  $missing = @(
+    $requiredIdentityNames | Where-Object {
+      [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_))
+    }
+  )
+  if ($missing.Count -gt 0) {
+    throw "Required Windows identity configuration is missing: $($missing -join ', ')"
+  }
+}
 
 function Get-RequiredIdentityValue {
   param([Parameter(Mandatory = $true)][string]$Name)
@@ -36,10 +56,12 @@ function Assert-SafeXmlValue {
 }
 
 function Get-IdentityConfiguration {
+  Assert-RequiredIdentityValues
   $packageName = Get-RequiredIdentityValue "WINDOWS_PACKAGE_NAME"
   $publisher = Get-RequiredIdentityValue "WINDOWS_PACKAGE_PUBLISHER"
   $publisherDisplayName = Get-RequiredIdentityValue "WINDOWS_PACKAGE_PUBLISHER_DISPLAY_NAME"
   $applicationId = Get-RequiredIdentityValue "WINDOWS_PACKAGE_APPLICATION_ID"
+  $packageFamilyName = Get-RequiredIdentityValue "WINDOWS_PACKAGE_FAMILY_NAME"
   $packageVersion = Get-RequiredIdentityValue "WINDOWS_PACKAGE_VERSION"
   $remoteIdValue = Get-RequiredIdentityValue "WINDOWS_WNS_REMOTE_ID"
 
@@ -48,6 +70,10 @@ function Get-IdentityConfiguration {
   }
   if ($applicationId -notmatch "^[A-Za-z0-9.-]{1,64}$") {
     throw "WINDOWS_PACKAGE_APPLICATION_ID is not a valid manifest application id."
+  }
+  $expectedFamilyPattern = "^$([regex]::Escape($packageName))_[A-Za-z0-9]{13}$"
+  if ($packageFamilyName -notmatch $expectedFamilyPattern) {
+    throw "WINDOWS_PACKAGE_FAMILY_NAME must match the selected package name and Microsoft publisher id."
   }
   Assert-SafeXmlValue "WINDOWS_PACKAGE_PUBLISHER" $publisher 256
   Assert-SafeXmlValue "WINDOWS_PACKAGE_PUBLISHER_DISPLAY_NAME" $publisherDisplayName 256
@@ -67,6 +93,7 @@ function Get-IdentityConfiguration {
 
   return @{
     ApplicationId = $applicationId
+    PackageFamilyName = $packageFamilyName
     PackageName = $packageName
     PackageVersion = $packageVersion
     Publisher = $publisher
@@ -181,6 +208,7 @@ function Invoke-Render {
 
   $clientConfiguration = [ordered]@{
     applicationId = $Configuration.ApplicationId
+    packageFamilyName = $Configuration.PackageFamilyName
     packageName = $Configuration.PackageName
     remoteId = $Configuration.RemoteId
   } | ConvertTo-Json

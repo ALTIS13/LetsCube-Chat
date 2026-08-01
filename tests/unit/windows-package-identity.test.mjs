@@ -22,6 +22,7 @@ const identityEnvironment = {
   WINDOWS_PACKAGE_PUBLISHER: "CN=LETSCUBE Test",
   WINDOWS_PACKAGE_PUBLISHER_DISPLAY_NAME: "LETSCUBE Test",
   WINDOWS_PACKAGE_APPLICATION_ID: "LETSCUBE",
+  WINDOWS_PACKAGE_FAMILY_NAME: "LETSCUBE.Test.Identity_abcdefghijklm",
   WINDOWS_PACKAGE_VERSION: "0.2.7.0",
   WINDOWS_WNS_REMOTE_ID: "1c4eef27-51fd-43b8-9a31-c8be45fc0a66",
 };
@@ -131,6 +132,7 @@ test(
       assert.match(executableManifest, /applicationId="LETSCUBE"/);
       assert.deepEqual(clientConfig, {
         applicationId: "LETSCUBE",
+        packageFamilyName: identityEnvironment.WINDOWS_PACKAGE_FAMILY_NAME,
         packageName: "LETSCUBE.Test.Identity",
         remoteId: identityEnvironment.WINDOWS_WNS_REMOTE_ID,
       });
@@ -154,6 +156,9 @@ test(
       `${result.stdout}\n${result.stderr}`,
       /Required Windows identity configuration is missing/,
     );
+    for (const name of Object.keys(identityEnvironment)) {
+      assert.match(`${result.stdout}\n${result.stderr}`, new RegExp(name));
+    }
   },
 );
 
