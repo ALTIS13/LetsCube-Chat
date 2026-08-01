@@ -57,10 +57,10 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 
 ## Last Confirmed Deploy Baseline
 
-- Production web baseline: `b66584808ae50e288d9f93e111856f8f60bb9e5b` (native Windows foreground, toast grouping, pending action route and read-history lifecycle hardening over the production-safe Notification Center baseline). The stable startup geometry, transient update confirmation and cryptographically verified publisher remain included from their earlier baselines.
+- Production web baseline: `d53e7f26b55782eef9c287d66b48aa88a6fde759` (privacy-safe verified-phone profile search over the native Windows foreground, toast grouping, pending action route and read-history lifecycle baseline). The stable startup geometry, transient update confirmation and cryptographically verified publisher remain included from their earlier baselines.
 - Coolify app: `letscube-web`.
 - Public app: `https://app.letscube.ru`.
-- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; deployment `w85ts4luj9w561qaphsu2jm3` completed exact commit `b66584808ae50e288d9f93e111856f8f60bb9e5b`, passed its first healthcheck and completed the rolling update. The chat-summary and access-snapshot RPC build flags remain enabled.
+- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; deployment `o5kpnw78lx42yefr3qxnkhvj` completed exact commit `d53e7f26b55782eef9c287d66b48aa88a6fde759` with `is_webhook=true`, passed its healthcheck and completed the rolling update. The chat-summary and access-snapshot RPC build flags remain enabled.
 - Worker auto deploy: worker-specific GitHub webhook is verified. Deployment `hjlbhqir375ia6wzmqarhswq` completed exact commit `8d20b89645b9471b4477a8566a5d23ff5cfc9027` with `is_webhook=true`, status `finished` and a healthy `/api/healthz` check. Worker `watch_paths` remain limited to worker/build/runtime paths and shared package manifests. GitHub Actions are intentionally disabled and repo workflow files/secrets were removed to avoid billing-lock email noise.
 - Self-host stack: Coolify proxy, self-hosted Supabase, Mailcow, app and worker deployment are already in place.
 - Support mail bridge: MX/SPF/DKIM/DMARC passed on authoritative and public

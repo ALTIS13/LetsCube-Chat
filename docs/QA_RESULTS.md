@@ -1447,3 +1447,11 @@ Recurring tasks roadmap note:
   authenticated multi-role RLS smoke and the database type-drift check. The
   build retains existing sourcemap/large-chunk warnings; RLS smoke retains its
   existing informational broad-storage rows for privileged/fixture clients.
+- Coolify webhook deployment `o5kpnw78lx42yefr3qxnkhvj` finished exact commit
+  `d53e7f26b55782eef9c287d66b48aa88a6fde759` with `is_webhook=true` and the
+  application remained `running:healthy`. Production HTML and its referenced
+  JS asset returned HTTP 200 and the bundle contains the new phone-search RPC.
+  Production Playwright passed all three desktop projects in one run. The two
+  mobile projects hit the existing long-bootstrap recovery screen only in the
+  sequential matrix; isolated 390x844 and 412x915 production reruns both
+  passed in 8.3-8.4 seconds.
