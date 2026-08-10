@@ -636,7 +636,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
               Маршрутизация по локации
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
-              Выберите клуб, роль получателя и администратора, через которого проходит задача.
+              Выберите локацию, роль получателя и администратора, через которого проходит задача.
             </p>
           </div>
           {routing.loading && <KubIcon name="spinner" size={14} tone="accent" className="shrink-0" />}
@@ -712,7 +712,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
             </div>
 
             <label className="min-w-0 text-xs font-medium text-[color:var(--kub-muted)]">
-              <span className="mb-1.5 block uppercase tracking-wide">Администратор клуба</span>
+              <span className="mb-1.5 block uppercase tracking-wide">Администратор локации</span>
               <select
                 value={routeAdminId}
                 onChange={(event) => setRouteAdminId(event.target.value)}
@@ -1006,12 +1006,12 @@ function validateRoutingDraft(input: RoutingDraftValidationInput): string | null
       return "Недостаточно прав для задачи администратора.";
     }
     if (!input.routeAdminId && !input.assigneeId) {
-      return "Для задачи администратора выберите администратора клуба или конкретного исполнителя.";
+      return "Для задачи администратора выберите администратора локации или конкретного исполнителя.";
     }
   }
 
   if ((input.targetRole === "admin" || input.targetRole === "manager" || input.targetRole === "owner") && !input.routeAdminId && !input.assigneeId) {
-    return "Для маршрута администратору выберите администратора клуба или конкретного исполнителя.";
+    return "Для маршрута администратору выберите администратора локации или конкретного исполнителя.";
   }
 
   return null;

@@ -72,14 +72,14 @@ test.describe("public privacy and support surfaces", () => {
       status: "new",
       createdAt: "2026-07-27T09:00:00.000Z",
       updatedAt: "2026-07-27T09:00:00.000Z",
-      messages: [
-        {
-          id: "4f15de54-cdb8-4976-9e53-2db3bb5fe80b",
+      messages: Array.from({ length: 28 }, (_, index) => ({
+          id: `4f15de54-cdb8-4976-9e53-${String(index).padStart(12, "0")}`,
           authorType: "guest",
-          body: "После входа приложение не загружает историю сообщений.",
+          body: index === 27
+            ? "После входа приложение не загружает историю сообщений."
+            : `Предыдущее сообщение ${index + 1}`,
           createdAt: "2026-07-27T09:00:00.000Z",
-        },
-      ],
+        })),
     };
     let createRequests = 0;
     let restoreRequests = 0;
@@ -168,8 +168,15 @@ test.describe("public privacy and support surfaces", () => {
     await page.getByRole("button", { name: "Отправить и открыть чат" }).click();
 
     await expect(page.getByTestId("guest-support-chat")).toBeVisible();
+    expect(await page.getByTestId("public-scroll-root").evaluate((node) => node.scrollTop)).toBeLessThanOrEqual(1);
     await expect(page.getByText("Обращение LC-2026-0042")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Не открывается переписка" })).toBeVisible();
+    const guestScroll = page.getByTestId("guest-support-scroll");
+    const initialScroll = await guestScroll.evaluate((node) => ({
+      top: node.scrollTop,
+      max: Math.max(0, node.scrollHeight - node.clientHeight),
+    }));
+    expect(initialScroll.max - initialScroll.top).toBeLessThanOrEqual(4);
     expect(createRequests).toBe(1);
     expect(page.url()).not.toContain(guestSecret);
     expect(

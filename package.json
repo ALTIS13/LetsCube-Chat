@@ -1,7 +1,7 @@
 {
   "name": "workspace",
   "version": "0.0.0",
-  "description": "LETSCUBE messenger workspace for cyber-arena operations.",
+  "description": "LETSCUBE secure communication workspace.",
   "author": "LETSCUBE",
   "packageManager": "pnpm@10.33.2",
   "license": "MIT",

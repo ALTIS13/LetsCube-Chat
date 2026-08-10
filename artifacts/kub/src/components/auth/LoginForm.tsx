@@ -160,7 +160,7 @@ export function LoginForm() {
           </div>
           <div className="text-center">
             <p className="text-sm text-[color:var(--kub-muted)]">
-              Панель связи киберарены
+              Защищённое пространство общения
             </p>
           </div>
         </div>

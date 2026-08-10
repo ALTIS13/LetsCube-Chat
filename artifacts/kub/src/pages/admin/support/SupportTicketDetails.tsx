@@ -129,6 +129,7 @@ export function SupportTicketDetails({
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <SupportConversation
+          conversationKey={ticket.id}
           messages={details.messages}
           canReply={canReply}
           replyAvailable={replyAvailable}

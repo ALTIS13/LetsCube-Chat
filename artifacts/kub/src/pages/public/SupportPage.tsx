@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { KubIcon } from "@/components/kub";
 import { PublicPageShell } from "./PublicPageShell";
 import { SupportRequestForm } from "./SupportRequestForm";
@@ -22,6 +22,7 @@ export function SupportPage() {
   const [restoring, setRestoring] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const scrollRootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -80,6 +81,14 @@ export function SupportPage() {
     return () => window.clearInterval(interval);
   }, [session, ticket?.id]);
 
+  useEffect(() => {
+    if (!ticket?.id) return;
+    const frame = window.requestAnimationFrame(() => {
+      scrollRootRef.current?.scrollTo({ top: 0, behavior: "auto" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [ticket?.id]);
+
   const createTicket = async (request: NormalizedSupportRequest) => {
     setSubmitting(true);
     setError("");
@@ -115,7 +124,7 @@ export function SupportPage() {
   }, [session]);
 
   return (
-    <PublicPageShell>
+    <PublicPageShell scrollRootRef={scrollRootRef}>
       <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
         <header className="mb-8 max-w-3xl">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--kub-pink)]">

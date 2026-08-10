@@ -167,7 +167,7 @@ function AuthCallback() {
             alt="Letscube"
           />
           <p className="text-sm text-[color:var(--kub-muted)]">
-            Панель связи киберарены
+            Защищённое пространство общения
           </p>
         </div>
         {recoveryMode ? (

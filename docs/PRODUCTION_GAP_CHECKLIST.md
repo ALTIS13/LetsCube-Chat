@@ -15,7 +15,7 @@ self-host cutover.
 
 ## Phone and auth
 
-- [ ] SMS provider selected.
+- [x] SMS provider selected: SMS.RU; activation and real delivery remain pending provider approval.
 - [ ] SMS provider configured in Supabase Auth.
 - [ ] Real phone OTP test completed.
 - [x] Password recovery checked after domain change.

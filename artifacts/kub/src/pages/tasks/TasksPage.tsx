@@ -349,8 +349,8 @@ export function TasksPage() {
         <div className="flex flex-1 items-center justify-center px-4">
           <KubEmptyState
             icon={<KubIcon name="shield" size={28} />}
-            title="Раздел задач доступен только сотрудникам клуба"
-            description="Если вам нужен доступ к задачам, обратитесь к администратору клуба."
+            title="Раздел задач доступен только сотрудникам локации"
+            description="Если вам нужен доступ к задачам, обратитесь к администратору локации."
             action={
               <KubButton variant="secondary" onClick={() => setLocation("/")}>
                 Вернуться к чатам
@@ -366,7 +366,7 @@ export function TasksPage() {
     <div className="flex flex-col h-[100dvh] bg-[var(--kub-bg)]">
       <KubHeader
         title="Задачи"
-        subtitle={canCreateTasks ? "Управление задачами клуба" : "Ваши задачи"}
+        subtitle={canCreateTasks ? "Управление задачами локации" : "Ваши задачи"}
         leading={
           <button
             type="button"

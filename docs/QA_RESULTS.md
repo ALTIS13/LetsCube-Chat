@@ -1455,3 +1455,38 @@ Recurring tasks roadmap note:
   mobile projects hit the existing long-bootstrap recovery screen only in the
   sequential matrix; isolated 390x844 and 412x915 production reruns both
   passed in 8.3-8.4 seconds.
+
+## 2026-08-10 - Neutral terminology, disabled SMS.RU foundation and support chat hardening
+
+- Replaced visible computer-club/cyber-arena wording in current application
+  surfaces with neutral LETSCUBE, organization and location terminology.
+  Legal references to ООО «КУБ» remain intentionally visible in the privacy
+  policy and public legal footer.
+- Added a provider-disabled SMS.RU source foundation. The OTP template is 46
+  characters with a hard 65-character guard. The adapter uses POST form data,
+  verifies the Supabase Standard Webhooks signature before authorization, and
+  cannot contact SMS.RU unless the trusted runtime explicitly enables delivery.
+- The proposal re-checks concurrent webhook IDs after claim locking and caps
+  authorized attempts across replacement claims at 5 per user/hour, 10 per
+  user/24 hours and 5 per target-phone HMAC/hour. These limits are not active
+  because the proposal remains unapplied.
+- Added the unapplied
+  `.migration-backup/supabase/migrations/20260810_smsru_phone_verification_foundation.sql`
+  proposal with rollout defaults disabled, private HMAC claim/idempotency
+  storage and service-only internal RPCs. No SQL, Auth hook, Edge Function or
+  real SMS delivery was applied in this stage.
+- Replaced unconditional support-chat scroll-to-bottom behavior with a shared
+  anchor. A conversation opens at the latest message; incoming messages follow
+  only while the reader is near the bottom or after their own reply. Readers
+  reviewing history keep their position and receive a compact «Новые
+  сообщения» action. Content and viewport resizes both re-anchor an active
+  bottom reader.
+- The public support shell now resets its own scroll root when a newly created
+  or restored ticket opens. Polling updates do not move the page itself.
+- Focused unit contracts passed 12/12. Support Playwright passed 30/30 at
+  3840x2160, 1920x1080, 1440x900, 390x844 and 412x915. The 412x915 operator
+  case was repeated three times after fixing an 8-pixel late-layout drift.
+- Authenticated smoke passed 5/5. Typecheck, production build, database type
+  drift, RLS smoke and `git diff --check` passed. The build retains existing
+  sourcemap/large-chunk warnings, and mutation/fixture-dependent RLS probes
+  remain explicitly skipped unless their opt-in environment is enabled.

@@ -56,6 +56,12 @@ test.describe("LETSCUBE operator support workspace", () => {
     await expect(page.getByText("Не могу войти после смены пароля.")).toBeVisible();
     await expect(page.getByText("История действий")).toBeVisible();
 
+    const initialScroll = await scroll.evaluate((node) => ({
+      top: node.scrollTop,
+      max: Math.max(0, node.scrollHeight - node.clientHeight),
+    }));
+    expect(initialScroll.max - initialScroll.top).toBeLessThanOrEqual(4);
+
     for (const action of ["Ответить", "Передать", "Вернуть в пул", "Передать старшему", "Настройки"]) {
       await expect(page.getByRole("button", { name: action, exact: true })).toBeVisible();
     }
@@ -113,17 +119,17 @@ async function mockSupportApi(page: Page, options: MockOptions) {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify([
-        {
-          id: "33333333-3333-4333-8333-333333333333",
+      body: JSON.stringify(
+        Array.from({ length: 36 }, (_, index) => ({
+          id: `33333333-3333-4333-8333-${String(index).padStart(12, "0")}`,
           ticket_id: ticketId,
           author_user_id: null,
           author_kind: "requester",
           source: "web",
-          body: "Не могу войти после смены пароля.",
+          body: index === 35 ? "Не могу войти после смены пароля." : `Сообщение истории ${index + 1}`,
           created_at: now,
-        },
-      ]),
+        })),
+      ),
     });
   });
 

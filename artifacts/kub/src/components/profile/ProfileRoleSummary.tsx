@@ -87,7 +87,7 @@ export function ProfileRoleSummary({ user, compact = false }: ProfileRoleSummary
             {getLocationRoleDisplay(primaryMembership.dynamicRole, primaryMembership.member.role)}
           </KubBadge>
         )}
-        {memberships.length > 1 && <KubBadge tone="muted" pill>+{clubCountLabel(memberships.length - 1)}</KubBadge>}
+        {memberships.length > 1 && <KubBadge tone="muted" pill>+{locationCountLabel(memberships.length - 1)}</KubBadge>}
       </div>
     );
   }
@@ -116,13 +116,13 @@ export function ProfileRoleSummary({ user, compact = false }: ProfileRoleSummary
           <p className="mt-1 text-xs text-[color:var(--kub-muted)]">Доступ: все технические разделы</p>
         )}
         {hasDynamicContent && globalRoles.some((role) => role.key === "owner") && (
-          <p className="mt-1 text-xs text-[color:var(--kub-muted)]">Доступ: все клубы</p>
+          <p className="mt-1 text-xs text-[color:var(--kub-muted)]">Доступ: все локации</p>
         )}
       </section>
 
       <section>
         <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-cyan)]">
-          Клубы
+          Локации
         </div>
         {hasLocationContent ? (
           <div className="space-y-1.5">
@@ -133,7 +133,7 @@ export function ProfileRoleSummary({ user, compact = false }: ProfileRoleSummary
               >
                 <div className="flex min-w-0 items-center justify-between gap-2">
                   <span className="truncate text-sm font-medium text-[color:var(--kub-text)]">
-                    {location?.name ?? "Клуб"}
+                    {location?.name ?? "Локация"}
                   </span>
                   <KubBadge tone={isStaffMembership(member.role, dynamicRole?.key) ? "cyan" : "pink"} pill>
                     {getLocationRoleDisplay(dynamicRole, member.role)}
@@ -152,12 +152,12 @@ export function ProfileRoleSummary({ user, compact = false }: ProfileRoleSummary
                 onClick={() => setShowAllClubs((value) => !value)}
                 className="text-xs font-semibold text-[color:var(--kub-cyan)] hover:underline"
               >
-                {showAllClubs ? "Свернуть клубы" : `Показать ещё ${clubCountLabel(memberships.length - 3)}`}
+                {showAllClubs ? "Свернуть локации" : `Показать ещё ${locationCountLabel(memberships.length - 3)}`}
               </button>
             )}
           </div>
         ) : (
-          <div className="text-sm text-[color:var(--kub-muted)]">Клубы не назначены</div>
+          <div className="text-sm text-[color:var(--kub-muted)]">Локации не назначены</div>
         )}
       </section>
     </div>
@@ -178,16 +178,16 @@ function roleTone(key: string): "pink" | "cyan" {
 }
 
 function getLocationRoleDisplay(role: DynamicRole | null | undefined, legacyRole: LocationRole): string {
-  return role ? getRoleLabel(role) : LOCATION_ROLE_LABEL[legacyRole] ?? "Участник клуба";
+  return role ? getRoleLabel(role) : LOCATION_ROLE_LABEL[legacyRole] ?? "Участник локации";
 }
 
 function isStaffMembership(legacyRole: LocationRole, dynamicRoleKey?: string): boolean {
   return legacyRole === "staff" || dynamicRoleKey === "location_staff";
 }
 
-function clubCountLabel(count: number): string {
+function locationCountLabel(count: number): string {
   const lastTwo = count % 100;
   const last = count % 10;
-  const noun = lastTwo >= 11 && lastTwo <= 14 ? "клубов" : last === 1 ? "клуб" : last >= 2 && last <= 4 ? "клуба" : "клубов";
+  const noun = lastTwo >= 11 && lastTwo <= 14 ? "локаций" : last === 1 ? "локация" : last >= 2 && last <= 4 ? "локации" : "локаций";
   return `${count} ${noun}`;
 }

@@ -1,18 +1,20 @@
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { Link } from "wouter";
 import { KubBrandLogo, KubIcon } from "@/components/kub";
 import { useTheme } from "@/hooks/useTheme";
 
 interface PublicPageShellProps {
   children: ReactNode;
+  scrollRootRef?: RefObject<HTMLDivElement | null>;
 }
 
-export function PublicPageShell({ children }: PublicPageShellProps) {
+export function PublicPageShell({ children, scrollRootRef }: PublicPageShellProps) {
   const { resolvedTheme } = useTheme();
   const logoTone = resolvedTheme === "light" ? "dark" : "light";
 
   return (
     <div
+      ref={scrollRootRef}
       data-testid="public-scroll-root"
       className="h-dvh overflow-x-hidden overflow-y-auto bg-[var(--kub-bg)] text-[color:var(--kub-text)]"
     >

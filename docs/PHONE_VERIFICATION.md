@@ -28,7 +28,19 @@ There is no “save without verification” path for changing a phone number.
 
 Use the [Supabase Send SMS Hook](https://supabase.com/docs/guides/auth/auth-hooks/send-sms-hook) with a trusted server-side LETSCUBE adapter. Supabase Auth must continue to generate and verify the OTP; the adapter only sends the generated code and must not expose or persist it in frontend-accessible storage.
 
-Preferred provider: [Yandex Cloud Notification Service SMS](https://yandex.cloud/ru/docs/notifications/concepts/sms). It supports Russian E.164 numbers and an individual registered sender. Production onboarding requires activating the service, creating an SMS channel and registering the sender name. SMSC.ru, SMS Aero and MTS Exolve can be supported through the same adapter contract if Yandex onboarding or delivery is unsuitable.
+Selected provider: [SMS.RU](https://sms.ru/api). The repository contains a provider-disabled server adapter and a schema proposal, but the provider is not connected to Supabase Auth and no real SMS has been sent. Production activation requires provider approval, an approved sender name, server-only `SMS_RU_API_ID`, `SEND_SMS_HOOK_SECRET` and `PHONE_CLAIM_HMAC_SECRET` secrets, followed by controlled physical delivery QA. The account login/password pair is not used by the runtime adapter.
+
+The exact production template is `LETSCUBE: код 123456. Никому его не сообщайте.`. It is 46 characters for a six-digit code and the adapter rejects any SMS longer than 65 characters before contacting the provider.
+
+The disabled schema proposal also keeps concurrent webhook retries idempotent and applies server-side cost/abuse ceilings across replacement claims: no more than 5 authorized attempts per user per hour, 10 per user per 24 hours, and 5 per target-phone HMAC per hour. These are foundation defaults to re-check against the approved provider contract before activation.
+
+Current implementation files:
+
+- `supabase/functions/auth-send-sms/` - signed Send SMS Hook and SMS.RU adapter;
+- `supabase/functions/phone-verification-gateway/` - authenticated HMAC claim gateway;
+- `.migration-backup/supabase/migrations/20260810_smsru_phone_verification_foundation.sql` - unapplied schema/RLS proposal with rollout flags disabled by default.
+
+Do not deploy/enable the Auth hook, set `SMS_DELIVERY_ENABLED=true`, enable the new-account cutoff or apply restrictive onboarding RLS until provider approval and backup/rehearsal are complete.
 
 Self-hosted Auth configuration belongs in server/Coolify secrets and the Auth container environment. Required configuration includes phone auth enablement and the Send SMS Hook URI/secret. Keep SMS autoconfirm disabled. Do not put provider keys or hook secrets in frontend env.
 

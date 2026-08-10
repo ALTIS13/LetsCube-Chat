@@ -455,7 +455,7 @@ export function buildCommandResults({
       resultType: "command",
       id: "open-tasks",
       title: "Открыть задачи",
-      subtitle: "Задачи клуба",
+      subtitle: "Задачи локации",
       source: "command",
       rank: 90,
     });

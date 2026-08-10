@@ -142,7 +142,7 @@ export function RegisterForm() {
               />
             </div>
             <p className="text-sm text-[color:var(--kub-muted)]">
-              Панель связи киберарены
+              Защищённое пространство общения
             </p>
           </div>
 

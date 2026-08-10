@@ -87,7 +87,7 @@ export function AdminLayout() {
           <div className="text-sm font-semibold flex items-center gap-2 text-[color:var(--kub-text)] truncate">
             Админ-панель
             <span className="hidden sm:inline text-[10px] uppercase tracking-[0.18em] text-[color:var(--kub-pink)] truncate">
-              LETSCUBE · Кибер-арена
+              LETSCUBE
             </span>
           </div>
           <div className="text-xs text-[color:var(--kub-muted)] truncate">

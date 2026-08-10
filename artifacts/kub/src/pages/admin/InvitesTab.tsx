@@ -246,7 +246,7 @@ export function InvitesTab() {
               Приглашения сотрудников
             </h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-[color:var(--kub-muted)]">
-              Создавайте коды или ссылки-приглашения с лимитом использований и заранее заданной ролью/клубом,
+              Создавайте коды или ссылки-приглашения с лимитом использований и заранее заданной ролью/локацией,
               чтобы не назначать работников вручную после регистрации.
             </p>
           </div>
@@ -326,10 +326,10 @@ export function InvitesTab() {
           </label>
           <label className="flex flex-col gap-1.5">
             <span className="text-xs font-medium uppercase tracking-wide text-[color:var(--kub-muted)]">
-              Клуб
+              Локация
             </span>
             <select className={selectClassName} value={locationId} onChange={(event) => setLocationId(event.target.value)}>
-              <option value="">Без клуба</option>
+              <option value="">Без локации</option>
               {routing.locations.map((location) => (
                 <option key={location.id} value={location.id}>
                   {location.name}
@@ -339,7 +339,7 @@ export function InvitesTab() {
           </label>
           <label className="flex flex-col gap-1.5">
             <span className="text-xs font-medium uppercase tracking-wide text-[color:var(--kub-muted)]">
-              Роль в клубе
+              Роль в локации
             </span>
             <select
               className={selectClassName}
@@ -467,8 +467,8 @@ function InviteRow({
           <div className="text-sm font-semibold text-[color:var(--kub-text)]">{invite.label}</div>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[color:var(--kub-muted)]">
             <span>Глобальная: {invite.global_role_name ?? "нет"}</span>
-            <span>Клуб: {invite.location_name ?? "нет"}</span>
-            <span>Роль клуба: {invite.location_role_name ?? "нет"}</span>
+            <span>Локация: {invite.location_name ?? "нет"}</span>
+            <span>Роль в локации: {invite.location_role_name ?? "нет"}</span>
             {invite.primary_admin_name && <span>Админ: {invite.primary_admin_name}</span>}
           </div>
         </div>
@@ -535,8 +535,8 @@ function mapInviteError(error: unknown): string {
   if (text.includes("invite_label_invalid")) return "Название инвайта должно быть от 2 до 120 символов.";
   if (text.includes("invite_max_uses_invalid")) return "Лимит использований должен быть от 1 до 1000.";
   if (text.includes("invite_global_role_invalid")) return "Выбранная глобальная роль недоступна.";
-  if (text.includes("invite_location_invalid")) return "Выбранный клуб недоступен.";
-  if (text.includes("invite_location_role_invalid")) return "Выбранная роль клуба недоступна.";
+  if (text.includes("invite_location_invalid")) return "Выбранная локация недоступна.";
+  if (text.includes("invite_location_role_invalid")) return "Выбранная роль в локации недоступна.";
   if (text.includes("invite_critical_role_forbidden")) return "Критические роли может выдавать только тех. администратор.";
   if (text.includes("permission") || text.includes("42501")) return "Недостаточно прав для управления инвайтами.";
   return mapRolesPermissionsError(error, "Не удалось выполнить действие с инвайтом.");

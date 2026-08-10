@@ -246,7 +246,7 @@ export function LocationsTab() {
               {routingProbeEnabled ? routing.error ?? LOCATION_ROUTING_REQUIRED_MESSAGE : LOCATION_ROUTING_REQUIRED_MESSAGE}
             </p>
             <p className="mt-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
-              Существующее создание и обновление задач остаётся доступным без маршрутизации по клубам.
+              Существующее создание и обновление задач остаётся доступным без маршрутизации по локациям.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <KubButton
@@ -283,7 +283,7 @@ export function LocationsTab() {
         <div>
           <h2 className="text-lg font-bold text-[color:var(--kub-text)]">Локации</h2>
           <p className="text-sm text-[color:var(--kub-muted)]">
-            Настройте клубы, администраторов локаций и работников перед recurring tasks.
+            Настройте локации, их администраторов и работников перед созданием повторяющихся задач.
           </p>
         </div>
         <KubButton
@@ -435,7 +435,7 @@ export function LocationsTab() {
                 <div>
                   <h3 className="text-sm font-semibold text-[color:var(--kub-text)]">Назначения</h3>
                   <p className="text-xs text-[color:var(--kub-muted)]">
-                    Работнику можно назначить основного администратора клуба.
+                    Работнику можно назначить основного администратора локации.
                   </p>
                 </div>
                 <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_170px_minmax(0,1fr)_auto]">

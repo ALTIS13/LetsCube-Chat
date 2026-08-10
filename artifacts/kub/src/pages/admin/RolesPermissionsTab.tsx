@@ -454,7 +454,7 @@ export function RolesPermissionsTab() {
             Что такое роль
           </div>
           <p className="text-xs leading-relaxed text-[color:var(--kub-muted)]">
-            Это понятное название доступа: например, администратор клуба, работник клуба или тех. администратор.
+            Это понятное название доступа: например, администратор локации, сотрудник локации или тех. администратор.
           </p>
         </KubPanel>
         <KubPanel className="space-y-1.5">

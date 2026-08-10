@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { KubButton, KubIcon } from "@/components/kub";
 import type { SupportTicketMessage } from "@/lib/support/operatorApi";
+import { useConversationScroll } from "@/lib/support/useConversationScroll";
 import { cn } from "@/lib/utils";
 
 interface SupportConversationProps {
+  conversationKey: string;
   messages: SupportTicketMessage[];
   canReply: boolean;
   replyAvailable: boolean;
@@ -12,6 +14,7 @@ interface SupportConversationProps {
 }
 
 export function SupportConversation({
+  conversationKey,
   messages,
   canReply,
   replyAvailable,
@@ -19,11 +22,13 @@ export function SupportConversation({
   onReply,
 }: SupportConversationProps) {
   const [body, setBody] = useState("");
-  const endRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length]);
+  const lastMessage = messages.at(-1) ?? null;
+  const { scrollRef, contentRef, hasNewMessages, handleScroll, scrollToLatest } = useConversationScroll({
+    conversationKey,
+    messageCount: messages.length,
+    lastMessageId: lastMessage?.id ?? null,
+    lastMessageOwned: lastMessage?.authorKind === "operator",
+  });
 
   const submit = async () => {
     const value = body.trim();
@@ -34,10 +39,14 @@ export function SupportConversation({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col" aria-label="Переписка по обращению">
-      <div
-        data-testid="support-ticket-scroll"
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-4 sm:px-5"
-      >
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          data-testid="support-ticket-scroll"
+          className="h-full min-h-0 overflow-y-auto overscroll-contain px-3 py-4 sm:px-5"
+        >
+          <div ref={contentRef} className="space-y-3">
         {messages.length === 0 ? (
           <div className="flex min-h-48 flex-col items-center justify-center text-center">
             <KubIcon name="chatBubble" size={28} tone="muted" />
@@ -80,7 +89,20 @@ export function SupportConversation({
             );
           })
         )}
-        <div ref={endRef} />
+          </div>
+        </div>
+        {hasNewMessages ? (
+          <KubButton
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 shadow-lg"
+            leftIcon={<KubIcon name="chevronDown" size={14} />}
+            onClick={() => scrollToLatest()}
+          >
+            Новые сообщения
+          </KubButton>
+        ) : null}
       </div>
 
       <div className="flex-shrink-0 border-t border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-3">

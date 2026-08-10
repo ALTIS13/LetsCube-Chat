@@ -3,6 +3,7 @@ import { KubBadge, KubButton, KubIcon, KubPanel } from "@/components/kub";
 import { SUPPORT_CATEGORY_LABELS, type GuestSupportSession, type PublicSupportTicket } from "@/lib/support/types";
 import { getSupportErrorMessage } from "@/lib/support/errors";
 import { sendGuestSupportMessage } from "@/lib/support/supportGateway";
+import { useConversationScroll } from "@/lib/support/useConversationScroll";
 
 interface GuestSupportChatProps {
   ticket: PublicSupportTicket;
@@ -39,6 +40,13 @@ export function GuestSupportChat({
       }).format(new Date(session.idleExpiresAt)),
     [session.idleExpiresAt],
   );
+  const lastMessage = ticket.messages.at(-1) ?? null;
+  const { scrollRef, contentRef, hasNewMessages, handleScroll, scrollToLatest } = useConversationScroll({
+    conversationKey: ticket.id,
+    messageCount: ticket.messages.length,
+    lastMessageId: lastMessage?.id ?? null,
+    lastMessageOwned: lastMessage?.authorType === "guest" || lastMessage?.authorType === "user",
+  });
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -78,7 +86,7 @@ export function GuestSupportChat({
   };
 
   return (
-    <KubPanel className="flex min-h-[620px] w-full flex-col overflow-hidden p-0" data-testid="guest-support-chat">
+    <KubPanel className="flex h-[clamp(28rem,72dvh,44rem)] min-h-0 w-full min-w-0 flex-col overflow-hidden p-0" data-testid="guest-support-chat">
       <header className="border-b border-[color:var(--kub-border-color)] px-4 py-4 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -98,10 +106,15 @@ export function GuestSupportChat({
         </div>
       </header>
 
-      <div
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-[var(--kub-bg)]/45 px-4 py-5 sm:px-6"
-        aria-live="polite"
-      >
+      <div className="relative min-h-0 flex-1 bg-[var(--kub-bg)]/45">
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          data-testid="guest-support-scroll"
+          className="h-full min-h-0 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6"
+          aria-live="polite"
+        >
+          <div ref={contentRef} className="space-y-3">
         {ticket.messages.map((item) => {
           const own = item.authorType === "guest" || item.authorType === "user";
           const system = item.authorType === "system";
@@ -131,6 +144,20 @@ export function GuestSupportChat({
             </div>
           );
         })}
+          </div>
+        </div>
+        {hasNewMessages ? (
+          <KubButton
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 shadow-lg"
+            leftIcon={<KubIcon name="chevronDown" size={14} />}
+            onClick={() => scrollToLatest()}
+          >
+            Новые сообщения
+          </KubButton>
+        ) : null}
       </div>
 
       <form onSubmit={submit} className="border-t border-[color:var(--kub-border-color)] p-3 sm:p-4">

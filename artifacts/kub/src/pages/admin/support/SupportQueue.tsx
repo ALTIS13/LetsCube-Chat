@@ -36,7 +36,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   messaging: "Сообщения",
   media: "Медиа",
   tasks: "Задачи",
-  club: "Клуб",
+  club: "Локация",
   privacy: "Персональные данные",
   abuse: "Нарушение",
   other: "Другое",
