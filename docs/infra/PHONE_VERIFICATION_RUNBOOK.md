@@ -32,6 +32,9 @@ marked verified until Supabase Auth OTP verification succeeds.
    only `POST /apiSms/create` with one immediate `digit` message and must never
    modify shared account senders, bases, blacklists, schedules or messages
    belonging to other LETSCUBE services.
+10. For physical QA, keep the global policy disabled and add only the test user
+    ID to `phone_verification_pilot_users`. Remove or disable that row after QA
+    if the production rollout is not continuing.
 
 ## Required QA
 

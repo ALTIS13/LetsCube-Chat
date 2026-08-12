@@ -25,6 +25,15 @@ insert into public.phone_verification_policy (singleton, enabled, enforce_data_a
 values (true, false, false)
 on conflict (singleton) do nothing;
 
+create table if not exists public.phone_verification_pilot_users (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  enabled boolean not null default true,
+  expires_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (expires_at is null or expires_at > created_at)
+);
+
 create table if not exists public.phone_verification_claims (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -65,10 +74,12 @@ create index if not exists phone_verification_sms_events_phone_created_idx
   on public.phone_verification_sms_events (phone_hmac, created_at desc);
 
 alter table public.phone_verification_policy enable row level security;
+alter table public.phone_verification_pilot_users enable row level security;
 alter table public.phone_verification_claims enable row level security;
 alter table public.phone_verification_sms_events enable row level security;
 
 revoke all on table public.phone_verification_policy from public, anon, authenticated;
+revoke all on table public.phone_verification_pilot_users from public, anon, authenticated;
 revoke all on table public.phone_verification_claims from public, anon, authenticated;
 revoke all on table public.phone_verification_sms_events from public, anon, authenticated;
 
@@ -100,11 +111,18 @@ as $function$
 declare
   v_enabled boolean := false;
 begin
-  select policy.enabled into v_enabled
+  if p_user_id is null or p_phone_hmac !~ '^[0-9a-f]{64}$' then return 'invalid'; end if;
+
+  select coalesce(policy.enabled, false) or exists (
+    select 1
+    from public.phone_verification_pilot_users pilot
+    where pilot.user_id = p_user_id
+      and pilot.enabled
+      and (pilot.expires_at is null or pilot.expires_at > now())
+  ) into v_enabled
   from public.phone_verification_policy policy
   where policy.singleton;
   if not coalesce(v_enabled, false) then return 'disabled'; end if;
-  if p_user_id is null or p_phone_hmac !~ '^[0-9a-f]{64}$' then return 'invalid'; end if;
 
   update public.phone_verification_claims
   set status = 'expired', updated_at = now()
@@ -272,6 +290,8 @@ grant execute on function public.profile_phone_set_discoverable(boolean) to auth
 
 comment on table public.phone_verification_claims is
   'Server-only HMAC phone claims. Raw phone numbers and OTP values are never stored here.';
+comment on table public.phone_verification_pilot_users is
+  'Server-managed allowlist for controlled SMS verification pilots while global delivery remains disabled.';
 comment on table public.phone_verification_sms_events is
   'Server-only idempotency and safe result categories for Send SMS Hook events.';
 

@@ -167,3 +167,12 @@ test("p1sms timeout is ambiguous and is never retried", async () => {
   assert.deepEqual(result, { ok: false, category: "timeout_unknown" });
   assert.equal(calls, 1);
 });
+
+test("p1sms request timeout stays inside the Supabase HTTP hook budget", async () => {
+  const source = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("../../supabase/functions/auth-send-sms/p1sms.mjs", import.meta.url), "utf8"),
+  );
+  const timeout = source.match(/AbortSignal\.timeout\(([\d_]+)\)/u);
+  assert.ok(timeout, "adapter must bound the provider request");
+  assert.ok(Number(timeout[1].replaceAll("_", "")) <= 4_000);
+});

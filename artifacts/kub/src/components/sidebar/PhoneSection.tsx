@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import type { ProfileContact } from "@/types/database";
 import { mapPgError } from "@/lib/errors";
 
-const RESEND_WAIT_MS = 45_000;
+const RESEND_WAIT_MS = 60_000;
 const PHONE_FORMAT_HINT = "Введите номер в международном формате, например +79991234567.";
 const SMS_PROVIDER_MISSING_MESSAGE = "SMS-провайдер не настроен. Обратитесь к администратору.";
 
@@ -115,16 +115,36 @@ export function PhoneSection() {
     if (data) setContact(data);
   };
 
-  const sendCode = async () => {
+  const cancelPhoneClaim = async () => {
+    await supabase.functions.invoke("phone-verification-gateway", {
+      body: { action: "cancel" },
+    });
+  };
+
+  const sendCode = async (resend = false) => {
     reset();
     if (!isValid || !normalised) {
       setError(PHONE_FORMAT_HINT);
       return;
     }
     setBusy("send");
-    const { error: err } = await supabase.auth.updateUser({ phone: normalised });
+    const { data: claimData, error: claimError } = await supabase.functions.invoke(
+      "phone-verification-gateway",
+      { body: { action: "begin", phone: normalised } },
+    );
+    const claimCreated = !claimError && claimData?.ok === true;
+    if (!claimCreated) {
+      setBusy(null);
+      setStage("idle");
+      setError(humanisePhoneGatewayError(claimData?.error));
+      return;
+    }
+    const { error: err } = resend
+      ? await supabase.auth.resend({ phone: normalised, type: "phone_change" })
+      : await supabase.auth.updateUser({ phone: normalised });
     setBusy(null);
     if (err) {
+      if (claimCreated) await cancelPhoneClaim();
       if (looksLikeProviderUnavailable(err.message)) {
         setStage("unsupported");
         setCode("");
@@ -167,6 +187,7 @@ export function PhoneSection() {
       setError(humanise(rpcErr.message));
       return;
     }
+    await cancelPhoneClaim();
     await refreshSelf();
     setBusy(null);
     setStage("idle");
@@ -174,6 +195,14 @@ export function PhoneSection() {
     setResendAvailableAt(null);
     editingRef.current = false;
     setInfo("Телефон подтверждён.");
+  };
+
+  const cancelCodeEntry = async () => {
+    await cancelPhoneClaim();
+    setStage("idle");
+    setCode("");
+    setResendAvailableAt(null);
+    reset();
   };
 
   const removePhone = async () => {
@@ -290,14 +319,14 @@ export function PhoneSection() {
             <KubButton
               variant="ghost"
               size="sm"
-              onClick={() => { setStage("idle"); setCode(""); setResendAvailableAt(null); reset(); }}
+              onClick={cancelCodeEntry}
             >
               Отмена
             </KubButton>
             <KubButton
               variant="secondary"
               size="sm"
-              onClick={sendCode}
+              onClick={() => sendCode(true)}
               loading={busy === "send"}
               disabled={resendSeconds > 0 || !dirty || !isValid}
             >
@@ -306,9 +335,9 @@ export function PhoneSection() {
           </>
         ) : stage === "unsupported" ? (
           <KubButton
-            variant="secondary"
-            size="sm"
-            onClick={sendCode}
+              variant="secondary"
+              size="sm"
+              onClick={() => sendCode(false)}
             loading={busy === "send"}
             disabled={!dirty || !isValid}
           >
@@ -320,7 +349,7 @@ export function PhoneSection() {
               variant="primary"
               size="sm"
               leftIcon={<KubIcon name="check" size={13} />}
-              onClick={sendCode}
+              onClick={() => sendCode(false)}
               loading={busy === "send"}
               disabled={!dirty || !isValid}
             >
@@ -386,4 +415,18 @@ function looksLikeProviderUnavailable(msg: string): boolean {
 // остальными вызовами и на случай добавления специфики страницы.
 function humanise(msg: string): string {
   return mapPgError(msg);
+}
+
+function humanisePhoneGatewayError(code: unknown): string {
+  switch (code) {
+    case "disabled":
+      return "SMS-подтверждение пока недоступно для этого аккаунта.";
+    case "phone_in_use":
+      return "Этот номер уже привязан к другому аккаунту.";
+    case "invalid_phone":
+    case "invalid":
+      return PHONE_FORMAT_HINT;
+    default:
+      return "Не удалось подготовить отправку кода. Попробуйте позже.";
+  }
 }

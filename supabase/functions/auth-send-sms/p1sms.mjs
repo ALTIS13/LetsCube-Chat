@@ -65,7 +65,7 @@ export async function sendP1Sms(input, fetchImpl = fetch) {
       headers: request.headers,
       body: request.body,
       redirect: "error",
-      signal: AbortSignal.timeout(8_000),
+      signal: AbortSignal.timeout(3_500),
     });
     if (!response.ok) {
       if (response.status === 429) return { ok: false, category: "rate_limited" };

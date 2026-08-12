@@ -28,7 +28,10 @@ Deno.serve(async (request: Request) => {
   const publicKey = Deno.env.get("SUPABASE_ANON_KEY");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const hmacSecret = Deno.env.get("PHONE_CLAIM_HMAC_SECRET");
-  if (!token || !supabaseUrl || !publicKey || !serviceRoleKey || !hmacSecret) {
+  if (!token) {
+    return corsResponse(request, { ok: false, error: "unauthorized" }, 401);
+  }
+  if (!supabaseUrl || !publicKey || !serviceRoleKey || !hmacSecret) {
     return corsResponse(request, { ok: false, error: "not_configured" }, 503);
   }
 
@@ -65,6 +68,22 @@ Deno.serve(async (request: Request) => {
 
   const phone = normalizeE164(body.phone);
   if (!phone) return corsResponse(request, { ok: false, error: "invalid_phone" }, 400);
+
+  const existingPhone = await admin
+    .from("profile_contacts")
+    .select("user_id")
+    .eq("phone", phone)
+    .eq("phone_verified", true)
+    .neq("user_id", authData.user.id)
+    .limit(1)
+    .maybeSingle();
+  if (existingPhone.error) {
+    return corsResponse(request, { ok: false, error: "unavailable" }, 503);
+  }
+  if (existingPhone.data) {
+    return corsResponse(request, { ok: false, error: "phone_in_use" }, 409);
+  }
+
   const phoneHmac = await hmacSha256(phone, hmacSecret);
   const result = await admin.rpc("phone_verification_claim_begin_internal", {
     p_user_id: authData.user.id,

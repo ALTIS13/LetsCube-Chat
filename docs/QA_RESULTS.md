@@ -1524,3 +1524,33 @@ Recurring tasks roadmap note:
   automatic npm dependency resolution typechecked the Edge Function
   entrypoint successfully; Supabase CLI 2.98.2 remains available for the later
   controlled deployment stage.
+
+## 2026-08-12 - Controlled p1sms phone verification pilot
+
+- Created a current production database/configuration backup under the
+  root-only server backup directory and verified its `pg_restore` inventory.
+- Rehearsed the SMS migration inside a transaction with `ROLLBACK`, then
+  applied the reviewed schema. Global SMS policy, account cutoff and
+  data-access enforcement remain disabled.
+- Added one expiring server-managed pilot allowlist entry. No email, phone,
+  provider key, OTP or user identifier is stored in Git or documentation.
+- Deployed the signed Auth Send SMS Hook and authenticated phone claim gateway.
+  Auth and Edge Runtime are healthy. A signed synthetic hook request reached
+  the claim gate and was rejected with `claim_required`; it did not contact
+  p1sms or send an SMS.
+- The settings flow now creates an HMAC claim before both initial send and
+  resend, uses Supabase Auth `phone_change` OTP verification, cancels failed or
+  abandoned claims, and mirrors verified state only through
+  `profile_phone_mark_verified()` after Auth confirmation.
+- A rollback-only live database smoke confirmed: pilot claim `created`,
+  non-pilot claim `disabled`, zero claims after rollback, and no `anon` or
+  `authenticated` access to pilot/claim tables or internal RPCs.
+- Focused source contracts pass 16/16. Targeted authenticated Playwright passes
+  all five required desktop/mobile projects. The only remaining production QA
+  is the pilot user's manual request and entry of a real six-digit SMS code.
+- KUB typecheck, production build, database type drift, authenticated
+  multi-account RLS smoke, production authenticated smoke (`5/5`) and
+  `git diff --check` pass. The build retains its existing sourcemap and large
+  chunk warnings. An initial smoke without an explicit LETSCUBE base URL hit an
+  unrelated local service on port 5173 and was discarded; the corrected run
+  targeted `https://app.letscube.ru`.

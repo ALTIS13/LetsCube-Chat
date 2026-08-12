@@ -69,11 +69,22 @@ test.describe("LETSCUBE push and phone production foundation", () => {
     });
     test.skip(!role, "QA credentials or auth state are not configured");
 
+    const phoneFlowCalls: string[] = [];
+    await page.route("**/functions/v1/phone-verification-gateway", async (route) => {
+      const body = route.request().postDataJSON() as { action?: string };
+      phoneFlowCalls.push(`gateway:${body.action ?? "unknown"}`);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true }),
+      });
+    });
     await page.route("**/auth/v1/user", async (route) => {
       if (route.request().method() !== "PUT") {
         await route.continue();
         return;
       }
+      phoneFlowCalls.push("auth:update-phone");
       await route.fulfill({
         status: 500,
         contentType: "application/json",
@@ -99,6 +110,11 @@ test.describe("LETSCUBE push and phone production foundation", () => {
     await expect(page.getByText("SMS-провайдер не настроен. Обратитесь к администратору.")).toBeVisible();
     await expect(page.getByText(/Twilio|account SID|missing Twilio/i)).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Сохранить без/ })).toHaveCount(0);
+    expect(phoneFlowCalls.slice(0, 3)).toEqual([
+      "gateway:begin",
+      "auth:update-phone",
+      "gateway:cancel",
+    ]);
   });
 
   test("profile usernames reserve admin-looking handles for real admins", async () => {
