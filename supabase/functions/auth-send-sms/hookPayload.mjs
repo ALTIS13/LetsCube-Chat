@@ -1,6 +1,6 @@
 export function readSendSmsDestination(user, sms) {
   if (sms && typeof sms === "object" && Object.hasOwn(sms, "phone")) {
-    return readE164(sms.phone);
+    return readGoTruePhone(sms.phone);
   }
   if (!user || typeof user !== "object") return null;
 
@@ -8,6 +8,12 @@ export function readSendSmsDestination(user, sms) {
     return readE164(user.new_phone);
   }
   return readE164(user.phone);
+}
+
+function readGoTruePhone(value) {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (/^[1-9]\d{7,14}$/u.test(text)) return `+${text}`;
+  return readE164(text);
 }
 
 function readE164(value) {

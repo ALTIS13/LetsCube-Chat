@@ -1574,3 +1574,9 @@ Recurring tasks roadmap note:
   claim gate and returned the expected `403 claim_required`. It did not call
   p1sms: SMS events and active claims remained zero, the single expiring pilot
   remained active, and global policy/enforcement remained disabled.
+- A second manual attempt exposed a narrower format mismatch: GoTrue validates
+  the submitted E.164 number and removes its leading `+` before constructing
+  `sms.phone`. The claim was cancelled with `send_count = 0` and no SMS event,
+  proving that neither the provider nor its key was involved. The regression
+  fixture now uses the exact digits-only GoTrue payload, and the hook restores
+  canonical `+E.164` before claim HMAC and p1sms correlation.

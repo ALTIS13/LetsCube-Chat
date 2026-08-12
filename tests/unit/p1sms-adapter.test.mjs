@@ -65,7 +65,7 @@ test("phone-change delivery uses the explicit GoTrue sms.phone destination", () 
   assert.equal(
     readSendSmsDestination(
       { phone: "+79990000001", new_phone: "+79990000002" },
-      { phone: "+79990000003" },
+      { phone: "79990000003" },
     ),
     "+79990000003",
   );

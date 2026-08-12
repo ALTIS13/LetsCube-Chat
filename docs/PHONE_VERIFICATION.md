@@ -27,8 +27,10 @@ There is no “save without verification” path for changing a phone number.
 - One expiring server-side pilot allowlist entry is active for physical OTP QA.
 - No SMS was sent during deployment or automated validation.
 - The hook reads the requested phone-change destination from `sms.phone`, which
-  is the payload produced by the deployed GoTrue `v2.189.0`. A guarded
-  `user.new_phone` / `user.phone` fallback is retained only for older payloads.
+  is the payload produced by the deployed GoTrue `v2.189.0`. GoTrue removes the
+  leading `+` during E.164 validation, so the hook restores it before HMAC and
+  provider checks. A guarded `user.new_phone` / `user.phone` fallback is
+  retained only for older payloads.
 
 ## Recommended production delivery path
 
