@@ -1,4 +1,7 @@
-export function readSendSmsDestination(user) {
+export function readSendSmsDestination(user, sms) {
+  if (sms && typeof sms === "object" && Object.hasOwn(sms, "phone")) {
+    return readE164(sms.phone);
+  }
   if (!user || typeof user !== "object") return null;
 
   if (Object.hasOwn(user, "new_phone")) {

@@ -56,6 +56,7 @@ test("Send SMS hook remains fail-closed and verifies Standard Webhooks first", a
   assert.match(source, /P1SMS_API_KEY/u);
   assert.match(source, /sendP1Sms/u);
   assert.match(source, /readSendSmsDestination/u);
+  assert.match(source, /readSendSmsDestination\(event\.user, event\.sms\)/u);
   assert.doesNotMatch(source, /SMS_RU_API_ID|sendSmsRu|apiUsers|apiSenders|getSms|reject/u);
   assert.doesNotMatch(source, /console\.(?:log|debug)\(/u);
 });

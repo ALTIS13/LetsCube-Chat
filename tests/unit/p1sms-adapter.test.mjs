@@ -61,7 +61,21 @@ test("p1sms request rejects destinations outside the documented Russian 11-digit
   );
 });
 
-test("phone-change delivery uses new_phone and never falls back when it is malformed", () => {
+test("phone-change delivery uses the explicit GoTrue sms.phone destination", () => {
+  assert.equal(
+    readSendSmsDestination(
+      { phone: "+79990000001", new_phone: "+79990000002" },
+      { phone: "+79990000003" },
+    ),
+    "+79990000003",
+  );
+  assert.equal(
+    readSendSmsDestination({ phone: "+79990000001" }, { phone: "invalid" }),
+    null,
+  );
+});
+
+test("legacy hook payload fallback prefers new_phone and rejects malformed destinations", () => {
   assert.equal(
     readSendSmsDestination({ phone: "+79990000001", new_phone: "+79990000002" }),
     "+79990000002",

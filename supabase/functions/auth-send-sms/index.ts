@@ -7,7 +7,7 @@ const MAX_BODY_BYTES = 12_000;
 
 type SendSmsEvent = {
   user?: { id?: unknown; phone?: unknown; new_phone?: unknown };
-  sms?: { otp?: unknown };
+  sms?: { otp?: unknown; phone?: unknown };
 };
 
 Deno.serve(async (request: Request) => {
@@ -30,7 +30,7 @@ Deno.serve(async (request: Request) => {
   }
 
   const userId = readUuid(event.user?.id);
-  const phone = readSendSmsDestination(event.user);
+  const phone = readSendSmsDestination(event.user, event.sms);
   const otp = readOtp(event.sms?.otp);
   const webhookId = request.headers.get("webhook-id")?.trim() ?? "";
   if (!userId || !phone || !otp || !webhookId || webhookId.length > 200) {

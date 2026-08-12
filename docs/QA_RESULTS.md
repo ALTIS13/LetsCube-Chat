@@ -1554,3 +1554,23 @@ Recurring tasks roadmap note:
   chunk warnings. An initial smoke without an explicit LETSCUBE base URL hit an
   unrelated local service on port 5173 and was discarded; the corrected run
   targeted `https://app.letscube.ru`.
+
+## 2026-08-12 - GoTrue Send SMS hook destination compatibility
+
+- The first manual pilot request failed before contacting p1sms. Auth reported
+  `Invalid payload sent to hook`; the live claim remained cancelled with zero
+  sends and the SMS event table remained empty.
+- Exact deployed GoTrue `v2.189.0` source inspection showed that phone-change
+  hooks place the requested destination in `sms.phone`. The hook previously
+  inspected only `user.new_phone` / `user.phone`, so it rejected a valid signed
+  payload as malformed.
+- Added a regression test that failed with the old parser, then updated the
+  narrow payload adapter to prefer `sms.phone` while keeping a fail-closed
+  legacy fallback. Invalid explicit destinations never fall back to another
+  number.
+- The corrected hook was deployed after a root-only server backup. Local and
+  deployed SHA-256 hashes match, and Edge Runtime is healthy.
+- A signed synthetic request using the real `sms.phone` shape reached the HMAC
+  claim gate and returned the expected `403 claim_required`. It did not call
+  p1sms: SMS events and active claims remained zero, the single expiring pilot
+  remained active, and global policy/enforcement remained disabled.
