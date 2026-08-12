@@ -1,11 +1,12 @@
 import { createClient } from "npm:@supabase/supabase-js@2.105.1";
 import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
-import { sendSmsRu } from "./smsRu.mjs";
+import { readSendSmsDestination } from "./hookPayload.mjs";
+import { sendP1Sms } from "./p1sms.mjs";
 
 const MAX_BODY_BYTES = 12_000;
 
 type SendSmsEvent = {
-  user?: { id?: unknown; phone?: unknown };
+  user?: { id?: unknown; phone?: unknown; new_phone?: unknown };
   sms?: { otp?: unknown };
 };
 
@@ -29,15 +30,15 @@ Deno.serve(async (request: Request) => {
   }
 
   const userId = readUuid(event.user?.id);
-  const phone = readE164(event.user?.phone);
+  const phone = readSendSmsDestination(event.user);
   const otp = readOtp(event.sms?.otp);
   const webhookId = request.headers.get("webhook-id")?.trim() ?? "";
   if (!userId || !phone || !otp || !webhookId || webhookId.length > 200) {
     return safeError(400, "invalid_request");
   }
 
-  // This repository stage is intentionally fail-closed. Merely deploying the
-  // function cannot contact SMS.RU until the provider approval gate is opened.
+  // Merely deploying the function cannot contact p1sms until the separate
+  // delivery gate is opened after controlled physical QA.
   if (Deno.env.get("SMS_DELIVERY_ENABLED") !== "true") {
     return safeError(503, "delivery_disabled");
   }
@@ -45,8 +46,8 @@ Deno.serve(async (request: Request) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const claimHmacSecret = Deno.env.get("PHONE_CLAIM_HMAC_SECRET");
-  const apiId = Deno.env.get("SMS_RU_API_ID");
-  if (!supabaseUrl || !serviceRoleKey || !claimHmacSecret || !apiId) {
+  const p1SmsApiKey = Deno.env.get("P1SMS_API_KEY");
+  if (!supabaseUrl || !serviceRoleKey || !claimHmacSecret || !p1SmsApiKey) {
     return safeError(503, "not_configured");
   }
 
@@ -60,15 +61,17 @@ Deno.serve(async (request: Request) => {
     p_webhook_id: webhookId,
   });
   if (authorization.error) return safeError(503, "claim_check_failed");
-  if (authorization.data === "duplicate") return Response.json({}, { status: 200 });
+  if (authorization.data === "duplicate_accepted") return Response.json({}, { status: 200 });
+  if (authorization.data === "duplicate_unconfirmed") {
+    return safeError(503, "delivery_unconfirmed");
+  }
   if (authorization.data !== "authorized") return safeError(403, "claim_required");
 
-  const result = await sendSmsRu({
+  const result = await sendP1Sms({
     enabled: true,
-    apiId,
+    apiKey: p1SmsApiKey,
     phone,
     otp,
-    sender: Deno.env.get("SMS_RU_SENDER_APPROVED") === "true" ? "LETSCUBE" : undefined,
   });
 
   await admin.rpc("phone_verification_sms_event_finish", {
@@ -89,11 +92,6 @@ function readUuid(value: unknown): string | null {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(text)
     ? text
     : null;
-}
-
-function readE164(value: unknown): string | null {
-  const text = typeof value === "string" ? value.trim() : "";
-  return /^\+\d{8,15}$/u.test(text) ? text : null;
 }
 
 function readOtp(value: unknown): string | null {

@@ -1490,3 +1490,37 @@ Recurring tasks roadmap note:
   drift, RLS smoke and `git diff --check` passed. The build retains existing
   sourcemap/large-chunk warnings, and mutation/fixture-dependent RLS probes
   remain explicitly skipped unless their opt-in environment is enabled.
+
+## 2026-08-12 - Provider-disabled p1sms adapter hardening
+
+- Replaced the inactive SMS.RU transport source with a narrow p1sms adapter.
+  Supabase Auth still generates and verifies the OTP; the adapter only submits
+  one immediate `digit` message to `POST /apiSms/create`.
+- The shared LETSCUBE p1sms account is protected by a fixed endpoint, one-item
+  request, `letscube-otp` tag, blocked redirects and source guards forbidding
+  account, sender, history, scheduling, reject, phone-base and blacklist APIs.
+- Added strict response correlation: exactly one positive provider message ID,
+  the expected destination, a bounded response body and an accepted status are
+  required. Raw provider responses never leave the adapter.
+- Added `phone_change` destination handling that prefers valid `user.new_phone`
+  and refuses a malformed new number instead of falling back to the old one.
+- Added `.ops-private/` to the tracked ignore policy. The p1sms key remains only
+  in local private storage; its value was not printed, copied to documentation
+  or added to Git.
+- Delivery remains disabled. No Edge Function, Auth hook, SQL, provider secret
+  or production configuration was changed, and no real SMS was sent.
+- Focused p1sms and hook contracts passed 14/14. `git diff --check`, KUB
+  typecheck, production build, database type drift, authenticated multi-role
+  RLS smoke and anonymous REST RLS probe passed. The build retains its existing
+  sourcemap/large-chunk warnings; mutation and fixture-dependent RLS probes
+  retain their documented skips.
+- The first authenticated Playwright smoke invocation targeted a stale local
+  service on port 5173 (`Apollo.GAP`) and was invalid for LETSCUBE. The
+  corrected production run against `https://app.letscube.ru` passed 1440x900,
+  390x844 and 412x915. Its 1920x1080 and 3840x2160 cases observed two transient
+  Google Fonts 404 responses; both isolated reruns passed. The LETSCUBE API,
+  auth flow and frontend runtime reported no regression.
+- No global Deno installation was added. A one-off Deno 2.9.5 runner with
+  automatic npm dependency resolution typechecked the Edge Function
+  entrypoint successfully; Supabase CLI 2.98.2 remains available for the later
+  controlled deployment stage.

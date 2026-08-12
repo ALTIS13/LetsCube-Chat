@@ -154,15 +154,16 @@ set search_path = pg_catalog, public
 as $function$
 declare
   v_claim public.phone_verification_claims%rowtype;
+  v_existing boolean;
   v_user_hour_count integer := 0;
   v_user_day_count integer := 0;
   v_phone_hour_count integer := 0;
 begin
-  if exists (
-    select 1 from public.phone_verification_sms_events event
-    where event.webhook_id = p_webhook_id
-  ) then
-    return 'duplicate';
+  select event.accepted into v_existing
+  from public.phone_verification_sms_events event
+  where event.webhook_id = p_webhook_id;
+  if found then
+    return case when v_existing is true then 'duplicate_accepted' else 'duplicate_unconfirmed' end;
   end if;
 
   select claim.* into v_claim
@@ -176,11 +177,11 @@ begin
 
   -- A concurrent retry can pass the first check before the original request
   -- commits, then wait on this claim lock. Re-check after acquiring the lock.
-  if exists (
-    select 1 from public.phone_verification_sms_events event
-    where event.webhook_id = p_webhook_id
-  ) then
-    return 'duplicate';
+  select event.accepted into v_existing
+  from public.phone_verification_sms_events event
+  where event.webhook_id = p_webhook_id;
+  if found then
+    return case when v_existing is true then 'duplicate_accepted' else 'duplicate_unconfirmed' end;
   end if;
 
   if v_claim.last_sms_at is not null and v_claim.last_sms_at > now() - interval '60 seconds' then
@@ -215,7 +216,11 @@ begin
   where id = v_claim.id;
   return 'authorized';
 exception
-  when unique_violation then return 'duplicate';
+  when unique_violation then
+    select event.accepted into v_existing
+    from public.phone_verification_sms_events event
+    where event.webhook_id = p_webhook_id;
+    return case when v_existing is true then 'duplicate_accepted' else 'duplicate_unconfirmed' end;
 end
 $function$;
 

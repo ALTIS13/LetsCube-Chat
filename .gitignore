@@ -1,4 +1,5 @@
 # Environment files. Keep only safe templates in git.
+.ops-private/
 .env
 .env.*
 !.env.example

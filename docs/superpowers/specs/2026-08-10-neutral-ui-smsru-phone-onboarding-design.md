@@ -1,4 +1,4 @@
-# LETSCUBE Neutral UI And SMS.RU Phone Onboarding Design
+# LETSCUBE Neutral UI And p1sms Phone Onboarding Design
 
 **Status:** accepted product design; implementation and provider activation are separate gates.
 
@@ -7,7 +7,7 @@
 ## Goal
 
 Remove visible computer-club positioning from LETSCUBE and prepare a secure,
-provider-disabled SMS.RU integration for mandatory phone verification of new
+provider-disabled p1sms integration for mandatory phone verification of new
 accounts. Supabase Auth remains the authority that generates and verifies OTP
 codes. SMS delivery must not be activated until the sender and production
 delivery terms are approved by the provider.
@@ -17,7 +17,7 @@ delivery terms are approved by the provider.
 This design covers:
 
 - neutral user-facing terminology across the web, Android and Windows clients;
-- a server-only SMS.RU Send SMS Hook adapter;
+- a server-only p1sms Send SMS Hook adapter;
 - post-email phone onboarding for accounts created after a controlled cutoff;
 - duplicate pending-phone protection;
 - privacy-safe exact phone discovery;
@@ -39,9 +39,9 @@ will have a separate design and implementation plan.
   `search_profiles_by_phone(text, integer)`. It requires `users.view`, searches
   verified numbers only and never returns the number itself.
 - The self-hosted Auth runtime has phone delivery and SMS autoconfirm disabled.
-- SMS.RU credentials live in ignored local private storage. `api_id`
-  authentication, account limits and a positive balance were verified without
-  sending an SMS or printing credential values.
+- p1sms credentials live in ignored local private storage. API authentication,
+  sender inventory and a positive balance were verified without sending an SMS
+  or printing credential values.
 
 ## Product Terminology
 
@@ -130,12 +130,12 @@ user has the same pending number. LETSCUBE prevents that before enabling SMS.
 The HMAC secret belongs to backend secrets. A plain unsalted phone hash is not
 sufficient because the phone-number space is enumerable.
 
-## SMS.RU Adapter
+## p1sms Adapter
 
 The preferred architecture is:
 
 ```text
-Supabase Auth -> signed HTTP Send SMS Hook -> LETSCUBE Edge Function -> SMS.RU
+Supabase Auth -> signed HTTP Send SMS Hook -> LETSCUBE Edge Function -> p1sms
 ```
 
 Supabase Auth owns OTP generation, expiry, resend semantics and verification.
@@ -162,17 +162,21 @@ user name, URL or dynamic prose may be appended.
   active phone claim.
 - Use the webhook ID as an idempotency key so one Auth event cannot create two
   SMS sends.
-- Call SMS.RU with HTTPS POST form data. Do not place `api_id`, phone or message
-  data in a query string.
-- Use `SMS_RU_API_ID` from server secrets. Runtime does not use the account
-  login/password pair.
-- Set `from` only after `LETSCUBE` is approved by SMS.RU. Until then the adapter
-  omits the field and the production hook remains disabled.
-- Never log the API ID, OTP, full phone, request body or raw provider response.
+- Call only `POST https://admin.p1sms.ru/apiSms/create` with a JSON body. Never
+  call account, sender, history, scheduling, reject, phone-base or blacklist
+  endpoints used by the shared LETSCUBE provider account.
+- Use `P1SMS_API_KEY` from server secrets. Never place the key, phone or message
+  in a URL and reject redirects before the credential-bearing body can leave
+  the fixed provider host.
+- Send exactly one immediate `digit` message tagged `letscube-otp`; do not set
+  a sender, webhook, schedule, randomizer, link or cascade.
+- For `phone_change`, use a valid `user.new_phone`; never fall back to the old
+  `user.phone` when `new_phone` is present but malformed.
+- Never log the API key, OTP, full phone, request body or raw provider response.
 - Persist only safe event IDs, phone HMAC, user ID, normalized result category
   and timestamps required for idempotency, rate limiting and operator health.
 
-An accepted SMS.RU API response means provider acceptance, not handset
+An accepted p1sms API response means provider acceptance, not handset
 delivery. Ambiguous network timeouts are not retried automatically because a
 retry could duplicate an SMS. The user can request another code after the
 cooldown.
@@ -186,17 +190,17 @@ Allowed now:
 - adapter source and unit/security tests;
 - schema and RLS with rollout/enforcement flags disabled;
 - onboarding and settings UI behind a disabled server capability;
-- SMS.RU error mapping and provider-health contracts;
+- p1sms error mapping and provider-health contracts;
 - deployment documentation and secret names without values;
 - a local mocked or fully offline adapter test.
 
 Forbidden until provider approval:
 
-- invoking `sms/send`, including a real destination;
+- invoking `apiSms/create`, including a real destination;
 - configuring the Auth Send SMS Hook URI;
 - enabling phone delivery in GoTrue;
 - enabling the new-account cutoff or RLS enforcement;
-- setting an unapproved sender name;
+- modifying shared p1sms account state or enabling a sender;
 - claiming production phone verification is available.
 
 The existing friendly unavailable state remains visible while the capability
@@ -259,7 +263,7 @@ Activation is a separate future operation after provider approval:
 1. Verify a current database/config backup.
 2. Deploy schema and adapter with all enforcement and delivery flags off.
 3. Run unit, integration, RLS and browser tests using mocks only.
-4. Confirm an approved SMS.RU sender and production terms.
+4. Confirm p1sms production terms and shared-account operating limits.
 5. Add backend secrets without exposing them in Git, docs or frontend bundles.
 6. Configure the signed Send SMS Hook and keep SMS autoconfirm disabled.
 7. Run one controlled real-number send and correct/wrong/expired/resend QA.
@@ -288,6 +292,6 @@ Automated coverage includes:
 - email registration, recovery, CAPTCHA, invite mode, chats, tasks, push,
   Android and Windows regression guards;
 - secret scans and verification that frontend code contains no service-role or
-  SMS.RU credential.
+  p1sms credential.
 
 Physical SMS delivery QA is explicitly pending until provider approval.

@@ -4,7 +4,9 @@ import test from "node:test";
 
 const GATEWAY = new URL("../../supabase/functions/phone-verification-gateway/index.ts", import.meta.url);
 const HOOK = new URL("../../supabase/functions/auth-send-sms/index.ts", import.meta.url);
+const ADAPTER = new URL("../../supabase/functions/auth-send-sms/p1sms.mjs", import.meta.url);
 const MIGRATION = new URL(
+  // Historical proposal filename is retained to avoid migration-history ambiguity.
   "../../.migration-backup/supabase/migrations/20260810_smsru_phone_verification_foundation.sql",
   import.meta.url,
 );
@@ -22,10 +24,30 @@ test("Send SMS hook remains fail-closed and verifies Standard Webhooks first", a
   const source = await readFile(HOOK, "utf8");
   const signatureCheck = source.indexOf("new Webhook");
   const deliveryGate = source.indexOf('SMS_DELIVERY_ENABLED") !== "true"');
+  const providerSecret = source.indexOf('Deno.env.get("P1SMS_API_KEY")');
   assert.ok(signatureCheck >= 0);
   assert.ok(deliveryGate > signatureCheck);
+  assert.ok(providerSecret > deliveryGate);
   assert.match(source, /phone_verification_claim_authorize_sms/u);
+  assert.match(source, /duplicate_accepted/u);
+  assert.match(source, /duplicate_unconfirmed/u);
+  assert.match(source, /P1SMS_API_KEY/u);
+  assert.match(source, /sendP1Sms/u);
+  assert.match(source, /readSendSmsDestination/u);
+  assert.doesNotMatch(source, /SMS_RU_API_ID|sendSmsRu|apiUsers|apiSenders|getSms|reject/u);
   assert.doesNotMatch(source, /console\.(?:log|debug)\(/u);
+});
+
+test("p1sms runtime adapter can only use the fixed send endpoint", async () => {
+  const source = await readFile(ADAPTER, "utf8");
+  assert.match(source, /https:\/\/admin\.p1sms\.ru\/apiSms\/create/u);
+  assert.match(source, /redirect:\s*"error"/u);
+  assert.match(source, /tag:\s*P1SMS_TAG/u);
+  assert.doesNotMatch(
+    source,
+    /apiUsers|apiSenders|getSmsStatus|getSmsList|\/reject|changePlannedTime|phoneBase|blacklist/iu,
+  );
+  assert.doesNotMatch(source, /console\.(?:log|debug|error)\(/u);
 });
 
 test("schema proposal defaults rollout off and keeps internal tables private", async () => {
@@ -40,7 +62,8 @@ test("schema proposal defaults rollout off and keeps internal tables private", a
 
 test("schema proposal keeps webhook retries idempotent and caps sends across replacement claims", async () => {
   const sql = await readFile(MIGRATION, "utf8");
-  assert.match(sql, /if exists \([\s\S]*event\.webhook_id = p_webhook_id[\s\S]*\) then[\s\S]*return 'duplicate';[\s\S]*for update;[\s\S]*if exists \([\s\S]*event\.webhook_id = p_webhook_id/iu);
+  assert.match(sql, /return case when v_existing is true then 'duplicate_accepted' else 'duplicate_unconfirmed' end/iu);
+  assert.match(sql, /for update;[\s\S]*select event\.accepted[\s\S]*event\.webhook_id = p_webhook_id/iu);
   assert.match(sql, /event\.user_id = p_user_id[\s\S]*interval '1 hour'[\s\S]*>= 5/iu);
   assert.match(sql, /event\.user_id = p_user_id[\s\S]*interval '24 hours'[\s\S]*>= 10/iu);
 });

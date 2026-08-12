@@ -28,7 +28,9 @@ There is no “save without verification” path for changing a phone number.
 
 Use the [Supabase Send SMS Hook](https://supabase.com/docs/guides/auth/auth-hooks/send-sms-hook) with a trusted server-side LETSCUBE adapter. Supabase Auth must continue to generate and verify the OTP; the adapter only sends the generated code and must not expose or persist it in frontend-accessible storage.
 
-Selected provider: [SMS.RU](https://sms.ru/api). The repository contains a provider-disabled server adapter and a schema proposal, but the provider is not connected to Supabase Auth and no real SMS has been sent. Production activation requires provider approval, an approved sender name, server-only `SMS_RU_API_ID`, `SEND_SMS_HOOK_SECRET` and `PHONE_CLAIM_HMAC_SECRET` secrets, followed by controlled physical delivery QA. The account login/password pair is not used by the runtime adapter.
+Selected provider: p1sms. The repository contains a provider-disabled server adapter and a schema proposal, but p1sms is not connected to Supabase Auth and no real SMS has been sent. Production activation requires provider approval, server-only `P1SMS_API_KEY`, `SEND_SMS_HOOK_SECRET` and `PHONE_CLAIM_HMAC_SECRET` secrets, followed by controlled physical delivery QA.
+
+The p1sms account is shared by LETSCUBE services. The runtime adapter therefore has a deliberately narrow contract: it calls only `POST https://admin.p1sms.ru/apiSms/create`, submits one immediate `digit` message tagged `letscube-otp`, blocks HTTP redirects and never calls account, balance, sender, history, scheduling, reject, phone-base or blacklist endpoints. The API key is read only after `SMS_DELIVERY_ENABLED=true`, remains in trusted Edge Function/Coolify secrets and is never placed in a URL, frontend bundle, log or database row.
 
 The exact production template is `LETSCUBE: код 123456. Никому его не сообщайте.`. It is 46 characters for a six-digit code and the adapter rejects any SMS longer than 65 characters before contacting the provider.
 
@@ -36,11 +38,11 @@ The disabled schema proposal also keeps concurrent webhook retries idempotent an
 
 Current implementation files:
 
-- `supabase/functions/auth-send-sms/` - signed Send SMS Hook and SMS.RU adapter;
+- `supabase/functions/auth-send-sms/` - signed Send SMS Hook and narrow p1sms adapter;
 - `supabase/functions/phone-verification-gateway/` - authenticated HMAC claim gateway;
 - `.migration-backup/supabase/migrations/20260810_smsru_phone_verification_foundation.sql` - unapplied schema/RLS proposal with rollout flags disabled by default.
 
-Do not deploy/enable the Auth hook, set `SMS_DELIVERY_ENABLED=true`, enable the new-account cutoff or apply restrictive onboarding RLS until provider approval and backup/rehearsal are complete.
+Deploying source alone is safe because delivery remains fail-closed. Do not configure the Auth hook, set `SMS_DELIVERY_ENABLED=true`, enable the new-account cutoff or apply restrictive onboarding RLS until provider approval, backup/rehearsal and one controlled physical SMS test are complete.
 
 Self-hosted Auth configuration belongs in server/Coolify secrets and the Auth container environment. Required configuration includes phone auth enablement and the Send SMS Hook URI/secret. Keep SMS autoconfirm disabled. Do not put provider keys or hook secrets in frontend env.
 

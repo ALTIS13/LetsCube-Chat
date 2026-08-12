@@ -1,4 +1,4 @@
-# Neutral UI, SMS.RU Foundation And Support Hardening Plan
+# Neutral UI, SMS Foundation And Support Hardening Plan
 
 **Status:** stages 1-3 complete; stage 4 pending an official LANGAME transport decision
 
@@ -14,15 +14,16 @@
 - Keep database, route, environment, package and migration identifiers intact.
 - Verify auth, admin, tasks, invites, roles, support, privacy and PWA metadata.
 
-## Stage 2 - Provider-disabled SMS.RU foundation
+## Stage 2 - Provider-disabled SMS foundation
 
 **Status:** complete as a disabled source/schema foundation. No SMS was sent,
 the Edge Functions were not deployed, and the SQL proposal was not applied.
 
 - Add a pure SMS contract with the exact 46-character OTP template and a hard
   65-character maximum.
-- Add a server-only SMS.RU adapter that is fail-closed unless
-  `SMS_DELIVERY_ENABLED=true`; this stage must make no provider request.
+- Add a server-only provider adapter that is fail-closed unless
+  `SMS_DELIVERY_ENABLED=true`; this stage made no provider request. The
+  transport was replaced with p1sms on 2026-08-12.
 - Add a signed Supabase Send SMS Hook scaffold with safe error categories and
   no raw OTP, phone, provider body or credential logging.
 - Add a schema proposal for pending phone claims, idempotency, disabled rollout

@@ -12,9 +12,8 @@ marked verified until Supabase Auth OTP verification succeeds.
 
 ## Self-host setup
 
-1. Preferred provider: Yandex Cloud Notification Service with an individual
-   sender registered for production. SMSC.ru, SMS Aero or MTS Exolve are
-   fallback providers behind the same adapter contract.
+1. The selected provider is p1sms. Verify current production terms and the
+   shared LETSCUBE account balance before activation.
 2. Implement a trusted HTTP Send SMS Hook adapter. Supabase Auth generates and
    verifies the OTP; the adapter only submits the phone/code message to the
    selected provider.
@@ -29,6 +28,10 @@ marked verified until Supabase Auth OTP verification succeeds.
    stale abandoned `auth.users.phone_change` values on a bounded schedule.
 8. Add Auth/provider rate limits, resend cooldown, cost alerts and sanitized
    delivery metrics before enabling production traffic.
+9. Store `P1SMS_API_KEY` only as a trusted server secret. Runtime code may call
+   only `POST /apiSms/create` with one immediate `digit` message and must never
+   modify shared account senders, bases, blacklists, schedules or messages
+   belonging to other LETSCUBE services.
 
 ## Required QA
 
