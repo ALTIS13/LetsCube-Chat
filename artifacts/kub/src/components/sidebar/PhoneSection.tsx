@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import type { ProfileContact } from "@/types/database";
 import { mapPgError } from "@/lib/errors";
 
-const RESEND_WAIT_MS = 60_000;
+const RESEND_WAIT_MS = 120_000;
 const PHONE_FORMAT_HINT = "Введите номер в международном формате, например +79991234567.";
 const CODE_DELIVERY_UNAVAILABLE_MESSAGE =
   "Сервис доставки кода не настроен. Обратитесь к администратору.";
@@ -337,7 +337,9 @@ export function PhoneSection() {
               loading={busy === "send"}
               disabled={resendSeconds > 0 || !dirty || !isValid}
             >
-              {resendSeconds > 0 ? `Повторно через ${resendSeconds}с` : "Отправить код повторно"}
+              {resendSeconds > 0
+                ? `Повторно через ${formatResendCountdown(resendSeconds)}`
+                : "Отправить код повторно"}
             </KubButton>
           </>
         ) : stage === "unsupported" ? (
@@ -401,6 +403,12 @@ function formatVerifiedAt(value: string): string | null {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatResendCountdown(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes}:${remainder.toString().padStart(2, "0")}`;
 }
 
 function looksLikeProviderUnavailable(msg: string): boolean {

@@ -42,7 +42,7 @@ The p1sms account is shared by LETSCUBE services. The runtime adapter therefore 
 
 The exact production template is `LETSCUBE: код 123456. Никому его не сообщайте.`. It is 46 characters for a six-digit code and the adapter rejects any SMS longer than 65 characters before contacting the provider.
 
-The schema keeps concurrent webhook retries idempotent and applies server-side cost/abuse ceilings across replacement claims: no more than 5 authorized attempts per user per hour, 10 per user per 24 hours, and 5 per target-phone HMAC per hour. Client resend cooldown matches the server's 60-second minimum.
+The schema keeps concurrent webhook retries idempotent and applies server-side cost/abuse ceilings across replacement claims: no more than 5 authorized attempts per user per hour, 10 per user per 24 hours, and 5 per target-phone HMAC per hour. Client and server resend cooldowns are both 120 seconds so the Telegram-first cascade has time to finish before another OTP can be requested.
 
 Current implementation files:
 

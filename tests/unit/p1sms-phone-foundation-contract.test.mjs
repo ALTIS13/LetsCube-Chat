@@ -14,6 +14,10 @@ const MIGRATION = new URL(
   "../../.migration-backup/supabase/migrations/20260810_smsru_phone_verification_foundation.sql",
   import.meta.url,
 );
+const COOLDOWN_MIGRATION = new URL(
+  "../../.migration-backup/supabase/migrations/20260820150904_phone_verification_two_minute_resend.sql",
+  import.meta.url,
+);
 
 test("phone claim gateway is authenticated and never owns OTP delivery", async () => {
   const source = await readFile(GATEWAY, "utf8");
@@ -39,6 +43,8 @@ test("settings create a server claim before asking Supabase Auth to send an OTP"
   assert.match(source, /if \(claimCreated\) await cancelPhoneClaim\(\)/u);
   assert.match(source, /auth\.resend\(\{/u);
   assert.match(source, /type:\s*"phone_change"/u);
+  assert.match(source, /RESEND_WAIT_MS\s*=\s*120_000/u);
+  assert.match(source, /formatResendCountdown\(resendSeconds\)/u);
   assert.match(source, /profile_phone_mark_verified[\s\S]*?cancelPhoneClaim/u);
 });
 
@@ -116,4 +122,11 @@ test("schema proposal keeps webhook retries idempotent and caps sends across rep
   assert.match(sql, /for update;[\s\S]*select event\.accepted[\s\S]*event\.webhook_id = p_webhook_id/iu);
   assert.match(sql, /event\.user_id = p_user_id[\s\S]*interval '1 hour'[\s\S]*>= 5/iu);
   assert.match(sql, /event\.user_id = p_user_id[\s\S]*interval '24 hours'[\s\S]*>= 10/iu);
+});
+
+test("server resend cooldown matches the two-minute client countdown", async () => {
+  const sql = await readFile(COOLDOWN_MIGRATION, "utf8");
+  assert.match(sql, /create or replace function public\.phone_verification_claim_authorize_sms/iu);
+  assert.match(sql, /last_sms_at > now\(\) - interval '120 seconds'/iu);
+  assert.doesNotMatch(sql, /interval '60 seconds'/iu);
 });
