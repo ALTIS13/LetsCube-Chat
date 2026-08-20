@@ -58,13 +58,26 @@ test("Windows release version and build metadata stay aligned", () => {
   const libRs = readText("windows-tauri/src-tauri/src/lib.rs");
   const publisherPublicKey = readText("scripts/windows-updater-public.key").trim();
 
-  assert.equal(shellPackage.version, "0.2.9");
-  assert.equal(shellPackage.desktopBuild, 13);
+  assert.equal(shellPackage.version, "0.2.10");
+  assert.equal(shellPackage.desktopBuild, 14);
   assert.equal(tauriConfig.version, shellPackage.version);
   assert.equal(cargoVersion, shellPackage.version);
   assert.equal(tauriConfig.plugins.updater.pubkey, publisherPublicKey);
   assert.doesNotMatch(startupHtml, /Desktop\s+\d+\.\d+\.\d+/);
   assert.match(libRs, /startup_runtime_script[\s\S]*CARGO_PKG_VERSION/);
+});
+
+test("Windows startup uses the neutral LETSCUBE wordmark without the former venue descriptor", () => {
+  const startupLogo = readText("windows-tauri/ui/letscube-logo.svg").trim();
+  const neutralWordmark = readText(
+    "artifacts/kub/public/brand/letscube/letscube-wordmark-horizontal-light.svg",
+  ).trim();
+  const startupCss = readText("windows-tauri/ui/startup.css");
+  const overlayCss = readText("windows-tauri/ui/startup-overlay.css");
+
+  assert.equal(startupLogo, neutralWordmark);
+  assert.doesNotMatch(startupCss, /filter:\s*brightness\(0\)\s+invert\(1\)/);
+  assert.doesNotMatch(overlayCss, /filter:\s*brightness\(0\)\s+invert\(1\)/);
 });
 
 test("Windows updater build loads the encrypted local signing identity without exposing secrets", () => {
