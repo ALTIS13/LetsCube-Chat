@@ -16,8 +16,8 @@ self-host cutover.
 ## Phone and auth
 
 - [x] Code-delivery provider selected: p1sms; the adapter uses digital SMS first with provider-managed Telegram fallback.
-- [ ] SMS provider configured in Supabase Auth.
-- [ ] Real phone OTP test completed.
+- [x] p1sms provider and Supabase Auth Send SMS Hook configured for authenticated accounts.
+- [x] Real phone OTP verification completed on the controlled pilot before global delivery rollout.
 - [x] Password recovery checked after domain change.
 - [x] Auth callback checked after domain change.
 

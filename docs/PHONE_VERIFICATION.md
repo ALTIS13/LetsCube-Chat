@@ -1,6 +1,6 @@
 # Phone Verification
 
-Status: the verified-only UI/database flow and privacy-safe exact phone search are deployed. A p1sms SMS-first production pilot is prepared for an explicit server-managed allowlist; global rollout and enforcement remain disabled.
+Status: the verified-only UI/database flow, privacy-safe exact phone search and p1sms SMS-first delivery are deployed for all authenticated accounts. Mandatory phone enforcement remains disabled.
 
 ## Current flow
 
@@ -36,7 +36,7 @@ There is no “save without verification” path for changing a phone number.
 
 Use the [Supabase Send SMS Hook](https://supabase.com/docs/guides/auth/auth-hooks/send-sms-hook) with a trusted server-side LETSCUBE adapter. Supabase Auth must continue to generate and verify the OTP; the adapter only sends the generated code and must not expose or persist it in frontend-accessible storage.
 
-Selected provider: p1sms. Production activation uses server-only `P1SMS_API_KEY`, `SEND_SMS_HOOK_SECRET` and `PHONE_CLAIM_HMAC_SECRET`. Global policy remains disabled during the first physical QA; only records in the private `phone_verification_pilot_users` allowlist may create a delivery claim.
+Selected provider: p1sms. Production activation uses server-only `P1SMS_API_KEY`, `SEND_SMS_HOOK_SECRET` and `PHONE_CLAIM_HMAC_SECRET`. The global delivery policy allows authenticated accounts to create a claim, while `enforce_data_access` remains disabled so phone verification is not yet mandatory for registration or normal application access.
 
 The p1sms account is shared by LETSCUBE services. The runtime adapter therefore has a deliberately narrow contract: it calls only `POST https://admin.p1sms.ru/apiSms/create`, submits one immediate `digit` message tagged `letscube-otp`, blocks HTTP redirects and never calls account, balance, sender, history, scheduling, reject, phone-base, blacklist or cascade-management endpoints. The account-level digital-SMS-to-Telegram fallback is configured by p1sms support and is not recreated or retried by LETSCUBE. The API key is read only after `SMS_DELIVERY_ENABLED=true`, remains in trusted Edge Function/Coolify secrets and is never placed in a URL, frontend bundle, log or database row.
 

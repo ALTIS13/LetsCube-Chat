@@ -1634,3 +1634,24 @@ Recurring tasks roadmap note:
 - Validation: the new regression test failed before the fix, then the focused
   phone/p1sms suite passed 22/22. Frontend typecheck, production build and
   `git diff --check` passed; existing sourcemap and large-chunk warnings remain.
+
+# 2026-08-20 - phone verification global delivery rollout
+
+- Before rollout, the live singleton policy had `enabled=false`, no mandatory
+  cutoff and `enforce_data_access=false`; one of 12 accounts was in the active
+  pilot allowlist and one verified phone existed.
+- Created and validated root-only backup
+  `/srv/letscube/backups/pre-migrations/20260820-192123-before-phone-global-rollout.dump`
+  containing the phone policy and pilot tables.
+- Applied
+  `.migration-backup/supabase/migrations/20260820161957_enable_phone_verification_for_all_accounts.sql`.
+  The live policy is now `enabled=true`, while the cutoff remains unset and
+  `enforce_data_access=false`. Registration and ordinary application access do
+  not require a verified phone.
+- A rollback-only database smoke used an account outside the pilot allowlist:
+  `phone_verification_claim_begin_internal()` returned `created`, the
+  transaction rolled back, and zero synthetic claims remained. No Auth hook or
+  provider delivery was invoked.
+- The four internal phone policy/claim/event tables still expose zero table
+  grants to `anon` or `authenticated`. Focused phone/p1sms contracts passed
+  23/23 and `git diff --check` passed.

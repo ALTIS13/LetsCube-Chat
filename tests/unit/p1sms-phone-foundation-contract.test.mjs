@@ -18,6 +18,10 @@ const COOLDOWN_MIGRATION = new URL(
   "../../.migration-backup/supabase/migrations/20260820150904_phone_verification_two_minute_resend.sql",
   import.meta.url,
 );
+const GLOBAL_ROLLOUT_MIGRATION = new URL(
+  "../../.migration-backup/supabase/migrations/20260820161957_enable_phone_verification_for_all_accounts.sql",
+  import.meta.url,
+);
 
 test("phone claim gateway is authenticated and never owns OTP delivery", async () => {
   const source = await readFile(GATEWAY, "utf8");
@@ -144,4 +148,12 @@ test("server resend cooldown matches the two-minute client countdown", async () 
   assert.match(sql, /create or replace function public\.phone_verification_claim_authorize_sms/iu);
   assert.match(sql, /last_sms_at > now\(\) - interval '120 seconds'/iu);
   assert.doesNotMatch(sql, /interval '60 seconds'/iu);
+});
+
+test("global rollout enables delivery without making phone verification mandatory", async () => {
+  const sql = await readFile(GLOBAL_ROLLOUT_MIGRATION, "utf8");
+  assert.match(sql, /update public\.phone_verification_policy[\s\S]*enabled\s*=\s*true/iu);
+  assert.match(sql, /enforce_data_access is false/iu);
+  assert.doesNotMatch(sql, /enforce_data_access\s*=\s*true/iu);
+  assert.doesNotMatch(sql, /required_for_created_at_or_after\s*=/iu);
 });
