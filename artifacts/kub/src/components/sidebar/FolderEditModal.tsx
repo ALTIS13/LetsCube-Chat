@@ -10,8 +10,8 @@ import { KubButton, KubIcon, KubModal, type KubIconName } from "@/components/kub
 import { cn } from "@/lib/utils";
 import { FOLDER_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
 import { requestAppConfirm } from "@/lib/appDialogs";
-
-const QUICK_EMOJI = ["👤", "💼", "📢", "📌", "🔥", "🏠", "🎓", "💬", "❤️", "📦"];
+import { EmojiCategoryPicker } from "@/components/ui/EmojiCategoryPicker";
+import { FOLDER_EMOJI_CATEGORIES } from "@/lib/emojiCatalog";
 
 interface FolderEditModalProps {
   folder: Folder | null;
@@ -265,35 +265,14 @@ export function FolderEditModal({
         <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-[color:var(--kub-muted)]">
           Иконка
         </label>
-        <div className="flex flex-wrap gap-1">
-          <button
-            onClick={() => canManage && setEmoji(null)}
-            disabled={!canManage}
-            className={cn(
-              "w-8 h-8 rounded-lg flex items-center justify-center text-xs transition-all disabled:opacity-60 border",
-              emoji === null
-                ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] border-[var(--kub-cyan)]"
-                : "bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)] border-[color:var(--kub-border-color)]"
-            )}
-          >
-            —
-          </button>
-          {QUICK_EMOJI.map((e) => (
-            <button
-              key={e}
-              onClick={() => canManage && setEmoji(e)}
-              disabled={!canManage}
-              className={cn(
-                "w-8 h-8 rounded-lg flex items-center justify-center text-base transition-all disabled:opacity-60 border",
-                emoji === e
-                  ? "bg-[var(--kub-cyan)] border-[var(--kub-cyan)] kub-glow-soft"
-                  : "bg-[var(--kub-surface-2)] border-[color:var(--kub-border-color)]"
-              )}
-            >
-              {e}
-            </button>
-          ))}
-        </div>
+        <EmojiCategoryPicker
+          categories={FOLDER_EMOJI_CATEGORIES}
+          selected={emoji}
+          onSelect={(value) => canManage && setEmoji(value)}
+          allowEmpty
+          disabled={!canManage}
+          testIdPrefix="folder-icon"
+        />
       </div>
 
       <div>

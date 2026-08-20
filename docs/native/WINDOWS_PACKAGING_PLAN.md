@@ -1,9 +1,9 @@
 # Windows Packaging Plan
 
 LETSCUBE has migrated from the retired Electron experiment to a Tauri 2
-Windows client. The verified `0.2.7` build `11` candidate has passed physical
-notification grouping/action/read-cleanup QA, was verified in Test and was
-promoted unchanged to Stable. The shell loads only
+Windows client. The verified `0.2.10` build `14` candidate has passed physical
+startup, update, notification grouping/action/read-cleanup QA, was verified in
+Test and was promoted unchanged to Stable. The shell loads only
 `https://app.letscube.ru` and keeps the production web application as the
 shared product surface.
 
@@ -141,18 +141,19 @@ registration, WNS secrets and physical terminated-process QA remain.
 ## Release catalog
 
 `https://api.letscube.ru/releases/v1/windows/stable.json` and both Tauri updater
-channels expose the physically tested `0.2.8` build `12` artifact. The
-installed `0.2.7` client detected, downloaded, verified and applied that update
-without losing its authenticated profile. The release retains one Toast Header
+channels expose the physically tested `0.2.10` build `14` artifact. Physical
+cross-version updates through `0.2.8 -> 0.2.9 -> 0.2.10` retained the
+authenticated profile. The release retains one Toast Header
 per chat, up to five unread cards, exact routing from fresh and historical
 cards, chat-scoped history cleanup and duplicate-sender prevention. It also
-removes an eager chart dependency that crashed before React mounted when Tauri
-froze the production WebView prototypes.
+removes the eager chart startup failure, keeps SmartCaptcha compatible with
+WebView2 and uses a neutral LETSCUBE startup wordmark without the retired venue
+subtitle.
 Artifacts remain immutable under
 `https://api.letscube.ru/releases/files/windows/`.
 Public Test, Stable updater and Stable download manifests resolve to the same
-2,322,508-byte artifact with SHA-256
-`697f345bd544281e27b7ab6f4293abebd6c024c10bf60ca6a6e513c5df2e7bfd`.
+2,321,755-byte artifact with SHA-256
+`31ed5a8749a85802ce67581e92a9518f67b9c5930fb7463072ab7bcfd737d760`.
 Manifest responses use `no-cache, no-store`; the versioned installer uses
 `public, max-age=31536000, immutable`.
 

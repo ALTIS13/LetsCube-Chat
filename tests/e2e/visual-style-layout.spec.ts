@@ -82,6 +82,18 @@ test.describe("LETSCUBE visual style and layout", () => {
     const dialog = page.getByRole("dialog").filter({ hasText: "Новая папка" });
     await expect(dialog).toBeVisible();
 
+    const iconCategories = dialog.getByTestId("folder-icon-categories");
+    const iconGrid = dialog.getByTestId("folder-icon-grid");
+    await expect(iconCategories).toBeVisible();
+    await expect(iconCategories.getByRole("button")).toHaveCount(4);
+    await expect(iconGrid.getByRole("button")).toHaveCount(13);
+    await assertNoHorizontalOverflow(iconCategories, "folder icon categories have horizontal overflow");
+    await assertNoHorizontalOverflow(iconGrid, "folder icon grid has horizontal overflow");
+
+    await iconCategories.getByRole("button", { name: "Работа" }).click();
+    await expect(iconCategories.getByRole("button", { name: "Работа" })).toHaveAttribute("data-state", "active");
+    await expect(iconGrid.getByRole("button")).toHaveCount(13);
+
     const scrollSurfaces = await dialog.locator("*").evaluateAll((nodes) =>
       nodes
         .filter((node): node is HTMLElement => node instanceof HTMLElement)
@@ -98,6 +110,40 @@ test.describe("LETSCUBE visual style and layout", () => {
 
     expect(scrollSurfaces, `folder editor has nested vertical scrolling: ${JSON.stringify(scrollSurfaces)}`)
       .toHaveLength(1);
+  });
+
+  test("message emoji picker stays compact and groups the expanded catalog", async ({ page }) => {
+    const role = findFirstAvailableQaRole(
+      ["owner", "tech_admin", "location_admin", "location_staff", "client"],
+      { includeDefault: true },
+    );
+    test.skip(!role, "QA credentials or auth state are not configured");
+
+    await gotoOrSkip(page, "/");
+    await loginAsRoleOrSkip(page, role);
+
+    const firstChat = page.locator('[data-testid="chat-list-item"]').first();
+    test.skip((await firstChat.count()) === 0, "QA account has no visible chats");
+    await firstChat.click();
+
+    await page.getByRole("button", { name: "Эмодзи" }).click();
+    const picker = page.getByTestId("message-emoji-picker");
+    const categories = page.getByTestId("message-emoji-categories");
+    const grid = page.getByTestId("message-emoji-grid");
+    await expect(picker).toBeVisible();
+    await expect(categories).toBeVisible();
+    await expect(categories.getByRole("button")).toHaveCount(5);
+    await expect(grid.getByRole("button")).toHaveCount(16);
+    await assertNoHorizontalOverflow(categories, "message emoji categories have horizontal overflow");
+    await assertNoHorizontalOverflow(grid, "message emoji grid has horizontal overflow");
+    const pickerBox = await requiredBox(picker, "message emoji picker");
+    expect(pickerBox.width).toBeLessThanOrEqual(440);
+
+    await categories.getByRole("button", { name: "Жесты" }).click();
+    await expect(categories.getByRole("button", { name: "Жесты" })).toHaveAttribute("data-state", "active");
+    await expect(grid.getByRole("button")).toHaveCount(16);
+    await grid.getByRole("button", { name: "Выбрать 👍" }).click();
+    await expect(page.getByPlaceholder("Сообщение…")).toHaveValue("👍");
   });
 
   test("authenticated shell brand stays readable in light theme", async ({ page }, testInfo) => {

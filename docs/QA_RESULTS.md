@@ -1670,6 +1670,39 @@ Recurring tasks roadmap note:
   build and `git diff --check` passed. Automated validation did not send a real
   OTP or expose provider credentials.
 
+# 2026-08-21 - Windows 0.2.10 and folder editor scroll ownership
+
+- Physical WebView2 QA isolated the Yandex SmartCaptcha startup failure to the
+  non-default frozen-prototype option. The compatible Tauri default now lets
+  the CAPTCHA runtime render while exact-origin navigation, CSP and the narrow
+  desktop capability boundary remain unchanged.
+- The Windows startup lockup now uses the neutral LETSCUBE wordmark instead of
+  the legacy SVG that encoded the retired venue subtitle. Physical signed
+  updates `0.2.8 -> 0.2.9 -> 0.2.10` retained the authenticated profile, and
+  the early startup frame displayed the stable endpoint geometry without the
+  old subtitle.
+- The folder editor no longer combines a scrollable modal body with a second
+  scrollable chat checklist. The shared modal body is the sole vertical scroll
+  owner, so the footer remains reachable without adjacent scrollbars.
+- Folder icons now provide 48 choices in four compact categories, while the
+  message composer provides 80 emoji in five categories. Only the active
+  category is rendered; the desktop message picker is capped at 420px and the
+  mobile picker uses the available width without horizontal overflow. A shared
+  accessible component preserves keyboard focus, selected state and text
+  insertion.
+- The focused folder-layout regression passed against production at desktop
+  `1440x900` and mobile `390x844`. Full desktop layout QA passed 8 scenarios
+  with 2 fixture-dependent skips, and authenticated smoke passed all 5 desktop
+  and mobile projects. Typecheck, production build, Tauri contracts `14/14`,
+  Rust `32/32` and the complete Windows lifecycle suite passed; only the known
+  sourcemap/chunk and Cargo linker/PDB warnings remain.
+- The exact 2,321,755-byte signed-updater artifact was promoted unchanged from
+  Test to Stable. Stable/Test updater and Stable download catalogs expose
+  `0.2.10/14` with SHA-256
+  `31ed5a8749a85802ce67581e92a9518f67b9c5930fb7463072ab7bcfd737d760`.
+  Authenticode/SmartScreen reputation and killed-process WNS delivery remain
+  separate external release gates.
+
 # 2026-08-20 - Windows 0.2.8 startup and chat-history anchoring
 
 - Reproduced the release-only blank window in the installed `0.2.7/11` client.

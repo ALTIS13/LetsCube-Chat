@@ -45,18 +45,14 @@ import {
   StagedAttachmentTransferProgress,
   VoicePlaybackProgress,
 } from "@/lib/stagedUploadWorkflow";
+import { EmojiCategoryPicker } from "@/components/ui/EmojiCategoryPicker";
+import { MESSAGE_EMOJI_CATEGORIES } from "@/lib/emojiCatalog";
 
 const DRAFT_PREFIX = "kub:draft:";
 const draftKey = (chatId: string) => `${DRAFT_PREFIX}${chatId}`;
 const MOBILE_RECORDER_LONG_PRESS_MS = 320;
 const RECORDER_TAP_MOVE_PX = 10;
 const RECORDER_LOCK_DRAG_PX = 72;
-
-const EMOJI_PANEL = [
-  "😀","😂","🥰","😎","🤔","😭","🔥","❤️","👍","👏",
-  "🎉","🚀","💯","✨","🙏","😅","🤣","😊","😍","🥳",
-  "😤","🤯","😱","🤩","😴","🥺","😇","🤗","😏","😬",
-];
 
 interface MessageInputProps {
   chatId: string;
@@ -770,16 +766,13 @@ export function MessageInput({
   return (
     <div className="flex-shrink-0 bg-[var(--kub-chat-bg)]">
       {showEmoji && (
-        <div className="px-3 py-3 grid grid-cols-8 sm:grid-cols-10 gap-1 bg-[var(--kub-surface-2)] border-t border-[color:var(--kub-border-color)]">
-          {EMOJI_PANEL.map((emoji) => (
-            <button
-              key={emoji}
-              onClick={() => insertEmoji(emoji)}
-              className="text-xl min-w-[40px] min-h-[40px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center rounded-lg hover:bg-[var(--kub-surface-3)] transition-all hover:scale-125 active:scale-95"
-            >
-              {emoji}
-            </button>
-          ))}
+        <div className="border-t border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2.5">
+          <EmojiCategoryPicker
+            categories={MESSAGE_EMOJI_CATEGORIES}
+            onSelect={(value) => value && insertEmoji(value)}
+            testIdPrefix="message-emoji"
+            className="ml-auto w-full max-w-[420px]"
+          />
         </div>
       )}
 
