@@ -108,6 +108,14 @@ test("covers the injected Windows startup and updater lifecycle", async ({}, tes
     expect(new URL(page.url()).origin).toBe(PRODUCTION_ORIGIN);
     expect(browser.contexts().flatMap((context) => context.pages())).toHaveLength(1);
     await expect(page).toHaveTitle("LETSCUBE");
+    const applicationRoot = page.locator("#root");
+    await expect(applicationRoot).toHaveAttribute("data-kub-boot-id", /.+/, { timeout: 20_000 });
+    await expect
+      .poll(() => applicationRoot.evaluate((node) => node.childElementCount), {
+        message: "production handoff must mount the LETSCUBE application instead of leaving a blank WebView",
+        timeout: 20_000,
+      })
+      .toBeGreaterThan(0);
     await expect
       .poll(() => page.evaluate(() => window.letscubeDesktop?.getUpdateState()), {
         timeout: 10_000,

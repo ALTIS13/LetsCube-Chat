@@ -237,6 +237,52 @@ test.describe("LETSCUBE visual style and layout", () => {
 
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
+
+  test("loading older messages preserves the visible history anchor", async ({ page }) => {
+    const consoleErrors = collectConsoleErrors(page);
+    const role = findFirstAvailableQaRole(
+      ["owner", "tech_admin", "location_admin", "location_staff", "client"],
+      { includeDefault: true },
+    );
+    test.skip(!role, "QA credentials or auth state are not configured");
+
+    await gotoOrSkip(page, "/");
+    await loginAsRoleOrSkip(page, role);
+
+    const scrollContainer = await openPagedScrollableReadChatOrSkip(page);
+
+    const before = await scrollContainer.evaluate((node) => {
+      const el = node as HTMLElement;
+      el.scrollTop = 120;
+      const containerTop = el.getBoundingClientRect().top;
+      const visible = [...el.querySelectorAll<HTMLElement>("[data-message-id]")]
+        .find((message) => message.getBoundingClientRect().bottom > containerTop + 1);
+      if (!visible?.dataset.messageId) return null;
+      return {
+        messageId: visible.dataset.messageId,
+        offset: visible.getBoundingClientRect().top - containerTop,
+      };
+    });
+    test.skip(!before, "Could not capture a visible message anchor");
+
+    await scrollContainer.evaluate((node) => {
+      node.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+    await expect(scrollContainer).toHaveAttribute("data-loading-older", "true", { timeout: 5_000 });
+    await expect(scrollContainer).toHaveAttribute("data-loading-older", "false", { timeout: 15_000 });
+
+    const after = await scrollContainer.evaluate((node, messageId) => {
+      const el = node as HTMLElement;
+      const target = [...el.querySelectorAll<HTMLElement>("[data-message-id]")]
+        .find((message) => message.dataset.messageId === messageId);
+      if (!target) return null;
+      return target.getBoundingClientRect().top - el.getBoundingClientRect().top;
+    }, before!.messageId);
+
+    expect(after, "The previously visible message must remain rendered after prepend").not.toBeNull();
+    expect(Math.abs(after! - before!.offset)).toBeLessThanOrEqual(3);
+    expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
+  });
 });
 
 function collectConsoleErrors(page: Page): string[] {
@@ -302,6 +348,25 @@ async function openScrollableReadChatOrSkip(page: Page): Promise<Locator> {
   }
 
   test.skip(true, "QA account has no fully read chat with enough history for scroll anchoring regression");
+  return scrollContainer;
+}
+
+async function openPagedScrollableReadChatOrSkip(page: Page): Promise<Locator> {
+  const readChats = page.locator('[data-testid="chat-list-item"][data-unread-count="0"][data-has-messages="true"]');
+  const count = await readChats.count();
+  test.skip(count === 0, "QA account has no fully read visible chats with messages");
+
+  const scrollContainer = page.getByTestId("message-scroll-container");
+  for (let index = 0; index < Math.min(count, 24); index += 1) {
+    const candidate = readChats.nth(index);
+    if (!(await candidate.isVisible().catch(() => false))) break;
+    await candidate.click();
+    await expect(scrollContainer).toBeVisible();
+    await expect(scrollContainer).toHaveAttribute("data-loading-older", "false");
+    if (await scrollContainer.getAttribute("data-has-more-older") === "true") return scrollContainer;
+  }
+
+  test.skip(true, "QA account has no additional history page for prepend anchoring");
   return scrollContainer;
 }
 

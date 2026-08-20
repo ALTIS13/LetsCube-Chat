@@ -1,6 +1,6 @@
 "use client";
 
-import React, { RefObject, useState, useEffect, useCallback, useRef } from "react";
+import React, { RefObject, useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import { KubIcon, KubModal } from "@/components/kub";
 import { MessageBubble } from "./MessageBubble";
 import type { MediaViewerItem } from "./MediaViewer";
@@ -14,6 +14,11 @@ import { requestAppConfirm } from "@/lib/appDialogs";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { formatFullTime } from "@/lib/format";
 import { useAvatarVariantUrls, useMessageMediaVariantUrls } from "@/hooks/useMediaVariants";
+import {
+  captureVisibleMessageAnchor,
+  restoreVisibleMessageAnchor,
+  type VisibleMessageAnchor,
+} from "@/lib/messageScrollAnchor";
 
 interface MessageListProps {
   messages: MessageWithSender[];
@@ -176,6 +181,11 @@ export function MessageList({
   const hasMoreOlderRef = useRef(hasMoreOlder);
   useEffect(() => { hasMoreOlderRef.current = hasMoreOlder; }, [hasMoreOlder]);
   const preservingOlderScrollRef = useRef(false);
+  const olderScrollAnchorRef = useRef<VisibleMessageAnchor | null>(null);
+  const olderStartFirstMessageIdRef = useRef<string | null>(null);
+  const olderStartMessageCountRef = useRef(0);
+  const olderReleaseFrameRef = useRef<number | null>(null);
+  const olderSafetyTimeoutRef = useRef<number | null>(null);
   const initialScrollAppliedRef = useRef<string | null>(null);
   const initialScrollPendingRef = useRef(false);
   const initialScrollPendingKeyRef = useRef<string | null>(null);
@@ -295,33 +305,58 @@ export function MessageList({
     setBulkConfirmAction(null);
   }, [selectedIds]);
 
+  const releaseOlderScrollPreservation = useCallback(() => {
+    if (olderReleaseFrameRef.current !== null) {
+      cancelAnimationFrame(olderReleaseFrameRef.current);
+      olderReleaseFrameRef.current = null;
+    }
+    if (olderSafetyTimeoutRef.current !== null) {
+      window.clearTimeout(olderSafetyTimeoutRef.current);
+      olderSafetyTimeoutRef.current = null;
+    }
+    olderScrollAnchorRef.current = null;
+    olderStartFirstMessageIdRef.current = null;
+    olderStartMessageCountRef.current = 0;
+    preservingOlderScrollRef.current = false;
+  }, []);
+
   const loadOlderAtTop = useCallback(async () => {
     const el = containerRef.current;
     if (
       !el ||
       !onLoadOlder ||
       loadingOlderRef.current ||
+      preservingOlderScrollRef.current ||
       !hasMoreOlderRef.current ||
       initialScrollAppliedRef.current !== initialScrollKey ||
       initialScrollPendingRef.current ||
       isInitialBottomLocked()
     ) return;
-    const beforeHeight = el.scrollHeight;
-    const beforeTop = el.scrollTop;
     preservingOlderScrollRef.current = true;
-    await onLoadOlder();
-    requestAnimationFrame(() => {
-      const current = containerRef.current;
-      if (current) {
-        current.scrollTop = beforeTop + (current.scrollHeight - beforeHeight);
+    olderScrollAnchorRef.current = captureVisibleMessageAnchor(el);
+    olderStartFirstMessageIdRef.current = sortedMessages[0]?.id ?? null;
+    olderStartMessageCountRef.current = sortedMessages.length;
+    try {
+      const result = await onLoadOlder();
+      if (result && result.loaded === 0) {
+        releaseOlderScrollPreservation();
+        return;
       }
-      preservingOlderScrollRef.current = false;
-    });
-  }, [initialScrollKey, isInitialBottomLocked, onLoadOlder]);
+      // React applies the prepended page asynchronously. Only start the guard
+      // after the request finishes so a slow network cannot release the anchor.
+      olderSafetyTimeoutRef.current = window.setTimeout(releaseOlderScrollPreservation, 2_000);
+    } catch (error) {
+      releaseOlderScrollPreservation();
+      throw error;
+    }
+  }, [initialScrollKey, isInitialBottomLocked, onLoadOlder, releaseOlderScrollPreservation, sortedMessages]);
 
   const handleScroll = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
+    if (preservingOlderScrollRef.current) {
+      olderScrollAnchorRef.current = captureVisibleMessageAnchor(el) ?? olderScrollAnchorRef.current;
+    }
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (isInitialBottomLocked()) {
       isAtBottomRef.current = true;
@@ -341,6 +376,25 @@ export function MessageList({
       el.scrollTop < 160
     ) void loadOlderAtTop();
   }, [initialScrollKey, isInitialBottomLocked, loadOlderAtTop]);
+
+  useLayoutEffect(() => {
+    if (!preservingOlderScrollRef.current || !olderScrollAnchorRef.current) return;
+    const prepended = sortedMessages.length > olderStartMessageCountRef.current
+      && (sortedMessages[0]?.id ?? null) !== olderStartFirstMessageIdRef.current;
+    if (!prepended) return;
+
+    const container = containerRef.current;
+    if (!container) {
+      releaseOlderScrollPreservation();
+      return;
+    }
+    restoreVisibleMessageAnchor(container, olderScrollAnchorRef.current);
+    olderReleaseFrameRef.current = requestAnimationFrame(() => {
+      olderReleaseFrameRef.current = requestAnimationFrame(releaseOlderScrollPreservation);
+    });
+  }, [releaseOlderScrollPreservation, sortedMessages]);
+
+  useEffect(() => releaseOlderScrollPreservation, [initialScrollKey, releaseOlderScrollPreservation]);
 
   const scrollToBottom = useCallback((smooth = true) => {
     requestAnimationFrame(() => {
