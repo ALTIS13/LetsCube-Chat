@@ -67,7 +67,7 @@ export async function sendP1Sms(input, fetchImpl = fetch) {
       headers: request.headers,
       body: request.body,
       redirect: "error",
-      signal: AbortSignal.timeout(3_500),
+      signal: AbortSignal.timeout(15_000),
     });
     if (!response.ok) {
       if (response.status === 429) return { ok: false, category: "rate_limited" };
@@ -112,4 +112,28 @@ export async function sendP1Sms(input, fetchImpl = fetch) {
           : "provider_unavailable",
     };
   }
+}
+
+export function scheduleP1SmsDelivery({ waitUntil, deliver, finish }) {
+  if (typeof waitUntil !== "function" || typeof deliver !== "function" || typeof finish !== "function") {
+    throw new Error("invalid_delivery_scheduler");
+  }
+
+  const task = (async () => {
+    let result;
+    try {
+      result = await deliver();
+    } catch {
+      result = { ok: false, category: "background_failed" };
+    }
+
+    try {
+      await finish(result);
+    } catch {
+      // The hook has already acknowledged the queued delivery. Keep provider
+      // and database details out of the Auth response and runtime logs.
+    }
+  })();
+
+  waitUntil(task);
 }

@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.105.1";
 import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 import { readSendSmsDestination } from "./hookPayload.mjs";
-import { sendP1Sms } from "./p1sms.mjs";
+import { scheduleP1SmsDelivery, sendP1Sms } from "./p1sms.mjs";
 
 const MAX_BODY_BYTES = 12_000;
 
@@ -67,20 +67,25 @@ Deno.serve(async (request: Request) => {
   }
   if (authorization.data !== "authorized") return safeError(403, "claim_required");
 
-  const result = await sendP1Sms({
-    enabled: true,
-    apiKey: p1SmsApiKey,
-    phone,
-    otp,
+  scheduleP1SmsDelivery({
+    waitUntil: (task: Promise<unknown>) => EdgeRuntime.waitUntil(task),
+    deliver: () =>
+      sendP1Sms({
+        enabled: true,
+        apiKey: p1SmsApiKey,
+        phone,
+        otp,
+      }),
+    finish: async (result: { ok: boolean; category: string }) => {
+      await admin.rpc("phone_verification_sms_event_finish", {
+        p_webhook_id: webhookId,
+        p_result_category: result.category,
+        p_accepted: result.ok,
+      });
+    },
   });
 
-  await admin.rpc("phone_verification_sms_event_finish", {
-    p_webhook_id: webhookId,
-    p_result_category: result.category,
-    p_accepted: result.ok,
-  });
-
-  return result.ok ? Response.json({}, { status: 200 }) : safeError(503, result.category);
+  return Response.json({}, { status: 200 });
 });
 
 function safeError(status: number, category: string): Response {
