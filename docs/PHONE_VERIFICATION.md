@@ -1,13 +1,13 @@
 # Phone Verification
 
-Status: the verified-only UI/database flow, privacy-safe exact phone search and p1sms SMS-first delivery are deployed for all authenticated accounts. Mandatory phone enforcement remains disabled.
+Status: the verified-only UI/database flow, privacy-safe exact phone search and p1sms Telegram-first delivery are deployed for all authenticated accounts. Mandatory phone enforcement remains disabled.
 
 ## Current flow
 
 1. User enters a phone number in profile settings.
 2. The app requires an explicit international E.164-style number with `+` and country code, for example `+79991234567`. Spaces, dashes and parentheses are removed for convenience, but local numbers without `+` are not accepted.
 3. The app creates a short-lived server-side HMAC claim before calling Supabase Auth phone update. The claim contains no raw phone number.
-4. Supabase Auth generates the OTP and invokes the signed LETSCUBE Send SMS Hook. The hook submits one `digit` message to p1sms; the provider-managed account cascade falls back to Telegram after `not_delivered`. A repeated send uses the dedicated `phone_change` resend endpoint.
+4. Supabase Auth generates the OTP and invokes the signed LETSCUBE Send SMS Hook. The hook submits one `telegram_auth` message to p1sms; the provider-managed account cascade falls back to digital SMS after `not_delivered`. A repeated send uses the dedicated `phone_change` resend endpoint.
 5. User enters the 6-digit code.
 6. The app calls Supabase Auth OTP verification.
 7. Only after successful OTP verification, `profile_phone_mark_verified()` mirrors the verified phone into `public.profile_contacts`.
@@ -38,11 +38,11 @@ Use the [Supabase Send SMS Hook](https://supabase.com/docs/guides/auth/auth-hook
 
 Selected provider: p1sms. Production activation uses server-only `P1SMS_API_KEY`, `SEND_SMS_HOOK_SECRET` and `PHONE_CLAIM_HMAC_SECRET`. The global delivery policy allows authenticated accounts to create a claim, while `enforce_data_access` remains disabled so phone verification is not yet mandatory for registration or normal application access.
 
-The p1sms account is shared by LETSCUBE services. The runtime adapter therefore has a deliberately narrow contract: it calls only `POST https://admin.p1sms.ru/apiSms/create`, submits one immediate `digit` message tagged `letscube-otp`, blocks HTTP redirects and never calls account, balance, sender, history, scheduling, reject, phone-base, blacklist or cascade-management endpoints. The account-level digital-SMS-to-Telegram fallback is configured by p1sms support and is not recreated or retried by LETSCUBE. The API key is read only after `SMS_DELIVERY_ENABLED=true`, remains in trusted Edge Function/Coolify secrets and is never placed in a URL, frontend bundle, log or database row.
+The p1sms account is shared by LETSCUBE services. The runtime adapter therefore has a deliberately narrow contract: it calls only `POST https://admin.p1sms.ru/apiSms/create`, submits one immediate `telegram_auth` message tagged `letscube-otp`, blocks HTTP redirects and never calls account, balance, sender, history, scheduling, reject, phone-base, blacklist or cascade-management endpoints. The account-level Telegram-to-digital-SMS fallback is configured by p1sms support and is not recreated or retried by LETSCUBE. The API key is read only after `SMS_DELIVERY_ENABLED=true`, remains in trusted Edge Function/Coolify secrets and is never placed in a URL, frontend bundle, log or database row.
 
 The exact production template is `LETSCUBE: код 123456. Никому его не сообщайте.`. It is 46 characters for a six-digit code and the adapter rejects any SMS longer than 65 characters before contacting the provider.
 
-The schema keeps concurrent webhook retries idempotent and applies server-side cost/abuse ceilings across replacement claims: no more than 5 authorized attempts per user per hour, 10 per user per 24 hours, and 5 per target-phone HMAC per hour. Client and server resend cooldowns are both 120 seconds so the SMS-first cascade has time to finish before another OTP can be requested.
+The schema keeps concurrent webhook retries idempotent and applies server-side cost/abuse ceilings across replacement claims: no more than 5 authorized attempts per user per hour, 10 per user per 24 hours, and 5 per target-phone HMAC per hour. Client and server resend cooldowns are both 120 seconds so the Telegram-first cascade has time to finish before another OTP can be requested.
 
 Current implementation files:
 
@@ -50,10 +50,10 @@ Current implementation files:
 - `supabase/functions/phone-verification-gateway/` - authenticated HMAC claim gateway;
 - `.migration-backup/supabase/migrations/20260810_smsru_phone_verification_foundation.sql` - schema/RLS source with rollout flags disabled by default and a private pilot allowlist.
 
-The provider and Auth hook are configured for the allowlisted physical test.
-Delivery remains fail-closed for every account outside that private allowlist.
-Do not enable the global policy, new-account cutoff or restrictive onboarding
-RLS until the controlled test and post-test database audit are complete.
+The provider and Auth hook are enabled for authenticated accounts after the
+controlled physical test. The new-account cutoff and restrictive onboarding
+RLS remain disabled, so phone verification is not mandatory for registration
+or ordinary application access.
 
 Self-hosted Auth configuration belongs in server/Coolify secrets and the Auth container environment. Required configuration includes phone auth enablement and the Send SMS Hook URI/secret. Keep SMS autoconfirm disabled. Do not put provider keys or hook secrets in frontend env.
 

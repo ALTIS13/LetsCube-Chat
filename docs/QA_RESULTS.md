@@ -1655,3 +1655,17 @@ Recurring tasks roadmap note:
 - The four internal phone policy/claim/event tables still expose zero table
   grants to `anon` or `authenticated`. Focused phone/p1sms contracts passed
   23/23 and `git diff --check` passed.
+
+# 2026-08-20 - restored p1sms Telegram-first OTP cascade
+
+- Returned the single provider request to `telegram_auth`. The account-level
+  p1sms rule owns the `not_delivered` fallback to digital SMS; LETSCUBE still
+  submits exactly one message and does not manage or duplicate the cascade.
+- Kept the provider-neutral UI, 120-second resend cooldown, HMAC claims,
+  server-side rate limits and global availability for authenticated accounts.
+- Deployed only the adapter after a timestamped root-only backup. The local and
+  deployed SHA-256 hashes match, the Edge Functions container is healthy, and
+  an unsigned hook probe returned HTTP 401 before provider delivery.
+- Focused phone/p1sms contracts passed 23/23, frontend typecheck, production
+  build and `git diff --check` passed. Automated validation did not send a real
+  OTP or expose provider credentials.
