@@ -26,6 +26,7 @@ import {
   DEFAULT_MEDIA_QUALITY,
   MEDIA_QUALITY_METADATA_KEY,
   MEDIA_QUALITY_STORAGE_KEY,
+  applyVideoQualityToAttachments,
   normalizeMediaQuality,
   selectVideoPlaybackUrl,
   type MediaQuality,
@@ -144,6 +145,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
   const setMediaQuality = useCallback((quality: MediaQuality) => {
     setMediaQualityState(quality);
+    setStagedAttachments((current) => applyVideoQualityToAttachments(current, quality));
     if (typeof window !== "undefined") {
       window.localStorage.setItem(MEDIA_QUALITY_STORAGE_KEY, quality);
     }
@@ -301,7 +303,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         const prepared = await runScopedStagedPreparation(
           uploadScope,
           scopeToken,
-          () => prepareChatImageAttachment(sourceFile, mediaQuality),
+          () => prepareChatImageAttachment(sourceFile, DEFAULT_MEDIA_QUALITY),
         );
         if (prepared.status === "stale") {
           accepted.forEach(revokeAttachmentPreview);
@@ -330,7 +332,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         optimized: file !== sourceFile || file.size !== sourceFile.size || file.type !== sourceFile.type,
         originalSize: sourceFile.size,
         originalMimeType: sourceFile.type || undefined,
-        mediaQuality,
+        mediaQuality: file.type.startsWith("video/") ? mediaQuality : undefined,
       }));
     }
 

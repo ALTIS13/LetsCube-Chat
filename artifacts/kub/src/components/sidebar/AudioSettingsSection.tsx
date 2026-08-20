@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { KubButton, KubIcon } from "@/components/kub";
 import {
   DEFAULT_AUDIO_DEVICE_ID,
+  applyLiveAudioGain,
   buildAudioTrackConstraints,
   formatAudioPercent,
   inferProcessingMode,
@@ -44,6 +45,8 @@ export function AudioSettingsSection() {
   const monitorContextRef = useRef<AudioContext | null>(null);
   const monitorSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const monitorGainRef = useRef<GainNode | null>(null);
+  const monitorInputGainRef = useRef<GainNode | null>(null);
+  const testInputGainRef = useRef<GainNode | null>(null);
 
   const outputSelectionSupported = supportsAudioOutputSelection();
 
@@ -102,6 +105,7 @@ export function AudioSettingsSection() {
     }
     monitorSourceRef.current = null;
     monitorGainRef.current = null;
+    monitorInputGainRef.current = null;
     const context = monitorContextRef.current;
     monitorContextRef.current = null;
     if (context && context.state !== "closed") {
@@ -126,6 +130,7 @@ export function AudioSettingsSection() {
     streamRef.current = null;
     void contextRef.current?.close().catch(() => undefined);
     contextRef.current = null;
+    testInputGainRef.current = null;
     if (updateState) {
       setTesting(false);
       setLevel(0);
@@ -134,9 +139,12 @@ export function AudioSettingsSection() {
   };
 
   useEffect(() => {
-    if (monitorGainRef.current) {
-      monitorGainRef.current.gain.value = settings.monitorGain;
-    }
+    applyLiveAudioGain(testInputGainRef.current?.gain ?? null, settings.micInputGain);
+    applyLiveAudioGain(monitorInputGainRef.current?.gain ?? null, settings.micInputGain);
+  }, [settings.micInputGain]);
+
+  useEffect(() => {
+    applyLiveAudioGain(monitorGainRef.current?.gain ?? null, settings.monitorGain);
   }, [settings.monitorGain]);
 
   useEffect(() => {
@@ -177,12 +185,16 @@ export function AudioSettingsSection() {
         }
       }
       const source = context.createMediaStreamSource(stream);
+      const inputGain = context.createGain();
       const gain = context.createGain();
+      inputGain.gain.value = audioSettings.micInputGain;
       gain.gain.value = audioSettings.monitorGain;
-      source.connect(gain);
+      source.connect(inputGain);
+      inputGain.connect(gain);
       gain.connect(context.destination);
       monitorContextRef.current = context;
       monitorSourceRef.current = source;
+      monitorInputGainRef.current = inputGain;
       monitorGainRef.current = gain;
       setSelfMonitoring(true);
       return true;
@@ -224,6 +236,7 @@ export function AudioSettingsSection() {
       void refreshDevices();
       streamRef.current = stream;
       contextRef.current = context;
+      testInputGainRef.current = gain;
       setTesting(true);
       setProcessingNotice(result.deviceFallback
         ? "Выбранный микрофон недоступен. Используется системный."
@@ -238,7 +251,7 @@ export function AudioSettingsSection() {
         for (const sample of data) {
           peak = Math.max(peak, Math.abs(sample - 128));
         }
-        setLevel(Math.min(1, (peak / 128) * nextSettings.micInputGain));
+        setLevel(Math.min(1, peak / 128));
         frameRef.current = requestAnimationFrame(tick);
       };
       tick();
@@ -286,7 +299,7 @@ export function AudioSettingsSection() {
   const changeProcessingMode = async (mode: Exclude<AudioProcessingMode, "custom">) => {
     if (settings.processingMode === mode) return;
     const nextSettings = updateSettings(settingsForProcessingMode(mode));
-    await applySettingsLive(nextSettings, { forceReacquire: true });
+    await applySettingsLive(nextSettings);
   };
 
   const changeProcessingToggle = async (
@@ -350,8 +363,8 @@ export function AudioSettingsSection() {
   };
 
   return (
-    <div className="rounded-xl overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
-      <div className="px-4 py-3 space-y-4">
+    <div className="space-y-3">
+      <div className="space-y-3">
         <div className="flex items-start gap-3">
           <KubIcon name="microphone" size={16} className="mt-0.5 text-[color:var(--kub-cyan)]" />
           <div className="flex-1 min-w-0">

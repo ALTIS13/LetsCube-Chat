@@ -62,6 +62,11 @@ export function clampAudioElementVolume(value: unknown): number {
   return clamp(value, 0, 1, DEFAULT_AUDIO_SETTINGS.voicePlaybackVolume);
 }
 
+export function applyLiveAudioGain(parameter: { value: number } | null, value: number): void {
+  if (!parameter || !Number.isFinite(value)) return;
+  parameter.value = value;
+}
+
 function parseAudioSettings(value: unknown): Partial<AudioSettings> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Partial<AudioSettings>;

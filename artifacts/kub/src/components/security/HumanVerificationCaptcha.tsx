@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { getAuthCaptchaConfig } from "@/lib/authCaptcha";
 import { useTheme } from "@/hooks/useTheme";
+import { isNativeApp } from "@/lib/platform/capabilities";
+import { isDesktopApp } from "@/lib/platform/desktop";
 
 type TurnstileWidgetId = string;
 type YandexWidgetId = string | number;
@@ -29,6 +31,7 @@ interface YandexSmartCaptchaRenderOptions {
   invisible?: boolean;
   test?: boolean;
   theme?: "light" | "dark";
+  webview?: boolean;
 }
 
 interface YandexSmartCaptchaApi {
@@ -66,6 +69,7 @@ export function HumanVerificationCaptcha({
 }: HumanVerificationCaptchaProps) {
   const config = getAuthCaptchaConfig();
   const { resolvedTheme } = useTheme();
+  const embeddedWebView = isDesktopApp() || isNativeApp();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetRef = useRef<TurnstileWidgetId | YandexWidgetId | null>(null);
   const [error, setError] = useState("");
@@ -81,7 +85,14 @@ export function HumanVerificationCaptcha({
         if (cancelled || !containerRef.current || widgetRef.current) return;
         widgetRef.current =
           config.provider === "yandex-smartcaptcha"
-            ? renderYandexSmartCaptcha(containerRef.current, config.siteKey, resolvedTheme, onTokenChange, setError)
+            ? renderYandexSmartCaptcha(
+                containerRef.current,
+                config.siteKey,
+                resolvedTheme,
+                embeddedWebView,
+                onTokenChange,
+                setError,
+              )
             : renderTurnstile(containerRef.current, config.siteKey, onTokenChange, setError);
       })
       .catch(() => {
@@ -106,7 +117,7 @@ export function HumanVerificationCaptcha({
       widgetRef.current = null;
       onTokenChange("");
     };
-  }, [config, disabled, onTokenChange, resolvedTheme]);
+  }, [config, disabled, embeddedWebView, onTokenChange, resolvedTheme]);
 
   useEffect(() => {
     if (!config || !widgetRef.current) return;
@@ -183,6 +194,7 @@ function renderYandexSmartCaptcha(
   container: HTMLElement,
   siteKey: string,
   theme: "light" | "dark",
+  webview: boolean,
   onTokenChange: (token: string) => void,
   setError: (message: string) => void,
 ): YandexWidgetId {
@@ -190,6 +202,7 @@ function renderYandexSmartCaptcha(
   return window.smartCaptcha.render(container, {
     sitekey: siteKey,
     theme,
+    webview,
     callback: (token) => {
       setError("");
       onTokenChange(token);

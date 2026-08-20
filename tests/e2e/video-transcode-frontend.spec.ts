@@ -24,10 +24,12 @@ test("resolves imported video playback from persisted media quality", () => {
   expect(MEDIA_QUALITY_METADATA_KEY).toBe("media_quality");
   expect(getMediaQualityFromMetadata(null)).toBe("balanced");
   expect(getMediaQualityFromMetadata({ [MEDIA_QUALITY_METADATA_KEY]: "compact" })).toBe("compact");
-  expect(getMediaQualityFromMetadata({ [MEDIA_QUALITY_METADATA_KEY]: "high" })).toBe("high");
+  expect(getMediaQualityFromMetadata({ [MEDIA_QUALITY_METADATA_KEY]: "high" })).toBe("original");
+  expect(getMediaQualityFromMetadata({ [MEDIA_QUALITY_METADATA_KEY]: "original" })).toBe("original");
   expect(selectVideoPlaybackUrl({ originalUrl, video720pUrl: variantUrl, mediaMetadata: null })).toBe(variantUrl);
   expect(selectVideoPlaybackUrl({ originalUrl, video720pUrl: variantUrl, mediaMetadata: { [MEDIA_QUALITY_METADATA_KEY]: "compact" } })).toBe(variantUrl);
   expect(selectVideoPlaybackUrl({ originalUrl, video720pUrl: variantUrl, mediaMetadata: { [MEDIA_QUALITY_METADATA_KEY]: "high" } })).toBe(originalUrl);
+  expect(selectVideoPlaybackUrl({ originalUrl, video720pUrl: variantUrl, mediaMetadata: { [MEDIA_QUALITY_METADATA_KEY]: "original" } })).toBe(originalUrl);
   expect(selectVideoPlaybackUrl({ originalUrl, video720pUrl: null, mediaMetadata: null })).toBe(originalUrl);
   expect(getVideoPlaybackFallbackUrl(variantUrl, originalUrl)).toBe(originalUrl);
   expect(getVideoPlaybackFallbackUrl(originalUrl, originalUrl)).toBeNull();
@@ -48,7 +50,8 @@ test("wires one batched 720p variant query through persisted quality metadata", 
   expect(chatWindowSource).not.toContain('console.warn("[attachments] upload failed:", error)');
   expect(mediaVariantsSource).not.toContain("error.message");
   expect(bubbleSource).toContain("selectVideoPlaybackUrl");
-  expect(inputSource).toContain("серверную 720p-копию");
+  expect(inputSource).toContain("Качество видео");
+  expect(inputSource).toContain("MEDIA_QUALITY_OPTIONS");
 });
 
 test("uses one stable cache key for a chat regardless of realtime message IDs", () => {

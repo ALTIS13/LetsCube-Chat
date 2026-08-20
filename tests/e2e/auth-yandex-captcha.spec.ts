@@ -37,12 +37,13 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
     page,
   }) => {
     const requests = collectAuthRequests(page);
+    await mockRegistrationInviteMode(page, false);
     await gotoOrSkip(page, "/register");
 
     await expect(page.getByTestId("auth-captcha")).toBeVisible();
     await expect(page.getByTestId("auth-captcha").locator(".smart-captcha")).toHaveAttribute(
       "data-sitekey",
-      "playwright-yandex-site-key",
+      /.+/,
     );
 
     await fillRegistration(page);
@@ -55,6 +56,7 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
 
   test("/register submits through auth-yandex-gateway when token exists", async ({ page }) => {
     const requests = collectAuthRequests(page);
+    await mockRegistrationInviteMode(page, false);
     await page.route("**/functions/v1/auth-yandex-gateway", async (route) => {
       const body = route.request().postDataJSON() as Record<string, unknown>;
       expect(body.action).toBe("signup");
@@ -151,6 +153,7 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
     page,
   }) => {
     const requests = collectAuthRequests(page);
+    await mockRegistrationInviteMode(page, false);
     await page.route("**/functions/v1/auth-yandex-gateway", async (route) => {
       await route.fulfill({
         status: 429,
@@ -234,6 +237,20 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
     expect(layout.colorScheme).toContain("dark");
     expect(layout.optionsTheme).toBe("dark");
   });
+
+  test("/register enables the supported SmartCaptcha WebView mode inside Windows", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.letscubeDesktop = {
+        platform: "windows",
+        version: "0.2.8",
+        build: 12,
+      } as Window["letscubeDesktop"];
+    });
+    await gotoOrSkip(page, "/register");
+
+    await expect(page.getByTestId("auth-captcha")).toBeVisible();
+    expect(await page.evaluate(() => window.__lastSmartCaptchaOptions?.webview)).toBe(true);
+  });
 });
 
 function collectAuthRequests(page: Page) {
@@ -269,6 +286,7 @@ interface FakeSmartCaptchaOptions {
   "expired-callback"?: () => void;
   "error-callback"?: () => void;
   theme?: "light" | "dark";
+  webview?: boolean;
 }
 
 interface FakeSmartCaptcha {

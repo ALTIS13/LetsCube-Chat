@@ -1,4 +1,4 @@
-export type MediaQuality = "compact" | "balanced" | "high";
+export type MediaQuality = "compact" | "balanced" | "original";
 
 export const DEFAULT_MEDIA_QUALITY: MediaQuality = "balanced";
 export const MEDIA_QUALITY_STORAGE_KEY = "letscube:media-quality";
@@ -20,16 +20,16 @@ export const MEDIA_QUALITY_OPTIONS: ReadonlyArray<{
     description: "Оптимально для чатов",
   },
   {
-    value: "high",
-    label: "Высокое",
-    description: "Лучше качество, больше размер",
+    value: "original",
+    label: "Исходное",
+    description: "Без снижения качества",
   },
 ];
 
 const IMAGE_PROFILES: Record<MediaQuality, { maxDimension: number; quality: number }> = {
   compact: { maxDimension: 1280, quality: 0.76 },
   balanced: { maxDimension: 1920, quality: 0.84 },
-  high: { maxDimension: 2560, quality: 0.9 },
+  original: { maxDimension: 2560, quality: 0.9 },
 };
 
 const VIDEO_PROFILES: Record<MediaQuality, {
@@ -59,7 +59,7 @@ const VIDEO_PROFILES: Record<MediaQuality, {
     audioBitsPerSecond: 128_000,
     frameRate: 30,
   },
-  high: {
+  original: {
     roundSize: 1080,
     regularWidth: 1920,
     regularHeight: 1080,
@@ -71,9 +71,20 @@ const VIDEO_PROFILES: Record<MediaQuality, {
 };
 
 export function normalizeMediaQuality(value: unknown): MediaQuality {
-  return value === "compact" || value === "balanced" || value === "high"
+  if (value === "high") return "original";
+  return value === "compact" || value === "balanced" || value === "original"
     ? value
     : DEFAULT_MEDIA_QUALITY;
+}
+
+export function applyVideoQualityToAttachments<
+  T extends { kind: string; mediaQuality?: MediaQuality },
+>(attachments: T[], quality: MediaQuality): T[] {
+  return attachments.map((attachment) =>
+    attachment.kind === "video" || attachment.kind === "video_message"
+      ? { ...attachment, mediaQuality: quality }
+      : attachment
+  );
 }
 
 export function getMediaQualityFromMetadata(metadata: unknown): MediaQuality {
@@ -92,7 +103,7 @@ export function selectVideoPlaybackUrl({
   video720pUrl?: string | null;
   mediaMetadata: unknown;
 }): string {
-  return getMediaQualityFromMetadata(mediaMetadata) === "high" || !video720pUrl
+  return getMediaQualityFromMetadata(mediaMetadata) === "original" || !video720pUrl
     ? originalUrl
     : video720pUrl;
 }

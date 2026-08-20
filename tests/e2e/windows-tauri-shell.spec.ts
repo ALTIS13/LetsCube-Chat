@@ -387,7 +387,7 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
           .first(),
       ).toBeVisible();
       await expect(page.getByRole("button", { name: "Записать видео" })).toBeVisible();
-      await expect(page.getByTestId("media-quality-selector")).toBeVisible();
+      await expect(page.getByTestId("media-quality-selector")).toHaveCount(0);
       await page.locator("div.fixed.inset-0.z-10").click({ position: { x: 12, y: 200 } });
 
       await page.getByTestId("notification-bell-button").click();
@@ -589,6 +589,7 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
 
       await page.getByRole("button", { name: "Меню" }).click();
       await page.getByRole("button", { name: "Настройки" }).click();
+      await page.getByRole("tab", { name: "Приложение" }).click();
       await expect(page.getByTestId("desktop-update-settings")).toBeVisible();
       await expect(page.getByTestId("release-download-button")).toHaveCount(0);
       const channelControl = page.getByTestId("desktop-update-channel-control");

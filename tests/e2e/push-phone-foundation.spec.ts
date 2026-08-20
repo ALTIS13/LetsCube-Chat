@@ -16,7 +16,7 @@ test.describe("LETSCUBE push and phone production foundation", () => {
     await page.getByRole("button", { name: "Меню" }).click();
     await page.getByRole("button", { name: "Настройки" }).click();
 
-    await expect(page.getByText("Редактировать профиль").first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Настройки" })).toBeVisible();
     await page.getByText("Push-уведомления").scrollIntoViewIfNeeded();
     await expect(page.getByText("Push-уведомления")).toBeVisible();
     await expect(page.getByRole("switch", { name: "Push: Сообщения" })).toBeVisible();
@@ -97,7 +97,8 @@ test.describe("LETSCUBE push and phone production foundation", () => {
 
     await page.getByRole("button", { name: "Меню" }).click();
     await page.getByRole("button", { name: "Настройки" }).click();
-    await expect(page.getByText("Редактировать профиль").first()).toBeVisible();
+    await page.getByRole("tab", { name: "Профиль" }).click();
+    await expect(page.getByText("Личная информация")).toBeVisible();
 
     const phoneInput = page.getByPlaceholder("+7 999 123 45 67");
     await phoneInput.scrollIntoViewIfNeeded();

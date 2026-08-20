@@ -92,7 +92,7 @@ test.describe("LETSCUBE visual style and layout", () => {
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
 
-  test("composer exposes media quality choices before attaching files", async ({ page }) => {
+  test("composer keeps video quality out of the generic attachment menu", async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
     const role = findFirstAvailableQaRole(
       ["owner", "tech_admin", "location_admin", "location_staff", "client"],
@@ -108,11 +108,7 @@ test.describe("LETSCUBE visual style and layout", () => {
     await firstChat.click();
 
     await page.getByRole("button", { name: "Прикрепить" }).click();
-    const selector = page.getByTestId("media-quality-selector");
-    await expect(selector).toBeVisible();
-    await expect(selector).toContainText("Качество медиа");
-    await page.getByTestId("media-quality-option-high").click();
-    await expect(page.getByTestId("media-quality-option-high")).toHaveAttribute("data-state", "active");
+    await expect(page.getByTestId("media-quality-selector")).toHaveCount(0);
 
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });

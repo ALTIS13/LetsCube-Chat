@@ -857,11 +857,6 @@ export function MessageInput({
                 <span>{label}</span>
               </button>
             ))}
-            {onMediaQualityChange && attachments.length === 0 && (
-              <div className="border-t border-[color:var(--kub-border-color)] p-2">
-                <MediaQualitySelector value={mediaQuality} onChange={onMediaQualityChange} compact />
-              </div>
-            )}
           </div>
         </>
       )}
@@ -905,7 +900,9 @@ export function MessageInput({
 
         {attachments.length > 0 && (
           <>
-            {onMediaQualityChange && (
+            {onMediaQualityChange && attachments.some((attachment) =>
+              attachment.kind === "video" || attachment.kind === "video_message"
+            ) && (
               <MediaQualitySelector value={mediaQuality} onChange={onMediaQualityChange} />
             )}
             <AttachmentTray
@@ -1102,12 +1099,12 @@ function MediaQualitySelector({
     >
       <div className="mb-1.5 flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
         <KubIcon name="video" size={13} />
-        <span>Качество медиа</span>
+        <span>Качество видео</span>
       </div>
       <div
         className="relative grid grid-cols-3 gap-1 px-1"
         role="radiogroup"
-        aria-label="Качество загружаемых медиа"
+        aria-label="Качество загружаемого видео"
         data-testid="media-quality-track"
       >
         <div

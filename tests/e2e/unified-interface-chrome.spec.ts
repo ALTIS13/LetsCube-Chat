@@ -50,20 +50,79 @@ test.describe("LETSCUBE unified interface chrome", () => {
     await expect(page.getByText("Облачная синхронизация", { exact: true })).toHaveCount(0);
   });
 
-  test("composer uses a compact accessible media quality track", async ({ page }) => {
+  test("composer shows video quality only for a staged video", async ({ page }) => {
     await openFirstChatOrSkip(page);
 
     await page.getByRole("button", { name: "Прикрепить" }).click();
     const selector = page.getByTestId("media-quality-selector");
     const track = page.getByTestId("media-quality-track");
 
+    await expect(selector).toHaveCount(0);
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Фото или видео" }).click();
+    const fileChooser = await fileChooserPromise;
+    await fileChooser.setFiles({
+      name: "quality-check.mp4",
+      mimeType: "video/mp4",
+      buffer: Buffer.from("not-a-real-video"),
+    });
     await expect(selector).toBeVisible();
     await expect(track).toHaveAttribute("role", "radiogroup");
     await expect(track.getByRole("radio")).toHaveCount(3);
 
-    await page.getByTestId("media-quality-option-high").click();
-    await expect(page.getByTestId("media-quality-option-high")).toHaveAttribute("aria-checked", "true");
-    await expect(selector).toContainText("Лучше качество, больше размер");
+    await page.getByTestId("media-quality-option-original").click();
+    await expect(page.getByTestId("media-quality-option-original")).toHaveAttribute("aria-checked", "true");
+    await expect(selector).toContainText("Без снижения качества");
+  });
+
+  test("settings expose direct sections with notifications first", async ({ page }) => {
+    const role = findFirstAvailableQaRole(
+      ["owner", "tech_admin", "location_admin", "location_staff", "client"],
+      { includeDefault: true },
+    );
+    test.skip(!role, "QA credentials or auth state are not configured");
+
+    await gotoOrSkip(page, "/");
+    await loginAsRoleOrSkip(page, role);
+    await page.getByRole("button", { name: "Меню" }).click();
+    await page.getByRole("button", { name: "Настройки" }).click();
+
+    await expect(page.getByRole("heading", { name: "Настройки" })).toBeVisible();
+    const tabs = page.getByRole("tablist", { name: "Разделы настроек" });
+    await expect(tabs).toBeVisible();
+    await expect(tabs.getByRole("tab")).toHaveCount(4);
+    expect(await tabs.getByRole("tab").locator("span").evaluateAll((labels) =>
+      labels.every((label) => label.scrollWidth <= label.clientWidth + 1),
+    )).toBe(true);
+    await expect(page.getByText("Push-уведомления")).toBeVisible();
+
+    await tabs.getByRole("tab", { name: "Звук" }).click();
+    await expect(page.getByText("Звук и голосовые")).toBeVisible();
+    await tabs.getByRole("tab", { name: "Профиль" }).click();
+    await expect(page.getByText("Личная информация")).toBeVisible();
+    await tabs.getByRole("tab", { name: "Главное" }).click();
+    await expect(page.getByText("Push-уведомления")).toBeVisible();
+  });
+
+  test("audio settings expose devices, live levels, and processing controls", async ({ page }) => {
+    const role = findFirstAvailableQaRole(
+      ["owner", "tech_admin", "location_admin", "location_staff", "client"],
+      { includeDefault: true },
+    );
+    test.skip(!role, "QA credentials or auth state are not configured");
+
+    await gotoOrSkip(page, "/");
+    await loginAsRoleOrSkip(page, role);
+    await page.getByRole("button", { name: "Меню" }).click();
+    await page.getByRole("button", { name: "Настройки" }).click();
+    await page.getByRole("tab", { name: "Звук" }).click();
+
+    await expect(page.getByText("Звук и голосовые")).toBeVisible();
+    await expect(page.getByText("Устройства", { exact: true })).toBeVisible();
+    await expect(page.locator('input[type="range"]')).toHaveCount(2);
+    await expect(page.getByRole("button", { name: "Проверка микрофона" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Чистый голос" })).toBeVisible();
+    await expect(page.getByText("Слышать свой микрофон")).toBeVisible();
   });
 
   test("administration dashboard exposes operational sections", async ({ page }) => {

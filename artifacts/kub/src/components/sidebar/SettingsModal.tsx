@@ -32,6 +32,15 @@ const THEME_OPTIONS: ReadonlyArray<{ value: Theme; label: string; icon: KubIconN
   { value: "light", label: "Светлая", icon: "themeLight" },
 ];
 
+type SettingsTab = "general" | "profile" | "audio" | "application";
+
+const SETTINGS_TABS: ReadonlyArray<{ value: SettingsTab; label: string; icon: KubIconName }> = [
+  { value: "general", label: "Главное", icon: "settings" },
+  { value: "profile", label: "Профиль", icon: "user" },
+  { value: "audio", label: "Звук", icon: "microphone" },
+  { value: "application", label: "Приложение", icon: "cloud" },
+];
+
 export function SettingsModal({ onClose }: { onClose: () => void }) {
   const { currentUser, setCurrentUser } = useAppStore();
   const supabase = createClient();
@@ -58,6 +67,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const avatarInputId = `profile-avatar-input-${currentUser?.id ?? "self"}`;
 
@@ -142,11 +152,11 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     <KubModal
       open
       onClose={onClose}
-      title="Редактировать профиль"
-      icon={<KubIcon name="user" size={16} />}
+      title="Настройки"
+      icon={<KubIcon name="settings" size={16} />}
       size="lg"
       contentClassName="p-0"
-      footer={
+      footer={activeTab === "profile" ? (
         <>
           <KubButton variant="ghost" onClick={onClose}>Закрыть</KubButton>
           <KubButton
@@ -159,8 +169,41 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             {saved ? "Сохранено" : "Сохранить"}
           </KubButton>
         </>
-      }
+      ) : (
+        <KubButton variant="secondary" onClick={onClose}>Закрыть</KubButton>
+      )}
     >
+      <div className="sticky top-0 z-10 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-3 sm:px-4">
+        <div
+          role="tablist"
+          aria-label="Разделы настроек"
+          className="grid grid-cols-2 gap-1 rounded-lg bg-[var(--kub-bg)] p-1 sm:grid-cols-4"
+        >
+          {SETTINGS_TABS.map((tab) => {
+            const active = tab.value === activeTab;
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setActiveTab(tab.value)}
+                className={cn(
+                  "flex min-w-0 items-center justify-center gap-1 rounded-md px-1.5 py-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)] sm:gap-1.5 sm:px-2 sm:text-xs",
+                  active
+                    ? "bg-[var(--kub-surface-3)] text-[color:var(--kub-text)]"
+                    : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
+                )}
+              >
+                <KubIcon name={tab.icon} size={13} />
+                <span className="min-w-0 truncate">{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {activeTab === "profile" && (
+        <div role="tabpanel" aria-label="Профиль">
       <div className="flex flex-col items-center py-6 gap-3 bg-[var(--kub-surface)] border-b border-[color:var(--kub-border-color)] kub-grid-subtle">
         <div className="relative">
           {uploadingAvatar ? (
@@ -263,19 +306,23 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         <SectionLabel>Телефон</SectionLabel>
         <PhoneSection />
       </div>
+        </div>
+      )}
 
-      <div className="px-4 py-4 border-t border-[color:var(--kub-border-color)]">
-        <SectionLabel>Звук</SectionLabel>
+      {activeTab === "audio" && (
+      <div role="tabpanel" aria-label="Звук" className="px-4 py-4">
         <AudioSettingsSection />
       </div>
+      )}
 
-      {error && (
+      {activeTab === "profile" && error && (
         <div className="mx-4 px-3 py-2 rounded-xl text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger)] border border-[color:var(--kub-danger)]/30">
           {error}
         </div>
       )}
 
-      <div className="px-4 py-4 mt-2 border-t border-[color:var(--kub-border-color)]">
+      {activeTab === "general" && (
+      <div role="tabpanel" aria-label="Главное" className="px-4 py-4">
         <SectionLabel>Внешний вид</SectionLabel>
         <div className="rounded-xl overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
           <div className="flex flex-col gap-2 px-4 py-3">
@@ -324,13 +371,16 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       </div>
+      )}
 
-      <div className="px-4 py-4 border-t border-[color:var(--kub-border-color)]">
+      {activeTab === "application" && (
+      <div role="tabpanel" aria-label="Приложение" className="px-4 py-4">
         <SectionLabel>Приложение</SectionLabel>
         <ReleaseDistributionSection />
       </div>
+      )}
 
-      {isStaff && (
+      {activeTab === "application" && isStaff && (
         <div className="px-4 py-4 border-t border-[color:var(--kub-border-color)]">
           <SectionLabel>Сервис</SectionLabel>
           <div className="rounded-xl overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
@@ -351,7 +401,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         </div>
       )}
 
-      <div className="px-4 py-4 border-t border-[color:var(--kub-border-color)]">
+      {activeTab === "general" && (
+      <div className="px-4 pb-4">
         <SectionLabel>Уведомления</SectionLabel>
         <div className="rounded-xl overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
           <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
@@ -429,6 +480,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       </div>
+      )}
     </KubModal>
   );
 }
