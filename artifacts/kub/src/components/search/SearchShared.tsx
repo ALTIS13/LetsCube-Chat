@@ -64,6 +64,7 @@ export function SearchResultsList({
       {sections.map((section) => (
         <SearchSection
           key={section.type}
+          type={section.type}
           title={SEARCH_SECTION_LABELS[section.type]}
           results={section.results}
           activeIndex={activeIndex}
@@ -79,6 +80,7 @@ export function SearchResultsList({
 }
 
 export function SearchSection({
+  type,
   title,
   results,
   activeIndex,
@@ -88,6 +90,7 @@ export function SearchSection({
   compact = false,
   testIdPrefix = "global-search-result",
 }: {
+  type: GlobalSearchResultType;
   title: string;
   results: GlobalSearchResult[];
   activeIndex: number;
@@ -99,7 +102,7 @@ export function SearchSection({
 }) {
   if (results.length === 0) return null;
   return (
-    <section>
+    <section data-search-section={type}>
       <div className={cn(
         "px-2 pb-1 text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--kub-muted)]",
         compact && "px-1.5 text-[10px]",

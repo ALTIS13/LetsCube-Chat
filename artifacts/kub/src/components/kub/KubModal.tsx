@@ -13,6 +13,7 @@ interface KubModalProps {
   size?: "sm" | "md" | "lg";
   className?: string;
   contentClassName?: string;
+  scrollBody?: boolean;
   /**
    * On viewports smaller than `sm` (640px), render the modal as a full-screen
    * sheet (covers the whole viewport, no rounded corners, no border, sticky
@@ -42,6 +43,7 @@ export function KubModal({
   size = "md",
   className,
   contentClassName,
+  scrollBody = true,
   mobileSheet = true,
 }: KubModalProps) {
   const pointerStartedInsideRef = useRef(false);
@@ -119,7 +121,14 @@ export function KubModal({
           </div>
         )}
 
-        <div className={cn("flex-1 min-h-0 overflow-y-auto px-4 sm:px-5 py-4", contentClassName)}>
+        <div
+          data-testid="kub-modal-body"
+          className={cn(
+            "flex-1 min-h-0 px-4 sm:px-5 py-4",
+            scrollBody ? "overflow-y-auto" : "overflow-y-hidden",
+            contentClassName,
+          )}
+        >
           {children}
         </div>
 

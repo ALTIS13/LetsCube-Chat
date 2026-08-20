@@ -46,7 +46,7 @@ import {
   VoicePlaybackProgress,
 } from "@/lib/stagedUploadWorkflow";
 import { EmojiCategoryPicker } from "@/components/ui/EmojiCategoryPicker";
-import { MESSAGE_EMOJI_CATEGORIES } from "@/lib/emojiCatalog";
+import { MESSAGE_EMOJI_CATEGORIES, MESSAGE_EMOJI_SEARCH_TERMS } from "@/lib/emojiCatalog";
 
 const DRAFT_PREFIX = "kub:draft:";
 const draftKey = (chatId: string) => `${DRAFT_PREFIX}${chatId}`;
@@ -766,13 +766,21 @@ export function MessageInput({
   return (
     <div className="flex-shrink-0 bg-[var(--kub-chat-bg)]">
       {showEmoji && (
-        <div className="border-t border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2.5">
-          <EmojiCategoryPicker
-            categories={MESSAGE_EMOJI_CATEGORIES}
-            onSelect={(value) => value && insertEmoji(value)}
-            testIdPrefix="message-emoji"
-            className="ml-auto w-full max-w-[420px]"
-          />
+        <div className="flex justify-end px-3 pb-2 pt-1.5">
+          <div
+            data-testid="message-emoji-surface"
+            className="w-full max-w-[560px] rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-2.5 shadow-[0_12px_32px_rgba(0,0,0,0.2)]"
+          >
+            <EmojiCategoryPicker
+              categories={MESSAGE_EMOJI_CATEGORIES}
+              onSelect={(value) => value && insertEmoji(value)}
+              testIdPrefix="message-emoji"
+              className="w-full"
+              searchable
+              searchTerms={MESSAGE_EMOJI_SEARCH_TERMS}
+              scrollable
+            />
+          </div>
         </div>
       )}
 

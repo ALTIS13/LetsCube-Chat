@@ -24,6 +24,37 @@ test.describe("KUB global search", () => {
         ]),
       });
     });
+    await page.route("**/rest/v1/rpc/global_search_v2", async (route) => {
+      const body = (route.request().postDataJSON() ?? {}) as { p_query?: string };
+      if (body.p_query !== "SectionProbe") {
+        await route.continue();
+        return;
+      }
+      const row = (result_type: string, id: string, title: string) => ({
+        result_type,
+        id,
+        title,
+        subtitle: null,
+        snippet: null,
+        avatar_url: null,
+        chat_id: result_type === "chat" || result_type === "message" ? id : null,
+        message_id: result_type === "message" ? id : null,
+        task_id: null,
+        location_id: result_type === "location" ? id : null,
+        created_at: "2026-08-01T00:00:00.000Z",
+        rank: 100,
+      });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          row("message", "00000000-0000-4000-8000-000000000203", "Сообщение probe"),
+          row("location", "00000000-0000-4000-8000-000000000204", "Локация probe"),
+          row("user", "00000000-0000-4000-8000-000000000202", "Пользователь probe"),
+          row("chat", "00000000-0000-4000-8000-000000000201", "Чат probe"),
+        ]),
+      });
+    });
     page.on("console", (message) => {
       if (message.type() === "error") consoleErrors.push(message.text());
     });
@@ -59,6 +90,12 @@ test.describe("KUB global search", () => {
       await expect(input).toBeFocused();
       await input.fill("@te");
       await expect(input).toHaveValue("@te");
+      await input.fill("SectionProbe");
+      await expect
+        .poll(() => palette.locator("section[data-search-section]").evaluateAll((nodes) =>
+          nodes.map((node) => node.getAttribute("data-search-section")),
+        ))
+        .toEqual(["chat", "user", "message", "location"]);
       await input.fill("from:@te has:image after:2026-05-01");
       await expect(page.getByTestId("search-filter-chip-from")).toBeVisible();
       await expect(page.getByTestId("search-filter-chip-has")).toBeVisible();
@@ -80,13 +117,21 @@ test.describe("KUB global search", () => {
           .getByText(/Люди|Чаты|Сообщения|Задачи|Локации/i)
           .first(),
       ).toBeVisible();
+      await input.fill("SectionProbe");
+      await expect
+        .poll(() => page
+          .getByTestId("sidebar-global-search-results")
+          .locator("section[data-search-section]")
+          .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-search-section"))))
+        .toEqual(["chat", "user", "message", "location"]);
       await input.fill("type:task after:2026-05-01 TestLocationCodex");
       await expect(page.getByTestId("search-filter-chip-type")).toBeVisible();
       await expect(page.getByTestId("search-filter-chip-after")).toBeVisible();
       await page.getByTestId("search-filter-chip-after").click();
       await expect(input).not.toHaveValue(/after:2026-05-01/);
       await input.fill("@te");
-      const userResult = page.getByTestId("sidebar-search-result-user").first();
+      await expect(page.getByTestId("sidebar-global-search-results").getByText("Пользователь probe")).toHaveCount(0);
+      const userResult = page.getByTestId("sidebar-search-result-user").filter({ hasText: "@" }).first();
       await userResult.waitFor({ state: "visible", timeout: 5_000 }).catch(() => null);
       if (await userResult.isVisible().catch(() => false)) {
         await userResult.click();

@@ -22,6 +22,8 @@ import {
 } from "@/lib/groupReadReceipts";
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
 import { getVideoPlaybackFallbackUrl, selectVideoPlaybackUrl } from "@/lib/mediaQuality";
+import { EmojiCategoryPicker } from "@/components/ui/EmojiCategoryPicker";
+import { MESSAGE_EMOJI_CATEGORIES, MESSAGE_EMOJI_SEARCH_TERMS } from "@/lib/emojiCatalog";
 
 const EMOJI_QUICK = ["👍", "❤️", "😂", "😮", "😢", "🔥", "👏", "🎉"];
 
@@ -433,6 +435,7 @@ export function MessageBubble({
   usersMap = {}, messagesMap = {}, mediaVariant, senderAvatarVariant, deliveryState, groupReadInfo, onOpenGroupReadReceipts, isSavedChat,
 }: MessageBubbleProps) {
   const [showContext, setShowContext] = useState(false);
+  const [reactionCatalogOpen, setReactionCatalogOpen] = useState(false);
   const [reactionsExpanded, setReactionsExpanded] = useState(false);
   const [contextPos, setContextPos] = useState({ x: 0, y: 0 });
   const [reactionPos, setReactionPos] = useState({ x: 0, y: 0 });
@@ -486,13 +489,19 @@ export function MessageBubble({
           ? { bottom: Math.max(8, viewportHeight - contextPos.y + 8) }
           : { top: Math.min(contextPos.y + 8, Math.max(8, viewportHeight - contextMenuMaxHeight - 8)) }),
       };
-  const reactionPickerWidth = 284;
+  const reactionPickerWidth = reactionCatalogOpen ? Math.min(560, viewportWidth - 16) : 284;
+  const reactionPickerMaxHeight = Math.min(410, viewportHeight - 16);
   const reactionPickerStyle: CSSProperties = {
     left: Math.min(Math.max(8, reactionPos.x - reactionPickerWidth / 2), Math.max(8, viewportWidth - reactionPickerWidth - 8)),
     width: Math.min(reactionPickerWidth, viewportWidth - 16),
-    ...(reactionPos.y > 64
-      ? { top: Math.max(8, reactionPos.y - 52) }
-      : { top: Math.min(viewportHeight - 52, reactionPos.y + 36) }),
+    maxHeight: reactionPickerMaxHeight,
+    ...(reactionCatalogOpen
+      ? reactionPos.y > viewportHeight / 2
+        ? { bottom: Math.max(8, viewportHeight - reactionPos.y + 8) }
+        : { top: Math.min(viewportHeight - reactionPickerMaxHeight - 8, reactionPos.y + 36) }
+      : reactionPos.y > 64
+        ? { top: Math.max(8, reactionPos.y - 52) }
+        : { top: Math.min(viewportHeight - 52, reactionPos.y + 36) }),
   };
   const contextOpen = actionMenuOpen ?? showContext;
   const closeContext = useCallback(() => {
@@ -514,7 +523,10 @@ export function MessageBubble({
   }, [contextOpen]);
 
   useEffect(() => {
-    if (!reactionMenuOpen) return;
+    if (!reactionMenuOpen) {
+      setReactionCatalogOpen(false);
+      return;
+    }
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onCloseReactionMenu?.();
     };
@@ -649,6 +661,13 @@ export function MessageBubble({
     closeContext();
     onToggleReactionMenu?.();
   }, [closeContext, onToggleReactionMenu]);
+
+  const openFullReactionCatalog = useCallback((anchor?: { x: number; y: number }) => {
+    if (anchor) setReactionPos(anchor);
+    setReactionCatalogOpen(true);
+    closeContext();
+    if (!reactionMenuOpen) onToggleReactionMenu?.();
+  }, [closeContext, onToggleReactionMenu, reactionMenuOpen]);
 
   const openContext = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -945,7 +964,7 @@ export function MessageBubble({
           >
             {canReact && (
               <div className="mb-1 flex items-center justify-between gap-1 border-b border-[color:var(--kub-border-color)] px-3 pb-2 pt-1">
-                {EMOJI_QUICK.map((emoji) => (
+                {EMOJI_QUICK.slice(0, 6).map((emoji) => (
                   <button
                     key={emoji}
                     onClick={() => { onReaction(emoji); closeContext(); }}
@@ -958,6 +977,21 @@ export function MessageBubble({
                     {emoji}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    openFullReactionCatalog({ x: rect.left + rect.width / 2, y: rect.top });
+                  }}
+                  className={cn(
+                    "flex min-w-0 flex-1 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-all hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)] active:scale-95",
+                    compactContextMenu ? "h-9" : "h-8",
+                  )}
+                  aria-label="Больше реакций"
+                  title="Больше реакций"
+                >
+                  <KubIcon name="more" size={16} />
+                </button>
               </div>
             )}
             {contextItems.map(({ icon, label, danger, action }) => (
@@ -977,23 +1011,54 @@ export function MessageBubble({
         </div>
       )}
 
-      {canReact && reactionMenuOpen && !compactContextMenu && (
+      {canReact && reactionMenuOpen && (!compactContextMenu || reactionCatalogOpen) && (
         <div
           data-reaction-menu="true"
-          className="fixed z-[55] flex max-w-[calc(100vw-16px)] items-center justify-center gap-0.5 rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 py-1.5 shadow-2xl kub-glow-soft"
+          className={cn(
+            "fixed z-[55] max-w-[calc(100vw-16px)] border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] shadow-2xl kub-glow-soft",
+            reactionCatalogOpen
+              ? "overflow-hidden rounded-xl p-2.5"
+              : "flex items-center justify-center gap-0.5 rounded-full px-2 py-1.5",
+          )}
           style={reactionPickerStyle}
           onClick={(e) => e.stopPropagation()}
         >
-          {EMOJI_QUICK.slice(0, 6).map((emoji) => (
-            <button
-              key={emoji}
-              onClick={() => { onReaction(emoji); onCloseReactionMenu?.(); }}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-lg transition-all hover:scale-125 hover:bg-[var(--kub-surface-3)]"
-              aria-label={`Поставить реакцию ${emoji}`}
-            >
-              {emoji}
-            </button>
-          ))}
+          {reactionCatalogOpen ? (
+            <EmojiCategoryPicker
+              categories={MESSAGE_EMOJI_CATEGORIES}
+              searchTerms={MESSAGE_EMOJI_SEARCH_TERMS}
+              onSelect={(value) => {
+                if (!value) return;
+                onReaction(value);
+                onCloseReactionMenu?.();
+              }}
+              testIdPrefix="reaction-emoji"
+              searchable
+              scrollable
+            />
+          ) : (
+            <>
+              {EMOJI_QUICK.slice(0, 6).map((emoji) => (
+                <button
+                  key={emoji}
+                  onClick={() => { onReaction(emoji); onCloseReactionMenu?.(); }}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-lg transition-all hover:scale-125 hover:bg-[var(--kub-surface-3)]"
+                  aria-label={`Поставить реакцию ${emoji}`}
+                >
+                  {emoji}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setReactionCatalogOpen(true)}
+                className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]"
+                aria-label="Больше реакций"
+                title="Больше реакций"
+              >
+                <KubIcon name="more" size={16} />
+              </button>
+            </>
+          )}
         </div>
       )}
 

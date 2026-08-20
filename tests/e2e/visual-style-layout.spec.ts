@@ -65,7 +65,7 @@ test.describe("LETSCUBE visual style and layout", () => {
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
 
-  test("folder editor keeps one reachable vertical scroll surface", async ({ page }) => {
+  test("folder editor keeps fields fixed and scrolls the searchable chat list", async ({ page }) => {
     const role = findFirstAvailableQaRole(
       ["owner", "tech_admin", "location_admin", "location_staff", "client"],
       { includeDefault: true },
@@ -81,6 +81,26 @@ test.describe("LETSCUBE visual style and layout", () => {
 
     const dialog = page.getByRole("dialog").filter({ hasText: "Новая папка" });
     await expect(dialog).toBeVisible();
+
+    const modalBody = dialog.getByTestId("kub-modal-body");
+    const chatSearch = dialog.getByTestId("folder-chat-search");
+    const chatList = dialog.getByTestId("folder-chat-list");
+    await expect(chatSearch).toBeVisible();
+    await expect(chatList).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Создать" })).toBeVisible();
+
+    const modalBodyOverflow = await modalBody.evaluate((node) => getComputedStyle(node).overflowY);
+    const chatListOverflow = await chatList.evaluate((node) => getComputedStyle(node).overflowY);
+    expect(modalBodyOverflow).toBe("hidden");
+    expect(chatListOverflow).toBe("auto");
+
+    const chatRows = chatList.getByRole("button");
+    if ((await chatRows.count()) > 1) {
+      const firstChatName = (await chatRows.first().innerText()).trim();
+      await chatSearch.fill(firstChatName.slice(0, Math.max(2, Math.min(firstChatName.length, 6))));
+      await expect(chatRows).toHaveCount(1);
+      await chatSearch.fill("");
+    }
 
     const iconCategories = dialog.getByTestId("folder-icon-categories");
     const iconGrid = dialog.getByTestId("folder-icon-grid");
@@ -102,6 +122,7 @@ test.describe("LETSCUBE visual style and layout", () => {
           return overflowY === "auto" || overflowY === "scroll";
         })
         .map((node) => ({
+          testId: node.dataset.testid ?? null,
           className: node.className,
           clientHeight: node.clientHeight,
           scrollHeight: node.scrollHeight,
@@ -110,9 +131,10 @@ test.describe("LETSCUBE visual style and layout", () => {
 
     expect(scrollSurfaces, `folder editor has nested vertical scrolling: ${JSON.stringify(scrollSurfaces)}`)
       .toHaveLength(1);
+    expect(scrollSurfaces[0]?.testId).toBe("folder-chat-list");
   });
 
-  test("message emoji picker stays compact and groups the expanded catalog", async ({ page }) => {
+  test("message emoji picker is one coherent searchable catalog", async ({ page }, testInfo) => {
     const role = findFirstAvailableQaRole(
       ["owner", "tech_admin", "location_admin", "location_staff", "client"],
       { includeDefault: true },
@@ -126,24 +148,56 @@ test.describe("LETSCUBE visual style and layout", () => {
     test.skip((await firstChat.count()) === 0, "QA account has no visible chats");
     await firstChat.click();
 
-    await page.getByRole("button", { name: "Эмодзи" }).click();
+    await page.getByRole("button", { name: "Эмодзи", exact: true }).click();
+    const surface = page.getByTestId("message-emoji-surface");
     const picker = page.getByTestId("message-emoji-picker");
     const categories = page.getByTestId("message-emoji-categories");
     const grid = page.getByTestId("message-emoji-grid");
+    const search = page.getByTestId("message-emoji-search");
+    await expect(surface).toBeVisible();
     await expect(picker).toBeVisible();
+    await expect(search).toBeVisible();
     await expect(categories).toBeVisible();
-    await expect(categories.getByRole("button")).toHaveCount(5);
-    await expect(grid.getByRole("button")).toHaveCount(16);
+    await expect(categories.getByRole("button")).toHaveCount(8);
+    await expect(grid.getByRole("button")).toHaveCount(40);
     await assertNoHorizontalOverflow(categories, "message emoji categories have horizontal overflow");
     await assertNoHorizontalOverflow(grid, "message emoji grid has horizontal overflow");
+    const surfaceBox = await requiredBox(surface, "message emoji surface");
     const pickerBox = await requiredBox(picker, "message emoji picker");
-    expect(pickerBox.width).toBeLessThanOrEqual(440);
+    expect(surfaceBox.width - pickerBox.width).toBeLessThanOrEqual(32);
+    expect(surfaceBox.width).toBeLessThanOrEqual(600);
+    const viewport = testInfo.project.use.viewport;
+    if (viewport && "width" in viewport && viewport.width >= 768) {
+      expect(surfaceBox.width).toBeGreaterThanOrEqual(500);
+    }
 
     await categories.getByRole("button", { name: "Жесты" }).click();
     await expect(categories.getByRole("button", { name: "Жесты" })).toHaveAttribute("data-state", "active");
-    await expect(grid.getByRole("button")).toHaveCount(16);
+    await expect(grid.getByRole("button")).toHaveCount(40);
     await grid.getByRole("button", { name: "Выбрать 👍" }).click();
     await expect(page.getByPlaceholder("Сообщение…")).toHaveValue("👍");
+
+    await search.fill("единорог");
+    await expect(grid.getByRole("button", { name: "Выбрать 🦄" })).toBeVisible();
+    await grid.getByRole("button", { name: "Выбрать 🦄" }).click();
+    await expect(page.getByPlaceholder("Сообщение…")).toHaveValue("👍🦄");
+    await page.getByRole("button", { name: "Эмодзи", exact: true }).click();
+
+    const messageBubble = page.locator('[data-message-bubble="true"]').last();
+    test.skip((await messageBubble.count()) === 0, "QA chat has no messages for reaction picker");
+    if (viewport && "width" in viewport && viewport.width < 640) {
+      await messageBubble.click({ button: "right" });
+    } else {
+      await messageBubble.hover();
+      const reactionTrigger = messageBubble.getByRole("button", { name: "Реакция" });
+      await expect(reactionTrigger).toBeVisible();
+      await reactionTrigger.click();
+    }
+    await page.getByRole("button", { name: "Больше реакций" }).click();
+    const reactionSearch = page.getByTestId("reaction-emoji-search");
+    await expect(reactionSearch).toBeVisible();
+    await reactionSearch.fill("единорог");
+    await expect(page.getByTestId("reaction-emoji-grid").getByRole("button", { name: "Выбрать 🦄" })).toBeVisible();
   });
 
   test("authenticated shell brand stays readable in light theme", async ({ page }, testInfo) => {

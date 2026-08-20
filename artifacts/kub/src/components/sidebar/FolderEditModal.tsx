@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import type { Folder, FolderScope, ChatWithLastMessage, Profile } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
 import { useIsManagerOrAdmin } from "@/hooks/useRole";
@@ -12,6 +12,7 @@ import { FOLDER_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
 import { requestAppConfirm } from "@/lib/appDialogs";
 import { EmojiCategoryPicker } from "@/components/ui/EmojiCategoryPicker";
 import { FOLDER_EMOJI_CATEGORIES } from "@/lib/emojiCatalog";
+import { getChatDisplayInfo } from "@/lib/chatDisplay";
 
 interface FolderEditModalProps {
   folder: Folder | null;
@@ -48,6 +49,29 @@ export function FolderEditModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [creatorProfile, setCreatorProfile] = useState<Profile | null>(null);
+  const [chatFilter, setChatFilter] = useState("");
+
+  const filteredChats = useMemo(() => {
+    const needle = chatFilter.trim().toLocaleLowerCase("ru-RU");
+    if (!needle) return chats;
+    return chats.filter((chat) => {
+      const info = getChatDisplayInfo(chat, currentUser?.id);
+      const memberNames = chat.members
+        ?.flatMap((member) => [member.profile?.full_name, member.profile?.username])
+        .filter(Boolean)
+        .join(" ") ?? "";
+      const haystack = [
+        info.title,
+        info.subtitle,
+        chat.name,
+        chat.description,
+        chat.other_user?.full_name,
+        chat.other_user?.username,
+        memberNames,
+      ].filter(Boolean).join(" ").toLocaleLowerCase("ru-RU");
+      return haystack.includes(needle);
+    });
+  }, [chatFilter, chats, currentUser?.id]);
 
   const initializedForRef = useRef<string | null>(null);
   useEffect(() => {
@@ -163,7 +187,9 @@ export function FolderEditModal({
       title={titleNode}
       icon={<KubIcon name="folderAdd" size={16} />}
       size="sm"
-      contentClassName="px-5 py-4 space-y-3 overscroll-contain"
+      className="sm:h-[min(760px,calc(100vh-32px))]"
+      contentClassName="flex flex-col gap-3 px-5 py-4"
+      scrollBody={false}
       footer={
         <div className="flex items-center gap-2 w-full">
           {folder && canManage && (
@@ -275,18 +301,47 @@ export function FolderEditModal({
         />
       </div>
 
-      <div>
+      <div className="flex min-h-[150px] flex-1 flex-col">
         <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-[color:var(--kub-muted)]">
           Чаты в папке ({selectedChatIds.size})
         </label>
-        <div className="rounded-xl overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
+        <label className="mb-2 flex h-9 items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 focus-within:border-[color:var(--kub-cyan)]">
+          <KubIcon name="search" size={14} className="shrink-0 text-[color:var(--kub-muted)]" />
+          <input
+            type="search"
+            value={chatFilter}
+            onChange={(event) => setChatFilter(event.target.value)}
+            data-testid="folder-chat-search"
+            placeholder="Найти чат или пользователя"
+            className="min-w-0 flex-1 bg-transparent text-xs text-[color:var(--kub-text)] outline-none placeholder:text-[color:var(--kub-muted)]"
+          />
+          {chatFilter && (
+            <button
+              type="button"
+              onClick={() => setChatFilter("")}
+              className="rounded-md p-1 text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]"
+              aria-label="Очистить поиск чатов"
+            >
+              <KubIcon name="close" size={12} />
+            </button>
+          )}
+        </label>
+        <div
+          data-testid="folder-chat-list"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-xl bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]"
+        >
           {chats.length === 0 ? (
             <p className="px-4 py-3 text-xs text-[color:var(--kub-muted)]">
               У тебя пока нет чатов
             </p>
+          ) : filteredChats.length === 0 ? (
+            <p className="px-4 py-6 text-center text-xs text-[color:var(--kub-muted)]">
+              Чаты и пользователи не найдены
+            </p>
           ) : (
-            chats.map((c: ChatWithLastMessage) => {
+            filteredChats.map((c: ChatWithLastMessage) => {
               const checked = selectedChatIds.has(c.id);
+              const display = getChatDisplayInfo(c, currentUser?.id);
               return (
                 <button
                   key={c.id}
@@ -306,7 +361,7 @@ export function FolderEditModal({
                   </div>
                   <ChatAvatar chat={c} size="sm" />
                   <span className="text-sm text-left truncate flex-1 text-[color:var(--kub-text)]">
-                    {c.name ?? "Без названия"}
+                    {display.title}
                   </span>
                 </button>
               );
