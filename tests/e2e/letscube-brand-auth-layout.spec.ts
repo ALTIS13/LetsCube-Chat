@@ -9,7 +9,7 @@ test.describe("Letscube auth brand layout", () => {
     await gotoOrSkip(page, "/login");
 
     const logo = page.getByTestId("auth-brand-lockup").locator("img");
-    await expect(logo).toHaveAttribute("src", /letscube-logo-vertical-dark\.svg$/);
+    await expect(logo).toHaveAttribute("src", /letscube-wordmark-vertical-dark\.svg$/);
   });
 
   for (const path of ["/login", "/register"] as const) {
@@ -19,9 +19,17 @@ test.describe("Letscube auth brand layout", () => {
       await gotoOrSkip(page, path);
 
       await expect(page.getByTestId("auth-brand-lockup")).toBeVisible();
-      await expect(page.locator('img[src*="letscube-logo"]')).toHaveCount(1);
+      await expect(page.locator('img[src*="letscube-wordmark"]')).toHaveCount(1);
       await expect(page.getByText("КУБ", { exact: true })).toHaveCount(0);
       await expect(page.getByText("KUB", { exact: true })).toHaveCount(0);
+
+      const visibleText = await page.locator("body").innerText();
+      expect(visibleText).not.toMatch(/кибер[- ]?арен|игров(?:ой|ого)\s+клуб/i);
+
+      const description = await page.locator('meta[name="description"]').getAttribute("content");
+      expect(description).toBe(
+        "LETSCUBE - защищённый мессенджер для общения, задач и совместной работы.",
+      );
 
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
         await page.evaluate(() => window.innerWidth + 1),
@@ -106,7 +114,7 @@ test.describe("Letscube safe public registration", () => {
             created_at: "2026-06-21T00:00:00.000Z",
             updated_at: "2026-06-21T00:00:00.000Z",
             app_metadata: { provider: "email", providers: ["email"] },
-            user_metadata: { full_name: "Новый Игрок" },
+            user_metadata: { full_name: "Новый пользователь" },
             identities: [],
           },
         }),
@@ -117,7 +125,7 @@ test.describe("Letscube safe public registration", () => {
     });
 
     await gotoOrSkip(page, "/register");
-    await page.locator('input[autocomplete="name"]').fill("Новый Игрок");
+    await page.locator('input[autocomplete="name"]').fill("Новый пользователь");
     await page.locator('input[type="email"]').fill("new-user@example.test");
     await page.locator('input[type="password"]').fill("correct-horse-battery");
     await page.getByRole("button", { name: "Создать аккаунт" }).click();

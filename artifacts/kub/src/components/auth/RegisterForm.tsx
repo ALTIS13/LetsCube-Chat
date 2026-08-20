@@ -138,11 +138,11 @@ export function RegisterForm() {
                 tone={resolvedTheme === "light" ? "dark" : "light"}
                 className="h-24 w-56 justify-center"
                 imgClassName="max-h-24"
-                alt="Letscube"
+                alt="LETSCUBE"
               />
             </div>
             <p className="text-sm text-[color:var(--kub-muted)]">
-              Защищённое пространство общения
+              Защищённый мессенджер
             </p>
           </div>
 
@@ -201,7 +201,7 @@ export function RegisterForm() {
               tone={resolvedTheme === "light" ? "dark" : "light"}
               className="h-24 w-56 justify-center"
               imgClassName="max-h-24"
-              alt="Letscube"
+              alt="LETSCUBE"
             />
           </div>
           <div className="text-center">
@@ -209,7 +209,7 @@ export function RegisterForm() {
               Создать аккаунт
             </h1>
             <p className="text-sm mt-1 text-[color:var(--kub-muted)]">
-              Доступ к панели связи LETSCUBE
+              Для общения и совместной работы в LETSCUBE
             </p>
           </div>
         </div>

@@ -5,12 +5,12 @@ import {
   loginAsRoleOrSkip,
 } from "./helpers/auth";
 
-test.describe("KUB visual style and layout", () => {
+test.describe("LETSCUBE visual style and layout", () => {
   test("brand assets render on auth shell", async ({ page }, testInfo) => {
     const consoleErrors = collectConsoleErrors(page);
 
     await gotoOrSkip(page, "/login");
-    await expect(page.locator('img[src*="letscube-logo-vertical-light"]').first()).toBeVisible();
+    await expect(page.locator('img[src*="letscube-wordmark-vertical-"]').first()).toBeVisible();
 
     const viewport = testInfo.project.use.viewport;
     const viewportWidth = viewport && typeof viewport === "object" && "width" in viewport ? viewport.width : 0;
@@ -80,7 +80,7 @@ test.describe("KUB visual style and layout", () => {
 
     const brand = page.getByTestId("sidebar-brand-strip");
     await expect(brand).toBeVisible();
-    await expect(brand.locator('img[src*="letscube-logo-horizontal-dark"]')).toBeVisible();
+    await expect(brand.locator('img[src*="letscube-wordmark-horizontal-dark"]')).toBeVisible();
     await assertNoHorizontalOverflow(brand, "light theme sidebar brand has horizontal overflow");
 
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);

@@ -164,10 +164,10 @@ function AuthCallback() {
             tone="light"
             className="h-24 w-56 justify-center"
             imgClassName="max-h-24"
-            alt="Letscube"
+            alt="LETSCUBE"
           />
           <p className="text-sm text-[color:var(--kub-muted)]">
-            Защищённое пространство общения
+            Защищённый мессенджер
           </p>
         </div>
         {recoveryMode ? (

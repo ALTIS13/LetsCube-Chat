@@ -128,7 +128,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
           tone={resolvedTheme === "light" ? "dark" : "light"}
           className="h-8 min-w-0 flex-1"
           imgClassName="max-h-8 w-auto max-w-full"
-          alt="Letscube"
+          alt="LETSCUBE"
         />
       </div>
 

@@ -16,18 +16,18 @@ export function KubBrandLogo({
   className,
   imgClassName,
   decorative = false,
-  alt = "Letscube",
+  alt = "LETSCUBE",
 }: KubBrandLogoProps) {
   const file =
     variant === "mark"
       ? "letscube-mark.svg"
       : variant === "vertical"
         ? tone === "dark"
-          ? "letscube-logo-vertical-dark.svg"
-          : "letscube-logo-vertical-light.svg"
+          ? "letscube-wordmark-vertical-dark.svg"
+          : "letscube-wordmark-vertical-light.svg"
         : tone === "dark"
-          ? "letscube-logo-horizontal-dark.svg"
-          : "letscube-logo-horizontal-light.svg";
+          ? "letscube-wordmark-horizontal-dark.svg"
+          : "letscube-wordmark-horizontal-light.svg";
 
   return (
     <span className={cn("inline-flex min-w-0 items-center", className)}>
