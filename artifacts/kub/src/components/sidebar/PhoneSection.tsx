@@ -136,9 +136,10 @@ export function PhoneSection() {
     );
     const claimCreated = !claimError && claimData?.ok === true;
     if (!claimCreated) {
+      const claimErrorCode = await readPhoneGatewayErrorCode(claimData, claimError);
       setBusy(null);
       setStage("idle");
-      setError(humanisePhoneGatewayError(claimData?.error));
+      setError(humanisePhoneGatewayError(claimErrorCode));
       return;
     }
     const { error: err } = resend
@@ -435,4 +436,26 @@ function humanisePhoneGatewayError(code: unknown): string {
     default:
       return "Не удалось подготовить отправку кода. Попробуйте позже.";
   }
+}
+
+async function readPhoneGatewayErrorCode(data: unknown, error: unknown): Promise<unknown> {
+  const directCode = readGatewayErrorCode(data);
+  if (directCode) return directCode;
+
+  const context = error && typeof error === "object" && "context" in error
+    ? (error as { context?: unknown }).context
+    : null;
+  if (!context || typeof context !== "object" || !("clone" in context)) return undefined;
+
+  try {
+    const response = (context as Response).clone();
+    return readGatewayErrorCode(await response.json());
+  } catch {
+    return undefined;
+  }
+}
+
+function readGatewayErrorCode(value: unknown): unknown {
+  if (!value || typeof value !== "object" || !("error" in value)) return undefined;
+  return (value as { error?: unknown }).error;
 }

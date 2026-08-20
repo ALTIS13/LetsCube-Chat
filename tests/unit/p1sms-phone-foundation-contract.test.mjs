@@ -42,6 +42,16 @@ test("settings create a server claim before asking Supabase Auth to send an OTP"
   assert.match(source, /profile_phone_mark_verified[\s\S]*?cancelPhoneClaim/u);
 });
 
+test("settings preserve structured gateway errors returned with non-2xx responses", async () => {
+  const source = await readFile(PHONE_SECTION, "utf8");
+  assert.match(
+    source,
+    /await readPhoneGatewayErrorCode\(claimData, claimError\)/u,
+    "the UI must recover the gateway error code from FunctionsHttpError.context",
+  );
+  assert.match(source, /humanisePhoneGatewayError\(claimErrorCode\)/u);
+});
+
 test("Send SMS hook remains fail-closed and verifies Standard Webhooks first", async () => {
   const source = await readFile(HOOK, "utf8");
   const signatureCheck = source.indexOf("new Webhook");
