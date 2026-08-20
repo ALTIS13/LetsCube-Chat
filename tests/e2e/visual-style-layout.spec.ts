@@ -65,6 +65,41 @@ test.describe("LETSCUBE visual style and layout", () => {
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
 
+  test("folder editor keeps one reachable vertical scroll surface", async ({ page }) => {
+    const role = findFirstAvailableQaRole(
+      ["owner", "tech_admin", "location_admin", "location_staff", "client"],
+      { includeDefault: true },
+    );
+    test.skip(!role, "QA credentials or auth state are not configured");
+
+    await gotoOrSkip(page, "/");
+    await loginAsRoleOrSkip(page, role);
+
+    const openEditor = page.getByRole("button", { name: "Новая папка" }).first();
+    test.skip((await openEditor.count()) === 0, "Folder controls are unavailable for this QA role");
+    await openEditor.click();
+
+    const dialog = page.getByRole("dialog").filter({ hasText: "Новая папка" });
+    await expect(dialog).toBeVisible();
+
+    const scrollSurfaces = await dialog.locator("*").evaluateAll((nodes) =>
+      nodes
+        .filter((node): node is HTMLElement => node instanceof HTMLElement)
+        .filter((node) => {
+          const overflowY = getComputedStyle(node).overflowY;
+          return overflowY === "auto" || overflowY === "scroll";
+        })
+        .map((node) => ({
+          className: node.className,
+          clientHeight: node.clientHeight,
+          scrollHeight: node.scrollHeight,
+        })),
+    );
+
+    expect(scrollSurfaces, `folder editor has nested vertical scrolling: ${JSON.stringify(scrollSurfaces)}`)
+      .toHaveLength(1);
+  });
+
   test("authenticated shell brand stays readable in light theme", async ({ page }, testInfo) => {
     const consoleErrors = collectConsoleErrors(page);
     const role = findFirstAvailableQaRole(

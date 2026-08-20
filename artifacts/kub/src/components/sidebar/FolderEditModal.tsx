@@ -163,7 +163,7 @@ export function FolderEditModal({
       title={titleNode}
       icon={<KubIcon name="folderAdd" size={16} />}
       size="sm"
-      contentClassName="px-5 py-4 space-y-3 max-h-[60vh] overflow-y-auto"
+      contentClassName="px-5 py-4 space-y-3 overscroll-contain"
       footer={
         <div className="flex items-center gap-2 w-full">
           {folder && canManage && (
@@ -300,7 +300,7 @@ export function FolderEditModal({
         <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-[color:var(--kub-muted)]">
           Чаты в папке ({selectedChatIds.size})
         </label>
-        <div className="rounded-xl overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] max-h-56 overflow-y-auto">
+        <div className="rounded-xl overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
           {chats.length === 0 ? (
             <p className="px-4 py-3 text-xs text-[color:var(--kub-muted)]">
               У тебя пока нет чатов
