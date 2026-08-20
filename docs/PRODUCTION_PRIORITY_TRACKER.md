@@ -316,14 +316,14 @@ Status: `[~]` active. Android and Windows Tauri internal candidates are availabl
 
 ## Next Phone Verification Rollout
 
-Status: `[~]` production search is complete; real SMS delivery and physical OTP QA are next.
+Status: `[~]` production search is complete; Telegram-first p1sms delivery and physical OTP QA are next.
 
 - Keep the current no-fake-verification fallback and never mark a number verified before a real OTP succeeds.
 - `[x]` Privacy-safe exact phone search is deployed through `search_profiles_by_phone(text, integer)`. It accepts only normalized `+E.164`, requires `users.view`, returns profile fields without the phone number, and includes only `phone_verified = true` contacts.
 - `[x]` The profile flow already uses `auth.updateUser({ phone })`, `verifyOtp(..., type: "phone_change")`, and `profile_phone_mark_verified()`. The database RPC re-checks `auth.users.phone_confirmed_at`, so the client cannot mark a number verified directly.
 - `[x]` 2026-08-01 production audit: Supabase Auth `v2.189.0`, phone provider disabled, SMS autoconfirm disabled, Send SMS Hook not configured, zero verified phone contacts, and zero pending/duplicate/stale `phone_change` rows.
 - `[x]` Delivery architecture selected: Supabase Auth HTTP Send SMS Hook -> server-side LETSCUBE adapter -> p1sms. Supabase Auth remains responsible for OTP generation and verification.
-- `[x]` p1sms source foundation: strict 46-character template, hard 65-character guard, one immediate `digit` message per request, `letscube-otp` tag, redirect blocking, Standard Webhooks verification, deployed GoTrue digits-only `sms.phone` normalization with guarded legacy fallback, HMAC claim checks, concurrent-retry idempotency, per-user/per-phone server ceilings and safe result categories. It is deployed for an explicit expiring pilot allowlist; automated validation made no real SMS request.
+- `[x]` p1sms source foundation: strict 46-character template, hard 65-character guard, one immediate `telegram_auth` message per request, provider-managed `not_delivered` fallback to digital SMS, `letscube-otp` tag, redirect blocking, Standard Webhooks verification, deployed GoTrue digits-only `sms.phone` normalization with guarded legacy fallback, HMAC claim checks, concurrent-retry idempotency, per-user/per-phone server ceilings and safe result categories. LETSCUBE neither manages cascade schemes nor retries the provider request. It is deployed for an explicit expiring pilot allowlist; automated validation makes no real delivery request.
 - `[~]` Provider activation: deploy only `P1SMS_API_KEY` and hook/HMAC secrets to trusted server storage for the allowlisted physical test. Keep the shared LETSCUBE account isolated by never calling p1sms account, sender, history, scheduling, reject, phone-base or blacklist APIs.
 - `[~]` Review, rehearse and apply `.migration-backup/supabase/migrations/20260810_smsru_phone_verification_foundation.sql` after a current backup. Global policy, cutoff and enforcement defaults remain off; pilot access is a separate live data row and is not committed.
 - `[x]` Configure `GOTRUE_EXTERNAL_PHONE_ENABLED`, `GOTRUE_HOOK_SEND_SMS_ENABLED`, hook URI and hook secret in the self-hosted Auth runtime; SMS autoconfirm remains disabled.

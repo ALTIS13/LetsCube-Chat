@@ -1580,3 +1580,22 @@ Recurring tasks roadmap note:
   proving that neither the provider nor its key was involved. The regression
   fixture now uses the exact digits-only GoTrue payload, and the hook restores
   canonical `+E.164` before claim HMAC and p1sms correlation.
+
+# 2026-08-20 - p1sms Telegram-first OTP cascade
+
+- Switched the single p1sms OTP request from direct `digit` delivery to
+  `telegram_auth`. The account-level p1sms rule owns the `not_delivered`
+  fallback to digital SMS; LETSCUBE does not set `cascadeSchemeId` or issue a
+  second provider request.
+- Kept the 46-character OTP text, 65-character hard limit, fixed endpoint,
+  redirect blocking, provider-response sanitization, rate limits and pilot
+  allowlist unchanged.
+- Updated phone settings to use channel-neutral delivery wording. Supabase Auth
+  remains the sole OTP generator and verifier.
+- Validation: p1sms/hook contracts 18/18, frontend typecheck and production
+  build passed. The targeted five-viewport push/phone suite passed 15 static
+  guards and skipped 15 authenticated cases because no QA auth state was
+  available. Authenticated smoke skipped all five viewports for the same
+  reason. Database type drift remained advisory-only; RLS smoke exited 0 after
+  reporting unavailable QA sessions and no mutation fixtures. No provider
+  delivery request was made by automated validation.

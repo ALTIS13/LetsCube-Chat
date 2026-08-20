@@ -7,7 +7,7 @@ marked verified until Supabase Auth OTP verification succeeds.
 
 - No fake verification path.
 - No "save without verification" path.
-- Missing SMS provider errors are shown as friendly setup messages.
+- Missing code-delivery provider errors are shown as friendly setup messages.
 - Raw provider errors are not shown in UI.
 
 ## Self-host setup
@@ -29,9 +29,11 @@ marked verified until Supabase Auth OTP verification succeeds.
 8. Add Auth/provider rate limits, resend cooldown, cost alerts and sanitized
    delivery metrics before enabling production traffic.
 9. Store `P1SMS_API_KEY` only as a trusted server secret. Runtime code may call
-   only `POST /apiSms/create` with one immediate `digit` message and must never
-   modify shared account senders, bases, blacklists, schedules or messages
-   belonging to other LETSCUBE services.
+   only `POST /apiSms/create` with one immediate `telegram_auth` message. The
+   p1sms account-level rule performs the `not_delivered` fallback to digital
+   SMS; LETSCUBE must not create a second provider request or manage cascade
+   schemes, shared senders, bases, blacklists, schedules or messages belonging
+   to other LETSCUBE services.
 10. For physical QA, keep the global policy disabled and add only the test user
     ID to `phone_verification_pilot_users`. Remove or disable that row after QA
     if the production rollout is not continuing.
@@ -40,7 +42,7 @@ marked verified until Supabase Auth OTP verification succeeds.
 
 - Invalid local phone number is rejected.
 - E.164-style number is accepted.
-- OTP send works with real provider.
+- OTP delivery works through Telegram and falls back to digital SMS when Telegram is unavailable.
 - Wrong OTP shows friendly error.
 - Correct OTP sets verified state.
 - Changing phone requires a fresh OTP.

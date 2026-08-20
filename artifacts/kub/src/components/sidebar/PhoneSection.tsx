@@ -10,7 +10,8 @@ import { mapPgError } from "@/lib/errors";
 
 const RESEND_WAIT_MS = 60_000;
 const PHONE_FORMAT_HINT = "Введите номер в международном формате, например +79991234567.";
-const SMS_PROVIDER_MISSING_MESSAGE = "SMS-провайдер не настроен. Обратитесь к администратору.";
+const CODE_DELIVERY_UNAVAILABLE_MESSAGE =
+  "Сервис доставки кода не настроен. Обратитесь к администратору.";
 
 /**
  * Settings → Phone section.
@@ -21,12 +22,13 @@ const SMS_PROVIDER_MISSING_MESSAGE = "SMS-провайдер не настрое
  * caller's own row.
  *
  * Verified-only flow: `auth.updateUser({phone})` triggers a 6-digit
- * SMS OTP; the user enters the code, we call `verifyOtp`, then the
+ * OTP delivery through Telegram with an SMS fallback; the user enters
+ * the code, we call `verifyOtp`, then the
  * SECURITY DEFINER RPC `profile_phone_mark_verified()` mirrors the
  * verified state into `profile_contacts`. The RPC re-checks
  * `auth.users.phone_confirmed_at`, so the client cannot lie.
  *
- * If the project's SMS provider is not configured, `auth.updateUser`
+ * If the project's delivery provider is not configured, `auth.updateUser`
  * fails with a recognisable error. We surface a friendly setup message
  * and do not persist a new phone number as verified or unverified.
  */
@@ -149,7 +151,7 @@ export function PhoneSection() {
         setStage("unsupported");
         setCode("");
         setResendAvailableAt(null);
-        setInfo(SMS_PROVIDER_MISSING_MESSAGE);
+        setInfo(CODE_DELIVERY_UNAVAILABLE_MESSAGE);
       } else {
         setStage("idle");
         setError(humanise(err.message));
@@ -160,7 +162,7 @@ export function PhoneSection() {
     setStage("code-sent");
     setNow(Date.now());
     setResendAvailableAt(nextResendAt);
-    setInfo(`Код из 6 цифр отправлен на ${normalised}`);
+    setInfo(`Код отправлен в Telegram или SMS на номер ${normalised}`);
   };
 
   const verifyCode = async () => {
@@ -178,7 +180,11 @@ export function PhoneSection() {
     });
     if (vErr) {
       setBusy(null);
-      setError(looksLikeProviderUnavailable(vErr.message) ? SMS_PROVIDER_MISSING_MESSAGE : humanise(vErr.message));
+      setError(
+        looksLikeProviderUnavailable(vErr.message)
+          ? CODE_DELIVERY_UNAVAILABLE_MESSAGE
+          : humanise(vErr.message),
+      );
       return;
     }
     const { error: rpcErr } = await supabase.rpc("profile_phone_mark_verified");
@@ -273,7 +279,7 @@ export function PhoneSection() {
       {stage === "code-sent" && (
         <div className="px-4 pt-0 pb-3 border-t border-[color:var(--kub-border-color)]">
           <label className="text-[10px] font-semibold uppercase tracking-wider mt-3 mb-1.5 block text-[color:var(--kub-cyan)]">
-            Код из SMS (6 цифр)
+            Код подтверждения (6 цифр)
           </label>
           <input
             inputMode="numeric"
@@ -420,7 +426,7 @@ function humanise(msg: string): string {
 function humanisePhoneGatewayError(code: unknown): string {
   switch (code) {
     case "disabled":
-      return "SMS-подтверждение пока недоступно для этого аккаунта.";
+      return "Подтверждение телефона пока недоступно для этого аккаунта.";
     case "phone_in_use":
       return "Этот номер уже привязан к другому аккаунту.";
     case "invalid_phone":

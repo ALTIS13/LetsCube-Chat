@@ -1,13 +1,13 @@
 # Phone Verification
 
-Status: the verified-only UI/database flow and privacy-safe exact phone search are deployed. A p1sms production pilot is prepared for an explicit server-managed allowlist; global SMS rollout and enforcement remain disabled.
+Status: the verified-only UI/database flow and privacy-safe exact phone search are deployed. A p1sms Telegram-first production pilot is prepared for an explicit server-managed allowlist; global rollout and enforcement remain disabled.
 
 ## Current flow
 
 1. User enters a phone number in profile settings.
 2. The app requires an explicit international E.164-style number with `+` and country code, for example `+79991234567`. Spaces, dashes and parentheses are removed for convenience, but local numbers without `+` are not accepted.
 3. The app creates a short-lived server-side HMAC claim before calling Supabase Auth phone update. The claim contains no raw phone number.
-4. Supabase Auth generates the OTP and invokes the signed LETSCUBE Send SMS Hook. A repeated send uses the dedicated `phone_change` resend endpoint.
+4. Supabase Auth generates the OTP and invokes the signed LETSCUBE Send SMS Hook. The hook submits one `telegram_auth` message to p1sms; the provider-managed account cascade falls back to digital SMS after `not_delivered`. A repeated send uses the dedicated `phone_change` resend endpoint.
 5. User enters the 6-digit code.
 6. The app calls Supabase Auth OTP verification.
 7. Only after successful OTP verification, `profile_phone_mark_verified()` mirrors the verified phone into `public.profile_contacts`.
@@ -38,7 +38,7 @@ Use the [Supabase Send SMS Hook](https://supabase.com/docs/guides/auth/auth-hook
 
 Selected provider: p1sms. Production activation uses server-only `P1SMS_API_KEY`, `SEND_SMS_HOOK_SECRET` and `PHONE_CLAIM_HMAC_SECRET`. Global policy remains disabled during the first physical QA; only records in the private `phone_verification_pilot_users` allowlist may create a delivery claim.
 
-The p1sms account is shared by LETSCUBE services. The runtime adapter therefore has a deliberately narrow contract: it calls only `POST https://admin.p1sms.ru/apiSms/create`, submits one immediate `digit` message tagged `letscube-otp`, blocks HTTP redirects and never calls account, balance, sender, history, scheduling, reject, phone-base or blacklist endpoints. The API key is read only after `SMS_DELIVERY_ENABLED=true`, remains in trusted Edge Function/Coolify secrets and is never placed in a URL, frontend bundle, log or database row.
+The p1sms account is shared by LETSCUBE services. The runtime adapter therefore has a deliberately narrow contract: it calls only `POST https://admin.p1sms.ru/apiSms/create`, submits one immediate `telegram_auth` message tagged `letscube-otp`, blocks HTTP redirects and never calls account, balance, sender, history, scheduling, reject, phone-base, blacklist or cascade-management endpoints. The account-level Telegram-to-digital-SMS fallback is configured by p1sms support and is not recreated or retried by LETSCUBE. The API key is read only after `SMS_DELIVERY_ENABLED=true`, remains in trusted Edge Function/Coolify secrets and is never placed in a URL, frontend bundle, log or database row.
 
 The exact production template is `LETSCUBE: код 123456. Никому его не сообщайте.`. It is 46 characters for a six-digit code and the adapter rejects any SMS longer than 65 characters before contacting the provider.
 
@@ -64,7 +64,7 @@ Before production enablement, add protection for the [documented `phone_change` 
 If Supabase Auth returns a provider setup error, the UI shows:
 
 ```text
-SMS-провайдер не настроен. Обратитесь к администратору.
+Сервис доставки кода не настроен. Обратитесь к администратору.
 ```
 
 Raw provider details are not shown in the UI.
@@ -73,9 +73,9 @@ The app does not mark the phone as verified and does not save a changed phone nu
 
 ## Manual QA
 
-- With SMS provider disabled, try to verify a phone and confirm the friendly setup message.
+- With provider delivery disabled, try to verify a phone and confirm the friendly setup message.
 - Confirm a local number such as `89991234567` is rejected and `+79991234567` is accepted as input.
-- With SMS provider enabled, verify a real test number.
+- With provider delivery enabled, verify Telegram delivery and the digital-SMS fallback on a real test number.
 - Confirm `profile_contacts.phone_verified = true` and `phone_verified_at` is set only after OTP success.
 - Change the number and confirm it requires a fresh OTP.
 - Confirm the resend action is delayed by the countdown and that there is no “save without verification” action.

@@ -107,7 +107,9 @@ test.describe("LETSCUBE push and phone production foundation", () => {
 
     await phoneInput.fill("+1 (555) 123-45-67");
     await page.getByRole("button", { name: /Подтвердить номер|Изменить номер/ }).click();
-    await expect(page.getByText("SMS-провайдер не настроен. Обратитесь к администратору.")).toBeVisible();
+    await expect(
+      page.getByText("Сервис доставки кода не настроен. Обратитесь к администратору."),
+    ).toBeVisible();
     await expect(page.getByText(/Twilio|account SID|missing Twilio/i)).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Сохранить без/ })).toHaveCount(0);
     expect(phoneFlowCalls.slice(0, 3)).toEqual([

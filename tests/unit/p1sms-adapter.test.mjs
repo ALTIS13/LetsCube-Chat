@@ -20,7 +20,7 @@ test("LETSCUBE p1sms OTP remains one short message", () => {
   assert.throws(() => renderSmsOtp("12345"), /invalid_otp/u);
 });
 
-test("p1sms request is a single immediate digit message and keeps the key out of the URL", () => {
+test("p1sms request starts the account-level Telegram-to-digit cascade without duplicating delivery", () => {
   const request = buildP1SmsRequest({
     apiKey: "private-api-key",
     phone: "+79991234567",
@@ -36,7 +36,7 @@ test("p1sms request is a single immediate digit message and keeps the key out of
     apiKey: "private-api-key",
     sms: [
       {
-        channel: "digit",
+        channel: "telegram_auth",
         text: "LETSCUBE: код 123456. Никому его не сообщайте.",
         phone: "79991234567",
         tag: P1SMS_TAG,
@@ -46,6 +46,7 @@ test("p1sms request is a single immediate digit message and keeps the key out of
   assert.equal(payload.sms.length, 1);
   assert.equal("sender" in payload.sms[0], false);
   assert.equal("plannedAt" in payload.sms[0], false);
+  assert.equal("cascadeSchemeId" in payload.sms[0], false);
   assert.equal("webhookUrl" in payload, false);
 });
 

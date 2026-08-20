@@ -168,8 +168,11 @@ user name, URL or dynamic prose may be appended.
 - Use `P1SMS_API_KEY` from server secrets. Never place the key, phone or message
   in a URL and reject redirects before the credential-bearing body can leave
   the fixed provider host.
-- Send exactly one immediate `digit` message tagged `letscube-otp`; do not set
-  a sender, webhook, schedule, randomizer, link or cascade.
+- Send exactly one immediate `telegram_auth` message tagged `letscube-otp`.
+  The p1sms account-level cascade, configured by provider support, performs the
+  `not_delivered` fallback to digital SMS. Do not set a sender, webhook,
+  schedule, randomizer, link or `cascadeSchemeId`, and never submit a second
+  provider request for the same Auth event.
 - For `phone_change`, use a valid `user.new_phone`; never fall back to the old
   `user.phone` when `new_phone` is present but malformed.
 - Never log the API key, OTP, full phone, request body or raw provider response.

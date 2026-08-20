@@ -64,6 +64,8 @@ test("Send SMS hook remains fail-closed and verifies Standard Webhooks first", a
 test("p1sms runtime adapter can only use the fixed send endpoint", async () => {
   const source = await readFile(ADAPTER, "utf8");
   assert.match(source, /https:\/\/admin\.p1sms\.ru\/apiSms\/create/u);
+  assert.match(source, /channel:\s*"telegram_auth"/u);
+  assert.doesNotMatch(source, /cascadeSchemeId/u);
   assert.match(source, /redirect:\s*"error"/u);
   assert.match(source, /tag:\s*P1SMS_TAG/u);
   assert.doesNotMatch(
@@ -71,6 +73,15 @@ test("p1sms runtime adapter can only use the fixed send endpoint", async () => {
     /apiUsers|apiSenders|getSmsStatus|getSmsList|\/reject|changePlannedTime|phoneBase|blacklist/iu,
   );
   assert.doesNotMatch(source, /console\.(?:log|debug|error)\(/u);
+});
+
+test("phone UI describes the provider cascade without promising SMS-only delivery", async () => {
+  const source = await readFile(PHONE_SECTION, "utf8");
+  assert.match(source, /Код отправлен в Telegram или SMS/u);
+  assert.match(source, /Код подтверждения \(6 цифр\)/u);
+  assert.match(source, /Сервис доставки кода не настроен/u);
+  assert.doesNotMatch(source, /Код из SMS/u);
+  assert.doesNotMatch(source, /SMS-провайдер не настроен/u);
 });
 
 test("schema proposal defaults rollout off and keeps internal tables private", async () => {
