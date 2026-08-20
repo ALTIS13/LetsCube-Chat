@@ -489,8 +489,8 @@ export function MessageBubble({
           ? { bottom: Math.max(8, viewportHeight - contextPos.y + 8) }
           : { top: Math.min(contextPos.y + 8, Math.max(8, viewportHeight - contextMenuMaxHeight - 8)) }),
       };
-  const reactionPickerWidth = reactionCatalogOpen ? Math.min(560, viewportWidth - 16) : 284;
-  const reactionPickerMaxHeight = Math.min(410, viewportHeight - 16);
+  const reactionPickerWidth = reactionCatalogOpen ? Math.min(480, viewportWidth - 16) : 284;
+  const reactionPickerMaxHeight = Math.min(340, viewportHeight - 16);
   const reactionPickerStyle: CSSProperties = {
     left: Math.min(Math.max(8, reactionPos.x - reactionPickerWidth / 2), Math.max(8, viewportWidth - reactionPickerWidth - 8)),
     width: Math.min(reactionPickerWidth, viewportWidth - 16),
@@ -1017,7 +1017,7 @@ export function MessageBubble({
           className={cn(
             "fixed z-[55] max-w-[calc(100vw-16px)] border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] shadow-2xl kub-glow-soft",
             reactionCatalogOpen
-              ? "overflow-hidden rounded-xl p-2.5"
+              ? "overflow-hidden rounded-xl p-2"
               : "flex items-center justify-center gap-0.5 rounded-full px-2 py-1.5",
           )}
           style={reactionPickerStyle}
@@ -1035,6 +1035,7 @@ export function MessageBubble({
               testIdPrefix="reaction-emoji"
               searchable
               scrollable
+              compact
             />
           ) : (
             <>

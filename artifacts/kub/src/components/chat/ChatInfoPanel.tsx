@@ -568,7 +568,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
 
   return (
     <div className="flex min-h-0 flex-col h-full w-full md:w-80 flex-shrink-0 border-l bg-[var(--kub-surface)] border-[color:var(--kub-border-color)]" data-testid="chat-info-panel">
-      <div className="sticky top-0 z-20 grid h-14 flex-shrink-0 grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3" data-testid="chat-info-header">
+      <div className="sticky top-0 z-20 grid h-[var(--kub-control-row-height)] flex-shrink-0 grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3" data-testid="chat-info-header">
         <button
           onClick={onClose}
           className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)]"

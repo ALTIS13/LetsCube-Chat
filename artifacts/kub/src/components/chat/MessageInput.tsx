@@ -769,7 +769,7 @@ export function MessageInput({
         <div className="flex justify-end px-3 pb-2 pt-1.5">
           <div
             data-testid="message-emoji-surface"
-            className="w-full max-w-[560px] rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-2.5 shadow-[0_12px_32px_rgba(0,0,0,0.2)]"
+            className="w-full max-w-[480px] rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-2 shadow-[0_12px_32px_rgba(0,0,0,0.2)]"
           >
             <EmojiCategoryPicker
               categories={MESSAGE_EMOJI_CATEGORIES}
@@ -779,6 +779,7 @@ export function MessageInput({
               searchable
               searchTerms={MESSAGE_EMOJI_SEARCH_TERMS}
               scrollable
+              compact
             />
           </div>
         </div>

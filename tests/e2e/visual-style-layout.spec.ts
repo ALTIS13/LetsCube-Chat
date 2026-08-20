@@ -165,10 +165,11 @@ test.describe("LETSCUBE visual style and layout", () => {
     const surfaceBox = await requiredBox(surface, "message emoji surface");
     const pickerBox = await requiredBox(picker, "message emoji picker");
     expect(surfaceBox.width - pickerBox.width).toBeLessThanOrEqual(32);
-    expect(surfaceBox.width).toBeLessThanOrEqual(600);
+    expect(surfaceBox.width).toBeLessThanOrEqual(500);
+    expect(surfaceBox.height).toBeLessThanOrEqual(320);
     const viewport = testInfo.project.use.viewport;
     if (viewport && "width" in viewport && viewport.width >= 768) {
-      expect(surfaceBox.width).toBeGreaterThanOrEqual(500);
+      expect(surfaceBox.width).toBeGreaterThanOrEqual(440);
     }
 
     await categories.getByRole("button", { name: "Жесты" }).click();
@@ -196,6 +197,9 @@ test.describe("LETSCUBE visual style and layout", () => {
     await page.getByRole("button", { name: "Больше реакций" }).click();
     const reactionSearch = page.getByTestId("reaction-emoji-search");
     await expect(reactionSearch).toBeVisible();
+    const reactionPickerBox = await requiredBox(page.getByTestId("reaction-emoji-picker"), "reaction emoji picker");
+    expect(reactionPickerBox.width).toBeLessThanOrEqual(480);
+    expect(reactionPickerBox.height).toBeLessThanOrEqual(300);
     await reactionSearch.fill("единорог");
     await expect(page.getByTestId("reaction-emoji-grid").getByRole("button", { name: "Выбрать 🦄" })).toBeVisible();
   });
@@ -248,7 +252,7 @@ test.describe("LETSCUBE visual style and layout", () => {
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
 
-  test("chat profile panel header and summary are aligned", async ({ page }) => {
+  test("chat profile panel header and summary are aligned", async ({ page }, testInfo) => {
     const consoleErrors = collectConsoleErrors(page);
     const role = findFirstAvailableQaRole(
       ["owner", "tech_admin", "location_admin", "location_staff", "client"],
@@ -268,6 +272,7 @@ test.describe("LETSCUBE visual style and layout", () => {
     await infoButton.click();
 
     const panel = page.getByTestId("chat-info-panel");
+    const chatHeader = page.getByTestId("chat-header-shell");
     const header = page.getByTestId("chat-info-header");
     const summary = page.getByTestId("chat-info-summary");
     await expect(panel).toBeVisible();
@@ -282,6 +287,13 @@ test.describe("LETSCUBE visual style and layout", () => {
     expect(headerBox.x + headerBox.width).toBeLessThanOrEqual(panelBox.x + panelBox.width + 1);
     expect(summaryBox.x).toBeGreaterThanOrEqual(panelBox.x - 1);
     expect(summaryBox.x + summaryBox.width).toBeLessThanOrEqual(panelBox.x + panelBox.width + 1);
+    const viewport = testInfo.project.use.viewport;
+    if (viewport && "width" in viewport && viewport.width >= 768) {
+      await expect(chatHeader).toBeVisible();
+      const chatHeaderBox = await requiredBox(chatHeader, "chat header shell");
+      expect(Math.abs(chatHeaderBox.y - headerBox.y)).toBeLessThanOrEqual(1);
+      expect(Math.abs(chatHeaderBox.y + chatHeaderBox.height - (headerBox.y + headerBox.height))).toBeLessThanOrEqual(1);
+    }
 
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });

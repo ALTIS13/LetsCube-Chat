@@ -16,6 +16,7 @@ interface EmojiCategoryPickerProps {
   searchable?: boolean;
   searchTerms?: EmojiSearchTerms;
   scrollable?: boolean;
+  compact?: boolean;
 }
 
 export function EmojiCategoryPicker({
@@ -29,6 +30,7 @@ export function EmojiCategoryPicker({
   searchable = false,
   searchTerms = {},
   scrollable = false,
+  compact = false,
 }: EmojiCategoryPickerProps) {
   const initialCategory = categories.find((category) =>
     selected ? category.emojis.includes(selected) : false,
@@ -59,9 +61,12 @@ export function EmojiCategoryPicker({
   if (!activeCategory) return null;
 
   return (
-    <div data-testid={`${testIdPrefix}-picker`} className={cn("space-y-2", className)}>
+    <div data-testid={`${testIdPrefix}-picker`} className={cn(compact ? "space-y-1.5" : "space-y-2", className)}>
       {searchable && (
-        <label className="flex h-9 items-center gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] px-2.5 focus-within:border-[color:var(--kub-cyan)]">
+        <label className={cn(
+          "flex items-center gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] px-2.5 focus-within:border-[color:var(--kub-cyan)]",
+          compact ? "h-8" : "h-9",
+        )}>
           <KubIcon name="search" size={14} className="shrink-0 text-[color:var(--kub-muted)]" />
           <input
             type="search"
@@ -104,7 +109,8 @@ export function EmojiCategoryPicker({
               data-state={active ? "active" : "inactive"}
               aria-pressed={active}
               className={cn(
-                "min-w-0 min-h-8 truncate rounded-md px-1.5 text-[10px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)] disabled:opacity-60",
+                "min-w-0 truncate rounded-md px-1.5 font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)] disabled:opacity-60",
+                compact ? "min-h-7 text-[9px]" : "min-h-8 text-[10px]",
                 active
                   ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
                   : "text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-text)]",
@@ -120,7 +126,8 @@ export function EmojiCategoryPicker({
         data-testid={`${testIdPrefix}-grid`}
         className={cn(
           "grid grid-cols-8 gap-1",
-          scrollable && "max-h-52 overflow-y-auto overscroll-contain pr-1",
+          scrollable && (compact ? "max-h-40" : "max-h-52"),
+          scrollable && "overflow-y-auto overscroll-contain pr-1",
         )}
         aria-label={`Эмодзи: ${activeCategory.label}`}
       >
@@ -130,6 +137,7 @@ export function EmojiCategoryPicker({
             active={selected === null}
             disabled={disabled}
             onClick={() => onSelect(null)}
+            compact={compact}
           >
             —
           </EmojiOption>
@@ -141,6 +149,7 @@ export function EmojiCategoryPicker({
             active={selected === emoji}
             disabled={disabled}
             onClick={() => onSelect(emoji)}
+            compact={compact}
           >
             {emoji}
           </EmojiOption>
@@ -161,9 +170,10 @@ interface EmojiOptionProps {
   disabled: boolean;
   onClick: () => void;
   children: string;
+  compact: boolean;
 }
 
-function EmojiOption({ label, active, disabled, onClick, children }: EmojiOptionProps) {
+function EmojiOption({ label, active, disabled, onClick, children, compact }: EmojiOptionProps) {
   return (
     <button
       type="button"
@@ -172,7 +182,8 @@ function EmojiOption({ label, active, disabled, onClick, children }: EmojiOption
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex h-9 min-w-0 items-center justify-center rounded-lg border text-lg leading-none transition-[background-color,border-color,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)] active:scale-95 disabled:opacity-60",
+        "flex min-w-0 items-center justify-center rounded-lg border text-lg leading-none transition-[background-color,border-color,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)] active:scale-95 disabled:opacity-60",
+        compact ? "h-7" : "h-9",
         active
           ? "border-[var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_18%,var(--kub-surface-2))] kub-glow-soft"
           : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] hover:border-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-3)]",
