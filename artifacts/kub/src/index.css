@@ -593,8 +593,18 @@ textarea::placeholder, input::placeholder {
 
 .kub-auth-shell {
   position: relative;
-  overflow: hidden;
+  height: 100dvh;
+  min-height: 0;
+  align-items: flex-start;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding-block: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-bottom));
   isolation: isolate;
+}
+
+.kub-auth-shell > [data-testid="auth-form-shell"] {
+  margin-block: auto;
 }
 
 .kub-auth-shell::after {

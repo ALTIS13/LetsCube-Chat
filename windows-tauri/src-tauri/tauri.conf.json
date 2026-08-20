@@ -28,7 +28,7 @@
     ],
     "security": {
       "capabilities": ["production", "startup"],
-      "freezePrototype": true,
+      "freezePrototype": false,
       "csp": "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'"
     }
   },

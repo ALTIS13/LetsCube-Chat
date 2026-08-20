@@ -278,6 +278,35 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
           "production_navigation",
         ]),
       );
+
+      await page.goto(`${PRODUCTION_ORIGIN}/register`, {
+        waitUntil: "domcontentloaded",
+      });
+      const captcha = page.getByTestId("auth-captcha");
+      await expect(captcha).toBeVisible();
+      await expect
+        .poll(
+          () =>
+            page.evaluate(() => {
+              const container = document.querySelector(
+                '[data-testid="auth-captcha"] [data-provider="yandex-smartcaptcha"]',
+              );
+              return {
+                runtimeLoaded: typeof window.smartCaptcha?.render === "function",
+                widgetChildren: container?.childElementCount ?? 0,
+              };
+            }),
+          { timeout: 25_000 },
+        )
+        .toEqual({ runtimeLoaded: true, widgetChildren: expect.any(Number) });
+      expect(
+        await captcha
+          .locator('[data-provider="yandex-smartcaptcha"]')
+          .evaluate((element) => element.childElementCount),
+      ).toBeGreaterThan(0);
+      await expect(captcha.getByText(/Не удалось загрузить проверку защиты/)).toHaveCount(0);
+      await page.screenshot({ path: testInfo.outputPath("tauri-registration-captcha.png") });
+      await page.goto(`${PRODUCTION_ORIGIN}/login`, { waitUntil: "domcontentloaded" });
     } finally {
       await browser.close();
     }

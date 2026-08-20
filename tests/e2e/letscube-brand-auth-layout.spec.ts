@@ -74,6 +74,37 @@ test.describe("Letscube auth brand layout", () => {
 });
 
 test.describe("Letscube safe public registration", () => {
+  test("/register keeps the submit controls reachable in a short desktop window", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1360, height: 860 });
+    await installCaptchaMock(page);
+    await mockRegistrationInviteMode(page, true);
+    await gotoOrSkip(page, "/register");
+
+    const authShell = page.locator(".kub-auth-shell");
+    const initialScrollState = await authShell.evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+    }));
+    expect(initialScrollState.scrollHeight).toBeGreaterThan(initialScrollState.clientHeight);
+    await authShell.hover();
+    await page.mouse.wheel(0, 1_200);
+    await expect.poll(() => authShell.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+
+    const submit = page.getByRole("button", { name: "Создать аккаунт" });
+    await expect(submit).toBeVisible();
+    const submitBox = await submit.boundingBox();
+    expect(submitBox).not.toBeNull();
+    expect(submitBox!.y + submitBox!.height).toBeLessThanOrEqual(860);
+
+    const recovery = page.getByRole("link", { name: "Восстановить доступ" });
+    await expect(recovery).toBeVisible();
+    const recoveryBox = await recovery.boundingBox();
+    expect(recoveryBox).not.toBeNull();
+    expect(recoveryBox!.y + recoveryBox!.height).toBeLessThanOrEqual(860);
+  });
+
   test("/register provides signup form with recovery guidance", async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
     await installCaptchaMock(page);
@@ -94,6 +125,7 @@ test.describe("Letscube safe public registration", () => {
   test("/register never opens an authenticated app session after signup", async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
     await installCaptchaMock(page);
+    await mockRegistrationInviteMode(page, false);
     await mockAuthGatewaySuccess(page);
     await page.route("**/auth/v1/signup**", async (route) => {
       await route.fulfill({
@@ -143,6 +175,7 @@ test.describe("Letscube safe public registration", () => {
   test("/register keeps existing-email signup errors generic", async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
     await installCaptchaMock(page);
+    await mockRegistrationInviteMode(page, false);
     await mockAuthGatewaySuccess(page);
     await page.route("**/auth/v1/signup**", async (route) => {
       await route.fulfill({
@@ -257,6 +290,19 @@ async function mockAuthGatewaySuccess(page: Page): Promise<void> {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ ok: true }),
+    });
+  });
+}
+
+async function mockRegistrationInviteMode(
+  page: Page,
+  inviteOnlyEnabled: boolean,
+): Promise<void> {
+  await page.route("**/rest/v1/rpc/registration_invite_mode", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify([{ invite_only_enabled: inviteOnlyEnabled }]),
     });
   });
 }
