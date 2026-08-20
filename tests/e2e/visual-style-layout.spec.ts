@@ -35,7 +35,7 @@ test.describe("LETSCUBE visual style and layout", () => {
     await gotoOrSkip(page, "/");
     await loginAsRoleOrSkip(page, role);
 
-    await expect(page.getByTestId("sidebar-brand-strip").locator("img")).toHaveCount(1);
+    await expect(page.getByTestId("authenticated-shell-brand").locator("img")).toHaveCount(1);
 
     await page.getByTestId("notification-bell-button").click();
     const panel = page.getByTestId("notification-panel");
@@ -65,7 +65,7 @@ test.describe("LETSCUBE visual style and layout", () => {
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
 
-  test("sidebar brand stays readable in light theme", async ({ page }) => {
+  test("authenticated shell brand stays readable in light theme", async ({ page }, testInfo) => {
     const consoleErrors = collectConsoleErrors(page);
     const role = findFirstAvailableQaRole(
       ["owner", "tech_admin", "location_admin", "location_staff", "client"],
@@ -78,9 +78,15 @@ test.describe("LETSCUBE visual style and layout", () => {
     await page.evaluate(() => window.localStorage.setItem("kub-theme", "light"));
     await page.reload({ waitUntil: "domcontentloaded" });
 
-    const brand = page.getByTestId("sidebar-brand-strip");
+    const viewport = testInfo.project.use.viewport;
+    const isMobile = Boolean(viewport && "width" in viewport && viewport.width < 768);
+    const brand = isMobile
+      ? page.getByTestId("sidebar-control-row").locator('img[src*="letscube-mark"]')
+      : page.getByTestId("authenticated-shell-brand");
     await expect(brand).toBeVisible();
-    await expect(brand.locator('img[src*="letscube-wordmark-horizontal-dark"]')).toBeVisible();
+    if (!isMobile) {
+      await expect(brand.locator('img[src*="letscube-wordmark-horizontal-dark"]')).toBeVisible();
+    }
     await assertNoHorizontalOverflow(brand, "light theme sidebar brand has horizontal overflow");
 
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);

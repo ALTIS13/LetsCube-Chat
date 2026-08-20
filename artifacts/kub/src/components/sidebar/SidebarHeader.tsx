@@ -121,18 +121,17 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {showNewGroup && <NewGroupModal onClose={() => setShowNewGroup(false)} onRefetch={onRefetch} />}
 
-      {/* Brand strip */}
-      <div className="flex items-center gap-2 px-3 pt-2.5 pb-1.5" data-testid="sidebar-brand-strip">
+      <div
+        className="flex h-[var(--kub-control-row-height)] min-w-0 items-center gap-1.5 px-3"
+        data-testid="sidebar-control-row"
+      >
         <KubBrandLogo
-          variant="horizontal"
+          variant="mark"
           tone={resolvedTheme === "light" ? "dark" : "light"}
-          className="h-8 min-w-0 flex-1"
-          imgClassName="max-h-8 w-auto max-w-full"
+          className="mr-0.5 h-8 w-8 shrink-0 md:hidden"
+          imgClassName="h-8 w-8"
           alt="LETSCUBE"
         />
-      </div>
-
-      <div className="flex min-w-0 items-center gap-1.5 px-3 pb-2.5">
         {isSearchFocused || searchQuery ? (
           <button
             onClick={() => { setSearchQuery(""); setIsSearchFocused(false); }}

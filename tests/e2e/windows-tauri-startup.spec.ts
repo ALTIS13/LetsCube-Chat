@@ -33,6 +33,10 @@ test("covers the injected Windows startup and updater lifecycle", async ({}, tes
     const page = pages[0];
     await page.waitForURL("http://tauri.localhost/startup.html");
     await expect(page).toHaveTitle("LETSCUBE");
+    await expect(page.getByTestId("startup-titlebar")).toBeVisible();
+    await expect(page.getByTestId("startup-window-minimize")).toBeVisible();
+    await expect(page.getByTestId("startup-window-maximize")).toBeVisible();
+    await expect(page.getByTestId("startup-window-close")).toBeVisible();
     await page.emulateMedia({ reducedMotion: "reduce" });
 
     for (const viewport of VIEWPORTS) {
@@ -172,7 +176,13 @@ async function assertNativeInjectedUpdateUi(
   expect(role, "Native updater UI requires a configured QA authenticated state or credentials.").not.toBeNull();
   if (!role) throw new Error("native_updater_ui_auth_missing");
   await loginAsRoleOrSkip(page, role);
-  await expect(page.getByTestId("sidebar-brand-strip")).toBeVisible({ timeout: 20_000 });
+  const appTopBar = page.getByTestId("app-top-bar");
+  await expect(
+    page.locator('[data-testid="app-top-bar"], [data-testid="sidebar-brand-strip"]'),
+  ).toBeVisible({ timeout: 20_000 });
+  if (await appTopBar.isVisible().catch(() => false)) {
+    await expect(page.getByTestId("desktop-window-controls")).toBeVisible();
+  }
 
   if (mode === "normal_update") {
     const pill = page.getByTestId("desktop-update-pill");

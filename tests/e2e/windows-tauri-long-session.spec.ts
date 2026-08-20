@@ -42,7 +42,10 @@ test.describe("LETSCUBE Windows Tauri long session", () => {
         await page.locator('input[type="password"]').fill(credentials!.password);
         await page.locator('button[type="submit"]').click();
       }
-      await expect(page.getByTestId("sidebar-brand-strip")).toBeVisible({ timeout: 30_000 });
+      const productionShellChrome = page.locator(
+        '[data-testid="app-top-bar"], [data-testid="sidebar-brand-strip"]',
+      );
+      await expect(productionShellChrome).toBeVisible({ timeout: 30_000 });
 
       const marker = `TAURI_SOAK_${Date.now()}`;
       await page.evaluate((value) => {
@@ -90,7 +93,7 @@ test.describe("LETSCUBE Windows Tauri long session", () => {
         expect(new URL(page.url()).origin).toBe(PRODUCTION_ORIGIN);
         expect(context.pages()).toHaveLength(1);
         await expect(page.getByText("Произошла ошибка интерфейса")).toHaveCount(0);
-        await expect(page.getByTestId("sidebar-brand-strip")).toBeVisible();
+        await expect(productionShellChrome).toBeVisible();
         expect(await page.evaluate(() => localStorage.getItem("__letscubeTauriSoakMarker"))).toBe(
           marker,
         );

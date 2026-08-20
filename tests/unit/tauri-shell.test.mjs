@@ -118,6 +118,15 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
     "desktop_notify",
     "desktop_remove_notification",
     "desktop_take_pending_notification_route",
+    "desktop_start_dragging",
+    "desktop_minimize",
+    "desktop_toggle_maximize",
+    "desktop_is_maximized",
+    "desktop_close_to_tray",
+    "startup_start_dragging",
+    "startup_minimize",
+    "startup_toggle_maximize",
+    "startup_close_to_tray",
   ]) {
     assert.match(
       buildRs,
@@ -145,6 +154,11 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.match(libRs, /removeNotification: async \(notification\) => call\("desktop_remove_notification"/);
   assert.match(libRs, /desktop_take_pending_notification_route/);
   assert.match(libRs, /takePendingNotificationRoute: async \(\) => call\("desktop_take_pending_notification_route"\)/);
+  assert.match(libRs, /startDragging: async \(\) => call\("desktop_start_dragging"\)/);
+  assert.match(libRs, /minimize: async \(\) => call\("desktop_minimize"\)/);
+  assert.match(libRs, /toggleMaximize: async \(\) => call\("desktop_toggle_maximize"\)/);
+  assert.match(libRs, /isMaximized: async \(\) => call\("desktop_is_maximized"\)/);
+  assert.match(libRs, /closeToTray: async \(\) => call\("desktop_close_to_tray"\)/);
   assert.equal(capability.permissions.includes("allow-desktop-show-main"), true);
   assert.equal(capability.permissions.includes("allow-desktop-is-main-foreground"), true);
   assert.equal(capability.permissions.includes("allow-desktop-notify"), true);
@@ -220,6 +234,29 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
     )?.[0] ?? "";
     assert.match(commandBody, /require_production_main\(&window\)/, `${command} must use the production/main guard`);
   }
+  for (const command of [
+    "desktop_start_dragging",
+    "desktop_minimize",
+    "desktop_toggle_maximize",
+    "desktop_is_maximized",
+    "desktop_close_to_tray",
+  ]) {
+    const commandBody = libRs.match(
+      new RegExp(`fn\\s+${command}[\\s\\S]*?(?=\\n#\\[tauri::command\\]|\\npub fn run)`),
+    )?.[0] ?? "";
+    assert.match(commandBody, /require_production_main\(&window\)/, `${command} must use the production/main guard`);
+  }
+  for (const command of [
+    "startup_start_dragging",
+    "startup_minimize",
+    "startup_toggle_maximize",
+    "startup_close_to_tray",
+  ]) {
+    const commandBody = libRs.match(
+      new RegExp(`fn\\s+${command}[\\s\\S]*?(?=\\n#\\[tauri::command\\]|\\npub fn run)`),
+    )?.[0] ?? "";
+    assert.match(commandBody, /require_startup_main\(&window\)/, `${command} must use the exact startup/main guard`);
+  }
   const productionGuard = libRs.match(
     /fn require_production_main[\s\S]*?(?=\nfn is_safe_external_url)/,
   )?.[0] ?? "";
@@ -278,19 +315,31 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
     capability.permissions.filter((permission) => /^allow-desktop-/.test(permission)).sort(),
     [
       "allow-desktop-check-update",
+      "allow-desktop-close-to-tray",
       "allow-desktop-get-update-channel",
       "allow-desktop-get-update-state",
       "allow-desktop-install-update",
       "allow-desktop-is-main-foreground",
+      "allow-desktop-is-maximized",
+      "allow-desktop-minimize",
       "allow-desktop-notify",
       "allow-desktop-remove-notification",
       "allow-desktop-set-update-channel",
       "allow-desktop-show-main",
+      "allow-desktop-start-dragging",
       "allow-desktop-take-pending-notification-route",
+      "allow-desktop-toggle-maximize",
     ],
-    "remote production origin must receive only the ten guarded desktop commands",
+    "remote production origin must receive only the guarded desktop commands",
   );
-  assert.deepEqual(startupCapability.permissions.sort(), ["allow-begin-startup-qa", "allow-retry-main"]);
+  assert.deepEqual(startupCapability.permissions.sort(), [
+    "allow-begin-startup-qa",
+    "allow-retry-main",
+    "allow-startup-close-to-tray",
+    "allow-startup-minimize",
+    "allow-startup-start-dragging",
+    "allow-startup-toggle-maximize",
+  ]);
 });
 
 test("Windows startup uses one main window and a local approved handshake scene", () => {
@@ -298,7 +347,7 @@ test("Windows startup uses one main window and a local approved handshake scene"
   assert.deepEqual(config.app.windows.map((window) => window.label), ["main"]);
   assert.equal(config.app.windows[0].url, "startup.html");
   assert.equal(config.app.windows[0].visible, true);
-  assert.equal(config.app.windows[0].decorations, true);
+  assert.equal(config.app.windows[0].decorations, false);
   assert.equal(config.app.windows[0].resizable, true);
   assert.equal(config.app.windows[0].center, true);
   assert.equal(config.app.windows[0].minWidth, 960);
@@ -313,6 +362,10 @@ test("Windows startup uses one main window and a local approved handshake scene"
   assert.match(html, /data-testid="startup-client-port"/);
   assert.match(html, /data-testid="startup-server-port"/);
   assert.match(html, /data-testid="startup-center-seal"/);
+  assert.match(html, /data-testid="startup-titlebar"/);
+  assert.match(html, /data-testid="startup-window-minimize"/);
+  assert.match(html, /data-testid="startup-window-maximize"/);
+  assert.match(html, /data-testid="startup-window-close"/);
   assert.match(html, /id="startup-status"/);
   assert.match(html, /id="startup-retry"/);
   assert.match(css, /grid-template-columns:\s*1fr\s+34px\s+1fr/);
@@ -325,6 +378,10 @@ test("Windows startup uses one main window and a local approved handshake scene"
   assert.match(css, /\.rail-right\s*\{[^}]*right:\s*calc\(25% \+ 75\.5px\);/s);
   assert.match(css, /prefers-reduced-motion/);
   assert.match(script, /letscube:\/\/startup-state/);
+  assert.match(script, /startup_start_dragging/);
+  assert.match(script, /startup_minimize/);
+  assert.match(script, /startup_toggle_maximize/);
+  assert.match(script, /startup_close_to_tray/);
   assert.match(script, /snapshot\.stage\s*===\s*"complete"\s*&&\s*snapshot\.connected\s*===\s*true/);
   assert.doesNotMatch(script, /setTimeout|setInterval/);
 

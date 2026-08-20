@@ -1,165 +1,63 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { KubIcon, KubPanel, type KubIconName } from "@/components/kub";
-
-interface Metrics {
-  totalUsers: number;
-  online: number;
-  newToday: number;
-  newThisWeek: number;
-  totalChats: number;
-  messagesToday: number;
-  activeBans: number;
-  activeMutes: number;
-}
-
-const startOfDayIso = () => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-};
-const startOfWeekIso = () => {
-  const d = new Date();
-  d.setDate(d.getDate() - 7);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-};
+import { KubButton, KubIcon } from "@/components/kub";
+import { useAdminDashboard } from "@/hooks/useAdminDashboard";
+import { DashboardMetricStrip } from "./dashboard/DashboardMetricStrip";
+import { RecentActivity } from "./dashboard/RecentActivity";
+import { RegistrationTrend } from "./dashboard/RegistrationTrend";
 
 export function DashboardTab() {
-  const supabase = createClient();
-  const [metrics, setMetrics] = useState<Metrics | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
-  const loadInFlightRef = useRef(false);
-
-  const load = useCallback(async () => {
-    if (loadInFlightRef.current) return;
-    loadInFlightRef.current = true;
-
-    const nowIso = new Date().toISOString();
-    const todayIso = startOfDayIso();
-    const weekIso = startOfWeekIso();
-    const onlineCutoffIso = new Date(Date.now() - 60_000).toISOString();
-
-    try {
-      const [users, online, newToday, newWeek, chats, msgsToday, bans, mutes] = await Promise.all([
-        supabase.from("profiles").select("id", { count: "exact", head: true }),
-        supabase.from("profiles").select("id", { count: "exact", head: true }).gte("online_at", onlineCutoffIso),
-        supabase.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", todayIso),
-        supabase.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", weekIso),
-        supabase.from("chats").select("id", { count: "exact", head: true }),
-        supabase.from("messages").select("id", { count: "exact", head: true }).gte("created_at", todayIso),
-        supabase.from("bans").select("id", { count: "exact", head: true }).or(`expires_at.is.null,expires_at.gt.${nowIso}`),
-        supabase.from("mutes").select("id", { count: "exact", head: true }).or(`expires_at.is.null,expires_at.gt.${nowIso}`),
-      ]);
-
-      setMetrics({
-        totalUsers: users.count ?? 0,
-        online: online.count ?? 0,
-        newToday: newToday.count ?? 0,
-        newThisWeek: newWeek.count ?? 0,
-        totalChats: chats.count ?? 0,
-        messagesToday: msgsToday.count ?? 0,
-        activeBans: bans.count ?? 0,
-        activeMutes: mutes.count ?? 0,
-      });
-      setUpdatedAt(new Date());
-    } finally {
-      loadInFlightRef.current = false;
-      setLoading(false);
-    }
-  }, [supabase]);
-
-  useEffect(() => {
-    load();
-    const id = setInterval(load, 30_000);
-    return () => clearInterval(id);
-  }, [load]);
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const debouncedLoad = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        void load();
-      }, 500);
-    };
-    const channel = supabase
-      .channel("admin-dashboard")
-      .on("postgres_changes", { event: "*", schema: "public", table: "bans" }, debouncedLoad)
-      .on("postgres_changes", { event: "*", schema: "public", table: "mutes" }, debouncedLoad)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, debouncedLoad)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "chats" }, debouncedLoad)
-      .subscribe();
-    return () => {
-      if (timer) clearTimeout(timer);
-      supabase.removeChannel(channel);
-    };
-  }, [supabase, load]);
-
-  if (loading || !metrics) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <KubIcon name="spinner" size={24} tone="accent" label="Загрузка" />
-      </div>
-    );
-  }
-
-  type Tone = "cyan" | "pink" | "online" | "danger" | "warn";
-  const cards: Array<{ icon: KubIconName; label: string; value: number; tone: Tone }> = [
-    { icon: "users",    label: "Всего пользователей", value: metrics.totalUsers,   tone: "cyan" },
-    { icon: "activity", label: "Онлайн сейчас",        value: metrics.online,        tone: "online" },
-    { icon: "userPlus", label: "Новых сегодня",        value: metrics.newToday,      tone: "pink" },
-    { icon: "userPlus", label: "Новых за 7 дней",      value: metrics.newThisWeek,   tone: "pink" },
-    { icon: "chatRect", label: "Чатов",                value: metrics.totalChats,    tone: "cyan" },
-    { icon: "chatRect", label: "Сообщений за сегодня", value: metrics.messagesToday, tone: "online" },
-    { icon: "shieldOff",label: "Активных банов",       value: metrics.activeBans,    tone: "danger" },
-    { icon: "muted",    label: "Активных мьютов",      value: metrics.activeMutes,   tone: "warn" },
-  ];
-
-  const toneColor: Record<Tone, string> = {
-    cyan:   "var(--kub-cyan)",
-    pink:   "var(--kub-pink)",
-    online: "var(--kub-online)",
-    danger: "var(--kub-danger)",
-    warn:   "var(--kub-warn)",
-  };
+  const dashboard = useAdminDashboard();
+  const attentionCount = dashboard.metrics.activeBans + dashboard.metrics.activeMutes;
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-[color:var(--kub-text)]">
-          Сводка по системе
-        </h2>
-        {updatedAt && (
-          <span className="text-[11px] uppercase tracking-wide text-[color:var(--kub-muted)]">
-            обновлено в {updatedAt.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-          </span>
-        )}
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-bold text-[color:var(--kub-text)]">Состояние системы</h2>
+            <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--kub-online)]/30 bg-[color-mix(in_srgb,var(--kub-online)_9%,transparent)] px-2 py-0.5 text-[10px] font-semibold text-[color:var(--kub-online)]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--kub-online)]" />
+              Данные обновляются
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-[color:var(--kub-muted)]">
+            Пользователи, активность и последние административные события
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {attentionCount > 0 && (
+            <span className="text-xs text-[color:var(--kub-warn)]">
+              Требуют внимания: {attentionCount.toLocaleString("ru-RU")}
+            </span>
+          )}
+          <KubButton
+            size="sm"
+            variant="ghost"
+            disabled={dashboard.loading}
+            onClick={() => void dashboard.refresh()}
+          >
+            <KubIcon name={dashboard.loading ? "spinner" : "activity"} size={14} className={dashboard.loading ? "animate-spin" : ""} />
+            Обновить
+          </KubButton>
+        </div>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {cards.map(({ icon, label, value, tone }) => {
-          const c = toneColor[tone];
-          return (
-            <KubPanel key={label} padded={false} className="p-4 flex flex-col gap-2 hover:border-[color:var(--kub-cyan)]/40 transition-colors">
-              <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center"
-                style={{ background: `color-mix(in srgb, ${c} 18%, transparent)`, border: `1px solid color-mix(in srgb, ${c} 38%, transparent)`, color: c }}
-              >
-                <KubIcon name={icon} size={16} tone="currentColor" />
-              </div>
-              <div className="text-2xl font-bold tabular-nums text-[color:var(--kub-text)]">
-                {value.toLocaleString("ru-RU")}
-              </div>
-              <div className="text-[11px] uppercase tracking-wide leading-tight break-words text-[color:var(--kub-muted)]">
-                {label}
-              </div>
-            </KubPanel>
-          );
-        })}
-      </div>
+
+      <DashboardMetricStrip metrics={dashboard.metrics} loading={dashboard.loading} error={dashboard.errors.metrics} />
+      <RegistrationTrend series={dashboard.registrationSeries} metrics={dashboard.metrics} error={dashboard.errors.registrations} />
+      <RecentActivity
+        users={dashboard.recentUsers}
+        events={dashboard.recentEvents}
+        usersError={dashboard.errors.users}
+        eventsError={dashboard.errors.events}
+      />
+
+      {dashboard.updatedAt && (
+        <div className="flex items-center justify-end gap-1.5 text-[10px] uppercase text-[color:var(--kub-muted)]">
+          <KubIcon name="clock" size={11} />
+          Обновлено {dashboard.updatedAt.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+        </div>
+      )}
     </div>
   );
 }

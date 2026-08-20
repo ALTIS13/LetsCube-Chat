@@ -185,7 +185,7 @@ function describe(row: AuditLogWithActor): string {
       return `${actor} изменил режим регистрации`;
     }
     default:
-      return `${actor}: ${row.action}`;
+      return "Системное событие";
   }
 }
 
@@ -478,7 +478,7 @@ export function AuditTab() {
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <KubBadge tone="cyan">
-                          {ACTION_LABEL[r.action as AuditAction] ?? r.action}
+                          {ACTION_LABEL[r.action as AuditAction] ?? "Системное событие"}
                         </KubBadge>
                         <span className="text-[11px] text-[color:var(--kub-muted)]">
                           {fmtDateTime(r.created_at)}

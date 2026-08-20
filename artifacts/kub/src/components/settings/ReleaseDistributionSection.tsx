@@ -5,6 +5,7 @@ import { useReleaseCatalog, type ReleaseCatalogUiState } from "@/hooks/useReleas
 import { useDesktopUpdate } from "@/hooks/useDesktopUpdate";
 import { getBuildMetadata } from "@/lib/monitoring";
 import { getCurrentDistributionTarget } from "@/lib/platform/capabilities";
+import { getVisibleReleaseVersion } from "@/lib/releaseVersionLabel";
 
 const STATE_COPY: Record<ReleaseCatalogUiState, string> = {
   checking: "Проверяем доступность приложения",
@@ -40,6 +41,11 @@ export function ReleaseDistributionSection() {
   const artifact = manifest?.available ? manifest.artifact : null;
   const nativePackage = release.platform !== null;
   const windowsNative = target === "windows_native";
+  const installedVersionLabel = getVisibleReleaseVersion(
+    desktopUpdate?.snapshot?.installedVersion ?? buildMetadata.version,
+  );
+  const buildVersionLabel = getVisibleReleaseVersion(buildMetadata.version);
+  const shortCommit = buildMetadata.commit !== "unknown" ? buildMetadata.commit.slice(0, 7) : null;
 
   const selectDesktopChannel = (channel: "stable" | "test") => {
     if (channel === "stable") setConfirmTestChannel(false);
@@ -118,9 +124,11 @@ export function ReleaseDistributionSection() {
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0 text-xs text-[color:var(--kub-text)]">
                   {desktopUpdate.presentation?.title ?? "Подготавливаем проверку обновлений"}
-                  <span className="mt-0.5 block text-[11px] text-[color:var(--kub-muted)]">
-                    Версия {desktopUpdate.snapshot?.installedVersion ?? buildMetadata.version}
-                  </span>
+                  {installedVersionLabel && (
+                    <span className="mt-0.5 block text-[11px] text-[color:var(--kub-muted)]">
+                      {installedVersionLabel}
+                    </span>
+                  )}
                 </div>
                 <div
                   className="desktop-update-channel-control"
@@ -281,10 +289,13 @@ export function ReleaseDistributionSection() {
           </ol>
         </div>
       )}
-      <div className="border-t border-[color:var(--kub-border-color)] px-4 py-2 text-xs text-[color:var(--kub-muted)]">
-        Сборка: {buildMetadata.version}
-        {buildMetadata.commit !== "unknown" ? ` · ${buildMetadata.commit.slice(0, 7)}` : ""}
-      </div>
+      {(buildVersionLabel || shortCommit) && (
+        <div className="border-t border-[color:var(--kub-border-color)] px-4 py-2 text-xs text-[color:var(--kub-muted)]">
+          {buildVersionLabel}
+          {buildVersionLabel && shortCommit ? " · " : ""}
+          {shortCommit ? `Ревизия ${shortCommit}` : ""}
+        </div>
+      )}
     </div>
   );
 }

@@ -206,7 +206,10 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
   return (
     <>
     <div className="flex flex-shrink-0 flex-col bg-[var(--kub-surface)] border-b border-[color:var(--kub-border-color)]">
-    <div className="flex h-14 items-center gap-1 px-2">
+    <div
+      className="flex h-[var(--kub-control-row-height)] items-center gap-1 px-2"
+      data-testid="chat-control-row"
+    >
       <button
         onClick={() => setSelectedChatId(null)}
         className="md:hidden p-2 rounded-lg hover:bg-[var(--kub-surface-2)] transition-colors flex-shrink-0 text-[color:var(--kub-cyan)]"

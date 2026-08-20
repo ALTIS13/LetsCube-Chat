@@ -24,6 +24,15 @@ const status = document.querySelector("#startup-status");
 const failure = document.querySelector("#startup-failure");
 const error = document.querySelector("#startup-error");
 const retry = document.querySelector("#startup-retry");
+const dragRegion = document.querySelector("#startup-drag-region");
+const minimize = document.querySelector("#startup-window-minimize");
+const maximize = document.querySelector("#startup-window-maximize");
+const close = document.querySelector("#startup-window-close");
+
+function invokeWindowCommand(command) {
+  const invoke = window.__TAURI_INTERNALS__?.invoke;
+  return typeof invoke === "function" ? invoke(command).catch(() => undefined) : Promise.resolve();
+}
 
 function renderStartup(snapshot) {
   if (!snapshot || typeof snapshot.stage !== "string" || typeof snapshot.connected !== "boolean") return;
@@ -58,6 +67,14 @@ retry.addEventListener("click", () => {
     retry.disabled = false;
   }
 });
+
+dragRegion.addEventListener("mousedown", (event) => {
+  if (event.button === 0) void invokeWindowCommand("startup_start_dragging");
+});
+dragRegion.addEventListener("dblclick", () => void invokeWindowCommand("startup_toggle_maximize"));
+minimize.addEventListener("click", () => void invokeWindowCommand("startup_minimize"));
+maximize.addEventListener("click", () => void invokeWindowCommand("startup_toggle_maximize"));
+close.addEventListener("click", () => void invokeWindowCommand("startup_close_to_tray"));
 
 window.renderStartup = renderStartup;
 window.addEventListener(STARTUP_EVENT, (event) => renderStartup(event.detail));

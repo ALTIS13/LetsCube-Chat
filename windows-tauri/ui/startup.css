@@ -10,13 +10,24 @@ html, body { width: 100%; min-width: 960px; height: 100%; min-height: 640px; mar
 body { background: #071019; }
 
 .startup-shell {
-  width: 100%; height: 100%; display: grid; grid-template-rows: 82px minmax(390px, 1fr) 190px;
+  width: 100%; height: 100%; display: grid; grid-template-rows: 44px minmax(390px, 1fr) 190px;
   padding: 0 6vw 28px; background: linear-gradient(180deg, #0b1824 0, #071019 72%);
 }
-.startup-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1d3140; }
-.brand { width: 190px; height: auto; filter: brightness(0) invert(1); opacity: .92; }
-.version-pill { display: flex; align-items: center; gap: 8px; border: 1px solid #2b4354; border-radius: 7px; padding: 7px 10px; color: #a9bac7; font-size: 12px; }
+.startup-header { display: flex; align-items: stretch; justify-content: space-between; margin: 0 -6vw; padding-left: 6vw; border-bottom: 1px solid #1d3140; background: #0b1824; }
+.startup-drag-region { display: flex; min-width: 0; flex: 1; align-items: center; gap: 14px; cursor: default; }
+.brand { width: 154px; height: auto; filter: brightness(0) invert(1); opacity: .94; }
+.version-pill { display: flex; align-items: center; gap: 7px; color: #7f96a7; font-size: 11px; }
 .version-dot { width: 7px; height: 7px; border-radius: 50%; background: #e0a928; box-shadow: 0 0 0 3px #e0a92820; }
+.startup-window-controls { display: flex; height: 43px; align-items: stretch; }
+.window-control { display: grid; width: 44px; height: 43px; place-items: center; border: 0; border-radius: 0; padding: 0; background: transparent; color: #91a5b5; }
+.window-control:hover { background: #152737; color: #f4f7fa; }
+.window-control-close:hover { background: #c42b3a; color: #fff; }
+.window-minimize { width: 12px; height: 1px; background: currentColor; }
+.window-maximize { width: 12px; height: 12px; border: 1px solid currentColor; }
+.window-close { position: relative; width: 14px; height: 14px; }
+.window-close::before, .window-close::after { content: ""; position: absolute; top: 6px; left: 0; width: 14px; height: 1px; background: currentColor; }
+.window-close::before { transform: rotate(45deg); }
+.window-close::after { transform: rotate(-45deg); }
 
 .handshake { display: grid; grid-template-columns: 1fr 34px 1fr; align-items: center; position: relative; max-width: 980px; width: 100%; margin: 0 auto; isolation: isolate; }
 .endpoint { display: grid; grid-template-rows: 74px 20px 126px 20px 19px 4px 14px; justify-items: center; align-content: center; min-width: 0; }

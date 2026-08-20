@@ -9,6 +9,7 @@ import { BottomNav } from "./BottomNav";
 import { DesktopUpdatePill } from "@/components/desktop/DesktopUpdatePill";
 import { useDesktopUpdate } from "@/hooks/useDesktopUpdate";
 import { cn } from "@/lib/utils";
+import { AppTopBar } from "./AppTopBar";
 
 /**
  * Top-level shell. On <md, the layout is a one-pane drawer:
@@ -72,6 +73,7 @@ export function MainLayout() {
         aria-hidden={updateBlocking ? true : undefined}
         inert={updateBlocking ? true : undefined}
       >
+        <AppTopBar />
         <div className="flex flex-1 overflow-hidden">
           <div
             className={cn(

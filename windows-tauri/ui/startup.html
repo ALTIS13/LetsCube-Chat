@@ -8,9 +8,16 @@
   </head>
   <body data-stage="boot">
     <main class="startup-shell" aria-live="polite">
-      <header class="startup-header">
-        <img src="letscube-logo.svg" alt="LETSCUBE" class="brand" />
-        <div class="version-pill"><span class="version-dot"></span><span data-desktop-version>Desktop</span></div>
+      <header class="startup-header" data-testid="startup-titlebar">
+        <div class="startup-drag-region" id="startup-drag-region">
+          <img src="letscube-logo.svg" alt="LETSCUBE" class="brand" />
+          <div class="version-pill"><span class="version-dot"></span><span data-desktop-version>Desktop</span></div>
+        </div>
+        <div class="startup-window-controls" aria-label="Управление окном">
+          <button type="button" class="window-control" id="startup-window-minimize" data-testid="startup-window-minimize" aria-label="Свернуть" title="Свернуть"><span class="window-minimize"></span></button>
+          <button type="button" class="window-control" id="startup-window-maximize" data-testid="startup-window-maximize" aria-label="Развернуть" title="Развернуть"><span class="window-maximize"></span></button>
+          <button type="button" class="window-control window-control-close" id="startup-window-close" data-testid="startup-window-close" aria-label="Свернуть в область уведомлений" title="Свернуть в область уведомлений"><span class="window-close"></span></button>
+        </div>
       </header>
 
       <section class="handshake" id="startup-handshake" aria-labelledby="startup-status">

@@ -41,5 +41,10 @@ interface Window {
     notify(notification: LetscubeDesktopNotification): Promise<boolean>;
     removeNotification(notification: LetscubeDesktopNotificationIdentity): Promise<boolean>;
     takePendingNotificationRoute(): Promise<string | null>;
+    startDragging(): Promise<void>;
+    minimize(): Promise<void>;
+    toggleMaximize(): Promise<void>;
+    isMaximized(): Promise<boolean>;
+    closeToTray(): Promise<void>;
   };
 }

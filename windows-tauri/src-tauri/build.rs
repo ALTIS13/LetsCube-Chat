@@ -13,6 +13,15 @@ const COMMANDS: &[&str] = &[
     "desktop_notify",
     "desktop_remove_notification",
     "desktop_take_pending_notification_route",
+    "desktop_start_dragging",
+    "desktop_minimize",
+    "desktop_toggle_maximize",
+    "desktop_is_maximized",
+    "desktop_close_to_tray",
+    "startup_start_dragging",
+    "startup_minimize",
+    "startup_toggle_maximize",
+    "startup_close_to_tray",
 ];
 
 fn main() {

@@ -108,6 +108,18 @@ fn require_production_main(window: &WebviewWindow) -> Result<(), &'static str> {
     Ok(())
 }
 
+fn require_startup_main(window: &WebviewWindow) -> Result<(), &'static str> {
+    if window.label() != "main"
+        || window
+            .url()
+            .map(|url| !is_local_startup_url(&url))
+            .unwrap_or(true)
+    {
+        return Err("unauthorized");
+    }
+    Ok(())
+}
+
 fn is_safe_external_url(url: &Url) -> bool {
     matches!(url.scheme(), "http" | "https" | "mailto")
         && url.username().is_empty()
@@ -233,7 +245,12 @@ fn desktop_bridge_script() -> String {
     isMainForeground: async () => call("desktop_is_main_foreground"),
     notify: async (notification) => call("desktop_notify", {{ notification }}),
     removeNotification: async (notification) => call("desktop_remove_notification", {{ notification }}),
-    takePendingNotificationRoute: async () => call("desktop_take_pending_notification_route")
+    takePendingNotificationRoute: async () => call("desktop_take_pending_notification_route"),
+    startDragging: async () => call("desktop_start_dragging"),
+    minimize: async () => call("desktop_minimize"),
+    toggleMaximize: async () => call("desktop_toggle_maximize"),
+    isMaximized: async () => call("desktop_is_maximized"),
+    closeToTray: async () => call("desktop_close_to_tray")
   }});
   Object.defineProperty(window, "letscubeDesktop", {{
     configurable: false,
@@ -334,6 +351,76 @@ fn desktop_is_main_foreground(window: WebviewWindow) -> Result<bool, &'static st
         .is_focused()
         .map_err(|_| "window_state_unavailable")?;
     Ok(visible && !minimized && focused)
+}
+
+#[tauri::command]
+fn desktop_start_dragging(window: WebviewWindow) -> Result<(), &'static str> {
+    require_production_main(&window)?;
+    window.start_dragging().map_err(|_| "window_action_failed")
+}
+
+#[tauri::command]
+fn desktop_minimize(window: WebviewWindow) -> Result<(), &'static str> {
+    require_production_main(&window)?;
+    window.minimize().map_err(|_| "window_action_failed")
+}
+
+#[tauri::command]
+fn desktop_toggle_maximize(window: WebviewWindow) -> Result<(), &'static str> {
+    require_production_main(&window)?;
+    let maximized = window
+        .is_maximized()
+        .map_err(|_| "window_state_unavailable")?;
+    if maximized {
+        window.unmaximize().map_err(|_| "window_action_failed")
+    } else {
+        window.maximize().map_err(|_| "window_action_failed")
+    }
+}
+
+#[tauri::command]
+fn desktop_is_maximized(window: WebviewWindow) -> Result<bool, &'static str> {
+    require_production_main(&window)?;
+    window
+        .is_maximized()
+        .map_err(|_| "window_state_unavailable")
+}
+
+#[tauri::command]
+fn desktop_close_to_tray(window: WebviewWindow) -> Result<(), &'static str> {
+    require_production_main(&window)?;
+    window.hide().map_err(|_| "window_action_failed")
+}
+
+#[tauri::command]
+fn startup_start_dragging(window: WebviewWindow) -> Result<(), &'static str> {
+    require_startup_main(&window)?;
+    window.start_dragging().map_err(|_| "window_action_failed")
+}
+
+#[tauri::command]
+fn startup_minimize(window: WebviewWindow) -> Result<(), &'static str> {
+    require_startup_main(&window)?;
+    window.minimize().map_err(|_| "window_action_failed")
+}
+
+#[tauri::command]
+fn startup_toggle_maximize(window: WebviewWindow) -> Result<(), &'static str> {
+    require_startup_main(&window)?;
+    let maximized = window
+        .is_maximized()
+        .map_err(|_| "window_state_unavailable")?;
+    if maximized {
+        window.unmaximize().map_err(|_| "window_action_failed")
+    } else {
+        window.maximize().map_err(|_| "window_action_failed")
+    }
+}
+
+#[tauri::command]
+fn startup_close_to_tray(window: WebviewWindow) -> Result<(), &'static str> {
+    require_startup_main(&window)?;
+    window.hide().map_err(|_| "window_action_failed")
 }
 
 fn is_safe_notification_route(route: &str) -> bool {
@@ -1207,7 +1294,16 @@ pub fn run() {
             desktop_is_main_foreground,
             desktop_notify,
             desktop_remove_notification,
-            desktop_take_pending_notification_route
+            desktop_take_pending_notification_route,
+            desktop_start_dragging,
+            desktop_minimize,
+            desktop_toggle_maximize,
+            desktop_is_maximized,
+            desktop_close_to_tray,
+            startup_start_dragging,
+            startup_minimize,
+            startup_toggle_maximize,
+            startup_close_to_tray
         ])
         .setup(|app| {
             setup_update_controller(app.handle())?;

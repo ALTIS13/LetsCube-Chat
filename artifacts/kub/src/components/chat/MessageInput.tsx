@@ -1088,6 +1088,9 @@ function MediaQualitySelector({
   onChange: (quality: MediaQuality) => void;
   compact?: boolean;
 }) {
+  const selectedOption = MEDIA_QUALITY_OPTIONS.find((option) => option.value === value)
+    ?? MEDIA_QUALITY_OPTIONS[1];
+
   return (
     <div
       data-testid="media-quality-selector"
@@ -1101,31 +1104,50 @@ function MediaQualitySelector({
         <KubIcon name="video" size={13} />
         <span>Качество медиа</span>
       </div>
-      <div className="grid grid-cols-3 gap-1">
+      <div
+        className="relative grid grid-cols-3 gap-1 px-1"
+        role="radiogroup"
+        aria-label="Качество загружаемых медиа"
+        data-testid="media-quality-track"
+      >
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute left-[16.67%] right-[16.67%] top-2.5 h-px bg-[var(--kub-border-color)]"
+        />
         {MEDIA_QUALITY_OPTIONS.map((option) => {
           const active = option.value === value;
           return (
             <button
               key={option.value}
               type="button"
+              role="radio"
+              aria-checked={active}
               data-testid={`media-quality-option-${option.value}`}
               data-state={active ? "active" : "inactive"}
               onClick={() => onChange(option.value)}
               className={cn(
-                "min-w-0 rounded-xl px-2 py-2 text-left transition-colors",
+                "group relative z-[1] flex min-w-0 flex-col items-center gap-1 rounded-md px-1 pb-1 pt-0 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)]",
                 active
-                  ? "bg-[color-mix(in_srgb,var(--kub-cyan)_20%,var(--kub-surface))] text-[color:var(--kub-text)] ring-1 ring-[color:var(--kub-cyan)]"
-                  : "bg-[var(--kub-surface)] text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]",
+                  ? "text-[color:var(--kub-text)]"
+                  : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
               )}
             >
-              <span className="block truncate text-xs font-semibold">{option.label}</span>
-              <span className="mt-0.5 block text-[10px] leading-3 opacity-80">{option.description}</span>
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "h-5 w-5 rounded-full border-2 transition-[border-color,background-color,box-shadow]",
+                  active
+                    ? "border-[color:var(--kub-cyan)] bg-[color:var(--kub-cyan)] shadow-[0_0_0_4px_color-mix(in_srgb,var(--kub-cyan)_16%,transparent)]"
+                    : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] group-hover:border-[color:var(--kub-cyan)]",
+                )}
+              />
+              <span className="block max-w-full truncate text-[11px] font-semibold">{option.label}</span>
             </button>
           );
         })}
       </div>
-      <p className="mt-1.5 px-1 text-[10px] leading-4 text-[color:var(--kub-muted)]">
-        Оригинал сохраняется. Для готовых видео «Экономно» и «Стандарт» используют серверную 720p-копию, когда она готова; «Высокое» воспроизводит оригинал.
+      <p className="mt-1 px-1 text-center text-[10px] leading-4 text-[color:var(--kub-muted)]">
+        {selectedOption.description}
       </p>
     </div>
   );

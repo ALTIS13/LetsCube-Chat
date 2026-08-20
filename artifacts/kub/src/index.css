@@ -111,6 +111,8 @@
 
   --tracking-normal: 0em;
   --spacing: 0.25rem;
+  --kub-app-topbar-height: 2.75rem;
+  --kub-control-row-height: 3.5rem;
 }
 
 .dark {
@@ -767,7 +769,7 @@ textarea::placeholder, input::placeholder {
 
 .desktop-update-pill {
   position: fixed;
-  top: max(0.75rem, env(safe-area-inset-top));
+  top: calc(var(--kub-app-topbar-height) + max(0.75rem, env(safe-area-inset-top)));
   right: 0.75rem;
   z-index: 30;
   display: flex;

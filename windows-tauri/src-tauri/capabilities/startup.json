@@ -7,6 +7,10 @@
   "platforms": ["windows"],
   "permissions": [
     "allow-retry-main",
-    "allow-begin-startup-qa"
+    "allow-begin-startup-qa",
+    "allow-startup-start-dragging",
+    "allow-startup-minimize",
+    "allow-startup-toggle-maximize",
+    "allow-startup-close-to-tray"
   ]
 }

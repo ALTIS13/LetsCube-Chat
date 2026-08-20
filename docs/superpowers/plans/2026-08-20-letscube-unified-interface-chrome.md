@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-20-letscube-unified-interface-chrome-design.md`
 
+**Status:** Completed and validated on 2026-08-20. Browser, production build, Rust/Tauri contract and native lifecycle checks passed; representative screenshots were inspected.
+
 ## Global Constraints
 
 - Preserve chat, notification, search, task, media, PWA, Android and Windows updater behavior.
@@ -35,7 +37,7 @@
 - Produces: `getVisibleReleaseVersion(value: unknown): string | null`.
 - Preserves: `MediaQuality`, `MEDIA_QUALITY_OPTIONS`, storage keys and upload/recording behavior.
 
-- [ ] **Step 1: Add failing unit tests for release version filtering**
+- [x] **Step 1: Add failing unit tests for release version filtering**
 
 ```ts
 test("release version label hides placeholders", () => {
@@ -48,7 +50,7 @@ test("release version label accepts a real semantic version", () => {
 });
 ```
 
-- [ ] **Step 2: Add failing Playwright contracts**
+- [x] **Step 2: Add failing Playwright contracts**
 
 ```ts
 await expect(page.getByTestId("media-quality-track")).toHaveAttribute("role", "radiogroup");
@@ -56,13 +58,13 @@ await expect(page.getByTestId("welcome-capability-pills")).toHaveCount(0);
 await expect(page.getByText("Шифрование", { exact: true })).toHaveCount(0);
 ```
 
-- [ ] **Step 3: Run the focused tests and confirm expected failures**
+- [x] **Step 3: Run the focused tests and confirm expected failures**
 
 Run: `node --test tests/unit/release-version-label.test.mts`  
 Run: `pnpm.cmd exec playwright test tests/e2e/unified-interface-chrome.spec.ts --project=chromium-desktop-1440`  
 Expected: tests fail because the helper/track/new welcome contract does not exist.
 
-- [ ] **Step 4: Implement the smallest passing UI changes**
+- [x] **Step 4: Implement the smallest passing UI changes**
 
 ```ts
 export function getVisibleReleaseVersion(value: unknown): string | null {
@@ -73,7 +75,7 @@ export function getVisibleReleaseVersion(value: unknown): string | null {
 
 Implement a three-stop accessible radio track and one active description. Remove the welcome feature array and unsupported claims.
 
-- [ ] **Step 5: Re-run focused tests and refactor only after green**
+- [x] **Step 5: Re-run focused tests and refactor only after green**
 
 Run: `node --test tests/unit/release-version-label.test.mts`  
 Run: `pnpm.cmd exec playwright test tests/e2e/unified-interface-chrome.spec.ts --project=chromium-desktop-1440`
@@ -96,7 +98,7 @@ Run: `pnpm.cmd exec playwright test tests/e2e/unified-interface-chrome.spec.ts -
 - Produces CSS tokens: `--kub-app-topbar-height` and `--kub-control-row-height`.
 - Consumes: `isDesktopApp()` and the existing LETSCUBE brand assets.
 
-- [ ] **Step 1: Add failing shell geometry tests**
+- [x] **Step 1: Add failing shell geometry tests**
 
 ```ts
 await expect(page.getByTestId("app-top-bar")).toBeVisible();
@@ -104,11 +106,11 @@ await expect(page.getByTestId("authenticated-shell-brand")).toHaveCount(1);
 expect(Math.abs(sidebarBox.y + sidebarBox.height - chatBox.y - chatBox.height)).toBeLessThanOrEqual(1);
 ```
 
-- [ ] **Step 2: Run the shell tests and confirm the missing top bar/baseline failure**
+- [x] **Step 2: Run the shell tests and confirm the missing top bar/baseline failure**
 
 Run: `pnpm.cmd exec playwright test tests/e2e/unified-interface-chrome.spec.ts --project=chromium-desktop-1440`
 
-- [ ] **Step 3: Implement shared geometry and desktop/mobile brand behavior**
+- [x] **Step 3: Implement shared geometry and desktop/mobile brand behavior**
 
 ```tsx
 <div className="flex h-[var(--kub-app-topbar-height)] items-center border-b ...">
@@ -119,7 +121,7 @@ Run: `pnpm.cmd exec playwright test tests/e2e/unified-interface-chrome.spec.ts -
 
 Render the rail on `md+`, keep a compact mark in the mobile sidebar row, remove the old desktop brand strip, and set both control rows to `var(--kub-control-row-height)`.
 
-- [ ] **Step 4: Re-run layout tests at desktop and mobile sizes**
+- [x] **Step 4: Re-run layout tests at desktop and mobile sizes**
 
 Run: `pnpm.cmd exec playwright test tests/e2e/unified-interface-chrome.spec.ts tests/e2e/visual-style-layout.spec.ts`
 
@@ -138,7 +140,7 @@ Run: `pnpm.cmd exec playwright test tests/e2e/unified-interface-chrome.spec.ts t
 - Produces: `formatAdminAuditEvent(row)` shared by dashboard and audit list.
 - Produces: `useAdminDashboard()` with independent `metrics`, `registrationSeries`, `recentUsers`, `recentEvents`, `loading`, `errors`, `updatedAt`, and `refresh` fields.
 
-- [ ] **Step 1: Write failing model tests**
+- [x] **Step 1: Write failing model tests**
 
 ```ts
 test("registration series returns every requested day including zero days", () => {
@@ -152,15 +154,15 @@ test("audit formatter never exposes raw unknown payloads", () => {
 });
 ```
 
-- [ ] **Step 2: Run model tests and confirm missing-module failures**
+- [x] **Step 2: Run model tests and confirm missing-module failures**
 
 Run: `node --test tests/unit/admin-dashboard-model.test.mts`
 
-- [ ] **Step 3: Implement bounded model and parallel hook**
+- [x] **Step 3: Implement bounded model and parallel hook**
 
 Use parallel count queries, at most seven days of profile timestamps, at most six recent profiles, and at most eight audit rows. Preserve successful regions when another query fails and coalesce realtime/interval refreshes.
 
-- [ ] **Step 4: Re-run model tests and typecheck**
+- [x] **Step 4: Re-run model tests and typecheck**
 
 Run: `node --test tests/unit/admin-dashboard-model.test.mts`  
 Run: `pnpm.cmd --filter @workspace/kub run typecheck`
@@ -180,7 +182,7 @@ Run: `pnpm.cmd --filter @workspace/kub run typecheck`
 - Consumes: `useAdminDashboard()`.
 - Produces test IDs: `admin-dashboard-metrics`, `admin-registration-trend`, `admin-recent-users`, `admin-recent-events`.
 
-- [ ] **Step 1: Add failing admin dashboard presentation tests**
+- [x] **Step 1: Add failing admin dashboard presentation tests**
 
 ```ts
 await expect(page.getByTestId("admin-dashboard-metrics")).toBeVisible();
@@ -189,15 +191,15 @@ await expect(page.getByTestId("admin-recent-users")).toBeVisible();
 await expect(page.getByTestId("admin-recent-events")).toBeVisible();
 ```
 
-- [ ] **Step 2: Run the admin test and confirm the new sections are absent**
+- [x] **Step 2: Run the admin test and confirm the new sections are absent**
 
 Run: `pnpm.cmd exec playwright test tests/e2e/unified-interface-chrome.spec.ts --project=chromium-desktop-1440 -g "administration dashboard"`
 
-- [ ] **Step 3: Implement the dashboard using existing Recharts**
+- [x] **Step 3: Implement the dashboard using existing Recharts**
 
 Use a compact metrics band, an accessible seven-day line/area chart, an online composition summary, and bounded recent lists. Avoid nested cards, fake trends and blocking whole-page errors.
 
-- [ ] **Step 4: Re-run desktop/mobile admin tests and typecheck**
+- [x] **Step 4: Re-run desktop/mobile admin tests and typecheck**
 
 Run: `pnpm.cmd exec playwright test tests/e2e/unified-interface-chrome.spec.ts`  
 Run: `pnpm.cmd --filter @workspace/kub run typecheck`
@@ -224,7 +226,7 @@ Run: `pnpm.cmd --filter @workspace/kub run typecheck`
 - Extends `window.letscubeDesktop` with `startDragging`, `minimize`, `toggleMaximize`, `isMaximized`, and `closeToTray`.
 - Preserves exact-origin capability and close-to-tray semantics.
 
-- [ ] **Step 1: Add failing Tauri contract tests**
+- [x] **Step 1: Add failing Tauri contract tests**
 
 ```js
 assert.equal(tauriConfig.app.windows[0].decorations, false);
@@ -233,15 +235,15 @@ for (const command of ["desktop_start_dragging", "desktop_minimize", "desktop_to
 }
 ```
 
-- [ ] **Step 2: Run Tauri tests and confirm failures**
+- [x] **Step 2: Run Tauri tests and confirm failures**
 
 Run: `pnpm.cmd windows:tauri:test`
 
-- [ ] **Step 3: Implement fail-closed main-window commands and bridge methods**
+- [x] **Step 3: Implement fail-closed main-window commands and bridge methods**
 
 Each command calls `require_production_main`, checks `window.label() == "main"`, and invokes only the corresponding Tauri window method. Add controls to `AppTopBar` only when `isDesktopApp()` is true.
 
-- [ ] **Step 4: Re-run Rust/unit/type checks**
+- [x] **Step 4: Re-run Rust/unit/type checks**
 
 Run: `pnpm.cmd windows:tauri:test`  
 Run: `cargo test --manifest-path windows-tauri/src-tauri/Cargo.toml`  
@@ -262,7 +264,7 @@ Run: `pnpm.cmd --filter @workspace/kub run typecheck`
 - Consumes the same bridge window commands.
 - Produces stable `startup-titlebar` geometry matching `AppTopBar`.
 
-- [ ] **Step 1: Add failing startup titlebar tests**
+- [x] **Step 1: Add failing startup titlebar tests**
 
 ```ts
 await expect(page.getByTestId("startup-titlebar")).toBeVisible();
@@ -270,15 +272,15 @@ await expect(page.getByTestId("startup-window-minimize")).toBeVisible();
 await expect(page.getByTestId("startup-window-close")).toBeVisible();
 ```
 
-- [ ] **Step 2: Run startup tests and confirm failure**
+- [x] **Step 2: Run startup tests and confirm failure**
 
 Run: `pnpm.cmd exec playwright test tests/e2e/windows-tauri-startup.spec.ts`
 
-- [ ] **Step 3: Implement matching startup chrome without moving handshake geometry**
+- [x] **Step 3: Implement matching startup chrome without moving handshake geometry**
 
 Replace the old 82px header with the shared 44px titlebar treatment. Keep the handshake endpoints, progress rails, status, update checks and minimum visible durations unchanged.
 
-- [ ] **Step 4: Re-run startup and shell tests**
+- [x] **Step 4: Re-run startup and shell tests**
 
 Run: `pnpm.cmd exec playwright test tests/e2e/windows-tauri-startup.spec.ts tests/e2e/windows-tauri-shell.spec.ts`
 
@@ -294,33 +296,33 @@ Run: `pnpm.cmd exec playwright test tests/e2e/windows-tauri-startup.spec.ts test
 - Produces final screenshots under ignored `output/playwright/`.
 - Produces no schema, secret, generated release or tracked screenshot changes.
 
-- [ ] **Step 1: Run focused unit and browser suites**
+- [x] **Step 1: Run focused unit and browser suites**
 
 Run: `node --test tests/unit/release-version-label.test.mts tests/unit/admin-dashboard-model.test.mts tests/unit/tauri-shell.test.mjs`  
 Run: `pnpm.cmd exec playwright test tests/e2e/unified-interface-chrome.spec.ts tests/e2e/visual-style-layout.spec.ts tests/e2e/release-distribution-settings.spec.ts`
 
-- [ ] **Step 2: Run project validation**
+- [x] **Step 2: Run project validation**
 
 Run: `git diff --check`  
 Run: `pnpm.cmd --filter @workspace/kub run typecheck`  
 Run: `cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"`  
 Run: `pnpm.cmd e2e:smoke`
 
-- [ ] **Step 3: Run Windows verification**
+- [x] **Step 3: Run Windows verification**
 
 Run: `pnpm.cmd windows:tauri:test`  
 Run: `cargo test --manifest-path windows-tauri/src-tauri/Cargo.toml`  
 Run: `pnpm.cmd windows:tauri:qa`
 
-- [ ] **Step 4: Inspect representative screenshots and layout metrics**
+- [x] **Step 4: Inspect representative screenshots and layout metrics**
 
 Check 3840x2160, 1920x1080, 1440x900, 390x844, 412x915, and Tauri 1360x860/minimum size. Verify one wordmark, aligned baselines, no horizontal overflow, compact quality control, readable dashboard and stable titlebar.
 
-- [ ] **Step 5: Run the required Impeccable detector once after UI completion**
+- [x] **Step 5: Run the required Impeccable detector once after UI completion**
 
 Run: `node C:\Users\maksi\.agents\skills\impeccable\scripts\detect.mjs --json artifacts/kub/src/components/layout artifacts/kub/src/components/sidebar/SidebarHeader.tsx artifacts/kub/src/components/chat/MessageInput.tsx artifacts/kub/src/components/chat/WelcomeScreen.tsx artifacts/kub/src/pages/admin`
 
-- [ ] **Step 6: Update tracker, review the diff, commit and push only after all required checks pass**
+- [x] **Step 6: Update tracker, review the diff, commit and push only after all required checks pass**
 
 ```powershell
 git status --short

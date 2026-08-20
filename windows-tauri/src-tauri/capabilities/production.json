@@ -18,6 +18,11 @@
     "allow-desktop-is-main-foreground",
     "allow-desktop-notify",
     "allow-desktop-remove-notification",
-    "allow-desktop-take-pending-notification-route"
+    "allow-desktop-take-pending-notification-route",
+    "allow-desktop-start-dragging",
+    "allow-desktop-minimize",
+    "allow-desktop-toggle-maximize",
+    "allow-desktop-is-maximized",
+    "allow-desktop-close-to-tray"
   ]
 }
