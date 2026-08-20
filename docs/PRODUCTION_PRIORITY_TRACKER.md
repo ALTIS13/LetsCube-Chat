@@ -61,10 +61,10 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 
 ## Last Confirmed Deploy Baseline
 
-- Production web baseline: `59df9afc13927ed77eb5c6ec74c691659a83f7be` (single-scroll folder editor over the privacy-safe verified-phone search, Windows notification routing and chat-history anchoring baseline).
+- Production web code baseline: `aff77ab82c9af30deea25781caa742b558dbecbb` (single-scroll folder editor and grouped emoji pickers over the privacy-safe verified-phone search, Windows notification routing and chat-history anchoring baseline).
 - Coolify app: `letscube-web`.
 - Public app: `https://app.letscube.ru`.
-- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`; deployment `o5kpnw78lx42yefr3qxnkhvj` completed exact commit `d53e7f26b55782eef9c287d66b48aa88a6fde759` with `is_webhook=true`, passed its healthcheck and completed the rolling update. The chat-summary and access-snapshot RPC build flags remain enabled.
+- Auto deploy: GitHub webhook to Coolify is active for `letscube-web`. The latest UI code container completed exact commit `aff77ab82c9af30deea25781caa742b558dbecbb`, passed its healthcheck and replaced the previous rolling replica. The chat-summary and access-snapshot RPC build flags remain enabled.
 - Worker auto deploy: worker-specific GitHub webhook is verified. Deployment `hjlbhqir375ia6wzmqarhswq` completed exact commit `8d20b89645b9471b4477a8566a5d23ff5cfc9027` with `is_webhook=true`, status `finished` and a healthy `/api/healthz` check. Worker `watch_paths` remain limited to worker/build/runtime paths and shared package manifests. GitHub Actions are intentionally disabled and repo workflow files/secrets were removed to avoid billing-lock email noise.
 - Self-host stack: Coolify proxy, self-hosted Supabase, Mailcow, app and worker deployment are already in place.
 - Support mail bridge: MX/SPF/DKIM/DMARC passed on authoritative and public

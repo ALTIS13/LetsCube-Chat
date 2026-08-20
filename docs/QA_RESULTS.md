@@ -1696,6 +1696,11 @@ Recurring tasks roadmap note:
   and mobile projects. Typecheck, production build, Tauri contracts `14/14`,
   Rust `32/32` and the complete Windows lifecycle suite passed; only the known
   sourcemap/chunk and Cargo linker/PDB warnings remain.
+- After Coolify completed the rolling replacement, the production folder and
+  message picker checks passed `4/4` at desktop `1440x900` and mobile
+  `390x844`. One earlier request reached the retiring replica during the
+  rolling overlap; the final check ran only after the previous container had
+  exited.
 - The exact 2,321,755-byte signed-updater artifact was promoted unchanged from
   Test to Stable. Stable/Test updater and Stable download catalogs expose
   `0.2.10/14` with SHA-256
