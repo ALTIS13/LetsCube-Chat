@@ -141,17 +141,18 @@ registration, WNS secrets and physical terminated-process QA remain.
 ## Release catalog
 
 `https://api.letscube.ru/releases/v1/windows/stable.json` and both Tauri updater
-channels expose the physically tested `0.2.7` build `11` artifact. Test was
-verified first, then the exact same immutable installer and adjacent updater
-signature were promoted to Stable. The release adds one
-Toast Header per chat, retains up to five unread cards, opens the exact message
-from fresh and historical cards, removes only the opened chat's history after
-reading and avoids duplicate sender text.
+channels expose the physically tested `0.2.8` build `12` artifact. The
+installed `0.2.7` client detected, downloaded, verified and applied that update
+without losing its authenticated profile. The release retains one Toast Header
+per chat, up to five unread cards, exact routing from fresh and historical
+cards, chat-scoped history cleanup and duplicate-sender prevention. It also
+removes an eager chart dependency that crashed before React mounted when Tauri
+froze the production WebView prototypes.
 Artifacts remain immutable under
 `https://api.letscube.ru/releases/files/windows/`.
 Public Test, Stable updater and Stable download manifests resolve to the same
-2,318,468-byte artifact with SHA-256
-`408c238d0eae67471c6fb9b8ae95a1c9bb54640912883d86d7ae390a414d65e1`.
+2,322,508-byte artifact with SHA-256
+`697f345bd544281e27b7ab6f4293abebd6c024c10bf60ca6a6e513c5df2e7bfd`.
 Manifest responses use `no-cache, no-store`; the versioned installer uses
 `public, max-age=31536000, immutable`.
 

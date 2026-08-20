@@ -41,6 +41,7 @@ test("normal update is compact and requires a click", () => {
   assert.equal(presentation.blocking, false);
   assert.equal(presentation.action, "install");
   assert.equal(presentation.persistent, true);
+  assert.equal(presentation.description, "Можно установить сейчас");
 });
 
 test("only a critical stable update blocks the messenger", () => {

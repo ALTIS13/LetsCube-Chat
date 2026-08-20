@@ -67,6 +67,27 @@ test("Windows release version and build metadata stay aligned", () => {
   assert.match(libRs, /startup_runtime_script[\s\S]*CARGO_PKG_VERSION/);
 });
 
+test("Windows updater build loads the encrypted local signing identity without exposing secrets", () => {
+  const scriptPath = new URL("../../scripts/windows-tauri-updater-build.ps1", import.meta.url);
+  assert.equal(existsSync(scriptPath), true, "Windows updater build wrapper is missing");
+  assert.equal(
+    rootPackage.scripts["windows:tauri:build:updater"],
+    "pwsh -NoLogo -NoProfile -NonInteractive -File scripts/windows-tauri-updater-build.ps1",
+  );
+
+  const script = readFileSync(scriptPath, "utf8");
+  assert.match(script, /\.codex-local[\\/]windows-updater[\\/]updater\.key/);
+  assert.match(script, /\.codex-local[\\/]windows-updater[\\/]updater-password\.txt/);
+  assert.match(script, /scripts[\\/]windows-updater-public\.key/);
+  assert.match(script, /TAURI_SIGNING_PRIVATE_KEY/);
+  assert.match(script, /TAURI_SIGNING_PRIVATE_KEY_PASSWORD/);
+  assert.match(script, /try\s*\{[\s\S]*?finally\s*\{/);
+  assert.match(script, /Remove-Item\s+Env:TAURI_SIGNING_PRIVATE_KEY/);
+  assert.match(script, /Remove-Item\s+Env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD/);
+  assert.doesNotMatch(script, /Write-(?:Host|Output|Verbose|Debug)[^\n]*(?:PRIVATE_KEY|PASSWORD)/i);
+  assert.doesNotMatch(script, /--(?:key|password)/i);
+});
+
 test("Windows Tauri shell files encode the minimum-capability production contract", () => {
   const cargoTomlPath = new URL("./Cargo.toml", srcTauriRoot);
   const libRsPath = new URL("./src/lib.rs", srcTauriRoot);

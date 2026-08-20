@@ -111,7 +111,9 @@ Snapshot updated: 2026-07-28. The detailed execution source of truth is
   registration/delivery foundation and physical auth/media/geolocation QA exist.
 - Tauri 2 is the selected Windows client. Secure startup, tray/single-instance,
   updater signing, cross-version updates and exact native notification routing
-  are physically verified through `0.2.7/11`.
+  are physically verified through `0.2.8/12`. The installed `0.2.7` client
+  detected, verified and applied `0.2.8` through the native updater while
+  preserving its authenticated profile.
 - Windows has a fail-closed Authenticode build path, provider-isolated WNS
   backend delivery helper, sanitized capability matrix and isolated native
   offline/long-session QA runner.

@@ -1669,3 +1669,29 @@ Recurring tasks roadmap note:
 - Focused phone/p1sms contracts passed 23/23, frontend typecheck, production
   build and `git diff --check` passed. Automated validation did not send a real
   OTP or expose provider credentials.
+
+# 2026-08-20 - Windows 0.2.8 startup and chat-history anchoring
+
+- Reproduced the release-only blank window in the installed `0.2.7/11` client.
+  An eagerly imported chart dependency mutated a prototype during module load,
+  while the Tauri release WebView intentionally freezes built-in prototypes.
+  The resulting read-only `constructor` assignment stopped React before mount.
+  The dashboard trend is now rendered by bounded React/CSS bars without that
+  startup dependency, and the old installed client mounts the production UI.
+- Older chat pages now preserve the first actually visible message and its
+  viewport offset after React commits the prepended rows. The single-flight
+  guard remains active through slow network loads and suppresses bottom-anchor
+  observers during restoration, preventing jumps to the first message or back
+  to the newest message while the user scrolls upward.
+- Added a fail-closed updater build wrapper. It reads the existing encrypted
+  private key and password only from ignored `.codex-local` files, verifies the
+  corresponding tracked public key before building and removes signing values
+  from the process environment in `finally`.
+- Built and server-verified the updater-signed `0.2.8/12` NSIS artifact. Stable
+  download and both updater manifests expose the same 2,322,508-byte immutable file
+  with SHA-256
+  `697f345bd544281e27b7ab6f4293abebd6c024c10bf60ca6a6e513c5df2e7bfd`.
+  The installed `0.2.7` client reported `available`, applied the native update,
+  restarted as `0.2.8/12`, retained its authenticated profile and then reported
+  `current`. Authenticode remains `NotSigned` and is still a separate external
+  publisher/SmartScreen release gate.

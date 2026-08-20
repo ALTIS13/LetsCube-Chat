@@ -118,7 +118,7 @@ export function getDesktopUpdatePresentation(
         ? presentation("Тестовый канал", `Установлена версия ${state.installedVersion}`, "check", true)
         : presentation("LETSCUBE обновлён", `Установлена версия ${state.installedVersion}`, "check", false);
     case "available":
-      return presentation(`Доступна версия${version}`, "Установите её, когда будет удобно", "install", true);
+      return presentation(`Доступна версия${version}`, "Можно установить сейчас", "install", true);
     case "critical_update_required":
       return {
         ...presentation("Требуется важное обновление", `Для продолжения установите LETSCUBE${version}`, "install", true),
