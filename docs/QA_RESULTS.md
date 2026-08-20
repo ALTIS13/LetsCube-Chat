@@ -1615,3 +1615,22 @@ Recurring tasks roadmap note:
   production build and `git diff --check` passed. The build retains existing
   sourcemap and large-chunk warnings. Automated validation made no real OTP
   delivery request.
+
+# 2026-08-20 - confirmed-phone delivery no-op handling
+
+- Production evidence for the reported missing p1sms request showed a new
+  active claim with `send_count = 0` and no SMS event. The claim HMAC matched
+  the account's already-confirmed Supabase Auth phone, so `auth.updateUser()`
+  correctly treated the unchanged phone as a no-op and never invoked the Send
+  SMS Hook. The UI had incorrectly reported that a code was sent.
+- Phone settings now detect the same confirmed Auth phone before creating a
+  delivery claim. They restore the verified profile mirror only through
+  `profile_phone_mark_verified()`, whose server-side implementation rechecks
+  Auth confirmation. A genuinely changed phone still follows the SMS-first
+  OTP flow.
+- User-facing delivery copy is provider-neutral: `Код отправлен на номер ...`.
+  Telegram remains an internal provider fallback and is no longer mentioned
+  in the phone settings UI.
+- Validation: the new regression test failed before the fix, then the focused
+  phone/p1sms suite passed 22/22. Frontend typecheck, production build and
+  `git diff --check` passed; existing sourcemap and large-chunk warnings remain.

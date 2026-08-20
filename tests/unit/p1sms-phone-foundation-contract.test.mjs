@@ -48,6 +48,20 @@ test("settings create a server claim before asking Supabase Auth to send an OTP"
   assert.match(source, /profile_phone_mark_verified[\s\S]*?cancelPhoneClaim/u);
 });
 
+test("settings restore an already-confirmed Auth phone without claiming a delivery", async () => {
+  const source = await readFile(PHONE_SECTION, "utf8");
+  const sendCode = source.indexOf("const sendCode = async");
+  const authLookup = source.indexOf("supabase.auth.getUser()", sendCode);
+  const claim = source.indexOf("phone-verification-gateway", sendCode);
+  const verifiedRpc = source.indexOf('supabase.rpc("profile_phone_mark_verified")', authLookup);
+
+  assert.ok(authLookup > sendCode, "send must inspect the confirmed Auth phone");
+  assert.ok(authLookup < claim, "same-phone recovery must not create a delivery claim");
+  assert.ok(verifiedRpc > authLookup && verifiedRpc < claim);
+  assert.match(source, /Код отправлен на номер/u);
+  assert.doesNotMatch(source, /Код отправлен в Telegram/u);
+});
+
 test("settings preserve structured gateway errors returned with non-2xx responses", async () => {
   const source = await readFile(PHONE_SECTION, "utf8");
   assert.match(
@@ -94,11 +108,12 @@ test("p1sms runtime adapter can only use the fixed send endpoint", async () => {
   assert.doesNotMatch(source, /console\.(?:log|debug|error)\(/u);
 });
 
-test("phone UI describes the provider cascade without promising SMS-only delivery", async () => {
+test("phone UI keeps provider routing out of user-facing delivery copy", async () => {
   const source = await readFile(PHONE_SECTION, "utf8");
-  assert.match(source, /Код отправлен в Telegram или SMS/u);
+  assert.match(source, /Код отправлен на номер/u);
   assert.match(source, /Код подтверждения \(6 цифр\)/u);
   assert.match(source, /Сервис доставки кода не настроен/u);
+  assert.doesNotMatch(source, /Telegram|Телеграм/u);
   assert.doesNotMatch(source, /Код из SMS/u);
   assert.doesNotMatch(source, /SMS-провайдер не настроен/u);
 });

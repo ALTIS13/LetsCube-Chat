@@ -21,9 +21,8 @@ const CODE_DELIVERY_UNAVAILABLE_MESSAGE =
  * numbers at the data-access layer. This component manages the
  * caller's own row.
  *
- * Verified-only flow: `auth.updateUser({phone})` triggers a 6-digit
- * OTP delivery through Telegram with an SMS fallback; the user enters
- * the code, we call `verifyOtp`, then the
+ * Verified-only flow: `auth.updateUser({phone})` triggers delivery of a
+ * 6-digit OTP; the user enters the code, we call `verifyOtp`, then the
  * SECURITY DEFINER RPC `profile_phone_mark_verified()` mirrors the
  * verified state into `profile_contacts`. The RPC re-checks
  * `auth.users.phone_confirmed_at`, so the client cannot lie.
@@ -130,6 +129,35 @@ export function PhoneSection() {
       return;
     }
     setBusy("send");
+
+    // Re-adding the same phone after removing it from profile_contacts is an
+    // Auth no-op: GoTrue keeps the previously confirmed phone and does not
+    // invoke the Send SMS Hook. Restore the profile mirror through the same
+    // server-verified RPC instead of claiming a delivery that cannot happen.
+    const { data: authState, error: authLookupError } = await supabase.auth.getUser();
+    const confirmedAuthPhone = normaliseAuthPhone(authState.user?.phone);
+    if (
+      !authLookupError &&
+      authState.user?.phone_confirmed_at &&
+      confirmedAuthPhone === normalised
+    ) {
+      const { error: restoreError } = await supabase.rpc("profile_phone_mark_verified");
+      await cancelPhoneClaim();
+      setBusy(null);
+      if (restoreError) {
+        setStage("idle");
+        setError(humanise(restoreError.message));
+        return;
+      }
+      await refreshSelf();
+      setStage("idle");
+      setCode("");
+      setResendAvailableAt(null);
+      editingRef.current = false;
+      setInfo("Телефон уже подтверждён.");
+      return;
+    }
+
     const { data: claimData, error: claimError } = await supabase.functions.invoke(
       "phone-verification-gateway",
       { body: { action: "begin", phone: normalised } },
@@ -163,7 +191,7 @@ export function PhoneSection() {
     setStage("code-sent");
     setNow(Date.now());
     setResendAvailableAt(nextResendAt);
-    setInfo(`Код отправлен в Telegram или SMS на номер ${normalised}`);
+    setInfo(`Код отправлен на номер ${normalised}`);
   };
 
   const verifyCode = async () => {
@@ -391,6 +419,12 @@ function normaliseE164(p: string): string | null {
   if (!v || !v.startsWith("+")) return null;
   if (!/^\+\d+$/.test(v)) return null;
   return /^\+[1-9]\d{6,14}$/.test(v) ? v : null;
+}
+
+function normaliseAuthPhone(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const phone = value.trim();
+  return normaliseE164(phone.startsWith("+") ? phone : `+${phone}`);
 }
 
 function formatVerifiedAt(value: string): string | null {
