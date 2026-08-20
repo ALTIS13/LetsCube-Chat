@@ -83,7 +83,7 @@ test("Send SMS hook remains fail-closed and verifies Standard Webhooks first", a
 test("p1sms runtime adapter can only use the fixed send endpoint", async () => {
   const source = await readFile(ADAPTER, "utf8");
   assert.match(source, /https:\/\/admin\.p1sms\.ru\/apiSms\/create/u);
-  assert.match(source, /channel:\s*"telegram_auth"/u);
+  assert.match(source, /channel:\s*"digit"/u);
   assert.doesNotMatch(source, /cascadeSchemeId/u);
   assert.match(source, /redirect:\s*"error"/u);
   assert.match(source, /tag:\s*P1SMS_TAG/u);

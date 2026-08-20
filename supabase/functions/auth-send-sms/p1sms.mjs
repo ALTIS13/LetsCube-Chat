@@ -34,9 +34,9 @@ export function buildP1SmsRequest({ apiKey, phone, message }) {
       apiKey,
       sms: [
         {
-          // P1SMS owns the account-level fallback to digit SMS when Telegram
+          // P1SMS owns the account-level fallback to Telegram when direct SMS
           // reports not_delivered. LETSCUBE must submit exactly one message.
-          channel: "telegram_auth",
+          channel: "digit",
           text: message,
           phone: phone.slice(1),
           tag: P1SMS_TAG,

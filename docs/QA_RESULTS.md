@@ -1599,3 +1599,19 @@ Recurring tasks roadmap note:
   reason. Database type drift remained advisory-only; RLS smoke exited 0 after
   reporting unavailable QA sessions and no mutation fixtures. No provider
   delivery request was made by automated validation.
+
+# 2026-08-20 - p1sms SMS-first OTP cascade
+
+- Changed the single provider request from `telegram_auth` to `digit` after
+  confirmation that the p1sms account-level cascade is bidirectional. P1SMS
+  now owns the `not_delivered` fallback from direct SMS to Telegram.
+- LETSCUBE still submits exactly one short message tagged `letscube-otp`; it
+  does not create a second request or mutate shared provider cascade settings.
+- Deployed only the `auth-send-sms` adapter after a timestamped root-only
+  server backup. Local and deployed SHA-256 hashes match, the Edge Functions
+  container returned to `healthy`, and an unsigned hook probe was rejected
+  with HTTP 401 without contacting the provider.
+- Validation: focused p1sms/phone contracts passed 21/21, frontend typecheck,
+  production build and `git diff --check` passed. The build retains existing
+  sourcemap and large-chunk warnings. Automated validation made no real OTP
+  delivery request.

@@ -29,9 +29,9 @@ marked verified until Supabase Auth OTP verification succeeds.
 8. Add Auth/provider rate limits, resend cooldown, cost alerts and sanitized
    delivery metrics before enabling production traffic.
 9. Store `P1SMS_API_KEY` only as a trusted server secret. Runtime code may call
-   only `POST /apiSms/create` with one immediate `telegram_auth` message. The
-   p1sms account-level rule performs the `not_delivered` fallback to digital
-   SMS; LETSCUBE must not create a second provider request or manage cascade
+   only `POST /apiSms/create` with one immediate `digit` message. The p1sms
+   account-level rule performs the `not_delivered` fallback to Telegram;
+   LETSCUBE must not create a second provider request or manage cascade
    schemes, shared senders, bases, blacklists, schedules or messages belonging
    to other LETSCUBE services.
 10. For physical QA, keep the global policy disabled and add only the test user
