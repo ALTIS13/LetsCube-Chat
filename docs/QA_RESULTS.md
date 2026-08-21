@@ -1497,7 +1497,7 @@ Recurring tasks roadmap note:
   Supabase Auth still generates and verifies the OTP; the adapter only submits
   one immediate `digit` message to `POST /apiSms/create`.
 - The shared LETSCUBE p1sms account is protected by a fixed endpoint, one-item
-  request, `letscube-otp` tag, blocked redirects and source guards forbidding
+  request, blocked redirects and source guards forbidding
   account, sender, history, scheduling, reject, phone-base and blacklist APIs.
 - Added strict response correlation: exactly one positive provider message ID,
   the expected destination, a bounded response body and an accepted status are
@@ -1738,8 +1738,45 @@ Recurring tasks roadmap note:
 - Local/deployed Edge Function SHA-256 hashes match and the functions container
   is healthy. Unsigned Send SMS Hook and unauthenticated gateway probes both
   returned HTTP 401; no automated provider delivery was triggered.
+- At the user's request, general phone verification access was disabled after
+  verified backup
+  `/srv/letscube/backups/pre-migrations/20260821-094138-before-phone-admin-only.dump`.
+  Migration `20260821095000_phone_verification_admin_only.sql` passed rollback
+  rehearsal and apply. A rollback-only production smoke returned `created` for
+  an account with `system.manage` and `disabled` for a regular account; the
+  internal claim function remains executable only by `service_role`. The phone
+  settings section is not rendered for non-administrators.
+
+# 2026-08-21 - Administrator-only phone controls and p1sms error fallback
+
+- Restricted the complete phone verification gateway to accounts with the
+  global `system.manage` permission. This covers capability checks, claim
+  cancellation, number removal and new claim creation; the Send SMS Hook also
+  re-checks the same permission before authorizing provider delivery.
+- Cancelled active non-administrator phone claims during migration so a claim
+  created before the restriction cannot authorize a later resend.
+- Migration `20260821101000_phone_gateway_admin_only.sql` passed a production
+  rollback rehearsal and apply after verified backup
+  `/srv/letscube/backups/pre-migrations/20260821-095422-before-phone-gateway-admin-only.dump`.
+  Production smoke confirmed zero active non-admin claims and execute access
+  only for `service_role`.
+- A sanitized provider-history check found the latest digital message in
+  terminal status `agg_error` with no cascade child. The previous cascade
+  listened only for `not_delivered`, so Telegram fallback could not start.
+- The local p1sms API manual documents `not_delivered` and `error` as cascade
+  conditions. The message-scoped request now includes both terminal branches,
+  each targeting `telegram_auth`; LETSCUBE still sends only one provider
+  request and does not poll or resend OTPs itself.
+- The current public p1sms API page differs from the support example: a cascade
+  step keeps `needStatus` at the step level but requires the delivery `channel`
+  inside `smstemplate`. The provider had accepted the old request while
+  ignoring its malformed cascade branch. The adapter and structural tests now
+  follow the current documented nesting.
+- Removed the undocumented `tag` field from the provider request. It was absent
+  from the current public send contract and provided no observable correlation
+  value in sanitized provider history.
 - Validation passed: `git diff --check`, frontend typecheck, production build,
-  24/24 focused p1sms/phone tests, database type drift check and RLS smoke. The
+  25/25 focused p1sms/phone tests, database type drift check and RLS smoke. The
   production build retains known sourcemap and large-chunk warnings. The
   authenticated Playwright smoke exited 0 but skipped all five projects because
   this local session had no reusable auth state.

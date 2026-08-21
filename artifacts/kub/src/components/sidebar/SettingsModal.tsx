@@ -302,10 +302,12 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         />
       </div>
 
-      <div className="px-4 py-4 border-t border-[color:var(--kub-border-color)]">
-        <SectionLabel>Телефон</SectionLabel>
-        <PhoneSection />
-      </div>
+      {isAdmin && (
+        <div className="px-4 py-4 border-t border-[color:var(--kub-border-color)]">
+          <SectionLabel>Телефон</SectionLabel>
+          <PhoneSection />
+        </div>
+      )}
         </div>
       )}
 

@@ -26,12 +26,26 @@ const PHONE_REMOVE_MIGRATION = new URL(
   "../../.migration-backup/supabase/migrations/20260821093000_phone_remove_internal.sql",
   import.meta.url,
 );
+const ADMIN_ONLY_MIGRATION = new URL(
+  "../../.migration-backup/supabase/migrations/20260821095000_phone_verification_admin_only.sql",
+  import.meta.url,
+);
+const ADMIN_GATEWAY_MIGRATION = new URL(
+  "../../.migration-backup/supabase/migrations/20260821101000_phone_gateway_admin_only.sql",
+  import.meta.url,
+);
+const SETTINGS_MODAL = new URL(
+  "../../artifacts/kub/src/components/sidebar/SettingsModal.tsx",
+  import.meta.url,
+);
 
 test("phone claim gateway is authenticated and never owns OTP delivery", async () => {
   const source = await readFile(GATEWAY, "utf8");
   assert.match(source, /auth\.getUser\(token\)/u);
   assert.match(source, /if \(!token\)[\s\S]*"unauthorized"[\s\S]*401/iu);
   assert.match(source, /phone_verification_claim_begin_internal/u);
+  assert.match(source, /phone_verification_admin_access_internal/u);
+  assert.match(source, /adminAccess\.data !== true[\s\S]*"disabled"[\s\S]*403/u);
   assert.match(source, /from\("profile_contacts"\)/u);
   assert.match(source, /eq\("phone_verified", true\)/u);
   assert.match(source, /phone_in_use/u);
@@ -107,11 +121,12 @@ test("p1sms runtime adapter can only use the fixed send endpoint", async () => {
   assert.match(source, /https:\/\/admin\.p1sms\.ru\/apiSms\/create/u);
   assert.match(source, /channel:\s*"digit"/u);
   assert.match(source, /needStatus:\s*"not_delivered"/u);
-  assert.match(source, /channel:\s*"telegram_auth"/u);
-  assert.match(source, /smstemplate/u);
+  assert.match(source, /needStatus:\s*"error"/u);
+  assert.match(source, /needStatus:\s*"not_delivered"[\s\S]{0,180}smstemplate:\s*\{[\s\S]{0,80}channel:\s*"telegram_auth"/u);
+  assert.doesNotMatch(source, /needStatus:\s*"(?:not_delivered|error)"\s*,\s*channel:/u);
   assert.doesNotMatch(source, /cascadeSchemeId/u);
   assert.match(source, /redirect:\s*"error"/u);
-  assert.match(source, /tag:\s*P1SMS_TAG/u);
+  assert.doesNotMatch(source, /P1SMS_TAG|tag:\s*/u);
   assert.doesNotMatch(
     source,
     /apiUsers|apiSenders|getSmsStatus|getSmsList|\/reject|changePlannedTime|phoneBase|blacklist/iu,
@@ -157,6 +172,25 @@ test("phone UI keeps provider routing out of user-facing delivery copy", async (
   assert.doesNotMatch(source, /Telegram|Телеграм/u);
   assert.doesNotMatch(source, /Код из SMS/u);
   assert.doesNotMatch(source, /SMS-провайдер не настроен/u);
+});
+
+test("phone verification is restricted to administrators in UI and database", async () => {
+  const [settings, migration, gatewayMigration] = await Promise.all([
+    readFile(SETTINGS_MODAL, "utf8"),
+    readFile(ADMIN_ONLY_MIGRATION, "utf8"),
+    readFile(ADMIN_GATEWAY_MIGRATION, "utf8"),
+  ]);
+
+  assert.match(settings, /isAdmin\s*&&\s*\([\s\S]{0,320}<PhoneSection\s*\/>/u);
+  assert.match(migration, /update public\.phone_verification_policy[\s\S]*enabled\s*=\s*false/iu);
+  assert.match(migration, /has_permission\(p_user_id, 'system\.manage'\)/u);
+  assert.doesNotMatch(migration, /phone_verification_pilot_users[\s\S]{0,500}return 'created'/u);
+  assert.match(migration, /grant execute on function public\.phone_verification_claim_begin_internal\(uuid, text\) to service_role/iu);
+  assert.match(gatewayMigration, /phone_verification_admin_access_internal\(p_user_id uuid\)/iu);
+  assert.match(gatewayMigration, /has_permission\(p_user_id, 'system\.manage'\)/u);
+  assert.match(gatewayMigration, /phone_verification_claim_authorize_sms[\s\S]*return 'disabled'/iu);
+  assert.match(gatewayMigration, /phone_verification_claims[\s\S]*status = 'cancelled'/iu);
+  assert.match(gatewayMigration, /grant execute on function public\.phone_verification_admin_access_internal\(uuid\) to service_role/iu);
 });
 
 test("schema proposal defaults rollout off and keeps internal tables private", async () => {

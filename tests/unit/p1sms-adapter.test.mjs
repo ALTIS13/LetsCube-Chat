@@ -3,7 +3,6 @@ import test from "node:test";
 
 import {
   P1SMS_ENDPOINT,
-  P1SMS_TAG,
   SMS_MAX_LENGTH,
   buildP1SmsRequest,
   renderSmsOtp,
@@ -20,7 +19,7 @@ test("LETSCUBE p1sms OTP remains one short message", () => {
   assert.throws(() => renderSmsOtp("12345"), /invalid_otp/u);
 });
 
-test("p1sms request sends digit first and falls back to Telegram only after not_delivered", () => {
+test("p1sms request sends digit first and falls back after terminal delivery failures", () => {
   const request = buildP1SmsRequest({
     apiKey: "private-api-key",
     phone: "+79991234567",
@@ -39,13 +38,19 @@ test("p1sms request sends digit first and falls back to Telegram only after not_
         channel: "digit",
         text: "LETSCUBE: код 123456. Никому его не сообщайте.",
         phone: "79991234567",
-        tag: P1SMS_TAG,
         cascade: {
           schemeDetail: [
             {
               needStatus: "not_delivered",
-              channel: "telegram_auth",
               smstemplate: {
+                channel: "telegram_auth",
+                texts: ["LETSCUBE: код 123456. Никому его не сообщайте."],
+              },
+            },
+            {
+              needStatus: "error",
+              smstemplate: {
+                channel: "telegram_auth",
                 texts: ["LETSCUBE: код 123456. Никому его не сообщайте."],
               },
             },
@@ -55,9 +60,19 @@ test("p1sms request sends digit first and falls back to Telegram only after not_
     ],
   });
   assert.equal(payload.sms.length, 1);
+  assert.equal(payload.sms[0].text, "LETSCUBE: код 123456. Никому его не сообщайте.");
+  assert.equal("texts" in payload.sms[0], false);
+  assert.deepEqual(
+    payload.sms[0].cascade.schemeDetail.map((step) => step.smstemplate.texts),
+    [
+      ["LETSCUBE: код 123456. Никому его не сообщайте."],
+      ["LETSCUBE: код 123456. Никому его не сообщайте."],
+    ],
+  );
   assert.equal("sender" in payload.sms[0], false);
   assert.equal("plannedAt" in payload.sms[0], false);
   assert.equal("cascadeSchemeId" in payload.sms[0], false);
+  assert.equal("tag" in payload.sms[0], false);
   assert.equal("webhookUrl" in payload, false);
   assert.equal(
     payload.sms[0].cascade.schemeDetail.some((step) => step.needStatus === "delivered"),

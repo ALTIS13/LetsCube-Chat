@@ -1,6 +1,5 @@
 export const SMS_MAX_LENGTH = 65;
 export const P1SMS_ENDPOINT = "https://admin.p1sms.ru/apiSms/create";
-export const P1SMS_TAG = "letscube-otp";
 
 const ACCEPTED_STATUSES = new Set(["created", "moderation", "sent", "delivered", "read"]);
 const MAX_PROVIDER_RESPONSE_BYTES = 32_000;
@@ -39,13 +38,22 @@ export function buildP1SmsRequest({ apiKey, phone, message }) {
           channel: "digit",
           text: message,
           phone: phone.slice(1),
-          tag: P1SMS_TAG,
           cascade: {
             schemeDetail: [
               {
                 needStatus: "not_delivered",
-                channel: "telegram_auth",
                 smstemplate: {
+                  channel: "telegram_auth",
+                  texts: [message],
+                },
+              },
+              {
+                // P1SMS can surface provider/aggregator failures as an error
+                // rather than not_delivered. Keep that terminal path covered
+                // by the same Telegram fallback.
+                needStatus: "error",
+                smstemplate: {
+                  channel: "telegram_auth",
                   texts: [message],
                 },
               },

@@ -46,6 +46,16 @@ Deno.serve(async (request: Request) => {
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+  const adminAccess = await admin.rpc("phone_verification_admin_access_internal", {
+    p_user_id: authData.user.id,
+  });
+  if (adminAccess.error) {
+    return corsResponse(request, { ok: false, error: "unavailable" }, 503);
+  }
+  if (adminAccess.data !== true) {
+    return corsResponse(request, { ok: false, error: "disabled" }, 403);
+  }
+
   const action = body.action;
 
   if (action === "capability") {
