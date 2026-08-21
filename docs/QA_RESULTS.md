@@ -1681,6 +1681,7 @@ Recurring tasks roadmap note:
   updates `0.2.8 -> 0.2.9 -> 0.2.10` retained the authenticated profile, and
   the early startup frame displayed the stable endpoint geometry without the
   old subtitle.
+
 - The folder editor no longer combines a scrollable modal body with a second
   scrollable chat checklist. The shared modal body is the sole vertical scroll
   owner, so the footer remains reachable without adjacent scrollbars.
@@ -1707,6 +1708,41 @@ Recurring tasks roadmap note:
   `31ed5a8749a85802ce67581e92a9518f67b9c5930fb7463072ab7bcfd737d760`.
   Authenticode/SmartScreen reputation and killed-process WNS delivery remain
   separate external release gates.
+
+# 2026-08-21 - p1sms SMS-first fallback and complete phone removal
+
+- After p1sms support disabled the forced account-level cascade and approved
+  the LETSCUBE templates, the runtime request now sends one primary `digit`
+  message with one inline `not_delivered -> telegram_auth` fallback. P1SMS
+  evaluates delivery and creates the fallback; LETSCUBE neither polls status
+  nor issues a second provider request.
+- The profile `Удалить` action previously cleared only `profile_contacts`.
+  Supabase Auth retained the confirmed phone and phone identity, so re-adding
+  the same number became an Auth no-op and no fresh OTP was sent.
+- A first attempted fix exposed another important constraint: current GoTrue
+  accepts an admin update with an empty phone but ignores it, and the profile
+  guard correctly rejects direct server updates without its internal bypass.
+  The final implementation uses the service-role-only
+  `profile_phone_remove_internal(uuid)` RPC. In one transaction it clears the
+  Auth phone and pending phone-change state, removes only the phone-change OTP
+  token and phone identity, clears the private profile mirror, and cancels the
+  active verification claim. `anon` and `authenticated` have no execute grant.
+- Migration `20260821093000_phone_remove_internal.sql` passed a production
+  rollback rehearsal before apply. Verified backup:
+  `/srv/letscube/backups/pre-migrations/20260821-093456-before-test-phone-reset.dump`.
+  The final gateway backup is
+  `/srv/letscube/backups/edge-functions/20260821-093432-phone-remove-final`.
+- The explicitly authorized test account reset was verified without printing
+  its phone or user ID: Auth phone empty, pending phone change empty, private
+  profile phone empty, zero phone identities and zero active claims.
+- Local/deployed Edge Function SHA-256 hashes match and the functions container
+  is healthy. Unsigned Send SMS Hook and unauthenticated gateway probes both
+  returned HTTP 401; no automated provider delivery was triggered.
+- Validation passed: `git diff --check`, frontend typecheck, production build,
+  24/24 focused p1sms/phone tests, database type drift check and RLS smoke. The
+  production build retains known sourcemap and large-chunk warnings. The
+  authenticated Playwright smoke exited 0 but skipped all five projects because
+  this local session had no reusable auth state.
 
 # 2026-08-20 - Windows 0.2.8 startup and chat-history anchoring
 

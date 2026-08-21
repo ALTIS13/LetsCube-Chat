@@ -62,6 +62,17 @@ Deno.serve(async (request: Request) => {
     return corsResponse(request, { ok: true }, 200);
   }
 
+  if (action === "remove") {
+    const profileRemoval = await admin.rpc("profile_phone_remove_internal", {
+      p_user_id: authData.user.id,
+    });
+    if (profileRemoval.error) {
+      return corsResponse(request, { ok: false, error: "unavailable" }, 503);
+    }
+
+    return corsResponse(request, { ok: true }, 200);
+  }
+
   if (action !== "begin") {
     return corsResponse(request, { ok: false, error: "invalid_request" }, 400);
   }

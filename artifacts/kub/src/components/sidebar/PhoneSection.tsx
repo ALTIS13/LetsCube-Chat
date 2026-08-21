@@ -130,10 +130,9 @@ export function PhoneSection() {
     }
     setBusy("send");
 
-    // Re-adding the same phone after removing it from profile_contacts is an
-    // Auth no-op: GoTrue keeps the previously confirmed phone and does not
-    // invoke the Send SMS Hook. Restore the profile mirror through the same
-    // server-verified RPC instead of claiming a delivery that cannot happen.
+    // Repair legacy or interrupted removals where Auth still owns a confirmed
+    // phone but the profile mirror is empty. New removals clear both stores via
+    // the authenticated server gateway below.
     const { data: authState, error: authLookupError } = await supabase.auth.getUser();
     const confirmedAuthPhone = normaliseAuthPhone(authState.user?.phone);
     if (
@@ -243,15 +242,21 @@ export function PhoneSection() {
   const removePhone = async () => {
     reset();
     setBusy("save");
-    const { error: dErr } = await supabase
-      .from("profile_contacts")
-      .update({ phone: null, updated_at: new Date().toISOString() })
-      .eq("user_id", currentUser.id);
-    if (dErr) {
+    const { data, error: removeError } = await supabase.functions.invoke(
+      "phone-verification-gateway",
+      { body: { action: "remove" } },
+    );
+    if (removeError || data?.ok !== true) {
+      const errorCode = await readPhoneGatewayErrorCode(data, removeError);
       setBusy(null);
-      setError(humanise(dErr.message));
+      setError(
+        errorCode === "unauthorized"
+          ? "Сессия истекла. Войдите снова и повторите удаление."
+          : "Не удалось удалить номер. Попробуйте позже.",
+      );
       return;
     }
+    await supabase.auth.refreshSession();
     await refreshSelf();
     setBusy(null);
     setPhoneInput("");

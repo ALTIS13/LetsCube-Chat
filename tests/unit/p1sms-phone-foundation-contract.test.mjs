@@ -22,6 +22,10 @@ const GLOBAL_ROLLOUT_MIGRATION = new URL(
   "../../.migration-backup/supabase/migrations/20260820161957_enable_phone_verification_for_all_accounts.sql",
   import.meta.url,
 );
+const PHONE_REMOVE_MIGRATION = new URL(
+  "../../.migration-backup/supabase/migrations/20260821093000_phone_remove_internal.sql",
+  import.meta.url,
+);
 
 test("phone claim gateway is authenticated and never owns OTP delivery", async () => {
   const source = await readFile(GATEWAY, "utf8");
@@ -101,7 +105,10 @@ test("Send SMS hook remains fail-closed and verifies Standard Webhooks first", a
 test("p1sms runtime adapter can only use the fixed send endpoint", async () => {
   const source = await readFile(ADAPTER, "utf8");
   assert.match(source, /https:\/\/admin\.p1sms\.ru\/apiSms\/create/u);
+  assert.match(source, /channel:\s*"digit"/u);
+  assert.match(source, /needStatus:\s*"not_delivered"/u);
   assert.match(source, /channel:\s*"telegram_auth"/u);
+  assert.match(source, /smstemplate/u);
   assert.doesNotMatch(source, /cascadeSchemeId/u);
   assert.match(source, /redirect:\s*"error"/u);
   assert.match(source, /tag:\s*P1SMS_TAG/u);
@@ -110,6 +117,36 @@ test("p1sms runtime adapter can only use the fixed send endpoint", async () => {
     /apiUsers|apiSenders|getSmsStatus|getSmsList|\/reject|changePlannedTime|phoneBase|blacklist/iu,
   );
   assert.doesNotMatch(source, /console\.(?:log|debug|error)\(/u);
+});
+
+test("phone removal clears the trusted Auth phone and profile mirror", async () => {
+  const [gateway, settings, migration] = await Promise.all([
+    readFile(GATEWAY, "utf8"),
+    readFile(PHONE_SECTION, "utf8"),
+    readFile(PHONE_REMOVE_MIGRATION, "utf8"),
+  ]);
+
+  assert.match(gateway, /action === "remove"/u);
+  assert.match(gateway, /rpc\("profile_phone_remove_internal"/u);
+  assert.doesNotMatch(gateway, /auth\.admin\.updateUserById/u);
+  assert.doesNotMatch(gateway, /from\("profile_contacts"\)[\s\S]{0,320}phone:\s*null/u);
+  assert.match(migration, /create or replace function public\.profile_phone_remove_internal\(p_user_id uuid\)/iu);
+  assert.match(migration, /set_config\('app\.profile_contacts_bypass', 'on', true\)/u);
+  assert.match(migration, /update auth\.users[\s\S]*phone\s*=\s*null[\s\S]*phone_confirmed_at\s*=\s*null/u);
+  assert.match(migration, /phone_change\s*=\s*''[\s\S]*phone_change_token\s*=\s*''/u);
+  assert.match(migration, /delete from auth\.one_time_tokens[\s\S]*phone_change_token/u);
+  assert.match(migration, /delete from auth\.identities[\s\S]*provider\s*=\s*'phone'/u);
+  assert.match(migration, /update public\.profile_contacts[\s\S]*phone\s*=\s*null/u);
+  assert.match(migration, /phone_verified\s*=\s*false/u);
+  assert.match(migration, /phone_verified_at\s*=\s*null/u);
+  assert.match(migration, /phone_verification_claim_cancel_internal\(p_user_id\)/u);
+  assert.match(migration, /revoke all on function public\.profile_phone_remove_internal\(uuid\) from public, anon, authenticated, service_role/iu);
+  assert.match(migration, /grant execute on function public\.profile_phone_remove_internal\(uuid\) to service_role/iu);
+  assert.match(settings, /body:\s*\{\s*action:\s*"remove"\s*\}/u);
+  assert.doesNotMatch(
+    settings,
+    /from\("profile_contacts"\)[\s\S]{0,240}update\(\{\s*phone:\s*null/u,
+  );
 });
 
 test("phone UI keeps provider routing out of user-facing delivery copy", async () => {

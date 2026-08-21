@@ -34,12 +34,23 @@ export function buildP1SmsRequest({ apiKey, phone, message }) {
       apiKey,
       sms: [
         {
-          // P1SMS owns the account-level fallback to digit SMS when Telegram
-          // reports not_delivered. LETSCUBE must submit exactly one message.
-          channel: "telegram_auth",
+          // P1SMS tracks delivery and creates the Telegram fallback only when
+          // the primary digit message reaches the terminal not_delivered state.
+          channel: "digit",
           text: message,
           phone: phone.slice(1),
           tag: P1SMS_TAG,
+          cascade: {
+            schemeDetail: [
+              {
+                needStatus: "not_delivered",
+                channel: "telegram_auth",
+                smstemplate: {
+                  texts: [message],
+                },
+              },
+            ],
+          },
         },
       ],
     }),

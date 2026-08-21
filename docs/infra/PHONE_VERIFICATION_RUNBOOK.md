@@ -29,10 +29,10 @@ marked verified until Supabase Auth OTP verification succeeds.
 8. Add Auth/provider rate limits, resend cooldown, cost alerts and sanitized
    delivery metrics before enabling production traffic.
 9. Store `P1SMS_API_KEY` only as a trusted server secret. Runtime code may call
-   only `POST /apiSms/create` with one immediate `telegram_auth` message. The
-   p1sms account-level rule performs the `not_delivered` fallback to digital SMS;
-   LETSCUBE must not create a second provider request or manage cascade
-   schemes, shared senders, bases, blacklists, schedules or messages belonging
+   only `POST /apiSms/create` with one immediate `digit` message and one inline
+   `not_delivered -> telegram_auth` fallback. P1SMS owns status evaluation and
+   fallback creation; LETSCUBE must not poll, create a second provider request,
+   or manage shared senders, bases, blacklists, schedules or messages belonging
    to other LETSCUBE services.
 10. For physical QA, keep the global policy disabled and add only the test user
     ID to `phone_verification_pilot_users`. Remove or disable that row after QA
@@ -42,10 +42,11 @@ marked verified until Supabase Auth OTP verification succeeds.
 
 - Invalid local phone number is rejected.
 - E.164-style number is accepted.
-- OTP delivery works through Telegram and falls back to digital SMS when Telegram is unavailable.
+- OTP delivery uses digital SMS first and falls back to Telegram only after `not_delivered`.
 - Wrong OTP shows friendly error.
 - Correct OTP sets verified state.
 - Changing phone requires a fresh OTP.
+- Removing phone clears both the trusted Supabase Auth value and the private profile mirror.
 - Missing provider does not mark verified.
 - A second account cannot concurrently claim the same pending phone.
 - Provider logs and UI contain no raw OTP, full phone, secret or stack trace.
