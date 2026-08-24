@@ -1767,6 +1767,16 @@ Recurring tasks roadmap note:
   conditions. The message-scoped request now includes both terminal branches,
   each targeting `telegram_auth`; LETSCUBE still sends only one provider
   request and does not poll or resend OTPs itself.
+- P1SMS support subsequently confirmed that an aggregator failure is surfaced
+  as the distinct `agg_error` status and must be listed explicitly in
+  `needStatus`. The runtime request now preserves the existing `not_delivered`
+  and `error` branches and adds `agg_error -> telegram_auth`; physical fallback
+  delivery remains pending a new administrator-initiated verification attempt.
+- Focused p1sms/phone validation passed 25/25, followed by frontend typecheck,
+  production build, database type-drift check and RLS smoke. The updated
+  adapter was deployed with a server-side backup; local and remote SHA-256
+  matched, the Edge Functions container returned to `running`, and unsigned
+  probes for both phone endpoints remained fail-closed with HTTP 401.
 - The current public p1sms API page differs from the support example: a cascade
   step keeps `needStatus` at the step level but requires the delivery `channel`
   inside `smstemplate`. The provider had accepted the old request while

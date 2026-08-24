@@ -120,10 +120,11 @@ test("p1sms runtime adapter can only use the fixed send endpoint", async () => {
   const source = await readFile(ADAPTER, "utf8");
   assert.match(source, /https:\/\/admin\.p1sms\.ru\/apiSms\/create/u);
   assert.match(source, /channel:\s*"digit"/u);
+  assert.match(source, /needStatus:\s*"agg_error"/u);
   assert.match(source, /needStatus:\s*"not_delivered"/u);
   assert.match(source, /needStatus:\s*"error"/u);
   assert.match(source, /needStatus:\s*"not_delivered"[\s\S]{0,180}smstemplate:\s*\{[\s\S]{0,80}channel:\s*"telegram_auth"/u);
-  assert.doesNotMatch(source, /needStatus:\s*"(?:not_delivered|error)"\s*,\s*channel:/u);
+  assert.doesNotMatch(source, /needStatus:\s*"(?:agg_error|not_delivered|error)"\s*,\s*channel:/u);
   assert.doesNotMatch(source, /cascadeSchemeId/u);
   assert.match(source, /redirect:\s*"error"/u);
   assert.doesNotMatch(source, /P1SMS_TAG|tag:\s*/u);

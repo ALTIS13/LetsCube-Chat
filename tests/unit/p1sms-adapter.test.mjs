@@ -41,6 +41,13 @@ test("p1sms request sends digit first and falls back after terminal delivery fai
         cascade: {
           schemeDetail: [
             {
+              needStatus: "agg_error",
+              smstemplate: {
+                channel: "telegram_auth",
+                texts: ["LETSCUBE: код 123456. Никому его не сообщайте."],
+              },
+            },
+            {
               needStatus: "not_delivered",
               smstemplate: {
                 channel: "telegram_auth",
@@ -67,7 +74,12 @@ test("p1sms request sends digit first and falls back after terminal delivery fai
     [
       ["LETSCUBE: код 123456. Никому его не сообщайте."],
       ["LETSCUBE: код 123456. Никому его не сообщайте."],
+      ["LETSCUBE: код 123456. Никому его не сообщайте."],
     ],
+  );
+  assert.deepEqual(
+    payload.sms[0].cascade.schemeDetail.map((step) => step.needStatus),
+    ["agg_error", "not_delivered", "error"],
   );
   assert.equal("sender" in payload.sms[0], false);
   assert.equal("plannedAt" in payload.sms[0], false);

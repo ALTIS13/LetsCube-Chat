@@ -33,13 +33,22 @@ export function buildP1SmsRequest({ apiKey, phone, message }) {
       apiKey,
       sms: [
         {
-          // P1SMS tracks delivery and creates the Telegram fallback only when
-          // the primary digit message reaches the terminal not_delivered state.
+          // P1SMS tracks delivery and creates the Telegram fallback when the
+          // primary digit message reaches a supported terminal failure state.
           channel: "digit",
           text: message,
           phone: phone.slice(1),
           cascade: {
             schemeDetail: [
+              {
+                // Provider support confirmed that aggregator failures are
+                // reported as agg_error and must be matched explicitly.
+                needStatus: "agg_error",
+                smstemplate: {
+                  channel: "telegram_auth",
+                  texts: [message],
+                },
+              },
               {
                 needStatus: "not_delivered",
                 smstemplate: {
@@ -48,9 +57,7 @@ export function buildP1SmsRequest({ apiKey, phone, message }) {
                 },
               },
               {
-                // P1SMS can surface provider/aggregator failures as an error
-                // rather than not_delivered. Keep that terminal path covered
-                // by the same Telegram fallback.
+                // Keep the generic terminal error path covered as well.
                 needStatus: "error",
                 smstemplate: {
                   channel: "telegram_auth",

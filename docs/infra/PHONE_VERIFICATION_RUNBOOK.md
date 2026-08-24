@@ -30,7 +30,7 @@ marked verified until Supabase Auth OTP verification succeeds.
    delivery metrics before enabling production traffic.
 9. Store `P1SMS_API_KEY` only as a trusted server secret. Runtime code may call
    only `POST /apiSms/create` with one immediate `digit` message and one inline
-   `not_delivered -> telegram_auth` and `error -> telegram_auth` fallbacks. P1SMS owns status evaluation and
+   `agg_error -> telegram_auth`, `not_delivered -> telegram_auth` and `error -> telegram_auth` fallbacks. P1SMS owns status evaluation and
    fallback creation; LETSCUBE must not poll, create a second provider request,
    or manage shared senders, bases, blacklists, schedules or messages belonging
    to other LETSCUBE services.
@@ -42,7 +42,7 @@ marked verified until Supabase Auth OTP verification succeeds.
 
 - Invalid local phone number is rejected.
 - E.164-style number is accepted.
-- OTP delivery uses digital SMS first and falls back to Telegram only after `not_delivered` or a terminal provider error.
+- OTP delivery uses digital SMS first and falls back to Telegram only after `agg_error`, `not_delivered` or a terminal provider error. P1SMS support confirmed that `agg_error` is a separate not-sent status and must be matched explicitly.
 - An administrator with `system.manage` can create a claim; a regular account receives `disabled` and does not contact the provider.
 - Wrong OTP shows friendly error.
 - Correct OTP sets verified state.

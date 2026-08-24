@@ -1,13 +1,13 @@
 # Phone Verification
 
-Status: the verified-only UI/database flow is restricted to administrators with `system.manage`; privacy-safe exact phone search remains available to authorized staff. P1SMS delivery uses digital SMS first and an inline Telegram fallback after the provider reports `not_delivered` or a terminal delivery `error`. Mandatory phone enforcement remains disabled.
+Status: the verified-only UI/database flow is restricted to administrators with `system.manage`; privacy-safe exact phone search remains available to authorized staff. P1SMS delivery uses digital SMS first and an inline Telegram fallback after the provider reports `agg_error`, `not_delivered` or a terminal delivery `error`. Mandatory phone enforcement remains disabled.
 
 ## Current flow
 
 1. An administrator enters a phone number in profile settings. The phone section is hidden for other accounts, and the server rejects their delivery claims.
 2. The app requires an explicit international E.164-style number with `+` and country code, for example `+79991234567`. Spaces, dashes and parentheses are removed for convenience, but local numbers without `+` are not accepted.
 3. The app creates a short-lived server-side HMAC claim before calling Supabase Auth phone update. The claim contains no raw phone number.
-4. Supabase Auth generates the OTP and invokes the signed LETSCUBE Send SMS Hook. The hook submits one `digit` message to p1sms with inline `not_delivered` and `error` fallbacks to `telegram_auth`. P1SMS evaluates the delivery status and creates the fallback; LETSCUBE does not poll or issue a second request. A repeated send uses the dedicated `phone_change` resend endpoint.
+4. Supabase Auth generates the OTP and invokes the signed LETSCUBE Send SMS Hook. The hook submits one `digit` message to p1sms with inline `agg_error`, `not_delivered` and `error` fallbacks to `telegram_auth`. P1SMS evaluates the delivery status and creates the fallback; LETSCUBE does not poll or issue a second request. A repeated send uses the dedicated `phone_change` resend endpoint.
 5. User enters the 6-digit code.
 6. The app calls Supabase Auth OTP verification.
 7. Only after successful OTP verification, `profile_phone_mark_verified()` mirrors the verified phone into `public.profile_contacts`.
@@ -38,7 +38,7 @@ Use the [Supabase Send SMS Hook](https://supabase.com/docs/guides/auth/auth-hook
 
 Selected provider: p1sms. Production activation uses server-only `P1SMS_API_KEY`, `SEND_SMS_HOOK_SECRET` and `PHONE_CLAIM_HMAC_SECRET`. Only accounts with the global `system.manage` permission may create a delivery claim. `enforce_data_access` remains disabled, so phone verification is not mandatory for registration or normal application access.
 
-The p1sms account is shared by LETSCUBE services. The runtime adapter therefore has a deliberately narrow contract: it calls only `POST https://admin.p1sms.ru/apiSms/create`, submits one immediate `digit` message with message-scoped `not_delivered -> telegram_auth` and `error -> telegram_auth` fallback branches, and follows the current p1sms schema by using singular `sms[].text` for the message being sent and `smstemplate.texts[]` plus `smstemplate.channel` for fallback templates. The plural top-level template form belongs to the separate `createCascadeScheme` configuration endpoint and is intentionally not used at runtime. Undocumented request fields are not sent. The adapter blocks HTTP redirects and never calls account, balance, sender, history, scheduling, reject, phone-base, blacklist or cascade-management endpoints. The forced account-level cascade is disabled; this message-scoped cascade cannot alter templates or delivery rules of other LETSCUBE services. The API key is read only after `SMS_DELIVERY_ENABLED=true`, remains in trusted Edge Function/Coolify secrets and is never placed in a URL, frontend bundle, log or database row.
+The p1sms account is shared by LETSCUBE services. The runtime adapter therefore has a deliberately narrow contract: it calls only `POST https://admin.p1sms.ru/apiSms/create`, submits one immediate `digit` message with message-scoped `agg_error -> telegram_auth`, `not_delivered -> telegram_auth` and `error -> telegram_auth` fallback branches, and follows the current p1sms schema by using singular `sms[].text` for the message being sent and `smstemplate.texts[]` plus `smstemplate.channel` for fallback templates. P1SMS support confirmed that `agg_error` means the initial message was not sent and must be matched as its own expected cascade status. The plural top-level template form belongs to the separate `createCascadeScheme` configuration endpoint and is intentionally not used at runtime. Undocumented request fields are not sent. The adapter blocks HTTP redirects and never calls account, balance, sender, history, scheduling, reject, phone-base, blacklist or cascade-management endpoints. The forced account-level cascade is disabled; this message-scoped cascade cannot alter templates or delivery rules of other LETSCUBE services. The API key is read only after `SMS_DELIVERY_ENABLED=true`, remains in trusted Edge Function/Coolify secrets and is never placed in a URL, frontend bundle, log or database row.
 
 The exact production template is `LETSCUBE: код 123456. Никому его не сообщайте.`. It is 46 characters for a six-digit code and the adapter rejects any SMS longer than 65 characters before contacting the provider.
 
@@ -76,7 +76,7 @@ The app does not mark the phone as verified and does not save a changed phone nu
 
 - With provider delivery disabled, try to verify a phone and confirm the friendly setup message.
 - Confirm a local number such as `89991234567` is rejected and `+79991234567` is accepted as input.
-- With provider delivery enabled, verify primary digital-SMS delivery and the Telegram fallback after real `not_delivered` and provider-error results.
+- With provider delivery enabled, verify primary digital-SMS delivery and the Telegram fallback after real `agg_error`, `not_delivered` and provider-error results.
 - Remove a verified phone and confirm both Supabase Auth and `profile_contacts` no longer retain it before requesting a fresh OTP.
 - Confirm `profile_contacts.phone_verified = true` and `phone_verified_at` is set only after OTP success.
 - Change the number and confirm it requires a fresh OTP.
