@@ -15,7 +15,7 @@ const root = resolve(dirname(scriptPath), "..");
 const expectedApplicationId = "com.kub.messenger";
 
 function quoteWindowsArgument(value) {
-  if (/^[A-Za-z0-9_@./:\\-]+$/.test(value)) return value;
+  if (/^[A-Za-z0-9_@./:\\=-]+$/.test(value)) return value;
   return `"${value.replaceAll('"', '""')}"`;
 }
 
@@ -41,6 +41,8 @@ function run(command, args, env, cwd = root) {
 
   return result.stdout.trim();
 }
+
+export { run as runReleaseCommand };
 
 function bundleContainsValue(directory, value) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {

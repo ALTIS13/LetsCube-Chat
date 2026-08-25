@@ -14,9 +14,10 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { readAndroidReleaseMetadata } from "../../scripts/android-release-metadata.mjs";
-import { verifyAndroidReleaseArtifactMetadata } from "../../scripts/build-android-release.mjs";
+import * as releaseBuilder from "../../scripts/build-android-release.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const { verifyAndroidReleaseArtifactMetadata } = releaseBuilder;
 
 test("Android release metadata has the canonical production version", () => {
   assert.deepEqual(readAndroidReleaseMetadata(root), {
@@ -126,6 +127,22 @@ test("Android release builder creates and verifies signed release artifacts", ()
   assert.match(releaseBuilder, /assembleRelease/);
   assert.match(releaseBuilder, /bundleRelease/);
   assert.match(releaseBuilder, /apksigner/);
+});
+
+test("Android release builder preserves Windows command options containing equals signs", {
+  skip: process.platform !== "win32",
+}, () => {
+  const expected = spawnSync("git", ["rev-parse", "--short=12", "HEAD"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+
+  assert.equal(expected.status, 0);
+  assert.equal(typeof releaseBuilder.runReleaseCommand, "function");
+  assert.equal(
+    releaseBuilder.runReleaseCommand("git", ["rev-parse", "--short=12", "HEAD"], process.env, root),
+    expected.stdout.trim(),
+  );
 });
 
 test("Android release artifact verification rejects metadata drift", () => {
