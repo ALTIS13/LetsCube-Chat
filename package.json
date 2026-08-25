@@ -22,6 +22,7 @@
     "android:assets": "pnpm dlx @capacitor/assets@3.0.5 generate --android --assetPath assets --iconBackgroundColor \"#17212b\" --iconBackgroundColorDark \"#17212b\" --splashBackgroundColor \"#17212b\" --splashBackgroundColorDark \"#17212b\" --logoSplashScale 0.18",
     "android:build:debug": "cd android && gradlew.bat assembleDebug",
     "android:build:production:debug": "node scripts/build-android-production.mjs",
+    "android:build:production:release": "node scripts/build-android-release.mjs",
     "windows:tauri:prepare": "pnpm.cmd --dir windows-tauri --ignore-workspace install",
     "windows:tauri:run": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH%&& pnpm.cmd --dir windows-tauri --ignore-workspace exec tauri dev",
     "windows:tauri:test": "node --test tests/unit/tauri-shell.test.mjs",

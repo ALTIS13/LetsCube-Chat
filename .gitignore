@@ -83,12 +83,19 @@ test-results/
 
 # Desktop signing and updater outputs are local/release-server only.
 electron-builder.env
+*.jks
+*.keystore
 *.pfx
 *.p12
 *.pvk
 *.spc
 *.blockmap
 latest*.yml
+android-signing*.env
+
+# Android release credentials and generated delivery artifacts are local only.
+android/app/build/outputs/apk/release/
+android/app/build/outputs/bundle/release/
 
 # Standalone Tauri/Rust outputs. Source and Cargo.lock stay tracked.
 windows-tauri/node_modules/

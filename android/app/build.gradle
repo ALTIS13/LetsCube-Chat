@@ -1,5 +1,35 @@
 apply plugin: 'com.android.application'
 
+def versionProperties = new Properties()
+versionProperties.load(new FileInputStream(rootProject.file('version.properties')))
+
+def releaseTaskRequested = gradle.startParameter.taskNames.any { taskName ->
+    taskName.toLowerCase().contains('release')
+}
+def releaseSigningEnvironmentNames = [
+    'LETSCUBE_ANDROID_KEYSTORE_PATH',
+    'LETSCUBE_ANDROID_KEY_ALIAS',
+    'LETSCUBE_ANDROID_STORE_PASSWORD',
+    'LETSCUBE_ANDROID_KEY_PASSWORD',
+]
+def releaseSigningEnvironment = releaseSigningEnvironmentNames.collectEntries { variableName ->
+    [(variableName): System.getenv(variableName)]
+}
+
+if (releaseTaskRequested) {
+    def missingVariable = releaseSigningEnvironmentNames.find { variableName ->
+        !releaseSigningEnvironment[variableName]
+    }
+    if (missingVariable) {
+        throw new GradleException("Android release signing requires ${missingVariable}.")
+    }
+
+    def keystoreFile = file(releaseSigningEnvironment['LETSCUBE_ANDROID_KEYSTORE_PATH'])
+    if (!keystoreFile.isFile()) {
+        throw new GradleException('LETSCUBE_ANDROID_KEYSTORE_PATH must reference an existing regular file.')
+    }
+}
+
 android {
     namespace = "com.kub.messenger"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +37,8 @@ android {
         applicationId "com.kub.messenger"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "0.1.0"
+        versionCode versionProperties.getProperty("VERSION_CODE").toInteger()
+        versionName versionProperties.getProperty("VERSION_NAME")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +46,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    if (releaseTaskRequested) {
+        signingConfigs {
+            release {
+                storeFile file(releaseSigningEnvironment['LETSCUBE_ANDROID_KEYSTORE_PATH'])
+                keyAlias releaseSigningEnvironment['LETSCUBE_ANDROID_KEY_ALIAS']
+                storePassword releaseSigningEnvironment['LETSCUBE_ANDROID_STORE_PASSWORD']
+                keyPassword releaseSigningEnvironment['LETSCUBE_ANDROID_KEY_PASSWORD']
+            }
+        }
+    }
     buildTypes {
         release {
+            if (releaseTaskRequested) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

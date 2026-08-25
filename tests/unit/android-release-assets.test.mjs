@@ -4,6 +4,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import { readAndroidReleaseMetadata } from "../../scripts/android-release-metadata.mjs";
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const read = (path) => readFileSync(resolve(root, path), "utf8");
 
@@ -15,8 +17,12 @@ test("Android release identity stays on the LETSCUBE package contract", () => {
   assert.match(capacitorConfig, /appId:\s*"com\.kub\.messenger"/);
   assert.match(capacitorConfig, /appName:\s*"LETSCUBE"/);
   assert.match(strings, /<string name="app_name">LETSCUBE<\/string>/);
-  assert.match(gradle, /versionCode\s+1/);
-  assert.match(gradle, /versionName\s+"0\.1\.0"/);
+  assert.match(gradle, /versionProperties\.getProperty\("VERSION_CODE"\)/);
+  assert.match(gradle, /versionProperties\.getProperty\("VERSION_NAME"\)/);
+  assert.deepEqual(readAndroidReleaseMetadata(root), {
+    versionName: "0.1.1",
+    versionCode: 2,
+  });
 });
 
 test("Android icon and splash use the official LETSCUBE mark", () => {

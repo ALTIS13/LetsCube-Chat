@@ -3,6 +3,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
+import { readAndroidReleaseMetadata } from "./android-release-metadata.mjs";
+
 const scriptPath = fileURLToPath(import.meta.url);
 const root = resolve(dirname(scriptPath), "..");
 const PUBLIC_KEYS = [
@@ -98,13 +100,6 @@ function quoteWindowsArgument(value) {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
-function getAndroidVersion() {
-  const gradle = readFileSync(resolve(root, "android/app/build.gradle"), "utf8");
-  const match = gradle.match(/versionName\s+"([^"]+)"/);
-  if (!match) throw new Error("Android versionName is missing from android/app/build.gradle.");
-  return match[1];
-}
-
 function bundleContainsValue(directory, value) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = resolve(directory, entry.name);
@@ -126,9 +121,10 @@ async function main() {
   }
 
   const source = parseEnvText(readFileSync(envPath, "utf8"));
+  const releaseMetadata = readAndroidReleaseMetadata(root);
   const publicEnv = collectPublicAndroidBuildEnv(source, {
     commit: getCommandOutput("git", ["rev-parse", "--short=12", "HEAD"]),
-    version: getAndroidVersion(),
+    version: releaseMetadata.versionName,
   });
   const env = { ...process.env, ...publicEnv };
   const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";

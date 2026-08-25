@@ -6,6 +6,7 @@ import {
   collectPublicAndroidBuildEnv,
   parseEnvText,
 } from "../../scripts/build-android-production.mjs";
+import { readAndroidReleaseMetadata } from "../../scripts/android-release-metadata.mjs";
 
 test("Android production build forwards only public Vite settings", () => {
   const source = parseEnvText(`
@@ -50,4 +51,11 @@ test("Android production build rejects missing public Supabase settings", () => 
 test("Android phone activity stays in portrait orientation", () => {
   const manifest = fs.readFileSync("android/app/src/main/AndroidManifest.xml", "utf8");
   assert.match(manifest, /android:screenOrientation="portrait"/);
+});
+
+test("Android production debug build reads canonical release metadata", () => {
+  assert.deepEqual(readAndroidReleaseMetadata(process.cwd()), {
+    versionName: "0.1.1",
+    versionCode: 2,
+  });
 });
