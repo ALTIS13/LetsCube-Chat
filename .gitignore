@@ -94,3 +94,6 @@ latest*.yml
 windows-tauri/node_modules/
 windows-tauri/src-tauri/target/
 windows-tauri/src-tauri/gen/
+
+# Local isolated implementation worktrees.
+.worktrees/
