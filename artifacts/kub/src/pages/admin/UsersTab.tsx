@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { BulkSelectControl } from "@/components/ui/BulkSelectControl";
-import { clearRoleAccessCache, useIsAdmin } from "@/hooks/useRole";
+import { clearRoleAccessCache, useIsAdmin, usePermissionAccess } from "@/hooks/useRole";
 import { useTaskRouting } from "@/hooks/useTaskRouting";
 import { KubBadge, KubButton, KubIcon, KubModal, KubPanel } from "@/components/kub";
 import { BanModal } from "./BanModal";
@@ -60,6 +60,7 @@ export function UsersTab() {
   const rt = getRealtimeClient();
   const currentUser = useAppStore((s) => s.currentUser);
   const isAdmin = useIsAdmin();
+  const phoneAccess = usePermissionAccess(["system.manage"]);
   const [dynamicRolesEnabled] = useDynamicRolesEnabledPreference();
   const dynamicRoles = useDynamicRoles({ enabled: dynamicRolesEnabled && isAdmin, includeAssignments: true });
   const routing = useTaskRouting({ enabled: isAdmin, includeMembers: true });
@@ -873,9 +874,16 @@ export function UsersTab() {
           contact={contacts[profileTarget.id]}
           state={stateById[profileTarget.id]}
           canManageAvatar={isAdmin || profileTarget.id === currentUser?.id}
+          canManagePhone={!phoneAccess.checking && phoneAccess.hasPermission("system.manage")}
           onAvatarUpdated={(avatarUrl) => {
             setRows((rs) => rs.map((r) => (r.id === profileTarget.id ? { ...r, avatar_url: avatarUrl } : r)));
             setProfileTarget((target) => target ? { ...target, avatar_url: avatarUrl } : target);
+          }}
+          onPhoneRemoved={() => {
+            setContacts((current) => ({
+              ...current,
+              [profileTarget.id]: { phone: null, phone_verified: false },
+            }));
           }}
           onClose={() => setProfileTarget(null)}
         />
@@ -885,19 +893,22 @@ export function UsersTab() {
 }
 
 function ProfilePreviewModal({
-  user, email, contact, state, canManageAvatar, onAvatarUpdated, onClose,
+  user, email, contact, state, canManageAvatar, canManagePhone, onAvatarUpdated, onPhoneRemoved, onClose,
 }: {
   user: Profile;
   email?: string;
   contact?: ContactRow;
   state?: RowState;
   canManageAvatar?: boolean;
+  canManagePhone?: boolean;
   onAvatarUpdated?: (avatarUrl: string | null) => void;
+  onPhoneRemoved?: () => void;
   onClose: () => void;
 }) {
   const supabase = createClient();
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [phoneRemoving, setPhoneRemoving] = useState(false);
   const fmt = (s: string | null) =>
     s
       ? new Date(s).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
@@ -983,6 +994,29 @@ function ProfilePreviewModal({
     await updateAvatarUrl(null);
   };
 
+  const handlePhoneRemove = async () => {
+    if (!canManagePhone || !contact?.phone || phoneRemoving) return;
+    const confirmed = await requestAppConfirm({
+      title: "Удалить номер пользователя?",
+      description: "Номер будет удалён из профиля и данных входа. Для повторного добавления потребуется новое подтверждение.",
+      confirmLabel: "Удалить номер",
+      tone: "danger",
+      icon: "delete",
+    });
+    if (!confirmed) return;
+
+    setPhoneRemoving(true);
+    const { data, error } = await supabase.functions.invoke("phone-verification-gateway", {
+      body: { action: "admin_remove", target_user_id: user.id },
+    });
+    setPhoneRemoving(false);
+    if (error || data?.ok !== true) {
+      showAppAlert("Не удалось удалить номер пользователя. Попробуйте позже.", "Номер не удалён");
+      return;
+    }
+    onPhoneRemoved?.();
+  };
+
   return (
     <KubModal
       open={true}
@@ -1062,7 +1096,13 @@ function ProfilePreviewModal({
       <div className="grid grid-cols-2 gap-3 text-sm">
         <Field label="Базовая роль" value={roleLabel[user.role]} />
         <Field label="Эл. почта" value={email ?? "—"} mono copyable />
-        <PhoneField phone={contact?.phone ?? null} verified={!!contact?.phone_verified} />
+        <PhoneField
+          phone={contact?.phone ?? null}
+          verified={!!contact?.phone_verified}
+          canRemove={!!canManagePhone}
+          removing={phoneRemoving}
+          onRemove={() => void handlePhoneRemove()}
+        />
         <Field label="Был в сети" value={fmtAgo(user.online_at)} />
         <Field label="Зарегистрирован" value={fmt(user.created_at)} />
         <Field
@@ -1153,7 +1193,19 @@ function Field({ label, value, mono, danger, warn, copyable }: { label: string; 
   );
 }
 
-function PhoneField({ phone, verified }: { phone: string | null; verified: boolean }) {
+function PhoneField({
+  phone,
+  verified,
+  canRemove,
+  removing,
+  onRemove,
+}: {
+  phone: string | null;
+  verified: boolean;
+  canRemove?: boolean;
+  removing?: boolean;
+  onRemove?: () => void;
+}) {
   const onCopy = () => {
     if (!phone) return;
     navigator.clipboard?.writeText(phone).catch(() => {});
@@ -1164,16 +1216,31 @@ function PhoneField({ phone, verified }: { phone: string | null; verified: boole
         Телефон
       </div>
       {phone ? (
-        <div
-          onClick={onCopy}
-          title="Скопировать"
-          className="font-medium cursor-pointer hover:underline text-[color:var(--kub-text)] flex items-center gap-1.5"
-        >
-          <span>{phone}</span>
-          {verified ? (
-            <KubBadge tone="online" dot>OK</KubBadge>
-          ) : (
-            <KubBadge tone="muted">не подтв.</KubBadge>
+        <div className="space-y-1.5">
+          <div
+            onClick={onCopy}
+            title="Скопировать"
+            className="font-medium cursor-pointer hover:underline text-[color:var(--kub-text)] flex items-center gap-1.5"
+          >
+            <span>{phone}</span>
+            {verified ? (
+              <KubBadge tone="online" dot>OK</KubBadge>
+            ) : (
+              <KubBadge tone="muted">не подтв.</KubBadge>
+            )}
+          </div>
+          {canRemove && (
+            <KubButton
+              type="button"
+              variant="ghost"
+              size="sm"
+              leftIcon={<KubIcon name="delete" size={12} />}
+              loading={removing}
+              onClick={onRemove}
+              className="h-7 px-2 text-[color:var(--kub-danger)]"
+            >
+              Удалить номер
+            </KubButton>
           )}
         </div>
       ) : (

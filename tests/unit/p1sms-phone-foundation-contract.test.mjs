@@ -38,6 +38,14 @@ const SETTINGS_MODAL = new URL(
   "../../artifacts/kub/src/components/sidebar/SettingsModal.tsx",
   import.meta.url,
 );
+const ADMIN_USERS = new URL(
+  "../../artifacts/kub/src/pages/admin/UsersTab.tsx",
+  import.meta.url,
+);
+const ADMIN_PHONE_REMOVE_MIGRATION = new URL(
+  "../../.migration-backup/supabase/migrations/20260825190000_admin_phone_remove_audit.sql",
+  import.meta.url,
+);
 
 test("phone gateway owns four-digit OTP delivery and verification server-side", async () => {
   const source = await readFile(GATEWAY, "utf8");
@@ -172,6 +180,31 @@ test("phone removal clears the trusted Auth phone and profile mirror", async () 
     settings,
     /from\("profile_contacts"\)[\s\S]{0,240}update\(\{\s*phone:\s*null/u,
   );
+});
+
+test("administrator user panel removes a target phone only through the trusted gateway", async () => {
+  const [gateway, users, migration] = await Promise.all([
+    readFile(GATEWAY, "utf8"),
+    readFile(ADMIN_USERS, "utf8"),
+    readFile(ADMIN_PHONE_REMOVE_MIGRATION, "utf8"),
+  ]);
+  const accessCheck = gateway.indexOf("phone_verification_admin_access_internal");
+  const adminRemove = gateway.indexOf('action === "admin_remove"');
+
+  assert.ok(accessCheck >= 0 && adminRemove > accessCheck);
+  assert.match(gateway, /target_user_id/u);
+  assert.match(gateway, /admin_remove[\s\S]{0,700}admin_profile_phone_remove_internal/u);
+  assert.match(users, /action:\s*"admin_remove",\s*target_user_id:\s*user\.id/u);
+  assert.match(users, /Удалить номер пользователя\?/u);
+  assert.match(users, /Удалить номер/u);
+  assert.doesNotMatch(users, /rpc\("profile_phone_remove_internal"/u);
+  assert.match(migration, /has_permission\(p_actor_id, 'system\.manage'\)/u);
+  assert.match(migration, /perform public\.profile_phone_remove_internal\(p_target_user_id\)/u);
+  assert.match(migration, /insert into public\.audit_logs/u);
+  assert.match(migration, /'admin_phone_removed'/u);
+  assert.doesNotMatch(migration, /jsonb_build_object\([^)]*phone/iu);
+  assert.match(migration, /grant execute on function public\.admin_profile_phone_remove_internal\(uuid, uuid\)\s+to service_role/iu);
+  assert.doesNotMatch(migration, /grant execute[^;]+to (?:anon|authenticated)/iu);
 });
 
 test("phone UI keeps provider routing out of user-facing delivery copy", async () => {

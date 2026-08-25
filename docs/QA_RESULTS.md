@@ -1858,3 +1858,26 @@ Recurring tasks roadmap note:
   cases skipped because reusable local auth state was unavailable. Physical
   four-digit delivery and confirmation remain pending an administrator test in
   the deployed UI.
+
+# 2026-08-25 - Audited phone removal in the administrator panel
+
+- Root cause: the trusted removal action was exposed only in the current
+  administrator's profile settings. The administrator user preview displayed a
+  phone number but provided no management action.
+- The user preview now shows `Удалить номер` beside an existing phone only when
+  the caller has `system.manage`. A destructive confirmation explains that Auth
+  and profile phone state will be cleared and a new verification will be
+  required before the number can be restored.
+- The browser sends only the target user ID to the authenticated phone gateway.
+  A service-only database wrapper repeats the `system.manage` check, clears Auth,
+  identity, profile and active claim state atomically, then writes an
+  `admin_phone_removed` audit event without the phone value.
+- Verified pre-change database backup:
+  `/srv/letscube/backups/pre-migrations/20260825-185322-before-admin-phone-remove.dump`.
+  Migration `20260825190000_admin_phone_remove_audit.sql` passed a rollback
+  rehearsal before apply. `anon` and `authenticated` have no execute grant.
+- A rollback-only production smoke verified Auth/profile clearing and the audit
+  event without changing the real account. Edge backup:
+  `/srv/letscube/backups/edge-functions/20260825-185406-admin-phone-remove`.
+  The Edge bundle check, file hash, health check and unsigned HTTP 401 probe
+  passed.

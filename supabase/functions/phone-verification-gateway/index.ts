@@ -7,6 +7,7 @@ type GatewayBody = {
   action?: unknown;
   phone?: unknown;
   code?: unknown;
+  target_user_id?: unknown;
 };
 
 Deno.serve(async (request: Request) => {
@@ -76,6 +77,26 @@ Deno.serve(async (request: Request) => {
       p_user_id: authData.user.id,
     });
     if (result.error) return corsResponse(request, { ok: false, error: "unavailable" }, 503);
+    return corsResponse(request, { ok: true }, 200);
+  }
+
+  if (action === "admin_remove") {
+    const targetUserId = readUuid(body.target_user_id);
+    if (!targetUserId) {
+      return corsResponse(request, { ok: false, error: "invalid_user" }, 400);
+    }
+    const result = await admin.rpc("admin_profile_phone_remove_internal", {
+      p_actor_id: authData.user.id,
+      p_target_user_id: targetUserId,
+    });
+    if (result.error) return corsResponse(request, { ok: false, error: "unavailable" }, 503);
+    if (result.data !== "removed") {
+      return corsResponse(
+        request,
+        { ok: false, error: result.data },
+        result.data === "disabled" ? 403 : 400,
+      );
+    }
     return corsResponse(request, { ok: true }, 200);
   }
 
@@ -228,6 +249,13 @@ function generateFourDigitOtp(): string {
 function readFourDigitOtp(value: unknown): string | null {
   const code = typeof value === "string" ? value.trim() : "";
   return /^\d{4}$/u.test(code) ? code : null;
+}
+
+function readUuid(value: unknown): string | null {
+  const id = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(id)
+    ? id
+    : null;
 }
 
 function normalizeE164(value: unknown): string | null {
