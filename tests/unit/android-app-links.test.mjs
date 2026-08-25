@@ -18,7 +18,7 @@ function loadParser() {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const module = { exports: {} };
-  vm.runInNewContext(output, { exports: module.exports, module, URL });
+  vm.runInNewContext(output, { exports: module.exports, module, URL, URLSearchParams });
   return module.exports;
 }
 
@@ -26,8 +26,8 @@ test("Android auth app links accept only the canonical HTTPS callback and retain
   const { parseAndroidAuthAppLink } = loadParser();
 
   assert.equal(
-    parseAndroidAuthAppLink("https://app.letscube.ru/auth/callback?code=opaque#type=recovery"),
-    "/auth/callback?code=opaque#type=recovery",
+    parseAndroidAuthAppLink("https://app.letscube.ru/auth/callback?code=opaque&error=access_denied&type=recovery#access_token=opaque"),
+    "/auth/callback?code=opaque&error=access_denied&type=recovery#access_token=opaque",
   );
 });
 
@@ -40,9 +40,14 @@ test("Android auth app links reject non-canonical callback URLs", () => {
     "https://user@app.letscube.ru/auth/callback",
     "https://user:pass@app.letscube.ru/auth/callback",
     "https://app.letscube.ru/auth/callback/next",
+    "https://app.letscube.ru/auth/callback/%2e%2e/callback",
+    "https://app.letscube.ru/auth/callback/%2E%2E%2Fcallback",
     "https://app.letscube.ru/auth/callback%2Fnext",
     "https://app.letscube.ru/auth%2Fcallback",
     "https://app.letscube.ru/login?returnTo=%2Fauth%2Fcallback",
+    "https://app.letscube.ru/auth/callback?returnTo=https%3A%2F%2Fevil.example",
+    "https://app.letscube.ru/auth/callback?redirect=%2F%2Fevil.example",
+    "https://app.letscube.ru/auth/callback?next=https%3A%2F%2Fevil.example",
   ];
 
   for (const value of rejected) {
@@ -50,15 +55,30 @@ test("Android auth app links reject non-canonical callback URLs", () => {
   }
 });
 
-test("Android callback listener is scoped to native Android and mounted inside Wouter", () => {
-  const hook = readFileSync(resolve(root, "artifacts/kub/src/hooks/useAndroidAppLinks.ts"), "utf8");
-  const app = readFileSync(resolve(root, "artifacts/kub/src/App.tsx"), "utf8");
+test("Android app-link controller deduplicates cold callback delivery and removes its listener", async () => {
+  const { createAndroidAppLinkController } = loadParser();
+  const coldUrl = "https://app.letscube.ru/auth/callback?code=cold";
+  const laterUrl = "https://app.letscube.ru/auth/callback?code=later";
+  const routes = [];
+  let onAppUrlOpen;
+  let removeCalls = 0;
+  const controller = createAndroidAppLinkController({
+    getLaunchUrl: async () => ({ url: coldUrl }),
+    addListener: async (listener) => {
+      onAppUrlOpen = listener;
+      return { remove: async () => { removeCalls += 1; } };
+    },
+  }, (route) => routes.push(route));
 
-  assert.match(hook, /isNativeAndroid\(\)/);
-  assert.match(hook, /App\.getLaunchUrl\(\)/);
-  assert.match(hook, /App\.addListener\("appUrlOpen"/);
-  assert.match(hook, /remove\(\)/);
-  assert.match(app, /<WouterRouter[\s\S]*<AndroidAppLinkListener\s*\/>[\s\S]*<RootRoutes\s*\/>[\s\S]*<\/WouterRouter>/);
+  controller.start();
+  await new Promise((resolve) => setImmediate(resolve));
+  onAppUrlOpen({ url: coldUrl });
+  onAppUrlOpen({ url: laterUrl });
+
+  assert.deepEqual(routes, ["/auth/callback?code=cold", "/auth/callback?code=later"]);
+  controller.dispose();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(removeCalls, 1);
 });
 
 test("Android manifest and Nginx expose only the verified asset association endpoint", () => {
@@ -75,37 +95,43 @@ test("Android manifest and Nginx expose only the verified asset association endp
   );
 });
 
-test("asset links generator writes the single release-certificate association", () => {
+test("asset links generator normalizes contiguous apksigner SHA-256 output", () => {
   const fixture = mkdtempSync(resolve(tmpdir(), "letscube-assetlinks-"));
-  const apk = resolve(fixture, "app-release.apk");
-  const output = resolve(fixture, "assetlinks.json");
   const apksigner = resolve(fixture, "apksigner.cmd");
+  const rawFingerprints = [
+    "112233445566778899aabbccddeeff00112233445566778899aabbccddeeff00",
+    "112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00",
+  ];
   const fingerprint = "11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00";
 
-  writeFileSync(apk, "release fixture");
-  writeFileSync(
-    apksigner,
-    `@echo off\r\necho Verifies\r\necho Signer #1 certificate DN: CN=LETSCUBE Release\r\necho Signer #1 certificate SHA-256 digest: ${fingerprint}\r\n`,
-  );
-
   try {
-    const result = spawnSync(process.execPath, [generatorPath, apk, output], {
-      cwd: root,
-      encoding: "utf8",
-      env: { ...process.env, LETSCUBE_ANDROID_APKSIGNER: apksigner },
-    });
+    for (const [index, rawFingerprint] of rawFingerprints.entries()) {
+      const apk = resolve(fixture, `app-release-${index}.apk`);
+      const output = resolve(fixture, `assetlinks-${index}.json`);
+      writeFileSync(apk, "release fixture");
+      writeFileSync(
+        apksigner,
+        `@echo off\r\necho Verifies\r\necho Signer #1 certificate DN: CN=LETSCUBE Release\r\necho Signer #1 certificate SHA-256 digest: ${rawFingerprint}\r\n`,
+      );
 
-    assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(JSON.parse(readFileSync(output, "utf8")), [
-      {
-        relation: ["delegate_permission/common.handle_all_urls"],
-        target: {
-          namespace: "android_app",
-          package_name: "com.kub.messenger",
-          sha256_cert_fingerprints: [fingerprint],
+      const result = spawnSync(process.execPath, [generatorPath, apk, output], {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...process.env, LETSCUBE_ANDROID_APKSIGNER: apksigner },
+      });
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.deepEqual(JSON.parse(readFileSync(output, "utf8")), [
+        {
+          relation: ["delegate_permission/common.handle_all_urls"],
+          target: {
+            namespace: "android_app",
+            package_name: "com.kub.messenger",
+            sha256_cert_fingerprints: [fingerprint],
+          },
         },
-      },
-    ]);
+      ]);
+    }
   } finally {
     rmSync(fixture, { force: true, recursive: true });
   }

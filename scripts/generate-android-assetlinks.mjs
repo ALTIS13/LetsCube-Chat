@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const scriptPath = fileURLToPath(import.meta.url);
 const packageName = "com.kub.messenger";
 const relation = "delegate_permission/common.handle_all_urls";
-const fingerprintPattern = /Signer #\d+ certificate SHA-256 digest:\s*([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){31})\s*$/gm;
+const fingerprintPattern = /Signer #\d+ certificate SHA-256 digest:\s*([0-9A-Fa-f]{64})\s*$/gm;
 
 function quoteWindowsArgument(value) {
   if (/^[A-Za-z0-9_@./:\\-]+$/.test(value)) return value;
@@ -36,7 +36,8 @@ export function readReleaseCertificateFingerprint(apkPath) {
     throw new Error("Android debug certificate cannot generate asset links.");
   }
 
-  const fingerprints = [...verification.matchAll(fingerprintPattern)].map((match) => match[1].toUpperCase());
+  const fingerprints = [...verification.matchAll(fingerprintPattern)]
+    .map((match) => match[1].toUpperCase().match(/.{2}/g).join(":"));
   if (fingerprints.length !== 1) {
     throw new Error("Release APK must have exactly one SHA-256 signer certificate.");
   }
