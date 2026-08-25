@@ -23,6 +23,7 @@
     "android:build:debug": "cd android && gradlew.bat assembleDebug",
     "android:build:production:debug": "node scripts/build-android-production.mjs",
     "android:build:production:release": "node scripts/build-android-release.mjs",
+    "android:verify:release": "node scripts/verify-android-release.mjs",
     "windows:tauri:prepare": "pnpm.cmd --dir windows-tauri --ignore-workspace install",
     "windows:tauri:run": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH%&& pnpm.cmd --dir windows-tauri --ignore-workspace exec tauri dev",
     "windows:tauri:test": "node --test tests/unit/tauri-shell.test.mjs",
@@ -62,6 +63,7 @@
     "@tailwindcss/oxide-win32-x64-msvc": "4.2.1",
     "lightningcss-win32-x64-msvc": "1.31.1",
     "prettier": "^3.8.1",
+    "sharp": "0.35.2",
     "typescript": "~5.9.2"
   },
   "dependencies": {
