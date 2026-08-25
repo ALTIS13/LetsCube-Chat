@@ -302,7 +302,7 @@ function MeasuredTextWithMeta({
   const textFlowRef = useRef<HTMLParagraphElement | null>(null);
   const textContentRef = useRef<HTMLSpanElement | null>(null);
   const footerRef = useRef<HTMLSpanElement | null>(null);
-  const blockedInlineSignatureRef = useRef<string | null>(null);
+  const inlineBlockedRef = useRef(false);
   const hasMeta = meta !== null && meta !== undefined && meta !== false;
 
   const measure = useCallback(() => {
@@ -323,18 +323,8 @@ function MeasuredTextWithMeta({
     const bubbleInnerRight = getBubbleInnerRight(bubbleEl);
     const rightLimit = compound ? bubbleInnerRight : getTextRightLimit(textEl, bubbleEl, stackRef.current);
     const gap = 8;
-    const signature = [
-      compound ? "compound" : "simple",
-      lineRects.length,
-      Math.round(textEl.getBoundingClientRect().width),
-      Math.round(footerRect.width),
-      Math.round(rightLimit),
-      Math.round(lastLine.left),
-      Math.round(lastLine.right),
-    ].join("|");
-
     if (placement === "inline" && !isFooterOnLastTextLine(lastLine, footerRect)) {
-      blockedInlineSignatureRef.current = signature;
+      inlineBlockedRef.current = true;
       setPlacement((previous) => (previous === "anchored" ? previous : "anchored"));
       return;
     }
@@ -344,14 +334,14 @@ function MeasuredTextWithMeta({
     const canInline =
       singleLineText &&
       available >= footerRect.width + gap &&
-      blockedInlineSignatureRef.current !== signature;
+      !inlineBlockedRef.current;
     const next: MetaPlacement = canInline ? "inline" : "anchored";
 
     setPlacement((previous) => (previous === next ? previous : next));
   }, [bubbleRef, compound, hasMeta, placement, stackRef]);
 
   useEffect(() => {
-    blockedInlineSignatureRef.current = null;
+    inlineBlockedRef.current = false;
     setPlacement(getInitialMetaPlacement(content));
   }, [content, measureKey]);
 
@@ -364,6 +354,10 @@ function MeasuredTextWithMeta({
       window.cancelAnimationFrame(frame);
       frame = window.requestAnimationFrame(measure);
     };
+    const handleViewportResize = () => {
+      inlineBlockedRef.current = false;
+      schedule();
+    };
 
     schedule();
     const secondFrame = window.requestAnimationFrame(schedule);
@@ -371,14 +365,14 @@ function MeasuredTextWithMeta({
     [textFlowRef.current, textContentRef.current, footerRef.current, bubbleRef.current, stackRef.current]
       .filter(Boolean)
       .forEach((node) => observer?.observe(node as Element));
-    window.addEventListener("resize", schedule);
+    window.addEventListener("resize", handleViewportResize);
     document.fonts?.ready.then(schedule).catch(() => undefined);
 
     return () => {
       cancelled = true;
       window.cancelAnimationFrame(frame);
       window.cancelAnimationFrame(secondFrame);
-      window.removeEventListener("resize", schedule);
+      window.removeEventListener("resize", handleViewportResize);
       observer?.disconnect();
     };
   }, [bubbleRef, measure, measureKey, placement, stackRef]);
@@ -784,14 +778,9 @@ export function MessageBubble({
   const groupReadLabel = groupReadInfo ? getGroupReadReceiptCompactLabel(groupReadInfo) : "";
   const groupReadAriaLabel = groupReadInfo ? getGroupReadReceiptAriaLabel(groupReadInfo) : "";
   const footerMeasureKey = [
-    message.id,
     textContent,
-    message.created_at,
     message.edited_at ?? "",
     message.pinned ? "pinned" : "",
-    deliveryState?.state ?? "",
-    deliveryState?.icon ?? "",
-    deliveryState?.label ?? "",
     groupReadLabel,
     groupReadAriaLabel,
     compactContextMenu ? "mobile-actions" : "desktop-actions",
@@ -804,16 +793,21 @@ export function MessageBubble({
       {message.edited_at && (
         <span className="max-w-8 shrink truncate text-[10px] text-[color:var(--kub-muted)]" title="изменено">изм.</span>
       )}
-      <span className="shrink-0 text-[10px] leading-none text-[color:var(--kub-muted)]">
+      <span className="inline-flex min-w-[2.75rem] shrink-0 justify-end tabular-nums text-right text-[10px] leading-none text-[color:var(--kub-muted)]">
         {formatFullTime(message.created_at)}
       </span>
       {deliveryState?.isOwnMessage && !showGroupReadIndicator && (
-        <KubIcon
-          name={deliveryState.icon}
-          size={13}
-          tone={deliveryState.tone}
-          label={deliveryState.label}
-        />
+        <span
+          data-message-delivery-slot="true"
+          className="inline-flex h-[13px] w-[13px] shrink-0 items-center justify-center"
+        >
+          <KubIcon
+            name={deliveryState.icon}
+            size={13}
+            tone={deliveryState.tone}
+            label={deliveryState.label}
+          />
+        </span>
       )}
       {groupReadInfo && showGroupReadIndicator && (
         <button

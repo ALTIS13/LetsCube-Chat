@@ -126,8 +126,10 @@ pnpm.cmd android:open
 
 ## Known MVP limitations
 
-- Native push/FCM foundation has one physical background delivery/tap smoke;
-  full real-account message/task/mute, killed-app and broader-device QA remains.
+- Native push/FCM has Android 16 Google Play emulator coverage and Android 15
+  official-GMS physical coverage for registration, foreground/background,
+  killed-process delivery and exact-message tap routing. Android 13/14 and a
+  broader vendor/device matrix remain.
 - Android app links/custom scheme are not finalized.
 - Release signing/AAB is not configured.
 - Store-listing artwork and final release screenshots are still pending.

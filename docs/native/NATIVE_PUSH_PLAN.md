@@ -77,9 +77,12 @@ Current implementation status:
   the repository contains no private key or service-account JSON.
 - The self-hosted Edge Function sends FCM HTTP v1 messages from the native
   outbox while preserving the separate browser Web Push path.
-- Physical Android QA confirmed registration, background delivery and opening
-  the app from a system notification. Full real-account message/task/mute and
-  killed-app scenarios remain release gates.
+- Physical and emulator Android QA confirmed registration, message/task
+  delivery semantics, category suppression, grouping, background and
+  killed-process delivery, plus exact-message notification tap routing. An
+  Android 15 Nothing A063 with official Google Play Services also confirmed
+  foreground in-app delivery without a duplicate OS card. Android 13/14 and a
+  broader vendor/device matrix remain release gates.
 
 ## iOS
 
