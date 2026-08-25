@@ -1,7 +1,12 @@
+import { isNativeAndroid } from "./platform/capabilities";
+import { ANDROID_AUTH_CALLBACK_URL } from "./platform/androidAppLinks";
+
 export const CONFIRMATION_LINK_INVALID_MESSAGE =
   "Ссылка подтверждения недействительна или устарела. Попробуйте войти или запросить письмо повторно.";
+export { ANDROID_AUTH_CALLBACK_URL } from "./platform/androidAppLinks";
 
 export function getAuthCallbackUrl(): string {
+  if (isNativeAndroid()) return ANDROID_AUTH_CALLBACK_URL;
   if (typeof window === "undefined") return "/auth/callback";
 
   const baseUrl = import.meta.env.BASE_URL || "/";

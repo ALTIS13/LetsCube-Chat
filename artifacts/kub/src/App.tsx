@@ -28,6 +28,7 @@ import { KubBrandLogo, KubButton, KubIcon, KubInput, KubLogo, KubPanel } from "@
 import { kubBrandAsset } from "@/components/kub/brandAssets";
 import { clearMonitoringUser, reportError, setMonitoringUser } from "@/lib/monitoring";
 import { getAuthCallbackErrorMessage, getAuthCallbackExceptionMessage } from "@/lib/authRedirect";
+import { useAndroidAppLinks } from "@/hooks/useAndroidAppLinks";
 import {
   PASSWORD_RECOVERY_LINK_INVALID_MESSAGE,
   clearPasswordRecoveryFlow,
@@ -436,6 +437,11 @@ function RootRoutes() {
   return <AppRoutes />;
 }
 
+function AndroidAppLinkListener() {
+  useAndroidAppLinks();
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -446,6 +452,7 @@ function App() {
         <AppUpdateBanner />
         <AppDialogs />
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+          <AndroidAppLinkListener />
           <RootRoutes />
         </WouterRouter>
       </TooltipProvider>
