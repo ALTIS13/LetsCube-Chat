@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, resolve } from "node:path";
 import test from "node:test";
 
-import { verifyAndroidRelease } from "../../scripts/verify-android-release.mjs";
+import { resolveAndroidTools, verifyAndroidRelease } from "../../scripts/verify-android-release.mjs";
 
 const fingerprint = "11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00";
 
@@ -13,7 +13,10 @@ function createFixture() {
   const apkPath = resolve(directory, "app-release.apk");
   const assetLinksPath = resolve(directory, "assetlinks.json");
   writeFileSync(apkPath, "signed release fixture");
-  writeFileSync(assetLinksPath, JSON.stringify([{ target: { package_name: "com.kub.messenger", sha256_cert_fingerprints: [fingerprint] } }]));
+  writeFileSync(assetLinksPath, JSON.stringify([{
+    relation: ["delegate_permission/common.handle_all_urls"],
+    target: { package_name: "com.kub.messenger", sha256_cert_fingerprints: [fingerprint] },
+  }]));
   return { directory, apkPath, assetLinksPath };
 }
 
@@ -26,7 +29,20 @@ function createRunner(overrides = {}) {
     "manifest version-code": "2",
     "manifest debuggable": "false",
     "manifest print": '<manifest><application android:debuggable="false"><activity android:name="com.kub.messenger.MainActivity" android:exported="true" /></application></manifest>',
-    "manifest permissions": "android.permission.INTERNET\nandroid.permission.CAMERA\nandroid.permission.RECORD_AUDIO",
+    "manifest permissions": [
+      "android.permission.ACCESS_COARSE_LOCATION",
+      "android.permission.ACCESS_FINE_LOCATION",
+      "android.permission.ACCESS_NETWORK_STATE",
+      "android.permission.CAMERA",
+      "android.permission.INTERNET",
+      "android.permission.MODIFY_AUDIO_SETTINGS",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.READ_EXTERNAL_STORAGE",
+      "android.permission.READ_MEDIA_AUDIO",
+      "android.permission.READ_MEDIA_IMAGES",
+      "android.permission.READ_MEDIA_VIDEO",
+      "android.permission.RECORD_AUDIO",
+    ].join("\n"),
     ...overrides,
   };
   return {
@@ -122,19 +138,91 @@ test("Android release verifier rejects unsafe manifest and certificate contracts
         ...options,
         run: createRunner({ "manifest print": '<manifest><application><receiver android:name="com.example.Exported" android:exported="true" /></application></manifest>' }).run,
       }),
-      /unexpected exported component/,
+      /exported components do not match/,
     );
     assert.throws(
       () => verifyAndroidRelease(fixture.apkPath, {
         ...options,
-        run: createRunner({ "manifest permissions": "android.permission.READ_CONTACTS" }).run,
+        run: createRunner({ "manifest permissions": "android.permission.QUERY_ALL_PACKAGES" }).run,
       }),
-      /unexpected dangerous permission/,
+      /permissions do not match the approved contract/,
     );
-    writeFileSync(fixture.assetLinksPath, JSON.stringify([{ target: { package_name: "com.kub.messenger", sha256_cert_fingerprints: ["AA:BB"] } }]));
+    writeFileSync(fixture.assetLinksPath, JSON.stringify([{
+      relation: ["delegate_permission/common.handle_all_urls"],
+      target: { package_name: "com.kub.messenger", sha256_cert_fingerprints: ["AA:BB"] },
+    }]));
     assert.throws(
       () => verifyAndroidRelease(fixture.apkPath, { ...options, run: createRunner().run }),
       /does not match Digital Asset Links/,
+    );
+  } finally {
+    rmSync(fixture.directory, { force: true, recursive: true });
+  }
+});
+
+test("Android release verifier fails closed for missing SDK tools and bad signature output", () => {
+  const fixture = createFixture();
+  const sdkRoot = resolve(fixture.directory, "android-sdk");
+  mkdirSync(resolve(sdkRoot, "build-tools", "36.0.0"), { recursive: true });
+
+  try {
+    assert.throws(() => resolveAndroidTools(sdkRoot), /Required Android SDK/);
+    assert.throws(
+      () => verifyAndroidRelease(fixture.apkPath, {
+        assetLinksPath: fixture.assetLinksPath,
+        expectedMetadata: { applicationId: "com.kub.messenger", versionName: "0.1.1", versionCode: 2 },
+        tools: { apksigner: "apksigner", apkanalyzer: "apkanalyzer" },
+        run: createRunner({ "verify --verbose --print-certs": "DOES NOT VERIFY" }).run,
+      }),
+      /exactly one SHA-256 signing certificate/,
+    );
+  } finally {
+    rmSync(fixture.directory, { force: true, recursive: true });
+  }
+});
+
+test("Android release verifier requires a valid authorizing Asset Links statement", () => {
+  const fixture = createFixture();
+  const options = {
+    expectedMetadata: { applicationId: "com.kub.messenger", versionName: "0.1.1", versionCode: 2 },
+    tools: { apksigner: "apksigner", apkanalyzer: "apkanalyzer" },
+    run: createRunner().run,
+  };
+
+  try {
+    rmSync(fixture.assetLinksPath);
+    assert.throws(() => verifyAndroidRelease(fixture.apkPath, { ...options, assetLinksPath: fixture.assetLinksPath }), /association is required/);
+    writeFileSync(fixture.assetLinksPath, "not json");
+    assert.throws(() => verifyAndroidRelease(fixture.apkPath, { ...options, assetLinksPath: fixture.assetLinksPath }), /association is invalid/);
+    writeFileSync(fixture.assetLinksPath, JSON.stringify([{
+      relation: ["delegate_permission/common.get_login_creds"],
+      target: { package_name: "com.kub.messenger", sha256_cert_fingerprints: [fingerprint] },
+    }]));
+    assert.throws(() => verifyAndroidRelease(fixture.apkPath, { ...options, assetLinksPath: fixture.assetLinksPath }), /does not match Digital Asset Links/);
+  } finally {
+    rmSync(fixture.directory, { force: true, recursive: true });
+  }
+});
+
+test("Android release verifier requires exactly one exported MainActivity", () => {
+  const fixture = createFixture();
+  const options = {
+    assetLinksPath: fixture.assetLinksPath,
+    expectedMetadata: { applicationId: "com.kub.messenger", versionName: "0.1.1", versionCode: 2 },
+    tools: { apksigner: "apksigner", apkanalyzer: "apkanalyzer" },
+  };
+
+  try {
+    assert.throws(
+      () => verifyAndroidRelease(fixture.apkPath, { ...options, run: createRunner({ "manifest print": "<manifest><application /></manifest>" }).run }),
+      /exported components do not match/,
+    );
+    assert.throws(
+      () => verifyAndroidRelease(fixture.apkPath, {
+        ...options,
+        run: createRunner({ "manifest print": '<manifest><application><activity android:name="com.kub.messenger.MainActivity" android:exported="true" /><activity android:name="com.kub.messenger.MainActivity" android:exported="true" /></application></manifest>' }).run,
+      }),
+      /exported components do not match/,
     );
   } finally {
     rmSync(fixture.directory, { force: true, recursive: true });

@@ -8,13 +8,13 @@ const scriptPath = fileURLToPath(import.meta.url);
 const root = resolve(dirname(scriptPath), "..");
 const darkSurface = "#17212b";
 
-function featureSurface() {
+export function createFeatureSurface() {
   return Buffer.from(`
     <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="500" viewBox="0 0 1024 500">
       <rect width="1024" height="500" fill="${darkSurface}"/>
       <rect x="512" width="1" height="500" fill="#253443"/>
-      <text x="530" y="220" fill="#ffffff" font-family="Arial, sans-serif" font-size="64" font-weight="700">LETSCUBE</text>
-      <text x="534" y="272" fill="#b8c6d5" font-family="Arial, sans-serif" font-size="27" font-weight="400">Messenger</text>
+      <rect x="598" y="160" width="270" height="12" fill="#427fc2"/>
+      <rect x="598" y="190" width="178" height="12" fill="#ed1e7a"/>
     </svg>`, "utf8");
 }
 
@@ -49,7 +49,7 @@ export async function generateAndroidStoreAssets(workspaceRoot = root) {
     76,
     56,
   );
-  await renderPng(featureSurface(), mark, resolve(storeDirectory, "feature-graphic-1024x500.png"), 1024, 500, { width: 330, height: 380 }, 90, 60);
+  await renderPng(createFeatureSurface(), mark, resolve(storeDirectory, "feature-graphic-1024x500.png"), 1024, 500, { width: 330, height: 380 }, 90, 60);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === scriptPath) {

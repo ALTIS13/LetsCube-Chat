@@ -4,6 +4,8 @@ param(
   [ValidateNotNullOrEmpty()]
   [string]$Apk,
   [string]$Serial = "",
+  [string]$AdbPath = "",
+  [string]$ApkAnalyzerPath = "",
   [ValidateSet("install", "upgrade", "links", "permissions", "smoke")]
   [string]$Mode = "smoke"
 )
@@ -32,13 +34,41 @@ function Add-Verdict([string]$Command, [bool]$Passed) {
 }
 
 function Get-AdbPath {
+  if ($AdbPath) {
+    if (-not (Test-Path -LiteralPath $AdbPath -PathType Leaf)) { throw "Android Debug Bridge is unavailable." }
+    return $AdbPath
+  }
   $command = Get-Command adb.exe -ErrorAction SilentlyContinue
   if (-not $command) { $command = Get-Command adb -ErrorAction SilentlyContinue }
   if (-not $command) { throw "Android Debug Bridge is unavailable." }
   return $command.Source
 }
 
-$Adb = Get-AdbPath
+function Get-ApkAnalyzerPath {
+  if ($ApkAnalyzerPath) {
+    if (-not (Test-Path -LiteralPath $ApkAnalyzerPath -PathType Leaf)) { throw "Android APK analyzer is unavailable." }
+    return $ApkAnalyzerPath
+  }
+  if (-not $env:ANDROID_HOME) { throw "Android APK analyzer is unavailable." }
+  $candidate = Join-Path $env:ANDROID_HOME "cmdline-tools\\latest\\bin\\apkanalyzer.bat"
+  if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { throw "Android APK analyzer is unavailable." }
+  return $candidate
+}
+
+function Assert-ApkIdentity {
+  try {
+    if (-not (Test-Path -LiteralPath $Apk -PathType Leaf)) { throw "APK input is unavailable." }
+    $analyzer = Get-ApkAnalyzerPath
+    $output = @(& $analyzer "manifest" "application-id" $Apk 2>&1)
+    if ($LASTEXITCODE -ne 0 -or $output.Count -ne 1 -or $output[0].ToString().Trim() -ne $PackageName) {
+      throw "APK package identity assertion failed."
+    }
+  } catch {
+    Add-Verdict "apk_identity" $false
+    throw "APK package identity assertion failed."
+  }
+  Add-Verdict "apk_identity" $true
+}
 
 function Invoke-Adb([string]$Name, [string[]]$Arguments) {
   $output = & $script:Adb @script:AdbTarget @Arguments 2>&1
@@ -91,12 +121,18 @@ function Assert-VerifiedLink {
   if ($links -notmatch "(?im)app\.letscube\.ru\s*:\s*(verified|approved)") {
     throw "Android App Link verification assertion failed."
   }
+  $resolution = Invoke-Adb "link_resolution" @("shell", "cmd", "package", "resolve-activity", "--brief", "-a", "android.intent.action.VIEW", "-c", "android.intent.category.BROWSABLE", "-d", $LinkUrl)
+  if ($resolution.Trim() -notin @("com.kub.messenger/.MainActivity", "com.kub.messenger/com.kub.messenger.MainActivity")) {
+    throw "Android App Link resolution assertion failed."
+  }
   $launch = Invoke-Adb "link_launch" @("shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-c", "android.intent.category.BROWSABLE", "-d", $LinkUrl)
   if ($launch -notmatch "(?im)status:\s*ok") { throw "Android App Link launch assertion failed." }
 }
 
 try {
-  $AdbTarget = Select-Device
+  if ($Mode -in @("install", "upgrade", "smoke")) { Assert-ApkIdentity }
+  $script:Adb = Get-AdbPath
+  $script:AdbTarget = Select-Device
   $model = (Invoke-Adb "device_model" @("shell", "getprop", "ro.product.model")).Trim()
   $api = (Invoke-Adb "device_api" @("shell", "getprop", "ro.build.version.sdk")).Trim()
   if (-not $model -or $model -notmatch "^[A-Za-z0-9 ._-]{1,80}$" -or $api -notmatch "^\d{1,3}$") {

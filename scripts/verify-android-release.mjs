@@ -9,11 +9,14 @@ import { readAndroidReleaseMetadata } from "./android-release-metadata.mjs";
 const scriptPath = fileURLToPath(import.meta.url);
 const root = resolve(dirname(scriptPath), "..");
 const EXPECTED_APPLICATION_ID = "com.kub.messenger";
-const ALLOWED_EXPORTED_COMPONENTS = new Set(["activity:com.kub.messenger.MainActivity"]);
-const ALLOWED_DANGEROUS_PERMISSIONS = new Set([
+const EXPECTED_EXPORTED_COMPONENTS = ["activity:com.kub.messenger.MainActivity"];
+const EXPECTED_PERMISSIONS = new Set([
   "android.permission.ACCESS_COARSE_LOCATION",
   "android.permission.ACCESS_FINE_LOCATION",
+  "android.permission.ACCESS_NETWORK_STATE",
   "android.permission.CAMERA",
+  "android.permission.INTERNET",
+  "android.permission.MODIFY_AUDIO_SETTINGS",
   "android.permission.POST_NOTIFICATIONS",
   "android.permission.READ_EXTERNAL_STORAGE",
   "android.permission.READ_MEDIA_AUDIO",
@@ -21,45 +24,7 @@ const ALLOWED_DANGEROUS_PERMISSIONS = new Set([
   "android.permission.READ_MEDIA_VIDEO",
   "android.permission.RECORD_AUDIO",
 ]);
-const DANGEROUS_PERMISSIONS = new Set([
-  "android.permission.ACCESS_BACKGROUND_LOCATION",
-  "android.permission.ACCESS_COARSE_LOCATION",
-  "android.permission.ACCESS_FINE_LOCATION",
-  "android.permission.ACCEPT_HANDOVER",
-  "android.permission.ACTIVITY_RECOGNITION",
-  "android.permission.ADD_VOICEMAIL",
-  "android.permission.ANSWER_PHONE_CALLS",
-  "android.permission.BLUETOOTH_CONNECT",
-  "android.permission.BODY_SENSORS",
-  "android.permission.BODY_SENSORS_BACKGROUND",
-  "android.permission.CALL_PHONE",
-  "android.permission.CAMERA",
-  "android.permission.GET_ACCOUNTS",
-  "android.permission.NEARBY_WIFI_DEVICES",
-  "android.permission.POST_NOTIFICATIONS",
-  "android.permission.PROCESS_OUTGOING_CALLS",
-  "android.permission.READ_CALENDAR",
-  "android.permission.READ_CALL_LOG",
-  "android.permission.READ_CONTACTS",
-  "android.permission.READ_EXTERNAL_STORAGE",
-  "android.permission.READ_MEDIA_AUDIO",
-  "android.permission.READ_MEDIA_IMAGES",
-  "android.permission.READ_MEDIA_VIDEO",
-  "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
-  "android.permission.READ_PHONE_NUMBERS",
-  "android.permission.READ_PHONE_STATE",
-  "android.permission.READ_SMS",
-  "android.permission.RECEIVE_MMS",
-  "android.permission.RECEIVE_SMS",
-  "android.permission.RECEIVE_WAP_PUSH",
-  "android.permission.RECORD_AUDIO",
-  "android.permission.SEND_SMS",
-  "android.permission.UWB_RANGING",
-  "android.permission.WRITE_CALENDAR",
-  "android.permission.WRITE_CALL_LOG",
-  "android.permission.WRITE_CONTACTS",
-  "android.permission.WRITE_EXTERNAL_STORAGE",
-]);
+const AUTHORIZING_RELATION = "delegate_permission/common.handle_all_urls";
 
 function executableNames(name) {
   return process.platform === "win32" ? [`${name}.bat`, `${name}.exe`, name] : [name];
@@ -151,20 +116,20 @@ function readExportedComponents(manifest) {
 }
 
 function verifyExportedComponents(manifest) {
-  const unexpected = readExportedComponents(manifest)
-    .filter((component) => !ALLOWED_EXPORTED_COMPONENTS.has(component));
-  if (unexpected.length > 0) {
-    throw new Error("Release APK contains an unexpected exported component.");
+  const components = readExportedComponents(manifest).sort();
+  const expected = [...EXPECTED_EXPORTED_COMPONENTS].sort();
+  if (components.length !== expected.length || components.some((component, index) => component !== expected[index])) {
+    throw new Error("Release APK exported components do not match the approved contract.");
   }
 }
 
 function verifyPermissions(output) {
-  const permissions = new Set(output.match(/android\.permission\.[A-Z0-9_]+/g) || []);
-  const unexpected = [...permissions].filter(
-    (permission) => DANGEROUS_PERMISSIONS.has(permission) && !ALLOWED_DANGEROUS_PERMISSIONS.has(permission),
-  );
-  if (unexpected.length > 0) {
-    throw new Error("Release APK requests an unexpected dangerous permission.");
+  const permissions = new Set(output.match(/(?:[A-Za-z_][A-Za-z0-9_]*\.)+[A-Za-z_][A-Za-z0-9_]*/g) || []);
+  if (
+    permissions.size !== EXPECTED_PERMISSIONS.size
+    || [...permissions].some((permission) => !EXPECTED_PERMISSIONS.has(permission))
+  ) {
+    throw new Error("Release APK permissions do not match the approved contract.");
   }
 }
 
@@ -181,7 +146,10 @@ function verifyCertificateAssociation(assetLinksPath, fingerprint) {
 
   const associated = Array.isArray(document) && document.some((statement) => {
     const target = statement?.target;
-    return target?.package_name === EXPECTED_APPLICATION_ID
+    return Array.isArray(statement?.relation)
+      && statement.relation.length === 1
+      && statement.relation[0] === AUTHORIZING_RELATION
+      && target?.package_name === EXPECTED_APPLICATION_ID
       && Array.isArray(target.sha256_cert_fingerprints)
       && target.sha256_cert_fingerprints.some((candidate) => normalizeFingerprint(candidate) === fingerprint);
   });

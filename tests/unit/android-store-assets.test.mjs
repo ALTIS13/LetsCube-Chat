@@ -7,7 +7,7 @@ import test from "node:test";
 
 import sharp from "sharp";
 
-import { generateAndroidStoreAssets } from "../../scripts/generate-android-store-assets.mjs";
+import { createFeatureSurface, generateAndroidStoreAssets } from "../../scripts/generate-android-store-assets.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -34,4 +34,8 @@ test("Android store assets are deterministic opaque Google Play PNGs", async () 
   await generateAndroidStoreAssets(root);
   const after = [icon, featureGraphic].map((path) => createHash("sha256").update(readFileSync(path)).digest("hex"));
   assert.deepEqual(after, before);
+});
+
+test("Android feature graphic source has no host-rendered text or font dependency", () => {
+  assert.doesNotMatch(createFeatureSurface().toString("utf8"), /<(?:text|style)\b|font-/i);
 });
