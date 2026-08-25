@@ -20,7 +20,7 @@ test("LETSCUBE p1sms OTP remains one short message", () => {
   assert.throws(() => renderSmsOtp("12345"), /invalid_otp/u);
 });
 
-test("p1sms request sends digit first and falls back after terminal delivery failures", () => {
+test("p1sms request sends Telegram first and falls back to digit after terminal delivery failures", () => {
   const request = buildP1SmsRequest({
     apiKey: "private-api-key",
     phone: "+79991234567",
@@ -36,7 +36,7 @@ test("p1sms request sends digit first and falls back after terminal delivery fai
     apiKey: "private-api-key",
     sms: [
       {
-        channel: "digit",
+        channel: "telegram_auth",
         text: "LETSCUBE: код 1234. Никому его не сообщайте.",
         phone: "79991234567",
         cascade: {
@@ -44,21 +44,21 @@ test("p1sms request sends digit first and falls back after terminal delivery fai
             {
               needStatus: "agg_error",
               smstemplate: {
-                channel: "telegram_auth",
+                channel: "digit",
                 texts: ["LETSCUBE: код 1234. Никому его не сообщайте."],
               },
             },
             {
               needStatus: "not_delivered",
               smstemplate: {
-                channel: "telegram_auth",
+                channel: "digit",
                 texts: ["LETSCUBE: код 1234. Никому его не сообщайте."],
               },
             },
             {
               needStatus: "error",
               smstemplate: {
-                channel: "telegram_auth",
+                channel: "digit",
                 texts: ["LETSCUBE: код 1234. Никому его не сообщайте."],
               },
             },

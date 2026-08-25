@@ -33,9 +33,9 @@ export function buildP1SmsRequest({ apiKey, phone, message }) {
       apiKey,
       sms: [
         {
-          // P1SMS tracks delivery and creates the Telegram fallback when the
-          // primary digit message reaches a supported terminal failure state.
-          channel: "digit",
+          // P1SMS tracks delivery and creates the digital fallback when the
+          // primary Telegram message reaches a supported terminal failure state.
+          channel: "telegram_auth",
           text: message,
           phone: phone.slice(1),
           cascade: {
@@ -45,14 +45,14 @@ export function buildP1SmsRequest({ apiKey, phone, message }) {
                 // reported as agg_error and must be matched explicitly.
                 needStatus: "agg_error",
                 smstemplate: {
-                  channel: "telegram_auth",
+                  channel: "digit",
                   texts: [message],
                 },
               },
               {
                 needStatus: "not_delivered",
                 smstemplate: {
-                  channel: "telegram_auth",
+                  channel: "digit",
                   texts: [message],
                 },
               },
@@ -60,7 +60,7 @@ export function buildP1SmsRequest({ apiKey, phone, message }) {
                 // Keep the generic terminal error path covered as well.
                 needStatus: "error",
                 smstemplate: {
-                  channel: "telegram_auth",
+                  channel: "digit",
                   texts: [message],
                 },
               },

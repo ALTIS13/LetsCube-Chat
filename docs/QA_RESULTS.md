@@ -1881,3 +1881,19 @@ Recurring tasks roadmap note:
   `/srv/letscube/backups/edge-functions/20260825-185406-admin-phone-remove`.
   The Edge bundle check, file hash, health check and unsigned HTTP 401 probe
   passed.
+
+# 2026-08-25 - Restored Telegram-first p1sms cascade
+
+- Provider support clarified that the `digit` channel is an advertising-class
+  call whose delivery can be blocked by operators or routed to voicemail. The
+  primary OTP channel is therefore `telegram_auth` again.
+- The single provider request keeps message-scoped fallbacks for `agg_error`,
+  `not_delivered` and `error`, but every fallback now targets `digit`. LETSCUBE
+  still sends one four-digit OTP request and never performs a client-side retry
+  or exposes provider routing in the UI.
+- Focused p1sms/phone contracts passed 27/27. Both Edge entrypoints bundled
+  successfully with the staged adapter. Production backup:
+  `/srv/letscube/backups/edge-functions/20260825-215448-telegram-first-cascade`.
+  The deployed adapter hash matches the validated local file, the Edge runtime
+  is healthy, and unsigned gateway/hook probes both fail closed with HTTP 401.
+  Automated validation did not send a real OTP.
