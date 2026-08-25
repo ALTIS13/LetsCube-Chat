@@ -3,9 +3,7 @@ apply plugin: 'com.android.application'
 def versionProperties = new Properties()
 versionProperties.load(new FileInputStream(rootProject.file('version.properties')))
 
-def releaseTaskRequested = gradle.startParameter.taskNames.any { taskName ->
-    taskName.toLowerCase().contains('release')
-}
+def releaseSigningProjectPath = project.path
 def releaseSigningEnvironmentNames = [
     'LETSCUBE_ANDROID_KEYSTORE_PATH',
     'LETSCUBE_ANDROID_KEY_ALIAS',
@@ -15,18 +13,22 @@ def releaseSigningEnvironmentNames = [
 def releaseSigningEnvironment = releaseSigningEnvironmentNames.collectEntries { variableName ->
     [(variableName): System.getenv(variableName)]
 }
+def missingReleaseSigningVariable = releaseSigningEnvironmentNames.find { variableName ->
+    !releaseSigningEnvironment[variableName]
+}
+def releaseKeystoreFile = missingReleaseSigningVariable ? null : file(releaseSigningEnvironment['LETSCUBE_ANDROID_KEYSTORE_PATH'])
 
-if (releaseTaskRequested) {
-    def missingVariable = releaseSigningEnvironmentNames.find { variableName ->
-        !releaseSigningEnvironment[variableName]
+gradle.taskGraph.whenReady { taskGraph ->
+    def releaseTaskResolved = taskGraph.allTasks.any { task ->
+        task.project.path == releaseSigningProjectPath && task.name.toLowerCase().contains('release')
     }
-    if (missingVariable) {
-        throw new GradleException("Android release signing requires ${missingVariable}.")
-    }
-
-    def keystoreFile = file(releaseSigningEnvironment['LETSCUBE_ANDROID_KEYSTORE_PATH'])
-    if (!keystoreFile.isFile()) {
-        throw new GradleException('LETSCUBE_ANDROID_KEYSTORE_PATH must reference an existing regular file.')
+    if (releaseTaskResolved) {
+        if (missingReleaseSigningVariable) {
+            throw new GradleException("Android release signing requires ${missingReleaseSigningVariable}.")
+        }
+        if (!releaseKeystoreFile.isFile()) {
+            throw new GradleException('LETSCUBE_ANDROID_KEYSTORE_PATH must reference an existing regular file.')
+        }
     }
 }
 
@@ -46,9 +48,9 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    if (releaseTaskRequested) {
-        signingConfigs {
-            release {
+    signingConfigs {
+        release {
+            if (!missingReleaseSigningVariable) {
                 storeFile file(releaseSigningEnvironment['LETSCUBE_ANDROID_KEYSTORE_PATH'])
                 keyAlias releaseSigningEnvironment['LETSCUBE_ANDROID_KEY_ALIAS']
                 storePassword releaseSigningEnvironment['LETSCUBE_ANDROID_STORE_PASSWORD']
@@ -58,9 +60,7 @@ android {
     }
     buildTypes {
         release {
-            if (releaseTaskRequested) {
-                signingConfig signingConfigs.release
-            }
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
