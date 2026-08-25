@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 const GATEWAY = new URL("../../supabase/functions/phone-verification-gateway/index.ts", import.meta.url);
@@ -39,35 +39,41 @@ const SETTINGS_MODAL = new URL(
   import.meta.url,
 );
 
-test("phone claim gateway is authenticated and never owns OTP delivery", async () => {
+test("phone gateway owns four-digit OTP delivery and verification server-side", async () => {
   const source = await readFile(GATEWAY, "utf8");
   assert.match(source, /auth\.getUser\(token\)/u);
   assert.match(source, /if \(!token\)[\s\S]*"unauthorized"[\s\S]*401/iu);
   assert.match(source, /phone_verification_claim_begin_internal/u);
+  assert.match(source, /phone_verification_code_prepare_internal/u);
+  assert.match(source, /phone_verification_code_verify_internal/u);
+  assert.match(source, /phone_verification_profile_finalize_internal/u);
   assert.match(source, /phone_verification_admin_access_internal/u);
   assert.match(source, /adminAccess\.data !== true[\s\S]*"disabled"[\s\S]*403/u);
   assert.match(source, /from\("profile_contacts"\)/u);
   assert.match(source, /eq\("phone_verified", true\)/u);
   assert.match(source, /phone_in_use/u);
   assert.match(source, /PHONE_CLAIM_HMAC_SECRET/u);
+  assert.match(source, /P1SMS_API_KEY/u);
+  assert.match(source, /SMS_DELIVERY_ENABLED/u);
+  assert.match(source, /generateFourDigitOtp/u);
+  assert.match(source, /sendP1Sms/u);
+  assert.match(source, /auth\.admin\.updateUserById/u);
   assert.doesNotMatch(source, /sms\.ru\/sms\/send/u);
   assert.doesNotMatch(source, /console\.(?:log|debug)\(/u);
 });
 
-test("settings create a server claim before asking Supabase Auth to send an OTP", async () => {
+test("settings use only the server gateway for four-digit delivery and verification", async () => {
   const source = await readFile(PHONE_SECTION, "utf8");
-  const claim = source.indexOf("const { data: claimData, error: claimError }");
-  const authSend = source.indexOf("auth.updateUser({ phone: normalised })");
-  assert.ok(claim >= 0, "phone settings must create a server-side claim");
-  assert.ok(authSend > claim, "the claim must exist before Supabase Auth invokes the SMS hook");
-  assert.doesNotMatch(source, /if \(!resend\)\s*\{[\s\S]*?phone-verification-gateway/u);
+  assert.match(source, /body:\s*\{\s*action:\s*"begin",\s*phone:\s*normalised\s*\}/u);
+  assert.match(source, /body:\s*\{\s*action:\s*"verify",\s*phone:\s*normalised,\s*code\s*\}/u);
   assert.match(source, /const cancelPhoneClaim = async[\s\S]*?action:\s*"cancel"/u);
-  assert.match(source, /if \(claimCreated\) await cancelPhoneClaim\(\)/u);
-  assert.match(source, /auth\.resend\(\{/u);
-  assert.match(source, /type:\s*"phone_change"/u);
+  assert.doesNotMatch(source, /auth\.updateUser\(\{\s*phone/u);
+  assert.doesNotMatch(source, /auth\.resend\(\{/u);
+  assert.doesNotMatch(source, /auth\.verifyOtp\(\{/u);
   assert.match(source, /RESEND_WAIT_MS\s*=\s*120_000/u);
   assert.match(source, /formatResendCountdown\(resendSeconds\)/u);
-  assert.match(source, /profile_phone_mark_verified[\s\S]*?cancelPhoneClaim/u);
+  assert.match(source, /auth\.refreshSession\(\)/u);
+  assert.match(source, /\^\\d\{4\}\$/u);
 });
 
 test("settings restore an already-confirmed Auth phone without claiming a delivery", async () => {
@@ -141,10 +147,13 @@ test("phone removal clears the trusted Auth phone and profile mirror", async () 
     readFile(PHONE_SECTION, "utf8"),
     readFile(PHONE_REMOVE_MIGRATION, "utf8"),
   ]);
+  const removeStart = gateway.indexOf('if (action === "remove")');
+  const removeEnd = gateway.indexOf('const phone = normalizeE164', removeStart);
+  const removeBranch = gateway.slice(removeStart, removeEnd);
 
   assert.match(gateway, /action === "remove"/u);
   assert.match(gateway, /rpc\("profile_phone_remove_internal"/u);
-  assert.doesNotMatch(gateway, /auth\.admin\.updateUserById/u);
+  assert.doesNotMatch(removeBranch, /auth\.admin\.updateUserById/u);
   assert.doesNotMatch(gateway, /from\("profile_contacts"\)[\s\S]{0,320}phone:\s*null/u);
   assert.match(migration, /create or replace function public\.profile_phone_remove_internal\(p_user_id uuid\)/iu);
   assert.match(migration, /set_config\('app\.profile_contacts_bypass', 'on', true\)/u);
@@ -168,11 +177,54 @@ test("phone removal clears the trusted Auth phone and profile mirror", async () 
 test("phone UI keeps provider routing out of user-facing delivery copy", async () => {
   const source = await readFile(PHONE_SECTION, "utf8");
   assert.match(source, /Код отправлен на номер/u);
-  assert.match(source, /Код подтверждения \(6 цифр\)/u);
+  assert.match(source, /Код подтверждения \(4 цифры\)/u);
   assert.match(source, /Сервис доставки кода не настроен/u);
   assert.doesNotMatch(source, /Telegram|Телеграм/u);
   assert.doesNotMatch(source, /Код из SMS/u);
   assert.doesNotMatch(source, /SMS-провайдер не настроен/u);
+});
+
+test("four-digit OTP schema is private, expiring and attempt-limited", async () => {
+  const migrations = await readdir(
+    new URL("../../.migration-backup/supabase/migrations/", import.meta.url),
+  );
+  const migrationName = migrations.find((name) => name.endsWith("phone_verification_four_digit_otp.sql"));
+  assert.ok(migrationName, "four-digit OTP migration must exist");
+  const sql = await readFile(
+    new URL(`../../.migration-backup/supabase/migrations/${migrationName}`, import.meta.url),
+    "utf8",
+  );
+  assert.match(sql, /otp_hmac text/iu);
+  assert.match(sql, /otp_expires_at timestamptz/iu);
+  assert.match(sql, /verify_attempts integer/iu);
+  assert.match(sql, /verify_attempts\s*>=\s*5/iu);
+  assert.match(sql, /phone_verification_code_prepare_internal/iu);
+  assert.match(sql, /phone_verification_code_verify_internal/iu);
+  assert.match(sql, /phone_verification_profile_finalize_internal/iu);
+  assert.match(sql, /for update/iu);
+  assert.match(sql, /return 'valid'/iu);
+  assert.match(
+    sql,
+    /phone_verification_profile_finalize_internal\(\s*p_user_id uuid,\s*p_phone_hmac text,\s*p_otp_hmac text/iu,
+  );
+  assert.match(sql, /set status = 'verified',[\s\S]*otp_hmac = null/iu);
+  assert.match(sql, /where id = v_claim\.id/iu);
+  assert.match(sql, /created_at\s*>\s*now\(\)\s*-\s*interval '120 seconds'/iu);
+  assert.match(sql, /grant execute on function public\.phone_verification_code_prepare_internal/iu);
+  assert.match(sql, /grant execute on function public\.phone_verification_code_verify_internal/iu);
+  assert.match(sql, /grant execute on function public\.phone_verification_profile_finalize_internal\(uuid, text, text\) to service_role/iu);
+  assert.doesNotMatch(sql, /grant execute[^;]+to (?:anon|authenticated)/iu);
+
+  const beginStart = sql.indexOf("create or replace function public.phone_verification_claim_begin_internal");
+  const beginEnd = sql.indexOf("create or replace function public.phone_verification_claim_cancel_internal");
+  const beginSql = sql.slice(beginStart, beginEnd);
+  const cooldownGuard = beginSql.indexOf("interval '120 seconds'");
+  const activeClaimCancellation = beginSql.indexOf("set status = 'cancelled'");
+  assert.ok(cooldownGuard >= 0, "claim begin must enforce the resend cooldown");
+  assert.ok(
+    cooldownGuard < activeClaimCancellation,
+    "a rate-limited resend must not cancel the still-valid code",
+  );
 });
 
 test("phone verification is restricted to administrators in UI and database", async () => {

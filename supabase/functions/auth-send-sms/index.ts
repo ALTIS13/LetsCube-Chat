@@ -101,7 +101,7 @@ function readUuid(value: unknown): string | null {
 
 function readOtp(value: unknown): string | null {
   const text = typeof value === "string" ? value.trim() : "";
-  return /^\d{6}$/u.test(text) ? text : null;
+  return /^\d{4}$/u.test(text) ? text : null;
 }
 
 async function hmacSha256(value: string, secret: string): Promise<string> {

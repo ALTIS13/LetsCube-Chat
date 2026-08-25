@@ -5,7 +5,7 @@ const ACCEPTED_STATUSES = new Set(["created", "moderation", "sent", "delivered",
 const MAX_PROVIDER_RESPONSE_BYTES = 32_000;
 
 export function renderSmsOtp(otp) {
-  if (!/^\d{6}$/u.test(String(otp ?? ""))) throw new Error("invalid_otp");
+  if (!/^\d{4}$/u.test(String(otp ?? ""))) throw new Error("invalid_otp");
   const message = `LETSCUBE: код ${otp}. Никому его не сообщайте.`;
   if (message.length > SMS_MAX_LENGTH) throw new Error("sms_too_long");
   return message;

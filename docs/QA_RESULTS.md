@@ -1816,3 +1816,45 @@ Recurring tasks roadmap note:
   restarted as `0.2.8/12`, retained its authenticated profile and then reported
   `current`. Authenticode remains `NotSigned` and is still a separate external
   publisher/SmartScreen release gate.
+
+# 2026-08-25 - Four-digit p1sms phone verification
+
+- Root cause confirmed: the p1sms digital channel accepts four-digit
+  verification codes, while the previous LETSCUBE profile flow generated six
+  digits through GoTrue. The provider configuration will not be changed.
+- Self-hosted Auth remains on `supabase/gotrue:v2.189.0`. Its source enforces an
+  OTP length from 6 to 10 and resets smaller values to 6, so no unsupported
+  environment override or private GoTrue fork was introduced.
+- The administrator-only phone gateway now generates an unbiased four-digit
+  code, stores only a domain-separated HMAC, applies a 10-minute TTL and a
+  five-attempt ceiling, and enforces the existing two-minute resend cooldown.
+  The raw code is not stored or logged.
+- A correct code remains retryable until Auth succeeds. After Auth confirms the
+  phone, claim consumption and the private profile mirror are committed in one
+  database transaction.
+- Verified pre-change database backup:
+  `/srv/letscube/backups/pre-migrations/20260825-180748-before-phone-four-digit-otp.dump`.
+  Its archive inventory passed `pg_restore -l` validation.
+- Migration `20260825093000_phone_verification_four_digit_otp.sql` passed a
+  rollback rehearsal before apply. Production checks confirmed all three
+  columns, three service-only functions, RLS enabled, zero OTP-HMAC rows and no
+  execute grants for `anon` or `authenticated`.
+- A regression test then caught that an early resend could cancel the still
+  valid claim before returning `rate_limited`. The cooldown check now runs
+  before claim replacement. The updated migration passed another rollback
+  rehearsal and apply after verified backup
+  `/srv/letscube/backups/pre-migrations/20260825-181848-before-phone-resend-preserve.dump`.
+- Edge Function backup:
+  `/srv/letscube/backups/edge-functions/20260825-181236-phone-four-digit`.
+  The production Edge runtime bundle check passed; deployed file hashes match,
+  the container is healthy and unsigned probes remain fail-closed with HTTP
+  401. No automated provider delivery was triggered.
+- The follow-up gateway backup is
+  `/srv/letscube/backups/edge-functions/20260825-181910-phone-resend-preserve`;
+  the updated gateway passed the same bundle, health and hash checks.
+- Focused phone/p1sms tests passed 26/26. Frontend typecheck, production build,
+  DB type-drift check, RLS smoke and rollback-only RPC smoke passed. Targeted
+  Playwright completed with 15 contract tests passed and 15 authenticated UI
+  cases skipped because reusable local auth state was unavailable. Physical
+  four-digit delivery and confirmation remain pending an administrator test in
+  the deployed UI.

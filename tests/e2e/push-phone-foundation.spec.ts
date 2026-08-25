@@ -74,21 +74,9 @@ test.describe("LETSCUBE push and phone production foundation", () => {
       const body = route.request().postDataJSON() as { action?: string };
       phoneFlowCalls.push(`gateway:${body.action ?? "unknown"}`);
       await route.fulfill({
-        status: 200,
+        status: 503,
         contentType: "application/json",
-        body: JSON.stringify({ ok: true }),
-      });
-    });
-    await page.route("**/auth/v1/user", async (route) => {
-      if (route.request().method() !== "PUT") {
-        await route.continue();
-        return;
-      }
-      phoneFlowCalls.push("auth:update-phone");
-      await route.fulfill({
-        status: 500,
-        contentType: "application/json",
-        body: JSON.stringify({ message: "missing Twilio account SID" }),
+        body: JSON.stringify({ ok: false, error: "delivery_unavailable" }),
       });
     });
 
@@ -113,11 +101,7 @@ test.describe("LETSCUBE push and phone production foundation", () => {
     ).toBeVisible();
     await expect(page.getByText(/Twilio|account SID|missing Twilio/i)).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Сохранить без/ })).toHaveCount(0);
-    expect(phoneFlowCalls.slice(0, 3)).toEqual([
-      "gateway:begin",
-      "auth:update-phone",
-      "gateway:cancel",
-    ]);
+    expect(phoneFlowCalls).toEqual(["gateway:begin"]);
   });
 
   test("profile usernames reserve admin-looking handles for real admins", async () => {

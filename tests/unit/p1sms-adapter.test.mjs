@@ -11,11 +11,12 @@ import {
 import { readSendSmsDestination } from "../../supabase/functions/auth-send-sms/hookPayload.mjs";
 
 test("LETSCUBE p1sms OTP remains one short message", () => {
-  const message = renderSmsOtp("123456");
-  assert.equal(message, "LETSCUBE: код 123456. Никому его не сообщайте.");
-  assert.equal(message.length, 46);
+  const message = renderSmsOtp("1234");
+  assert.equal(message, "LETSCUBE: код 1234. Никому его не сообщайте.");
+  assert.equal(message.length, 44);
   assert.equal(SMS_MAX_LENGTH, 65);
   assert.ok(message.length <= SMS_MAX_LENGTH);
+  assert.throws(() => renderSmsOtp("123"), /invalid_otp/u);
   assert.throws(() => renderSmsOtp("12345"), /invalid_otp/u);
 });
 
@@ -23,7 +24,7 @@ test("p1sms request sends digit first and falls back after terminal delivery fai
   const request = buildP1SmsRequest({
     apiKey: "private-api-key",
     phone: "+79991234567",
-    message: renderSmsOtp("123456"),
+    message: renderSmsOtp("1234"),
   });
   const payload = JSON.parse(request.body);
 
@@ -36,7 +37,7 @@ test("p1sms request sends digit first and falls back after terminal delivery fai
     sms: [
       {
         channel: "digit",
-        text: "LETSCUBE: код 123456. Никому его не сообщайте.",
+        text: "LETSCUBE: код 1234. Никому его не сообщайте.",
         phone: "79991234567",
         cascade: {
           schemeDetail: [
@@ -44,21 +45,21 @@ test("p1sms request sends digit first and falls back after terminal delivery fai
               needStatus: "agg_error",
               smstemplate: {
                 channel: "telegram_auth",
-                texts: ["LETSCUBE: код 123456. Никому его не сообщайте."],
+                texts: ["LETSCUBE: код 1234. Никому его не сообщайте."],
               },
             },
             {
               needStatus: "not_delivered",
               smstemplate: {
                 channel: "telegram_auth",
-                texts: ["LETSCUBE: код 123456. Никому его не сообщайте."],
+                texts: ["LETSCUBE: код 1234. Никому его не сообщайте."],
               },
             },
             {
               needStatus: "error",
               smstemplate: {
                 channel: "telegram_auth",
-                texts: ["LETSCUBE: код 123456. Никому его не сообщайте."],
+                texts: ["LETSCUBE: код 1234. Никому его не сообщайте."],
               },
             },
           ],
@@ -67,14 +68,14 @@ test("p1sms request sends digit first and falls back after terminal delivery fai
     ],
   });
   assert.equal(payload.sms.length, 1);
-  assert.equal(payload.sms[0].text, "LETSCUBE: код 123456. Никому его не сообщайте.");
+  assert.equal(payload.sms[0].text, "LETSCUBE: код 1234. Никому его не сообщайте.");
   assert.equal("texts" in payload.sms[0], false);
   assert.deepEqual(
     payload.sms[0].cascade.schemeDetail.map((step) => step.smstemplate.texts),
     [
-      ["LETSCUBE: код 123456. Никому его не сообщайте."],
-      ["LETSCUBE: код 123456. Никому его не сообщайте."],
-      ["LETSCUBE: код 123456. Никому его не сообщайте."],
+      ["LETSCUBE: код 1234. Никому его не сообщайте."],
+      ["LETSCUBE: код 1234. Никому его не сообщайте."],
+      ["LETSCUBE: код 1234. Никому его не сообщайте."],
     ],
   );
   assert.deepEqual(
@@ -93,7 +94,7 @@ test("p1sms request sends digit first and falls back after terminal delivery fai
 });
 
 test("p1sms request rejects destinations outside the documented Russian 11-digit contract", () => {
-  const message = renderSmsOtp("123456");
+  const message = renderSmsOtp("1234");
   assert.throws(
     () => buildP1SmsRequest({ apiKey: "key", phone: "+12025550123", message }),
     /invalid_sms_request/u,
@@ -130,7 +131,7 @@ test("legacy hook payload fallback prefers new_phone and rejects malformed desti
 test("provider-disabled p1sms adapter never contacts the network", async () => {
   let calls = 0;
   const result = await sendP1Sms(
-    { enabled: false, apiKey: "private-api-key", phone: "+79991234567", otp: "123456" },
+    { enabled: false, apiKey: "private-api-key", phone: "+79991234567", otp: "1234" },
     async () => {
       calls += 1;
       throw new Error("network must not be called");
@@ -144,7 +145,7 @@ test("provider-disabled p1sms adapter never contacts the network", async () => {
 test("p1sms adapter accepts only a successful single-message provider envelope", async () => {
   let redirect;
   const result = await sendP1Sms(
-    { enabled: true, apiKey: "private-api-key", phone: "+79991234567", otp: "123456" },
+    { enabled: true, apiKey: "private-api-key", phone: "+79991234567", otp: "1234" },
     async (_url, init) => {
       redirect = init.redirect;
       return new Response(
@@ -163,7 +164,7 @@ test("p1sms adapter accepts only a successful single-message provider envelope",
 
 test("p1sms adapter maps provider failures without exposing the raw response", async () => {
   const result = await sendP1Sms(
-    { enabled: true, apiKey: "private-api-key", phone: "+79991234567", otp: "123456" },
+    { enabled: true, apiKey: "private-api-key", phone: "+79991234567", otp: "1234" },
     async () =>
       new Response(JSON.stringify({ status: "error", message: "account-wide private detail" }), {
         status: 200,
@@ -180,7 +181,7 @@ test("p1sms adapter rejects an uncorrelated or oversized success response", asyn
     enabled: true,
     apiKey: "private-api-key",
     phone: "+79991234567",
-    otp: "123456",
+    otp: "1234",
   };
   const wrongDestination = await sendP1Sms(
     input,
@@ -214,7 +215,7 @@ test("p1sms adapter rejects an uncorrelated or oversized success response", asyn
 test("p1sms timeout is ambiguous and is never retried", async () => {
   let calls = 0;
   const result = await sendP1Sms(
-    { enabled: true, apiKey: "private-api-key", phone: "+79991234567", otp: "123456" },
+    { enabled: true, apiKey: "private-api-key", phone: "+79991234567", otp: "1234" },
     async () => {
       calls += 1;
       throw new DOMException("request timed out", "TimeoutError");

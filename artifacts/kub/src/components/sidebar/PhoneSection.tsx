@@ -21,15 +21,10 @@ const CODE_DELIVERY_UNAVAILABLE_MESSAGE =
  * numbers at the data-access layer. This component manages the
  * caller's own row.
  *
- * Verified-only flow: `auth.updateUser({phone})` triggers delivery of a
- * 6-digit OTP; the user enters the code, we call `verifyOtp`, then the
- * SECURITY DEFINER RPC `profile_phone_mark_verified()` mirrors the
- * verified state into `profile_contacts`. The RPC re-checks
- * `auth.users.phone_confirmed_at`, so the client cannot lie.
- *
- * If the project's delivery provider is not configured, `auth.updateUser`
- * fails with a recognisable error. We surface a friendly setup message
- * and do not persist a new phone number as verified or unverified.
+ * The authenticated gateway generates and verifies a 4-digit code, applies
+ * server-side attempt/rate limits, updates Auth with trusted credentials and
+ * mirrors the verified state into `profile_contacts`. The browser never owns
+ * an OTP secret or privileged Auth key.
  */
 export function PhoneSection() {
   const supabase = createClient();
@@ -96,7 +91,7 @@ export function PhoneSection() {
   const normalised = normaliseE164(phoneInput);
   const isValid = normalised !== null;
   const dirty = (storedPhone ?? "") !== (normalised ?? "");
-  const otpValid = /^\d{6}$/.test(code);
+  const otpValid = /^\d{4}$/.test(code);
   const resendSeconds =
     stage === "code-sent" && resendAvailableAt
       ? Math.max(0, Math.ceil((resendAvailableAt - now) / 1_000))
@@ -122,7 +117,7 @@ export function PhoneSection() {
     });
   };
 
-  const sendCode = async (resend = false) => {
+  const sendCode = async () => {
     reset();
     if (!isValid || !normalised) {
       setError(PHONE_FORMAT_HINT);
@@ -161,28 +156,17 @@ export function PhoneSection() {
       "phone-verification-gateway",
       { body: { action: "begin", phone: normalised } },
     );
-    const claimCreated = !claimError && claimData?.ok === true;
-    if (!claimCreated) {
-      const claimErrorCode = await readPhoneGatewayErrorCode(claimData, claimError);
-      setBusy(null);
-      setStage("idle");
-      setError(humanisePhoneGatewayError(claimErrorCode));
-      return;
-    }
-    const { error: err } = resend
-      ? await supabase.auth.resend({ phone: normalised, type: "phone_change" })
-      : await supabase.auth.updateUser({ phone: normalised });
     setBusy(null);
-    if (err) {
-      if (claimCreated) await cancelPhoneClaim();
-      if (looksLikeProviderUnavailable(err.message)) {
+    if (claimError || claimData?.ok !== true) {
+      const claimErrorCode = await readPhoneGatewayErrorCode(claimData, claimError);
+      if (claimErrorCode === "delivery_unavailable" || claimErrorCode === "not_configured") {
         setStage("unsupported");
         setCode("");
         setResendAvailableAt(null);
         setInfo(CODE_DELIVERY_UNAVAILABLE_MESSAGE);
       } else {
         setStage("idle");
-        setError(humanise(err.message));
+        setError(humanisePhoneGatewayError(claimErrorCode));
       }
       return;
     }
@@ -197,31 +181,21 @@ export function PhoneSection() {
     reset();
     if (!normalised) return;
     if (!otpValid) {
-      setError("Код должен состоять ровно из 6 цифр.");
+      setError("Код должен состоять ровно из 4 цифр.");
       return;
     }
     setBusy("verify");
-    const { error: vErr } = await supabase.auth.verifyOtp({
-      phone: normalised,
-      token: code,
-      type: "phone_change",
-    });
-    if (vErr) {
+    const { data: verifyData, error: verifyError } = await supabase.functions.invoke(
+      "phone-verification-gateway",
+      { body: { action: "verify", phone: normalised, code } },
+    );
+    if (verifyError || verifyData?.ok !== true) {
+      const verifyErrorCode = await readPhoneGatewayErrorCode(verifyData, verifyError);
       setBusy(null);
-      setError(
-        looksLikeProviderUnavailable(vErr.message)
-          ? CODE_DELIVERY_UNAVAILABLE_MESSAGE
-          : humanise(vErr.message),
-      );
+      setError(humanisePhoneGatewayError(verifyErrorCode));
       return;
     }
-    const { error: rpcErr } = await supabase.rpc("profile_phone_mark_verified");
-    if (rpcErr) {
-      setBusy(null);
-      setError(humanise(rpcErr.message));
-      return;
-    }
-    await cancelPhoneClaim();
+    await supabase.auth.refreshSession();
     await refreshSelf();
     setBusy(null);
     setStage("idle");
@@ -313,15 +287,15 @@ export function PhoneSection() {
       {stage === "code-sent" && (
         <div className="px-4 pt-0 pb-3 border-t border-[color:var(--kub-border-color)]">
           <label className="text-[10px] font-semibold uppercase tracking-wider mt-3 mb-1.5 block text-[color:var(--kub-cyan)]">
-            Код подтверждения (6 цифр)
+            Код подтверждения (4 цифры)
           </label>
           <input
             inputMode="numeric"
-            pattern="[0-9]{6}"
-            maxLength={6}
+            pattern="[0-9]{4}"
+            maxLength={4}
             value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-            placeholder="123456"
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
+            placeholder="1234"
             className={cn(
               "w-full rounded-xl px-3 py-2 text-sm tracking-[0.4em] text-center outline-none",
               "bg-[var(--kub-surface-3)] text-[color:var(--kub-text)]",
@@ -366,7 +340,7 @@ export function PhoneSection() {
             <KubButton
               variant="secondary"
               size="sm"
-              onClick={() => sendCode(true)}
+              onClick={sendCode}
               loading={busy === "send"}
               disabled={resendSeconds > 0 || !dirty || !isValid}
             >
@@ -379,7 +353,7 @@ export function PhoneSection() {
           <KubButton
               variant="secondary"
               size="sm"
-              onClick={() => sendCode(false)}
+              onClick={sendCode}
             loading={busy === "send"}
             disabled={!dirty || !isValid}
           >
@@ -391,7 +365,7 @@ export function PhoneSection() {
               variant="primary"
               size="sm"
               leftIcon={<KubIcon name="check" size={13} />}
-              onClick={() => sendCode(false)}
+              onClick={sendCode}
               loading={busy === "send"}
               disabled={!dirty || !isValid}
             >
@@ -450,21 +424,6 @@ function formatResendCountdown(seconds: number): string {
   return `${minutes}:${remainder.toString().padStart(2, "0")}`;
 }
 
-function looksLikeProviderUnavailable(msg: string): boolean {
-  const m = msg.toLowerCase();
-  return (
-    m.includes("sms provider") ||
-    m.includes("phone provider") ||
-    m.includes("phone signups are disabled") ||
-    m.includes("phone_provider_disabled") ||
-    m.includes("provider is not enabled") ||
-    m.includes("not enabled") ||
-    m.includes("not configured") ||
-    m.includes("twilio") ||
-    m.includes("account sid")
-  );
-}
-
 // Тонкая обёртка над общим маппером — оставлена ради единообразия с
 // остальными вызовами и на случай добавления специфики страницы.
 function humanise(msg: string): string {
@@ -480,6 +439,17 @@ function humanisePhoneGatewayError(code: unknown): string {
     case "invalid_phone":
     case "invalid":
       return PHONE_FORMAT_HINT;
+    case "invalid_code":
+      return "Неверный код подтверждения.";
+    case "expired":
+      return "Срок действия кода истёк. Запросите новый код.";
+    case "attempts_exceeded":
+      return "Превышено число попыток. Запросите новый код.";
+    case "rate_limited":
+      return "Новый код можно запросить через две минуты.";
+    case "delivery_unavailable":
+    case "not_configured":
+      return CODE_DELIVERY_UNAVAILABLE_MESSAGE;
     default:
       return "Не удалось подготовить отправку кода. Попробуйте позже.";
   }

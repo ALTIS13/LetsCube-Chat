@@ -1,7 +1,8 @@
 # Phone Verification Runbook
 
-KUB currently has hardened phone verification fallback. A phone number is not
-marked verified until Supabase Auth OTP verification succeeds.
+LETSCUBE has an administrator-only four-digit phone verification flow. A phone
+number is not marked verified until the trusted gateway validates the code and
+Supabase Auth confirms the number.
 
 ## Current status
 
@@ -14,18 +15,21 @@ marked verified until Supabase Auth OTP verification succeeds.
 
 1. The selected provider is p1sms. Verify current production terms and the
    shared LETSCUBE account balance before activation.
-2. Implement a trusted HTTP Send SMS Hook adapter. Supabase Auth generates and
-   verifies the OTP; the adapter only submits the phone/code message to the
-   selected provider.
-3. Verify the hook request signature and reject unsigned/expired requests.
-4. Configure phone auth, hook URI and hook secret in the self-hosted Auth
-   container environment. Keep SMS autoconfirm disabled.
+2. Keep verification in the authenticated `phone-verification-gateway`. It
+   generates a four-digit code, stores only a domain-separated HMAC, and calls
+   the narrow p1sms adapter from the trusted Edge runtime.
+3. Keep the legacy Send SMS Hook fail-closed and signature-verified, but do not
+   route the profile phone flow through GoTrue OTP. GoTrue `v2.189.0` supports
+   only 6-10 digits, while the p1sms digital channel requires four.
+4. Keep SMS autoconfirm disabled in the self-hosted Auth environment. The
+   gateway may update Auth only after its own code verification succeeds.
 5. Configure provider credentials in Coolify/server secrets only. Never expose
    them to the browser, Android or Windows clients.
-6. Keep profile phone state in the app database only after OTP success and the
-   server-side `profile_phone_mark_verified()` Auth check.
+6. Keep profile phone state in the app database only after code success and an
+   Auth-confirmed phone. Final claim consumption and profile mirroring must be
+   one database transaction.
 7. Reject concurrent pending claims for the same normalized phone and clear
-   stale abandoned `auth.users.phone_change` values on a bounded schedule.
+   expired/cancelled HMAC material.
 8. Add Auth/provider rate limits, resend cooldown, cost alerts and sanitized
    delivery metrics before enabling production traffic.
 9. Store `P1SMS_API_KEY` only as a trusted server secret. Runtime code may call
@@ -45,6 +49,8 @@ marked verified until Supabase Auth OTP verification succeeds.
 - OTP delivery uses digital SMS first and falls back to Telegram only after `agg_error`, `not_delivered` or a terminal provider error. P1SMS support confirmed that `agg_error` is a separate not-sent status and must be matched explicitly.
 - An administrator with `system.manage` can create a claim; a regular account receives `disabled` and does not contact the provider.
 - Wrong OTP shows friendly error.
+- The OTP is exactly four digits, expires after 10 minutes and is cancelled on
+  the fifth failed attempt.
 - Correct OTP sets verified state.
 - Changing phone requires a fresh OTP.
 - Removing phone clears both the trusted Supabase Auth value and the private profile mirror.
@@ -58,4 +64,4 @@ marked verified until Supabase Auth OTP verification succeeds.
 
 - Do not expose raw phone numbers where role permissions do not allow it.
 - Do not put SMS provider credentials into frontend env.
-- Do not store OTP codes in KUB tables.
+- Do not store raw OTP codes in LETSCUBE tables or logs; store only server-HMAC values.
