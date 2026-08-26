@@ -294,8 +294,18 @@ Current baseline:
   visible first-unread anchor and bounded geolocation passed. The overlay was
   replaced by restored-source, strictly verified, nondebuggable final `0.1.2/3`;
   the authenticated shell survived and all round-4 helpers/forwards were removed.
-  Media/capture, no-unread/fast-upward/prepend/footer and explicit logout/login
-  remain physical skips, so Task 4 remains open.
+- Task 4 fix round 5/5 passed explicit physical logout, bounded helper login,
+  cold authenticated session restore, fully-read/no-unread initial bottom,
+  fast-upward stability, older-history prepend anchoring and sampled footer/
+  timestamp stability. Synthetic media staging passed video-only quality,
+  original selection and local preview playback, but no upload was sent because
+  an isolated QA-only target was not proven within two minutes. Product upload
+  progress/completion/sent playback/cleanup and camera/photo/regular-video/
+  video-circle/voice remain physical skips, so Task 4 remains open.
+- The canonical local APK/AAB are the current restored-source Gradle outputs.
+  Signed ZIP byte identity is not expected across independent rebuilds;
+  package/version, nondebuggable state, signer/Asset Links parity and strict
+  APK/AAB validation are the authoritative equivalence checks.
 - `artifacts/kub/index.html` title and Apple web app title are `LETSCUBE`.
 - `artifacts/kub/public/manifest.json` uses `LETSCUBE`, `display: standalone`, and `display_override` fallbacks.
 - The iPhone home-screen icon uses a dedicated 180x180 LETSCUBE club asset; 192/512/maskable PWA icons use the same official mark, and the service worker precaches the complete icon set.
@@ -345,7 +355,7 @@ Status: `[~]` active. Android and Windows Tauri internal candidates are availabl
 - `[x]` Production debug APK connection and physical launch: the public build allowlist, LETSCUBE adaptive icons/dark splash, Android `0.1.0` versioning, install and first launch were verified on a Nothing/Spacewar A063 running Android 15.
 - `[x]` Native Android FCM foundation: local ignored Firebase client config, Capacitor permission/registration/channels, live auth-scoped device RPCs, RLS-protected device/outbox schema, trusted HTTP v1 delivery and one physical background notification/tap smoke are complete.
 - `[x]` Self-hosted native release catalog: Android `0.1.0` internal APK and immutable Windows Tauri `0.2.0` build `4` NSIS are available at `api.letscube.ru`; public size/SHA and cache/CORS headers were verified.
-- `[~]` Native push release QA: real owner-to-client message delivery, sender exclusion, category preference suppression, same-chat collapse, server-backed chat read-sync, cold-start tap routing, killed-process delivery, separate task delivery, location-staff task routing, restart registration recovery and Android 16 Google Play emulator coverage pass. On 2026-08-26 the signed final `0.1.2/3` Nothing A063 official-GMS candidate retained authenticated session/chat/registration through a same-key upgrade and passed fresh post-DND background/killed grouped cards, exact-chat taps and read-sync. Fix round 4 separately proved independent foreground FCM transport, authenticated offline/reconnect, first-unread anchoring and bounded geolocation. An earlier card absence under active DND is not counted as a delivery failure. A second Android 15 Realme device passes APK/portrait UI QA, but its custom-ROM microG cannot complete Google Check-in (`AccountDisabled`); broader vendor/device coverage and the remaining physical media/history/logout cases stay open.
+- `[~]` Native push release QA: real owner-to-client message delivery, sender exclusion, category preference suppression, same-chat collapse, server-backed chat read-sync, cold-start tap routing, killed-process delivery, separate task delivery, location-staff task routing, restart registration recovery and Android 16 Google Play emulator coverage pass. On 2026-08-26 the signed final `0.1.2/3` Nothing A063 official-GMS candidate retained authenticated session/chat/registration through a same-key upgrade and passed fresh post-DND background/killed grouped cards, exact-chat taps and read-sync. Fix round 4 separately proved independent foreground FCM transport, authenticated offline/reconnect, first-unread anchoring and bounded geolocation. Fix round 5 passed explicit logout/login/session restore and the remaining large-chat/history/footer cases; media staging reached original preview without a send. An earlier card absence under active DND is not counted as a delivery failure. A second Android 15 Realme device passes APK/portrait UI QA, but its custom-ROM microG cannot complete Google Check-in (`AccountDisabled`); broader vendor/device coverage plus actual upload and camera/photo/video/video-circle/voice acceptance stay open.
 - `[x]` Stabilize chat message footer geometry: a physical Android probe reproduced the `inline`/`anchored` ResizeObserver feedback loop on a medium-length incoming message. Once measured overflow anchors the footer it now remains anchored until a real viewport/content change; timestamp digits and private-delivery icons reserve fixed width. The same physical probe changed from two alternating layouts to one stable layout across 160 samples.
 - `[ ]` Release signing/AAB with secrets outside Git.
 - `[ ]` Android deep links/app links and recovery callback.

@@ -120,11 +120,17 @@ Current implementation status:
   and the resulting unread state was visible. Authenticated offline/reconnect,
   first-unread anchoring and bounded geolocation also passed. The synthetic
   message and all temporary listeners/helpers were removed.
-- Final source/Gradle state was restored before rebuilding and reinstalling
-  exact nondebuggable `0.1.2/3`; the authenticated shell survived and no WebView
-  debug socket or ADB forward remained. Media/camera/regular-video/video-circle/
-  voice, remaining physical large-history/footer cases and explicit logout/login
-  remain skips, so Task 4 is still open.
+- Fix round 5 sent no FCM message. It passed explicit physical logout, bounded
+  helper login, cold authenticated session restore and the remaining large-chat
+  no-unread/fast-upward/prepend/footer acceptance on the official-GMS Nothing.
+  Synthetic media staging also passed video-only quality selection, original
+  selection and local preview playback, but no product upload occurred because
+  an isolated QA-only target was not proven inside the two-minute bound.
+- Final source/Gradle state was restored before rebuilding and reinstalling the
+  canonical nondebuggable `0.1.2/3`; the authenticated shell survived and no
+  WebView debug socket, helper process, fixture or ADB forward remained. Actual
+  upload progress/completion/sent playback/cleanup and camera/photo/regular-
+  video/video-circle/voice remain skips, so Task 4 is still open.
 - Realme RMX3830 is a custom microG device. It may provide optional UI/media
   coverage but must never count toward FCM acceptance.
 

@@ -1918,12 +1918,18 @@ Recurring tasks roadmap note:
   `431eaac6d25e4cc1539354e274fccddb56c526ccd0a972b63e5e8a4da06f7a95`.
 - Final ignored artifacts are
   `.local/release-final/letscube-0.1.2-build-3.apk` (6,513,198 bytes, SHA-256
-  `bc5644c8b98bed23fff991ed07699e8046651040fbad6ee9b69190f1768a12ec`)
-  and `.local/release-final/letscube-0.1.2-build-3.aab` (6,150,070 bytes,
+  `af330f62a48d19a89972c1a1a2282382df657d395af2900a453158977b25802c`)
+  and `.local/release-final/letscube-0.1.2-build-3.aab` (6,150,069 bytes,
   SHA-256
-  `95334654021f8ae937f14e72229b98836d8c34f053530d2c9921f7f6b87159b6`).
+  `498ed78c0b6b43156d5c77e4d1f394fe1db10c14f28fdae855d8c52f8ff6910c`).
   The exact signed build wrapper and final release verifier both passed for
   version `0.1.2`, build `3`.
+- These canonical files are the current outputs of the restored tracked
+  production source used for the fix-round-5 closeout. Independently rebuilt
+  signed APK/AAB ZIP containers are not expected to retain byte identity, so
+  an older artifact hash is not used as proof of source equivalence. Package,
+  version, nondebuggable state, signer/Asset Links parity, strict APK checks
+  and AAB structure/signature validation are the authoritative release gates.
 - The tracked `artifacts/kub/public/.well-known/assetlinks.json` was generated
   from the signed baseline. Regeneration from the final APK was byte-identical
   to both baseline and tracked copies; document SHA-256 is
@@ -2162,3 +2168,51 @@ Recurring tasks roadmap note:
   inspection, JAR signature verification, `git diff --check` and tracked secret
   guards. The only private-key header match is the expected PEM parser literal
   without an embedded payload.
+
+# 2026-08-26 - Android Task 4 fix round 5/5
+
+- The controller-approved QA-only ruling was reused for one unpublished,
+  same-key, same-version `0.1.2/3` overlay on the official-GMS Nothing A063.
+  Temporary WebView debugging and `android:debuggable=true` existed only for
+  bounded CDP instrumentation and never entered canonical, catalog, Git or
+  publication paths. No FCM message was sent in this round.
+- Explicit logout reached the authentication screen. The ignored private
+  helper then completed a bounded login without printing credentials, tokens,
+  account identity or user content. The authenticated app shell survived a
+  cold process restart, closing the physical logout/login/session-restore gate.
+- In an existing large QA chat, CDP geometry proved a fully read initial view
+  near the bottom, stable fast upward reading without a jump to the bottom or
+  absolute top, preserved visible anchoring while older history was prepended,
+  and stable sampled footer/timestamp geometry without oscillation.
+- Synthetic non-private image and video fixtures exercised the product media
+  staging path. Image staging hid video quality controls; video staging exposed
+  three quality choices including original, accepted original and played the
+  local preview. An isolated two-account QA upload target could not be proven
+  within the two-minute bound, so no message/object was uploaded. Upload
+  progress/completion, sent-message playback and product-side deletion remain
+  honest skips. All host/device fixtures were removed.
+- The overall physical timebox expired before camera/photo, regular-video,
+  video-circle or voice controls could be exercised. No capture was started,
+  saved, sent or copied; those five capture gates remain honest skips. Round 4
+  remains the evidence for foreground FCM, authenticated offline/reconnect,
+  first-unread anchoring and geolocation. Round 3 remains the evidence for
+  background/killed cards, exact taps and delivered/read synchronization.
+- Production source, Gradle and version state were restored exactly before the
+  approved wrapper rebuilt final `0.1.2/3`. The latest restored-source Gradle
+  APK/AAB replaced canonical local outputs, Asset Links was regenerated with
+  the same signer, and strict APK/AAB checks passed. `adb install -r` replaced
+  the QA overlay with the canonical nondebuggable final; the authenticated
+  shell remained available and no WebView debug socket remained.
+- Cleanup left zero round-5 helpers, temporary fixtures, captured media,
+  device copies or ADB forwards. Task 4 remains open only for the skipped
+  product upload lifecycle and camera/photo/regular-video/video-circle/voice
+  physical acceptance. No Realme, deploy, publication, Play, push, SQL/schema/
+  RLS, iOS/PWA or Windows operation was performed.
+- Fresh closeout validation passed the focused Android unit suite 40/40, Kub
+  typecheck, strict canonical APK/Asset Links verification, restored-source
+  Gradle/canonical parity, Bundletool AAB validation and manifest inspection,
+  AAB cryptographic signature verification, zero compiled `MainActivity`
+  WebView-debug calls, tracked metadata parity, `git diff --check` and tracked
+  secret guards. `jarsigner -strict` additionally reports the expected
+  self-signed trust-chain and missing-timestamp warnings for the permanent
+  Android app-signing identity; ordinary cryptographic verification succeeds.
