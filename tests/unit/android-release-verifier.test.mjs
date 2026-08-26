@@ -39,9 +39,28 @@ function createFixture() {
   writeFileSync(apkPath, "signed release fixture");
   writeFileSync(assetLinksPath, JSON.stringify([{
     relation: ["delegate_permission/common.handle_all_urls"],
-    target: { package_name: "com.kub.messenger", sha256_cert_fingerprints: [fingerprint] },
+    target: {
+      namespace: "android_app",
+      package_name: "com.kub.messenger",
+      sha256_cert_fingerprints: [fingerprint],
+    },
   }]));
   return { directory, apkPath, assetLinksPath };
+}
+
+function assertAssetLinksRejected(document) {
+  const fixture = createFixture();
+  try {
+    writeFileSync(fixture.assetLinksPath, JSON.stringify(document));
+    assert.throws(() => verifyAndroidRelease(fixture.apkPath, {
+      assetLinksPath: fixture.assetLinksPath,
+      expectedMetadata: { applicationId: "com.kub.messenger", versionName: "0.1.1", versionCode: 2 },
+      tools: { apksigner: "apksigner", apkanalyzer: "apkanalyzer" },
+      run: createRunner().run,
+    }), /does not match Digital Asset Links/);
+  } finally {
+    rmSync(fixture.directory, { force: true, recursive: true });
+  }
 }
 
 function createRunner(overrides = {}) {
@@ -268,6 +287,69 @@ test("Android release verifier requires a valid authorizing Asset Links statemen
   } finally {
     rmSync(fixture.directory, { force: true, recursive: true });
   }
+});
+
+test("Android release verifier rejects an Asset Links target without android_app namespace", () => {
+  assertAssetLinksRejected([{
+    relation: ["delegate_permission/common.handle_all_urls"],
+    target: { package_name: "com.kub.messenger", sha256_cert_fingerprints: [fingerprint] },
+  }]);
+});
+
+test("Android release verifier rejects extra Asset Links statements", () => {
+  const statement = {
+    relation: ["delegate_permission/common.handle_all_urls"],
+    target: {
+      namespace: "android_app",
+      package_name: "com.kub.messenger",
+      sha256_cert_fingerprints: [fingerprint],
+    },
+  };
+  assertAssetLinksRejected([statement, statement]);
+});
+
+test("Android release verifier rejects extra Asset Links relations", () => {
+  assertAssetLinksRejected([{
+    relation: ["delegate_permission/common.handle_all_urls", "delegate_permission/common.get_login_creds"],
+    target: {
+      namespace: "android_app",
+      package_name: "com.kub.messenger",
+      sha256_cert_fingerprints: [fingerprint],
+    },
+  }]);
+});
+
+test("Android release verifier rejects extra Asset Links fingerprints", () => {
+  assertAssetLinksRejected([{
+    relation: ["delegate_permission/common.handle_all_urls"],
+    target: {
+      namespace: "android_app",
+      package_name: "com.kub.messenger",
+      sha256_cert_fingerprints: [fingerprint, "AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA:AA"],
+    },
+  }]);
+});
+
+test("Android release verifier rejects the wrong Asset Links package", () => {
+  assertAssetLinksRejected([{
+    relation: ["delegate_permission/common.handle_all_urls"],
+    target: {
+      namespace: "android_app",
+      package_name: "com.kub.other",
+      sha256_cert_fingerprints: [fingerprint],
+    },
+  }]);
+});
+
+test("Android release verifier rejects the wrong Asset Links fingerprint", () => {
+  assertAssetLinksRejected([{
+    relation: ["delegate_permission/common.handle_all_urls"],
+    target: {
+      namespace: "android_app",
+      package_name: "com.kub.messenger",
+      sha256_cert_fingerprints: ["22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22:22"],
+    },
+  }]);
 });
 
 test("Android release verifier requires the exact protected exported component contract", () => {

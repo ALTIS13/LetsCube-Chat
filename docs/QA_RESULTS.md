@@ -1900,12 +1900,15 @@ Recurring tasks roadmap note:
 
 # 2026-08-26 - Android signed production candidate 0.1.2/3
 
-- The final permanent unpublished identity was created outside Git under the
-  controller-managed signing boundary with organization `ООО КУБ`, country
-  `RU` and the required long-lived validity contract. Signing values,
-  certificate details and private inputs were never printed or copied into the
-  worktree. Exact expiry and encrypted-backup recovery remain release-owner
-  confirmations before publication.
+- The final permanent unpublished identity is owned by `ООО "КУБ"` and was
+  created outside Git on 2026-08-26 with organization `ООО КУБ` and country
+  `RU`. Its exact expiry is 2051-08-26 and its PKCS12 validity is at least 25
+  years. The controller verified that the encrypted local backup opens and
+  byte-matches the primary identity, and that the protected private-directory
+  ACL is limited to the current owner plus `SYSTEM`. The established PKCS12
+  same-password compatibility ruling remains unchanged. An external off-device
+  backup is still pending. Signing values, certificate details and private
+  inputs were never printed or copied into the worktree.
 - Signed baseline artifacts were preserved under ignored local storage:
   `.local/release-baseline/letscube-0.1.1-build-2.apk` is 6,513,186 bytes with
   SHA-256
@@ -1931,10 +1934,13 @@ Recurring tasks roadmap note:
   Services: the old `0.1.0/1` debug package rejected the release-signed
   baseline with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. After the authorized
   package-only uninstall, the signed `0.1.1/2` baseline installed cleanly.
-- Earlier UIAutomator field attempts could not prove credential entry. The
-  final bounded CDP/helper recovery returned `HELPER_UNAVAILABLE`; no further
-  credential or UIAutomator login attempt was made. Authenticated session,
-  chat and local notification registration retention are explicitly unproven.
+- Earlier UIAutomator field attempts could not prove credential entry, and the
+  final bounded CDP/helper recovery returned `HELPER_UNAVAILABLE`. Fix round
+  1/5 used the single newly authorized native credential submission without
+  reading either field back. After 25 seconds the login form remained, while
+  no app-shell/chat marker or generic authentication error appeared. No retry
+  was made. Authenticated session, chat and local notification registration
+  retention are explicitly unproven.
 - A non-sensitive baseline sentinel at
   `/sdcard/Android/data/com.kub.messenger/files/task4/baseline-0.1.1-build-2.sentinel`
   retained the exact `inode:size:mtime` metadata
@@ -1965,21 +1971,27 @@ Recurring tasks roadmap note:
 - Real signed-candidate FCM registration/delivery/tap routing was skipped
   because authentication/token registration could not be proven. Camera,
   photo, regular video, video-circle, voice, media picker/upload/quality/
-  playback, geolocation, authenticated login/logout/session restore,
-  large-chat scrolling and message-footer stability were skipped because they
-  require authenticated/manual interaction that was not safe to automate.
+  playback, geolocation, authenticated login/logout/session restore, physical
+  large-chat scrolling and physical message-footer stability were skipped
+  because they require authenticated/manual interaction that was not safe to
+  automate. Browser coverage for the large-history anchor and footer is
+  recorded below.
 - Repository validation passed `git diff --check`, Kub typecheck, production
   Vite build, release catalog tests 27/27, database type drift, RLS smoke,
   `android:sync`, the signed wrapper build, final APK verifier and Android unit
   tests 34/34. The build retains advisory sourcemap/dynamic-import/chunk-size
   warnings. Authenticated smoke exited 0 with 5/5 skipped.
-- The exact targeted Playwright suite first found no local server: callback
-  cases failed 5/5 with connection refusal and 65 tests skipped. With a bounded
-  local server, the browser callback contract passed 5/5; 30 distribution/auth
-  shell assertions failed because their expected menu/brand locators did not
-  materialize, and 35 deeper authenticated cases skipped. No additional
-  credential login was attempted, so this remains an explicit validation
-  concern rather than a pass.
+- The earlier red Playwright gate was a local setup failure: the server was
+  launched in Vite development mode without the ignored production public
+  inputs, so the expected production auth shell did not mount and the saved
+  owner state was empty. A bounded production preview loaded the ignored
+  QA/public values in-process without printing them. `e2e:smoke` then passed
+  5/5. The exact targeted command passed 66 assertions with four explicit
+  fixture-inapplicable mobile skips. A deterministic history-prepend fixture
+  now sends the same wheel input that releases the product's initial bottom
+  lock and delays only the older-message request so the existing loading and
+  anchor assertions observe the intended state; no assertion was removed or
+  weakened.
 - Tracked-file guards found zero keystores, signing env files,
   `google-services.json`, production-local env files, PEM payloads, long JWT
   candidates, raw FCM-token candidates or literal signing-secret assignments.
@@ -1987,3 +1999,42 @@ Recurring tasks roadmap note:
   with no embedded key payload. No production deploy, catalog publish, Coolify
   change, Play submission, push, SQL/schema/RLS, iOS/PWA or Windows change was
   performed.
+
+# 2026-08-26 - Android Task 4 fix round 1/5
+
+- Base reviewed commit: `990b339`. The Digital Asset Links verifier now
+  requires one statement, the exact single authorization relation,
+  `android_app` namespace, package `com.kub.messenger`, and one normalized APK
+  signer fingerprint. Rejection coverage includes a missing namespace, extra
+  statement, extra relation, extra fingerprint, wrong package and wrong
+  fingerprint.
+- The production-preview correction described above cleared the automated
+  gate: `pnpm.cmd e2e:smoke` passed 5/5, and the exact targeted Playwright
+  command passed 66 with four fixture-inapplicable mobile skips. The two skipped
+  scenarios are fast upward scroll and loading older history on each narrow
+  mobile fixture; all applicable large-history anchor and footer assertions
+  passed.
+- Nothing A063, Android 15/API 35 official GMS: a clean signed `0.1.1/2`
+  baseline install received the one bounded credential submission, but the
+  login form remained and authentication was not proven. Direct signed
+  `adb install -r` returned the device to final `0.1.2/3`. Final version,
+  notification permission, portrait, warm/cold/killed explicit-component
+  callback process routing, and malformed/foreign rejection all passed in the
+  sanitized rerun. The original Task 4 baseline sentinel proof remains the
+  package-data retention evidence; it is not session-retention evidence.
+- API 33, 34 and 36 Google Play AVDs ran sequentially, headless, with zero AVD
+  processes left afterward. Each passed fresh final install, expected API,
+  Google Play Services package presence, `0.1.2/3`, notification permission,
+  portrait, offline launch/reconnect and background retention. A separate
+  OS-level rerun passed warm/cold/killed explicit-component PID and focused
+  `MainActivity` routing on all three. The release WebView exposed only one
+  accessibility node on these AVDs, so its route text was unobservable and was
+  not substituted for the physical malformed/foreign acceptance.
+- Realme RMX3830, Android 15/API 35 custom microG: existing debug `0.1.0/1`
+  remained unchanged, launch and portrait passed, no release install was
+  attempted, and the device remains excluded from FCM acceptance.
+- Focused Android unit tests passed 40/40 and workspace typecheck passed.
+  Authenticated signed-candidate FCM registration/delivery/taps, session/chat
+  retention, physical media, geolocation, large-chat anchoring and physical
+  footer stability remain honest skips after the single login attempt failed.
+  Browser large-history/footer coverage passed as recorded above.

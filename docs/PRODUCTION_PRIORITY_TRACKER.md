@@ -265,6 +265,12 @@ Current baseline:
   device retained a non-sensitive app-local sentinel through the same-key
   upgrade, but authentication/session retention and signed-candidate FCM were
   not proven. Production domain verification waits for a later approved deploy.
+- Task 4 fix round 1/5 made the Asset Links verifier exact and cleared the
+  production-preview browser gate (`e2e:smoke` 5/5; targeted 66 passed with four
+  fixture-inapplicable mobile skips). One bounded Nothing login submission did
+  not leave the login form, so authenticated upgrade/FCM remain open without a
+  retry. Final safe lifecycle/callback checks passed on the official-GMS
+  Nothing and sequential API 33/34/36 Google Play AVDs.
 - `artifacts/kub/index.html` title and Apple web app title are `LETSCUBE`.
 - `artifacts/kub/public/manifest.json` uses `LETSCUBE`, `display: standalone`, and `display_override` fallbacks.
 - The iPhone home-screen icon uses a dedicated 180x180 LETSCUBE club asset; 192/512/maskable PWA icons use the same official mark, and the service worker precaches the complete icon set.

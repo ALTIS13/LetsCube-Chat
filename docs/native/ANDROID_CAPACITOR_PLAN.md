@@ -100,15 +100,17 @@ The self-hosted release catalog is active at
 candidate is local and unpublished.
 
 - App id: `com.kub.messenger`.
-- Signing owner: the controller-managed LETSCUBE Android release operator.
-- Identity creation/final rotation date: 2026-08-26; organization `ООО КУБ`,
-  country `RU`, with the contract requiring at least 25-year validity.
-- Exact certificate expiry remains in the private signing inventory and was
-  not independently inspected under the Task 4 redaction boundary. The release
-  owner must add/confirm that date before publication.
-- An encrypted backup outside the worktree is required. Its existence and
-  recovery remain operator-controlled external gates and are not asserted by
-  repository QA.
+- Signing owner: `ООО "КУБ"`.
+- Identity creation/final rotation date: 2026-08-26; organization `ООО КУБ`
+  and country `RU`.
+- Exact certificate expiry: 2051-08-26. The controller verified the PKCS12
+  validity is at least 25 years without exposing certificate details.
+- The encrypted local backup opens and byte-matches the primary identity. The
+  private directory ACL is protected and limited to the current owner plus
+  `SYSTEM`; an external off-device backup remains pending.
+- The established PKCS12 same-password compatibility ruling remains in force;
+  the tracked build contract still consumes separate store/key variables and
+  no password value is recorded in Git.
 - Keystore, passwords, Firebase client input and any backup remain ignored and
   outside Git. Tracked-file guards found no keystore, signing env,
   `google-services.json`, private-key payload, service-role JWT or raw FCM
@@ -180,7 +182,7 @@ pnpm.cmd android:open
   restore, camera/photo/video/video-circle/voice, media picker/upload/quality/
   playback, geolocation, large-chat scrolling and message-footer stability
   remain manual authenticated QA gates.
-- Play Console app creation, external encrypted-backup verification,
+- Play Console app creation, the external off-device encrypted backup,
   store-listing artwork and final release screenshots remain pending.
 
 ## Android QA

@@ -408,7 +408,15 @@ test.describe("LETSCUBE visual style and layout", () => {
     });
     test.skip(!before, "Could not capture a visible message anchor");
 
+    await page.route("**/rest/v1/messages**", async (route) => {
+      const createdAtFilter = new URL(route.request().url()).searchParams.get("created_at");
+      if (createdAtFilter?.startsWith("lt.")) {
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      }
+      await route.continue();
+    });
     await scrollContainer.evaluate((node) => {
+      node.dispatchEvent(new WheelEvent("wheel", { deltaY: -120, bubbles: true, cancelable: true }));
       node.dispatchEvent(new Event("scroll", { bubbles: true }));
     });
     await expect(scrollContainer).toHaveAttribute("data-loading-older", "true", { timeout: 5_000 });

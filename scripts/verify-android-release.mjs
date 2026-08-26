@@ -152,15 +152,16 @@ function verifyCertificateAssociation(assetLinksPath, fingerprint) {
     throw new Error("Digital Asset Links association is invalid.");
   }
 
-  const associated = Array.isArray(document) && document.some((statement) => {
-    const target = statement?.target;
-    return Array.isArray(statement?.relation)
-      && statement.relation.length === 1
-      && statement.relation[0] === AUTHORIZING_RELATION
-      && target?.package_name === EXPECTED_APPLICATION_ID
-      && Array.isArray(target.sha256_cert_fingerprints)
-      && target.sha256_cert_fingerprints.some((candidate) => normalizeFingerprint(candidate) === fingerprint);
-  });
+  const statement = Array.isArray(document) && document.length === 1 ? document[0] : null;
+  const target = statement?.target;
+  const associated = Array.isArray(statement?.relation)
+    && statement.relation.length === 1
+    && statement.relation[0] === AUTHORIZING_RELATION
+    && target?.namespace === "android_app"
+    && target.package_name === EXPECTED_APPLICATION_ID
+    && Array.isArray(target.sha256_cert_fingerprints)
+    && target.sha256_cert_fingerprints.length === 1
+    && normalizeFingerprint(target.sha256_cert_fingerprints[0]) === fingerprint;
   if (!associated) {
     throw new Error("Release APK certificate does not match Digital Asset Links association.");
   }

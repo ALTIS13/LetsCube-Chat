@@ -90,6 +90,11 @@ Current implementation status:
   for the signed candidate. Consequently, real foreground/background/killed
   delivery, system-card behavior and notification tap routing remain explicit
   release gates rather than Task 4 passes.
+- Fix round 1/5 used one bounded credential submission on the official-GMS
+  Nothing baseline without reading field values back. The login form remained
+  after 25 seconds and no app-shell/chat marker appeared, so no second attempt
+  was made and no signed-candidate FCM registration or delivery claim was
+  added. Safe permission and callback lifecycle checks still passed.
 - Realme RMX3830 is a custom microG device. It may provide optional UI/media
   coverage but must never count toward FCM acceptance.
 
