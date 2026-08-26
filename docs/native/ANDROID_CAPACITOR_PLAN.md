@@ -1,7 +1,7 @@
 # Android Capacitor Plan
 
-Target: produce an Android debug APK first, then an internal-test AAB/APK,
-without changing KUB web behavior.
+Target: maintain a verified signed Android production candidate without
+changing KUB web behavior or publishing before the external release gates pass.
 
 ## Phase 0: prerequisites
 
@@ -25,12 +25,14 @@ Current repository groundwork:
 - App id: `com.kub.messenger`
 - App name: `LETSCUBE`
 - Web assets directory: `artifacts/kub/dist/public`
-- Android version: `versionCode 1`, `versionName 0.1.0`
+- Android version: `versionCode 3`, `versionName 0.1.2`
 - Reproducible icon/splash source: `assets/logo.svg`
 - Android asset generation script: `pnpm.cmd android:assets`
 - Android sync script: `pnpm.cmd android:sync`
 - Android Studio open script: `pnpm.cmd android:open`
 - Debug build script: `pnpm.cmd android:build:debug`
+- Signed production build script: `pnpm.cmd android:build:production:release`
+- Signed APK verifier: `pnpm.cmd android:verify:release -- <apk>`
 
 The asset/build sync flow is:
 
@@ -40,8 +42,9 @@ cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run b
 pnpm.cmd android:sync
 ```
 
-Use Android Studio for emulator/device runs and debug APK inspection. Release
-signing is intentionally not configured in this stage.
+Use Android Studio for emulator/device runs and debug APK inspection. Signed
+production builds must load signing inputs only through the ignored
+operator-owned wrapper; never place signing material in the repository.
 
 ## Web asset model
 
@@ -51,10 +54,11 @@ offline, and store-review implications are reviewed.
 
 ## Deep links and auth
 
-Configure both:
-
-- HTTPS app links, for example `https://kub.example.com/auth/callback`;
-- optional custom scheme fallback, for example `kub://auth/callback`.
+The canonical Android callback is the exact HTTPS route
+`https://app.letscube.ru/auth/callback`. The manifest accepts that host and
+path only. Explicit-component callback tests run before production domain
+verification so an undeployed `assetlinks.json` cannot be mistaken for a
+verified public App Link.
 
 Supabase Auth URL configuration must include the chosen callback URLs. The
 frontend must continue to use dynamic origin where possible and must not
@@ -91,17 +95,47 @@ configuration remain local/server-only and are not committed. See
 ## Release signing
 
 The self-hosted release catalog is active at
-`https://api.letscube.ru/releases/v1/android/stable.json`. The current
-`0.1.0` production-configured debug APK is published only for internal QA;
-public release status still requires the signing steps below.
+`https://api.letscube.ru/releases/v1/android/stable.json`, but its published
+`0.1.0` APK remains the internal/debug build. The signed `0.1.2` build `3`
+candidate is local and unpublished.
 
-- Create a release keystore outside the repo.
-- Store keystore and passwords in a password manager or CI secret store.
-- Build an internal release before any Play Store submission.
-- Document the app id, signing owner, keystore backup location, and rotation
-  plan without committing values.
-- The repo-level Android ignore rules exclude local keystore and
-  `google-services.json` files from accidental commits.
+- App id: `com.kub.messenger`.
+- Signing owner: the controller-managed LETSCUBE Android release operator.
+- Identity creation/final rotation date: 2026-08-26; organization `ООО КУБ`,
+  country `RU`, with the contract requiring at least 25-year validity.
+- Exact certificate expiry remains in the private signing inventory and was
+  not independently inspected under the Task 4 redaction boundary. The release
+  owner must add/confirm that date before publication.
+- An encrypted backup outside the worktree is required. Its existence and
+  recovery remain operator-controlled external gates and are not asserted by
+  repository QA.
+- Keystore, passwords, Firebase client input and any backup remain ignored and
+  outside Git. Tracked-file guards found no keystore, signing env,
+  `google-services.json`, private-key payload, service-role JWT or raw FCM
+  token.
+- The old debug signature cannot upgrade to the release identity. Existing
+  debug users require one clean reinstall to enter the permanent release
+  signing chain.
+
+Preserved ignored artifacts:
+
+- baseline `0.1.1` build `2`: `.local/release-baseline/letscube-0.1.1-build-2.apk`
+  (6,513,186 bytes, SHA-256
+  `b1f21189c62d259a8f105bab33cc613f47a9424a23cb6abf38016f38249f2442`)
+  and `.local/release-baseline/letscube-0.1.1-build-2.aab` (6,150,057 bytes,
+  SHA-256
+  `431eaac6d25e4cc1539354e274fccddb56c526ccd0a972b63e5e8a4da06f7a95`);
+- final `0.1.2` build `3`: `.local/release-final/letscube-0.1.2-build-3.apk`
+  (6,513,202 bytes, SHA-256
+  `b14bffa43edbfbde5b64f262b63f56a98ab2866cd485fef36bf9a3adf82851a3`)
+  and `.local/release-final/letscube-0.1.2-build-3.aab` (6,150,078 bytes,
+  SHA-256
+  `3a0e7739d0d6aae76c6debc09a8a57c15d852d549734fd492209382bb1540dbf`).
+
+The baseline and final APKs generated byte-identical Digital Asset Links JSON.
+The tracked document SHA-256 is
+`b36206f44ae852f458ba1077d8ec8105b3906baa0341a0deec7b1a05da879777`;
+the certificate value itself is intentionally not duplicated in this plan.
 
 ## Manual Android Studio steps
 
@@ -124,15 +158,30 @@ pnpm.cmd android:open
 8. Test camera, microphone, file picker, auth, Realtime, and media playback on
    a real device before considering release work.
 
-## Known MVP limitations
+## Signed candidate QA status
 
-- Native push/FCM has Android 16 Google Play emulator coverage and Android 15
-  official-GMS physical coverage for registration, foreground/background,
-  killed-process delivery and exact-message tap routing. Android 13/14 and a
-  broader vendor/device matrix remain.
-- Android app links/custom scheme are not finalized.
-- Release signing/AAB is not configured.
-- Store-listing artwork and final release screenshots are still pending.
+- Google Play emulators on Android 13, 14 and 16 passed fresh signed install,
+  version, notification permission, portrait, foreground/background,
+  force-stop/relaunch, offline/reconnect and explicit-component callback
+  routing. Each emulator ran headless and was shut down before the next boot.
+- Android 15 Nothing A063 with official Google Play Services passed the clean
+  baseline install, same-key `adb install -r` upgrade, package-data sentinel
+  retention, notification permission, portrait and warm/cold/killed callback
+  routing. Malformed paths and foreign hosts did not navigate or crash.
+- QA authentication could not be proven and no further credential login was
+  attempted. Account session, chats and local notification registration
+  retention are therefore unproven; only package-data preservation is claimed.
+- Realme RMX3830 on Android 15 retained its existing `0.1.0/1` debug package,
+  correctly rejected the signed replacement and passed a safe launch/portrait
+  check. Its custom microG stack is excluded from FCM acceptance.
+- Production-domain verification and normal HTTPS recovery routing remain
+  pending until the tracked assetlinks document is deployed after review.
+- Real FCM delivery/tap routing for this signed candidate, login/logout/session
+  restore, camera/photo/video/video-circle/voice, media picker/upload/quality/
+  playback, geolocation, large-chat scrolling and message-footer stability
+  remain manual authenticated QA gates.
+- Play Console app creation, external encrypted-backup verification,
+  store-listing artwork and final release screenshots remain pending.
 
 ## Android QA
 

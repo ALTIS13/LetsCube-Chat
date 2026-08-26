@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.kub.messenger",
+      "sha256_cert_fingerprints": [
+        "AC:82:49:64:7E:3E:32:B3:2E:7D:BA:28:3C:6C:7B:C8:35:F2:93:40:1A:3C:F8:21:15:90:1C:E7:4F:4A:08:39"
+      ]
+    }
+  }
+]

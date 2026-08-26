@@ -9,6 +9,7 @@ import {
   parseEnvText,
 } from "./build-android-production.mjs";
 import { readAndroidReleaseMetadata } from "./android-release-metadata.mjs";
+import { resolveAndroidTools } from "./verify-android-release.mjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const root = resolve(dirname(scriptPath), "..");
@@ -43,6 +44,10 @@ function run(command, args, env, cwd = root) {
 }
 
 export { run as runReleaseCommand };
+
+export function resolveAndroidReleaseCommands(androidHome = process.env.ANDROID_HOME) {
+  return resolveAndroidTools(androidHome);
+}
 
 function bundleContainsValue(directory, value) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -93,6 +98,7 @@ async function main() {
   }
 
   const releaseMetadata = readAndroidReleaseMetadata(root);
+  const tools = resolveAndroidReleaseCommands();
   const source = parseEnvText(readFileSync(envPath, "utf8"));
   const publicEnv = collectPublicAndroidBuildEnv(source, {
     commit: run("git", ["rev-parse", "--short=12", "HEAD"], process.env),
@@ -113,11 +119,11 @@ async function main() {
 
   const apkPath = resolve(root, "android/app/build/outputs/apk/release/app-release.apk");
   const aabPath = resolve(root, "android/app/build/outputs/bundle/release/app-release.aab");
-  run("apksigner", ["verify", "--verbose", apkPath], env);
+  run(tools.apksigner, ["verify", "--verbose", apkPath], env);
   const actualMetadata = {
-    applicationId: run("apkanalyzer", ["manifest", "application-id", apkPath], env),
-    versionName: run("apkanalyzer", ["manifest", "version-name", apkPath], env),
-    versionCode: run("apkanalyzer", ["manifest", "version-code", apkPath], env),
+    applicationId: run(tools.apkanalyzer, ["manifest", "application-id", apkPath], env),
+    versionName: run(tools.apkanalyzer, ["manifest", "version-name", apkPath], env),
+    versionCode: run(tools.apkanalyzer, ["manifest", "version-code", apkPath], env),
   };
   verifyAndroidReleaseArtifactMetadata(actualMetadata, {
     applicationId: expectedApplicationId,

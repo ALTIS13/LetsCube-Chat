@@ -21,8 +21,8 @@ const { verifyAndroidReleaseArtifactMetadata } = releaseBuilder;
 
 test("Android release metadata has the canonical production version", () => {
   assert.deepEqual(readAndroidReleaseMetadata(root), {
-    versionName: "0.1.1",
-    versionCode: 2,
+    versionName: "0.1.2",
+    versionCode: 3,
   });
 });
 
@@ -143,6 +143,29 @@ test("Android release builder preserves Windows command options containing equal
     releaseBuilder.runReleaseCommand("git", ["rev-parse", "--short=12", "HEAD"], process.env, root),
     expected.stdout.trim(),
   );
+});
+
+test("Android release builder resolves inspection tools from the Android SDK", () => {
+  const fixtureRoot = mkdtempSync(resolve(tmpdir(), "letscube-android-sdk-"));
+  const buildTools = resolve(fixtureRoot, "build-tools/36.0.0");
+  const commandLineTools = resolve(fixtureRoot, "cmdline-tools/latest/bin");
+  const executableSuffix = process.platform === "win32" ? ".bat" : "";
+  const apksigner = resolve(buildTools, `apksigner${executableSuffix}`);
+  const apkanalyzer = resolve(commandLineTools, `apkanalyzer${executableSuffix}`);
+  mkdirSync(buildTools, { recursive: true });
+  mkdirSync(commandLineTools, { recursive: true });
+  writeFileSync(apksigner, "");
+  writeFileSync(apkanalyzer, "");
+
+  try {
+    assert.equal(typeof releaseBuilder.resolveAndroidReleaseCommands, "function");
+    assert.deepEqual(releaseBuilder.resolveAndroidReleaseCommands(fixtureRoot), {
+      apksigner,
+      apkanalyzer,
+    });
+  } finally {
+    rmSync(fixtureRoot, { force: true, recursive: true });
+  }
 });
 
 test("Android release artifact verification rejects metadata drift", () => {

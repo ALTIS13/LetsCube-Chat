@@ -4,9 +4,33 @@ import { tmpdir } from "node:os";
 import { basename, resolve } from "node:path";
 import test from "node:test";
 
-import { resolveAndroidTools, verifyAndroidRelease } from "../../scripts/verify-android-release.mjs";
+import * as releaseVerifier from "../../scripts/verify-android-release.mjs";
+
+const { resolveAndroidTools, verifyAndroidRelease } = releaseVerifier;
 
 const fingerprint = "11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00";
+const approvedExportedManifest = '<manifest><application android:debuggable="false">'
+  + '<activity android:name="com.kub.messenger.MainActivity" android:exported="true" />'
+  + '<receiver android:name="com.google.firebase.iid.FirebaseInstanceIdReceiver" android:exported="true" android:permission="com.google.android.c2dm.permission.SEND" />'
+  + '<receiver android:name="androidx.profileinstaller.ProfileInstallReceiver" android:exported="true" android:permission="android.permission.DUMP" />'
+  + "</application></manifest>";
+const approvedPermissions = [
+  "android.permission.ACCESS_COARSE_LOCATION",
+  "android.permission.ACCESS_FINE_LOCATION",
+  "android.permission.ACCESS_NETWORK_STATE",
+  "android.permission.CAMERA",
+  "android.permission.INTERNET",
+  "android.permission.MODIFY_AUDIO_SETTINGS",
+  "android.permission.POST_NOTIFICATIONS",
+  "android.permission.READ_EXTERNAL_STORAGE",
+  "android.permission.READ_MEDIA_AUDIO",
+  "android.permission.READ_MEDIA_IMAGES",
+  "android.permission.READ_MEDIA_VIDEO",
+  "android.permission.RECORD_AUDIO",
+  "android.permission.WAKE_LOCK",
+  "com.google.android.c2dm.permission.RECEIVE",
+  "com.kub.messenger.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+];
 
 function createFixture() {
   const directory = mkdtempSync(resolve(tmpdir(), "letscube-release-verifier-"));
@@ -28,21 +52,8 @@ function createRunner(overrides = {}) {
     "manifest version-name": "0.1.1",
     "manifest version-code": "2",
     "manifest debuggable": "false",
-    "manifest print": '<manifest><application android:debuggable="false"><activity android:name="com.kub.messenger.MainActivity" android:exported="true" /></application></manifest>',
-    "manifest permissions": [
-      "android.permission.ACCESS_COARSE_LOCATION",
-      "android.permission.ACCESS_FINE_LOCATION",
-      "android.permission.ACCESS_NETWORK_STATE",
-      "android.permission.CAMERA",
-      "android.permission.INTERNET",
-      "android.permission.MODIFY_AUDIO_SETTINGS",
-      "android.permission.POST_NOTIFICATIONS",
-      "android.permission.READ_EXTERNAL_STORAGE",
-      "android.permission.READ_MEDIA_AUDIO",
-      "android.permission.READ_MEDIA_IMAGES",
-      "android.permission.READ_MEDIA_VIDEO",
-      "android.permission.RECORD_AUDIO",
-    ].join("\n"),
+    "manifest print": approvedExportedManifest,
+    "manifest permissions": approvedPermissions.join("\n"),
     ...overrides,
   };
   return {
@@ -55,6 +66,61 @@ function createRunner(overrides = {}) {
     },
   };
 }
+
+test("Android release verifier accepts pnpm's argument separator", () => {
+  assert.equal(typeof releaseVerifier.readAndroidReleaseCliApk, "function");
+  assert.equal(releaseVerifier.readAndroidReleaseCliApk(["--", "candidate.apk"]), "candidate.apk");
+  assert.equal(releaseVerifier.readAndroidReleaseCliApk(["candidate.apk"]), "candidate.apk");
+  assert.throws(() => releaseVerifier.readAndroidReleaseCliApk(["--"]), /Usage/);
+});
+
+test("Android release verifier accepts only the protected exported dependency receivers", () => {
+  const fixture = createFixture();
+  const options = {
+    assetLinksPath: fixture.assetLinksPath,
+    expectedMetadata: { applicationId: "com.kub.messenger", versionName: "0.1.1", versionCode: 2 },
+    tools: { apksigner: "apksigner", apkanalyzer: "apkanalyzer" },
+  };
+
+  try {
+    assert.doesNotThrow(() => verifyAndroidRelease(fixture.apkPath, {
+      ...options,
+      run: createRunner({ "manifest print": approvedExportedManifest }).run,
+    }));
+    assert.throws(() => verifyAndroidRelease(fixture.apkPath, {
+      ...options,
+      run: createRunner({
+        "manifest print": approvedExportedManifest.replace(' android:permission="android.permission.DUMP"', ""),
+      }).run,
+    }), /exported components do not match/);
+  } finally {
+    rmSync(fixture.directory, { force: true, recursive: true });
+  }
+});
+
+test("Android release verifier accepts only the required FCM permission additions", () => {
+  const fixture = createFixture();
+  const options = {
+    assetLinksPath: fixture.assetLinksPath,
+    expectedMetadata: { applicationId: "com.kub.messenger", versionName: "0.1.1", versionCode: 2 },
+    tools: { apksigner: "apksigner", apkanalyzer: "apkanalyzer" },
+  };
+
+  try {
+    assert.doesNotThrow(() => verifyAndroidRelease(fixture.apkPath, {
+      ...options,
+      run: createRunner({ "manifest permissions": approvedPermissions.join("\n") }).run,
+    }));
+    assert.throws(() => verifyAndroidRelease(fixture.apkPath, {
+      ...options,
+      run: createRunner({
+        "manifest permissions": [...approvedPermissions, "android.permission.QUERY_ALL_PACKAGES"].join("\n"),
+      }).run,
+    }), /permissions do not match the approved contract/);
+  } finally {
+    rmSync(fixture.directory, { force: true, recursive: true });
+  }
+});
 
 test("Android release verifier runs signature and manifest gates before returning a redacted summary", () => {
   const fixture = createFixture();
@@ -204,7 +270,7 @@ test("Android release verifier requires a valid authorizing Asset Links statemen
   }
 });
 
-test("Android release verifier requires exactly one exported MainActivity", () => {
+test("Android release verifier requires the exact protected exported component contract", () => {
   const fixture = createFixture();
   const options = {
     assetLinksPath: fixture.assetLinksPath,

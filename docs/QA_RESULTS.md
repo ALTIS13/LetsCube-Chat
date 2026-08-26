@@ -1897,3 +1897,93 @@ Recurring tasks roadmap note:
   The deployed adapter hash matches the validated local file, the Edge runtime
   is healthy, and unsigned gateway/hook probes both fail closed with HTTP 401.
   Automated validation did not send a real OTP.
+
+# 2026-08-26 - Android signed production candidate 0.1.2/3
+
+- The final permanent unpublished identity was created outside Git under the
+  controller-managed signing boundary with organization `ООО КУБ`, country
+  `RU` and the required long-lived validity contract. Signing values,
+  certificate details and private inputs were never printed or copied into the
+  worktree. Exact expiry and encrypted-backup recovery remain release-owner
+  confirmations before publication.
+- Signed baseline artifacts were preserved under ignored local storage:
+  `.local/release-baseline/letscube-0.1.1-build-2.apk` is 6,513,186 bytes with
+  SHA-256
+  `b1f21189c62d259a8f105bab33cc613f47a9424a23cb6abf38016f38249f2442`;
+  `.local/release-baseline/letscube-0.1.1-build-2.aab` is 6,150,057 bytes with
+  SHA-256
+  `431eaac6d25e4cc1539354e274fccddb56c526ccd0a972b63e5e8a4da06f7a95`.
+- Final ignored artifacts are
+  `.local/release-final/letscube-0.1.2-build-3.apk` (6,513,202 bytes, SHA-256
+  `b14bffa43edbfbde5b64f262b63f56a98ab2866cd485fef36bf9a3adf82851a3`)
+  and `.local/release-final/letscube-0.1.2-build-3.aab` (6,150,078 bytes,
+  SHA-256
+  `3a0e7739d0d6aae76c6debc09a8a57c15d852d549734fd492209382bb1540dbf`).
+  The exact signed build wrapper and final release verifier both passed for
+  version `0.1.2`, build `3`.
+- The tracked `artifacts/kub/public/.well-known/assetlinks.json` was generated
+  from the signed baseline. Regeneration from the final APK was byte-identical
+  to both baseline and tracked copies; document SHA-256 is
+  `b36206f44ae852f458ba1077d8ec8105b3906baa0341a0deec7b1a05da879777`.
+  No certificate value is repeated in this QA record. The document is not
+  deployed and production domain verification was not claimed.
+- Nothing A063 `P212C6000159`, Android 15/API 35, official Google Play
+  Services: the old `0.1.0/1` debug package rejected the release-signed
+  baseline with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. After the authorized
+  package-only uninstall, the signed `0.1.1/2` baseline installed cleanly.
+- Earlier UIAutomator field attempts could not prove credential entry. The
+  final bounded CDP/helper recovery returned `HELPER_UNAVAILABLE`; no further
+  credential or UIAutomator login attempt was made. Authenticated session,
+  chat and local notification registration retention are explicitly unproven.
+- A non-sensitive baseline sentinel at
+  `/sdcard/Android/data/com.kub.messenger/files/task4/baseline-0.1.1-build-2.sentinel`
+  retained the exact `inode:size:mtime` metadata
+  `673040:0:1787699412` after direct `adb install -r` of `0.1.2/3`. Package
+  version advanced to `0.1.2/3`, proving same-key package-data preservation
+  without substituting that result for authenticated session retention.
+- The final Nothing callback matrix passed using explicit-component intents:
+  warm delivery retained the process, cold delivery started a new process, and
+  killed-process delivery relaunched `MainActivity`. A malformed callback path
+  and a foreign host retained the login route, emitted no callback marker and
+  did not crash. Raw callback URLs and payload values were suppressed.
+- Nothing safe lifecycle checks passed: release package identity/permission
+  harness, notification permission granted, portrait orientation, foreground
+  launch, background process retention, force-stop and killed relaunch.
+  Physical network toggling was skipped to avoid disrupting the user device.
+- Google Play emulators ran sequentially, hidden/headless, and each was shut
+  down before the next boot. LETSCUBE_API_33 (API 33), LETSCUBE_API_34 (API 34)
+  and Medium_Phone_API_36 (API 36) each passed Play-image identity, fresh
+  `0.1.2/3` install, notification permission, foreground launch, portrait,
+  explicit-component callback routing, offline/reconnect, background process,
+  force-stop and killed relaunch. WebView login state was deliberately not
+  inspected after the bounded login policy.
+- Realme RMX3830 `0C73A18I22105AB1`, Android 15/API 35, custom microG: the
+  signed candidate correctly failed to replace the existing debug `0.1.0/1`
+  package, which remained unchanged. Wake/launch reached `MainActivity`, the
+  process ran and portrait passed. No uninstall or data clear occurred. This
+  device is excluded from FCM acceptance.
+- Real signed-candidate FCM registration/delivery/tap routing was skipped
+  because authentication/token registration could not be proven. Camera,
+  photo, regular video, video-circle, voice, media picker/upload/quality/
+  playback, geolocation, authenticated login/logout/session restore,
+  large-chat scrolling and message-footer stability were skipped because they
+  require authenticated/manual interaction that was not safe to automate.
+- Repository validation passed `git diff --check`, Kub typecheck, production
+  Vite build, release catalog tests 27/27, database type drift, RLS smoke,
+  `android:sync`, the signed wrapper build, final APK verifier and Android unit
+  tests 34/34. The build retains advisory sourcemap/dynamic-import/chunk-size
+  warnings. Authenticated smoke exited 0 with 5/5 skipped.
+- The exact targeted Playwright suite first found no local server: callback
+  cases failed 5/5 with connection refusal and 65 tests skipped. With a bounded
+  local server, the browser callback contract passed 5/5; 30 distribution/auth
+  shell assertions failed because their expected menu/brand locators did not
+  materialize, and 35 deeper authenticated cases skipped. No additional
+  credential login was attempted, so this remains an explicit validation
+  concern rather than a pass.
+- Tracked-file guards found zero keystores, signing env files,
+  `google-services.json`, production-local env files, PEM payloads, long JWT
+  candidates, raw FCM-token candidates or literal signing-secret assignments.
+  The sole private-key header text is a validation literal in the push sender,
+  with no embedded key payload. No production deploy, catalog publish, Coolify
+  change, Play submission, push, SQL/schema/RLS, iOS/PWA or Windows change was
+  performed.

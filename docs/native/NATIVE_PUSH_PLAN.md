@@ -77,12 +77,21 @@ Current implementation status:
   the repository contains no private key or service-account JSON.
 - The self-hosted Edge Function sends FCM HTTP v1 messages from the native
   outbox while preserving the separate browser Web Push path.
-- Physical and emulator Android QA confirmed registration, message/task
-  delivery semantics, category suppression, grouping, background and
-  killed-process delivery, plus exact-message notification tap routing. An
-  Android 15 Nothing A063 with official Google Play Services also confirmed
-  foreground in-app delivery without a duplicate OS card. Android 13/14 and a
-  broader vendor/device matrix remain release gates.
+- Earlier Android foundation QA confirmed registration, message/task delivery
+  semantics, category suppression, grouping, background and killed-process
+  delivery, plus exact-message notification tap routing. That evidence is not
+  promoted to acceptance for the new signed candidate without an authenticated
+  registration on that package.
+- The signed `0.1.2/3` candidate passed the Android 13/14/16 Google Play
+  emulator notification-permission and lifecycle checks. The Android 15
+  Nothing A063 official-GMS device also passed permission grant, foreground,
+  background, force-stop and killed relaunch checks after same-key upgrade.
+- Authenticated session retention and FCM token registration were not proven
+  for the signed candidate. Consequently, real foreground/background/killed
+  delivery, system-card behavior and notification tap routing remain explicit
+  release gates rather than Task 4 passes.
+- Realme RMX3830 is a custom microG device. It may provide optional UI/media
+  coverage but must never count toward FCM acceptance.
 
 ## iOS
 

@@ -1,6 +1,6 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-08-21.
+Status: active production-hardening tracker, updated 2026-08-26.
 
 This file is the working source of truth for the next production stages. Before starting any new production task, read this file first, then update the relevant checkboxes/status when work is completed, blocked, or intentionally deferred.
 
@@ -24,7 +24,7 @@ Legend:
 4. `[x]` Priority 4 - Operator security observability.
 5. `[~]` Priority 5 - Installed web/PWA production shell. iPhone/iPad-specific implementation and QA are externally owned.
 6. `[!]` Priority 6 - Monitoring and self-hosted Sentry.
-7. `[~]` Native/mobile packaging resumed: Windows Tauri secure startup and signed updater are complete; Android release signing and the remaining platform release gates stay active.
+7. `[~]` Native/mobile packaging resumed: Windows Tauri secure startup and signed updater are complete; Android now has an unpublished signed `0.1.2/3` candidate, with authenticated/FCM/media/domain-verification and publication gates still active.
 
 ## Next Execution Queue
 
@@ -49,7 +49,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 4. `[x]` Added hybrid media upload progress, retry and current-session resume. Files above 6 MiB use TUS with exact 6 MiB chunks and bounded retries; smaller files keep the standard Storage path. Cancellation terminates partial uploads, retry keeps a stable object path, and chat/composer scopes prevent delayed files, recordings, location results or failed captions from crossing into another chat. A disposable 7 MiB production object was uploaded, read back at the exact size and deleted.
 5. `[!]` Keep iPhone/iPad Home Screen as the only PWA install target. Android browsers use the APK catalog and Windows browsers use the EXE catalog. Further iPhone/iPad PWA implementation and physical QA are owned by a separate agent and are out of scope for this execution stream.
 6. `[!]` Keep monitoring/Sentry and backup restore rehearsal deferred until the user confirms the backup environment and restore-test window.
-7. `[~]` Complete the Capacitor Android release candidate. LETSCUBE `0.1.0` production-configured debug APK is published through the self-hosted release catalog with verified size/SHA parity. Remaining: release signing/AAB, app links/recovery callback and broader signed-package QA.
+7. `[~]` Complete the Capacitor Android release candidate. The unpublished `0.1.2/3` APK/AAB is signed and verified; baseline-to-final same-key package-data retention, explicit warm/cold/killed callbacks, malformed/foreign rejection, Android 13/14/16 Google Play emulators and the Android 15 official-GMS Nothing lifecycle matrix passed. Authenticated session/chat/notification-registration retention was not proven, and real signed-candidate FCM, media/geolocation/large-chat QA, production App Link verification, encrypted-backup confirmation, Play setup and catalog publication remain external gates. The currently published `0.1.0` catalog APK remains internal/debug.
 8. `[x]` Replace the retired Electron spike with a clean-profile Tauri 2 Windows client. The one-window secure startup, tray/single-instance behavior, Stable/Test channels and signed Tauri updater are complete. Physical `0.2.0 -> 0.2.1`, `0.2.1 -> 0.2.2`, `0.2.2 -> 0.2.3`, `0.2.7 -> 0.2.8`, `0.2.8 -> 0.2.9` and `0.2.9 -> 0.2.10` production-update rehearsals passed without losing the authenticated profile. The `0.2.10/14` release keeps the hardened startup fix, restores Yandex SmartCaptcha compatibility in WebView2 and replaces the legacy venue subtitle embedded in the startup SVG with the neutral LETSCUBE wordmark. A successful version change shows a compact four-second confirmation and then frees the top-right area for future call controls.
 9. `[~]` Complete the external Windows release gates. LETSCUBE `0.2.10/14` retains the exact-origin native Windows toast/history/action contract: one stable Toast Header per chat, up to five unread message cards, exact per-message routing from fresh and historical cards, independent routing for other chats, and chat-scoped history removal after reading. Its reproducible updater wrapper reads the existing encrypted signing identity only from ignored local files and fails if the matching public key changes. Stable download plus Stable/Test updater catalogs expose the same verified immutable installer. A fail-closed Authenticode path, provider-isolated WNS sender, sanitized Windows matrix and native offline/long-session suite are prepared. A second fail-closed tool validates Microsoft package metadata, requires the exact PFN in its generated client contract, reports all missing metadata in one pass, renders matching sparse-package/executable manifests and builds a local unsigned `MakeAppx` validation artifact without changing the internal NSIS path. The live Supabase schema was audited read-only and the `windows/wns` proposal passed a production-schema transaction rehearsal with full rollback; it remains unapplied until a real identified client can acquire a WNS channel. Remaining external work is the real Microsoft package identity/publisher/PFN/Entra mapping, production signing and SmartScreen reputation, Windows 10 and alternate WebView2 device runs, Windows App SDK channel/COM registration, proposal application, server secrets and true killed-process physical delivery.
 10. `[x]` Harden direct-email support notifications. New inbound email tickets now create the same PII-free `ticket_created` event as web tickets, eligible pool operators receive one creation notification, and later requester replies notify the pool while the ticket remains unassigned. The first email message does not create a duplicate requester notification. The production migration was applied after a verified dump and passed a transactional live-DB fanout smoke.
@@ -255,10 +255,16 @@ Scope:
 - `[ ]` Verify real browser/PWA push delivery and notification click routing against a live installed client.
 - `[x]` Verify automated iOS manifest injection and confirm Android/Windows browsers are not offered PWA installation across all five Playwright viewports.
 - `[ ]` Preserve full messenger functionality: auth, chats, media, camera, voice, video-circle, tasks, search, notifications.
-- `[x]` Keep release signing material out of Git; the published `0.1.0` APK is explicitly internal/debug until signed release packaging is completed.
+- `[x]` Keep release signing material out of Git. The published `0.1.0` APK remains explicitly internal/debug; the verified signed `0.1.2/3` candidate and its AAB are preserved only under ignored local storage until release review permits publication.
 
 Current baseline:
 
+- The Android `0.1.2/3` signed candidate is unpublished. Its baseline and final
+  APKs produced byte-identical tracked Digital Asset Links JSON, while the old
+  debug signature correctly failed in-place upgrade. The official-GMS Nothing
+  device retained a non-sensitive app-local sentinel through the same-key
+  upgrade, but authentication/session retention and signed-candidate FCM were
+  not proven. Production domain verification waits for a later approved deploy.
 - `artifacts/kub/index.html` title and Apple web app title are `LETSCUBE`.
 - `artifacts/kub/public/manifest.json` uses `LETSCUBE`, `display: standalone`, and `display_override` fallbacks.
 - The iPhone home-screen icon uses a dedicated 180x180 LETSCUBE club asset; 192/512/maskable PWA icons use the same official mark, and the service worker precaches the complete icon set.

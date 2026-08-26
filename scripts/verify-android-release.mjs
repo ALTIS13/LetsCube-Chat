@@ -9,7 +9,11 @@ import { readAndroidReleaseMetadata } from "./android-release-metadata.mjs";
 const scriptPath = fileURLToPath(import.meta.url);
 const root = resolve(dirname(scriptPath), "..");
 const EXPECTED_APPLICATION_ID = "com.kub.messenger";
-const EXPECTED_EXPORTED_COMPONENTS = ["activity:com.kub.messenger.MainActivity"];
+const EXPECTED_EXPORTED_COMPONENTS = [
+  "activity:com.kub.messenger.MainActivity:",
+  "receiver:androidx.profileinstaller.ProfileInstallReceiver:android.permission.DUMP",
+  "receiver:com.google.firebase.iid.FirebaseInstanceIdReceiver:com.google.android.c2dm.permission.SEND",
+];
 const EXPECTED_PERMISSIONS = new Set([
   "android.permission.ACCESS_COARSE_LOCATION",
   "android.permission.ACCESS_FINE_LOCATION",
@@ -23,6 +27,9 @@ const EXPECTED_PERMISSIONS = new Set([
   "android.permission.READ_MEDIA_IMAGES",
   "android.permission.READ_MEDIA_VIDEO",
   "android.permission.RECORD_AUDIO",
+  "android.permission.WAKE_LOCK",
+  "com.google.android.c2dm.permission.RECEIVE",
+  "com.kub.messenger.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
 ]);
 const AUTHORIZING_RELATION = "delegate_permission/common.handle_all_urls";
 
@@ -109,8 +116,9 @@ function readExportedComponents(manifest) {
     const exported = /\bandroid:exported\s*=\s*["']true["']/.test(attributes);
     const name = attributes.match(/\bandroid:name\s*=\s*["']([^"']+)["']/)?.[1];
     if (!exported || !name) continue;
+    const permission = attributes.match(/\bandroid:permission\s*=\s*["']([^"']+)["']/)?.[1] || "";
     const normalizedName = name.startsWith(".") ? `${EXPECTED_APPLICATION_ID}${name}` : name;
-    components.push(`${match[1]}:${normalizedName}`);
+    components.push(`${match[1]}:${normalizedName}:${permission}`);
   }
   return components;
 }
@@ -210,9 +218,16 @@ export function verifyAndroidRelease(apkPath, options = {}) {
   };
 }
 
+export function readAndroidReleaseCliApk(args) {
+  const normalized = args[0] === "--" ? args.slice(1) : args;
+  if (normalized.length !== 1 || !normalized[0]) {
+    throw new Error("Usage: verify-android-release.mjs APK");
+  }
+  return normalized[0];
+}
+
 function main(args) {
-  if (args.length !== 1) throw new Error("Usage: verify-android-release.mjs APK");
-  console.log(JSON.stringify(verifyAndroidRelease(resolve(args[0]))));
+  console.log(JSON.stringify(verifyAndroidRelease(resolve(readAndroidReleaseCliApk(args)))));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === scriptPath) {
