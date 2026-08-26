@@ -95,6 +95,12 @@ Current implementation status:
   after 25 seconds and no app-shell/chat marker appeared, so no second attempt
   was made and no signed-candidate FCM registration or delivery claim was
   added. Safe permission and callback lifecycle checks still passed.
+- Fix round 2/5 built one same-key QA baseline with a temporary, uncommitted
+  WebView-debug call. Compiled bytecode contained the call, but Android 15
+  published no app devtools socket and a single bounded forward exposed zero
+  CDP targets. The credential helper was not invoked. The call was removed from
+  source and compiled final bytecode before rebuilding/verifying `0.1.2/3`, so
+  authenticated FCM registration and delivery/tap acceptance remain open.
 - Realme RMX3830 is a custom microG device. It may provide optional UI/media
   coverage but must never count toward FCM acceptance.
 

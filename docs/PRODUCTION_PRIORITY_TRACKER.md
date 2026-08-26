@@ -271,6 +271,13 @@ Current baseline:
   not leave the login form, so authenticated upgrade/FCM remain open without a
   retry. Final safe lifecycle/callback checks passed on the official-GMS
   Nothing and sequential API 33/34/36 Google Play AVDs.
+- Task 4 fix round 2/5 used the controller-approved temporary same-key QA
+  baseline, but Android 15 exposed no WebView devtools socket and the single
+  bounded CDP forward returned zero targets. The helper was not invoked. The
+  temporary call was removed from source and compiled bytecode before the real
+  final rebuild; final `0.1.2/3` is non-debuggable, strictly verified and has
+  exact same-key Asset Links parity. Authenticated physical acceptance remains
+  blocked on establishing a safe QA session.
 - `artifacts/kub/index.html` title and Apple web app title are `LETSCUBE`.
 - `artifacts/kub/public/manifest.json` uses `LETSCUBE`, `display: standalone`, and `display_override` fallbacks.
 - The iPhone home-screen icon uses a dedicated 180x180 LETSCUBE club asset; 192/512/maskable PWA icons use the same official mark, and the service worker precaches the complete icon set.

@@ -2038,3 +2038,35 @@ Recurring tasks roadmap note:
   retention, physical media, geolocation, large-chat anchoring and physical
   footer stability remain honest skips after the single login attempt failed.
   Browser large-history/footer coverage passed as recorded above.
+
+# 2026-08-26 - Android Task 4 fix round 2/5
+
+- The controller authorized one unpublished same-release-key `0.1.1/2` QA
+  baseline with a temporary `WebView.setWebContentsDebuggingEnabled(true)` call
+  solely for CDP login. The temporary `MainActivity` and version edits were
+  applied without a commit. The approved private wrapper built the production-
+  configured release APK/AAB, and compiled bytecode inspection confirmed the
+  temporary call was present before `BridgeActivity.onCreate`. The QA APK was
+  installed only on Nothing and was never copied into `.local/release-final` or
+  any publication path.
+- Nothing A063, Android 15/API 35 official GMS: the QA baseline installed
+  cleanly as `0.1.1/2`, remained Android `debuggable=false`, launched the
+  expected activity and process, but exposed no WebView devtools socket. One
+  bounded forward to the standard app-PID local-abstract socket produced zero
+  CDP targets. The ignored credential helper was therefore not invoked, no
+  credential/token/callback value was read or printed, and no alternate
+  token-bearing or logcat-based login path was attempted.
+- The temporary source and version edits were restored exactly before the
+  final build. Source scan, Git diff and compiled bytecode each found zero
+  WebView-debug enabling calls. The approved wrapper rebuilt real final
+  `0.1.2/3`; the APK reports `debuggable=false`, passes the strict release
+  verifier, and replaced the ignored final APK/AAB. Asset Links regenerated
+  from this final APK is byte-identical to the tracked and signed-baseline
+  documents. `adb install -r` returned Nothing to final `0.1.2/3`.
+- Authenticated baseline shell/chat state could not be established because the
+  Android WebView provider did not publish a reachable CDP endpoint despite the
+  compiled temporary call. Consequently, session/chat/native-notification
+  registration retention, signed-final FCM delivery/taps, media, geolocation,
+  physical large-history anchoring and physical footer stability remain
+  unproven. Per the bounded recovery ruling, this round stopped without a
+  second debugging attempt or fallback authentication mechanism.
