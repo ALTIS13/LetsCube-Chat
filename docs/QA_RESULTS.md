@@ -2070,3 +2070,55 @@ Recurring tasks roadmap note:
   physical large-history anchoring and physical footer stability remain
   unproven. Per the bounded recovery ruling, this round stopped without a
   second debugging attempt or fallback authentication mechanism.
+
+# 2026-08-26 - Android Task 4 fix round 3/5
+
+- The controller authorized a second unpublished same-key `0.1.1/2` QA
+  baseline with both the temporary WebView-debug call and
+  `android:debuggable=true`. The production/Firebase public inputs and permanent
+  release key remained unchanged. The QA artifact stayed ignored/local and was
+  never copied to a release-final, catalog or publication path.
+- On the official-GMS Nothing A063, the intentionally debuggable QA baseline
+  exposed a non-empty CDP target. The ignored helper established the private QA
+  session without printing credentials, tokens, callback fragments or user
+  content. Authenticated app shell, chat access and active native notification
+  registration were proven on the baseline.
+- All temporary source, Gradle and version edits were restored before the final
+  build. The approved wrapper rebuilt real final `0.1.2/3`; source and DEX scans
+  contain zero WebView-debug enabling calls, APK/AAB manifests are
+  non-debuggable, and the strict APK/Asset Links verifier plus AAB validation
+  passed. Final ignored APK/AAB copies match those restored-source outputs, and
+  baseline/final/tracked Asset Links remain byte-identical.
+- `adb install -r` installed final `0.1.2/3` over the authenticated baseline.
+  The authenticated session, chat access and active native notification
+  registration survived the same-key upgrade.
+- An initial missing notification card occurred while device DND was active.
+  The controller later confirmed read-only `zen_mode=0`; the DND-suppressed
+  observation is an environmental false negative and is not counted as an FCM
+  failure.
+- After DND was disabled, fresh signed-final background and killed-process
+  checks each produced a grouped `messages` system card. The killed state used
+  `am stop-app`: the app process was absent while the package remained eligible
+  for delivery. Tapping each card focused final `MainActivity`, opened the
+  exact chat/event, cleared the package card and preserved coherent delivered
+  and read synchronization. No payload text, account data or token was logged.
+- A fresh foreground event appeared and reconciled in the in-app notification
+  center. The bounded package-scoped log window did not independently prove an
+  FCM receipt, so only foreground realtime/in-app behavior is accepted;
+  foreground FCM transport remains unproven.
+- The bounded physical media run could not expose the attachment submenu
+  controls through UIAutomator. No file was selected, uploaded or sent, and no
+  camera, video or voice capture was started. The synthetic local fixture,
+  generator and device copy were deleted. Under the stop ruling, no additional
+  physical UI attempts were made: media picker/upload/quality/playback,
+  camera/photo, regular video, video-circle, voice, geolocation, physical
+  large-history anchoring and physical footer stability remain honest skips.
+- Round 1 browser regression evidence remains green and applicable because
+  round 3 changed no product source: `e2e:smoke` passed 5/5, and the targeted
+  suite passed 66 with four explicit fixture-inapplicable mobile skips. It was
+  not rerun for this documentation-only closeout.
+- Fresh closeout validation passed the strict APK/Asset Links verifier, AAB
+  structure/signature/manifest checks, focused Android unit tests 40/40, Kub
+  typecheck and repository diff/secret guards. Final cleanup left zero Task 4
+  helper processes and zero ADB forwards. No Realme, production deploy,
+  publish, push, SQL/schema/RLS, iOS/PWA or Windows operation was performed.

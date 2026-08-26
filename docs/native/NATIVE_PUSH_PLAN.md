@@ -79,17 +79,23 @@ Current implementation status:
   outbox while preserving the separate browser Web Push path.
 - Earlier Android foundation QA confirmed registration, message/task delivery
   semantics, category suppression, grouping, background and killed-process
-  delivery, plus exact-message notification tap routing. That evidence is not
-  promoted to acceptance for the new signed candidate without an authenticated
-  registration on that package.
+  delivery, plus exact-message notification tap routing. That historical
+  evidence was not promoted by itself; fix round 3 established a separate
+  authenticated registration and fresh acceptance on the signed candidate.
 - The signed `0.1.2/3` candidate passed the Android 13/14/16 Google Play
   emulator notification-permission and lifecycle checks. The Android 15
   Nothing A063 official-GMS device also passed permission grant, foreground,
   background, force-stop and killed relaunch checks after same-key upgrade.
-- Authenticated session retention and FCM token registration were not proven
-  for the signed candidate. Consequently, real foreground/background/killed
-  delivery, system-card behavior and notification tap routing remain explicit
-  release gates rather than Task 4 passes.
+- Fix round 3 established an authenticated session and active native
+  notification registration on an unpublished same-key QA baseline, then
+  proved session/chat/registration retention after direct upgrade to restored,
+  non-debuggable final `0.1.2/3`.
+- On the official-GMS Nothing candidate, background and killed-process delivery
+  produced grouped `messages` system cards. Card taps routed through final
+  `MainActivity` to the exact chat/event and completed coherent delivered/read
+  synchronization. Independent foreground FCM transport remains open: the
+  fresh event reconciled in-app, but the bounded transport log did not prove an
+  FCM receipt separately from realtime.
 - Fix round 1/5 used one bounded credential submission on the official-GMS
   Nothing baseline without reading field values back. The login form remained
   after 25 seconds and no app-shell/chat marker appeared, so no second attempt
@@ -101,6 +107,14 @@ Current implementation status:
   CDP targets. The credential helper was not invoked. The call was removed from
   source and compiled final bytecode before rebuilding/verifying `0.1.2/3`, so
   authenticated FCM registration and delivery/tap acceptance remain open.
+- Fix round 3/5 additionally enabled `android:debuggable=true` only in the
+  ignored unpublished QA baseline, allowing one bounded CDP login. All
+  temporary call/flag/version edits were restored before the final build; final
+  source and DEX have zero WebView-debug calls and final APK/AAB manifests are
+  non-debuggable. An earlier missing card while DND was active is recorded as
+  an environmental false negative. Fresh post-DND background and killed card,
+  exact-chat tap and read-sync checks passed without printing payloads or
+  tokens.
 - Realme RMX3830 is a custom microG device. It may provide optional UI/media
   coverage but must never count toward FCM acceptance.
 
