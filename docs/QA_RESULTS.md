@@ -1917,11 +1917,11 @@ Recurring tasks roadmap note:
   SHA-256
   `431eaac6d25e4cc1539354e274fccddb56c526ccd0a972b63e5e8a4da06f7a95`.
 - Final ignored artifacts are
-  `.local/release-final/letscube-0.1.2-build-3.apk` (6,513,202 bytes, SHA-256
-  `b14bffa43edbfbde5b64f262b63f56a98ab2866cd485fef36bf9a3adf82851a3`)
-  and `.local/release-final/letscube-0.1.2-build-3.aab` (6,150,078 bytes,
+  `.local/release-final/letscube-0.1.2-build-3.apk` (6,513,198 bytes, SHA-256
+  `bc5644c8b98bed23fff991ed07699e8046651040fbad6ee9b69190f1768a12ec`)
+  and `.local/release-final/letscube-0.1.2-build-3.aab` (6,150,070 bytes,
   SHA-256
-  `3a0e7739d0d6aae76c6debc09a8a57c15d852d549734fd492209382bb1540dbf`).
+  `95334654021f8ae937f14e72229b98836d8c34f053530d2c9921f7f6b87159b6`).
   The exact signed build wrapper and final release verifier both passed for
   version `0.1.2`, build `3`.
 - The tracked `artifacts/kub/public/.well-known/assetlinks.json` was generated
@@ -2122,3 +2122,43 @@ Recurring tasks roadmap note:
   typecheck and repository diff/secret guards. Final cleanup left zero Task 4
   helper processes and zero ADB forwards. No Realme, production deploy,
   publish, push, SQL/schema/RLS, iOS/PWA or Windows operation was performed.
+
+# 2026-08-26 - Android Task 4 fix round 4/5
+
+- A controller-approved unpublished same-key, same-version `0.1.2/3` QA overlay
+  temporarily enabled WebView debugging and `android:debuggable=true` only on
+  the official-GMS Nothing A063. Android had rejected the attempted `3 -> 2`
+  downgrade before changing package data, so no uninstall or data clear was
+  used. The overlay never entered the release-final, catalog, Git or publication
+  paths.
+- Bounded CDP instrumentation proved an authenticated app shell and native push
+  plugin, independent foreground FCM receipt, the corresponding unread chat
+  state, authenticated offline/reconnect signaling, a visible first-unread
+  anchor, and a bounded Capacitor geolocation result. The single synthetic FCM
+  message was soft-deleted and its listener/state helper was removed; no token,
+  credential, coordinates, payload text or user content was printed.
+- Background and killed-process grouped cards, exact-chat taps and coherent
+  delivered/read synchronization remain the signed-final evidence from fix
+  round 3 and were not repeated or promoted as round 4 results.
+- Under the controller timebox, no new physical cases were started after
+  geolocation. Media picker/upload/quality/original/playback, camera/photo,
+  regular video, video-circle, voice, no-unread bottom anchoring, fast-upward
+  scrolling, prepend anchoring, footer stability and an explicit logout/login
+  cycle remain honest physical skips. Task 4 therefore remains open.
+- Temporary `MainActivity` and Gradle changes were restored exactly. The
+  approved wrapper rebuilt final `0.1.2/3`; source and DEX contain zero WebView-
+  debug calls, the APK manifest and installed package are nondebuggable, and the
+  strict verifier passed. Canonical final APK/AAB copies match the restored-
+  source Gradle outputs, and final Asset Links remains byte-identical to the
+  baseline and tracked documents.
+- `adb install -r` replaced the QA overlay with exact final `0.1.2/3`. The
+  authenticated shell survived, `MainActivity` was focused, no login marker or
+  WebView debug socket remained, and cleanup left zero round-4 helper processes,
+  temporary files or ADB forwards. No Realme, deploy, publication, Play, push,
+  SQL/schema/RLS, iOS/PWA or Windows operation was performed.
+- Fresh closeout validation passed canonical APK/AAB parity with the restored-
+  source Gradle outputs, the focused Android unit suite 40/40, Kub typecheck,
+  strict APK/Asset Links verification, Bundletool AAB validation and manifest
+  inspection, JAR signature verification, `git diff --check` and tracked secret
+  guards. The only private-key header match is the expected PEM parser literal
+  without an embedded payload.

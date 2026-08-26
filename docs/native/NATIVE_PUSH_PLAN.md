@@ -82,10 +82,11 @@ Current implementation status:
   delivery, plus exact-message notification tap routing. That historical
   evidence was not promoted by itself; fix round 3 established a separate
   authenticated registration and fresh acceptance on the signed candidate.
-- The signed `0.1.2/3` candidate passed the Android 13/14/16 Google Play
-  emulator notification-permission and lifecycle checks. The Android 15
-  Nothing A063 official-GMS device also passed permission grant, foreground,
-  background, force-stop and killed relaunch checks after same-key upgrade.
+- The signed `0.1.2/3` candidate passed Android 13/14/16 Google Play emulator
+  notification-permission and lifecycle checks. Separately, the Android 15
+  official-GMS Nothing A063 passed its bounded physical permission, callback
+  and authenticated notification cases described below; emulator lifecycle is
+  not treated as authenticated physical coverage.
 - Fix round 3 established an authenticated session and active native
   notification registration on an unpublished same-key QA baseline, then
   proved session/chat/registration retention after direct upgrade to restored,
@@ -93,9 +94,7 @@ Current implementation status:
 - On the official-GMS Nothing candidate, background and killed-process delivery
   produced grouped `messages` system cards. Card taps routed through final
   `MainActivity` to the exact chat/event and completed coherent delivered/read
-  synchronization. Independent foreground FCM transport remains open: the
-  fresh event reconciled in-app, but the bounded transport log did not prove an
-  FCM receipt separately from realtime.
+  synchronization in fix round 3.
 - Fix round 1/5 used one bounded credential submission on the official-GMS
   Nothing baseline without reading field values back. The login form remained
   after 25 seconds and no app-shell/chat marker appeared, so no second attempt
@@ -115,6 +114,17 @@ Current implementation status:
   an environmental false negative. Fresh post-DND background and killed card,
   exact-chat tap and read-sync checks passed without printing payloads or
   tokens.
+- Fix round 4/5 used one further controller-approved same-key, same-version
+  unpublished QA overlay for bounded CDP instrumentation. An independent native
+  `pushNotificationReceived` listener observed the foreground FCM transport,
+  and the resulting unread state was visible. Authenticated offline/reconnect,
+  first-unread anchoring and bounded geolocation also passed. The synthetic
+  message and all temporary listeners/helpers were removed.
+- Final source/Gradle state was restored before rebuilding and reinstalling
+  exact nondebuggable `0.1.2/3`; the authenticated shell survived and no WebView
+  debug socket or ADB forward remained. Media/camera/regular-video/video-circle/
+  voice, remaining physical large-history/footer cases and explicit logout/login
+  remain skips, so Task 4 is still open.
 - Realme RMX3830 is a custom microG device. It may provide optional UI/media
   coverage but must never count toward FCM acceptance.
 
