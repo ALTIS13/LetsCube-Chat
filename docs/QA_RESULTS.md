@@ -2278,13 +2278,17 @@ Recurring tasks roadmap note:
   APK inspection tools receive the same sanitized tool environment. Focused
   allowlist/verifier tests passed 33/33, and fresh production debug plus signed
   release builds passed with the canonical hashes recorded above.
+- Scoped final re-review found no new Critical, Important or Minor regressions
+  and marked both the child-environment isolation and duplicate-v2 parsing
+  findings addressed. On final `HEAD`, Android/auth units passed 53/53,
+  TypeScript typecheck passed and the canonical APK passed strict verification.
 
 # 2026-08-27 - Android release build environment hardening
 
 - Final diff review identified that the Android wrappers validated an explicit
   public Vite allowlist but still inherited the parent process environment.
-  The wrappers now remove every inherited `VITE_*`, infra-env pointer and
-  secret-shaped environment name before adding the approved public values.
+  The wrappers now construct child environments from a closed platform/tool
+  allowlist before adding the approved public values.
 - The release Gradle process receives only the four dedicated Android signing
   inputs in addition to the sanitized build environment. Vite, Capacitor,
   `apksigner` and `apkanalyzer` do not receive those signing inputs.
