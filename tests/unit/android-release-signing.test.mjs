@@ -132,18 +132,29 @@ test("Android release builder creates and verifies signed release artifacts", ()
 test("Android release Gradle environment restores only dedicated signing inputs", () => {
   const baseEnv = {
     PATH: "C:\\tools",
+    JAVA_HOME: "C:\\Java\\jdk",
+    ANDROID_HOME: "C:\\Android\\sdk",
+    GRADLE_USER_HOME: "C:\\gradle",
     VITE_UNAPPROVED_SECRET: "must-not-leak",
     SUPABASE_SERVICE_ROLE_KEY: "must-not-leak",
     LETSCUBE_ANDROID_KEYSTORE_PATH: "C:\\secure\\release.p12",
     LETSCUBE_ANDROID_KEY_ALIAS: "letscube-release",
     LETSCUBE_ANDROID_STORE_PASSWORD: "store-password",
     LETSCUBE_ANDROID_KEY_PASSWORD: "key-password",
+    DATABASE_URL: "postgres://secret",
+    PGPASSWORD: "database-password",
+    GITHUB_PAT: "github-token",
+    EXAMPLE_AUTHTOKEN: "arbitrary-token",
+    HTTPS_PROXY: "https://user:password@proxy.example.com",
   };
   const result = releaseBuilder.createAndroidReleaseProcessEnv(baseEnv, {
     VITE_SUPABASE_URL: "https://core.example.com",
   });
 
   assert.equal(result.PATH, "C:\\tools");
+  assert.equal(result.JAVA_HOME, "C:\\Java\\jdk");
+  assert.equal(result.ANDROID_HOME, "C:\\Android\\sdk");
+  assert.equal(result.GRADLE_USER_HOME, "C:\\gradle");
   assert.equal(result.VITE_SUPABASE_URL, "https://core.example.com");
   assert.equal(result.VITE_UNAPPROVED_SECRET, undefined);
   assert.equal(result.SUPABASE_SERVICE_ROLE_KEY, undefined);
@@ -151,6 +162,35 @@ test("Android release Gradle environment restores only dedicated signing inputs"
   assert.equal(result.LETSCUBE_ANDROID_KEY_ALIAS, baseEnv.LETSCUBE_ANDROID_KEY_ALIAS);
   assert.equal(result.LETSCUBE_ANDROID_STORE_PASSWORD, baseEnv.LETSCUBE_ANDROID_STORE_PASSWORD);
   assert.equal(result.LETSCUBE_ANDROID_KEY_PASSWORD, baseEnv.LETSCUBE_ANDROID_KEY_PASSWORD);
+  assert.equal(result.DATABASE_URL, undefined);
+  assert.equal(result.PGPASSWORD, undefined);
+  assert.equal(result.GITHUB_PAT, undefined);
+  assert.equal(result.EXAMPLE_AUTHTOKEN, undefined);
+  assert.equal(result.HTTPS_PROXY, undefined);
+});
+
+test("Android release Git and artifact inspection children exclude inherited credentials", () => {
+  const result = releaseBuilder.createAndroidReleaseToolProcessEnv({
+    PATH: "C:\\tools",
+    JAVA_HOME: "C:\\Java\\jdk",
+    ANDROID_HOME: "C:\\Android\\sdk",
+    LETSCUBE_ANDROID_KEYSTORE_PATH: "C:\\secure\\release.p12",
+    DATABASE_URL: "postgres://secret",
+    PGPASSWORD: "database-password",
+    GITHUB_PAT: "github-token",
+    EXAMPLE_AUTHTOKEN: "arbitrary-token",
+    HTTPS_PROXY: "https://user:password@proxy.example.com",
+  });
+
+  assert.equal(result.PATH, "C:\\tools");
+  assert.equal(result.JAVA_HOME, "C:\\Java\\jdk");
+  assert.equal(result.ANDROID_HOME, "C:\\Android\\sdk");
+  assert.equal(result.LETSCUBE_ANDROID_KEYSTORE_PATH, undefined);
+  assert.equal(result.DATABASE_URL, undefined);
+  assert.equal(result.PGPASSWORD, undefined);
+  assert.equal(result.GITHUB_PAT, undefined);
+  assert.equal(result.EXAMPLE_AUTHTOKEN, undefined);
+  assert.equal(result.HTTPS_PROXY, undefined);
 });
 
 test("Android release builder preserves Windows command options containing equals signs", {

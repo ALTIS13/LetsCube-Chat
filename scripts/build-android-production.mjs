@@ -16,7 +16,63 @@ const PUBLIC_KEYS = [
   "VITE_AUTH_CAPTCHA_SITE_KEY",
   "VITE_AUTH_GATEWAY_URL",
 ];
-const SENSITIVE_ENV_NAME = /(?:^|_)(?:SECRET|TOKEN|PASSWORD|PRIVATE|KEY|CREDENTIALS?|SERVICE_ROLE)(?:_|$)/i;
+const APPROVED_BUILD_ENV_KEYS = new Set([
+  ...PUBLIC_KEYS,
+  "VITE_ACCESS_SNAPSHOT_RPC_ENABLED",
+  "VITE_CHAT_LIST_SUMMARIES_RPC_ENABLED",
+  "VITE_APP_ENV",
+  "VITE_APP_VERSION",
+  "VITE_APP_COMMIT",
+  "BASE_PATH",
+  "PORT",
+  "NODE_ENV",
+]);
+const ANDROID_BUILD_PROCESS_ENV_KEYS = [
+  "APPDATA",
+  "ANDROID_HOME",
+  "ANDROID_SDK_ROOT",
+  "CI",
+  "COLORTERM",
+  "CommonProgramFiles",
+  "CommonProgramFiles(x86)",
+  "ComSpec",
+  "COREPACK_HOME",
+  "FORCE_COLOR",
+  "GRADLE_USER_HOME",
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "HOME",
+  "JAVA_HOME",
+  "JDK_HOME",
+  "LANG",
+  "LANGUAGE",
+  "LC_ALL",
+  "LC_CTYPE",
+  "LOCALAPPDATA",
+  "LOGNAME",
+  "NO_COLOR",
+  "NUMBER_OF_PROCESSORS",
+  "OS",
+  "PATHEXT",
+  "PNPM_HOME",
+  "PROCESSOR_ARCHITECTURE",
+  "PROCESSOR_ARCHITEW6432",
+  "ProgramData",
+  "ProgramFiles",
+  "ProgramFiles(x86)",
+  "SystemDrive",
+  "SystemRoot",
+  "TEMP",
+  "TERM",
+  "TMP",
+  "TMPDIR",
+  "TZ",
+  "USER",
+  "USERNAME",
+  "USERPROFILE",
+  "windir",
+  "WINDIR",
+];
 
 export function parseEnvText(text) {
   const values = new Map();
@@ -73,17 +129,23 @@ export function collectPublicAndroidBuildEnv(source, metadata) {
 
 export function createAndroidBuildProcessEnv(baseEnv, publicEnv) {
   const env = {};
-  for (const [key, value] of Object.entries(baseEnv)) {
-    if (key.toUpperCase().startsWith("VITE_")) continue;
-    if (key.toUpperCase() === "KUB_INFRA_ENV_FILE") continue;
-    if (SENSITIVE_ENV_NAME.test(key)) continue;
-    env[key] = value;
+  const pathValue = baseEnv.PATH ?? baseEnv.Path;
+  if (typeof pathValue === "string") env.PATH = pathValue;
+
+  for (const key of ANDROID_BUILD_PROCESS_ENV_KEYS) {
+    const value = baseEnv[key];
+    if (typeof value === "string") env[key] = value;
   }
-  return { ...env, ...publicEnv };
+  for (const [key, value] of Object.entries(publicEnv)) {
+    if (APPROVED_BUILD_ENV_KEYS.has(key) && typeof value === "string") {
+      env[key] = value;
+    }
+  }
+  return env;
 }
 
 function run(command, args, env) {
-  const executable = process.platform === "win32" ? process.env.ComSpec || "cmd.exe" : command;
+  const executable = process.platform === "win32" ? env.ComSpec || "cmd.exe" : command;
   const executableArgs =
     process.platform === "win32"
       ? ["/d", "/s", "/c", [command, ...args].map(quoteWindowsArgument).join(" ")]
@@ -98,10 +160,11 @@ function run(command, args, env) {
   }
 }
 
-function getCommandOutput(command, args) {
+function getCommandOutput(command, args, env) {
   const result = spawnSync(command, args, {
     cwd: root,
     encoding: "utf8",
+    env,
   });
   if (result.status !== 0) throw new Error(`Unable to read Android build metadata from ${command}.`);
   return result.stdout.trim();
@@ -134,8 +197,9 @@ async function main() {
 
   const source = parseEnvText(readFileSync(envPath, "utf8"));
   const releaseMetadata = readAndroidReleaseMetadata(root);
+  const toolEnv = createAndroidBuildProcessEnv(process.env, {});
   const publicEnv = collectPublicAndroidBuildEnv(source, {
-    commit: getCommandOutput("git", ["rev-parse", "--short=12", "HEAD"]),
+    commit: getCommandOutput("git", ["rev-parse", "--short=12", "HEAD"], toolEnv),
     version: releaseMetadata.versionName,
   });
   const env = createAndroidBuildProcessEnv(process.env, publicEnv);

@@ -28,7 +28,7 @@ function quoteWindowsArgument(value) {
 }
 
 function run(command, args, env, cwd = root) {
-  const executable = process.platform === "win32" ? process.env.ComSpec || "cmd.exe" : command;
+  const executable = process.platform === "win32" ? env.ComSpec || "cmd.exe" : command;
   const executableArgs =
     process.platform === "win32"
       ? ["/d", "/s", "/c", [command, ...args].map(quoteWindowsArgument).join(" ")]
@@ -52,7 +52,9 @@ function run(command, args, env, cwd = root) {
 
 export { run as runReleaseCommand };
 
-export function resolveAndroidReleaseCommands(androidHome = process.env.ANDROID_HOME) {
+export function resolveAndroidReleaseCommands(
+  androidHome = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT,
+) {
   return resolveAndroidTools(androidHome);
 }
 
@@ -62,6 +64,10 @@ export function createAndroidReleaseProcessEnv(baseEnv, publicEnv) {
     if (baseEnv[key]) env[key] = baseEnv[key];
   }
   return env;
+}
+
+export function createAndroidReleaseToolProcessEnv(baseEnv) {
+  return createAndroidBuildProcessEnv(baseEnv, {});
 }
 
 function bundleContainsValue(directory, value) {
@@ -113,10 +119,11 @@ async function main() {
   }
 
   const releaseMetadata = readAndroidReleaseMetadata(root);
-  const tools = resolveAndroidReleaseCommands();
+  const toolEnv = createAndroidReleaseToolProcessEnv(process.env);
+  const tools = resolveAndroidReleaseCommands(toolEnv.ANDROID_HOME || toolEnv.ANDROID_SDK_ROOT);
   const source = parseEnvText(readFileSync(envPath, "utf8"));
   const publicEnv = collectPublicAndroidBuildEnv(source, {
-    commit: run("git", ["rev-parse", "--short=12", "HEAD"], process.env),
+    commit: run("git", ["rev-parse", "--short=12", "HEAD"], toolEnv),
     version: releaseMetadata.versionName,
   });
   const buildEnv = createAndroidBuildProcessEnv(process.env, publicEnv);
@@ -135,11 +142,11 @@ async function main() {
 
   const apkPath = resolve(root, "android/app/build/outputs/apk/release/app-release.apk");
   const aabPath = resolve(root, "android/app/build/outputs/bundle/release/app-release.aab");
-  run(tools.apksigner, ["verify", "--verbose", apkPath], buildEnv);
+  run(tools.apksigner, ["verify", "--verbose", apkPath], toolEnv);
   const actualMetadata = {
-    applicationId: run(tools.apkanalyzer, ["manifest", "application-id", apkPath], buildEnv),
-    versionName: run(tools.apkanalyzer, ["manifest", "version-name", apkPath], buildEnv),
-    versionCode: run(tools.apkanalyzer, ["manifest", "version-code", apkPath], buildEnv),
+    applicationId: run(tools.apkanalyzer, ["manifest", "application-id", apkPath], toolEnv),
+    versionName: run(tools.apkanalyzer, ["manifest", "version-name", apkPath], toolEnv),
+    versionCode: run(tools.apkanalyzer, ["manifest", "version-code", apkPath], toolEnv),
   };
   verifyAndroidReleaseArtifactMetadata(actualMetadata, {
     applicationId: expectedApplicationId,

@@ -4,6 +4,7 @@ import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
+import { createAndroidBuildProcessEnv } from "./build-android-production.mjs";
 import { readAndroidReleaseMetadata } from "./android-release-metadata.mjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
@@ -47,7 +48,7 @@ function findExecutable(directories, name) {
   return null;
 }
 
-export function resolveAndroidTools(androidHome = process.env.ANDROID_HOME) {
+export function resolveAndroidTools(androidHome = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT) {
   if (!androidHome || !existsSync(androidHome)) {
     throw new Error("ANDROID_HOME must reference an Android SDK directory.");
   }
@@ -76,12 +77,17 @@ function quoteWindowsArgument(value) {
   return `"${value.replaceAll('"', '""')}"`;
 }
 
+export function createAndroidReleaseInspectionProcessEnv(baseEnv) {
+  return createAndroidBuildProcessEnv(baseEnv, {});
+}
+
 function runTool(tool, args) {
-  const executable = process.platform === "win32" ? process.env.ComSpec || "cmd.exe" : tool;
+  const env = createAndroidReleaseInspectionProcessEnv(process.env);
+  const executable = process.platform === "win32" ? env.ComSpec || "cmd.exe" : tool;
   const executableArgs = process.platform === "win32"
     ? ["/d", "/s", "/c", [tool, ...args].map(quoteWindowsArgument).join(" ")]
     : args;
-  const result = spawnSync(executable, executableArgs, { encoding: "utf8", stdio: "pipe" });
+  const result = spawnSync(executable, executableArgs, { encoding: "utf8", env, stdio: "pipe" });
 
   if (result.error || result.status !== 0) {
     throw new Error("Android release inspection command failed.");
@@ -99,8 +105,8 @@ function readCertificateFingerprint(output) {
   if (/android debug/i.test(output)) {
     throw new Error("Android debug certificates are not accepted for release verification.");
   }
-  const v2Scheme = output.match(/Verified using v2 scheme \(APK Signature Scheme v2\):\s*(true|false)\s*$/im);
-  if (!v2Scheme || v2Scheme[1].toLowerCase() !== "true") {
+  const v2SchemeResults = [...output.matchAll(/^Verified using v2 scheme \(APK Signature Scheme v2\):\s*(true|false)\s*$/gim)];
+  if (v2SchemeResults.length !== 1 || v2SchemeResults[0][1].toLowerCase() !== "true") {
     throw new Error("Release APK must verify with the v2 signature scheme.");
   }
   const fingerprints = [...output.matchAll(/Signer #\d+ certificate SHA-256 digest:\s*([0-9A-Fa-f:]{64,95})\s*$/gm)]

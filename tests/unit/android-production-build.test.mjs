@@ -38,31 +38,67 @@ VAPID_PRIVATE_KEY=private-vapid
   assert.equal("VAPID_PRIVATE_KEY" in result, false);
 });
 
-test("Android child processes drop inherited secrets and unapproved Vite settings", () => {
+test("Android Vite and Capacitor children receive only platform settings and approved public values", () => {
   const publicEnv = {
     VITE_SUPABASE_URL: "https://core.example.com",
     VITE_SUPABASE_ANON_KEY: "public-anon",
+    VITE_UNAPPROVED_SECRET: "must-not-forward",
   };
   const result = createAndroidBuildProcessEnv(
     {
-      PATH: "C:\\tools",
+      Path: "C:\\tools\\alternate",
       TEMP: "C:\\temp",
+      TMP: "C:\\tmp",
+      HOME: "C:\\Users\\builder",
+      SystemRoot: "C:\\Windows",
+      ComSpec: "C:\\Windows\\System32\\cmd.exe",
+      JAVA_HOME: "C:\\Java\\jdk",
+      ANDROID_HOME: "C:\\Android\\sdk",
+      ANDROID_SDK_ROOT: "C:\\Android\\sdk",
+      GRADLE_USER_HOME: "C:\\gradle",
+      CI: "1",
+      FORCE_COLOR: "1",
+      LANG: "en_US.UTF-8",
       VITE_UNAPPROVED_SECRET: "must-not-leak",
       SUPABASE_SERVICE_ROLE_KEY: "must-not-leak",
       SUPABASE_ACCESS_TOKEN: "must-not-leak",
       LETSCUBE_ANDROID_STORE_PASSWORD: "must-not-leak",
+      LETSCUBE_ANDROID_KEYSTORE_PATH: "C:\\secure\\release.p12",
+      DATABASE_URL: "postgres://secret",
+      PGPASSWORD: "database-password",
+      GITHUB_PAT: "github-token",
+      EXAMPLE_AUTHTOKEN: "arbitrary-token",
+      HTTPS_PROXY: "https://user:password@proxy.example.com",
     },
     publicEnv,
   );
 
-  assert.equal(result.PATH, "C:\\tools");
+  assert.equal(result.PATH, "C:\\tools\\alternate");
+  assert.equal(result.Path, undefined);
   assert.equal(result.TEMP, "C:\\temp");
+  assert.equal(result.TMP, "C:\\tmp");
+  assert.equal(result.HOME, "C:\\Users\\builder");
+  assert.equal(result.SystemRoot, "C:\\Windows");
+  assert.equal(result.ComSpec, "C:\\Windows\\System32\\cmd.exe");
+  assert.equal(result.JAVA_HOME, "C:\\Java\\jdk");
+  assert.equal(result.ANDROID_HOME, "C:\\Android\\sdk");
+  assert.equal(result.ANDROID_SDK_ROOT, "C:\\Android\\sdk");
+  assert.equal(result.GRADLE_USER_HOME, "C:\\gradle");
+  assert.equal(result.CI, "1");
+  assert.equal(result.FORCE_COLOR, "1");
+  assert.equal(result.LANG, "en_US.UTF-8");
   assert.equal(result.VITE_SUPABASE_URL, publicEnv.VITE_SUPABASE_URL);
   assert.equal(result.VITE_SUPABASE_ANON_KEY, publicEnv.VITE_SUPABASE_ANON_KEY);
   assert.equal(result.VITE_UNAPPROVED_SECRET, undefined);
   assert.equal(result.SUPABASE_SERVICE_ROLE_KEY, undefined);
   assert.equal(result.SUPABASE_ACCESS_TOKEN, undefined);
   assert.equal(result.LETSCUBE_ANDROID_STORE_PASSWORD, undefined);
+  assert.equal(result.LETSCUBE_ANDROID_KEYSTORE_PATH, undefined);
+  assert.equal(result.DATABASE_URL, undefined);
+  assert.equal(result.PGPASSWORD, undefined);
+  assert.equal(result.GITHUB_PAT, undefined);
+  assert.equal(result.EXAMPLE_AUTHTOKEN, undefined);
+  assert.equal(result.HTTPS_PROXY, undefined);
 });
 
 test("Android production build rejects missing public Supabase settings", () => {

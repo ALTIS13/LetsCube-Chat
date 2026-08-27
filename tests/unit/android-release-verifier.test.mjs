@@ -6,7 +6,11 @@ import test from "node:test";
 
 import * as releaseVerifier from "../../scripts/verify-android-release.mjs";
 
-const { resolveAndroidTools, verifyAndroidRelease } = releaseVerifier;
+const {
+  createAndroidReleaseInspectionProcessEnv,
+  resolveAndroidTools,
+  verifyAndroidRelease,
+} = releaseVerifier;
 
 const fingerprint = "11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00";
 const approvedExportedManifest = '<manifest><application android:debuggable="false">'
@@ -91,6 +95,36 @@ test("Android release verifier accepts pnpm's argument separator", () => {
   assert.equal(releaseVerifier.readAndroidReleaseCliApk(["--", "candidate.apk"]), "candidate.apk");
   assert.equal(releaseVerifier.readAndroidReleaseCliApk(["candidate.apk"]), "candidate.apk");
   assert.throws(() => releaseVerifier.readAndroidReleaseCliApk(["--"]), /Usage/);
+});
+
+test("Android release inspection children receive a sanitized platform environment", () => {
+  const result = createAndroidReleaseInspectionProcessEnv({
+    PATH: "/tools",
+    HOME: "/home/builder",
+    JAVA_HOME: "/java",
+    ANDROID_HOME: "/android-sdk",
+    GRADLE_USER_HOME: "/gradle",
+    LANG: "en_US.UTF-8",
+    LETSCUBE_ANDROID_KEYSTORE_PATH: "/secure/release.p12",
+    DATABASE_URL: "postgres://secret",
+    PGPASSWORD: "database-password",
+    GITHUB_PAT: "github-token",
+    EXAMPLE_AUTHTOKEN: "arbitrary-token",
+    HTTPS_PROXY: "https://user:password@proxy.example.com",
+  });
+
+  assert.equal(result.PATH, "/tools");
+  assert.equal(result.HOME, "/home/builder");
+  assert.equal(result.JAVA_HOME, "/java");
+  assert.equal(result.ANDROID_HOME, "/android-sdk");
+  assert.equal(result.GRADLE_USER_HOME, "/gradle");
+  assert.equal(result.LANG, "en_US.UTF-8");
+  assert.equal(result.LETSCUBE_ANDROID_KEYSTORE_PATH, undefined);
+  assert.equal(result.DATABASE_URL, undefined);
+  assert.equal(result.PGPASSWORD, undefined);
+  assert.equal(result.GITHUB_PAT, undefined);
+  assert.equal(result.EXAMPLE_AUTHTOKEN, undefined);
+  assert.equal(result.HTTPS_PROXY, undefined);
 });
 
 test("Android release verifier accepts only the protected exported dependency receivers", () => {
@@ -282,6 +316,25 @@ test("Android release verifier rejects a v1-only APK signature", () => {
         tools: { apksigner: "apksigner", apkanalyzer: "apkanalyzer" },
         run: createRunner({
           "verify --verbose --print-certs": `Verified using v1 scheme (JAR signing): true\nVerified using v2 scheme (APK Signature Scheme v2): false\nSigner #1 certificate SHA-256 digest: ${fingerprint.replaceAll(":", "")}`,
+        }).run,
+      }),
+      /v2 signature scheme/,
+    );
+  } finally {
+    rmSync(fixture.directory, { force: true, recursive: true });
+  }
+});
+
+test("Android release verifier rejects contradictory duplicate v2 scheme results", () => {
+  const fixture = createFixture();
+  try {
+    assert.throws(
+      () => verifyAndroidRelease(fixture.apkPath, {
+        assetLinksPath: fixture.assetLinksPath,
+        expectedMetadata: { applicationId: "com.kub.messenger", versionName: "0.1.1", versionCode: 2 },
+        tools: { apksigner: "apksigner", apkanalyzer: "apkanalyzer" },
+        run: createRunner({
+          "verify --verbose --print-certs": `Verified using v2 scheme (APK Signature Scheme v2): true\nVerified using v2 scheme (APK Signature Scheme v2): false\nSigner #1 certificate SHA-256 digest: ${fingerprint.replaceAll(":", "")}`,
         }).run,
       }),
       /v2 signature scheme/,
