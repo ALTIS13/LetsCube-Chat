@@ -2345,6 +2345,9 @@ Recurring tasks roadmap note:
   native push navigation 1/1, foreground delivery migration 3/3, TypeScript
   typecheck, strict canonical APK verification, Bundletool AAB validation, the
   current live Stable manifest contract and preserved public-download parity.
+- Both Android 15 devices were connected with final `0.1.2/3`; Nothing reported
+  `zen_mode=0`. A fresh system `verify-app-links --re-verify` on the official-GMS
+  Nothing A063 returned `app.letscube.ru: verified` for `com.kub.messenger`.
 - No SQL/schema/RLS, iOS/PWA or Windows change was made. Remaining external gates
-  are a fresh automatic App Links check on an official-GMS device, an encrypted
-  off-device signing backup and Play Console/listing/screenshot preparation.
+  are an encrypted off-device signing backup and Play Console/listing/screenshot
+  preparation.

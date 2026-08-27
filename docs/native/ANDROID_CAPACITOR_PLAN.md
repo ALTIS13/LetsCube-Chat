@@ -230,10 +230,11 @@ pnpm.cmd android:open
   The latest web deployment passed live recovery callback/history QA, and the
   exact tested APK is published in Stable with public manifest, size and SHA-256
   download parity.
-- Fresh automatic App Links verification on an official-GMS device remains a
-  follow-up because Realme's OEM verifier is not authoritative. Play Console
-  setup, the external off-device encrypted backup, store-listing artwork and
-  final release screenshots remain pending. The AAB has not been published.
+- A fresh automatic App Links re-verification on the official-GMS Nothing A063
+  returned `app.letscube.ru: verified` for the installed final `0.1.2/3` package.
+  Play Console setup, the external off-device encrypted backup, store-listing
+  artwork and final release screenshots remain pending. The AAB has not been
+  published.
 
 ## Android QA
 
