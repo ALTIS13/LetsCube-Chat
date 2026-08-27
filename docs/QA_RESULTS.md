@@ -1918,10 +1918,10 @@ Recurring tasks roadmap note:
   `431eaac6d25e4cc1539354e274fccddb56c526ccd0a972b63e5e8a4da06f7a95`.
 - Final ignored artifacts are
   `.local/release-final/letscube-0.1.2-build-3.apk` (6,513,254 bytes, SHA-256
-  `97e5b2634289ea00fe1efc45456db122a62809010c14abbd0cda39f7ef0ef676`)
-  and `.local/release-final/letscube-0.1.2-build-3.aab` (6,150,120 bytes,
+  `436a5a62fdab286a058dec5921fc75c294ab64a836f4f84d74fe89da40980a76`)
+  and `.local/release-final/letscube-0.1.2-build-3.aab` (6,150,123 bytes,
   SHA-256
-  `38f28605f6f804c42d7d2769f2daecc684744e2c8219f44e618279c2de8d3542`).
+  `89f0eecd74db1507b10800ae42518271316fe5282a5ee309af8a4d9740880709`).
   The exact signed build wrapper and final release verifier both passed for
   version `0.1.2`, build `3`.
 - These canonical files are the current outputs of the restored tracked
@@ -2240,9 +2240,9 @@ Recurring tasks roadmap note:
   retains the authenticated shell, exposes no WebView debug socket and leaves
   zero controller helper files or ADB forwards. Canonical restored-source
   artifacts are 6,513,254-byte APK SHA-256
-  `97e5b2634289ea00fe1efc45456db122a62809010c14abbd0cda39f7ef0ef676`
-  and 6,150,120-byte AAB SHA-256
-  `38f28605f6f804c42d7d2769f2daecc684744e2c8219f44e618279c2de8d3542`.
+  `436a5a62fdab286a058dec5921fc75c294ab64a836f4f84d74fe89da40980a76`
+  and 6,150,123-byte AAB SHA-256
+  `89f0eecd74db1507b10800ae42518271316fe5282a5ee309af8a4d9740880709`.
 - This closeout sent no FCM event and made no production deploy, publication,
   Play, SQL/schema/RLS, iOS/PWA or Windows change. Local Task 4 physical
   acceptance is complete; Asset Links deployment/domain verification, normal
@@ -2270,6 +2270,14 @@ Recurring tasks roadmap note:
   local package has a different signer. The app was not uninstalled and its data
   was not cleared. The official-GMS Nothing physical acceptance evidence above
   remains the FCM source of truth.
+- Final review found the initial name-based child-environment sanitizer was not
+  closed: several common credential names and the keystore-path input could pass
+  through. The release pipeline now builds child environments from an explicit
+  platform/tool allowlist; approved public Vite values are added deliberately,
+  and the four signing inputs exist only in the Gradle release process. Git and
+  APK inspection tools receive the same sanitized tool environment. Focused
+  allowlist/verifier tests passed 33/33, and fresh production debug plus signed
+  release builds passed with the canonical hashes recorded above.
 
 # 2026-08-27 - Android release build environment hardening
 
