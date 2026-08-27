@@ -16,6 +16,7 @@ const PUBLIC_KEYS = [
   "VITE_AUTH_CAPTCHA_SITE_KEY",
   "VITE_AUTH_GATEWAY_URL",
 ];
+const SENSITIVE_ENV_NAME = /(?:^|_)(?:SECRET|TOKEN|PASSWORD|PRIVATE|KEY|CREDENTIALS?|SERVICE_ROLE)(?:_|$)/i;
 
 export function parseEnvText(text) {
   const values = new Map();
@@ -68,6 +69,17 @@ export function collectPublicAndroidBuildEnv(source, metadata) {
     PORT: "5173",
     NODE_ENV: "production",
   };
+}
+
+export function createAndroidBuildProcessEnv(baseEnv, publicEnv) {
+  const env = {};
+  for (const [key, value] of Object.entries(baseEnv)) {
+    if (key.toUpperCase().startsWith("VITE_")) continue;
+    if (key.toUpperCase() === "KUB_INFRA_ENV_FILE") continue;
+    if (SENSITIVE_ENV_NAME.test(key)) continue;
+    env[key] = value;
+  }
+  return { ...env, ...publicEnv };
 }
 
 function run(command, args, env) {
@@ -126,10 +138,10 @@ async function main() {
     commit: getCommandOutput("git", ["rev-parse", "--short=12", "HEAD"]),
     version: releaseMetadata.versionName,
   });
-  const env = { ...process.env, ...publicEnv };
+  const env = createAndroidBuildProcessEnv(process.env, publicEnv);
   const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 
-  console.log("Android production build: public connection settings validated; private keys are not forwarded.");
+  console.log("Android production build: only approved public Vite settings are forwarded.");
   run(pnpm, ["--filter", "@workspace/kub", "run", "build"], env);
 
   const bundlePath = resolve(root, "artifacts/kub/dist/public");

@@ -129,6 +129,30 @@ test("Android release builder creates and verifies signed release artifacts", ()
   assert.match(releaseBuilder, /apksigner/);
 });
 
+test("Android release Gradle environment restores only dedicated signing inputs", () => {
+  const baseEnv = {
+    PATH: "C:\\tools",
+    VITE_UNAPPROVED_SECRET: "must-not-leak",
+    SUPABASE_SERVICE_ROLE_KEY: "must-not-leak",
+    LETSCUBE_ANDROID_KEYSTORE_PATH: "C:\\secure\\release.p12",
+    LETSCUBE_ANDROID_KEY_ALIAS: "letscube-release",
+    LETSCUBE_ANDROID_STORE_PASSWORD: "store-password",
+    LETSCUBE_ANDROID_KEY_PASSWORD: "key-password",
+  };
+  const result = releaseBuilder.createAndroidReleaseProcessEnv(baseEnv, {
+    VITE_SUPABASE_URL: "https://core.example.com",
+  });
+
+  assert.equal(result.PATH, "C:\\tools");
+  assert.equal(result.VITE_SUPABASE_URL, "https://core.example.com");
+  assert.equal(result.VITE_UNAPPROVED_SECRET, undefined);
+  assert.equal(result.SUPABASE_SERVICE_ROLE_KEY, undefined);
+  assert.equal(result.LETSCUBE_ANDROID_KEYSTORE_PATH, baseEnv.LETSCUBE_ANDROID_KEYSTORE_PATH);
+  assert.equal(result.LETSCUBE_ANDROID_KEY_ALIAS, baseEnv.LETSCUBE_ANDROID_KEY_ALIAS);
+  assert.equal(result.LETSCUBE_ANDROID_STORE_PASSWORD, baseEnv.LETSCUBE_ANDROID_STORE_PASSWORD);
+  assert.equal(result.LETSCUBE_ANDROID_KEY_PASSWORD, baseEnv.LETSCUBE_ANDROID_KEY_PASSWORD);
+});
+
 test("Android release builder preserves Windows command options containing equals signs", {
   skip: process.platform !== "win32",
 }, () => {

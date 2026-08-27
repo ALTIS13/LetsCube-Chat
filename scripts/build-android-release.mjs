@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 
 import {
   collectPublicAndroidBuildEnv,
+  createAndroidBuildProcessEnv,
   parseEnvText,
 } from "./build-android-production.mjs";
 import { readAndroidReleaseMetadata } from "./android-release-metadata.mjs";
@@ -14,6 +15,12 @@ import { resolveAndroidTools } from "./verify-android-release.mjs";
 const scriptPath = fileURLToPath(import.meta.url);
 const root = resolve(dirname(scriptPath), "..");
 const expectedApplicationId = "com.kub.messenger";
+const RELEASE_SIGNING_ENV_KEYS = [
+  "LETSCUBE_ANDROID_KEYSTORE_PATH",
+  "LETSCUBE_ANDROID_KEY_ALIAS",
+  "LETSCUBE_ANDROID_STORE_PASSWORD",
+  "LETSCUBE_ANDROID_KEY_PASSWORD",
+];
 
 function quoteWindowsArgument(value) {
   if (/^[A-Za-z0-9_@./:\\=-]+$/.test(value)) return value;
@@ -47,6 +54,14 @@ export { run as runReleaseCommand };
 
 export function resolveAndroidReleaseCommands(androidHome = process.env.ANDROID_HOME) {
   return resolveAndroidTools(androidHome);
+}
+
+export function createAndroidReleaseProcessEnv(baseEnv, publicEnv) {
+  const env = createAndroidBuildProcessEnv(baseEnv, publicEnv);
+  for (const key of RELEASE_SIGNING_ENV_KEYS) {
+    if (baseEnv[key]) env[key] = baseEnv[key];
+  }
+  return env;
 }
 
 function bundleContainsValue(directory, value) {
@@ -104,26 +119,27 @@ async function main() {
     commit: run("git", ["rev-parse", "--short=12", "HEAD"], process.env),
     version: releaseMetadata.versionName,
   });
-  const env = { ...process.env, ...publicEnv };
+  const buildEnv = createAndroidBuildProcessEnv(process.env, publicEnv);
+  const releaseEnv = createAndroidReleaseProcessEnv(process.env, publicEnv);
   const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 
-  run(pnpm, ["--filter", "@workspace/kub", "run", "build"], env);
+  run(pnpm, ["--filter", "@workspace/kub", "run", "build"], buildEnv);
 
   const bundlePath = resolve(root, "artifacts/kub/dist/public");
   if (!bundleContainsValue(bundlePath, publicEnv.VITE_SUPABASE_URL)) {
     throw new Error("Built Android web bundle does not contain the configured public Supabase origin.");
   }
 
-  run(pnpm, ["android:sync"], env);
-  run("gradlew.bat", ["assembleRelease", "bundleRelease"], env, resolve(root, "android"));
+  run(pnpm, ["android:sync"], buildEnv);
+  run("gradlew.bat", ["assembleRelease", "bundleRelease"], releaseEnv, resolve(root, "android"));
 
   const apkPath = resolve(root, "android/app/build/outputs/apk/release/app-release.apk");
   const aabPath = resolve(root, "android/app/build/outputs/bundle/release/app-release.aab");
-  run(tools.apksigner, ["verify", "--verbose", apkPath], env);
+  run(tools.apksigner, ["verify", "--verbose", apkPath], buildEnv);
   const actualMetadata = {
-    applicationId: run(tools.apkanalyzer, ["manifest", "application-id", apkPath], env),
-    versionName: run(tools.apkanalyzer, ["manifest", "version-name", apkPath], env),
-    versionCode: run(tools.apkanalyzer, ["manifest", "version-code", apkPath], env),
+    applicationId: run(tools.apkanalyzer, ["manifest", "application-id", apkPath], buildEnv),
+    versionName: run(tools.apkanalyzer, ["manifest", "version-name", apkPath], buildEnv),
+    versionCode: run(tools.apkanalyzer, ["manifest", "version-code", apkPath], buildEnv),
   };
   verifyAndroidReleaseArtifactMetadata(actualMetadata, {
     applicationId: expectedApplicationId,

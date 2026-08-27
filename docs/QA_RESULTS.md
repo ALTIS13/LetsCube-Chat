@@ -2248,3 +2248,20 @@ Recurring tasks roadmap note:
   acceptance is complete; Asset Links deployment/domain verification, normal
   HTTPS recovery routing, external backup and catalog publication remain
   separate external gates.
+
+# 2026-08-27 - Android release build environment hardening
+
+- Final diff review identified that the Android wrappers validated an explicit
+  public Vite allowlist but still inherited the parent process environment.
+  The wrappers now remove every inherited `VITE_*`, infra-env pointer and
+  secret-shaped environment name before adding the approved public values.
+- The release Gradle process receives only the four dedicated Android signing
+  inputs in addition to the sanitized build environment. Vite, Capacitor,
+  `apksigner` and `apkanalyzer` do not receive those signing inputs.
+- TDD regression coverage passed for both the public child environment and the
+  release-only signing environment. A production-debug build with synthetic
+  inherited Vite/backend sentinels completed through Vite, Capacitor sync and
+  Gradle, and neither sentinel was present in the web bundle or Android assets.
+- No real credential value, signing identity, callback, device token or user
+  data was printed. No SQL/schema/RLS, deploy, publication, Play, iOS/PWA or
+  Windows operation was performed in this hardening check.

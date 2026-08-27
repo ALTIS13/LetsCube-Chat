@@ -368,6 +368,9 @@ Status: `[~]` active. Android and Windows Tauri internal candidates are availabl
   signing inputs outside Git. Canonical nondebuggable `0.1.2/3` APK/AAB pass
   strict identity, signer and structure checks; the encrypted off-device backup
   remains an external operational gate.
+- `[x]` Android build-environment isolation: inherited unapproved `VITE_*`,
+  infra pointers and secret-shaped variables are removed before Vite/Capacitor;
+  only the four dedicated signing inputs are restored for Gradle release tasks.
 - `[~]` Android verified HTTPS App Links and recovery callback are implemented
   for the exact `https://app.letscube.ru/auth/callback` route. Tracked Asset
   Links matches the final signer; production deployment, domain verification and

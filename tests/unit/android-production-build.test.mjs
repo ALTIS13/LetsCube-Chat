@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 import {
+  createAndroidBuildProcessEnv,
   collectPublicAndroidBuildEnv,
   parseEnvText,
 } from "../../scripts/build-android-production.mjs";
@@ -35,6 +36,33 @@ VAPID_PRIVATE_KEY=private-vapid
   assert.equal(result.PORT, "5173");
   assert.equal("SELFHOST_SERVICE_ROLE_KEY" in result, false);
   assert.equal("VAPID_PRIVATE_KEY" in result, false);
+});
+
+test("Android child processes drop inherited secrets and unapproved Vite settings", () => {
+  const publicEnv = {
+    VITE_SUPABASE_URL: "https://core.example.com",
+    VITE_SUPABASE_ANON_KEY: "public-anon",
+  };
+  const result = createAndroidBuildProcessEnv(
+    {
+      PATH: "C:\\tools",
+      TEMP: "C:\\temp",
+      VITE_UNAPPROVED_SECRET: "must-not-leak",
+      SUPABASE_SERVICE_ROLE_KEY: "must-not-leak",
+      SUPABASE_ACCESS_TOKEN: "must-not-leak",
+      LETSCUBE_ANDROID_STORE_PASSWORD: "must-not-leak",
+    },
+    publicEnv,
+  );
+
+  assert.equal(result.PATH, "C:\\tools");
+  assert.equal(result.TEMP, "C:\\temp");
+  assert.equal(result.VITE_SUPABASE_URL, publicEnv.VITE_SUPABASE_URL);
+  assert.equal(result.VITE_SUPABASE_ANON_KEY, publicEnv.VITE_SUPABASE_ANON_KEY);
+  assert.equal(result.VITE_UNAPPROVED_SECRET, undefined);
+  assert.equal(result.SUPABASE_SERVICE_ROLE_KEY, undefined);
+  assert.equal(result.SUPABASE_ACCESS_TOKEN, undefined);
+  assert.equal(result.LETSCUBE_ANDROID_STORE_PASSWORD, undefined);
 });
 
 test("Android production build rejects missing public Supabase settings", () => {
