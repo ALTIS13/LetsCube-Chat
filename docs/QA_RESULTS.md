@@ -2322,3 +2322,29 @@ Recurring tasks roadmap note:
 - No real credential value, signing identity, callback, device token or user
   data was printed. No SQL/schema/RLS, deploy, publication, Play, iOS/PWA or
   Windows operation was performed in this hardening check.
+
+# 2026-08-27 - Android Stable publication closeout
+
+- The callback-priority fix was deployed through Coolify; the production web
+  application reached a healthy deployment updated at `2026-08-27T19:37:04`.
+  An isolated live recovery run opened `Новый пароль`, retained the exact
+  `/auth/callback` route and removed callback query/fragment credentials from
+  browser history.
+- Live `/.well-known/assetlinks.json` returns the expected JSON/security/cache
+  headers and exact signer parity with the final APK. Twelve consecutive probes
+  returned JSON without the former SPA fallback.
+- The canonical nondebuggable APK `0.1.2` build `3` was atomically published to
+  Android Stable. The public manifest reports `available=true`, version `0.1.2`,
+  build `3`, 6,513,250 bytes and SHA-256
+  `d414fb7a818beb86a5bfbd06dc9cdc657e8aa82fa07acc32927b15ab2748af99`.
+  A fresh HTTPS download used an immutable URL and matched both size and hash.
+- The matching 6,150,126-byte AAB with SHA-256
+  `8c3be79e742e8771ed679ed9750e7fd530018c4de9ef69da0978df0c2f4430f4`
+  remains ignored/local and was not published or uploaded to Play Console.
+- Final docs-closeout validation passed the focused Android/auth subset 52/52,
+  native push navigation 1/1, foreground delivery migration 3/3, TypeScript
+  typecheck, strict canonical APK verification, Bundletool AAB validation, the
+  current live Stable manifest contract and preserved public-download parity.
+- No SQL/schema/RLS, iOS/PWA or Windows change was made. Remaining external gates
+  are a fresh automatic App Links check on an official-GMS device, an encrypted
+  off-device signing backup and Play Console/listing/screenshot preparation.
