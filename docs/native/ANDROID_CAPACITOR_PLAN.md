@@ -128,11 +128,11 @@ Preserved ignored artifacts:
   SHA-256
   `431eaac6d25e4cc1539354e274fccddb56c526ccd0a972b63e5e8a4da06f7a95`);
 - final `0.1.2` build `3`: `.local/release-final/letscube-0.1.2-build-3.apk`
-  (6,513,254 bytes, SHA-256
-  `436a5a62fdab286a058dec5921fc75c294ab64a836f4f84d74fe89da40980a76`)
-  and `.local/release-final/letscube-0.1.2-build-3.aab` (6,150,123 bytes,
+  (6,513,250 bytes, SHA-256
+  `d414fb7a818beb86a5bfbd06dc9cdc657e8aa82fa07acc32927b15ab2748af99`)
+  and `.local/release-final/letscube-0.1.2-build-3.aab` (6,150,126 bytes,
   SHA-256
-  `89f0eecd74db1507b10800ae42518271316fe5282a5ee309af8a4d9740880709`).
+  `8c3be79e742e8771ed679ed9750e7fd530018c4de9ef69da0978df0c2f4430f4`).
 
 The final canonical files are the current outputs of the restored tracked
 production source. Signed APK/AAB ZIP serialization is not treated as
@@ -208,14 +208,23 @@ pnpm.cmd android:open
 - Camera/photo, regular video, video-circle and voice controls each passed the
   expected live/record/stop/cancel path. No captured environment was retained,
   copied or sent.
-- Realme RMX3830 on Android 15 retained its existing `0.1.0/1` debug package,
-  correctly rejected the signed replacement and passed a safe launch/portrait
-  check. Its custom microG stack is excluded from FCM acceptance.
-- Production-domain verification and normal HTTPS recovery routing remain
-  pending until the tracked assetlinks document is deployed after review.
-- Local physical Task 4 acceptance is complete. Production-domain verification,
-  normal HTTPS recovery routing, external off-device encrypted backup and
-  catalog publication remain separate external release gates.
+- Realme RMX3830 on Android 15 initially retained its existing `0.1.0/1` debug
+  package and correctly rejected the first signed replacement. After the
+  controller-approved clean install it now runs final nondebuggable `0.1.2/3`;
+  its custom microG stack remains excluded from FCM acceptance.
+- Production Asset Links is deployed with exact signer parity and the expected
+  JSON/security/cache headers. The same certificate/manifest reached Android's
+  `verified` state before the final frontend-only rebuild. Realme's OEM
+  StatementService later became background-restricted and returned
+  `legacy_failure`; temporary verifier exemptions did not make it deterministic,
+  so the final routing run used `approved` state and is not represented as a
+  fresh automatic verification.
+- A physical post-deploy test exposed and fixed callback unmounting during the
+  global user loading transition. Warm, cold and force-stopped recovery links
+  now open the `Новый пароль` screen through an implicit HTTPS `VIEW` intent.
+- Local physical Task 4 and post-deploy callback acceptance are complete.
+  External off-device encrypted backup and catalog publication remain separate
+  release gates.
 - Play Console app creation, the external off-device encrypted backup,
   store-listing artwork and final release screenshots remain pending.
 

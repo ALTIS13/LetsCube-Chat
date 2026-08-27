@@ -1917,11 +1917,11 @@ Recurring tasks roadmap note:
   SHA-256
   `431eaac6d25e4cc1539354e274fccddb56c526ccd0a972b63e5e8a4da06f7a95`.
 - Final ignored artifacts are
-  `.local/release-final/letscube-0.1.2-build-3.apk` (6,513,254 bytes, SHA-256
-  `436a5a62fdab286a058dec5921fc75c294ab64a836f4f84d74fe89da40980a76`)
-  and `.local/release-final/letscube-0.1.2-build-3.aab` (6,150,123 bytes,
+  `.local/release-final/letscube-0.1.2-build-3.apk` (6,513,250 bytes, SHA-256
+  `d414fb7a818beb86a5bfbd06dc9cdc657e8aa82fa07acc32927b15ab2748af99`)
+  and `.local/release-final/letscube-0.1.2-build-3.aab` (6,150,126 bytes,
   SHA-256
-  `89f0eecd74db1507b10800ae42518271316fe5282a5ee309af8a4d9740880709`).
+  `8c3be79e742e8771ed679ed9750e7fd530018c4de9ef69da0978df0c2f4430f4`).
   The exact signed build wrapper and final release verifier both passed for
   version `0.1.2`, build `3`.
 - These canonical files are the current outputs of the restored tracked
@@ -2239,10 +2239,10 @@ Recurring tasks roadmap note:
   rebuilt canonical final `0.1.2/3`. The installed package is nondebuggable,
   retains the authenticated shell, exposes no WebView debug socket and leaves
   zero controller helper files or ADB forwards. Canonical restored-source
-  artifacts are 6,513,254-byte APK SHA-256
-  `436a5a62fdab286a058dec5921fc75c294ab64a836f4f84d74fe89da40980a76`
-  and 6,150,123-byte AAB SHA-256
-  `89f0eecd74db1507b10800ae42518271316fe5282a5ee309af8a4d9740880709`.
+  artifacts are 6,513,250-byte APK SHA-256
+  `d414fb7a818beb86a5bfbd06dc9cdc657e8aa82fa07acc32927b15ab2748af99`
+  and 6,150,126-byte AAB SHA-256
+  `8c3be79e742e8771ed679ed9750e7fd530018c4de9ef69da0978df0c2f4430f4`.
 - This closeout sent no FCM event and made no production deploy, publication,
   Play, SQL/schema/RLS, iOS/PWA or Windows change. Local Task 4 physical
   acceptance is complete; Asset Links deployment/domain verification, normal
@@ -2282,6 +2282,25 @@ Recurring tasks roadmap note:
   and marked both the child-environment isolation and duplicate-v2 parsing
   findings addressed. On final `HEAD`, Android/auth units passed 53/53,
   TypeScript typecheck passed and the canonical APK passed strict verification.
+- The post-deploy recovery check exposed a route-priority race: establishing a
+  callback session briefly reloaded global user state, so the loading gate could
+  unmount the callback after its URL had already been scrubbed. A RED/GREEN
+  regression test now requires `/auth/callback` to render before global loading.
+  Fresh Android/auth units passed 54/54, typecheck and production web build
+  passed, and the rebuilt APK/AAB passed strict and Bundletool validation.
+- Live Asset Links stabilized at 12/12 JSON responses and returns `200`,
+  `application/json`, `nosniff` and a one-hour public cache. Exact final APK
+  signer parity passed. The rebuilt release installed on Realme as nondebuggable;
+  warm, cold and force-stopped recovery links each opened the `Новый пароль`
+  screen through an implicit HTTPS `VIEW` intent.
+- Realme's OEM StatementService later returned `legacy_failure` after an update
+  because its verifier network job was background-restricted. Clearing only the
+  verifier cache and temporary network/Doze exemptions did not make that OEM
+  service deterministic. The routing run therefore used Android's `approved`
+  state after cryptographic parity; it is not recorded as a fresh automatic
+  verification. The same certificate/manifest had already reached `verified`
+  before the frontend-only rebuild. Official-GMS verification remains the
+  production device-matrix authority.
 
 # 2026-08-27 - Android release build environment hardening
 

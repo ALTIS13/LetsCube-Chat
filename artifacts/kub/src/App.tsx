@@ -346,13 +346,13 @@ function AppRoutes() {
     }
   }, [userId]);
 
-  if (loading || loadingError) {
-    return <LoadingScreen error={loadingError} onRetry={retry} onSignOut={user ? signOut : undefined} />;
-  }
-
   // Auth callback always renders so it can exchange the code, regardless of session state.
   if (location.startsWith("/auth/callback")) {
     return <AuthCallback />;
+  }
+
+  if (loading || loadingError) {
+    return <LoadingScreen error={loadingError} onRetry={retry} onSignOut={user ? signOut : undefined} />;
   }
 
   if (!user && !authRoute) {

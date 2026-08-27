@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { establishAuthCallbackSession } from "../../artifacts/kub/src/lib/authCallback.ts";
+
+const appSource = readFileSync(new URL("../../artifacts/kub/src/App.tsx", import.meta.url), "utf8");
 
 const session = {
   access_token: "callback-access-token",
@@ -112,4 +115,13 @@ test("auth callback treats a non-recovery PKCE exchange as a normal session", as
 
   assert.equal(result.kind, "session");
   assert.equal(result.session, session);
+});
+
+test("auth callback stays mounted while the global user state reloads", () => {
+  const callbackGate = appSource.indexOf('if (location.startsWith("/auth/callback"))');
+  const loadingGate = appSource.indexOf("if (loading || loadingError)");
+
+  assert.notEqual(callbackGate, -1);
+  assert.notEqual(loadingGate, -1);
+  assert.ok(callbackGate < loadingGate, "the callback route must render before the loading gate");
 });
