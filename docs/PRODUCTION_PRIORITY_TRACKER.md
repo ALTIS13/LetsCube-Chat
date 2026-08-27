@@ -313,6 +313,10 @@ Current baseline:
   Signed ZIP byte identity is not expected across independent rebuilds;
   package/version, nondebuggable state, signer/Asset Links parity and strict
   APK/AAB validation are the authoritative equivalence checks.
+- Android final-review hardening is complete: callback recovery cannot reuse an
+  unrelated persisted session, callback credentials are replaced out of browser
+  history before exchange, and the release verifier rejects APKs without a v2
+  signature. Canonical `0.1.2/3` was rebuilt and revalidated after these changes.
 - `artifacts/kub/index.html` title and Apple web app title are `LETSCUBE`.
 - `artifacts/kub/public/manifest.json` uses `LETSCUBE`, `display: standalone`, and `display_override` fallbacks.
 - The iPhone home-screen icon uses a dedicated 180x180 LETSCUBE club asset; 192/512/maskable PWA icons use the same official mark, and the service worker precaches the complete icon set.

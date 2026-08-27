@@ -99,6 +99,10 @@ function readCertificateFingerprint(output) {
   if (/android debug/i.test(output)) {
     throw new Error("Android debug certificates are not accepted for release verification.");
   }
+  const v2Scheme = output.match(/Verified using v2 scheme \(APK Signature Scheme v2\):\s*(true|false)\s*$/im);
+  if (!v2Scheme || v2Scheme[1].toLowerCase() !== "true") {
+    throw new Error("Release APK must verify with the v2 signature scheme.");
+  }
   const fingerprints = [...output.matchAll(/Signer #\d+ certificate SHA-256 digest:\s*([0-9A-Fa-f:]{64,95})\s*$/gm)]
     .map((match) => normalizeFingerprint(match[1]))
     .filter(Boolean);

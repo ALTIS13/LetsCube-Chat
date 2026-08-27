@@ -28,13 +28,11 @@ import { KubBrandLogo, KubButton, KubIcon, KubInput, KubLogo, KubPanel } from "@
 import { kubBrandAsset } from "@/components/kub/brandAssets";
 import { clearMonitoringUser, reportError, setMonitoringUser } from "@/lib/monitoring";
 import { getAuthCallbackErrorMessage, getAuthCallbackExceptionMessage } from "@/lib/authRedirect";
+import { establishAuthCallbackSession } from "@/lib/authCallback";
 import { useAndroidAppLinks } from "@/hooks/useAndroidAppLinks";
 import {
   PASSWORD_RECOVERY_LINK_INVALID_MESSAGE,
-  clearPasswordRecoveryFlow,
-  isPasswordRecoveryFlow,
   isPasswordRecoveryUrl,
-  markPasswordRecoveryFlow,
 } from "@/lib/authRecovery";
 import { isAuthRoute, isPublicRoute } from "@/lib/publicRoutes";
 
@@ -61,59 +59,38 @@ function AuthCallback() {
     const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
     const isRecovery =
       isPasswordRecoveryUrl(url.searchParams) ||
-      isPasswordRecoveryUrl(hashParams) ||
-      isPasswordRecoveryFlow();
-    if (isRecovery) {
-      markPasswordRecoveryFlow();
-    }
+      isPasswordRecoveryUrl(hashParams);
     const callbackError =
       getAuthCallbackErrorMessage(url.searchParams) ||
       getAuthCallbackErrorMessage(hashParams);
+    cleanAuthCallbackUrl();
 
     if (callbackError) {
       setError(callbackError);
       return;
     }
 
-    const code = url.searchParams.get("code");
-
     const finish = async () => {
       try {
-        if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) throw error;
-          if (isRecovery) {
-            setRecoveryMode(true);
-            cleanAuthCallbackUrl();
-            return;
-          }
-          setLocation("/");
+        const result = await establishAuthCallbackSession(supabase.auth, url);
+        if (result.kind === "recovery") {
+          setRecoveryMode(true);
           return;
         }
-
-        const { data, error } = await supabase.auth.getSession();
-        if (error) throw error;
+        if (result.kind === "session") {
+          setLocation("/", { replace: true });
+          return;
+        }
         if (isRecovery) {
-          if (data.session) {
-            setRecoveryMode(true);
-            cleanAuthCallbackUrl();
-          } else {
-            clearPasswordRecoveryFlow();
-            setError(PASSWORD_RECOVERY_LINK_INVALID_MESSAGE);
-          }
+          setError(PASSWORD_RECOVERY_LINK_INVALID_MESSAGE);
           return;
         }
-        if (data.session) {
-          setLocation("/");
-          return;
-        }
-
-        setLocation("/login?confirmed=1");
+        setLocation("/login?confirmed=1", { replace: true });
       } catch (err: unknown) {
         reportError(err, {
           category: "auth_callback",
           recovery: isRecovery,
-          hasCode: Boolean(code),
+          hasCode: Boolean(url.searchParams.get("code") || hashParams.get("code")),
         });
         setError(getAuthCallbackExceptionMessage(err));
       }
@@ -137,9 +114,8 @@ function AuthCallback() {
       const supabase = createClient();
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
-      clearPasswordRecoveryFlow();
       await supabase.auth.signOut();
-      setLocation("/login?password_reset=1");
+      setLocation("/login?password_reset=1", { replace: true });
     } catch (err: unknown) {
       reportError(err, { category: "password_recovery_update" });
       setError(getAuthCallbackExceptionMessage(err));
@@ -239,7 +215,7 @@ function AuthCallback() {
         {error && !recoveryMode && (
           <KubButton
             type="button"
-            onClick={() => setLocation("/login?auth_error=confirmation_link")}
+            onClick={() => setLocation("/login?auth_error=confirmation_link", { replace: true })}
             size="md"
           >
             Перейти ко входу
@@ -376,13 +352,6 @@ function AppRoutes() {
 
   // Auth callback always renders so it can exchange the code, regardless of session state.
   if (location.startsWith("/auth/callback")) {
-    return <AuthCallback />;
-  }
-
-  // Supabase may consume the recovery hash before React reads the URL. The
-  // PASSWORD_RECOVERY event sets a sessionStorage flag; while it is present,
-  // keep the user in the password update screen instead of entering the app.
-  if (user && isPasswordRecoveryFlow()) {
     return <AuthCallback />;
   }
 

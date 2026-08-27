@@ -1917,11 +1917,11 @@ Recurring tasks roadmap note:
   SHA-256
   `431eaac6d25e4cc1539354e274fccddb56c526ccd0a972b63e5e8a4da06f7a95`.
 - Final ignored artifacts are
-  `.local/release-final/letscube-0.1.2-build-3.apk` (6,513,202 bytes, SHA-256
-  `8d5efc8dbc377029bd66d1118d427cfb09c0ce93572a43f99e0cced56e30cf5a`)
-  and `.local/release-final/letscube-0.1.2-build-3.aab` (6,150,068 bytes,
+  `.local/release-final/letscube-0.1.2-build-3.apk` (6,513,254 bytes, SHA-256
+  `97e5b2634289ea00fe1efc45456db122a62809010c14abbd0cda39f7ef0ef676`)
+  and `.local/release-final/letscube-0.1.2-build-3.aab` (6,150,120 bytes,
   SHA-256
-  `d8157ea0405927c6e94f16678a1049d243cca1d48dfd821fbcfa870cccdadf3f`).
+  `38f28605f6f804c42d7d2769f2daecc684744e2c8219f44e618279c2de8d3542`).
   The exact signed build wrapper and final release verifier both passed for
   version `0.1.2`, build `3`.
 - These canonical files are the current outputs of the restored tracked
@@ -2239,15 +2239,37 @@ Recurring tasks roadmap note:
   rebuilt canonical final `0.1.2/3`. The installed package is nondebuggable,
   retains the authenticated shell, exposes no WebView debug socket and leaves
   zero controller helper files or ADB forwards. Canonical restored-source
-  artifacts are 6,513,202-byte APK SHA-256
-  `8d5efc8dbc377029bd66d1118d427cfb09c0ce93572a43f99e0cced56e30cf5a`
-  and 6,150,068-byte AAB SHA-256
-  `d8157ea0405927c6e94f16678a1049d243cca1d48dfd821fbcfa870cccdadf3f`.
+  artifacts are 6,513,254-byte APK SHA-256
+  `97e5b2634289ea00fe1efc45456db122a62809010c14abbd0cda39f7ef0ef676`
+  and 6,150,120-byte AAB SHA-256
+  `38f28605f6f804c42d7d2769f2daecc684744e2c8219f44e618279c2de8d3542`.
 - This closeout sent no FCM event and made no production deploy, publication,
   Play, SQL/schema/RLS, iOS/PWA or Windows change. Local Task 4 physical
   acceptance is complete; Asset Links deployment/domain verification, normal
   HTTPS recovery routing, external backup and catalog publication remain
   separate external gates.
+
+### 2026-08-27 Android final-review hardening
+
+- Auth callbacks now establish only the session represented by their own PKCE
+  code or complete implicit token pair. A recovery marker without callback
+  credentials cannot reuse an unrelated persisted session.
+- Query and fragment credentials are removed from the current history entry
+  before asynchronous exchange. Successful and terminal callback navigation
+  uses history replacement, so browser Back cannot restore callback secrets.
+- The strict APK verifier now requires APK Signature Scheme v2 in addition to
+  the existing signer, package, version, manifest and Asset Links checks.
+- Fresh validation passed Android/auth units 50/50, typecheck, production web
+  build, release catalog 27/27, authenticated smoke 5/5, database type drift,
+  read-only RLS smoke, production debug build, strict canonical APK verification
+  and Bundletool AAB validation. The targeted 70-case visual/release matrix
+  completed with 62 passes, 7 intentional mobile skips and one 3840px anchor
+  timing miss of 4px against a 3px threshold; the exact scenario then passed
+  three consecutive reruns.
+- A Realme update attempt was rejected before installation because the existing
+  local package has a different signer. The app was not uninstalled and its data
+  was not cleared. The official-GMS Nothing physical acceptance evidence above
+  remains the FCM source of truth.
 
 # 2026-08-27 - Android release build environment hardening
 

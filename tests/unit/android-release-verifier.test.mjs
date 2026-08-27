@@ -66,7 +66,7 @@ function assertAssetLinksRejected(document) {
 function createRunner(overrides = {}) {
   const calls = [];
   const output = {
-    "verify --verbose --print-certs": `Verified using v1 scheme (JAR signing): true\nSigner #1 certificate SHA-256 digest: ${fingerprint.replaceAll(":", "")}`,
+    "verify --verbose --print-certs": `Verified using v1 scheme (JAR signing): true\nVerified using v2 scheme (APK Signature Scheme v2): true\nSigner #1 certificate SHA-256 digest: ${fingerprint.replaceAll(":", "")}`,
     "manifest application-id": "com.kub.messenger",
     "manifest version-name": "0.1.1",
     "manifest version-code": "2",
@@ -257,9 +257,34 @@ test("Android release verifier fails closed for missing SDK tools and bad signat
         assetLinksPath: fixture.assetLinksPath,
         expectedMetadata: { applicationId: "com.kub.messenger", versionName: "0.1.1", versionCode: 2 },
         tools: { apksigner: "apksigner", apkanalyzer: "apkanalyzer" },
-        run: createRunner({ "verify --verbose --print-certs": "DOES NOT VERIFY" }).run,
+        run: createRunner({
+          "verify --verbose --print-certs": [
+            "Verifies",
+            "Verified using v2 scheme (APK Signature Scheme v2): true",
+            "DOES NOT CONTAIN A CERTIFICATE",
+          ].join("\n"),
+        }).run,
       }),
       /exactly one SHA-256 signing certificate/,
+    );
+  } finally {
+    rmSync(fixture.directory, { force: true, recursive: true });
+  }
+});
+
+test("Android release verifier rejects a v1-only APK signature", () => {
+  const fixture = createFixture();
+  try {
+    assert.throws(
+      () => verifyAndroidRelease(fixture.apkPath, {
+        assetLinksPath: fixture.assetLinksPath,
+        expectedMetadata: { applicationId: "com.kub.messenger", versionName: "0.1.1", versionCode: 2 },
+        tools: { apksigner: "apksigner", apkanalyzer: "apkanalyzer" },
+        run: createRunner({
+          "verify --verbose --print-certs": `Verified using v1 scheme (JAR signing): true\nVerified using v2 scheme (APK Signature Scheme v2): false\nSigner #1 certificate SHA-256 digest: ${fingerprint.replaceAll(":", "")}`,
+        }).run,
+      }),
+      /v2 signature scheme/,
     );
   } finally {
     rmSync(fixture.directory, { force: true, recursive: true });
