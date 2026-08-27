@@ -2293,6 +2293,10 @@ Recurring tasks roadmap note:
   signer parity passed. The rebuilt release installed on Realme as nondebuggable;
   warm, cold and force-stopped recovery links each opened the `Новый пароль`
   screen through an implicit HTTPS `VIEW` intent.
+- Scoped review of the callback-priority fix found no new Critical, Important
+  or Minor regressions and returned `READY`. The browser callback/history test
+  then passed 5/5 across three desktop and two mobile Playwright projects with
+  the required public runtime configuration loaded.
 - Realme's OEM StatementService later returned `legacy_failure` after an update
   because its verifier network job was background-restricted. Clearing only the
   verifier cache and temporary network/Doze exemptions did not make that OEM

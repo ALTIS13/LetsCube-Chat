@@ -222,6 +222,8 @@ pnpm.cmd android:open
 - A physical post-deploy test exposed and fixed callback unmounting during the
   global user loading transition. Warm, cold and force-stopped recovery links
   now open the `Новый пароль` screen through an implicit HTTPS `VIEW` intent.
+  Scoped review returned `READY`, and browser callback/history coverage passed
+  5/5 across the configured desktop/mobile Playwright projects.
 - Local physical Task 4 and post-deploy callback acceptance are complete.
   External off-device encrypted backup and catalog publication remain separate
   release gates.
