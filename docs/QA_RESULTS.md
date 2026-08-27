@@ -1917,11 +1917,11 @@ Recurring tasks roadmap note:
   SHA-256
   `431eaac6d25e4cc1539354e274fccddb56c526ccd0a972b63e5e8a4da06f7a95`.
 - Final ignored artifacts are
-  `.local/release-final/letscube-0.1.2-build-3.apk` (6,513,198 bytes, SHA-256
-  `af330f62a48d19a89972c1a1a2282382df657d395af2900a453158977b25802c`)
-  and `.local/release-final/letscube-0.1.2-build-3.aab` (6,150,069 bytes,
+  `.local/release-final/letscube-0.1.2-build-3.apk` (6,513,202 bytes, SHA-256
+  `8d5efc8dbc377029bd66d1118d427cfb09c0ce93572a43f99e0cced56e30cf5a`)
+  and `.local/release-final/letscube-0.1.2-build-3.aab` (6,150,068 bytes,
   SHA-256
-  `498ed78c0b6b43156d5c77e4d1f394fe1db10c14f28fdae855d8c52f8ff6910c`).
+  `d8157ea0405927c6e94f16678a1049d243cca1d48dfd821fbcfa870cccdadf3f`).
   The exact signed build wrapper and final release verifier both passed for
   version `0.1.2`, build `3`.
 - These canonical files are the current outputs of the restored tracked
@@ -2216,3 +2216,35 @@ Recurring tasks roadmap note:
   secret guards. `jarsigner -strict` additionally reports the expected
   self-signed trust-chain and missing-timestamp warnings for the permanent
   Android app-signing identity; ordinary cryptographic verification succeeds.
+
+# 2026-08-26 - Android Task 4 controller physical closeout
+
+- After the five automated fix rounds were exhausted, the controller closed
+  the remaining reviewer P1 on official-GMS Nothing A063 in a strictly QA-only
+  private chat. The approved same-key `0.1.2/3` debug overlay was installed only
+  for bounded CDP instrumentation and never entered canonical, catalog, Git or
+  publication paths.
+- The product file chooser staged and uploaded a synthetic WebM larger than
+  6 MiB with original quality selected. Product TUS upload progress, separate
+  message-send progress, upload completion and sent-message playback all
+  passed. The test message was soft-deleted; its original and generated media
+  variants were removed. An idempotent cleanup audit found four soft-deleted
+  test rows, zero active rows and all four objects removed or already absent.
+- Camera/photo reached live preview, shutter and captured preview before the
+  modal was closed without adding or sending. Regular video reached live,
+  record, stop and recorded preview before deletion. Voice reached record and
+  cancel; video-circle reached live and record before close/cancel. No captured
+  environment was retained, copied or sent.
+- Temporary source/Gradle edits were restored exactly before the private wrapper
+  rebuilt canonical final `0.1.2/3`. The installed package is nondebuggable,
+  retains the authenticated shell, exposes no WebView debug socket and leaves
+  zero controller helper files or ADB forwards. Canonical restored-source
+  artifacts are 6,513,202-byte APK SHA-256
+  `8d5efc8dbc377029bd66d1118d427cfb09c0ce93572a43f99e0cced56e30cf5a`
+  and 6,150,068-byte AAB SHA-256
+  `d8157ea0405927c6e94f16678a1049d243cca1d48dfd821fbcfa870cccdadf3f`.
+- This closeout sent no FCM event and made no production deploy, publication,
+  Play, SQL/schema/RLS, iOS/PWA or Windows change. Local Task 4 physical
+  acceptance is complete; Asset Links deployment/domain verification, normal
+  HTTPS recovery routing, external backup and catalog publication remain
+  separate external gates.

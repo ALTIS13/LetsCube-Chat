@@ -128,11 +128,11 @@ Preserved ignored artifacts:
   SHA-256
   `431eaac6d25e4cc1539354e274fccddb56c526ccd0a972b63e5e8a4da06f7a95`);
 - final `0.1.2` build `3`: `.local/release-final/letscube-0.1.2-build-3.apk`
-  (6,513,198 bytes, SHA-256
-  `af330f62a48d19a89972c1a1a2282382df657d395af2900a453158977b25802c`)
-  and `.local/release-final/letscube-0.1.2-build-3.aab` (6,150,069 bytes,
+  (6,513,202 bytes, SHA-256
+  `8d5efc8dbc377029bd66d1118d427cfb09c0ce93572a43f99e0cced56e30cf5a`)
+  and `.local/release-final/letscube-0.1.2-build-3.aab` (6,150,068 bytes,
   SHA-256
-  `498ed78c0b6b43156d5c77e4d1f394fe1db10c14f28fdae855d8c52f8ff6910c`).
+  `d8157ea0405927c6e94f16678a1049d243cca1d48dfd821fbcfa870cccdadf3f`).
 
 The final canonical files are the current outputs of the restored tracked
 production source. Signed APK/AAB ZIP serialization is not treated as
@@ -188,20 +188,22 @@ pnpm.cmd android:open
   authenticated session restore. It also passed fully-read/no-unread initial
   bottom anchoring, fast upward reading without a bottom/top jump, older-history
   prepend anchoring and sampled footer/timestamp stability in a large QA chat.
-- Synthetic media staging passed image/video picker behavior, video-only
-  quality choices, original selection and local preview playback. The bounded
-  run could not prove an isolated two-account QA upload target, so it sent
-  nothing; upload progress/completion, sent-message playback and product-side
-  cleanup remain unproven. The physical timebox expired before camera/photo,
-  regular-video, video-circle and voice controls could be exercised.
+- Controller closeout used a strictly QA-only private chat and the product file
+  chooser to upload a synthetic file larger than 6 MiB. TUS upload progress,
+  message-send progress, completion, sent-message playback and product-side
+  deletion all passed. A separate cleanup audit found zero active test rows and
+  all four test objects removed or already absent.
+- Camera/photo, regular video, video-circle and voice controls each passed the
+  expected live/record/stop/cancel path. No captured environment was retained,
+  copied or sent.
 - Realme RMX3830 on Android 15 retained its existing `0.1.0/1` debug package,
   correctly rejected the signed replacement and passed a safe launch/portrait
   check. Its custom microG stack is excluded from FCM acceptance.
 - Production-domain verification and normal HTTPS recovery routing remain
   pending until the tracked assetlinks document is deployed after review.
-- Actual product upload progress/completion, sent-message playback and cleanup,
-  plus camera/photo/regular-video/video-circle/voice remain mandatory physical
-  QA gates. Task 4 remains open.
+- Local physical Task 4 acceptance is complete. Production-domain verification,
+  normal HTTPS recovery routing, external off-device encrypted backup and
+  catalog publication remain separate external release gates.
 - Play Console app creation, the external off-device encrypted backup,
   store-listing artwork and final release screenshots remain pending.
 

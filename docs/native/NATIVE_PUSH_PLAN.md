@@ -128,9 +128,13 @@ Current implementation status:
   an isolated QA-only target was not proven inside the two-minute bound.
 - Final source/Gradle state was restored before rebuilding and reinstalling the
   canonical nondebuggable `0.1.2/3`; the authenticated shell survived and no
-  WebView debug socket, helper process, fixture or ADB forward remained. Actual
-  upload progress/completion/sent playback/cleanup and camera/photo/regular-
-  video/video-circle/voice remain skips, so Task 4 is still open.
+  WebView debug socket, helper process, fixture or ADB forward remained.
+- Controller closeout then passed a strictly QA-only product upload larger than
+  6 MiB with TUS/send progress, completion, sent playback and cleanup. Camera/
+  photo, regular video, video-circle and voice passed live/record/stop/cancel
+  coverage without retaining or sending captured environment. Local Task 4
+  physical acceptance is complete; production association and publication are
+  separate external gates.
 - Realme RMX3830 is a custom microG device. It may provide optional UI/media
   coverage but must never count toward FCM acceptance.
 
