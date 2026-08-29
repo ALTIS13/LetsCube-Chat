@@ -1,5 +1,6 @@
 import { getAuthCallbackUrl } from "@/lib/authRedirect";
 import { mapRegistrationInviteError, normalizeRegistrationInviteCode } from "@/lib/registrationInvite";
+import { resolveAuthGatewayRedirect } from "./authGatewayRedirect.mjs";
 
 const env = import.meta.env as Record<string, string | undefined>;
 
@@ -32,12 +33,16 @@ type AuthGatewayPayload = SignupPayload | RecoveryPayload | ResendSignupPayload;
 export async function requestAuthGateway(payload: AuthGatewayPayload): Promise<void> {
   const gatewayUrl = getAuthGatewayUrl();
   const requestBody = buildAuthGatewayRequestBody(payload);
+  const redirectTo = resolveAuthGatewayRedirect(
+    payload.action === "resend_signup" ? payload.redirectTo : undefined,
+    getAuthCallbackUrl,
+  );
   const response = await fetch(gatewayUrl, {
     method: "POST",
     headers: buildHeaders(),
     body: JSON.stringify({
       ...requestBody,
-      redirectTo: getAuthCallbackUrl(),
+      redirectTo,
     }),
   });
 

@@ -4,6 +4,7 @@ import {
   lifecycleKind,
   lifecycleRpcBody,
   normalizeLifecycleUserId,
+  resendSignupAndExtend,
 } from "./registrationLifecycle.mjs";
 
 type GatewayAction = "signup" | "recovery" | "resend_signup";
@@ -107,18 +108,17 @@ Deno.serve(async (request: Request) => {
   }
 
   if (action === "resend_signup") {
-    const authResponse = await callAuthEndpoint(supabaseUrl, supabaseKey, "resend", {
-      body: {
-        type: "signup",
-        email,
-        options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
-      },
+    const resend = await resendSignupAndExtend({
+      supabaseUrl,
+      supabaseKey,
+      serviceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+      email,
+      redirectTo,
     });
-    if (!authResponse.ok) {
-      console.error("auth-yandex-gateway signup resend failed", { status: authResponse.status });
+    if (!resend.ok) {
+      console.error("auth-yandex-gateway signup resend failed", { status: resend.status });
       return corsJson({ ok: false, error: "auth_failed" }, 400, request);
     }
-    await extendLifecycle(supabaseUrl, email);
     return corsJson({ ok: true }, 200, request);
   }
 
@@ -325,20 +325,6 @@ async function registerLifecycle(supabaseUrl: string, userId: string, inviteCode
   );
   if (!response.ok) {
     console.error("auth-yandex-gateway lifecycle registration failed", {
-      status: response.status,
-      code: lifecycleErrorCode(response.body),
-    });
-  }
-}
-
-async function extendLifecycle(supabaseUrl: string, email: string): Promise<void> {
-  const response = await callLifecycleRpc(
-    supabaseUrl,
-    "registration_lifecycle_extend_by_email_internal",
-    { p_email: email },
-  );
-  if (!response.ok) {
-    console.error("auth-yandex-gateway lifecycle extension failed", {
       status: response.status,
       code: lifecycleErrorCode(response.body),
     });
