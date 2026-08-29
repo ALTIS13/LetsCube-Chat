@@ -19,6 +19,7 @@ async function buildAll() {
       path.resolve(artifactDir, "src/index.ts"),
       path.resolve(artifactDir, "src/supportMailIndex.ts"),
       path.resolve(artifactDir, "src/workers/mediaVariantRules.ts"),
+      path.resolve(artifactDir, "src/workers/registrationCleanupWorker.ts"),
     ],
     platform: "node",
     bundle: true,
@@ -114,7 +115,7 @@ async function buildAll() {
     sourcemap: "linked",
     plugins: [
       // pino relies on workers to handle logging, instead of externalizing it we use a plugin to handle it
-      esbuildPluginPino({ transports: ["pino-pretty"] })
+      esbuildPluginPino({ transports: ["pino-pretty"] }),
     ],
     // Make sure packages that are cjs only (e.g. express) but are bundled continue to work in our esm output file
     banner: {

@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { startMediaVariantsWorker } from "./workers/mediaVariantsWorker";
 import { startPushDispatcher } from "./workers/pushDispatcher";
 import { shouldStartLegacyPushDispatcher } from "./workers/pushDispatcherConfig";
+import { startRegistrationCleanupWorker } from "./workers/registrationCleanupWorker";
 
 const rawPort = process.env["PORT"];
 
@@ -31,5 +32,6 @@ app.listen(port, (err) => {
   if (shouldStartLegacyPushDispatcher(process.env["PUSH_DISPATCHER_ENABLED"])) {
     startPushDispatcher();
   }
+  startRegistrationCleanupWorker();
   startMediaVariantsWorker();
 });
