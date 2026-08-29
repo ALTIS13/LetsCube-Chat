@@ -372,29 +372,15 @@ language sql
 security definer
 set search_path = pg_catalog, public, private, auth, storage
 as $function$
-  with exempted as (
-    update private.registration_lifecycles l
-    set admin_hold_at = p_now,
-        claim_token = null,
-        claimed_at = null,
-        updated_at = p_now
-    where p_now is not null
-      and l.admin_hold_at is null
-      and private.registration_identity_requires_hold(l.user_id)
-    returning l.user_id
-  ), due as (
-    select l.user_id
+  with locked_candidates as (
+    select l.user_id, l.signup_kind
     from private.registration_lifecycles l
     join auth.users u on u.id = l.user_id
-    where p_claim_token is not null
+    where p_limit between 1 and 100
+      and p_claim_token is not null
       and p_now is not null
       and l.eligible_at <= p_now
       and l.admin_hold_at is null
-      and not private.registration_identity_requires_hold(u.id)
-      and not private.registration_has_product_activity(u.id)
-      and not exists (
-        select 1 from exempted e where e.user_id = l.user_id
-      )
       and (
         l.claim_token is null
         or l.claimed_at < p_now - interval '15 minutes'
@@ -403,16 +389,40 @@ as $function$
       and u.phone_confirmed_at is null
       and u.last_sign_in_at is null
     order by l.eligible_at, l.user_id
-    limit least(greatest(coalesce(p_limit, 0), 0), 100)
+    limit p_limit
     for update of l skip locked
+  ), classified as (
+    select
+      candidate.user_id,
+      candidate.signup_kind,
+      private.registration_identity_requires_hold(candidate.user_id) as requires_hold,
+      private.registration_has_product_activity(candidate.user_id) as has_activity
+    from locked_candidates candidate
+  ), held as (
+    update private.registration_lifecycles l
+    set admin_hold_at = p_now,
+        claim_token = null,
+        claimed_at = null,
+        updated_at = p_now
+    from classified candidate
+    where l.user_id = candidate.user_id
+      and candidate.requires_hold
+    returning l.user_id
   ), claimed as (
     update private.registration_lifecycles l
     set claim_token = p_claim_token,
         claimed_at = p_now,
         attempt_count = l.attempt_count + 1,
         updated_at = p_now
-    from due
-    where l.user_id = due.user_id
+    from classified candidate
+    where l.user_id = candidate.user_id
+      and not candidate.requires_hold
+      and not candidate.has_activity
+      and not exists (
+        select 1
+        from held
+        where held.user_id = candidate.user_id
+      )
     returning l.user_id, l.signup_kind
   )
   select claimed.user_id, claimed.signup_kind

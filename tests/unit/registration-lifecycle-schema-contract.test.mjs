@@ -192,6 +192,51 @@ test("claim locks lifecycle rows without locking auth users", () => {
   assert.doesNotMatch(body, /for update skip locked/i);
 });
 
+test("claim bounds and locks candidates before classification or updates", () => {
+  const body = functionBody("public.registration_cleanup_claim");
+  const lockedCandidates = body.search(/\bwith\s+locked_candidates\s+as\s*\(/i);
+  const ordered = body.indexOf("order by", lockedCandidates);
+  const limited = body.indexOf("limit p_limit", ordered);
+  const locked = body.indexOf("for update of l skip locked", limited);
+  const classified = body.indexOf("classified as", locked);
+  const held = body.indexOf("held as", classified);
+  const claimed = body.indexOf("claimed as", held);
+  const firstUpdate = body.indexOf(
+    "update private.registration_lifecycles",
+    lockedCandidates,
+  );
+  const lifecycleUpdates = [
+    ...body.matchAll(/update private\.registration_lifecycles/gi),
+  ];
+
+  assert.ok(lockedCandidates >= 0, "expected a locked_candidates CTE");
+  assert.ok(ordered > lockedCandidates, "expected candidate ordering");
+  assert.ok(limited > ordered, "expected LIMIT p_limit after ordering");
+  assert.ok(locked > limited, "expected lifecycle row locking after LIMIT");
+  assert.ok(classified > locked, "expected classification after locking");
+  assert.ok(
+    held > classified,
+    "expected hold persistence after classification",
+  );
+  assert.ok(claimed > held, "expected claiming after hold persistence");
+  assert.ok(firstUpdate > locked, "expected updates only after locking");
+  assert.match(body.slice(classified, firstUpdate), /from locked_candidates/i);
+  assert.equal(lifecycleUpdates.length, 2);
+  assert.match(
+    body.slice(held, claimed),
+    /update private\.registration_lifecycles[\s\S]+from classified candidate[\s\S]+where l\.user_id = candidate\.user_id[\s\S]+candidate\.requires_hold/i,
+  );
+  assert.match(
+    body.slice(claimed),
+    /update private\.registration_lifecycles[\s\S]+from classified candidate[\s\S]+where l\.user_id = candidate\.user_id/i,
+  );
+  assert.doesNotMatch(
+    body.slice(0, locked),
+    /update private\.registration_lifecycles/i,
+  );
+  assert.doesNotMatch(body, /\bexempted\s+as\s*\(\s*update/i);
+});
+
 test("recheck durably holds identities that become exempt after registration", () => {
   const body = functionBody("public.registration_cleanup_recheck");
   assert.match(
