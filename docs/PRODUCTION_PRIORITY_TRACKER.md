@@ -9,6 +9,11 @@ Execution ownership:
 - This tracker/chat owns the shared backend and web interface plus Windows and Android applications.
 - iPhone/iPad PWA implementation and physical QA are owned by a separate agent. Do not modify or repeat that work from this execution stream; only consume its committed `main` baseline after checking `git status` and `git log`.
 
+Approved architecture handoff (2026-08-30):
+
+- `[~]` Registration lifecycle cleanup, LETSCUBE Bot API, the public app/download home, compact Stable changelog and shared motion system are specified in `docs/superpowers/specs/2026-08-30-registration-lifecycle-bot-platform-public-home-design.md`. The product design is approved; implementation plans and code are not started yet.
+- The specification contains a mandatory macOS/iOS handoff. Apple clients must consume the shared registration, bot identity, notification, release/changelog and motion contracts instead of creating parallel backend behavior. iPhone/iPad PWA implementation remains externally owned and is not modified by this stage.
+
 Legend:
 
 - `[x]` done and covered by regression checks.
