@@ -3,7 +3,7 @@ import { mapRegistrationInviteError, normalizeRegistrationInviteCode } from "@/l
 
 const env = import.meta.env as Record<string, string | undefined>;
 
-type AuthGatewayAction = "signup" | "recovery";
+type AuthGatewayAction = "signup" | "recovery" | "resend_signup";
 
 interface SignupPayload {
   action: "signup";
@@ -20,7 +20,14 @@ interface RecoveryPayload {
   captchaToken: string;
 }
 
-type AuthGatewayPayload = SignupPayload | RecoveryPayload;
+type ResendSignupPayload = {
+  action: "resend_signup";
+  email: string;
+  captchaToken: string;
+  redirectTo?: string;
+};
+
+type AuthGatewayPayload = SignupPayload | RecoveryPayload | ResendSignupPayload;
 
 export async function requestAuthGateway(payload: AuthGatewayPayload): Promise<void> {
   const gatewayUrl = getAuthGatewayUrl();
@@ -41,7 +48,7 @@ export async function requestAuthGateway(payload: AuthGatewayPayload): Promise<v
 }
 
 function buildAuthGatewayRequestBody(payload: AuthGatewayPayload): Record<string, unknown> {
-  if (payload.action === "recovery") {
+  if (payload.action === "recovery" || payload.action === "resend_signup") {
     return {
       action: payload.action,
       email: payload.email,

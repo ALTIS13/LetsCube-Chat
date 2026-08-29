@@ -41,7 +41,7 @@
     "format:check": "biome format package.json biome.json playwright.config.ts tests/e2e tests/rls tests/security scripts/supabase-typegen.mjs scripts/rls-smoke.mjs scripts/rls-anon-rest-probe.mjs scripts/auth-anti-abuse-smoke.mjs scripts/e2e-auth-states.mjs supabase/functions/auth-yandex-gateway/rateLimit.mjs supabase/functions/auth-yandex-gateway/inviteCode.mjs",
     "lint": "biome check package.json biome.json playwright.config.ts tests/e2e tests/rls tests/security scripts/supabase-typegen.mjs scripts/rls-smoke.mjs scripts/rls-anon-rest-probe.mjs scripts/auth-anti-abuse-smoke.mjs scripts/e2e-auth-states.mjs supabase/functions/auth-yandex-gateway/rateLimit.mjs supabase/functions/auth-yandex-gateway/inviteCode.mjs",
     "auth:rate-limit:test": "node --test tests/security/auth-yandex-rate-limit.test.mjs",
-    "auth:security:test": "node --test tests/security/auth-yandex-rate-limit.test.mjs tests/security/auth-yandex-invite-code.test.mjs",
+    "auth:security:test": "node --test tests/security/auth-yandex-rate-limit.test.mjs tests/security/auth-yandex-invite-code.test.mjs tests/security/auth-yandex-registration-lifecycle.test.mjs",
     "auth:anti-abuse:smoke": "node scripts/auth-anti-abuse-smoke.mjs",
     "rls:smoke": "node scripts/rls-smoke.mjs",
     "rls:anon-rest": "node scripts/rls-anon-rest-probe.mjs",

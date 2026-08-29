@@ -1,7 +1,12 @@
 import { createAuthRateLimiter } from "./rateLimit.mjs";
 import { normalizeInviteCode, shouldValidateInviteGate } from "./inviteCode.mjs";
+import {
+  lifecycleKind,
+  lifecycleRpcBody,
+  normalizeLifecycleUserId,
+} from "./registrationLifecycle.mjs";
 
-type GatewayAction = "signup" | "recovery";
+type GatewayAction = "signup" | "recovery" | "resend_signup";
 
 type RequestBody = {
   action?: unknown;
@@ -89,9 +94,31 @@ Deno.serve(async (request: Request) => {
     if (!authResponse.ok && !isExistingAccountError(authResponse.body)) {
       const inviteError = readInviteError(authResponse.body);
       if (inviteError) return corsJson({ ok: false, error: inviteError }, 400, request);
-      console.error("auth-yandex-gateway signup failed", summarizeAuthError(authResponse.status, authResponse.body));
+      console.error("auth-yandex-gateway signup failed", { status: authResponse.status });
       return corsJson({ ok: false, error: "auth_failed" }, 400, request);
     }
+    const userId = isNewSignupResponse(authResponse.body)
+      ? normalizeLifecycleUserId(authResponse.body.user)
+      : null;
+    if (authResponse.ok && userId) {
+      await registerLifecycle(supabaseUrl, userId, inviteCode);
+    }
+    return corsJson({ ok: true }, 200, request);
+  }
+
+  if (action === "resend_signup") {
+    const authResponse = await callAuthEndpoint(supabaseUrl, supabaseKey, "resend", {
+      body: {
+        type: "signup",
+        email,
+        options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+      },
+    });
+    if (!authResponse.ok) {
+      console.error("auth-yandex-gateway signup resend failed", { status: authResponse.status });
+      return corsJson({ ok: false, error: "auth_failed" }, 400, request);
+    }
+    await extendLifecycle(supabaseUrl, email);
     return corsJson({ ok: true }, 200, request);
   }
 
@@ -100,7 +127,7 @@ Deno.serve(async (request: Request) => {
     body: { email },
   });
   if (!authResponse.ok) {
-    console.error("auth-yandex-gateway recovery failed", summarizeAuthError(authResponse.status, authResponse.body));
+    console.error("auth-yandex-gateway recovery failed", { status: authResponse.status });
     return corsJson({ ok: false, error: "auth_failed" }, 400, request);
   }
   return corsJson({ ok: true }, 200, request);
@@ -117,7 +144,7 @@ async function readBody(request: Request): Promise<RequestBody | null> {
 }
 
 function normalizeAction(value: unknown): GatewayAction | null {
-  return value === "signup" || value === "recovery" ? value : null;
+  return value === "signup" || value === "recovery" || value === "resend_signup" ? value : null;
 }
 
 function normalizeEmail(value: unknown): string | null {
@@ -191,7 +218,7 @@ function readSupabasePublicKey() {
 async function callAuthEndpoint(
   supabaseUrl: string,
   supabaseKey: string,
-  endpoint: "signup" | "recover",
+  endpoint: "signup" | "recover" | "resend",
   payload: { redirectTo?: string; body: Record<string, unknown> },
 ) {
   const url = new URL(`/auth/v1/${endpoint}`, supabaseUrl);
@@ -280,12 +307,77 @@ function isExistingAccountError(error: Record<string, unknown>) {
   return code === "user_already_exists" || message.includes("already registered") || message.includes("already exists");
 }
 
-function summarizeAuthError(status: number, error: Record<string, unknown>) {
+function isNewSignupResponse(body: Record<string, unknown>): boolean {
+  const user = body.user;
+  return (
+    !!user &&
+    typeof user === "object" &&
+    Array.isArray((user as Record<string, unknown>).identities) &&
+    (user as Record<string, unknown>).identities.length > 0
+  );
+}
+
+async function registerLifecycle(supabaseUrl: string, userId: string, inviteCode: string | null): Promise<void> {
+  const response = await callLifecycleRpc(
+    supabaseUrl,
+    "registration_lifecycle_register_internal",
+    lifecycleRpcBody(userId, lifecycleKind(inviteCode), inviteCode),
+  );
+  if (!response.ok) {
+    console.error("auth-yandex-gateway lifecycle registration failed", {
+      status: response.status,
+      code: lifecycleErrorCode(response.body),
+    });
+  }
+}
+
+async function extendLifecycle(supabaseUrl: string, email: string): Promise<void> {
+  const response = await callLifecycleRpc(
+    supabaseUrl,
+    "registration_lifecycle_extend_by_email_internal",
+    { p_email: email },
+  );
+  if (!response.ok) {
+    console.error("auth-yandex-gateway lifecycle extension failed", {
+      status: response.status,
+      code: lifecycleErrorCode(response.body),
+    });
+  }
+}
+
+async function callLifecycleRpc(
+  supabaseUrl: string,
+  functionName: "registration_lifecycle_register_internal" | "registration_lifecycle_extend_by_email_internal",
+  body: Record<string, unknown>,
+) {
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!serviceRoleKey) return { ok: false, status: 503, body: { code: "not_configured" } };
+
+  let response: Response;
+  try {
+    response = await fetch(new URL(`/rest/v1/rpc/${functionName}`, supabaseUrl), {
+      method: "POST",
+      headers: {
+        apikey: serviceRoleKey,
+        authorization: `Bearer ${serviceRoleKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    return { ok: false, status: 503, body: { code: "request_failed" } };
+  }
+
   return {
-    status,
-    code: String(error.code || "auth_error").slice(0, 80),
-    message: String(error.message || error.msg || "auth error").slice(0, 160),
+    ok: response.ok,
+    status: response.status,
+    body: await readRemoteJson(response),
   };
+}
+
+function lifecycleErrorCode(error: Record<string, unknown>): string {
+  const code = error.code || error.error || "lifecycle_error";
+  return typeof code === "string" ? code.slice(0, 80) : "lifecycle_error";
 }
 
 async function validateInviteCode(
