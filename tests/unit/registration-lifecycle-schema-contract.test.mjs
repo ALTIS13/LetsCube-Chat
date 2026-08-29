@@ -6,20 +6,196 @@ const sql = readFileSync(
   ".migration-backup/supabase/migrations/20260830103000_registration_lifecycle_cleanup.sql",
   "utf8",
 );
+const lowerSql = sql.toLowerCase();
 
-test("registration lifecycle stays private and service-role-only", () => {
+const publicRpcs = [
+  ["registration_lifecycle_register_internal", "uuid,text,text"],
+  ["registration_lifecycle_extend_by_email_internal", "text"],
+  ["registration_cleanup_claim", "integer,uuid,timestamptz"],
+  ["registration_cleanup_recheck", "uuid,uuid,timestamptz"],
+  ["registration_cleanup_finish", "uuid,uuid,text,text"],
+  ["registration_lifecycle_backfill_internal", "integer,timestamptz"],
+];
+
+function functionDefinition(qualifiedName) {
+  const marker = `create or replace function ${qualifiedName.toLowerCase()}(`;
+  const start = lowerSql.indexOf(marker);
+  assert.ok(start >= 0, `missing function ${qualifiedName}`);
+  const next = lowerSql.indexOf(
+    "\ncreate or replace function ",
+    start + marker.length,
+  );
+  return sql.slice(start, next < 0 ? sql.length : next);
+}
+
+function functionBody(qualifiedName) {
+  const definition = functionDefinition(qualifiedName);
+  const match = definition.match(/\bas\s+\$([a-z0-9_]*)\$([\s\S]*?)\$\1\$;/i);
+  assert.ok(match, `missing delimited body for ${qualifiedName}`);
+  return match[2];
+}
+
+test("registration lifecycle tables and private predicates are defined", () => {
   assert.match(sql, /create schema if not exists private/i);
   assert.match(sql, /create table private\.registration_lifecycles/i);
-  assert.match(sql, /revoke all on function public\.registration_cleanup_claim/i);
-  assert.match(sql, /grant execute on function public\.registration_cleanup_claim[\s\S]+to service_role/i);
-  assert.doesNotMatch(sql, /grant execute[\s\S]+to anon/i);
-  assert.doesNotMatch(sql, /grant execute[\s\S]+to authenticated/i);
+  assert.match(sql, /create table private\.registration_cleanup_audit/i);
+  functionBody("private.registration_identity_requires_hold");
+  functionBody("private.registration_has_product_activity");
 });
 
-test("cleanup requires an unconfirmed and unused auth account", () => {
-  assert.match(sql, /email_confirmed_at is null/i);
-  assert.match(sql, /phone_confirmed_at is null/i);
-  assert.match(sql, /last_sign_in_at is null/i);
-  assert.match(sql, /from public\.messages/i);
-  assert.match(sql, /for update skip locked/i);
+for (const [name, signature] of publicRpcs) {
+  test(`${name} is service-role-only with a fixed search path`, () => {
+    const definition = functionDefinition(`public.${name}`);
+    const escapedSignature = signature.replaceAll(",", "\\s*,\\s*");
+    assert.match(
+      definition,
+      /set search_path = pg_catalog, public, private, auth, storage/i,
+    );
+    assert.match(
+      definition,
+      new RegExp(
+        `revoke all on function public\\.${name}\\(${escapedSignature}\\)\\s+from public, anon, authenticated, service_role`,
+        "i",
+      ),
+    );
+    assert.match(
+      definition,
+      new RegExp(
+        `grant execute on function public\\.${name}\\(${escapedSignature}\\)\\s+to service_role`,
+        "i",
+      ),
+    );
+    assert.doesNotMatch(
+      definition,
+      /grant execute[\s\S]+to (?:anon|authenticated)/i,
+    );
+  });
+}
+
+test("registration validates invite hashes and records durable exemptions", () => {
+  const body = functionBody("public.registration_lifecycle_register_internal");
+  assert.match(body, /p_user_id is null/i);
+  assert.match(body, /p_invite_code_hash\s*!~\s*'\^\[0-9a-f\]\{64\}\$'/i);
+  assert.match(
+    body,
+    /p_signup_kind = 'public'[\s\S]+p_invite_code_hash is not null/i,
+  );
+  assert.match(
+    body,
+    /private\.registration_identity_requires_hold\(p_user_id\)/i,
+  );
+  assert.match(body, /admin_hold_at/i);
+});
+
+test("resend is bounded and never moves an old backfill grace deadline backward", () => {
+  const body = functionBody(
+    "public.registration_lifecycle_extend_by_email_internal",
+  );
+  assert.match(body, /octet_length\(v_email\)[\s\S]+254/i);
+  assert.match(body, /v_email[\s\S]+\^\[\^\[:space:\]@\]\+@/i);
+  assert.match(
+    body,
+    /eligible_at\s*=\s*greatest\(\s*l\.eligible_at,\s*least\([\s\S]+interval '14 days'[\s\S]+interval '7 days'[\s\S]+interval '72 hours'[\s\S]+\)\s*\)/i,
+  );
+  assert.doesNotMatch(body, /eligible_at\s*=\s*least\(/i);
+});
+
+test("backfill classifies authoritative invite uses and preserves rollout grace", () => {
+  const body = functionBody("public.registration_lifecycle_backfill_internal");
+  assert.match(body, /from public\.registration_invite_uses/i);
+  assert.match(body, /case when[\s\S]+then 'invite'[\s\S]+else 'public'/i);
+  assert.match(
+    body,
+    /case when[\s\S]+signup_kind = 'invite'[\s\S]+interval '7 days'[\s\S]+interval '72 hours'/i,
+  );
+  assert.match(body, /p_enabled_at \+ interval '24 hours'/i);
+  assert.match(body, /private\.registration_identity_requires_hold\(/i);
+  assert.match(body, /admin_hold_at/i);
+});
+
+test("identity exemption covers legacy, dynamic and operational account indicators", () => {
+  const body = functionBody("private.registration_identity_requires_hold");
+  assert.match(body, /from public\.profiles/i);
+  assert.match(body, /role::text\s*<>\s*'user'/i);
+  assert.match(body, /from public\.user_global_roles/i);
+  assert.match(body, /from public\.user_roles/i);
+  assert.match(body, /join public\.roles/i);
+  assert.match(body, /r\.key\s*<>\s*'user'/i);
+  assert.match(body, /public\.profile_reserved_username_key/i);
+  assert.match(body, /public\.profile_reserved_username_keys/i);
+});
+
+test("product activity is centralized and covers every authoritative source", () => {
+  const body = functionBody("private.registration_has_product_activity");
+  for (const source of [
+    "messages",
+    "reactions",
+    "message_hidden_for_users",
+    "tasks",
+    "task_events",
+    "task_recurrences",
+    "task_recurrence_events",
+    "profile_contacts",
+    "chats",
+    "chat_members",
+    "group_invites",
+    "folders",
+    "locations",
+    "topics",
+    "audit_logs",
+    "bans",
+    "mutes",
+    "push_subscriptions",
+    "user_push_devices",
+    "push_foreground_sessions",
+    "notification_preferences",
+    "chat_notification_preferences",
+    "support_tickets",
+    "support_ticket_messages",
+    "support_ticket_events",
+    "support_operator_preferences",
+    "privacy_acceptances",
+    "phone_verification_claims",
+    "phone_verification_sms_events",
+    "registration_invites",
+  ]) {
+    assert.match(body, new RegExp(`from public\\.${source}\\b`, "i"), source);
+  }
+  assert.match(body, /from storage\.objects/i);
+  assert.match(body, /owner_id\s*=\s*p_user_id::text/i);
+  assert.match(body, /storage\.foldername\(/i);
+  assert.match(body, /pc\.phone_verified/i);
+  assert.doesNotMatch(
+    body,
+    /registration_invite_uses|user_global_roles|user_roles|location_members/i,
+  );
+});
+
+for (const name of [
+  "registration_cleanup_claim",
+  "registration_cleanup_recheck",
+]) {
+  test(`${name} rechecks identity, hold, auth and centralized activity`, () => {
+    const body = functionBody(`public.${name}`);
+    assert.match(body, /email_confirmed_at is null/i);
+    assert.match(body, /phone_confirmed_at is null/i);
+    assert.match(body, /last_sign_in_at is null/i);
+    assert.match(body, /admin_hold_at is null/i);
+    assert.match(body, /private\.registration_identity_requires_hold\(/i);
+    assert.match(body, /private\.registration_has_product_activity\(/i);
+  });
+}
+
+test("claim locks lifecycle rows without locking auth users", () => {
+  const body = functionBody("public.registration_cleanup_claim");
+  assert.match(body, /for update of l skip locked/i);
+  assert.doesNotMatch(body, /for update skip locked/i);
+});
+
+test("recheck durably holds identities that become exempt after registration", () => {
+  const body = functionBody("public.registration_cleanup_recheck");
+  assert.match(
+    body,
+    /registration_identity_requires_hold[\s\S]+update private\.registration_lifecycles[\s\S]+admin_hold_at/i,
+  );
 });
