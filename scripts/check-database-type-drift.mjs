@@ -32,6 +32,15 @@ const appFacingFunctions = [
   "task_restore",
 ];
 
+const serviceRoleOnlyFunctions = new Set([
+  "registration_lifecycle_register_internal",
+  "registration_lifecycle_extend_by_email_internal",
+  "registration_cleanup_claim",
+  "registration_cleanup_recheck",
+  "registration_cleanup_finish",
+  "registration_lifecycle_backfill_internal",
+]);
+
 const manual = read(manualPath);
 const generated = read(generatedPath);
 const manualSchema = parseSchema(manual, "manual database.ts");
@@ -80,11 +89,22 @@ for (const functionName of appFacingFunctions) {
   }
 }
 
+for (const functionName of serviceRoleOnlyFunctions) {
+  if (manualSchema.functions.has(functionName)) {
+    warnings.push(
+      `manual database.ts exposes service-role-only RPC: ${functionName}`,
+    );
+  } else if (generatedSchema.functions.has(functionName)) {
+    notes.push(`generated-only service-role RPC: ${functionName}`);
+  }
+}
+
 printSection("Database type drift check");
 console.log(`Manual:    ${path.relative(root, manualPath)}`);
 console.log(`Generated: ${path.relative(root, generatedPath)}`);
 console.log(`Tables checked: ${criticalTables.length}`);
 console.log(`RPC checked:    ${appFacingFunctions.length}`);
+console.log(`Private RPCs:   ${serviceRoleOnlyFunctions.size}`);
 
 if (warnings.length > 0) {
   printSection("Warnings");
