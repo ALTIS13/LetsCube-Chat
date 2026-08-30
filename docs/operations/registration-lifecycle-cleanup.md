@@ -448,15 +448,20 @@ never calls `registration_cleanup_recover_dead_letter`; that RPC is an
 operator-only one-row recovery action after the fifth failure has been reviewed.
 
 Re-verify in Coolify before rollout that this deployment is application UUID
-`fkd10qwlo4qod9e6gtyzzuwk`. Then run this read-only Docker check on the server;
-it must find exactly one running container with that explicit application label
-and confirm the verified host-to-container bind mount. Stop if either check
-fails.
+`fkd10qwlo4qod9e6gtyzzuwk`. Coolify 4.1 stores its internal numeric database ID
+in `coolify.applicationId`; do not compare that label with the public UUID. The
+public UUID is present in both `coolify.name` and
+`com.docker.compose.project`. The read-only Docker check below must find exactly
+one running container matching both UUID labels and confirm the verified
+host-to-container bind mount. Stop if either check fails.
 
 ```bash
 set -euo pipefail
 
-mapfile -t worker_containers < <(sudo -n docker ps --filter label=coolify.applicationId=fkd10qwlo4qod9e6gtyzzuwk --quiet)
+mapfile -t worker_containers < <(sudo -n docker ps \
+  --filter label=coolify.name=fkd10qwlo4qod9e6gtyzzuwk \
+  --filter label=com.docker.compose.project=fkd10qwlo4qod9e6gtyzzuwk \
+  --quiet)
 worker_count="${#worker_containers[@]}"
 [ "$worker_count" -eq 1 ]
 worker_container="${worker_containers[0]}"
@@ -540,7 +545,12 @@ current failure and a latest aggregate result with zero failed candidates; its
 output is limited to the safe status and aggregate result.
 
 ```bash
-mapfile -t worker_containers < <(sudo -n docker ps --filter label=coolify.applicationId=fkd10qwlo4qod9e6gtyzzuwk --quiet)
+set -euo pipefail
+
+mapfile -t worker_containers < <(sudo -n docker ps \
+  --filter label=coolify.name=fkd10qwlo4qod9e6gtyzzuwk \
+  --filter label=com.docker.compose.project=fkd10qwlo4qod9e6gtyzzuwk \
+  --quiet)
 worker_count="${#worker_containers[@]}"
 [ "$worker_count" -eq 1 ]
 worker_container="${worker_containers[0]}"

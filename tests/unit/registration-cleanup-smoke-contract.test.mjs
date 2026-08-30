@@ -118,9 +118,12 @@ test("Dockerfile worker runtime sources the local secret env and exposes cleanup
   assert.match(runbook, /\/run\/secrets\/letscube-infra\.env/);
   assert.match(runbook, /container destination/i);
   assert.match(runbook, /fkd10qwlo4qod9e6gtyzzuwk/);
-  assert.match(
-    runbook,
-    /docker ps --filter label=coolify\.applicationId=fkd10qwlo4qod9e6gtyzzuwk/,
+  const workerSelectorPattern =
+    /docker ps \\\n  --filter label=coolify\.name=fkd10qwlo4qod9e6gtyzzuwk \\\n  --filter label=com\.docker\.compose\.project=fkd10qwlo4qod9e6gtyzzuwk \\\n  --quiet/g;
+  assert.equal(
+    [...runbook.matchAll(workerSelectorPattern)].length,
+    2,
+    "preflight and post-deploy gates must use the same exact worker UUID labels",
   );
   assert.match(runbook, /worker_count=.*\n\[ "\$worker_count" -eq 1 \]/);
   assert.match(runbook, /Re-verify.*Coolify.*before rollout/i);
