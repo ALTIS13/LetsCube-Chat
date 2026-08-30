@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { createRegistrationCleanupRepository } from "../../artifacts/api-server/src/workers/registrationCleanupRepository.ts";
+import {
+  createRegistrationCleanupRepository,
+  resolveRegistrationCleanupCredentials,
+} from "../../artifacts/api-server/src/workers/registrationCleanupRepository.ts";
 import { runRegistrationCleanupBatch } from "../../artifacts/api-server/src/workers/registrationCleanupWorker.ts";
 
 const root = new URL("../../", import.meta.url);
@@ -288,6 +291,47 @@ test("repository calls the atomic delete RPC and projects purge count", async ()
   );
 });
 
+test("repository accepts the established self-host worker credential aliases", () => {
+  const repository = createRegistrationCleanupRepository({
+    VITE_SUPABASE_URL: "https://core.example.test",
+    SELFHOST_SERVICE_ROLE_KEY: "self-host-service-role",
+  });
+
+  assert.equal(typeof repository.claim, "function");
+  assert.equal(typeof repository.purgeAudit, "function");
+});
+
+test("repository credential resolution is ordered and fails closed", () => {
+  assert.deepEqual(
+    resolveRegistrationCleanupCredentials({
+      SUPABASE_URL: "https://primary.example.test",
+      VITE_SUPABASE_URL: "https://fallback.example.test",
+      SUPABASE_SERVICE_ROLE_KEY: "primary-service-role",
+      SELFHOST_SERVICE_ROLE_KEY: "fallback-service-role",
+    }),
+    {
+      url: "https://primary.example.test",
+      serviceRoleKey: "primary-service-role",
+    },
+  );
+  assert.deepEqual(
+    resolveRegistrationCleanupCredentials({
+      SUPABASE_URL: "   ",
+      VITE_SUPABASE_URL: "https://fallback.example.test",
+      SUPABASE_SERVICE_ROLE_KEY: " ",
+      SELFHOST_SERVICE_ROLE_KEY: "fallback-service-role",
+    }),
+    {
+      url: "https://fallback.example.test",
+      serviceRoleKey: "fallback-service-role",
+    },
+  );
+  assert.throws(
+    () => resolveRegistrationCleanupCredentials({}),
+    /registration_cleanup_credentials_missing/,
+  );
+});
+
 test("audit purge failure fails the batch before candidates are claimed", async () => {
   const fake = createRepository({
     candidates: [{ user_id: "candidate-a", signup_kind: "public" }],
@@ -319,5 +363,7 @@ test("cleanup startup is bundled and remains disabled by default", async () => {
   assert.match(worker, /setTimeout/);
   assert.match(worker, /\.unref\(\)/);
   assert.match(repository, /SUPABASE_SERVICE_ROLE_KEY/);
-  assert.doesNotMatch(repository, /VITE_SUPABASE|SELFHOST_SERVICE_ROLE_KEY/);
+  assert.match(repository, /VITE_SUPABASE_URL/);
+  assert.match(repository, /SELFHOST_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(repository, /VITE_[A-Z0-9_]*SERVICE_ROLE/);
 });

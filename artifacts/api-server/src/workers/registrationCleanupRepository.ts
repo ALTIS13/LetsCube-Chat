@@ -26,10 +26,15 @@ export interface RegistrationCleanupRepository {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function required(environment: NodeJS.ProcessEnv, name: string): string {
-  const value = environment[name]?.trim();
-  if (!value) throw new Error("registration_cleanup_credentials_missing");
-  return value;
+function required(
+  environment: NodeJS.ProcessEnv,
+  names: readonly string[],
+): string {
+  for (const name of names) {
+    const value = environment[name]?.trim();
+    if (value) return value;
+  }
+  throw new Error("registration_cleanup_credentials_missing");
 }
 
 function requireRpcData<T>(
@@ -61,12 +66,23 @@ function projectCandidate(value: unknown): CleanupCandidate {
   return { user_id: userId, signup_kind: signupKind };
 }
 
-function createServiceRoleClient(
+export function resolveRegistrationCleanupCredentials(
   environment: NodeJS.ProcessEnv,
-): SupabaseClient {
+): { url: string; serviceRoleKey: string } {
+  return {
+    url: required(environment, ["SUPABASE_URL", "VITE_SUPABASE_URL"]),
+    serviceRoleKey: required(environment, [
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "SELFHOST_SERVICE_ROLE_KEY",
+    ]),
+  };
+}
+
+function createServiceRoleClient(environment: NodeJS.ProcessEnv): SupabaseClient {
+  const credentials = resolveRegistrationCleanupCredentials(environment);
   return createClient(
-    required(environment, "SUPABASE_URL"),
-    required(environment, "SUPABASE_SERVICE_ROLE_KEY"),
+    credentials.url,
+    credentials.serviceRoleKey,
     {
       auth: {
         persistSession: false,
