@@ -2,26 +2,54 @@
 
 begin;
 
+create temporary table bot_sender_rewrite_probe(
+  message_id uuid not null
+) on commit drop;
+
+create or replace function pg_temp.bot_sender_rewrite_probe()
+returns trigger
+language plpgsql
+set search_path = ''
+as $function$
+begin
+  update public.messages
+  set user_id = null
+  where id = new.message_id;
+  return new;
+end
+$function$;
+
+create trigger trg_bot_sender_rewrite_probe
+  before insert on bot_sender_rewrite_probe
+  for each row execute function pg_temp.bot_sender_rewrite_probe();
+
 do $smoke$
 declare
   v_actor_id uuid;
   v_recipient_id uuid;
   v_profile_delete_id uuid := gen_random_uuid();
+  v_bulk_profile_one_id uuid := gen_random_uuid();
+  v_bulk_profile_two_id uuid := gen_random_uuid();
   v_chat_id uuid := gen_random_uuid();
   v_full_chat_id uuid := gen_random_uuid();
   v_private_chat_id uuid := gen_random_uuid();
   v_other_chat_id uuid := gen_random_uuid();
+  v_lifecycle_chat_id uuid := gen_random_uuid();
   v_delete_chat_id uuid := gen_random_uuid();
   v_bot_id uuid;
   v_second_bot_id uuid;
   v_third_bot_id uuid;
   v_message_id uuid;
   v_plain_message_id uuid;
+  v_restricted_plain_message_id uuid;
   v_mention_message_id uuid;
   v_command_message_id uuid;
   v_full_message_id uuid;
   v_private_message_id uuid;
   v_other_message_id uuid;
+  v_bulk_message_one_id uuid;
+  v_bulk_message_two_id uuid;
+  v_bulk_control_message_id uuid;
   v_topic_id uuid;
   v_other_topic_id uuid;
   v_media_message_id uuid;
@@ -34,6 +62,7 @@ declare
   v_notification_count integer;
   v_bot_message_count integer;
   v_update_count integer;
+  v_update_count_before integer;
   v_active_token_count integer;
   v_outbox_count integer;
   v_notification_id uuid;
@@ -206,6 +235,77 @@ begin
     raise exception 'profile_delete_tombstone_not_preserved';
   end if;
 
+  insert into auth.users(
+    id, aud, role, email, email_confirmed_at, created_at, updated_at
+  ) values
+    (
+      v_bulk_profile_one_id,
+      'authenticated',
+      'authenticated',
+      'bot-smoke-' || v_bulk_profile_one_id::text || '@invalid',
+      pg_catalog.now(),
+      pg_catalog.now(),
+      pg_catalog.now()
+    ),
+    (
+      v_bulk_profile_two_id,
+      'authenticated',
+      'authenticated',
+      'bot-smoke-' || v_bulk_profile_two_id::text || '@invalid',
+      pg_catalog.now(),
+      pg_catalog.now(),
+      pg_catalog.now()
+    );
+  insert into public.profiles(id, full_name, username)
+  values
+    (
+      v_bulk_profile_one_id,
+      'Bulk tombstone one',
+      'bulk_one_' || pg_catalog.substr(v_bulk_profile_one_id::text, 1, 8)
+    ),
+    (
+      v_bulk_profile_two_id,
+      'Bulk tombstone two',
+      'bulk_two_' || pg_catalog.substr(v_bulk_profile_two_id::text, 1, 8)
+    );
+  insert into public.messages(chat_id, user_id, content, type)
+  values (v_delete_chat_id, v_bulk_profile_one_id, 'bulk tombstone one', 'text')
+  returning id into v_bulk_message_one_id;
+  insert into public.messages(chat_id, user_id, content, type)
+  values (v_delete_chat_id, v_bulk_profile_two_id, 'bulk tombstone two', 'text')
+  returning id into v_bulk_message_two_id;
+  insert into public.messages(chat_id, user_id, content, type)
+  values (v_delete_chat_id, v_recipient_id, 'exact marker control', 'text')
+  returning id into v_bulk_control_message_id;
+
+  delete from public.profiles
+  where id in (v_bulk_profile_one_id, v_bulk_profile_two_id);
+  if (
+    select pg_catalog.count(*)
+    from public.messages message_row
+    where message_row.id in (v_bulk_message_one_id, v_bulk_message_two_id)
+      and message_row.user_id is null
+      and message_row.bot_id is null
+  ) <> 2 then
+    raise exception 'bulk_profile_delete_tombstones_not_preserved';
+  end if;
+
+  v_rejected := false;
+  begin
+    insert into bot_sender_rewrite_probe(message_id)
+    values (v_bulk_control_message_id);
+  exception
+    when check_violation then
+      if sqlerrm = 'message_sender_immutable' then
+        v_rejected := true;
+      else
+        raise;
+      end if;
+  end;
+  if not v_rejected then
+    raise exception 'nested_sender_rewrite_succeeded';
+  end if;
+
   select created.bot_id
   into v_bot_id
   from public.bot_create_internal(
@@ -297,6 +397,100 @@ begin
   end if;
 
   insert into public.chats(id, type, name, created_by)
+  values (v_lifecycle_chat_id, 'group', 'Bot lifecycle smoke', v_actor_id);
+  insert into public.chat_members(chat_id, user_id, role)
+  values
+    (v_lifecycle_chat_id, v_actor_id, 'owner'),
+    (v_lifecycle_chat_id, v_recipient_id, 'member');
+  insert into public.chat_bot_members(chat_id, bot_id, joined_at)
+  values (v_lifecycle_chat_id, v_second_bot_id, pg_catalog.now());
+
+  update public.bots
+  set state = 'paused'
+  where id = v_second_bot_id;
+  select pg_catalog.count(*)
+  into v_update_count_before
+  from private.bot_updates queued
+  where queued.bot_id = v_second_bot_id
+    and queued.update_type = 'membership';
+
+  update public.chat_bot_members
+  set removed_at = pg_catalog.now()
+  where chat_id = v_lifecycle_chat_id
+    and bot_id = v_second_bot_id;
+  update public.chat_bot_members
+  set removed_at = null
+  where chat_id = v_lifecycle_chat_id
+    and bot_id = v_second_bot_id;
+  select pg_catalog.count(*)
+  into v_update_count
+  from private.bot_updates queued
+  where queued.bot_id = v_second_bot_id
+    and queued.update_type = 'membership';
+  if v_update_count <> v_update_count_before then
+    raise exception 'inactive_membership_update_was_queued';
+  end if;
+
+  update public.bots
+  set state = 'suspended'
+  where id = v_second_bot_id;
+  update public.chat_bot_members
+  set removed_at = pg_catalog.now()
+  where chat_id = v_lifecycle_chat_id
+    and bot_id = v_second_bot_id;
+  update public.chat_bot_members
+  set removed_at = null
+  where chat_id = v_lifecycle_chat_id
+    and bot_id = v_second_bot_id;
+  select pg_catalog.count(*)
+  into v_update_count
+  from private.bot_updates queued
+  where queued.bot_id = v_second_bot_id
+    and queued.update_type = 'membership';
+  if v_update_count <> v_update_count_before then
+    raise exception 'suspended_membership_update_was_queued';
+  end if;
+
+  update public.bots
+  set state = 'active'
+  where id = v_second_bot_id;
+  update public.chat_bot_members
+  set removed_at = pg_catalog.now()
+  where chat_id = v_lifecycle_chat_id
+    and bot_id = v_second_bot_id;
+  if not exists (
+    select 1
+    from private.bot_updates queued
+    where queued.bot_id = v_second_bot_id
+      and queued.update_type = 'membership'
+      and queued.payload->'membership'->>'chat_id' = v_lifecycle_chat_id::text
+      and queued.payload->'membership'->>'action' = 'removed'
+  ) then
+    raise exception 'active_membership_removal_not_projected';
+  end if;
+  select pg_catalog.count(*)
+  into v_update_count_before
+  from private.bot_updates queued
+  where queued.bot_id = v_second_bot_id
+    and queued.update_type = 'membership'
+    and queued.payload->'membership'->>'chat_id' = v_lifecycle_chat_id::text
+    and queued.payload->'membership'->>'action' = 'added';
+  update public.chat_bot_members
+  set removed_at = null
+  where chat_id = v_lifecycle_chat_id
+    and bot_id = v_second_bot_id;
+  select pg_catalog.count(*)
+  into v_update_count
+  from private.bot_updates queued
+  where queued.bot_id = v_second_bot_id
+    and queued.update_type = 'membership'
+    and queued.payload->'membership'->>'chat_id' = v_lifecycle_chat_id::text
+    and queued.payload->'membership'->>'action' = 'added';
+  if v_update_count <> v_update_count_before + 1 then
+    raise exception 'active_membership_readd_not_projected';
+  end if;
+
+  insert into public.chats(id, type, name, created_by)
   values (v_chat_id, 'group', 'Bot platform rollback smoke', v_actor_id);
   insert into public.chat_members(chat_id, user_id, role)
   values
@@ -367,12 +561,12 @@ begin
 
   insert into public.messages(chat_id, user_id, content, type)
   values (v_chat_id, v_recipient_id, 'ordinary restricted message', 'text')
-  returning id into v_plain_message_id;
+  returning id into v_restricted_plain_message_id;
   select pg_catalog.count(*) into v_update_count
   from private.bot_updates queued
   where queued.bot_id = v_bot_id
     and queued.update_type = 'message'
-    and queued.payload->'message'->>'id' = v_plain_message_id::text;
+    and queued.payload->'message'->>'id' = v_restricted_plain_message_id::text;
   if v_update_count <> 0 then
     raise exception 'restricted_plain_message_was_projected';
   end if;
@@ -395,6 +589,64 @@ begin
     and not (queued.payload::text ~* '(email|phone|support|security)');
   if v_update_count <> 1 then
     raise exception 'restricted_mention_not_projected';
+  end if;
+
+  update public.messages
+  set content = content || ' edited'
+  where id = v_mention_message_id;
+  select pg_catalog.count(*) into v_update_count
+  from private.bot_updates queued
+  where queued.bot_id = v_bot_id
+    and queued.update_type = 'edited_message'
+    and queued.payload->'message'->>'id' = v_mention_message_id::text
+    and queued.payload->'message'->>'text' like '% edited';
+  if v_update_count <> 1 then
+    raise exception 'restricted_message_edit_not_projected';
+  end if;
+
+  update public.messages
+  set content = content
+  where id = v_mention_message_id;
+  update public.messages
+  set client_message_id = gen_random_uuid()
+  where id = v_mention_message_id;
+  select pg_catalog.count(*) into v_update_count
+  from private.bot_updates queued
+  where queued.bot_id = v_bot_id
+    and queued.update_type = 'edited_message'
+    and queued.payload->'message'->>'id' = v_mention_message_id::text;
+  if v_update_count <> 1 then
+    raise exception 'message_edit_noop_or_internal_update_was_projected';
+  end if;
+
+  update public.messages
+  set content = content || ' edited'
+  where id = v_restricted_plain_message_id;
+  if exists (
+    select 1
+    from private.bot_updates queued
+    where queued.bot_id = v_bot_id
+      and queued.update_type = 'edited_message'
+      and queued.payload->'message'->>'id' = v_restricted_plain_message_id::text
+  ) then
+    raise exception 'restricted_plain_message_edit_was_projected';
+  end if;
+
+  v_rejected := false;
+  begin
+    update public.messages
+    set type = 'system'
+    where id = v_mention_message_id;
+  exception
+    when check_violation then
+      if sqlerrm = 'message_sender_immutable' then
+        v_rejected := true;
+      else
+        raise;
+      end if;
+  end;
+  if not v_rejected then
+    raise exception 'edited_message_sender_system_transition_succeeded';
   end if;
 
   insert into public.messages(chat_id, user_id, content, type)
@@ -542,6 +794,21 @@ begin
   );
   insert into public.chat_bot_members(chat_id, bot_id, privacy_mode, joined_at)
   values (v_private_chat_id, v_bot_id, 'restricted', pg_catalog.now());
+  insert into public.chat_bot_members(
+    chat_id,
+    bot_id,
+    privacy_mode,
+    full_visibility_requested_at,
+    full_visibility_approved_by,
+    joined_at
+  ) values (
+    v_other_chat_id,
+    v_bot_id,
+    'full',
+    pg_catalog.now(),
+    v_actor_id,
+    pg_catalog.now()
+  );
 
   insert into public.messages(chat_id, user_id, content, type)
   values (v_full_chat_id, v_recipient_id, 'ordinary full message', 'text')
@@ -552,6 +819,19 @@ begin
       and queued.payload->'message'->>'id' = v_full_message_id::text
   ) then
     raise exception 'full_message_not_projected';
+  end if;
+  update public.messages
+  set content = content || ' edited'
+  where id = v_full_message_id;
+  if not exists (
+    select 1
+    from private.bot_updates queued
+    where queued.bot_id = v_bot_id
+      and queued.update_type = 'edited_message'
+      and queued.payload->'message'->>'id' = v_full_message_id::text
+      and queued.payload->'message'->>'text' = 'ordinary full message edited'
+  ) then
+    raise exception 'full_message_edit_not_projected';
   end if;
 
   insert into public.messages(chat_id, user_id, content, type)

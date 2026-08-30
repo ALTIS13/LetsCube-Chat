@@ -194,6 +194,12 @@ enters a seven-day reversible state. During that period tokens are disabled and
 the bot cannot send or receive updates. Final deletion preserves human chat
 history with a deleted-bot label instead of corrupting message references.
 
+Chat-membership writes do not depend on update delivery. Removing or re-adding
+a paused, suspended, pending-delete or deleted bot succeeds but emits no update;
+these inactive lifecycle events are skipped rather than queued or replayed.
+For an active bot, a `removed_at` transition to null is a re-add and emits the
+same bounded `added` membership event as the initial join.
+
 ## 6. Bot Chat Access And Privacy
 
 ### 6.1 Private chats
@@ -331,8 +337,9 @@ rule: every new non-system message has exactly one of the human sender column
 or `bot_id`. Profile-FK `ON DELETE SET NULL` may still turn an existing human
 message into a preserved tombstone; no migration rewrites or deletes history.
 The update guard accepts this transition only while an exact transaction-local
-profile-delete marker names the deleted profile; generic trigger depth is not
-an authorization signal.
+profile-delete marker set names the deleted profile. The set supports every
+profile in one multi-row delete statement without authorizing unrelated sender
+rewrites; generic trigger depth is not an authorization signal.
 
 Chat lists, message rendering, search, notifications, read sync and audit must
 recognize bot identities without inserting bot rows into human profile tables.

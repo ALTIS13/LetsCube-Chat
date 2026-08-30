@@ -395,10 +395,21 @@ language plpgsql
 security definer
 set search_path = ''
 as $function$
+declare
+  v_marker text;
 begin
+  v_marker := pg_catalog.current_setting(
+    'letscube.profile_delete_tombstone_user_ids',
+    true
+  );
+  if coalesce(v_marker, '') = '' then
+    v_marker := old.id::text;
+  elsif old.id::text <> all(pg_catalog.string_to_array(v_marker, ',')) then
+    v_marker := v_marker || ',' || old.id::text;
+  end if;
   perform pg_catalog.set_config(
-    'letscube.profile_delete_tombstone_user_id',
-    old.id::text,
+    'letscube.profile_delete_tombstone_user_ids',
+    v_marker,
     true
   );
   return old;
@@ -429,10 +440,15 @@ begin
       old.user_id is not null
       and new.user_id is null
       and new.bot_id is null
-      and pg_catalog.current_setting(
-        'letscube.profile_delete_tombstone_user_id',
-        true
-      ) = old.user_id::text
+      and old.user_id::text = any(
+        pg_catalog.string_to_array(
+          coalesce(pg_catalog.current_setting(
+            'letscube.profile_delete_tombstone_user_ids',
+            true
+          ), ''),
+          ','
+        )
+      )
       and not exists (
         select 1
         from public.profiles profile
@@ -1189,7 +1205,16 @@ begin
       raise exception 'bot_reply_invalid' using errcode = '22023';
     end if;
     v_reply_to_id := (p_payload->>'reply_to_id')::uuid;
-    if private.bot_can_receive_message(p_bot_id, v_reply_to_id) is not true then
+    if not exists (
+      select 1
+      from public.messages replied_message
+      where replied_message.id = v_reply_to_id
+        and replied_message.chat_id = p_chat_id
+        and private.bot_can_receive_message(
+          p_bot_id,
+          replied_message.id
+        )
+    ) then
       raise exception 'bot_reply_forbidden' using errcode = '42501';
     end if;
   end if;
@@ -1517,6 +1542,66 @@ create trigger trg_enqueue_bot_message_updates_after_insert
   after insert on public.messages
   for each row execute function private.enqueue_bot_message_updates_after_insert();
 
+create or replace function private.enqueue_bot_message_updates_after_update()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_bot_id uuid;
+begin
+  if row(
+    old.content,
+    old.media_bucket,
+    old.media_path,
+    old.media_metadata,
+    old.topic_id,
+    old.reply_to_id
+  ) is not distinct from row(
+    new.content,
+    new.media_bucket,
+    new.media_path,
+    new.media_metadata,
+    new.topic_id,
+    new.reply_to_id
+  ) then
+    return null;
+  end if;
+  if coalesce(new.type, 'text') = 'system'
+     or (new.user_id is null and new.bot_id is null) then
+    return null;
+  end if;
+
+  for v_bot_id in
+    select member_row.bot_id
+    from public.chat_bot_members member_row
+    where member_row.chat_id = new.chat_id
+      and member_row.removed_at is null
+      and member_row.bot_id is distinct from new.bot_id
+      and private.bot_can_receive_message(member_row.bot_id, new.id)
+  loop
+    perform public.bot_update_enqueue_internal(
+      v_bot_id,
+      'edited_message',
+      new.id,
+      '{}'::jsonb
+    );
+  end loop;
+  return null;
+end
+$function$;
+
+revoke all on function private.enqueue_bot_message_updates_after_update()
+  from public, anon, authenticated, service_role;
+
+drop trigger if exists trg_enqueue_bot_message_updates_after_update
+  on public.messages;
+create trigger trg_enqueue_bot_message_updates_after_update
+  after update of content, media_bucket, media_path, media_metadata, topic_id, reply_to_id
+  on public.messages
+  for each row execute function private.enqueue_bot_message_updates_after_update();
+
 create or replace function private.enqueue_bot_membership_update()
 returns trigger
 language plpgsql
@@ -1531,9 +1616,19 @@ begin
     v_action := 'added';
   elsif new.removed_at is not null and old.removed_at is null then
     v_action := 'removed';
+  elsif old.removed_at is not null and new.removed_at is null then
+    v_action := 'added';
   elsif new.privacy_mode is distinct from old.privacy_mode then
     v_action := 'privacy_changed';
   else
+    return null;
+  end if;
+  if not exists (
+    select 1
+    from public.bots bot
+    where bot.id = new.bot_id
+      and bot.state = 'active'
+  ) then
     return null;
   end if;
   v_actor_id := new.full_visibility_approved_by;

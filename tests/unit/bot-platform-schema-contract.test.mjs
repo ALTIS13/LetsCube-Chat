@@ -155,7 +155,23 @@ test("updates use authoritative safe projections and real triggers", () => {
   );
   assert.match(
     normalizedSql,
+    /create trigger trg_enqueue_bot_message_updates_after_update after update of content, media_bucket, media_path, media_metadata, topic_id, reply_to_id on public\.messages/,
+  );
+  assert.match(
+    normalizedSql,
+    /create or replace function private\.enqueue_bot_message_updates_after_update\(\)[\s\S]*row\(\s*old\.content, old\.media_bucket, old\.media_path, old\.media_metadata, old\.topic_id, old\.reply_to_id \) is not distinct from row\( new\.content, new\.media_bucket, new\.media_path, new\.media_metadata, new\.topic_id, new\.reply_to_id \)/,
+  );
+  assert.match(
+    normalizedSql,
     /create trigger trg_enqueue_bot_membership_updates after insert or update of privacy_mode, removed_at on public\.chat_bot_members/,
+  );
+  assert.match(
+    normalizedSql,
+    /old\.removed_at is not null and new\.removed_at is null[\s\S]*v_action := 'added'/,
+  );
+  assert.match(
+    normalizedSql,
+    /from public\.bots bot where bot\.id = new\.bot_id and bot\.state = 'active'/,
   );
   assert.match(normalizedSql, /restricted_command_or_mention_required/);
   assert.doesNotMatch(
@@ -204,8 +220,10 @@ test("message sender rules preserve legacy tombstones but reject new anonymous m
   );
   assert.match(
     normalizedSql,
-    /pg_catalog\.current_setting\( 'letscube\.profile_delete_tombstone_user_id', true \)/,
+    /pg_catalog\.current_setting\( 'letscube\.profile_delete_tombstone_user_ids', true \)/,
   );
+  assert.match(normalizedSql, /pg_catalog\.string_to_array\(/);
+  assert.match(normalizedSql, /old\.user_id::text = any/);
   assert.doesNotMatch(normalizedSql, /pg_trigger_depth\(\)/);
   assert.doesNotMatch(
     sql,
@@ -223,6 +241,13 @@ test("ordinary authenticated clients cannot forge bot-authored messages", () => 
     /create policy "chat members can send messages" on public\.messages for insert to authenticated with check \( \(select auth\.uid\(\)\) = user_id and bot_id is null/,
   );
   assert.match(normalizedSql, /insert into public\.messages[^;]*bot_id/);
+});
+
+test("bot replies are constrained to the target chat as well as visibility", () => {
+  assert.match(
+    normalizedSql,
+    /replied_message\.id = v_reply_to_id and replied_message\.chat_id = p_chat_id and private\.bot_can_receive_message\( p_bot_id, replied_message\.id \)/,
+  );
 });
 
 test("all gateway RPCs are fixed-search-path and service-role only", () => {
@@ -329,7 +354,17 @@ test("database smoke preserves history and rolls every probe back", () => {
   assert.match(normalizedSmoke, /bot_media_grant_not_consumed/);
   assert.match(normalizedSmoke, /expired_upload_grant_not_replaced/);
   assert.match(normalizedSmoke, /cross_chat_reply_succeeded/);
+  assert.match(normalizedSmoke, /v_other_chat_id, v_bot_id, 'full'/);
   assert.match(normalizedSmoke, /cross_chat_topic_succeeded/);
+  assert.match(normalizedSmoke, /bulk_profile_delete_tombstones_not_preserved/);
+  assert.match(normalizedSmoke, /nested_sender_rewrite_succeeded/);
+  assert.match(normalizedSmoke, /inactive_membership_update_was_queued/);
+  assert.match(normalizedSmoke, /suspended_membership_update_was_queued/);
+  assert.match(normalizedSmoke, /active_membership_readd_not_projected/);
+  assert.match(normalizedSmoke, /restricted_message_edit_not_projected/);
+  assert.match(normalizedSmoke, /restricted_plain_message_edit_was_projected/);
+  assert.match(normalizedSmoke, /message_edit_noop_or_internal_update_was_projected/);
+  assert.match(normalizedSmoke, /full_message_edit_not_projected/);
   assert.match(normalizedSmoke, /muted_bot_notification_enqueued_push/);
   assert.match(normalizedSmoke, /profile_delete_tombstone_not_preserved/);
   assert.match(normalizedSmoke, /anon_can_access_private_bot_table/);
