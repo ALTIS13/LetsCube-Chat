@@ -8,6 +8,7 @@ import { getAuthCallbackUrl } from "@/lib/authRedirect";
 import { getAuthCaptchaRequiredMessage, isAuthCaptchaEnabled, shouldUseAuthCaptchaGateway } from "@/lib/authCaptcha";
 import { requestAuthGateway } from "@/lib/authGateway";
 import { mapPgError } from "@/lib/errors";
+import { maskRegistrationEmail } from "@/lib/registrationConfirmation";
 import { PROFILE_LIMITS, normalizeFullName, validateFullName } from "@/lib/profileValidation";
 import {
   REGISTRATION_INVITE_ONLY_BANNER_BODY,
@@ -17,6 +18,8 @@ import {
   readRegistrationInviteFromSearch,
 } from "@/lib/registrationInvite";
 import { useTheme } from "@/hooks/useTheme";
+
+const RESEND_COOLDOWN_MS = 60_000;
 
 export function RegisterForm() {
   const [location, setLocation] = useLocation();
@@ -31,8 +34,16 @@ export function RegisterForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [submittedEmail, setSubmittedEmail] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
   const [captchaResetSignal, setCaptchaResetSignal] = useState(0);
+  const [resendCaptchaToken, setResendCaptchaToken] = useState("");
+  const [resendCaptchaResetSignal, setResendCaptchaResetSignal] = useState(0);
+  const [resendAvailableAt, setResendAvailableAt] = useState(0);
+  const [resendNow, setResendNow] = useState(0);
+  const [resending, setResending] = useState(false);
+  const [resendError, setResendError] = useState("");
+  const [resendSuccess, setResendSuccess] = useState("");
   const [inviteOnlyEnabled, setInviteOnlyEnabled] = useState(false);
 
   const supabase = useMemo(() => createNonPersistedAuthClient(), []);
@@ -60,11 +71,43 @@ export function RegisterForm() {
     };
   }, [supabase]);
 
+  useEffect(() => {
+    if (!success || !resendAvailableAt) return;
+
+    const tick = () => setResendNow(Date.now());
+    tick();
+    const intervalId = window.setInterval(() => {
+      const now = Date.now();
+      setResendNow(now);
+      if (now >= resendAvailableAt) window.clearInterval(intervalId);
+    }, 250);
+
+    return () => window.clearInterval(intervalId);
+  }, [resendAvailableAt, success]);
+
+  const resendCountdown = Math.max(0, Math.ceil((resendAvailableAt - resendNow) / 1_000));
+
+  const startResendCooldown = () => {
+    const now = Date.now();
+    setResendNow(now);
+    setResendAvailableAt(now + RESEND_COOLDOWN_MS);
+  };
+
+  const showRegistrationConfirmation = (normalizedEmail: string) => {
+    setSubmittedEmail(normalizedEmail);
+    setResendCaptchaToken("");
+    setResendError("");
+    setResendSuccess("");
+    startResendCooldown();
+    setSuccess(true);
+  };
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
+      const normalizedEmail = email.trim().toLowerCase();
       const fullNameError = validateFullName(fullName);
       if (fullNameError) throw new Error(fullNameError);
       if (isAuthCaptchaEnabled() && !captchaToken) {
@@ -81,7 +124,7 @@ export function RegisterForm() {
       if (shouldUseAuthCaptchaGateway()) {
         await requestAuthGateway({
           action: "signup",
-          email: email.trim(),
+          email: normalizedEmail,
           password,
           fullName: normalizeFullName(fullName),
           captchaToken,
@@ -89,7 +132,7 @@ export function RegisterForm() {
         });
       } else {
         const { error } = await supabase.auth.signUp({
-          email: email.trim(),
+          email: normalizedEmail,
           password,
           options: {
             captchaToken: captchaToken || undefined,
@@ -103,10 +146,10 @@ export function RegisterForm() {
         if (error) throw error;
       }
 
-      setSuccess(true);
+      showRegistrationConfirmation(normalizedEmail);
     } catch (err: unknown) {
       if (isExistingAccountSignupError(err)) {
-        setSuccess(true);
+        showRegistrationConfirmation(email.trim().toLowerCase());
         return;
       }
       setError(mapPgError(err));
@@ -119,7 +162,45 @@ export function RegisterForm() {
     }
   };
 
+  const handleResend = async () => {
+    if (resendCountdown > 0 || resending) return;
+
+    setResendError("");
+    setResendSuccess("");
+    if (!resendCaptchaToken) {
+      setResendError(getAuthCaptchaRequiredMessage());
+      return;
+    }
+
+    setResending(true);
+    try {
+      await requestAuthGateway({
+        action: "resend_signup",
+        email: submittedEmail,
+        captchaToken: resendCaptchaToken,
+      });
+      setResendSuccess("Письмо отправлено повторно.");
+      startResendCooldown();
+    } catch (err: unknown) {
+      setResendError(mapPgError(err));
+    } finally {
+      setResendCaptchaToken("");
+      setResendCaptchaResetSignal((value) => value + 1);
+      setResending(false);
+    }
+  };
+
+  const handleUseDifferentEmail = () => {
+    setEmail("");
+    setSubmittedEmail("");
+    setResendCaptchaToken("");
+    setResendError("");
+    setResendSuccess("");
+    setSuccess(false);
+  };
+
   if (success) {
+    const resendLocked = resendCountdown > 0;
     return (
       <div className="min-h-screen flex items-center justify-center px-4 kub-grid-bg kub-auth-shell">
         <img
@@ -161,19 +242,47 @@ export function RegisterForm() {
                 <h2 className="text-xl font-bold text-[color:var(--kub-text)]">
                   Проверьте почту
                 </h2>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--kub-muted)]">
-                  Если к этому адресу электронной почты ещё не привязан аккаунт,
-                  мы отправим вам письмо для подтверждения регистрации. Если
-                  письмо не пришло, проверьте папку «Спам» или воспользуйтесь
-                  опцией «Восстановить пароль».
-                </p>
+                <div className="mt-2 space-y-2 text-sm leading-6 text-[color:var(--kub-muted)]">
+                  <p>Если к этому адресу электронной почты ещё не привязан аккаунт, мы отправим письмо для подтверждения регистрации.</p>
+                  <p>Если письмо не пришло, проверьте папку «Спам» и правильность указанного адреса. При ошибке вернитесь и зарегистрируйтесь с корректным email.</p>
+                  <p>Неподтверждённая учётная запись будет удалена автоматически.</p>
+                </div>
+              </div>
+              <p className="break-all rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/60 px-3 py-2 font-mono text-sm text-[color:var(--kub-text)]">
+                {maskRegistrationEmail(submittedEmail)}
+              </p>
+              <div className="relative">
+                <AuthCaptcha
+                  disabled={resendLocked || resending}
+                  onTokenChange={setResendCaptchaToken}
+                  resetSignal={resendCaptchaResetSignal}
+                />
+                {resendLocked && (
+                  <p className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl bg-[var(--kub-surface-2)]/85 px-4 text-center text-xs leading-5 text-[color:var(--kub-muted)]">
+                    Подтверждение защиты станет доступно после окончания таймера.
+                  </p>
+                )}
+              </div>
+              <div className="min-h-10 px-1 text-xs leading-5" aria-live="polite">
+                {resendError && <p className="text-[color:var(--kub-danger)]">{resendError}</p>}
+                {resendSuccess && <p className="text-[color:var(--kub-online)]">{resendSuccess}</p>}
               </div>
               <div className="grid gap-3 pt-1">
-                <KubButton type="button" fullWidth onClick={() => setLocation("/login")}>
-                  К входу
+                <KubButton
+                  type="button"
+                  variant="secondary"
+                  fullWidth
+                  disabled={resendLocked || resending}
+                  loading={resending}
+                  onClick={handleResend}
+                >
+                  {resendLocked ? `Отправить письмо повторно через ${resendCountdown} сек.` : "Отправить письмо повторно"}
                 </KubButton>
-                <KubButton type="button" variant="secondary" fullWidth onClick={() => setLocation("/login?reset=1")}>
-                  Восстановить доступ
+                <KubButton type="button" fullWidth onClick={() => setLocation("/login")}>
+                  Ко входу
+                </KubButton>
+                <KubButton type="button" variant="secondary" fullWidth onClick={handleUseDifferentEmail}>
+                  Указать другой email
                 </KubButton>
               </div>
             </div>

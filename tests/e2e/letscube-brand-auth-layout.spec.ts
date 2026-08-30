@@ -172,7 +172,7 @@ test.describe("Letscube safe public registration", () => {
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
 
-  test("/register keeps existing-email signup errors generic", async ({ page }) => {
+  test("/register keeps existing-email signup results generic", async ({ page }) => {
     const consoleErrors = collectConsoleErrors(page);
     await installCaptchaMock(page);
     await mockRegistrationInviteMode(page, false);
@@ -197,7 +197,9 @@ test.describe("Letscube safe public registration", () => {
 
     await expect(page.getByText("Проверьте почту")).toBeVisible();
     await expect(page.getByText(/Пользователь.*уже зарегистрирован/i)).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Восстановить доступ" })).toBeVisible();
+    await expect(page.getByText("Неподтверждённая учётная запись будет удалена автоматически.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Указать другой email" })).toBeVisible();
+    await expect(page.getByText(/Восстановить пароль|Восстановить доступ/)).toHaveCount(0);
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
 
