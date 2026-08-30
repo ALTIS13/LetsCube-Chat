@@ -29,7 +29,9 @@ async function run() {
     ]);
     const supabaseUrl =
       readEnv(env, "SUPABASE_URL") || readEnv(env, "VITE_SUPABASE_URL");
-    const serviceRoleKey = readEnv(env, "SUPABASE_SERVICE_ROLE_KEY");
+    const serviceRoleKey =
+      readEnv(env, "SUPABASE_SERVICE_ROLE_KEY") ||
+      readEnv(env, "SELFHOST_SERVICE_ROLE_KEY");
 
     if (!supabaseUrl || !serviceRoleKey) {
       throw new Error("registration_cleanup_smoke_credentials_missing");

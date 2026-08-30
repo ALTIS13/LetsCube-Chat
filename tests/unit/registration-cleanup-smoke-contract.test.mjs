@@ -62,6 +62,10 @@ test("smoke script only calls the aggregate report RPC and projects safe aggrega
   assert.match(script, /createClient\(/);
   assert.match(script, /persistSession:\s*false/);
   assert.match(script, /autoRefreshToken:\s*false/);
+  assert.match(
+    script,
+    /readEnv\(env, "SUPABASE_SERVICE_ROLE_KEY"\)\s*\|\|\s*readEnv\(env, "SELFHOST_SERVICE_ROLE_KEY"\)/,
+  );
   assert.match(script, /\.rpc\(["']registration_cleanup_report["']/);
   assert.doesNotMatch(
     script,
