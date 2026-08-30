@@ -201,15 +201,21 @@ aggregate result.
 ```bash
 worker_container="$(sudo -n docker ps --filter name=letscube-worker --format '{{.ID}}' | head -n1)"
 test -n "$worker_container"
-sudo -n docker exec -e DEPLOY_STARTED_AT="$deploy_started_at" "$worker_container" node -e '
-const response = await fetch("http://127.0.0.1:8096/api/healthz/registration-cleanup");
-if (!response.ok) process.exit(1);
-const status = await response.json();
-const successAt = Date.parse(status.lastSuccessAt || "");
-const deployAt = Date.parse(process.env.DEPLOY_STARTED_AT || "");
-if (status.configured !== true || status.enabled !== true || status.reportOnly !== true || !Number.isFinite(successAt) || successAt < deployAt) process.exit(1);
-console.log(JSON.stringify({ configured: status.configured, enabled: status.enabled, reportOnly: status.reportOnly, lastRunAt: status.lastRunAt, lastSuccessAt: status.lastSuccessAt, lastFailureAt: status.lastFailureAt, lastResult: status.lastResult }));
-'
+sudo -n docker exec -e DEPLOY_STARTED_AT="$deploy_started_at" "$worker_container" sh -lc "
+  curl --fail --silent --show-error http://127.0.0.1:8096/api/healthz/registration-cleanup |
+    node -e '
+      let body = \"\";
+      process.stdin.setEncoding(\"utf8\");
+      process.stdin.on(\"data\", (chunk) => { body += chunk; });
+      process.stdin.on(\"end\", () => {
+        const status = JSON.parse(body);
+        const successAt = Date.parse(status.lastSuccessAt || \"\");
+        const deployAt = Date.parse(process.env.DEPLOY_STARTED_AT || \"\");
+        if (status.configured !== true || status.enabled !== true || status.reportOnly !== true || !Number.isFinite(successAt) || successAt < deployAt) process.exit(1);
+        console.log(JSON.stringify({ configured: status.configured, enabled: status.enabled, reportOnly: status.reportOnly, lastRunAt: status.lastRunAt, lastSuccessAt: status.lastSuccessAt, lastFailureAt: status.lastFailureAt, lastResult: status.lastResult }));
+      });
+    '
+"
 ```
 
 Only after the status command succeeds, remove the temporary rollback copy:

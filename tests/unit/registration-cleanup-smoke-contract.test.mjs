@@ -108,6 +108,7 @@ test("Dockerfile worker runtime sources the local secret env and exposes cleanup
   assert.match(runbook, /REGISTRATION_CLEANUP_ENABLED=true/);
   assert.match(runbook, /REGISTRATION_CLEANUP_REPORT_ONLY=true/);
   assert.match(runbook, /api\/healthz\/registration-cleanup/);
+  assert.match(runbook, /curl --fail --silent --show-error[\s\S]+api\/healthz\/registration-cleanup/);
   assert.match(runbook, /lastSuccessAt/);
   assert.match(runbook, /mktemp/);
   assert.match(runbook, /mv -f --/);
