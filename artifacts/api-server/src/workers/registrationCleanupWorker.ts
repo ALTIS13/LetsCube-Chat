@@ -166,8 +166,16 @@ export function createRegistrationCleanupWorkerRuntime(
     lastResult: current.lastResult ? { ...current.lastResult } : null,
   });
 
-  const markFailure = (): void => {
+  const markFailure = (result: CleanupBatchResult | null = null): void => {
+    current.lastSuccessAt = null;
     current.lastFailureAt = now().toISOString();
+    current.lastResult = result ? { ...result } : null;
+  };
+
+  const markSuccess = (result: CleanupBatchResult): void => {
+    current.lastFailureAt = null;
+    current.lastSuccessAt = now().toISOString();
+    current.lastResult = { ...result };
   };
 
   const scheduleRun = (
@@ -194,13 +202,12 @@ export function createRegistrationCleanupWorkerRuntime(
         return;
       }
 
-      current.lastResult = { ...result };
       if (result.failed > 0) {
-        markFailure();
+        markFailure(result);
         return;
       }
 
-      current.lastSuccessAt = now().toISOString();
+      markSuccess(result);
     } catch {
       markFailure();
     } finally {
@@ -261,6 +268,14 @@ export function registrationCleanupHealthPayload(
     lastRunAt: status.lastRunAt,
     lastSuccessAt: status.lastSuccessAt,
     lastFailureAt: status.lastFailureAt,
-    lastResult: status.lastResult ? { ...status.lastResult } : null,
+    lastResult: status.lastResult
+      ? {
+          claimed: status.lastResult.claimed,
+          reported: status.lastResult.reported,
+          deleted: status.lastResult.deleted,
+          skipped: status.lastResult.skipped,
+          failed: status.lastResult.failed,
+        }
+      : null,
   };
 }

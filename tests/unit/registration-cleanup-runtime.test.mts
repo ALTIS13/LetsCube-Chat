@@ -36,6 +36,29 @@ function runtime({
   });
 }
 
+function scheduledRuntime(results: Array<typeof success | null>) {
+  const callbacks: Array<() => void> = [];
+  const timestamps = [
+    new Date("2026-08-30T10:00:00.000Z"),
+    new Date("2026-08-30T10:00:01.000Z"),
+    new Date("2026-08-30T10:00:02.000Z"),
+    new Date("2026-08-30T10:00:03.000Z"),
+  ];
+  const worker = createRegistrationCleanupWorkerRuntime({
+    readConfig: () => ({
+      enabled: true,
+      reportOnly: true,
+      batchSize: 50,
+      intervalMs: 3_600_000,
+    }),
+    createRepository: async () => ({}),
+    runBatch: async () => results.shift() ?? null,
+    now: () => timestamps.shift() ?? new Date("2026-08-30T10:00:04.000Z"),
+    schedule: (callback) => callbacks.push(callback),
+  });
+  return { callbacks, worker };
+}
+
 test("disabled default records effective configuration without attempting a batch", async () => {
   const worker = runtime();
 
@@ -100,6 +123,42 @@ test("a batch with bounded RPC failures is not recorded as a successful run", as
   });
 });
 
+test("a scheduled failure clears the prior successful attempt evidence", async () => {
+  const { callbacks, worker } = scheduledRuntime([success, null]);
+
+  await worker.start({});
+  callbacks.shift()?.();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(worker.status(), {
+    configured: true,
+    enabled: true,
+    reportOnly: true,
+    lastRunAt: "2026-08-30T10:00:02.000Z",
+    lastSuccessAt: null,
+    lastFailureAt: "2026-08-30T10:00:03.000Z",
+    lastResult: null,
+  });
+});
+
+test("a scheduled success clears the prior failed attempt evidence", async () => {
+  const { callbacks, worker } = scheduledRuntime([null, success]);
+
+  await worker.start({});
+  callbacks.shift()?.();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(worker.status(), {
+    configured: true,
+    enabled: true,
+    reportOnly: true,
+    lastRunAt: "2026-08-30T10:00:02.000Z",
+    lastSuccessAt: "2026-08-30T10:00:03.000Z",
+    lastFailureAt: null,
+    lastResult: success,
+  });
+});
+
 test("health projection exposes only configured state, timestamps and aggregate counts", () => {
   const payload = registrationCleanupHealthPayload({
     configured: true,
@@ -108,7 +167,7 @@ test("health projection exposes only configured state, timestamps and aggregate 
     lastRunAt: "2026-08-30T10:00:00.000Z",
     lastSuccessAt: "2026-08-30T10:00:01.000Z",
     lastFailureAt: null,
-    lastResult: success,
+    lastResult: { ...success, injected: "must not be exposed" },
     ignored: "must not be exposed",
   });
 

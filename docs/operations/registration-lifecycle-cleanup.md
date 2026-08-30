@@ -172,12 +172,13 @@ set -euo pipefail
 
 env_file=/srv/letscube/secrets/letscube-infra.env
 env_dir=/srv/letscube/secrets
-rollback_file="$(sudo -n mktemp "$env_dir/.letscube-infra.env.rollback.XXXXXX")"
+rollback_file="${env_file}.registration-cleanup.rollback"
+sudo -n test -f "$env_file"
+sudo -n test ! -e "$rollback_file"
 candidate_file="$(sudo -n mktemp "$env_dir/.letscube-infra.env.candidate.XXXXXX")"
 cleanup_candidate() { sudo -n rm -f -- "$candidate_file"; }
 trap cleanup_candidate EXIT
 
-sudo -n test -f "$env_file"
 sudo -n cp --preserve=mode,ownership "$env_file" "$rollback_file"
 sudo -n cp --preserve=mode,ownership "$env_file" "$candidate_file"
 sudo -n awk -F= '
@@ -213,11 +214,18 @@ investigating, then redeploy the previous reviewed worker configuration:
 sudo -n mv -f -- "$rollback_file" "$env_file"
 ```
 
+The deterministic rollback file is deliberately retained until the status gate
+passes. If session loss occurs after creating it, do not start another rollout
+or overwrite that file. In the recovery session, re-verify the Coolify UUID and
+bind mount, restore the protected rollback file with the command above, deploy
+the previous reviewed worker configuration, and investigate before trying again.
+
 After a successful deploy, confirm the dedicated local worker status from inside
 the deployed container. Do not rely on the generic health endpoint. The command
 requires the effective enabled/report-only state and a success timestamp later
-than the recorded deployment start; its output is limited to the safe status and
-aggregate result.
+than both the latest run and recorded deployment start. It also requires no
+current failure and a latest aggregate result with zero failed candidates; its
+output is limited to the safe status and aggregate result.
 
 ```bash
 mapfile -t worker_containers < <(sudo -n docker ps --filter label=coolify.applicationId=fkd10qwlo4qod9e6gtyzzuwk --quiet)
@@ -232,9 +240,10 @@ sudo -n docker exec -e DEPLOY_STARTED_AT="$deploy_started_at" "$worker_container
       process.stdin.on(\"data\", (chunk) => { body += chunk; });
       process.stdin.on(\"end\", () => {
         const status = JSON.parse(body);
+        const runAt = Date.parse(status.lastRunAt || \"\");
         const successAt = Date.parse(status.lastSuccessAt || \"\");
         const deployAt = Date.parse(process.env.DEPLOY_STARTED_AT || \"\");
-        if (status.configured !== true || status.enabled !== true || status.reportOnly !== true || !Number.isFinite(successAt) || successAt < deployAt) process.exit(1);
+        if (status.configured !== true || status.enabled !== true || status.reportOnly !== true || !Number.isFinite(runAt) || !Number.isFinite(successAt) || successAt < runAt || successAt < deployAt || status.lastFailureAt !== null || status.lastResult?.failed !== 0) process.exit(1);
         console.log(JSON.stringify({ configured: status.configured, enabled: status.enabled, reportOnly: status.reportOnly, lastRunAt: status.lastRunAt, lastSuccessAt: status.lastSuccessAt, lastFailureAt: status.lastFailureAt, lastResult: status.lastResult }));
       });
     '

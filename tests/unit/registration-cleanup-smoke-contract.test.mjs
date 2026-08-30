@@ -15,6 +15,10 @@ const healthRoutePath = new URL(
   "../../artifacts/api-server/src/routes/health.ts",
   import.meta.url,
 );
+const cleanupHealthRoutePath = new URL(
+  "../../artifacts/api-server/src/routes/registrationCleanupHealthRoute.ts",
+  import.meta.url,
+);
 const runbookPath = new URL(
   "../../docs/operations/registration-lifecycle-cleanup.md",
   import.meta.url,
@@ -92,9 +96,10 @@ test("portable compose defaults keep cleanup disabled and report-only", async ()
 });
 
 test("Dockerfile worker runtime sources the local secret env and exposes cleanup health", async () => {
-  const [dockerfile, healthRoute, runbook] = await Promise.all([
+  const [dockerfile, healthRoute, cleanupHealthRoute, runbook] = await Promise.all([
     source(dockerfilePath),
     source(healthRoutePath),
+    source(cleanupHealthRoutePath),
     source(runbookPath),
   ]);
 
@@ -102,7 +107,9 @@ test("Dockerfile worker runtime sources the local secret env and exposes cleanup
   assert.match(dockerfile, /set -a;\s*\. \/run\/secrets\/letscube-infra\.env;\s*set \+a/);
   assert.match(dockerfile, /artifacts\/api-server\/dist\/index\.mjs/);
   assert.match(healthRoute, /\/healthz\/registration-cleanup/);
+  assert.match(healthRoute, /registrationCleanupHealthHandler/);
   assert.match(healthRoute, /registrationCleanupHealthPayload/);
+  assert.match(cleanupHealthRoute, /socket\.remoteAddress/);
   assert.match(runbook, /letscube-worker/);
   assert.match(runbook, /\/srv\/letscube\/secrets\/letscube-infra\.env/);
   assert.match(runbook, /\/run\/secrets\/letscube-infra\.env/);
@@ -121,7 +128,21 @@ test("Dockerfile worker runtime sources the local secret env and exposes cleanup
   assert.match(runbook, /api\/healthz\/registration-cleanup/);
   assert.match(runbook, /curl --fail --silent --show-error[\s\S]+api\/healthz\/registration-cleanup/);
   assert.match(runbook, /lastSuccessAt/);
+  assert.match(runbook, /lastRunAt/);
+  assert.match(runbook, /lastFailureAt !== null/);
+  assert.match(runbook, /lastResult\?\.failed !== 0/);
+  assert.match(runbook, /successAt < runAt/);
   assert.match(runbook, /mktemp/);
+  assert.match(
+    runbook,
+    /rollback_file="\$\{env_file\}\.registration-cleanup\.rollback"/,
+  );
+  assert.match(runbook, /sudo -n test ! -e "\$rollback_file"/);
+  assert.match(runbook, /session loss/i);
+  assert.doesNotMatch(
+    runbook,
+    /rollback_file="\$\(sudo -n mktemp/,
+  );
   assert.match(runbook, /mv -f --/);
   assert.match(runbook, /YYYYMMDD-HHMMSS/);
   assert.match(runbook, /before_backup_dirs/);
