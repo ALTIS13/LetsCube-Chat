@@ -306,9 +306,13 @@ The migration is additive and uses the following logical entities:
 - `bot_webhooks`: private destination and delivery configuration;
 - `bot_delivery_attempts`: metadata-only retry and dead-letter history.
 
-`messages` gains nullable `bot_id`. A database check enforces exactly one
-sender: the existing human sender column or `bot_id`, never both and never
-neither. Existing human messages remain unchanged.
+`messages` gains nullable `bot_id`. Existing non-system rows whose profile was
+deleted are preserved as legacy tombstones with both sender columns null. A
+database check forbids two senders and requires `system` rows to keep both
+sender columns null. A `BEFORE INSERT` guard applies the stricter live-write
+rule: every new non-system message has exactly one of the human sender column
+or `bot_id`. Profile-FK `ON DELETE SET NULL` may still turn an existing human
+message into a preserved tombstone; no migration rewrites or deletes history.
 
 Chat lists, message rendering, search, notifications, read sync and audit must
 recognize bot identities without inserting bot rows into human profile tables.

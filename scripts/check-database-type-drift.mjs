@@ -33,6 +33,21 @@ const appFacingFunctions = [
 ];
 
 const serviceRoleOnlyFunctions = new Set([
+  "bot_create_internal",
+  "bot_list_owned_internal",
+  "bot_rotate_token_internal",
+  "bot_token_lookup_internal",
+  "bot_token_touch_internal",
+  "bot_membership_authorize_internal",
+  "bot_send_message_internal",
+  "bot_updates_poll_internal",
+  "bot_updates_ack_internal",
+  "bot_webhook_set_internal",
+  "bot_webhook_delete_internal",
+  "bot_update_enqueue_internal",
+  "bot_delivery_claim_internal",
+  "bot_delivery_finish_internal",
+  "bot_delivery_cleanup_internal",
   "registration_lifecycle_register_internal",
   "registration_lifecycle_extend_by_email_internal",
   "registration_cleanup_claim",

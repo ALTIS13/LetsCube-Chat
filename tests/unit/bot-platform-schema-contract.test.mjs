@@ -1,0 +1,201 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+
+const migrationPath =
+  ".migration-backup/supabase/migrations/20260831100000_bot_platform_foundation.sql";
+const sql = readFileSync(migrationPath, "utf8");
+const normalizedSql = sql.replace(/\s+/g, " ").toLowerCase();
+const driftCheck = readFileSync("scripts/check-database-type-drift.mjs", "utf8");
+const bindingSpec = readFileSync(
+  "docs/superpowers/specs/2026-08-30-registration-lifecycle-bot-platform-public-home-design.md",
+  "utf8",
+);
+const dbSmoke = readFileSync("tests/server/bot-platform-db-smoke.sql", "utf8");
+
+const publicTables = ["bots", "bot_owners", "bot_commands", "chat_bot_members"];
+const privateTables = [
+  "bot_tokens",
+  "bot_updates",
+  "bot_webhooks",
+  "bot_delivery_attempts",
+  "bot_rate_limit_buckets",
+];
+const serviceRoleFunctions = [
+  ["bot_create_internal", "uuid,text,text,text,text,text"],
+  ["bot_list_owned_internal", "uuid"],
+  ["bot_rotate_token_internal", "uuid,uuid,text,text"],
+  ["bot_token_lookup_internal", "text"],
+  ["bot_token_touch_internal", "uuid,timestamptz"],
+  ["bot_membership_authorize_internal", "uuid,uuid,text"],
+  ["bot_send_message_internal", "uuid,uuid,text,jsonb,text"],
+  ["bot_updates_poll_internal", "uuid,bigint,integer,uuid"],
+  ["bot_updates_ack_internal", "uuid,bigint"],
+  ["bot_webhook_set_internal", "uuid,text,text"],
+  ["bot_webhook_delete_internal", "uuid"],
+  ["bot_update_enqueue_internal", "uuid,text,jsonb"],
+  ["bot_delivery_claim_internal", "integer,uuid"],
+  ["bot_delivery_finish_internal", "bigint,uuid,text,text"],
+  ["bot_delivery_cleanup_internal", "timestamptz,integer"],
+];
+
+test("bot identities remain separate from auth users and use archive-only lifecycle", () => {
+  assert.match(normalizedSql, /create table public\.bots/);
+  assert.doesNotMatch(normalizedSql, /insert into auth\.users/);
+  assert.match(
+    normalizedSql,
+    /state text not null default 'active' check \(state in \('active','paused','suspended','pending_delete','deleted'\)\)/,
+  );
+  assert.match(normalizedSql, /create table public\.bot_owners/);
+  assert.match(normalizedSql, /create table public\.bot_commands/);
+  assert.match(normalizedSql, /create table public\.chat_bot_members/);
+});
+
+test("public bot tables are RLS protected and direct writes stay revoked", () => {
+  for (const table of publicTables) {
+    assert.match(normalizedSql, new RegExp(`alter table public\\.${table} enable row level security`));
+    assert.match(
+      normalizedSql,
+      new RegExp(
+        `revoke all on table public\\.${table} from public, anon, authenticated, service_role`,
+      ),
+    );
+  }
+  assert.match(normalizedSql, /grant select on table public\.bots to authenticated/);
+  assert.match(normalizedSql, /grant select on table public\.bot_owners to authenticated/);
+  assert.match(normalizedSql, /grant select on table public\.chat_bot_members to authenticated/);
+  assert.doesNotMatch(normalizedSql, /grant (insert|update|delete).*public\.bots.*authenticated/);
+});
+
+test("token, webhook, update and delivery data stay private", () => {
+  assert.match(normalizedSql, /create schema if not exists private/);
+  assert.match(
+    normalizedSql,
+    /revoke all on schema private from public, anon, authenticated, service_role/,
+  );
+  for (const table of privateTables) {
+    assert.match(normalizedSql, new RegExp(`create table private\\.${table}`));
+    assert.match(
+      normalizedSql,
+      new RegExp(`revoke all on table private\\.${table}[^;]*from public, anon, authenticated, service_role`),
+    );
+  }
+  assert.match(normalizedSql, /check \(pg_catalog\.octet_length\(payload::text\) <= 65536\)/);
+  assert.match(normalizedSql, /expires_at timestamptz not null default \(pg_catalog\.now\(\) \+ interval '24 hours'\)/);
+  assert.match(normalizedSql, /check \(payload is null\)/);
+  assert.doesNotMatch(normalizedSql, /grant select on (table )?private\./);
+  assert.match(normalizedSql, /bot_update_history_forbidden/);
+});
+
+test("webhook disable result does not depend on delivery lease cleanup", () => {
+  assert.match(
+    normalizedSql,
+    /create or replace function public\.bot_webhook_delete_internal\([\s\S]*v_webhook_rows integer := 0;[\s\S]*get diagnostics v_webhook_rows = row_count;[\s\S]*return v_webhook_rows > 0/,
+  );
+});
+
+test("message sender rules preserve legacy tombstones but reject new anonymous messages", () => {
+  assert.match(
+    normalizedSql,
+    /add column if not exists bot_id uuid null references public\.bots\(id\) on delete restrict/,
+  );
+  assert.match(
+    normalizedSql,
+    /constraint messages_sender_shape_check check \( \(type = 'system' and user_id is null and bot_id is null\) or \( coalesce\(type, 'text'\) <> 'system' and not \(user_id is not null and bot_id is not null\) \) \) not valid/,
+  );
+  assert.match(normalizedSql, /create or replace function private\.enforce_message_sender_on_insert\(\)/);
+  assert.match(
+    normalizedSql,
+    /if coalesce\(new\.type, 'text'\) = 'system' then[\s\S]*new\.user_id is not null or new\.bot_id is not null[\s\S]*elsif \(new\.user_id is null\) = \(new\.bot_id is null\) then/,
+  );
+  assert.match(
+    normalizedSql,
+    /create trigger trg_messages_sender_on_insert before insert on public\.messages/,
+  );
+  assert.match(normalizedSql, /legacy tombstone/);
+  assert.doesNotMatch(normalizedSql, /update public\.messages set (user_id|bot_id)/);
+});
+
+test("ordinary authenticated clients cannot forge bot-authored messages", () => {
+  assert.match(
+    normalizedSql,
+    /drop policy if exists "chat members can send messages" on public\.messages/,
+  );
+  assert.match(
+    normalizedSql,
+    /create policy "chat members can send messages" on public\.messages for insert to authenticated with check \( \(select auth\.uid\(\)\) = user_id and bot_id is null/,
+  );
+  assert.match(normalizedSql, /insert into public\.messages[^;]*bot_id/);
+});
+
+test("all gateway RPCs are fixed-search-path and service-role only", () => {
+  for (const [name, signature] of serviceRoleFunctions) {
+    const escapedSignature = signature.replaceAll(",", ",\\s*");
+    assert.match(
+      normalizedSql,
+      new RegExp(`create or replace function public\\.${name}\\(`),
+      `${name} must exist`,
+    );
+    assert.match(
+      normalizedSql,
+      new RegExp(`function public\\.${name}\\(${escapedSignature}\\)[^;]*from public, anon, authenticated, service_role`),
+      `${name} must be revoked from every role before its narrow grant`,
+    );
+    assert.match(
+      normalizedSql,
+      new RegExp(`grant execute on function public\\.${name}\\(${escapedSignature}\\) to service_role`),
+      `${name} must be executable only by service_role`,
+    );
+    assert.match(driftCheck, new RegExp(`"${name}"`));
+  }
+
+  const definitions = normalizedSql.split("create or replace function public.").slice(1);
+  for (const definition of definitions) {
+    const name = definition.match(/^([a-z0-9_]+)/)?.[1];
+    if (!name?.startsWith("bot_")) continue;
+    assert.match(definition, /security definer/);
+    assert.match(
+      definition,
+      /set search_path = pg_catalog, public, private, auth, storage/,
+      `${name} must use the fixed trusted search path`,
+    );
+  }
+});
+
+test("notification fanout projects bot identity without changing human exclusion", () => {
+  assert.match(normalizedSql, /create or replace function public\.enqueue_message_notifications\(\)/);
+  assert.match(normalizedSql, /from public\.bots b where b\.id = new\.bot_id/);
+  assert.match(normalizedSql, /'sender_kind', v_sender_kind/);
+  assert.match(normalizedSql, /'bot_id', new\.bot_id/);
+  assert.match(
+    normalizedSql,
+    /and \(new\.user_id is null or member_row\.user_id <> new\.user_id\)/,
+  );
+  assert.match(
+    normalizedSql,
+    /push mutes and notification preferences remain enforced by public\._notification_push_allowed/,
+  );
+});
+
+test("binding spec documents the tombstone-safe sender invariant", () => {
+  assert.match(bindingSpec, /legacy tombstone/i);
+  assert.match(bindingSpec, /before insert/i);
+  assert.match(bindingSpec, /system/i);
+  assert.doesNotMatch(bindingSpec, /never both and never\s+neither/i);
+});
+
+test("database smoke preserves history and rolls every probe back", () => {
+  const normalizedSmoke = dbSmoke.replace(/\s+/g, " ").trim().toLowerCase();
+  assert.match(normalizedSmoke, /^\\set on_error_stop on begin;/);
+  assert.match(normalizedSmoke, /legacy_tombstone_count/);
+  assert.match(normalizedSmoke, /message_sender_required/);
+  assert.match(normalizedSmoke, /bot_send_message_internal/);
+  assert.match(normalizedSmoke, /bot_idempotency_failed/);
+  assert.match(normalizedSmoke, /bot_webhook_disable_depended_on_lease/);
+  assert.match(normalizedSmoke, /anon_can_access_private_bot_table/);
+  assert.match(normalizedSmoke, /authenticated_can_execute_bot_internal_rpc/);
+  assert.match(normalizedSmoke, /bot_history_delete_not_restricted/);
+  assert.match(normalizedSmoke, /rollback;$/);
+  assert.doesNotMatch(normalizedSmoke, /delete from public\.messages/);
+  assert.doesNotMatch(normalizedSmoke, /update public\.messages set (user_id|bot_id)/);
+});
