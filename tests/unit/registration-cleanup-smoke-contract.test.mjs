@@ -104,6 +104,17 @@ test("Dockerfile worker runtime sources the local secret env and exposes cleanup
   assert.match(healthRoute, /\/healthz\/registration-cleanup/);
   assert.match(healthRoute, /registrationCleanupHealthPayload/);
   assert.match(runbook, /letscube-worker/);
+  assert.match(runbook, /\/srv\/letscube\/secrets\/letscube-infra\.env/);
+  assert.match(runbook, /\/run\/secrets\/letscube-infra\.env/);
+  assert.match(runbook, /container destination/i);
+  assert.match(runbook, /fkd10qwlo4qod9e6gtyzzuwk/);
+  assert.match(
+    runbook,
+    /docker ps --filter label=coolify\.applicationId=fkd10qwlo4qod9e6gtyzzuwk/,
+  );
+  assert.match(runbook, /worker_count=.*\n\[ "\$worker_count" -eq 1 \]/);
+  assert.match(runbook, /Re-verify.*Coolify.*before rollout/i);
+  assert.doesNotMatch(runbook, /--filter name=letscube-worker/);
   assert.match(runbook, /set -euo pipefail/);
   assert.match(runbook, /REGISTRATION_CLEANUP_ENABLED=true/);
   assert.match(runbook, /REGISTRATION_CLEANUP_REPORT_ONLY=true/);

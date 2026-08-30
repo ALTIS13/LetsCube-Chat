@@ -138,19 +138,40 @@ scope/kind/reason/count output in the change record.
 
 ## 6. Deploy Report-Only letscube-worker And Backfill
 
-The live `letscube-worker` is a Dockerfile application that sources
-`/run/secrets/letscube-infra.env` at runtime. The root `docker-compose.yml`
-defaults are portability defaults only; they do not wire the live worker.
+The live `letscube-worker` is a Dockerfile application that sources the
+container destination `/run/secrets/letscube-infra.env` at runtime. Read-only
+verification established that Coolify bind-mounts the host source
+`/srv/letscube/secrets/letscube-infra.env` to that container destination. Edit
+only the host source; never attempt to modify the container destination. The
+root `docker-compose.yml` defaults are portability defaults only; they do not
+wire the live worker.
 
-On the production server, atomically prepare the existing server-local env file.
+Re-verify in Coolify before rollout that this deployment is application UUID
+`fkd10qwlo4qod9e6gtyzzuwk`. Then run this read-only Docker check on the server;
+it must find exactly one running container with that explicit application label
+and confirm the verified host-to-container bind mount. Stop if either check
+fails.
+
+```bash
+set -euo pipefail
+
+mapfile -t worker_containers < <(sudo -n docker ps --filter label=coolify.applicationId=fkd10qwlo4qod9e6gtyzzuwk --quiet)
+worker_count="${#worker_containers[@]}"
+[ "$worker_count" -eq 1 ]
+worker_container="${worker_containers[0]}"
+mount_source="$(sudo -n docker inspect --format '{{range .Mounts}}{{if and (eq .Source "/srv/letscube/secrets/letscube-infra.env") (eq .Destination "/run/secrets/letscube-infra.env")}}{{.Source}}{{end}}{{end}}' "$worker_container")"
+[ "$mount_source" = "/srv/letscube/secrets/letscube-infra.env" ]
+```
+
+On the production server, atomically prepare the verified host source file.
 This retains every unrelated line, mode, and owner; only the four non-secret
 cleanup flags are replaced. It prints only those flag names and values.
 
 ```bash
 set -euo pipefail
 
-env_file=/run/secrets/letscube-infra.env
-env_dir=/run/secrets
+env_file=/srv/letscube/secrets/letscube-infra.env
+env_dir=/srv/letscube/secrets
 rollback_file="$(sudo -n mktemp "$env_dir/.letscube-infra.env.rollback.XXXXXX")"
 candidate_file="$(sudo -n mktemp "$env_dir/.letscube-infra.env.candidate.XXXXXX")"
 cleanup_candidate() { sudo -n rm -f -- "$candidate_file"; }
@@ -199,8 +220,10 @@ than the recorded deployment start; its output is limited to the safe status and
 aggregate result.
 
 ```bash
-worker_container="$(sudo -n docker ps --filter name=letscube-worker --format '{{.ID}}' | head -n1)"
-test -n "$worker_container"
+mapfile -t worker_containers < <(sudo -n docker ps --filter label=coolify.applicationId=fkd10qwlo4qod9e6gtyzzuwk --quiet)
+worker_count="${#worker_containers[@]}"
+[ "$worker_count" -eq 1 ]
+worker_container="${worker_containers[0]}"
 sudo -n docker exec -e DEPLOY_STARTED_AT="$deploy_started_at" "$worker_container" sh -lc "
   curl --fail --silent --show-error http://127.0.0.1:8096/api/healthz/registration-cleanup |
     node -e '
@@ -264,9 +287,10 @@ Any nonzero exit, including any `claimed_unsafe_*` aggregate, is a stop signal.
 ## 7. Report-Only Rollback And Deletion Gate
 
 For a worker deployment, status, backfill, or aggregate-report concern, restore
-the preserved `/run/secrets/letscube-infra.env` rollback file as shown above,
-then deploy the previous reviewed `letscube-worker` configuration. If no
-rollback file remains, perform the same atomic procedure with only these values:
+the preserved `/srv/letscube/secrets/letscube-infra.env` host-source rollback
+file as shown above, then deploy the previous reviewed `letscube-worker`
+configuration. If no rollback file remains, perform the same atomic procedure
+with only these values:
 
 ```text
 REGISTRATION_CLEANUP_ENABLED=false
