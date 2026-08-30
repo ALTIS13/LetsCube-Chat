@@ -14,8 +14,7 @@ const publicRpcs = [
   ["registration_lifecycle_extend_by_email_internal", "text"],
   ["registration_cleanup_claim", "integer,uuid,timestamptz"],
   ["registration_cleanup_recheck", "uuid,uuid,timestamptz"],
-  ["registration_cleanup_authorize_delete", "uuid,uuid"],
-  ["registration_cleanup_recover_expired_authorizations", "integer,timestamptz"],
+  ["registration_cleanup_delete", "uuid,uuid,timestamptz"],
   ["registration_cleanup_finish", "uuid,uuid,text,text"],
   ["registration_cleanup_report", "timestamptz,timestamptz"],
   ["registration_cleanup_recover_dead_letter", "uuid,text"],
@@ -59,7 +58,6 @@ test("due, retry, dead-letter and retention paths have bounded indexes", () => {
     "registration_lifecycles_due_idx",
     "registration_lifecycles_retry_idx",
     "registration_lifecycles_dead_letter_idx",
-    "registration_lifecycles_delete_authorization_idx",
     "registration_cleanup_audit_retention_idx",
   ]) {
     assert.match(sql, new RegExp(`create index ${index}\\b`, "i"), index);
@@ -67,10 +65,6 @@ test("due, retry, dead-letter and retention paths have bounded indexes", () => {
   assert.match(
     sql,
     /registration_lifecycles_retry_idx[\s\S]+next_attempt_at[\s\S]+where admin_hold_at is null\s+and dead_lettered_at is null\s+and next_attempt_at is not null/i,
-  );
-  assert.match(
-    sql,
-    /registration_lifecycles_delete_authorization_idx[\s\S]+delete_authorization_expires_at[\s\S]+where delete_authorization_token is not null/i,
   );
 });
 
@@ -178,23 +172,6 @@ test("explicit same-value reassignment still invalidates invite provenance", () 
   assert.match(body, /admin_hold_at\s*=\s*coalesce/i);
 });
 
-test("expired delete authorization has a bounded service-only recovery path", () => {
-  const body = functionBody(
-    "public.registration_cleanup_recover_expired_authorizations",
-  );
-
-  assert.match(
-    body,
-    /delete_authorization_expires_at\s*<=\s*least\(p_now,\s*pg_catalog\.clock_timestamp\(\)\)/i,
-  );
-  assert.match(body, /order by[\s\S]+delete_authorization_expires_at[\s\S]+user_id/i);
-  assert.match(body, /limit p_limit/i);
-  assert.match(body, /for update of l skip locked/i);
-  assert.match(body, /delete_authorization_token\s*=\s*null/i);
-  assert.match(body, /claim_token\s*=\s*null/i);
-  assert.match(body, /'recovered'[\s\S]+'expired_delete_authorization'/i);
-});
-
 test("product activity is filtered before the bounded cleanup claim", () => {
   const body = functionBody("public.registration_cleanup_claim");
   const claimCandidates = body.match(
@@ -211,30 +188,17 @@ test("product activity is filtered before the bounded cleanup claim", () => {
   );
 });
 
-test("hold transitions preserve cleanup authorization until worker completion", () => {
-  for (const name of [
-    "private.registration_location_membership_guard",
-    "public.registration_cleanup_claim",
-    "public.registration_cleanup_recheck",
-  ]) {
-    const body = functionBody(name);
-    assert.doesNotMatch(
-      body,
-      /delete_authorization_(?:token|authorized_at|expires_at)\s*=\s*null/i,
-      name,
-    );
-  }
+test("protected identities are durably held in a separate bounded pass", () => {
+  const body = functionBody("public.registration_cleanup_claim");
+  const holdCandidates = body.match(
+    /hold_candidates\s+as\s*\(([\s\S]*?)\),\s*held\s+as/i,
+  );
 
-  for (const name of [
-    "private.registration_location_membership_guard",
-    "public.registration_cleanup_recheck",
-  ]) {
-    assert.doesNotMatch(
-      functionBody(name),
-      /claim_token\s*=\s*null|claimed_at\s*=\s*null/i,
-      name,
-    );
-  }
+  assert.ok(holdCandidates, "expected a dedicated protected-identity CTE");
+  assert.match(holdCandidates[1], /private\.registration_identity_requires_hold/i);
+  assert.match(holdCandidates[1], /limit p_limit/i);
+  assert.match(holdCandidates[1], /for update of l skip locked/i);
+  assert.match(body, /admin_hold_at\s*=\s*p_now/i);
 });
 
 for (const [name, signature] of publicRpcs) {
@@ -386,49 +350,29 @@ test("claim locks lifecycle rows without locking auth users", () => {
   assert.doesNotMatch(body, /for update skip locked/i);
 });
 
-test("claim bounds and locks candidates before classification or updates", () => {
+test("claim bounds protected holds and eligible claims before updates", () => {
   const body = functionBody("public.registration_cleanup_claim");
-  const lockedCandidates = body.search(/\bwith\s+locked_candidates\s+as\s*\(/i);
-  const ordered = body.indexOf("order by", lockedCandidates);
-  const limited = body.indexOf("limit p_limit", ordered);
-  const locked = body.indexOf("for update of l skip locked", limited);
-  const classified = body.indexOf("classified as", locked);
-  const held = body.indexOf("held as", classified);
-  const claimed = body.indexOf("claimed as", held);
-  const firstUpdate = body.indexOf(
-    "update private.registration_lifecycles",
-    lockedCandidates,
-  );
+  const holdCandidates = body.indexOf("hold_candidates as");
+  const held = body.indexOf("held as", holdCandidates);
+  const lockedCandidates = body.indexOf("locked_candidates as", held);
+  const claimed = body.indexOf("claimed as", lockedCandidates);
   const lifecycleUpdates = [
     ...body.matchAll(/update private\.registration_lifecycles/gi),
   ];
 
-  assert.ok(lockedCandidates >= 0, "expected a locked_candidates CTE");
-  assert.ok(ordered > lockedCandidates, "expected candidate ordering");
-  assert.ok(limited > ordered, "expected LIMIT p_limit after ordering");
-  assert.ok(locked > limited, "expected lifecycle row locking after LIMIT");
-  assert.ok(classified > locked, "expected classification after locking");
-  assert.ok(
-    held > classified,
-    "expected hold persistence after classification",
-  );
-  assert.ok(claimed > held, "expected claiming after hold persistence");
-  assert.ok(firstUpdate > locked, "expected updates only after locking");
-  assert.match(body.slice(classified, firstUpdate), /from locked_candidates/i);
+  assert.ok(holdCandidates >= 0, "expected hold candidates");
+  assert.ok(held > holdCandidates, "expected bounded hold update");
+  assert.ok(lockedCandidates > held, "expected independent eligible candidates");
+  assert.ok(claimed > lockedCandidates, "expected bounded claim update");
   assert.equal(lifecycleUpdates.length, 2);
   assert.match(
-    body.slice(held, claimed),
-    /update private\.registration_lifecycles[\s\S]+from classified candidate[\s\S]+where l\.user_id = candidate\.user_id[\s\S]+candidate\.requires_hold/i,
+    body.slice(holdCandidates, held),
+    /limit p_limit[\s\S]+for update of l skip locked/i,
   );
   assert.match(
-    body.slice(claimed),
-    /update private\.registration_lifecycles[\s\S]+from classified candidate[\s\S]+where l\.user_id = candidate\.user_id/i,
+    body.slice(lockedCandidates, claimed),
+    /limit p_limit[\s\S]+for update of l skip locked/i,
   );
-  assert.doesNotMatch(
-    body.slice(0, locked),
-    /update private\.registration_lifecycles/i,
-  );
-  assert.doesNotMatch(body, /\bexempted\s+as\s*\(\s*update/i);
 });
 
 test("recheck durably holds identities that become exempt after registration", () => {
@@ -439,21 +383,15 @@ test("recheck durably holds identities that become exempt after registration", (
   );
 });
 
-test("cleanup delete authorization is short-lived and claim-token-specific", () => {
-  assert.match(
-    sql,
-    /delete_authorization_token uuid null[\s\S]+delete_authorized_at timestamptz null[\s\S]+delete_authorization_expires_at timestamptz null/i,
-  );
-  const body = functionBody("public.registration_cleanup_authorize_delete");
+test("cleanup deletion is atomic and claim-token-specific", () => {
+  const body = functionBody("public.registration_cleanup_delete");
   assert.match(body, /l\.claim_token\s*=\s*p_claim_token/i);
-  assert.match(body, /l\.claimed_at\s*>\s*pg_catalog\.clock_timestamp\(\)\s*-\s*interval '15 minutes'/i);
-  assert.match(body, /delete_authorization_token\s*=\s*p_claim_token/i);
-  assert.match(
-    body,
-    /delete_authorization_expires_at\s*=\s*pg_catalog\.clock_timestamp\(\)\s*\+\s*interval '(?:[1-5]?[0-9]) seconds'/i,
-  );
+  assert.match(body, /l\.claimed_at\s*>\s*p_now\s*-\s*interval '15 minutes'/i);
   assert.match(body, /private\.registration_identity_requires_hold/i);
   assert.match(body, /private\.registration_has_product_activity/i);
+  assert.match(body, /set_config\(\s*'letscube\.registration_cleanup_claim_token'/i);
+  assert.match(body, /delete from auth\.users/i);
+  assert.doesNotMatch(sql, /delete_authorization_token uuid/i);
 });
 
 test("auth user delete guard rechecks cleanup eligibility in the delete statement", () => {
@@ -464,20 +402,17 @@ test("auth user delete guard rechecks cleanup eligibility in the delete statemen
   const body = functionBody("private.registration_cleanup_guard_auth_user_delete");
   assert.match(
     body,
+    /current_setting\(\s*'letscube\.registration_cleanup_claim_token',\s*true\s*\)/i,
+  );
+  assert.match(
+    body,
     /from private\.registration_lifecycles l[\s\S]+where l\.user_id = old\.id[\s\S]+for update/i,
   );
   assert.match(
     body,
-    /delete_authorization_token is null[\s\S]+return old/i,
+    /cleanup_claim_token is null[\s\S]+return old/i,
   );
-  assert.match(
-    body,
-    /claim_token\s+is distinct from\s+v_lifecycle\.delete_authorization_token/i,
-  );
-  assert.match(
-    body,
-    /delete_authorization_expires_at\s*(?:<\s*pg_catalog\.clock_timestamp\(\)|>=\s*pg_catalog\.clock_timestamp\(\))/i,
-  );
+  assert.match(body, /v_lifecycle\.claim_token::text\s*<>\s*v_cleanup_claim_token/i);
   assert.match(
     body,
     /eligible_at\s*(?:>\s*pg_catalog\.clock_timestamp\(\)|<=\s*pg_catalog\.clock_timestamp\(\))/i,
@@ -506,7 +441,6 @@ test("report-only completion clears a claim without creating an administrative h
   assert.match(body, /claim_token\s*=\s*null/i);
   assert.match(body, /claimed_at\s*=\s*null/i);
   assert.match(body, /insert into private\.registration_cleanup_audit/i);
-  assert.match(body, /delete_authorization_token\s*=\s*null/i);
   assert.doesNotMatch(body, /p_action\s*=\s*'deleted'/i);
 });
 

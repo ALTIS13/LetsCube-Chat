@@ -6,7 +6,6 @@ export type CleanupCandidate = {
 };
 
 export interface RegistrationCleanupRepository {
-  recoverExpiredAuthorizations(limit: number, now: string): Promise<number>;
   purgeAudit(now: string): Promise<number>;
   claim(
     limit: number,
@@ -14,9 +13,8 @@ export interface RegistrationCleanupRepository {
     now: string,
   ): Promise<CleanupCandidate[]>;
   recheck(userId: string, claimToken: string, now: string): Promise<boolean>;
-  authorizeDelete(userId: string, claimToken: string): Promise<boolean>;
+  deleteCandidate(userId: string, claimToken: string, now: string): Promise<boolean>;
   report(userId: string, claimToken: string, reason: string): Promise<void>;
-  deleteAuthUser(userId: string): Promise<void>;
   finish(
     userId: string,
     claimToken: string,
@@ -81,25 +79,11 @@ function createServiceRoleClient(
 
 export function createRegistrationCleanupRepository(
   environment: NodeJS.ProcessEnv = process.env,
-  client: Pick<SupabaseClient, "rpc" | "auth"> = createServiceRoleClient(
+  client: Pick<SupabaseClient, "rpc"> = createServiceRoleClient(
     environment,
   ),
 ): RegistrationCleanupRepository {
   return {
-    async recoverExpiredAuthorizations(limit, now) {
-      const data = requireRpcData<number>(
-        await client.rpc("registration_cleanup_recover_expired_authorizations", {
-          p_limit: limit,
-          p_now: now,
-        }),
-        "registration_cleanup_authorization_recovery_failed",
-      );
-      if (!Number.isSafeInteger(data) || data < 0 || data > limit) {
-        throw new Error("registration_cleanup_authorization_recovery_invalid_data");
-      }
-      return data;
-    },
-
     async purgeAudit(now) {
       const data = requireRpcData<number>(
         await client.rpc("registration_cleanup_purge_audit", {
@@ -144,16 +128,17 @@ export function createRegistrationCleanupRepository(
       return data;
     },
 
-    async authorizeDelete(userId, claimToken) {
+    async deleteCandidate(userId, claimToken, now) {
       const data = requireRpcData<boolean>(
-        await client.rpc("registration_cleanup_authorize_delete", {
+        await client.rpc("registration_cleanup_delete", {
           p_user_id: userId,
           p_claim_token: claimToken,
+          p_now: now,
         }),
-        "registration_cleanup_authorize_delete_failed",
+        "registration_cleanup_delete_failed",
       );
       if (typeof data !== "boolean") {
-        throw new Error("registration_cleanup_authorize_delete_invalid_data");
+        throw new Error("registration_cleanup_delete_invalid_data");
       }
       return data;
     },
@@ -168,11 +153,6 @@ export function createRegistrationCleanupRepository(
         }),
         "registration_cleanup_report_failed",
       );
-    },
-
-    async deleteAuthUser(userId) {
-      const { error } = await client.auth.admin.deleteUser(userId);
-      if (error) throw new Error("registration_cleanup_delete_failed");
     },
 
     async finish(userId, claimToken, action, reason) {

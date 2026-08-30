@@ -4,7 +4,9 @@
 
 **Goal:** Track public and invite registrations server-side, provide a safe resend experience, and automatically delete only never-confirmed, never-used accounts after the approved grace periods.
 
-**Architecture:** The trusted `auth-yandex-gateway` records lifecycle state through service-role-only RPCs after Supabase Auth accepts a signup. An hourly API worker claims bounded candidates from a private table, rechecks eligibility, and deletes through Supabase Admin API. The worker launches in report-only mode before deletion is enabled.
+**Architecture:** The trusted `auth-yandex-gateway` records lifecycle state through service-role-only RPCs after Supabase Auth accepts a signup. An hourly API worker claims bounded candidates from a private table, rechecks eligibility, and deletes through an atomic service-role-only database RPC. The worker launches in report-only mode before deletion is enabled.
+
+**Safety amendment (2026-08-30):** Final race review proved that an external Admin API request plus a recoverable short-lived authorization marker cannot distinguish a delayed cleanup request from a later ordinary administrative delete. The binding implementation therefore supersedes the Task 3 Admin API pseudocode below: `registration_cleanup_delete(uuid,uuid,timestamptz)` performs the final recheck and Auth delete in one transaction using a transaction-local claim context. Normal administrative deletes without that context remain unchanged.
 
 **Tech Stack:** Supabase Auth/Postgres/RLS, Deno Edge Functions, Node.js/TypeScript, Express worker runtime, React, Node test runner, Playwright.
 

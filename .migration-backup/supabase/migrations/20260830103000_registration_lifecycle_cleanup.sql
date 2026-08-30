@@ -25,24 +25,7 @@ create table private.registration_lifecycles (
   last_error_code text null check (
     last_error_code is null or last_error_code ~ '^[a-z][a-z0-9_]{0,63}$'
   ),
-  delete_authorization_token uuid null,
-  delete_authorized_at timestamptz null,
-  delete_authorization_expires_at timestamptz null,
-  updated_at timestamptz not null default now(),
-  constraint registration_cleanup_delete_authorization_complete check (
-    (
-      delete_authorization_token is null
-      and delete_authorized_at is null
-      and delete_authorization_expires_at is null
-    )
-    or (
-      delete_authorization_token is not null
-      and delete_authorized_at is not null
-      and delete_authorization_expires_at > delete_authorized_at
-      and delete_authorization_expires_at
-        <= delete_authorized_at + interval '60 seconds'
-    )
-  )
+  updated_at timestamptz not null default now()
 );
 
 create table private.registration_cleanup_audit (
@@ -84,12 +67,6 @@ create index registration_lifecycles_retry_idx
 create index registration_lifecycles_dead_letter_idx
   on private.registration_lifecycles (dead_lettered_at, user_id)
   where dead_lettered_at is not null;
-create index registration_lifecycles_delete_authorization_idx
-  on private.registration_lifecycles (
-    delete_authorization_expires_at,
-    user_id
-  )
-  where delete_authorization_token is not null;
 create index registration_cleanup_audit_retention_idx
   on private.registration_cleanup_audit (created_at);
 create index registration_location_provenance_invite_idx
@@ -463,8 +440,6 @@ begin
     where provenance.user_id = new.user_id
       and provenance.location_id = new.location_id;
 
-    -- Keep any cleanup authorization attached so an in-flight Admin API delete
-    -- reaches the Auth trigger and is rejected against this durable hold.
     update private.registration_lifecycles l
     set admin_hold_at = coalesce(l.admin_hold_at, pg_catalog.clock_timestamp()),
         updated_at = pg_catalog.clock_timestamp()
@@ -610,73 +585,6 @@ revoke all on function public.registration_lifecycle_extend_by_email_internal(te
 grant execute on function public.registration_lifecycle_extend_by_email_internal(text)
   to service_role;
 
-create or replace function public.registration_cleanup_recover_expired_authorizations(
-  p_limit integer,
-  p_now timestamptz
-)
-returns integer
-language plpgsql
-security definer
-set search_path = pg_catalog, public, private, auth, storage
-as $function$
-declare
-  v_recovered integer := 0;
-begin
-  if p_limit is null or p_limit not between 1 and 1000 then
-    raise exception 'registration_cleanup_recovery_limit_invalid'
-      using errcode = '22023';
-  end if;
-  if p_now is null then
-    raise exception 'registration_cleanup_recovery_time_required'
-      using errcode = '22023';
-  end if;
-
-  with expired as (
-    select l.user_id
-    from private.registration_lifecycles l
-    where l.delete_authorization_token is not null
-      and l.delete_authorization_expires_at
-        <= least(p_now, pg_catalog.clock_timestamp())
-    order by l.delete_authorization_expires_at, l.user_id
-    limit p_limit
-    for update of l skip locked
-  ), recovered as (
-    update private.registration_lifecycles l
-    set claim_token = null,
-        claimed_at = null,
-        delete_authorization_token = null,
-        delete_authorized_at = null,
-        delete_authorization_expires_at = null,
-        updated_at = pg_catalog.clock_timestamp()
-    from expired
-    where l.user_id = expired.user_id
-    returning l.user_id
-  ), audited as (
-    insert into private.registration_cleanup_audit(
-      user_reference,
-      action,
-      reason_code
-    )
-    select
-      recovered.user_id,
-      'recovered',
-      'expired_delete_authorization'
-    from recovered
-    returning 1
-  )
-  select count(*)::integer
-  into v_recovered
-  from audited;
-
-  return v_recovered;
-end
-$function$;
-
-revoke all on function public.registration_cleanup_recover_expired_authorizations(integer,timestamptz)
-  from public, anon, authenticated, service_role;
-grant execute on function public.registration_cleanup_recover_expired_authorizations(integer,timestamptz)
-  to service_role;
-
 create or replace function public.registration_cleanup_claim(
   p_limit integer,
   p_claim_token uuid,
@@ -687,7 +595,29 @@ language sql
 security definer
 set search_path = pg_catalog, public, private, auth, storage
 as $function$
-  with locked_candidates as (
+  with hold_candidates as (
+    select l.user_id
+    from private.registration_lifecycles l
+    where p_limit between 1 and 100
+      and p_claim_token is not null
+      and p_now is not null
+      and l.eligible_at <= p_now
+      and l.admin_hold_at is null
+      and l.dead_lettered_at is null
+      and private.registration_identity_requires_hold(l.user_id)
+    order by l.eligible_at, l.user_id
+    limit p_limit
+    for update of l skip locked
+  ), held as (
+    update private.registration_lifecycles l
+    set admin_hold_at = p_now,
+        claim_token = null,
+        claimed_at = null,
+        updated_at = p_now
+    from hold_candidates candidate
+    where l.user_id = candidate.user_id
+    returning l.user_id
+  ), locked_candidates as (
     select l.user_id, l.signup_kind
     from private.registration_lifecycles l
     join auth.users u on u.id = l.user_id
@@ -705,9 +635,7 @@ as $function$
       and u.email_confirmed_at is null
       and u.phone_confirmed_at is null
       and u.last_sign_in_at is null
-      -- Active rows are intentionally excluded before LIMIT. Protected
-      -- identities remain in the bounded set once, receive a durable hold,
-      -- and therefore cannot starve later eligible candidates.
+      and not private.registration_identity_requires_hold(l.user_id)
       and not private.registration_has_product_activity(l.user_id)
     order by
       coalesce(l.next_attempt_at, l.eligible_at),
@@ -715,38 +643,14 @@ as $function$
       l.user_id
     limit p_limit
     for update of l skip locked
-  ), classified as (
-    select
-      candidate.user_id,
-      candidate.signup_kind,
-      private.registration_identity_requires_hold(candidate.user_id) as requires_hold,
-      private.registration_has_product_activity(candidate.user_id) as has_activity
-    from locked_candidates candidate
-  ), held as (
-    -- Authorization is cleared only by completion/recovery. Preserving it here
-    -- prevents a delayed Admin API request from bypassing the Auth guard.
-    update private.registration_lifecycles l
-    set admin_hold_at = p_now,
-        updated_at = p_now
-    from classified candidate
-    where l.user_id = candidate.user_id
-      and candidate.requires_hold
-    returning l.user_id
   ), claimed as (
     update private.registration_lifecycles l
     set claim_token = p_claim_token,
         claimed_at = p_now,
         attempt_count = l.attempt_count + 1,
         updated_at = p_now
-    from classified candidate
+    from locked_candidates candidate
     where l.user_id = candidate.user_id
-      and not candidate.requires_hold
-      and not candidate.has_activity
-      and not exists (
-        select 1
-        from held
-        where held.user_id = candidate.user_id
-      )
     returning l.user_id, l.signup_kind
   )
   select claimed.user_id, claimed.signup_kind
@@ -805,47 +709,61 @@ revoke all on function public.registration_cleanup_recheck(uuid,uuid,timestamptz
 grant execute on function public.registration_cleanup_recheck(uuid,uuid,timestamptz)
   to service_role;
 
-create or replace function public.registration_cleanup_authorize_delete(
+create or replace function public.registration_cleanup_delete(
   p_user_id uuid,
-  p_claim_token uuid
+  p_claim_token uuid,
+  p_now timestamptz
 )
 returns boolean
 language plpgsql
 security definer
 set search_path = pg_catalog, public, private, auth, storage
 as $function$
+declare
+  v_deleted integer := 0;
 begin
-  if p_user_id is null or p_claim_token is null then
+  if p_user_id is null or p_claim_token is null or p_now is null then
     return false;
   end if;
 
-  update private.registration_lifecycles l
-  set delete_authorization_token = p_claim_token,
-      delete_authorized_at = pg_catalog.clock_timestamp(),
-      delete_authorization_expires_at = pg_catalog.clock_timestamp()
-        + interval '30 seconds',
-      updated_at = pg_catalog.clock_timestamp()
-  from auth.users u
+  perform 1
+  from private.registration_lifecycles l
+  join auth.users u on u.id = l.user_id
+  join public.profiles profile on profile.id = u.id
   where l.user_id = p_user_id
-    and u.id = l.user_id
     and l.claim_token = p_claim_token
-    and l.claimed_at > pg_catalog.clock_timestamp() - interval '15 minutes'
-    and l.eligible_at <= pg_catalog.clock_timestamp()
+    and l.claimed_at > p_now - interval '15 minutes'
+    and l.eligible_at <= p_now
     and l.admin_hold_at is null
     and l.dead_lettered_at is null
     and not private.registration_identity_requires_hold(l.user_id)
     and not private.registration_has_product_activity(l.user_id)
     and u.email_confirmed_at is null
     and u.phone_confirmed_at is null
-    and u.last_sign_in_at is null;
+    and u.last_sign_in_at is null
+  for update of l, u, profile;
 
-  return found;
+  if not found then
+    return false;
+  end if;
+
+  perform pg_catalog.set_config(
+    'letscube.registration_cleanup_claim_token',
+    p_claim_token::text,
+    true
+  );
+
+  delete from auth.users u
+  where u.id = p_user_id;
+
+  get diagnostics v_deleted = row_count;
+  return v_deleted = 1;
 end
 $function$;
 
-revoke all on function public.registration_cleanup_authorize_delete(uuid,uuid)
+revoke all on function public.registration_cleanup_delete(uuid,uuid,timestamptz)
   from public, anon, authenticated, service_role;
-grant execute on function public.registration_cleanup_authorize_delete(uuid,uuid)
+grant execute on function public.registration_cleanup_delete(uuid,uuid,timestamptz)
   to service_role;
 
 create or replace function private.registration_cleanup_guard_auth_user_delete()
@@ -856,28 +774,36 @@ set search_path = pg_catalog, public, private, auth, storage
 as $function$
 declare
   v_lifecycle private.registration_lifecycles%rowtype;
+  v_cleanup_claim_token text := nullif(
+    pg_catalog.current_setting(
+      'letscube.registration_cleanup_claim_token',
+      true
+    ),
+    ''
+  );
 begin
+  -- Deletes not initiated by the cleanup RPC keep the existing administrative
+  -- behavior and do not depend on lifecycle state.
+  if v_cleanup_claim_token is null then
+    return old;
+  end if;
+
   select l.*
   into v_lifecycle
   from private.registration_lifecycles l
   where l.user_id = old.id
   for update;
 
-  if not found or v_lifecycle.delete_authorization_token is null then
-    return old;
+  if not found then
+    raise exception 'registration_cleanup_delete_rejected'
+      using errcode = '55000';
   end if;
 
-  if v_lifecycle.claim_token is distinct from v_lifecycle.delete_authorization_token
+  if v_lifecycle.claim_token is null
+     or v_lifecycle.claim_token::text <> v_cleanup_claim_token
      or v_lifecycle.claimed_at is null
      or v_lifecycle.claimed_at
        <= pg_catalog.clock_timestamp() - interval '15 minutes'
-     or v_lifecycle.delete_authorized_at is null
-     or v_lifecycle.delete_authorized_at > pg_catalog.clock_timestamp()
-     or v_lifecycle.delete_authorization_expires_at is null
-     or v_lifecycle.delete_authorization_expires_at
-       < pg_catalog.clock_timestamp()
-     or v_lifecycle.delete_authorization_expires_at
-       > v_lifecycle.delete_authorized_at + interval '60 seconds'
      or v_lifecycle.eligible_at > pg_catalog.clock_timestamp()
      or v_lifecycle.admin_hold_at is not null
      or v_lifecycle.dead_lettered_at is not null
@@ -960,9 +886,6 @@ begin
         when p_action = 'failed' then p_reason_code
         else l.last_error_code
       end,
-      delete_authorization_token = null,
-      delete_authorized_at = null,
-      delete_authorization_expires_at = null,
       updated_at = pg_catalog.clock_timestamp()
   where l.user_id = p_user_id
     and l.claim_token = p_claim_token

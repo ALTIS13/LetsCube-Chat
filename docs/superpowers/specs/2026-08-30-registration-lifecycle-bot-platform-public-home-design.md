@@ -140,7 +140,10 @@ account is privileged or exempt from cleanup.
 
 The lifecycle worker runs hourly. It selects bounded batches with
 `FOR UPDATE SKIP LOCKED`, rechecks every condition, and deletes through a trusted
-Supabase Admin API path. The operation is idempotent. Confirmation or login
+service-role-only database RPC. That RPC locks the lifecycle, Auth user and
+profile rows, sets a transaction-local claim context, and performs the Auth
+delete in the same transaction; the Auth trigger rechecks the claim at the
+delete statement. The operation is idempotent. Confirmation or login
 during selection prevents deletion during the final recheck.
 
 ### 4.4 Safe rollout
