@@ -23,11 +23,16 @@ function config(overrides = {}) {
 function createRepository({
   candidates,
   recheck = () => true,
+  authorizeDelete = () => true,
   deleteAuthUser = () => undefined,
+  purgeAudit = () => 0,
 }) {
   const calls = {
+    order: [],
+    purgeAudit: [],
     claim: [],
     recheck: [],
+    authorizeDelete: [],
     report: [],
     deleteAuthUser: [],
     finish: [],
@@ -36,22 +41,37 @@ function createRepository({
   return {
     calls,
     repository: {
+      async purgeAudit(now) {
+        calls.order.push("purge");
+        calls.purgeAudit.push(now);
+        return purgeAudit(now);
+      },
       async claim(limit, claimToken, now) {
+        calls.order.push("claim");
         calls.claim.push({ limit, claimToken, now });
         return candidates;
       },
       async recheck(userId, claimToken, now) {
+        calls.order.push("recheck");
         calls.recheck.push({ userId, claimToken, now });
         return recheck(userId);
       },
+      async authorizeDelete(userId, claimToken) {
+        calls.order.push("authorize");
+        calls.authorizeDelete.push({ userId, claimToken });
+        return authorizeDelete(userId);
+      },
       async report(userId, claimToken, reason) {
+        calls.order.push("report");
         calls.report.push({ userId, claimToken, reason });
       },
       async deleteAuthUser(userId) {
+        calls.order.push("delete");
         calls.deleteAuthUser.push(userId);
         return deleteAuthUser(userId);
       },
       async finish(userId, claimToken, action, reason) {
+        calls.order.push(`finish:${action}`);
         calls.finish.push({ userId, claimToken, action, reason });
       },
     },
@@ -70,13 +90,14 @@ test("report-only cleanup never deletes an eligible candidate", async () => {
 
   assert.equal(result.reported, 1);
   assert.equal(fake.calls.deleteAuthUser.length, 0);
+  assert.deepEqual(fake.calls.order.slice(0, 2), ["purge", "claim"]);
   assert.deepEqual(
     fake.calls.report.map(({ reason }) => reason),
     ["report_only"],
   );
 });
 
-test("active cleanup rechecks immediately before deleting", async () => {
+test("active cleanup purges, rechecks, authorizes, then uses Admin API delete", async () => {
   const fake = createRepository({
     candidates: [{ user_id: "candidate-a", signup_kind: "invite" }],
   });
@@ -85,17 +106,37 @@ test("active cleanup rechecks immediately before deleting", async () => {
 
   assert.equal(result.deleted, 1);
   assert.deepEqual(fake.calls.deleteAuthUser, ["candidate-a"]);
-  assert.deepEqual(fake.calls.finish, [
-    {
-      userId: "candidate-a",
-      claimToken: fake.calls.claim[0].claimToken,
-      action: "deleted",
-      reason: "expired_unconfirmed",
-    },
+  assert.deepEqual(fake.calls.finish, []);
+  assert.deepEqual(fake.calls.order, [
+    "purge",
+    "claim",
+    "recheck",
+    "authorize",
+    "delete",
   ]);
   assert.equal(
     fake.calls.recheck[0].claimToken,
     fake.calls.claim[0].claimToken,
+  );
+  assert.equal(
+    fake.calls.authorizeDelete[0].claimToken,
+    fake.calls.claim[0].claimToken,
+  );
+});
+
+test("delete authorization denial skips Admin API deletion and clears the claim", async () => {
+  const fake = createRepository({
+    candidates: [{ user_id: "candidate-a", signup_kind: "invite" }],
+    authorizeDelete: () => false,
+  });
+
+  const result = await runRegistrationCleanupBatch(config(), fake.repository);
+
+  assert.equal(result.skipped, 1);
+  assert.deepEqual(fake.calls.deleteAuthUser, []);
+  assert.deepEqual(
+    fake.calls.finish.map(({ action, reason }) => ({ action, reason })),
+    [{ action: "skipped", reason: "delete_not_authorized" }],
   );
 });
 
@@ -161,13 +202,9 @@ test("a candidate failure does not stop later candidates", async () => {
         action: "failed",
         reason: "candidate_processing_failed",
       },
-      {
-        userId: "candidate-b",
-        action: "deleted",
-        reason: "expired_unconfirmed",
-      },
     ],
   );
+  assert.equal(fake.calls.finish.length, 1);
 });
 
 test("each batch uses a fresh claim token", async () => {
@@ -213,6 +250,61 @@ test("report and finish accept successful void RPC responses", async () => {
     calls.map(({ params }) => params.p_action),
     ["reported", "skipped"],
   );
+});
+
+test("repository authorizes before Admin API deletion and projects purge count", async () => {
+  const calls = [];
+  const repository = createRegistrationCleanupRepository(
+    {},
+    {
+      async rpc(name, params) {
+        calls.push({ name, params });
+        if (name === "registration_cleanup_authorize_delete") {
+          return { data: true, error: null };
+        }
+        if (name === "registration_cleanup_purge_audit") {
+          return { data: 17, error: null };
+        }
+        return { data: null, error: null };
+      },
+      auth: {
+        admin: {
+          async deleteUser(userId) {
+            calls.push({ name: "admin.deleteUser", params: { userId } });
+            return { error: null };
+          },
+        },
+      },
+    },
+  );
+
+  assert.equal(await repository.purgeAudit("2026-08-30T10:00:00.000Z"), 17);
+  assert.equal(await repository.authorizeDelete("candidate-a", "claim-a"), true);
+  await repository.deleteAuthUser("candidate-a");
+
+  assert.deepEqual(
+    calls.map(({ name }) => name),
+    [
+      "registration_cleanup_purge_audit",
+      "registration_cleanup_authorize_delete",
+      "admin.deleteUser",
+    ],
+  );
+});
+
+test("audit purge failure fails the batch before candidates are claimed", async () => {
+  const fake = createRepository({
+    candidates: [{ user_id: "candidate-a", signup_kind: "public" }],
+    purgeAudit: () => {
+      throw new Error("unavailable");
+    },
+  });
+
+  const result = await runRegistrationCleanupBatch(config(), fake.repository);
+
+  assert.equal(result, null);
+  assert.deepEqual(fake.calls.order, ["purge"]);
+  assert.equal(fake.calls.claim.length, 0);
 });
 
 test("cleanup startup is bundled and remains disabled by default", async () => {

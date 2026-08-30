@@ -132,7 +132,9 @@ function validReportShape(reportScope, signupKind, reasonCode) {
     "phone_confirmed",
     "signed_in",
     "product_activity",
+    "dead_lettered",
     "not_due",
+    "retry_wait",
     "eligible_due",
   ]);
   if (reportScope === "lifecycle") {
@@ -143,7 +145,7 @@ function validReportShape(reportScope, signupKind, reasonCode) {
   }
   return (
     signupKind === "all" &&
-    /^(?:reported|deleted|skipped|failed):[a-z][a-z0-9_]{0,63}$/.test(
+    /^(?:reported|deleted|skipped|failed|recovered):[a-z][a-z0-9_]{0,63}$/.test(
       reasonCode,
     )
   );

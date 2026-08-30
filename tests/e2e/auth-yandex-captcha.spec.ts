@@ -61,6 +61,7 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
       const body = route.request().postDataJSON() as Record<string, unknown>;
       expect(body.action).toBe("signup");
       expect(body.captchaToken).toBe("playwright-smart-token");
+      expect(body.captchaProvider).toBe("yandex-smartcaptcha");
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -182,6 +183,7 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
       const body = route.request().postDataJSON() as Record<string, unknown>;
       expect(body.action).toBe("recovery");
       expect(body.captchaToken).toBe("playwright-smart-token");
+      expect(body.captchaProvider).toBe("yandex-smartcaptcha");
       await route.fulfill({
         status: 429,
         contentType: "application/json",
@@ -238,7 +240,9 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
     expect(layout.optionsTheme).toBe("dark");
   });
 
-  test("/register enables the supported SmartCaptcha WebView mode inside Windows", async ({ page }) => {
+  test("/register enables the supported SmartCaptcha WebView mode inside Windows", async ({
+    page,
+  }) => {
     await page.addInitScript(() => {
       window.letscubeDesktop = {
         platform: "windows",

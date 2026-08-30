@@ -4,8 +4,12 @@ import { AuthCaptcha } from "@/components/auth/AuthCaptcha";
 import { createNonPersistedAuthClient } from "@/lib/supabase/client";
 import { KubBrandLogo, KubButton, KubIcon, KubInput, KubPanel } from "@/components/kub";
 import { kubBrandAsset } from "@/components/kub/brandAssets";
-import { getAuthCallbackUrl } from "@/lib/authRedirect";
-import { getAuthCaptchaRequiredMessage, isAuthCaptchaEnabled, shouldUseAuthCaptchaGateway } from "@/lib/authCaptcha";
+import {
+  getAuthCaptchaConfig,
+  getAuthCaptchaRequiredMessage,
+  getAuthCaptchaUnavailableMessage,
+  isAuthCaptchaEnabled,
+} from "@/lib/authCaptcha";
 import { requestAuthGateway } from "@/lib/authGateway";
 import { mapPgError } from "@/lib/errors";
 import { maskRegistrationEmail } from "@/lib/registrationConfirmation";
@@ -112,7 +116,11 @@ export function RegisterForm() {
       const normalizedEmail = email.trim().toLowerCase();
       const fullNameError = validateFullName(fullName);
       if (fullNameError) throw new Error(fullNameError);
-      if (isAuthCaptchaEnabled() && !captchaToken) {
+      const captchaConfig = getAuthCaptchaConfig();
+      if (!captchaConfig) {
+        throw new Error(getAuthCaptchaUnavailableMessage());
+      }
+      if (!captchaToken) {
         throw new Error(getAuthCaptchaRequiredMessage());
       }
       const normalizedInviteCode = normalizeRegistrationInviteCode(inviteCode);
@@ -123,30 +131,15 @@ export function RegisterForm() {
         throw new Error(REGISTRATION_INVITE_ONLY_CODE_REQUIRED_MESSAGE);
       }
 
-      if (shouldUseAuthCaptchaGateway()) {
-        await requestAuthGateway({
-          action: "signup",
-          email: normalizedEmail,
-          password,
-          fullName: normalizeFullName(fullName),
-          captchaToken,
-          inviteCode: normalizedInviteCode,
-        });
-      } else {
-        const { error } = await supabase.auth.signUp({
-          email: normalizedEmail,
-          password,
-          options: {
-            captchaToken: captchaToken || undefined,
-            data: {
-              full_name: normalizeFullName(fullName),
-              ...(normalizedInviteCode ? { invite_code: normalizedInviteCode } : {}),
-            },
-            emailRedirectTo: getAuthCallbackUrl(),
-          },
-        });
-        if (error) throw error;
-      }
+      await requestAuthGateway({
+        action: "signup",
+        email: normalizedEmail,
+        password,
+        fullName: normalizeFullName(fullName),
+        captchaToken,
+        captchaProvider: captchaConfig.provider,
+        inviteCode: normalizedInviteCode,
+      });
 
       showRegistrationConfirmation(normalizedEmail);
     } catch (err: unknown) {
@@ -169,6 +162,11 @@ export function RegisterForm() {
 
     setResendError("");
     setResendSuccess("");
+    const captchaConfig = getAuthCaptchaConfig();
+    if (!captchaConfig) {
+      setResendError(getAuthCaptchaUnavailableMessage());
+      return;
+    }
     if (!resendCaptchaToken) {
       setResendError(getAuthCaptchaRequiredMessage());
       return;
@@ -180,6 +178,7 @@ export function RegisterForm() {
         action: "resend_signup",
         email: submittedEmail,
         captchaToken: resendCaptchaToken,
+        captchaProvider: captchaConfig.provider,
       });
       setResendSuccess("Письмо отправлено повторно.");
       startResendCooldown();
@@ -256,6 +255,7 @@ export function RegisterForm() {
                 <AuthCaptcha
                   disabled={resendLocked}
                   onTokenChange={setResendCaptchaToken}
+                  required
                   resetSignal={resendCaptchaResetSignal}
                 />
                 {resendLocked && (
@@ -406,7 +406,11 @@ export function RegisterForm() {
               />
             )}
 
-            <AuthCaptcha onTokenChange={setCaptchaToken} resetSignal={captchaResetSignal} />
+            <AuthCaptcha
+              onTokenChange={setCaptchaToken}
+              required
+              resetSignal={captchaResetSignal}
+            />
 
             {error && (
               <p className="text-xs text-[color:var(--kub-danger)] px-1">{error}</p>

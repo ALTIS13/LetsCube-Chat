@@ -5,8 +5,13 @@ import { createClient } from "@/lib/supabase/client";
 import { KubBrandLogo, KubButton, KubIcon, KubInput, KubPanel } from "@/components/kub";
 import { kubBrandAsset } from "@/components/kub/brandAssets";
 import { mapPgError } from "@/lib/errors";
-import { CONFIRMATION_LINK_INVALID_MESSAGE, getAuthCallbackUrl } from "@/lib/authRedirect";
-import { getAuthCaptchaRequiredMessage, isAuthCaptchaEnabled, shouldUseAuthCaptchaGateway } from "@/lib/authCaptcha";
+import { CONFIRMATION_LINK_INVALID_MESSAGE } from "@/lib/authRedirect";
+import {
+  getAuthCaptchaConfig,
+  getAuthCaptchaRequiredMessage,
+  getAuthCaptchaUnavailableMessage,
+  isAuthCaptchaEnabled,
+} from "@/lib/authCaptcha";
 import { requestAuthGateway } from "@/lib/authGateway";
 import { useTheme } from "@/hooks/useTheme";
 
@@ -95,26 +100,24 @@ export function LoginForm() {
       setError("Введите адрес эл. почты, чтобы получить ссылку для сброса пароля.");
       return;
     }
-    if (isAuthCaptchaEnabled() && !resetCaptchaToken) {
+    const captchaConfig = getAuthCaptchaConfig();
+    if (!captchaConfig) {
+      setError(getAuthCaptchaUnavailableMessage());
+      return;
+    }
+    if (!resetCaptchaToken) {
       setError(getAuthCaptchaRequiredMessage());
       return;
     }
     setError("");
     setResetLoading(true);
     try {
-      if (shouldUseAuthCaptchaGateway()) {
-        await requestAuthGateway({
-          action: "recovery",
-          email: cleanEmail,
-          captchaToken: resetCaptchaToken,
-        });
-      } else {
-        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-          captchaToken: resetCaptchaToken || undefined,
-          redirectTo: getAuthCallbackUrl(),
-        });
-        if (error) throw error;
-      }
+      await requestAuthGateway({
+        action: "recovery",
+        email: cleanEmail,
+        captchaToken: resetCaptchaToken,
+        captchaProvider: captchaConfig.provider,
+      });
       setNotice("Если такая эл. почта зарегистрирована, письмо со ссылкой для сброса пароля придёт на почту.");
       setResetMode(false);
     } catch (err: unknown) {
@@ -235,7 +238,11 @@ export function LoginForm() {
               )}
 
               {resetMode && (
-                <AuthCaptcha onTokenChange={setResetCaptchaToken} resetSignal={resetCaptchaResetSignal} />
+                <AuthCaptcha
+                  onTokenChange={setResetCaptchaToken}
+                  required
+                  resetSignal={resetCaptchaResetSignal}
+                />
               )}
 
               {error && (

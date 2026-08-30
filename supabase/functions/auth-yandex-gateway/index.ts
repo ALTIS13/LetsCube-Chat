@@ -1,4 +1,5 @@
 import { createAuthRateLimiter } from "./rateLimit.mjs";
+import { verifyCaptchaToken } from "./captchaProvider.mjs";
 import { normalizeInviteCode, shouldValidateInviteGate } from "./inviteCode.mjs";
 import {
   lifecycleKind,
@@ -15,6 +16,7 @@ type RequestBody = {
   password?: unknown;
   fullName?: unknown;
   captchaToken?: unknown;
+  captchaProvider?: unknown;
   inviteCode?: unknown;
   redirectTo?: unknown;
 };
@@ -51,7 +53,14 @@ Deno.serve(async (request: Request) => {
   const captchaToken = normalizeToken(body?.captchaToken);
   if (!captchaToken) return corsJson({ ok: false, error: "captcha_required" }, 400, request);
 
-  const captcha = await verifyYandexSmartCaptcha(captchaToken, ip);
+  const captcha = await verifyCaptchaToken({
+    requestedProvider: body?.captchaProvider,
+    configuredProvider: Deno.env.get("KUB_AUTH_CAPTCHA_PROVIDER"),
+    yandexSecret: Deno.env.get("YANDEX_SMARTCAPTCHA_SECRET"),
+    turnstileSecret: Deno.env.get("TURNSTILE_SECRET_KEY"),
+    token: captchaToken,
+    ip,
+  });
   if (!captcha.ok) return corsJson({ ok: false, error: captcha.error }, captcha.status, request);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -172,38 +181,6 @@ function normalizeToken(value: unknown): string | null {
   const token = value.trim();
   if (!token || token.length > MAX_TOKEN_LENGTH) return null;
   return token;
-}
-
-async function verifyYandexSmartCaptcha(token: string, ip: string | null): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
-  const secret = Deno.env.get("YANDEX_SMARTCAPTCHA_SECRET");
-  if (!secret) return { ok: false, error: "not_configured", status: 500 };
-
-  const params = new URLSearchParams();
-  params.set("secret", secret);
-  params.set("token", token);
-  if (ip) params.set("ip", ip);
-
-  let response: Response;
-  try {
-    response = await fetch("https://smartcaptcha.cloud.yandex.ru/validate", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: params,
-    });
-  } catch {
-    return { ok: false, error: "captcha_failed", status: 503 };
-  }
-
-  if (!response.ok) return { ok: false, error: "captcha_failed", status: 503 };
-
-  try {
-    const result = (await response.json()) as { status?: string };
-    return result.status === "ok"
-      ? { ok: true }
-      : { ok: false, error: "captcha_failed", status: 400 };
-  } catch {
-    return { ok: false, error: "captcha_failed", status: 503 };
-  }
 }
 
 function readSupabasePublicKey() {

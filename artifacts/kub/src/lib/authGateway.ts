@@ -1,6 +1,7 @@
 import { getAuthCallbackUrl } from "@/lib/authRedirect";
 import { mapRegistrationInviteError, normalizeRegistrationInviteCode } from "@/lib/registrationInvite";
 import { resolveAuthGatewayRedirect } from "./authGatewayRedirect.mjs";
+import type { AuthCaptchaProvider } from "./authCaptcha";
 
 const env = import.meta.env as Record<string, string | undefined>;
 
@@ -12,6 +13,7 @@ interface SignupPayload {
   password: string;
   fullName: string;
   captchaToken: string;
+  captchaProvider: AuthCaptchaProvider;
   inviteCode?: string | null;
 }
 
@@ -19,12 +21,14 @@ interface RecoveryPayload {
   action: "recovery";
   email: string;
   captchaToken: string;
+  captchaProvider: AuthCaptchaProvider;
 }
 
 type ResendSignupPayload = {
   action: "resend_signup";
   email: string;
   captchaToken: string;
+  captchaProvider: AuthCaptchaProvider;
   redirectTo?: string;
 };
 
@@ -58,6 +62,7 @@ function buildAuthGatewayRequestBody(payload: AuthGatewayPayload): Record<string
       action: payload.action,
       email: payload.email,
       captchaToken: payload.captchaToken,
+      captchaProvider: payload.captchaProvider,
     };
   }
   const inviteCode = normalizeRegistrationInviteCode(payload.inviteCode);
@@ -67,6 +72,7 @@ function buildAuthGatewayRequestBody(payload: AuthGatewayPayload): Record<string
     password: payload.password,
     fullName: payload.fullName,
     captchaToken: payload.captchaToken,
+    captchaProvider: payload.captchaProvider,
     ...(inviteCode ? { inviteCode } : {}),
   };
 }

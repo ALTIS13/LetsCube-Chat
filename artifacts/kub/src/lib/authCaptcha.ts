@@ -21,11 +21,15 @@ export function getAuthCaptchaRequiredMessage(): string {
   return "Подтвердите защиту от автоматической регистрации.";
 }
 
-export function shouldUseAuthCaptchaGateway(): boolean {
-  return AUTH_CAPTCHA_CONFIG?.provider === "yandex-smartcaptcha";
+export function getAuthCaptchaUnavailableMessage(): string {
+  return "Защита регистрации временно недоступна. Обратитесь к администратору.";
 }
 
-function resolveAuthCaptchaConfig(): AuthCaptchaConfig | null {
+export function shouldUseAuthCaptchaGateway(): boolean {
+  return AUTH_CAPTCHA_CONFIG !== null;
+}
+
+export function resolveAuthCaptchaConfig(): AuthCaptchaConfig | null {
   const configuredProvider = env.VITE_AUTH_CAPTCHA_PROVIDER?.trim().toLowerCase();
   const siteKey = (env.VITE_AUTH_CAPTCHA_SITE_KEY || env.VITE_TURNSTILE_SITE_KEY || "").trim();
   if (!siteKey) return null;

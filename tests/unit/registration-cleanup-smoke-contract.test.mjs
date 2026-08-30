@@ -76,6 +76,9 @@ test("smoke script only calls the aggregate report RPC and projects safe aggrega
     assert.match(script, new RegExp(`['\"]${field}['\"]`));
   }
   assert.match(script, /claimed_unsafe_/);
+  assert.match(script, /dead_lettered/);
+  assert.match(script, /retry_wait/);
+  assert.match(script, /reported\|deleted\|skipped\|failed\|recovered/);
   assert.doesNotMatch(
     script,
     /console\.(?:log|error)[\s\S]{0,160}(?:email|phone|user_id|user_reference|claim_token|endpoint|token|secret)/i,
@@ -161,4 +164,98 @@ test("Dockerfile worker runtime sources the local secret env and exposes cleanup
   assert.match(runbook, /before_backup_dirs/);
   assert.match(runbook, /after_backup_dirs/);
   assert.match(runbook, /set local role service_role[\s\S]+registration_cleanup_report\(\)/i);
+});
+
+test("gateway deployment is hash-verified and precedes worker enablement and backfill", async () => {
+  const runbook = await source(runbookPath);
+  const gateway = runbook.indexOf(
+    "/srv/letscube/platform/supabase-docker/volumes/functions/auth-yandex-gateway",
+  );
+  const worker = runbook.indexOf("REGISTRATION_CLEANUP_ENABLED=true");
+  const backfill = runbook.indexOf(
+    "registration_lifecycle_backfill_internal(1000",
+  );
+
+  assert.ok(gateway >= 0, "expected the live gateway host path");
+  assert.ok(worker > gateway, "gateway deployment must precede worker enablement");
+  assert.ok(backfill > gateway, "gateway deployment must precede backfill");
+  assert.match(runbook, /\/home\/deno\/functions/);
+  for (const file of [
+    "index.ts",
+    "inviteCode.mjs",
+    "rateLimit.mjs",
+    "registrationLifecycle.mjs",
+    "captchaProvider.mjs",
+  ]) {
+    assert.match(runbook, new RegExp(file.replace(".", "\\.")));
+  }
+  assert.match(runbook, /git archive/);
+  assert.match(runbook, /sha256sum/);
+  assert.match(runbook, /committed\.sha256/);
+  assert.match(runbook, /staged\.sha256/);
+  assert.match(runbook, /deployed\.sha256/);
+  assert.match(runbook, /container\.sha256/);
+  assert.match(runbook, /cmp --silent/);
+  assert.match(
+    runbook,
+    /auth-yandex-gateway\.registration-lifecycle\.rollback/,
+  );
+  assert.match(runbook, /cp -a/);
+  assert.match(runbook, /install --owner/);
+  assert.match(runbook, /mv -f --/);
+  assert.match(runbook, /docker restart supabase-edge-functions/);
+  assert.match(runbook, /-X OPTIONS/);
+  assert.match(runbook, /captcha_required/);
+  assert.match(runbook, /session loss/i);
+});
+
+test("database rehearsal checks every operational grant, private helper and bounded plan", async () => {
+  const runbook = await source(runbookPath);
+
+  for (const rpc of [
+    "registration_lifecycle_register_internal",
+    "registration_lifecycle_extend_by_email_internal",
+    "registration_cleanup_claim",
+    "registration_cleanup_recheck",
+    "registration_cleanup_authorize_delete",
+    "registration_cleanup_finish",
+    "registration_cleanup_report",
+    "registration_cleanup_recover_dead_letter",
+    "registration_cleanup_purge_audit",
+    "registration_lifecycle_backfill_internal",
+  ]) {
+    assert.match(
+      runbook,
+      new RegExp(`public\\.${rpc}\\(`, "i"),
+      rpc,
+    );
+  }
+  assert.match(runbook, /has_function_privilege\('anon'/i);
+  assert.match(runbook, /has_function_privilege\('authenticated'/i);
+  assert.match(runbook, /has_function_privilege\('service_role'/i);
+
+  for (const helper of [
+    "registration_identity_requires_hold",
+    "registration_has_product_activity",
+    "registration_location_membership_requires_hold",
+    "registration_record_invite_location_provenance",
+    "registration_location_membership_guard",
+    "registration_cleanup_guard_auth_user_delete",
+  ]) {
+    assert.match(runbook, new RegExp(helper, "i"), helper);
+  }
+
+  assert.match(runbook, /select report_scope, signup_kind, reason_code, item_count[\s\S]+registration_cleanup_report\(\)/i);
+  assert.match(runbook, /explain \(costs off\)[\s\S]+dead_lettered_at is null/i);
+  assert.match(runbook, /explain \(costs off\)[\s\S]+next_attempt_at/i);
+  assert.match(runbook, /explain \(costs off\)[\s\S]+dead_lettered_at is not null/i);
+  assert.match(runbook, /explain \(costs off\)[\s\S]+registration_invite_uses[\s\S]+limit 1000/i);
+  for (const index of [
+    "registration_lifecycles_due_idx",
+    "registration_lifecycles_retry_idx",
+    "registration_lifecycles_dead_letter_idx",
+    "idx_registration_invite_uses_user",
+  ]) {
+    assert.match(runbook, new RegExp(index, "i"), index);
+  }
 });

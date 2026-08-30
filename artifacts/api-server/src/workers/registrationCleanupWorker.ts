@@ -72,6 +72,7 @@ export async function runRegistrationCleanupBatch(
   let candidates;
 
   try {
+    await repository.purgeAudit(now);
     candidates = await repository.claim(config.batchSize, claimToken, now);
   } catch {
     return null;
@@ -102,6 +103,21 @@ export async function runRegistrationCleanupBatch(
         continue;
       }
 
+      const deleteAuthorized = await repository.authorizeDelete(
+        candidate.user_id,
+        claimToken,
+      );
+      if (!deleteAuthorized) {
+        await repository.finish(
+          candidate.user_id,
+          claimToken,
+          "skipped",
+          "delete_not_authorized",
+        );
+        result.skipped += 1;
+        continue;
+      }
+
       try {
         await repository.deleteAuthUser(candidate.user_id);
       } catch {
@@ -115,12 +131,6 @@ export async function runRegistrationCleanupBatch(
         continue;
       }
 
-      await repository.finish(
-        candidate.user_id,
-        claimToken,
-        "deleted",
-        "expired_unconfirmed",
-      );
       result.deleted += 1;
     } catch {
       await finishAfterCandidateFailure(

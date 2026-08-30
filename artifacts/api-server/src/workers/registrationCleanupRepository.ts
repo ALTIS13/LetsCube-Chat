@@ -6,18 +6,20 @@ export type CleanupCandidate = {
 };
 
 export interface RegistrationCleanupRepository {
+  purgeAudit(now: string): Promise<number>;
   claim(
     limit: number,
     claimToken: string,
     now: string,
   ): Promise<CleanupCandidate[]>;
   recheck(userId: string, claimToken: string, now: string): Promise<boolean>;
+  authorizeDelete(userId: string, claimToken: string): Promise<boolean>;
   report(userId: string, claimToken: string, reason: string): Promise<void>;
   deleteAuthUser(userId: string): Promise<void>;
   finish(
     userId: string,
     claimToken: string,
-    action: "deleted" | "skipped" | "failed",
+    action: "skipped" | "failed",
     reason: string,
   ): Promise<void>;
 }
@@ -83,6 +85,20 @@ export function createRegistrationCleanupRepository(
   ),
 ): RegistrationCleanupRepository {
   return {
+    async purgeAudit(now) {
+      const data = requireRpcData<number>(
+        await client.rpc("registration_cleanup_purge_audit", {
+          p_limit: 1000,
+          p_now: now,
+        }),
+        "registration_cleanup_purge_failed",
+      );
+      if (!Number.isSafeInteger(data) || data < 0 || data > 1000) {
+        throw new Error("registration_cleanup_purge_invalid_data");
+      }
+      return data;
+    },
+
     async claim(limit, claimToken, now) {
       const data = requireRpcData<unknown[]>(
         await client.rpc("registration_cleanup_claim", {
@@ -109,6 +125,20 @@ export function createRegistrationCleanupRepository(
       );
       if (typeof data !== "boolean") {
         throw new Error("registration_cleanup_recheck_invalid_data");
+      }
+      return data;
+    },
+
+    async authorizeDelete(userId, claimToken) {
+      const data = requireRpcData<boolean>(
+        await client.rpc("registration_cleanup_authorize_delete", {
+          p_user_id: userId,
+          p_claim_token: claimToken,
+        }),
+        "registration_cleanup_authorize_delete_failed",
+      );
+      if (typeof data !== "boolean") {
+        throw new Error("registration_cleanup_authorize_delete_invalid_data");
       }
       return data;
     },

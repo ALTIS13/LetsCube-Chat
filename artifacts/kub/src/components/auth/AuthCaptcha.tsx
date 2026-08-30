@@ -3,6 +3,7 @@ import { HumanVerificationCaptcha } from "@/components/security/HumanVerificatio
 interface AuthCaptchaProps {
   disabled?: boolean;
   onTokenChange: (token: string) => void;
+  required?: boolean;
   resetSignal?: number;
 }
 

@@ -6,6 +6,7 @@ const sql = readFileSync(
   ".migration-backup/supabase/migrations/20260830103000_registration_lifecycle_cleanup.sql",
   "utf8",
 );
+const driftCheck = readFileSync("scripts/check-database-type-drift.mjs", "utf8");
 const lowerSql = sql.toLowerCase();
 
 const publicRpcs = [
@@ -13,8 +14,11 @@ const publicRpcs = [
   ["registration_lifecycle_extend_by_email_internal", "text"],
   ["registration_cleanup_claim", "integer,uuid,timestamptz"],
   ["registration_cleanup_recheck", "uuid,uuid,timestamptz"],
+  ["registration_cleanup_authorize_delete", "uuid,uuid"],
   ["registration_cleanup_finish", "uuid,uuid,text,text"],
   ["registration_cleanup_report", "timestamptz,timestamptz"],
+  ["registration_cleanup_recover_dead_letter", "uuid,text"],
+  ["registration_cleanup_purge_audit", "integer,timestamptz"],
   ["registration_lifecycle_backfill_internal", "integer,timestamptz"],
 ];
 
@@ -40,8 +44,153 @@ test("registration lifecycle tables and private predicates are defined", () => {
   assert.match(sql, /create schema if not exists private/i);
   assert.match(sql, /create table private\.registration_lifecycles/i);
   assert.match(sql, /create table private\.registration_cleanup_audit/i);
+  assert.match(sql, /create table private\.registration_location_provenance/i);
   functionBody("private.registration_identity_requires_hold");
   functionBody("private.registration_has_product_activity");
+  functionBody("private.registration_location_membership_requires_hold");
+  functionBody("private.registration_record_invite_location_provenance");
+  functionBody("private.registration_location_membership_guard");
+  functionBody("private.registration_cleanup_guard_auth_user_delete");
+});
+
+test("due, retry, dead-letter and retention paths have bounded indexes", () => {
+  for (const index of [
+    "registration_lifecycles_due_idx",
+    "registration_lifecycles_retry_idx",
+    "registration_lifecycles_dead_letter_idx",
+    "registration_cleanup_audit_retention_idx",
+  ]) {
+    assert.match(sql, new RegExp(`create index ${index}\\b`, "i"), index);
+  }
+  assert.match(
+    sql,
+    /registration_lifecycles_retry_idx[\s\S]+next_attempt_at[\s\S]+where admin_hold_at is null\s+and dead_lettered_at is null\s+and next_attempt_at is not null/i,
+  );
+});
+
+test("invite location provenance stores the exact invite-created membership snapshot", () => {
+  assert.match(
+    sql,
+    /create table private\.registration_location_provenance\s*\([\s\S]+user_id uuid[\s\S]+references auth\.users\s*\(id\) on delete cascade[\s\S]+location_id uuid[\s\S]+invite_id uuid[\s\S]+role_id uuid[\s\S]+legacy_role text[\s\S]+primary_admin_id uuid[\s\S]+is_primary boolean[\s\S]+primary key \(user_id, location_id\)/i,
+  );
+
+  const body = functionBody(
+    "private.registration_record_invite_location_provenance",
+  );
+  for (const source of [
+    "registration_invite_uses",
+    "registration_invites",
+    "location_members",
+    "roles",
+  ]) {
+    assert.match(body, new RegExp(`(?:from|join) public\\.${source}\\b`, "i"));
+  }
+  assert.match(body, /extensions\.digest\(ri\.code,\s*'sha256'\)/i);
+  assert.match(body, /ri\.location_role_id\s*=\s*lm\.role_id/i);
+  assert.match(body, /lm\.role\s*=\s*case r\.key/i);
+  assert.match(body, /lm\.primary_admin_id\s+is not distinct from/i);
+  assert.match(body, /lm\.is_primary\s*=\s*false/i);
+});
+
+test("new invite signup records provenance before identity hold classification", () => {
+  const body = functionBody("public.registration_lifecycle_register_internal");
+  const provenance = body.indexOf(
+    "private.registration_record_invite_location_provenance",
+  );
+  const hold = body.indexOf("private.registration_identity_requires_hold");
+
+  assert.ok(provenance >= 0, "expected invite provenance recording");
+  assert.ok(hold > provenance, "expected provenance before hold classification");
+  assert.match(body, /p_invite_code_hash/i);
+});
+
+test("backfill records only exact invite provenance before classifying holds", () => {
+  const body = functionBody("public.registration_lifecycle_backfill_internal");
+  const provenance = body.indexOf(
+    "private.registration_record_invite_location_provenance",
+  );
+  const hold = body.lastIndexOf("private.registration_identity_requires_hold");
+
+  assert.ok(provenance >= 0, "expected backfill provenance recording");
+  assert.ok(hold > provenance, "expected provenance before hold classification");
+  assert.match(body, /from public\.registration_invite_uses/i);
+});
+
+test("every current membership without an exact provenance snapshot requires a hold", () => {
+  const body = functionBody(
+    "private.registration_location_membership_requires_hold",
+  );
+  assert.match(body, /from public\.location_members lm/i);
+  assert.match(body, /private\.registration_location_provenance provenance/i);
+  assert.match(body, /provenance\.role_id\s+is not distinct from\s+lm\.role_id/i);
+  assert.match(body, /provenance\.legacy_role\s*=\s*lm\.role/i);
+  assert.match(
+    body,
+    /provenance\.primary_admin_id\s+is not distinct from\s+lm\.primary_admin_id/i,
+  );
+  assert.match(body, /provenance\.is_primary\s*=\s*lm\.is_primary/i);
+
+  const identityBody = functionBody(
+    "private.registration_identity_requires_hold",
+  );
+  assert.match(
+    identityBody,
+    /private\.registration_location_membership_requires_hold\(p_user_id\)/i,
+  );
+});
+
+test("location membership insert or role change invalidates provenance and durably holds lifecycle", () => {
+  assert.match(
+    sql,
+    /create trigger trg_registration_location_membership_guard\s+after insert or update on public\.location_members[\s\S]+execute function private\.registration_location_membership_guard\(\)/i,
+  );
+  const body = functionBody("private.registration_location_membership_guard");
+  assert.match(body, /delete from private\.registration_location_provenance/i);
+  assert.match(body, /update private\.registration_lifecycles/i);
+  assert.match(body, /admin_hold_at\s*=\s*coalesce\(l\.admin_hold_at,/i);
+  assert.match(body, /new\.user_id/i);
+});
+
+test("explicit same-value reassignment still invalidates invite provenance", () => {
+  const definition = functionDefinition(
+    "private.registration_location_membership_guard",
+  );
+  const body = functionBody("private.registration_location_membership_guard");
+
+  assert.match(
+    sql,
+    /create trigger trg_registration_location_membership_guard\s+after insert or update on public\.location_members/i,
+  );
+  assert.doesNotMatch(definition, /\bwhen\s*\(/i);
+  assert.doesNotMatch(body, /old\.(?:role|role_id|primary_admin_id|is_primary)/i);
+  assert.match(body, /delete from private\.registration_location_provenance/i);
+  assert.match(body, /admin_hold_at\s*=\s*coalesce/i);
+});
+
+test("hold transitions preserve cleanup authorization until worker completion", () => {
+  for (const name of [
+    "private.registration_location_membership_guard",
+    "public.registration_cleanup_claim",
+    "public.registration_cleanup_recheck",
+  ]) {
+    const body = functionBody(name);
+    assert.doesNotMatch(
+      body,
+      /delete_authorization_(?:token|authorized_at|expires_at)\s*=\s*null/i,
+      name,
+    );
+  }
+
+  for (const name of [
+    "private.registration_location_membership_guard",
+    "public.registration_cleanup_recheck",
+  ]) {
+    assert.doesNotMatch(
+      functionBody(name),
+      /claim_token\s*=\s*null|claimed_at\s*=\s*null/i,
+      name,
+    );
+  }
 });
 
 for (const [name, signature] of publicRpcs) {
@@ -246,6 +395,62 @@ test("recheck durably holds identities that become exempt after registration", (
   );
 });
 
+test("cleanup delete authorization is short-lived and claim-token-specific", () => {
+  assert.match(
+    sql,
+    /delete_authorization_token uuid null[\s\S]+delete_authorized_at timestamptz null[\s\S]+delete_authorization_expires_at timestamptz null/i,
+  );
+  const body = functionBody("public.registration_cleanup_authorize_delete");
+  assert.match(body, /l\.claim_token\s*=\s*p_claim_token/i);
+  assert.match(body, /l\.claimed_at\s*>\s*pg_catalog\.clock_timestamp\(\)\s*-\s*interval '15 minutes'/i);
+  assert.match(body, /delete_authorization_token\s*=\s*p_claim_token/i);
+  assert.match(
+    body,
+    /delete_authorization_expires_at\s*=\s*pg_catalog\.clock_timestamp\(\)\s*\+\s*interval '(?:[1-5]?[0-9]) seconds'/i,
+  );
+  assert.match(body, /private\.registration_identity_requires_hold/i);
+  assert.match(body, /private\.registration_has_product_activity/i);
+});
+
+test("auth user delete guard rechecks cleanup eligibility in the delete statement", () => {
+  assert.match(
+    sql,
+    /create trigger trg_registration_cleanup_guard_auth_user_delete\s+before delete on auth\.users[\s\S]+execute function private\.registration_cleanup_guard_auth_user_delete\(\)/i,
+  );
+  const body = functionBody("private.registration_cleanup_guard_auth_user_delete");
+  assert.match(
+    body,
+    /from private\.registration_lifecycles l[\s\S]+where l\.user_id = old\.id[\s\S]+for update/i,
+  );
+  assert.match(
+    body,
+    /delete_authorization_token is null[\s\S]+return old/i,
+  );
+  assert.match(
+    body,
+    /claim_token\s+is distinct from\s+v_lifecycle\.delete_authorization_token/i,
+  );
+  assert.match(
+    body,
+    /delete_authorization_expires_at\s*(?:<\s*pg_catalog\.clock_timestamp\(\)|>=\s*pg_catalog\.clock_timestamp\(\))/i,
+  );
+  assert.match(
+    body,
+    /eligible_at\s*(?:>\s*pg_catalog\.clock_timestamp\(\)|<=\s*pg_catalog\.clock_timestamp\(\))/i,
+  );
+  assert.match(body, /admin_hold_at is not null/i);
+  assert.match(body, /private\.registration_identity_requires_hold\(old\.id\)/i);
+  assert.match(body, /private\.registration_has_product_activity\(old\.id\)/i);
+  assert.match(body, /old\.email_confirmed_at is not null/i);
+  assert.match(body, /old\.phone_confirmed_at is not null/i);
+  assert.match(body, /old\.last_sign_in_at is not null/i);
+  assert.match(body, /raise exception 'registration_cleanup_delete_rejected'/i);
+  assert.match(
+    body,
+    /insert into private\.registration_cleanup_audit[\s\S]+values \(old\.id,\s*'deleted',\s*'expired_unconfirmed'\)/i,
+  );
+});
+
 test("report-only completion clears a claim without creating an administrative hold", () => {
   const body = functionBody("public.registration_cleanup_finish");
 
@@ -257,6 +462,68 @@ test("report-only completion clears a claim without creating an administrative h
   assert.match(body, /claim_token\s*=\s*null/i);
   assert.match(body, /claimed_at\s*=\s*null/i);
   assert.match(body, /insert into private\.registration_cleanup_audit/i);
+  assert.match(body, /delete_authorization_token\s*=\s*null/i);
+  assert.doesNotMatch(body, /p_action\s*=\s*'deleted'/i);
+});
+
+test("failed completion backs off and dead-letters exactly on the fifth failure", () => {
+  assert.match(sql, /failure_count integer not null default 0/i);
+  assert.match(sql, /next_attempt_at timestamptz null/i);
+  assert.match(sql, /dead_lettered_at timestamptz null/i);
+
+  const body = functionBody("public.registration_cleanup_finish");
+  assert.match(
+    body,
+    /failure_count\s*=\s*case[\s\S]+p_action = 'failed'[\s\S]+least\(5,\s*l\.failure_count\s*\+\s*1\)/i,
+  );
+  assert.match(body, /l\.failure_count\s*\+\s*1\s*>=\s*5[\s\S]+dead_lettered_at/i);
+  assert.match(body, /least\(\s*interval '24 hours'/i);
+  assert.match(body, /power\(\s*2,/i);
+  assert.match(body, /when p_action = 'reported' then l\.failure_count/i);
+  assert.match(body, /when p_action = 'reported' then l\.next_attempt_at/i);
+});
+
+test("claim excludes delayed retries and dead letters without old-failure starvation", () => {
+  const body = functionBody("public.registration_cleanup_claim");
+  assert.match(body, /l\.dead_lettered_at is null/i);
+  assert.match(body, /coalesce\(l\.next_attempt_at,\s*l\.eligible_at\)\s*<=\s*p_now/i);
+  assert.match(
+    body,
+    /order by\s+coalesce\(l\.next_attempt_at,\s*l\.eligible_at\),\s*l\.eligible_at,\s*l\.user_id/i,
+  );
+});
+
+test("dead-letter recovery resets one row and stays service-role-only", () => {
+  const body = functionBody("public.registration_cleanup_recover_dead_letter");
+  assert.match(body, /p_user_id is null/i);
+  assert.match(body, /p_reason_code\s*!~/i);
+  assert.match(body, /where l\.user_id\s*=\s*p_user_id/i);
+  assert.match(body, /and l\.dead_lettered_at is not null/i);
+  assert.match(body, /failure_count\s*=\s*0/i);
+  assert.match(body, /next_attempt_at\s*=\s*null/i);
+  assert.match(body, /dead_lettered_at\s*=\s*null/i);
+});
+
+test("audit purge is bounded to rows older than ninety days", () => {
+  const body = functionBody("public.registration_cleanup_purge_audit");
+  assert.match(body, /p_limit not between 1 and 10000/i);
+  assert.match(
+    body,
+    /created_at\s*<\s*least\(\s*p_now,\s*pg_catalog\.clock_timestamp\(\)\s*\)\s*-\s*interval '90 days'/i,
+  );
+  assert.match(body, /order by[\s\S]+limit p_limit[\s\S]+for update skip locked/i);
+  assert.match(body, /delete from private\.registration_cleanup_audit/i);
+  assert.match(body, /return v_deleted/i);
+});
+
+test("database type drift keeps every private operational RPC out of frontend types", () => {
+  for (const [name] of publicRpcs) {
+    assert.match(
+      driftCheck,
+      new RegExp(`["']${name}["']`),
+      `${name} missing from service-role-only allowlist`,
+    );
+  }
 });
 
 test("registration cleanup report is bounded, aggregate-only and service-role-only", () => {
@@ -289,7 +556,9 @@ test("registration cleanup report is bounded, aggregate-only and service-role-on
     "phone_confirmed",
     "signed_in",
     "product_activity",
+    "dead_lettered",
     "not_due",
+    "retry_wait",
     "eligible_due",
   ];
   for (const reason of expectedReasons) {

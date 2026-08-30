@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { gotoOrSkip } from "./helpers/auth";
 
 const confirmationVisualProjects = new Set([
@@ -9,8 +9,13 @@ const confirmationVisualProjects = new Set([
 ]);
 
 test.describe("Registration confirmation", () => {
-  test("shows the approved confirmation copy with a disabled resend control", async ({ page }, testInfo) => {
-    test.skip(!confirmationVisualProjects.has(testInfo.project.name), "confirmation coverage runs at required viewports");
+  test("shows the approved confirmation copy with a disabled resend control", async ({
+    page,
+  }, testInfo) => {
+    test.skip(
+      !confirmationVisualProjects.has(testInfo.project.name),
+      "confirmation coverage runs at required viewports",
+    );
     const consoleErrors = collectConsoleErrors(page);
     await installCaptchaMock(page);
     await mockRegistrationInviteMode(page);
@@ -33,14 +38,18 @@ test.describe("Registration confirmation", () => {
         "Если письмо не пришло, проверьте папку «Спам» и правильность указанного адреса. При ошибке вернитесь и зарегистрируйтесь с корректным email.",
       ),
     ).toBeVisible();
-    await expect(page.getByText("Неподтверждённая учётная запись будет удалена автоматически.")).toBeVisible();
+    await expect(
+      page.getByText("Неподтверждённая учётная запись будет удалена автоматически."),
+    ).toBeVisible();
     await expect(page.getByText("n***r@example.test")).toBeVisible();
     await expect(page.getByText(/Восстановить пароль|Восстановить доступ/)).toHaveCount(0);
 
     const resend = page.getByRole("button", { name: /Отправить письмо повторно/ });
     await expect(resend).toBeDisabled();
     await expect(page.getByTestId("auth-captcha")).toBeVisible();
-    await expect(page.getByText("Подтверждение защиты станет доступно после окончания таймера.")).toBeVisible();
+    await expect(
+      page.getByText("Подтверждение защиты станет доступно после окончания таймера."),
+    ).toBeVisible();
 
     if (testInfo.project.name === "chromium-mobile-390") {
       const countdownMetrics = await resend.evaluate((element) => ({
@@ -64,14 +73,22 @@ test.describe("Registration confirmation", () => {
       await page.evaluate(() => window.innerWidth + 1),
     );
 
-    await page.screenshot({ path: testInfo.outputPath("registration-confirmation.png"), fullPage: false });
+    await page.screenshot({
+      path: testInfo.outputPath("registration-confirmation.png"),
+      fullPage: false,
+    });
     await page.getByText("Указать другой email", { exact: true }).click();
     await expect(page.getByRole("heading", { name: "Создать аккаунт" })).toBeVisible();
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
   });
 
-  test("clears editable credentials after storing the normalized submitted address", async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== "chromium-desktop-1440", "credential retention regression runs once");
+  test("clears editable credentials after storing the normalized submitted address", async ({
+    page,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== "chromium-desktop-1440",
+      "credential retention regression runs once",
+    );
     await installCaptchaMock(page);
     await mockRegistrationInviteMode(page);
     await mockSignupSuccess(page);
@@ -88,16 +105,38 @@ test.describe("Registration confirmation", () => {
     await expect(page.locator('input[type="password"]')).toHaveValue("");
   });
 
-  test("disables pending resend requests, sanitizes failures, and resets CAPTCHA for a new token", async ({ page }, testInfo) => {
+  test("disables pending resend requests, sanitizes failures, and resets CAPTCHA for a new token", async ({
+    page,
+  }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium-desktop-1440", "resend interaction runs once");
-    const resendPayloads: Array<{ action?: string; captchaToken?: string; email?: string }> = [];
+    const resendPayloads: Array<{
+      action?: string;
+      captchaProvider?: string;
+      captchaToken?: string;
+      email?: string;
+    }> = [];
     const firstResponse = createDeferred();
     await page.clock.install({ time: new Date("2026-08-30T12:00:00.000Z") });
     await installCaptchaMock(page);
     await mockRegistrationInviteMode(page);
-    await mockSignupSuccess(page);
     await page.route("**/functions/v1/auth-yandex-gateway", async (route) => {
-      resendPayloads.push(route.request().postDataJSON() as { action?: string; captchaToken?: string; email?: string });
+      const payload = route.request().postDataJSON() as {
+        action?: string;
+        captchaProvider?: string;
+        captchaToken?: string;
+        email?: string;
+      };
+      expect(["turnstile", "yandex-smartcaptcha"]).toContain(payload.captchaProvider);
+      if (payload.action === "signup") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ ok: true }),
+        });
+        return;
+      }
+      expect(payload.action).toBe("resend_signup");
+      resendPayloads.push(payload);
       if (resendPayloads.length === 1) {
         await firstResponse.promise;
         await route.fulfill({
@@ -107,7 +146,11 @@ test.describe("Registration confirmation", () => {
         });
         return;
       }
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true }),
+      });
     });
     await gotoOrSkip(page, "/register");
 
@@ -118,33 +161,47 @@ test.describe("Registration confirmation", () => {
 
     const resend = page.getByRole("button", { name: /Отправить письмо повторно/ });
     await expect(resend).toBeDisabled();
-    const countdownHeight = await resend.evaluate((element) => element.getBoundingClientRect().height);
+    const countdownHeight = await resend.evaluate(
+      (element) => element.getBoundingClientRect().height,
+    );
     await page.clock.fastForward(60_000);
     await expect(resend).toBeEnabled();
-    await expect.poll(() => page.evaluate(() => window.__playwrightCaptchaRenders)).toBeGreaterThanOrEqual(2);
+    await expect
+      .poll(() => page.evaluate(() => window.__playwrightCaptchaRenders))
+      .toBeGreaterThanOrEqual(2);
     await resend.click();
     await expect.poll(() => resendPayloads.length).toBe(1);
     await expect(resend).toBeDisabled();
-    expect(await resend.evaluate((element) => element.getBoundingClientRect().height)).toBe(countdownHeight);
+    expect(await resend.evaluate((element) => element.getBoundingClientRect().height)).toBe(
+      countdownHeight,
+    );
 
     firstResponse.resolve();
     await expect(page.getByText("Не удалось создать аккаунт. Попробуйте позже.")).toBeVisible();
     await expect(page.getByText("raw gateway detail: sensitive@example.test")).toHaveCount(0);
-    await expect.poll(() => page.evaluate(() => window.__playwrightCaptchaResets)).toBeGreaterThanOrEqual(1);
-    await expect.poll(() => page.evaluate(() => window.__playwrightCaptchaTokens)).toBeGreaterThanOrEqual(3);
+    await expect
+      .poll(() => page.evaluate(() => window.__playwrightCaptchaResets))
+      .toBeGreaterThanOrEqual(1);
+    await expect
+      .poll(() => page.evaluate(() => window.__playwrightCaptchaTokens))
+      .toBeGreaterThanOrEqual(3);
     await expect(resend).toBeEnabled();
 
     await resend.click();
     await expect(page.getByText("Письмо отправлено повторно.")).toBeVisible();
-    expect(await resend.evaluate((element) => element.getBoundingClientRect().height)).toBe(countdownHeight);
+    expect(await resend.evaluate((element) => element.getBoundingClientRect().height)).toBe(
+      countdownHeight,
+    );
     expect(resendPayloads).toHaveLength(2);
     expect(resendPayloads[0]).toMatchObject({
       action: "resend_signup",
+      captchaProvider: expect.any(String),
       email: "new-user@example.test",
       captchaToken: "playwright-captcha-token-2",
     });
     expect(resendPayloads[1]).toMatchObject({
       action: "resend_signup",
+      captchaProvider: expect.any(String),
       email: "new-user@example.test",
       captchaToken: "playwright-captcha-token-3",
     });
@@ -214,8 +271,18 @@ async function mockRegistrationInviteMode(page: Page): Promise<void> {
 }
 
 async function mockSignupSuccess(page: Page): Promise<void> {
-  await page.route("**/auth/v1/signup**", async (route) => {
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ user: null }) });
+  await page.route("**/functions/v1/auth-yandex-gateway", async (route) => {
+    const payload = route.request().postDataJSON() as {
+      action?: string;
+      captchaProvider?: string;
+    };
+    expect(payload.action).toBe("signup");
+    expect(["turnstile", "yandex-smartcaptcha"]).toContain(payload.captchaProvider);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true }),
+    });
   });
 }
 
@@ -232,6 +299,8 @@ function unexpectedConsoleErrors(messages: string[]): string[] {
     (message) =>
       !message.includes("Failed to load resource") &&
       !message.includes("Missing Supabase environment variables") &&
-      !(message.includes("TypeError: Failed to fetch") && message.includes("@supabase_supabase-js")),
+      !(
+        message.includes("TypeError: Failed to fetch") && message.includes("@supabase_supabase-js")
+      ),
   );
 }

@@ -81,11 +81,87 @@ command until its output has been reviewed.
   cat <<'SQL'
 select to_regclass('private.registration_lifecycles') as registration_lifecycles;
 select to_regclass('private.registration_cleanup_audit') as registration_cleanup_audit;
+select to_regclass('private.registration_location_provenance') as registration_location_provenance;
 select to_regprocedure('public.registration_cleanup_report(timestamptz,timestamptz)') as registration_cleanup_report;
-select
-  has_function_privilege('anon', 'public.registration_cleanup_report(timestamptz,timestamptz)', 'execute') as anon_can_execute,
-  has_function_privilege('authenticated', 'public.registration_cleanup_report(timestamptz,timestamptz)', 'execute') as authenticated_can_execute,
-  has_function_privilege('service_role', 'public.registration_cleanup_report(timestamptz,timestamptz)', 'execute') as service_role_can_execute;
+
+with operational_rpc(signature) as (values
+  ('public.registration_lifecycle_register_internal(uuid,text,text)'),
+  ('public.registration_lifecycle_extend_by_email_internal(text)'),
+  ('public.registration_cleanup_claim(integer,uuid,timestamptz)'),
+  ('public.registration_cleanup_recheck(uuid,uuid,timestamptz)'),
+  ('public.registration_cleanup_authorize_delete(uuid,uuid)'),
+  ('public.registration_cleanup_finish(uuid,uuid,text,text)'),
+  ('public.registration_cleanup_report(timestamptz,timestamptz)'),
+  ('public.registration_cleanup_recover_dead_letter(uuid,text)'),
+  ('public.registration_cleanup_purge_audit(integer,timestamptz)'),
+  ('public.registration_lifecycle_backfill_internal(integer,timestamptz)')
+)
+select signature,
+       has_function_privilege('anon', signature, 'execute') as anon_can_execute,
+       has_function_privilege('authenticated', signature, 'execute') as authenticated_can_execute,
+       has_function_privilege('service_role', signature, 'execute') as service_role_can_execute
+from operational_rpc
+order by signature;
+
+with private_helper(signature) as (values
+  ('private.registration_identity_requires_hold(uuid)'),
+  ('private.registration_has_product_activity(uuid)'),
+  ('private.registration_location_membership_requires_hold(uuid)'),
+  ('private.registration_record_invite_location_provenance(uuid,text)'),
+  ('private.registration_location_membership_guard()'),
+  ('private.registration_cleanup_guard_auth_user_delete()')
+)
+select signature,
+       has_function_privilege('anon', signature, 'execute') as anon_can_execute,
+       has_function_privilege('authenticated', signature, 'execute') as authenticated_can_execute,
+       has_function_privilege('service_role', signature, 'execute') as service_role_can_execute
+from private_helper
+order by signature;
+
+set local enable_seqscan = off;
+explain (costs off)
+select l.user_id
+from private.registration_lifecycles l
+where l.admin_hold_at is null
+  and l.dead_lettered_at is null
+  and l.eligible_at <= clock_timestamp()
+  and coalesce(l.next_attempt_at, l.eligible_at) <= clock_timestamp()
+order by coalesce(l.next_attempt_at, l.eligible_at), l.eligible_at, l.user_id
+limit 100;
+
+explain (costs off)
+select l.user_id
+from private.registration_lifecycles l
+where l.admin_hold_at is null
+  and l.dead_lettered_at is null
+  and l.failure_count > 0
+  and l.next_attempt_at <= clock_timestamp()
+order by l.next_attempt_at, l.eligible_at, l.user_id
+limit 100;
+
+explain (costs off)
+select l.user_id
+from private.registration_lifecycles l
+where l.dead_lettered_at is not null
+order by l.dead_lettered_at, l.user_id
+limit 100;
+
+explain (costs off)
+select u.id
+from auth.users u
+where u.email_confirmed_at is null
+  and u.phone_confirmed_at is null
+  and u.last_sign_in_at is null
+  and not exists (
+    select 1 from private.registration_lifecycles l where l.user_id = u.id
+  )
+  and exists (
+    select 1 from public.registration_invite_uses riu where riu.user_id = u.id
+  )
+order by u.created_at, u.id
+limit 1000;
+reset enable_seqscan;
+
 set local role service_role;
 select report_scope, signup_kind, reason_code, item_count
 from public.registration_cleanup_report()
@@ -95,9 +171,15 @@ SQL
 } | sudo -n docker exec -i supabase-db psql -v ON_ERROR_STOP=1 -U postgres -d postgres
 ```
 
-Proceed only when the two relations and report function resolve, the grant check
-is `false`, `false`, `true`, the service-role report returns aggregate-only rows,
-and the transaction ends at `ROLLBACK` without a SQL error. If it fails before
+Proceed only when all three relations and the report function resolve, every
+operational RPC row is `false`, `false`, `true`, every private helper row is
+`false`, `false`, `false`, and all four bounded query plans are returned. The
+due, retry, and dead-letter plans must name
+`registration_lifecycles_due_idx`, `registration_lifecycles_retry_idx`, and
+`registration_lifecycles_dead_letter_idx` respectively; the invite branch of
+the backfill plan must name the existing `idx_registration_invite_uses_user`.
+The service-role report must return aggregate-only rows, and the transaction
+must end at `ROLLBACK` without a SQL error. If it fails before
 rollback, stop and inspect the SQL locally; ending the `psql` connection rolls
 back the uncommitted outer transaction.
 
@@ -120,10 +202,24 @@ service-role-only aggregate projection without selecting lifecycle identities.
 
 ```bash
 sudo -n docker exec -i supabase-db psql -v ON_ERROR_STOP=1 -U postgres -d postgres <<'SQL'
-select
-  has_function_privilege('anon', 'public.registration_cleanup_report(timestamptz,timestamptz)', 'execute') as anon_can_execute,
-  has_function_privilege('authenticated', 'public.registration_cleanup_report(timestamptz,timestamptz)', 'execute') as authenticated_can_execute,
-  has_function_privilege('service_role', 'public.registration_cleanup_report(timestamptz,timestamptz)', 'execute') as service_role_can_execute;
+with operational_rpc(signature) as (values
+  ('public.registration_lifecycle_register_internal(uuid,text,text)'),
+  ('public.registration_lifecycle_extend_by_email_internal(text)'),
+  ('public.registration_cleanup_claim(integer,uuid,timestamptz)'),
+  ('public.registration_cleanup_recheck(uuid,uuid,timestamptz)'),
+  ('public.registration_cleanup_authorize_delete(uuid,uuid)'),
+  ('public.registration_cleanup_finish(uuid,uuid,text,text)'),
+  ('public.registration_cleanup_report(timestamptz,timestamptz)'),
+  ('public.registration_cleanup_recover_dead_letter(uuid,text)'),
+  ('public.registration_cleanup_purge_audit(integer,timestamptz)'),
+  ('public.registration_lifecycle_backfill_internal(integer,timestamptz)')
+)
+select signature,
+       has_function_privilege('anon', signature, 'execute') as anon_can_execute,
+       has_function_privilege('authenticated', signature, 'execute') as authenticated_can_execute,
+       has_function_privilege('service_role', signature, 'execute') as service_role_can_execute
+from operational_rpc
+order by signature;
 begin;
 set local role service_role;
 select report_scope, signup_kind, reason_code, item_count
@@ -133,10 +229,209 @@ rollback;
 SQL
 ```
 
-The grant result must remain `false`, `false`, `true`. Preserve only aggregate
-scope/kind/reason/count output in the change record.
+Every operational grant result must remain `false`, `false`, `true`. Preserve
+only signatures, grant booleans, and aggregate scope/kind/reason/count output in
+the change record.
 
-## 6. Deploy Report-Only letscube-worker And Backfill
+## 6. Deploy And Verify auth-yandex-gateway
+
+This deployment is mandatory before worker enablement or lifecycle backfill. The
+live host directory is
+`/srv/letscube/platform/supabase-docker/volumes/functions/auth-yandex-gateway`.
+The parent host directory is bind-mounted into `supabase-edge-functions` at
+`/home/deno/functions`, so the in-container gateway path is
+`/home/deno/functions/auth-yandex-gateway`.
+
+From the clean reviewed checkout, stage only files from the exact commit. This
+includes the lifecycle and provider modules that are not present in the older
+deployed gateway. The manifest prints hashes and filenames only, never source
+content.
+
+```bash
+set -euo pipefail
+
+git diff --quiet
+git diff --cached --quiet
+gateway_commit="$(git rev-parse HEAD)"
+gateway_rel=supabase/functions/auth-yandex-gateway
+gateway_files=(
+  index.ts
+  inviteCode.mjs
+  rateLimit.mjs
+  registrationLifecycle.mjs
+  captchaProvider.mjs
+)
+gateway_paths=()
+for file in "${gateway_files[@]}"; do
+  git cat-file -e "${gateway_commit}:${gateway_rel}/${file}"
+  gateway_paths+=("${gateway_rel}/${file}")
+done
+
+local_stage="$(mktemp -d)"
+cleanup_local_stage() { rm -rf -- "$local_stage"; }
+trap cleanup_local_stage EXIT
+git archive --format=tar "$gateway_commit" "${gateway_paths[@]}" |
+  tar -xf - -C "$local_stage"
+committed_gateway_dir="$local_stage/$gateway_rel"
+(
+  cd "$committed_gateway_dir"
+  sha256sum "${gateway_files[@]}" > committed.sha256
+)
+
+remote_stage="/tmp/letscube-auth-gateway-${gateway_commit}"
+ssh techadmin@ms.letscube.ru "test ! -e '$remote_stage' && install -d -m 700 '$remote_stage'"
+scp -r "$committed_gateway_dir/." "techadmin@ms.letscube.ru:$remote_stage/"
+```
+
+On the production host, verify the exact mount, recompute the staged hashes, and
+prepare a same-filesystem candidate. Existing files retain their own owner and
+mode; new committed modules inherit `index.ts` ownership and mode. The current
+directory becomes the fresh deterministic rollback directory only during the
+atomic directory swap. Stop if either deterministic candidate or rollback path
+already exists.
+
+```bash
+set -euo pipefail
+
+gateway_commit='REPLACE_WITH_REVIEWED_COMMIT_HASH'
+gateway_root=/srv/letscube/platform/supabase-docker/volumes/functions
+gateway_dir="$gateway_root/auth-yandex-gateway"
+container_gateway_dir=/home/deno/functions/auth-yandex-gateway
+remote_stage="/tmp/letscube-auth-gateway-${gateway_commit}"
+candidate_dir="${gateway_dir}.registration-lifecycle.candidate"
+rollback_dir="${gateway_dir}.registration-lifecycle.rollback"
+gateway_files=(
+  index.ts
+  inviteCode.mjs
+  rateLimit.mjs
+  registrationLifecycle.mjs
+  captchaProvider.mjs
+)
+
+[[ "$gateway_commit" =~ ^[0-9a-f]{40}$ ]]
+sudo -n test -d "$gateway_dir"
+sudo -n test ! -e "$candidate_dir"
+sudo -n test ! -e "$rollback_dir"
+test -d "$remote_stage"
+
+mount_ok="$(sudo -n docker inspect --format '{{range .Mounts}}{{if and (eq .Source "/srv/letscube/platform/supabase-docker/volumes/functions") (eq .Destination "/home/deno/functions")}}ok{{end}}{{end}}' supabase-edge-functions)"
+[ "$mount_ok" = ok ]
+
+(
+  cd "$remote_stage"
+  sha256sum "${gateway_files[@]}" > staged.sha256
+)
+cmp --silent "$remote_stage/committed.sha256" "$remote_stage/staged.sha256"
+
+sudo -n cp -a -- "$gateway_dir" "$candidate_dir"
+for file in "${gateway_files[@]}"; do
+  reference="$candidate_dir/$file"
+  if ! sudo -n test -e "$reference"; then
+    reference="$candidate_dir/index.ts"
+  fi
+  owner="$(sudo -n stat -c '%u' "$reference")"
+  group="$(sudo -n stat -c '%g' "$reference")"
+  mode="$(sudo -n stat -c '%a' "$reference")"
+  candidate_file="$(sudo -n mktemp "$candidate_dir/.${file}.install.XXXXXX")"
+  sudo -n install --owner="$owner" --group="$group" --mode="$mode" \
+    "$remote_stage/$file" "$candidate_file"
+  sudo -n mv -f -- "$candidate_file" "$candidate_dir/$file"
+done
+
+sudo -n bash -c 'cd "$1" && sha256sum "${@:3}" > "$2"' sh \
+  "$candidate_dir" "$remote_stage/candidate.sha256" "${gateway_files[@]}"
+sudo -n cmp --silent "$remote_stage/committed.sha256" "$remote_stage/candidate.sha256"
+
+sudo -n mv -- "$gateway_dir" "$rollback_dir"
+if ! sudo -n mv -- "$candidate_dir" "$gateway_dir"; then
+  sudo -n mv -- "$rollback_dir" "$gateway_dir"
+  exit 1
+fi
+
+sudo -n bash -c 'cd "$1" && sha256sum "${@:3}" > "$2"' sh \
+  "$gateway_dir" "$remote_stage/deployed.sha256" "${gateway_files[@]}"
+sudo -n cmp --silent "$remote_stage/committed.sha256" "$remote_stage/deployed.sha256"
+```
+
+Restart only the Edge Functions container. Verify that its configured provider
+has the matching server-only secret without printing either value. Then perform
+an `OPTIONS` probe and a no-token POST that must stop at `captcha_required`
+before Supabase Auth; it cannot create or mutate an Auth user.
+
+```bash
+set -euo pipefail
+
+sudo -n docker restart supabase-edge-functions >/dev/null
+sudo -n docker exec supabase-edge-functions sh -lc '
+  provider="${KUB_AUTH_CAPTCHA_PROVIDER:-yandex-smartcaptcha}"
+  case "$provider" in
+    yandex|yandex-smartcaptcha|smartcaptcha) test -n "$YANDEX_SMARTCAPTCHA_SECRET" ;;
+    turnstile) test -n "$TURNSTILE_SECRET_KEY" ;;
+    *) exit 1 ;;
+  esac
+'
+
+gateway_url=https://core.letscube.ru/functions/v1/auth-yandex-gateway
+options_body="$remote_stage/options.body"
+options_status="$(curl --silent --show-error --output "$options_body" --write-out '%{http_code}' -X OPTIONS "$gateway_url")"
+[ "$options_status" = 204 ]
+
+anon_key="$(sudo -n docker exec supabase-edge-functions sh -lc 'printf "%s" "${SUPABASE_ANON_KEY:-${ANON_KEY:-}}"')"
+[ -n "$anon_key" ]
+smoke_body="$remote_stage/runtime-smoke.body"
+smoke_status="$(curl --silent --show-error --output "$smoke_body" --write-out '%{http_code}' \
+  -X POST "$gateway_url" \
+  -H "apikey: $anon_key" \
+  -H "authorization: Bearer $anon_key" \
+  -H 'content-type: application/json' \
+  --data '{"action":"recovery","email":"gateway-deploy-smoke@example.invalid"}')"
+unset anon_key
+[ "$smoke_status" = 400 ]
+grep -Eq '"ok"[[:space:]]*:[[:space:]]*false' "$smoke_body"
+grep -Eq '"error"[[:space:]]*:[[:space:]]*"captcha_required"' "$smoke_body"
+rm -f -- "$options_body" "$smoke_body"
+```
+
+Finally compare the committed manifest with both the host mount and the files as
+seen inside the running container. Redirect manifests to protected staging
+files; do not print file content.
+
+```bash
+sudo -n bash -c 'cd "$1" && sha256sum "${@:3}" > "$2"' sh \
+  "$gateway_dir" "$remote_stage/deployed.sha256" "${gateway_files[@]}"
+sudo -n docker exec supabase-edge-functions sh -lc \
+  'cd /home/deno/functions/auth-yandex-gateway && sha256sum index.ts inviteCode.mjs rateLimit.mjs registrationLifecycle.mjs captchaProvider.mjs' \
+  > "$remote_stage/container.sha256"
+sudo -n cmp --silent "$remote_stage/committed.sha256" "$remote_stage/deployed.sha256"
+sudo -n cmp --silent "$remote_stage/committed.sha256" "$remote_stage/container.sha256"
+```
+
+Do not enable the worker or run backfill until every gateway check above passes.
+Keep the deterministic gateway rollback directory until the report-only worker,
+backfill, and aggregate smoke gates pass.
+
+If the session is lost or any gateway check fails after the swap, use this
+self-contained rollback. It does not depend on variables from the interrupted
+shell and preserves the failed deployment for investigation.
+
+```bash
+set -euo pipefail
+
+recovery_gateway_dir=/srv/letscube/platform/supabase-docker/volumes/functions/auth-yandex-gateway
+recovery_gateway_rollback=/srv/letscube/platform/supabase-docker/volumes/functions/auth-yandex-gateway.registration-lifecycle.rollback
+recovery_failed_dir="${recovery_gateway_dir}.failed.$(date -u +%Y%m%d-%H%M%S)"
+sudo -n test -d "$recovery_gateway_dir"
+sudo -n test -d "$recovery_gateway_rollback"
+sudo -n test ! -e "$recovery_failed_dir"
+sudo -n mv -- "$recovery_gateway_dir" "$recovery_failed_dir"
+if ! sudo -n mv -- "$recovery_gateway_rollback" "$recovery_gateway_dir"; then
+  sudo -n mv -- "$recovery_failed_dir" "$recovery_gateway_dir"
+  exit 1
+fi
+sudo -n docker restart supabase-edge-functions >/dev/null
+```
+
+## 7. Deploy Report-Only letscube-worker And Backfill
 
 The live `letscube-worker` is a Dockerfile application that sources the
 container destination `/run/secrets/letscube-infra.env` at runtime. Read-only
@@ -145,6 +440,12 @@ verification established that Coolify bind-mounts the host source
 only the host source; never attempt to modify the container destination. The
 root `docker-compose.yml` defaults are portability defaults only; they do not
 wire the live worker.
+
+Each enabled batch first calls the bounded service-role-only 90-day audit purge.
+Caller time can retain audit rows longer but cannot shorten the 90-day floor. If
+purge fails, the batch fails before claim and processes no candidates. The worker
+never calls `registration_cleanup_recover_dead_letter`; that RPC is an
+operator-only one-row recovery action after the fifth failure has been reviewed.
 
 Re-verify in Coolify before rollout that this deployment is application UUID
 `fkd10qwlo4qod9e6gtyzzuwk`. Then run this read-only Docker check on the server;
@@ -304,7 +605,37 @@ REGISTRATION_CLEANUP_SMOKE=1 node scripts/registration-cleanup-smoke.mjs --repor
 
 Any nonzero exit, including any `claimed_unsafe_*` aggregate, is a stop signal.
 
-## 7. Report-Only Rollback And Deletion Gate
+After a dead-letter cause has been corrected and reviewed, an operator may reset
+exactly one row with a bounded, PII-free reason code. Never schedule or call this
+RPC from the worker:
+
+```bash
+dead_letter_user_id='REPLACE_WITH_REVIEWED_INTERNAL_UUID'
+sudo -n docker exec -i supabase-db psql -v ON_ERROR_STOP=1 \
+  -v user_id="$dead_letter_user_id" -U postgres -d postgres <<'SQL'
+begin;
+set local role service_role;
+select public.registration_cleanup_recover_dead_letter(
+  :'user_id'::uuid,
+  'operator_reviewed'
+) as recovered;
+commit;
+SQL
+```
+
+Only after the aggregate smoke succeeds, remove the deterministic gateway
+rollback and committed staging directory. Re-enter the absolute paths in the
+same shell before removal:
+
+```bash
+gateway_rollback=/srv/letscube/platform/supabase-docker/volumes/functions/auth-yandex-gateway.registration-lifecycle.rollback
+gateway_stage="/tmp/letscube-auth-gateway-REPLACE_WITH_REVIEWED_COMMIT_HASH"
+sudo -n test -d "$gateway_rollback"
+sudo -n rm -rf -- "$gateway_rollback"
+rm -rf -- "$gateway_stage"
+```
+
+## 8. Report-Only Rollback And Deletion Gate
 
 For a worker deployment, status, backfill, or aggregate-report concern, restore
 the preserved `/srv/letscube/secrets/letscube-infra.env` host-source rollback

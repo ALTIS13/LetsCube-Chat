@@ -106,9 +106,9 @@ export function OpsReportTab() {
           <ControlCard
             icon="lock"
             title="Шлюз авторизации"
-            value={shouldUseAuthCaptchaGateway() ? "через защищённый шлюз" : "прямая ветка авторизации"}
+            value={shouldUseAuthCaptchaGateway() ? "через защищённый шлюз" : "операции заблокированы"}
             ok={shouldUseAuthCaptchaGateway()}
-            detail="Для Яндекс SmartCaptcha публичная форма должна идти через защищённую серверную функцию."
+            detail="Регистрация, повторная отправка и восстановление всегда проходят через защищённую серверную функцию."
           />
           <ControlCard
             icon="audit"

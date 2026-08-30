@@ -62,8 +62,8 @@ KUB_WEB_PORT=8080
 VITE_VAPID_PUBLIC_KEY=<YOUR_VAPID_PUBLIC_KEY>
 ```
 
-If signup/recovery CAPTCHA is enabled with Yandex SmartCaptcha, add only public
-frontend values here:
+For signup, confirmation resend, and recovery CAPTCHA, add only public frontend
+values here. Yandex SmartCaptcha is the preferred production provider:
 
 ```env
 VITE_AUTH_CAPTCHA_PROVIDER=yandex-smartcaptcha
@@ -71,8 +71,10 @@ VITE_AUTH_CAPTCHA_SITE_KEY=<YOUR_PUBLIC_CAPTCHA_SITE_KEY>
 VITE_AUTH_GATEWAY_URL=https://core.letscube.ru/functions/v1/auth-yandex-gateway
 ```
 
-The Yandex SmartCaptcha secret belongs only in the `auth-yandex-gateway` Edge
-Function runtime environment, never in the frontend service.
+Cloudflare Turnstile is also supported by setting the public provider to
+`turnstile`. Both providers use `auth-yandex-gateway`; there is no direct Auth
+fallback. Configure the matching `KUB_AUTH_CAPTCHA_PROVIDER` and provider secret
+only in the Edge Function runtime environment, never in the frontend service.
 
 Optional private runtime values for the `kub-worker` service:
 

@@ -19,23 +19,110 @@ create table private.registration_lifecycles (
   claim_token uuid null,
   claimed_at timestamptz null,
   attempt_count integer not null default 0 check (attempt_count >= 0),
-  last_error_code text null,
-  updated_at timestamptz not null default now()
+  failure_count integer not null default 0 check (failure_count between 0 and 5),
+  next_attempt_at timestamptz null,
+  dead_lettered_at timestamptz null,
+  last_error_code text null check (
+    last_error_code is null or last_error_code ~ '^[a-z][a-z0-9_]{0,63}$'
+  ),
+  delete_authorization_token uuid null,
+  delete_authorized_at timestamptz null,
+  delete_authorization_expires_at timestamptz null,
+  updated_at timestamptz not null default now(),
+  constraint registration_cleanup_delete_authorization_complete check (
+    (
+      delete_authorization_token is null
+      and delete_authorized_at is null
+      and delete_authorization_expires_at is null
+    )
+    or (
+      delete_authorization_token is not null
+      and delete_authorized_at is not null
+      and delete_authorization_expires_at > delete_authorized_at
+      and delete_authorization_expires_at
+        <= delete_authorized_at + interval '60 seconds'
+    )
+  )
 );
 
 create table private.registration_cleanup_audit (
   id bigint generated always as identity primary key,
   user_reference uuid not null,
-  action text not null check (action in ('reported', 'deleted', 'skipped', 'failed')),
+  action text not null check (
+    action in ('reported', 'deleted', 'skipped', 'failed', 'recovered')
+  ),
   reason_code text not null,
   created_at timestamptz not null default now()
 );
 
+create table private.registration_location_provenance (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  location_id uuid not null,
+  invite_id uuid not null,
+  role_id uuid null,
+  legacy_role text not null check (
+    legacy_role in ('owner', 'admin', 'manager', 'staff')
+  ),
+  primary_admin_id uuid null,
+  is_primary boolean not null,
+  recorded_at timestamptz not null default now(),
+  primary key (user_id, location_id)
+);
+
 create index registration_lifecycles_due_idx
-  on private.registration_lifecycles (eligible_at, claimed_at)
-  where admin_hold_at is null;
+  on private.registration_lifecycles (
+    coalesce(next_attempt_at, eligible_at),
+    eligible_at,
+    user_id
+  )
+  where admin_hold_at is null and dead_lettered_at is null;
+create index registration_lifecycles_retry_idx
+  on private.registration_lifecycles (next_attempt_at, eligible_at, user_id)
+  where admin_hold_at is null
+    and dead_lettered_at is null
+    and next_attempt_at is not null;
+create index registration_lifecycles_dead_letter_idx
+  on private.registration_lifecycles (dead_lettered_at, user_id)
+  where dead_lettered_at is not null;
 create index registration_cleanup_audit_retention_idx
   on private.registration_cleanup_audit (created_at);
+create index registration_location_provenance_invite_idx
+  on private.registration_location_provenance (invite_id, user_id);
+
+revoke all on table private.registration_lifecycles,
+  private.registration_cleanup_audit,
+  private.registration_location_provenance
+  from public, anon, authenticated, service_role;
+
+create or replace function private.registration_location_membership_requires_hold(
+  p_user_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, auth, storage
+as $function$
+  select p_user_id is null
+    or exists (
+      select 1
+      from public.location_members lm
+      where lm.user_id = p_user_id
+        and not exists (
+          select 1
+          from private.registration_location_provenance provenance
+          where provenance.user_id = lm.user_id
+            and provenance.location_id = lm.location_id
+            and provenance.role_id is not distinct from lm.role_id
+            and provenance.legacy_role = lm.role
+            and provenance.primary_admin_id is not distinct from lm.primary_admin_id
+            and provenance.is_primary = lm.is_primary
+        )
+    );
+$function$;
+
+revoke all on function private.registration_location_membership_requires_hold(uuid)
+  from public, anon, authenticated, service_role;
 
 -- Bots are separate from auth.users in this repository. Human Auth rows are
 -- exempt when an actual role or reserved operational identity marks them as
@@ -53,6 +140,10 @@ declare
   v_legacy_role boolean := false;
 begin
   if p_user_id is null then
+    return true;
+  end if;
+
+  if private.registration_location_membership_requires_hold(p_user_id) then
     return true;
   end if;
 
@@ -242,6 +333,147 @@ $function$;
 revoke all on function private.registration_has_product_activity(uuid)
   from public, anon, authenticated, service_role;
 
+create or replace function private.registration_record_invite_location_provenance(
+  p_user_id uuid,
+  p_invite_code_hash text default null
+)
+returns integer
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, auth, storage
+as $function$
+declare
+  v_recorded integer := 0;
+begin
+  if p_user_id is null then
+    return 0;
+  end if;
+  if p_invite_code_hash is not null
+     and p_invite_code_hash !~ '^[0-9a-f]{64}$' then
+    raise exception 'registration_invite_hash_invalid' using errcode = '22023';
+  end if;
+
+  -- A retry after lifecycle creation must never recreate provenance invalidated
+  -- by a later explicit assignment.
+  if exists (
+    select 1
+    from private.registration_lifecycles l
+    where l.user_id = p_user_id
+  ) then
+    return 0;
+  end if;
+
+  with exact_matches as (
+    select distinct on (riu.user_id, ri.location_id)
+      riu.user_id,
+      ri.location_id,
+      ri.id as invite_id,
+      ri.location_role_id as role_id,
+      lm.role as legacy_role,
+      lm.primary_admin_id,
+      lm.is_primary
+    from public.registration_invite_uses riu
+    join public.registration_invites ri on ri.id = riu.invite_id
+    join public.roles r
+      on r.id = ri.location_role_id
+     and r.scope = 'location'
+     and r.is_active
+    join public.location_members lm
+      on lm.user_id = riu.user_id
+     and lm.location_id = ri.location_id
+    where riu.user_id = p_user_id
+      and ri.location_id is not null
+      and ri.location_role_id is not null
+      and (
+        p_invite_code_hash is null
+        or pg_catalog.encode(extensions.digest(ri.code, 'sha256'), 'hex')
+          = p_invite_code_hash
+      )
+      and ri.location_role_id = lm.role_id
+      and lm.role = case r.key
+        when 'location_owner' then 'owner'
+        when 'location_admin' then 'admin'
+        when 'location_manager' then 'manager'
+        else 'staff'
+      end
+      and lm.primary_admin_id is not distinct from case
+        when r.key = 'location_staff' then ri.primary_admin_id
+        else null
+      end
+      and lm.is_primary = false
+    order by riu.user_id, ri.location_id, riu.used_at desc, ri.id
+  )
+  insert into private.registration_location_provenance as provenance (
+    user_id,
+    location_id,
+    invite_id,
+    role_id,
+    legacy_role,
+    primary_admin_id,
+    is_primary
+  )
+  select
+    exact_matches.user_id,
+    exact_matches.location_id,
+    exact_matches.invite_id,
+    exact_matches.role_id,
+    exact_matches.legacy_role,
+    exact_matches.primary_admin_id,
+    exact_matches.is_primary
+  from exact_matches
+  on conflict (user_id, location_id) do update
+  set invite_id = excluded.invite_id,
+      role_id = excluded.role_id,
+      legacy_role = excluded.legacy_role,
+      primary_admin_id = excluded.primary_admin_id,
+      is_primary = excluded.is_primary,
+      recorded_at = pg_catalog.now();
+
+  get diagnostics v_recorded = row_count;
+  return v_recorded;
+end
+$function$;
+
+revoke all on function private.registration_record_invite_location_provenance(uuid,text)
+  from public, anon, authenticated, service_role;
+
+create or replace function private.registration_location_membership_guard()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, auth, storage
+as $function$
+begin
+  if exists (
+    select 1
+    from private.registration_lifecycles l
+    where l.user_id = new.user_id
+  ) then
+    delete from private.registration_location_provenance provenance
+    where provenance.user_id = new.user_id
+      and provenance.location_id = new.location_id;
+
+    -- Keep any cleanup authorization attached so an in-flight Admin API delete
+    -- reaches the Auth trigger and is rejected against this durable hold.
+    update private.registration_lifecycles l
+    set admin_hold_at = coalesce(l.admin_hold_at, pg_catalog.clock_timestamp()),
+        updated_at = pg_catalog.clock_timestamp()
+    where l.user_id = new.user_id;
+  end if;
+
+  return new;
+end
+$function$;
+
+revoke all on function private.registration_location_membership_guard()
+  from public, anon, authenticated, service_role;
+
+drop trigger if exists trg_registration_location_membership_guard
+  on public.location_members;
+create trigger trg_registration_location_membership_guard
+  after insert or update on public.location_members
+  for each row execute function private.registration_location_membership_guard();
+
 create or replace function public.registration_lifecycle_register_internal(
   p_user_id uuid,
   p_signup_kind text,
@@ -280,6 +512,12 @@ begin
     when p_signup_kind = 'invite' then interval '7 days'
     else interval '72 hours'
   end;
+  if p_signup_kind = 'invite' then
+    perform private.registration_record_invite_location_provenance(
+      p_user_id,
+      p_invite_code_hash
+    );
+  end if;
   v_admin_hold_at := case
     when private.registration_identity_requires_hold(p_user_id)
       then pg_catalog.now()
@@ -381,6 +619,8 @@ as $function$
       and p_now is not null
       and l.eligible_at <= p_now
       and l.admin_hold_at is null
+      and l.dead_lettered_at is null
+      and coalesce(l.next_attempt_at, l.eligible_at) <= p_now
       and (
         l.claim_token is null
         or l.claimed_at < p_now - interval '15 minutes'
@@ -388,7 +628,10 @@ as $function$
       and u.email_confirmed_at is null
       and u.phone_confirmed_at is null
       and u.last_sign_in_at is null
-    order by l.eligible_at, l.user_id
+    order by
+      coalesce(l.next_attempt_at, l.eligible_at),
+      l.eligible_at,
+      l.user_id
     limit p_limit
     for update of l skip locked
   ), classified as (
@@ -399,10 +642,10 @@ as $function$
       private.registration_has_product_activity(candidate.user_id) as has_activity
     from locked_candidates candidate
   ), held as (
+    -- Authorization is cleared only by completion/recovery. Preserving it here
+    -- prevents a delayed Admin API request from bypassing the Auth guard.
     update private.registration_lifecycles l
     set admin_hold_at = p_now,
-        claim_token = null,
-        claimed_at = null,
         updated_at = p_now
     from classified candidate
     where l.user_id = candidate.user_id
@@ -452,8 +695,6 @@ begin
   if private.registration_identity_requires_hold(p_user_id) then
     update private.registration_lifecycles l
     set admin_hold_at = coalesce(l.admin_hold_at, p_now),
-        claim_token = null,
-        claimed_at = null,
         updated_at = p_now
     where l.user_id = p_user_id;
     return false;
@@ -465,8 +706,10 @@ begin
     join auth.users u on u.id = l.user_id
     where l.user_id = p_user_id
       and l.claim_token = p_claim_token
+      and l.claimed_at > p_now - interval '15 minutes'
       and l.eligible_at <= p_now
       and l.admin_hold_at is null
+      and l.dead_lettered_at is null
       and not private.registration_identity_requires_hold(u.id)
       and not private.registration_has_product_activity(u.id)
       and u.email_confirmed_at is null
@@ -481,6 +724,110 @@ revoke all on function public.registration_cleanup_recheck(uuid,uuid,timestamptz
 grant execute on function public.registration_cleanup_recheck(uuid,uuid,timestamptz)
   to service_role;
 
+create or replace function public.registration_cleanup_authorize_delete(
+  p_user_id uuid,
+  p_claim_token uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, auth, storage
+as $function$
+begin
+  if p_user_id is null or p_claim_token is null then
+    return false;
+  end if;
+
+  update private.registration_lifecycles l
+  set delete_authorization_token = p_claim_token,
+      delete_authorized_at = pg_catalog.clock_timestamp(),
+      delete_authorization_expires_at = pg_catalog.clock_timestamp()
+        + interval '30 seconds',
+      updated_at = pg_catalog.clock_timestamp()
+  from auth.users u
+  where l.user_id = p_user_id
+    and u.id = l.user_id
+    and l.claim_token = p_claim_token
+    and l.claimed_at > pg_catalog.clock_timestamp() - interval '15 minutes'
+    and l.eligible_at <= pg_catalog.clock_timestamp()
+    and l.admin_hold_at is null
+    and l.dead_lettered_at is null
+    and not private.registration_identity_requires_hold(l.user_id)
+    and not private.registration_has_product_activity(l.user_id)
+    and u.email_confirmed_at is null
+    and u.phone_confirmed_at is null
+    and u.last_sign_in_at is null;
+
+  return found;
+end
+$function$;
+
+revoke all on function public.registration_cleanup_authorize_delete(uuid,uuid)
+  from public, anon, authenticated, service_role;
+grant execute on function public.registration_cleanup_authorize_delete(uuid,uuid)
+  to service_role;
+
+create or replace function private.registration_cleanup_guard_auth_user_delete()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, auth, storage
+as $function$
+declare
+  v_lifecycle private.registration_lifecycles%rowtype;
+begin
+  select l.*
+  into v_lifecycle
+  from private.registration_lifecycles l
+  where l.user_id = old.id
+  for update;
+
+  if not found or v_lifecycle.delete_authorization_token is null then
+    return old;
+  end if;
+
+  if v_lifecycle.claim_token is distinct from v_lifecycle.delete_authorization_token
+     or v_lifecycle.claimed_at is null
+     or v_lifecycle.claimed_at
+       <= pg_catalog.clock_timestamp() - interval '15 minutes'
+     or v_lifecycle.delete_authorized_at is null
+     or v_lifecycle.delete_authorized_at > pg_catalog.clock_timestamp()
+     or v_lifecycle.delete_authorization_expires_at is null
+     or v_lifecycle.delete_authorization_expires_at
+       < pg_catalog.clock_timestamp()
+     or v_lifecycle.delete_authorization_expires_at
+       > v_lifecycle.delete_authorized_at + interval '60 seconds'
+     or v_lifecycle.eligible_at > pg_catalog.clock_timestamp()
+     or v_lifecycle.admin_hold_at is not null
+     or v_lifecycle.dead_lettered_at is not null
+     or private.registration_identity_requires_hold(old.id)
+     or private.registration_has_product_activity(old.id)
+     or old.email_confirmed_at is not null
+     or old.phone_confirmed_at is not null
+     or old.last_sign_in_at is not null then
+    raise exception 'registration_cleanup_delete_rejected'
+      using errcode = '55000';
+  end if;
+
+  insert into private.registration_cleanup_audit(
+    user_reference,
+    action,
+    reason_code
+  ) values (old.id, 'deleted', 'expired_unconfirmed');
+
+  return old;
+end
+$function$;
+
+revoke all on function private.registration_cleanup_guard_auth_user_delete()
+  from public, anon, authenticated, service_role;
+
+drop trigger if exists trg_registration_cleanup_guard_auth_user_delete
+  on auth.users;
+create trigger trg_registration_cleanup_guard_auth_user_delete
+  before delete on auth.users
+  for each row execute function private.registration_cleanup_guard_auth_user_delete();
+
 create or replace function public.registration_cleanup_finish(
   p_user_id uuid,
   p_claim_token uuid,
@@ -493,7 +840,7 @@ security definer
 set search_path = pg_catalog, public, private, auth, storage
 as $function$
 begin
-  if p_action not in ('reported', 'deleted', 'skipped', 'failed') then
+  if p_action not in ('reported', 'skipped', 'failed') then
     raise exception 'registration_cleanup_action_invalid' using errcode = '22023';
   end if;
   if p_reason_code is null or p_reason_code !~ '^[a-z][a-z0-9_]{0,63}$' then
@@ -504,13 +851,43 @@ begin
   set claim_token = null,
       claimed_at = null,
       admin_hold_at = l.admin_hold_at,
-      last_error_code = case when p_action = 'failed' then p_reason_code else null end,
-      updated_at = pg_catalog.now()
+      failure_count = case
+        when p_action = 'failed'
+          then least(5, l.failure_count + 1)
+        when p_action = 'reported' then l.failure_count
+        else l.failure_count
+      end,
+      next_attempt_at = case
+        when p_action = 'failed' and l.failure_count + 1 >= 5 then null
+        when p_action = 'failed' then pg_catalog.clock_timestamp() + least(
+          interval '24 hours',
+          interval '15 minutes' * pg_catalog.power(
+            2,
+            greatest(0, l.failure_count)
+          )::double precision
+        )
+        when p_action = 'reported' then l.next_attempt_at
+        else l.next_attempt_at
+      end,
+      dead_lettered_at = case
+        when p_action = 'failed' and l.failure_count + 1 >= 5
+          then coalesce(l.dead_lettered_at, pg_catalog.clock_timestamp())
+        when p_action = 'reported' then l.dead_lettered_at
+        else l.dead_lettered_at
+      end,
+      last_error_code = case
+        when p_action = 'failed' then p_reason_code
+        else l.last_error_code
+      end,
+      delete_authorization_token = null,
+      delete_authorized_at = null,
+      delete_authorization_expires_at = null,
+      updated_at = pg_catalog.clock_timestamp()
   where l.user_id = p_user_id
     and l.claim_token = p_claim_token
     and p_claim_token is not null;
 
-  if not found and p_action <> 'deleted' then
+  if not found then
     raise exception 'registration_cleanup_claim_not_found' using errcode = 'P0002';
   end if;
 
@@ -562,6 +939,7 @@ begin
         when l.claim_token is not null
           and private.registration_has_product_activity(l.user_id)
           then 'claimed_unsafe_product_activity'
+        when l.dead_lettered_at is not null then 'dead_lettered'
         when l.admin_hold_at is not null then 'admin_hold'
         when private.registration_identity_requires_hold(l.user_id)
           then 'identity_exempt'
@@ -571,6 +949,8 @@ begin
         when private.registration_has_product_activity(l.user_id)
           then 'product_activity'
         when l.eligible_at > p_now then 'not_due'
+        when l.next_attempt_at is not null and l.next_attempt_at > p_now
+          then 'retry_wait'
         else 'eligible_due'
       end as reason_code
     from private.registration_lifecycles l
@@ -615,6 +995,101 @@ revoke all on function public.registration_cleanup_report(timestamptz,timestampt
 grant execute on function public.registration_cleanup_report(timestamptz,timestamptz)
   to service_role;
 
+create or replace function public.registration_cleanup_recover_dead_letter(
+  p_user_id uuid,
+  p_reason_code text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, auth, storage
+as $function$
+begin
+  if p_user_id is null then
+    raise exception 'registration_cleanup_user_invalid' using errcode = '22023';
+  end if;
+  if p_reason_code is null or p_reason_code !~ '^[a-z][a-z0-9_]{0,63}$' then
+    raise exception 'registration_cleanup_reason_invalid' using errcode = '22023';
+  end if;
+
+  update private.registration_lifecycles l
+  set failure_count = 0,
+      next_attempt_at = null,
+      dead_lettered_at = null,
+      last_error_code = null,
+      claim_token = null,
+      claimed_at = null,
+      delete_authorization_token = null,
+      delete_authorized_at = null,
+      delete_authorization_expires_at = null,
+      updated_at = pg_catalog.clock_timestamp()
+  where l.user_id = p_user_id
+    and l.dead_lettered_at is not null;
+
+  if not found then
+    return false;
+  end if;
+
+  insert into private.registration_cleanup_audit(
+    user_reference,
+    action,
+    reason_code
+  ) values (p_user_id, 'recovered', p_reason_code);
+  return true;
+end
+$function$;
+
+revoke all on function public.registration_cleanup_recover_dead_letter(uuid,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.registration_cleanup_recover_dead_letter(uuid,text)
+  to service_role;
+
+create or replace function public.registration_cleanup_purge_audit(
+  p_limit integer,
+  p_now timestamptz default now()
+)
+returns integer
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, auth, storage
+as $function$
+declare
+  v_deleted integer := 0;
+begin
+  if p_limit is null or p_limit not between 1 and 10000 then
+    raise exception 'registration_cleanup_purge_limit_invalid'
+      using errcode = '22023';
+  end if;
+  if p_now is null
+     or p_now < pg_catalog.clock_timestamp() - interval '1 day'
+     or p_now > pg_catalog.clock_timestamp() + interval '1 day' then
+    raise exception 'registration_cleanup_purge_time_invalid'
+      using errcode = '22023';
+  end if;
+
+  with expired as (
+    select a.id
+    from private.registration_cleanup_audit a
+    where a.created_at < least(p_now, pg_catalog.clock_timestamp())
+      - interval '90 days'
+    order by a.created_at, a.id
+    limit p_limit
+    for update skip locked
+  )
+  delete from private.registration_cleanup_audit a
+  using expired
+  where a.id = expired.id;
+
+  get diagnostics v_deleted = row_count;
+  return v_deleted;
+end
+$function$;
+
+revoke all on function public.registration_cleanup_purge_audit(integer,timestamptz)
+  from public, anon, authenticated, service_role;
+grant execute on function public.registration_cleanup_purge_audit(integer,timestamptz)
+  to service_role;
+
 create or replace function public.registration_lifecycle_backfill_internal(
   p_limit integer,
   p_enabled_at timestamptz
@@ -625,7 +1100,9 @@ security definer
 set search_path = pg_catalog, public, private, auth, storage
 as $function$
 declare
-  v_inserted integer;
+  v_candidate record;
+  v_inserted integer := 0;
+  v_row_count integer := 0;
 begin
   if p_enabled_at is null then
     raise exception 'registration_lifecycle_enabled_at_required' using errcode = '22023';
@@ -634,7 +1111,7 @@ begin
     raise exception 'registration_lifecycle_limit_invalid' using errcode = '22023';
   end if;
 
-  with candidates as (
+  for v_candidate in
     select
       u.id,
       u.created_at,
@@ -642,8 +1119,7 @@ begin
         select 1
         from public.registration_invite_uses riu
         where riu.user_id = u.id
-      ) then 'invite'::text else 'public'::text end as signup_kind,
-      private.registration_identity_requires_hold(u.id) as requires_hold
+      ) then 'invite'::text else 'public'::text end as signup_kind
     from auth.users u
     where u.email_confirmed_at is null
       and u.phone_confirmed_at is null
@@ -655,30 +1131,43 @@ begin
       )
     order by u.created_at, u.id
     limit p_limit
-  )
-  insert into private.registration_lifecycles(
-    user_id,
-    signup_kind,
-    created_at,
-    eligible_at,
-    admin_hold_at
-  )
-  select
-    candidates.id,
-    candidates.signup_kind,
-    candidates.created_at,
-    greatest(
-      candidates.created_at + case
-        when candidates.signup_kind = 'invite' then interval '7 days'
-        else interval '72 hours'
-      end,
-      p_enabled_at + interval '24 hours'
-    ),
-    case when candidates.requires_hold then p_enabled_at else null end
-  from candidates
-  on conflict (user_id) do nothing;
+  loop
+    if v_candidate.signup_kind = 'invite' then
+      perform private.registration_record_invite_location_provenance(
+        v_candidate.id,
+        null
+      );
+    end if;
 
-  get diagnostics v_inserted = row_count;
+    insert into private.registration_lifecycles(
+      user_id,
+      signup_kind,
+      created_at,
+      eligible_at,
+      admin_hold_at
+    ) values (
+      v_candidate.id,
+      v_candidate.signup_kind,
+      v_candidate.created_at,
+      greatest(
+        v_candidate.created_at + case
+          when v_candidate.signup_kind = 'invite' then interval '7 days'
+          else interval '72 hours'
+        end,
+        p_enabled_at + interval '24 hours'
+      ),
+      case
+        when private.registration_identity_requires_hold(v_candidate.id)
+          then p_enabled_at
+        else null
+      end
+    )
+    on conflict (user_id) do nothing;
+
+    get diagnostics v_row_count = row_count;
+    v_inserted := v_inserted + v_row_count;
+  end loop;
+
   return v_inserted;
 end
 $function$;
