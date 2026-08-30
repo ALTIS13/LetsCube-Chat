@@ -139,6 +139,19 @@ test("Dockerfile worker runtime sources the local secret env and exposes cleanup
   );
   assert.match(runbook, /sudo -n test ! -e "\$rollback_file"/);
   assert.match(runbook, /session loss/i);
+  assert.match(
+    runbook,
+    /recovery_env_file=\/srv\/letscube\/secrets\/letscube-infra\.env/,
+  );
+  assert.match(
+    runbook,
+    /recovery_rollback_file=\/srv\/letscube\/secrets\/letscube-infra\.env\.registration-cleanup\.rollback/,
+  );
+  assert.match(runbook, /sudo -n test -f "\$recovery_rollback_file"/);
+  assert.match(
+    runbook,
+    /sudo -n mv -f -- "\$recovery_rollback_file" "\$recovery_env_file"/,
+  );
   assert.doesNotMatch(
     runbook,
     /rollback_file="\$\(sudo -n mktemp/,

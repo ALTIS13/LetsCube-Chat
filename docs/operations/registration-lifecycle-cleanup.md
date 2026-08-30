@@ -217,8 +217,19 @@ sudo -n mv -f -- "$rollback_file" "$env_file"
 The deterministic rollback file is deliberately retained until the status gate
 passes. If session loss occurs after creating it, do not start another rollout
 or overwrite that file. In the recovery session, re-verify the Coolify UUID and
-bind mount, restore the protected rollback file with the command above, deploy
-the previous reviewed worker configuration, and investigate before trying again.
+bind mount, then run this self-contained recovery command before deploying the
+previous reviewed worker configuration:
+
+```bash
+set -euo pipefail
+
+recovery_env_file=/srv/letscube/secrets/letscube-infra.env
+recovery_rollback_file=/srv/letscube/secrets/letscube-infra.env.registration-cleanup.rollback
+sudo -n test -f "$recovery_rollback_file"
+sudo -n mv -f -- "$recovery_rollback_file" "$recovery_env_file"
+```
+
+Investigate the interrupted rollout before trying again.
 
 After a successful deploy, confirm the dedicated local worker status from inside
 the deployed container. Do not rely on the generic health endpoint. The command
