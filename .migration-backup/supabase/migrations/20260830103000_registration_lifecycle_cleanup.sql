@@ -726,6 +726,52 @@ begin
     return false;
   end if;
 
+  -- Wait only briefly for current product writes. Once acquired, these locks
+  -- let the final activity snapshot and Auth delete complete without a writer
+  -- committing between them. Reads remain available.
+  perform pg_catalog.set_config('lock_timeout', '500ms', true);
+  lock table
+    public.profiles,
+    public.user_global_roles,
+    public.roles,
+    public.location_members,
+    public.messages,
+    storage.objects,
+    public.reactions,
+    public.message_hidden_for_users,
+    public.tasks,
+    public.task_events,
+    public.task_recurrences,
+    public.task_recurrence_events,
+    public.profile_contacts,
+    public.chats,
+    public.chat_members,
+    public.group_invites,
+    public.folders,
+    public.locations,
+    public.topics,
+    public.audit_logs,
+    public.bans,
+    public.mutes,
+    public.push_subscriptions,
+    public.user_push_devices,
+    public.push_foreground_sessions,
+    public.notification_preferences,
+    public.chat_notification_preferences,
+    public.support_tickets,
+    public.support_ticket_messages,
+    public.support_ticket_events,
+    public.support_operator_preferences,
+    public.privacy_acceptances,
+    public.phone_verification_claims,
+    public.phone_verification_sms_events,
+    public.registration_invites
+  in share row exclusive mode;
+
+  if pg_catalog.to_regclass('public.user_roles') is not null then
+    execute 'lock table public.user_roles in share row exclusive mode';
+  end if;
+
   perform 1
   from private.registration_lifecycles l
   join auth.users u on u.id = l.user_id

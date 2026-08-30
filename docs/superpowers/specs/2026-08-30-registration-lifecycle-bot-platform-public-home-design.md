@@ -143,7 +143,9 @@ The lifecycle worker runs hourly. It selects bounded batches with
 service-role-only database RPC. That RPC locks the lifecycle, Auth user and
 profile rows, sets a transaction-local claim context, and performs the Auth
 delete in the same transaction; the Auth trigger rechecks the claim at the
-delete statement. The operation is idempotent. Confirmation or login
+delete statement. A short-timeout write lock over the authoritative activity
+relations prevents activity from committing between the final snapshot and
+delete; lock contention fails into bounded retry. The operation is idempotent. Confirmation or login
 during selection prevents deletion during the final recheck.
 
 ### 4.4 Safe rollout

@@ -394,6 +394,54 @@ test("cleanup deletion is atomic and claim-token-specific", () => {
   assert.doesNotMatch(sql, /delete_authorization_token uuid/i);
 });
 
+test("atomic cleanup delete serializes every identity and product activity writer", () => {
+  const body = functionBody("public.registration_cleanup_delete");
+
+  assert.match(body, /set_config\(\s*'lock_timeout',\s*'500ms',\s*true\s*\)/i);
+  assert.match(body, /lock table[\s\S]+in share row exclusive mode/i);
+  for (const relation of [
+    "public.profiles",
+    "public.user_global_roles",
+    "public.roles",
+    "public.location_members",
+    "public.messages",
+    "storage.objects",
+    "public.reactions",
+    "public.message_hidden_for_users",
+    "public.tasks",
+    "public.task_events",
+    "public.task_recurrences",
+    "public.task_recurrence_events",
+    "public.profile_contacts",
+    "public.chats",
+    "public.chat_members",
+    "public.group_invites",
+    "public.folders",
+    "public.locations",
+    "public.topics",
+    "public.audit_logs",
+    "public.bans",
+    "public.mutes",
+    "public.push_subscriptions",
+    "public.user_push_devices",
+    "public.push_foreground_sessions",
+    "public.notification_preferences",
+    "public.chat_notification_preferences",
+    "public.support_tickets",
+    "public.support_ticket_messages",
+    "public.support_ticket_events",
+    "public.support_operator_preferences",
+    "public.privacy_acceptances",
+    "public.phone_verification_claims",
+    "public.phone_verification_sms_events",
+    "public.registration_invites",
+  ]) {
+    assert.match(body, new RegExp(relation.replace(".", "\\."), "i"), relation);
+  }
+  assert.match(body, /to_regclass\(\s*'public\.user_roles'\s*\)/i);
+  assert.match(body, /lock table public\.user_roles in share row exclusive mode/i);
+});
+
 test("auth user delete guard rechecks cleanup eligibility in the delete statement", () => {
   assert.match(
     sql,
