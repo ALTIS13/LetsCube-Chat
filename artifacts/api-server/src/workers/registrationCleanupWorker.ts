@@ -72,6 +72,7 @@ export async function runRegistrationCleanupBatch(
   let candidates;
 
   try {
+    await repository.recoverExpiredAuthorizations(config.batchSize, now);
     await repository.purgeAudit(now);
     candidates = await repository.claim(config.batchSize, claimToken, now);
   } catch {

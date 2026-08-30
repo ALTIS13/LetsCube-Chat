@@ -84,6 +84,12 @@ create index registration_lifecycles_retry_idx
 create index registration_lifecycles_dead_letter_idx
   on private.registration_lifecycles (dead_lettered_at, user_id)
   where dead_lettered_at is not null;
+create index registration_lifecycles_delete_authorization_idx
+  on private.registration_lifecycles (
+    delete_authorization_expires_at,
+    user_id
+  )
+  where delete_authorization_token is not null;
 create index registration_cleanup_audit_retention_idx
   on private.registration_cleanup_audit (created_at);
 create index registration_location_provenance_invite_idx
@@ -401,6 +407,10 @@ begin
         else null
       end
       and lm.is_primary = false
+      -- registration_invite_consume writes both timestamps with now() in one
+      -- transaction. Any later assignment, including the same values, changes
+      -- location_members.updated_at and must not be treated as provisional.
+      and lm.updated_at = riu.used_at
     order by riu.user_id, ri.location_id, riu.used_at desc, ri.id
   )
   insert into private.registration_location_provenance as provenance (
@@ -600,6 +610,73 @@ revoke all on function public.registration_lifecycle_extend_by_email_internal(te
 grant execute on function public.registration_lifecycle_extend_by_email_internal(text)
   to service_role;
 
+create or replace function public.registration_cleanup_recover_expired_authorizations(
+  p_limit integer,
+  p_now timestamptz
+)
+returns integer
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, auth, storage
+as $function$
+declare
+  v_recovered integer := 0;
+begin
+  if p_limit is null or p_limit not between 1 and 1000 then
+    raise exception 'registration_cleanup_recovery_limit_invalid'
+      using errcode = '22023';
+  end if;
+  if p_now is null then
+    raise exception 'registration_cleanup_recovery_time_required'
+      using errcode = '22023';
+  end if;
+
+  with expired as (
+    select l.user_id
+    from private.registration_lifecycles l
+    where l.delete_authorization_token is not null
+      and l.delete_authorization_expires_at
+        <= least(p_now, pg_catalog.clock_timestamp())
+    order by l.delete_authorization_expires_at, l.user_id
+    limit p_limit
+    for update of l skip locked
+  ), recovered as (
+    update private.registration_lifecycles l
+    set claim_token = null,
+        claimed_at = null,
+        delete_authorization_token = null,
+        delete_authorized_at = null,
+        delete_authorization_expires_at = null,
+        updated_at = pg_catalog.clock_timestamp()
+    from expired
+    where l.user_id = expired.user_id
+    returning l.user_id
+  ), audited as (
+    insert into private.registration_cleanup_audit(
+      user_reference,
+      action,
+      reason_code
+    )
+    select
+      recovered.user_id,
+      'recovered',
+      'expired_delete_authorization'
+    from recovered
+    returning 1
+  )
+  select count(*)::integer
+  into v_recovered
+  from audited;
+
+  return v_recovered;
+end
+$function$;
+
+revoke all on function public.registration_cleanup_recover_expired_authorizations(integer,timestamptz)
+  from public, anon, authenticated, service_role;
+grant execute on function public.registration_cleanup_recover_expired_authorizations(integer,timestamptz)
+  to service_role;
+
 create or replace function public.registration_cleanup_claim(
   p_limit integer,
   p_claim_token uuid,
@@ -628,6 +705,10 @@ as $function$
       and u.email_confirmed_at is null
       and u.phone_confirmed_at is null
       and u.last_sign_in_at is null
+      -- Active rows are intentionally excluded before LIMIT. Protected
+      -- identities remain in the bounded set once, receive a durable hold,
+      -- and therefore cannot starve later eligible candidates.
+      and not private.registration_has_product_activity(l.user_id)
     order by
       coalesce(l.next_attempt_at, l.eligible_at),
       l.eligible_at,

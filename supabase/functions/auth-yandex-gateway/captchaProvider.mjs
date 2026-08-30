@@ -37,7 +37,9 @@ export function resolveCaptchaVerificationConfig({
 
   // Existing Yandex clients did not send captchaProvider. Keep that wire
   // contract while allowing an explicitly configured Turnstile deployment.
-  const provider = requested || configured || YANDEX_PROVIDER;
+  // Provider-less requests are the legacy Yandex wire contract. Never infer
+  // Turnstile here: that would submit a Yandex token to the wrong verifier.
+  const provider = requested || YANDEX_PROVIDER;
   if (configured && requested && configured !== requested) {
     return { ok: false, error: "not_configured", status: 500 };
   }

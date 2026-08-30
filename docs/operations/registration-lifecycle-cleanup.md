@@ -90,6 +90,7 @@ with operational_rpc(signature) as (values
   ('public.registration_cleanup_claim(integer,uuid,timestamptz)'),
   ('public.registration_cleanup_recheck(uuid,uuid,timestamptz)'),
   ('public.registration_cleanup_authorize_delete(uuid,uuid)'),
+  ('public.registration_cleanup_recover_expired_authorizations(integer,timestamptz)'),
   ('public.registration_cleanup_finish(uuid,uuid,text,text)'),
   ('public.registration_cleanup_report(timestamptz,timestamptz)'),
   ('public.registration_cleanup_recover_dead_letter(uuid,text)'),
@@ -142,6 +143,14 @@ limit 100;
 explain (costs off)
 select l.user_id
 from private.registration_lifecycles l
+where l.delete_authorization_token is not null
+  and l.delete_authorization_expires_at <= clock_timestamp()
+order by l.delete_authorization_expires_at, l.user_id
+limit 100;
+
+explain (costs off)
+select l.user_id
+from private.registration_lifecycles l
 where l.dead_lettered_at is not null
 order by l.dead_lettered_at, l.user_id
 limit 100;
@@ -173,9 +182,10 @@ SQL
 
 Proceed only when all three relations and the report function resolve, every
 operational RPC row is `false`, `false`, `true`, every private helper row is
-`false`, `false`, `false`, and all four bounded query plans are returned. The
-due, retry, and dead-letter plans must name
+`false`, `false`, `false`, and all five bounded query plans are returned. The
+due, retry, expired-authorization, and dead-letter plans must name
 `registration_lifecycles_due_idx`, `registration_lifecycles_retry_idx`, and
+`registration_lifecycles_delete_authorization_idx`, and
 `registration_lifecycles_dead_letter_idx` respectively; the invite branch of
 the backfill plan must name the existing `idx_registration_invite_uses_user`.
 The service-role report must return aggregate-only rows, and the transaction
@@ -208,6 +218,7 @@ with operational_rpc(signature) as (values
   ('public.registration_cleanup_claim(integer,uuid,timestamptz)'),
   ('public.registration_cleanup_recheck(uuid,uuid,timestamptz)'),
   ('public.registration_cleanup_authorize_delete(uuid,uuid)'),
+  ('public.registration_cleanup_recover_expired_authorizations(integer,timestamptz)'),
   ('public.registration_cleanup_finish(uuid,uuid,text,text)'),
   ('public.registration_cleanup_report(timestamptz,timestamptz)'),
   ('public.registration_cleanup_recover_dead_letter(uuid,text)'),

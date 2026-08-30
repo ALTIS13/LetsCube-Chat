@@ -25,10 +25,12 @@ function createRepository({
   recheck = () => true,
   authorizeDelete = () => true,
   deleteAuthUser = () => undefined,
+  recoverExpiredAuthorizations = () => 0,
   purgeAudit = () => 0,
 }) {
   const calls = {
     order: [],
+    recoverExpiredAuthorizations: [],
     purgeAudit: [],
     claim: [],
     recheck: [],
@@ -41,6 +43,11 @@ function createRepository({
   return {
     calls,
     repository: {
+      async recoverExpiredAuthorizations(limit, now) {
+        calls.order.push("recover");
+        calls.recoverExpiredAuthorizations.push({ limit, now });
+        return recoverExpiredAuthorizations(limit, now);
+      },
       async purgeAudit(now) {
         calls.order.push("purge");
         calls.purgeAudit.push(now);
@@ -90,7 +97,7 @@ test("report-only cleanup never deletes an eligible candidate", async () => {
 
   assert.equal(result.reported, 1);
   assert.equal(fake.calls.deleteAuthUser.length, 0);
-  assert.deepEqual(fake.calls.order.slice(0, 2), ["purge", "claim"]);
+  assert.deepEqual(fake.calls.order.slice(0, 3), ["recover", "purge", "claim"]);
   assert.deepEqual(
     fake.calls.report.map(({ reason }) => reason),
     ["report_only"],
@@ -108,6 +115,7 @@ test("active cleanup purges, rechecks, authorizes, then uses Admin API delete", 
   assert.deepEqual(fake.calls.deleteAuthUser, ["candidate-a"]);
   assert.deepEqual(fake.calls.finish, []);
   assert.deepEqual(fake.calls.order, [
+    "recover",
     "purge",
     "claim",
     "recheck",
@@ -265,6 +273,9 @@ test("repository authorizes before Admin API deletion and projects purge count",
         if (name === "registration_cleanup_purge_audit") {
           return { data: 17, error: null };
         }
+        if (name === "registration_cleanup_recover_expired_authorizations") {
+          return { data: 3, error: null };
+        }
         return { data: null, error: null };
       },
       auth: {
@@ -278,6 +289,13 @@ test("repository authorizes before Admin API deletion and projects purge count",
     },
   );
 
+  assert.equal(
+    await repository.recoverExpiredAuthorizations(
+      50,
+      "2026-08-30T10:00:00.000Z",
+    ),
+    3,
+  );
   assert.equal(await repository.purgeAudit("2026-08-30T10:00:00.000Z"), 17);
   assert.equal(await repository.authorizeDelete("candidate-a", "claim-a"), true);
   await repository.deleteAuthUser("candidate-a");
@@ -285,6 +303,7 @@ test("repository authorizes before Admin API deletion and projects purge count",
   assert.deepEqual(
     calls.map(({ name }) => name),
     [
+      "registration_cleanup_recover_expired_authorizations",
       "registration_cleanup_purge_audit",
       "registration_cleanup_authorize_delete",
       "admin.deleteUser",
@@ -303,7 +322,23 @@ test("audit purge failure fails the batch before candidates are claimed", async 
   const result = await runRegistrationCleanupBatch(config(), fake.repository);
 
   assert.equal(result, null);
-  assert.deepEqual(fake.calls.order, ["purge"]);
+  assert.deepEqual(fake.calls.order, ["recover", "purge"]);
+  assert.equal(fake.calls.claim.length, 0);
+});
+
+test("expired authorization recovery failure fails closed before purge or claim", async () => {
+  const fake = createRepository({
+    candidates: [{ user_id: "candidate-a", signup_kind: "public" }],
+    recoverExpiredAuthorizations: () => {
+      throw new Error("unavailable");
+    },
+  });
+
+  const result = await runRegistrationCleanupBatch(config(), fake.repository);
+
+  assert.equal(result, null);
+  assert.deepEqual(fake.calls.order, ["recover"]);
+  assert.equal(fake.calls.purgeAudit.length, 0);
   assert.equal(fake.calls.claim.length, 0);
 });
 

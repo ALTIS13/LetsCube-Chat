@@ -29,6 +29,22 @@ test("legacy requests without a provider keep the Yandex server default", () => 
   );
 });
 
+test("legacy Yandex requests do not switch verifier when Turnstile is configured", () => {
+  assert.deepEqual(
+    resolveCaptchaVerificationConfig({
+      requestedProvider: undefined,
+      configuredProvider: "turnstile",
+      yandexSecret: "server-yandex-secret",
+      turnstileSecret: "server-turnstile-secret",
+    }),
+    {
+      ok: true,
+      provider: "yandex-smartcaptcha",
+      secret: "server-yandex-secret",
+    },
+  );
+});
+
 test("the requested provider must match server configuration and secret", () => {
   assert.deepEqual(
     resolveCaptchaVerificationConfig({

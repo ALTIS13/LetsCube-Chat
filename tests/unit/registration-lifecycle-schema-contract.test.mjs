@@ -15,6 +15,7 @@ const publicRpcs = [
   ["registration_cleanup_claim", "integer,uuid,timestamptz"],
   ["registration_cleanup_recheck", "uuid,uuid,timestamptz"],
   ["registration_cleanup_authorize_delete", "uuid,uuid"],
+  ["registration_cleanup_recover_expired_authorizations", "integer,timestamptz"],
   ["registration_cleanup_finish", "uuid,uuid,text,text"],
   ["registration_cleanup_report", "timestamptz,timestamptz"],
   ["registration_cleanup_recover_dead_letter", "uuid,text"],
@@ -58,6 +59,7 @@ test("due, retry, dead-letter and retention paths have bounded indexes", () => {
     "registration_lifecycles_due_idx",
     "registration_lifecycles_retry_idx",
     "registration_lifecycles_dead_letter_idx",
+    "registration_lifecycles_delete_authorization_idx",
     "registration_cleanup_audit_retention_idx",
   ]) {
     assert.match(sql, new RegExp(`create index ${index}\\b`, "i"), index);
@@ -65,6 +67,10 @@ test("due, retry, dead-letter and retention paths have bounded indexes", () => {
   assert.match(
     sql,
     /registration_lifecycles_retry_idx[\s\S]+next_attempt_at[\s\S]+where admin_hold_at is null\s+and dead_lettered_at is null\s+and next_attempt_at is not null/i,
+  );
+  assert.match(
+    sql,
+    /registration_lifecycles_delete_authorization_idx[\s\S]+delete_authorization_expires_at[\s\S]+where delete_authorization_token is not null/i,
   );
 });
 
@@ -90,6 +96,11 @@ test("invite location provenance stores the exact invite-created membership snap
   assert.match(body, /lm\.role\s*=\s*case r\.key/i);
   assert.match(body, /lm\.primary_admin_id\s+is not distinct from/i);
   assert.match(body, /lm\.is_primary\s*=\s*false/i);
+  assert.match(
+    body,
+    /lm\.updated_at\s*=\s*riu\.used_at/i,
+    "only the membership write from the invite-consumption transaction is provisional",
+  );
 });
 
 test("new invite signup records provenance before identity hold classification", () => {
@@ -165,6 +176,39 @@ test("explicit same-value reassignment still invalidates invite provenance", () 
   assert.doesNotMatch(body, /old\.(?:role|role_id|primary_admin_id|is_primary)/i);
   assert.match(body, /delete from private\.registration_location_provenance/i);
   assert.match(body, /admin_hold_at\s*=\s*coalesce/i);
+});
+
+test("expired delete authorization has a bounded service-only recovery path", () => {
+  const body = functionBody(
+    "public.registration_cleanup_recover_expired_authorizations",
+  );
+
+  assert.match(
+    body,
+    /delete_authorization_expires_at\s*<=\s*least\(p_now,\s*pg_catalog\.clock_timestamp\(\)\)/i,
+  );
+  assert.match(body, /order by[\s\S]+delete_authorization_expires_at[\s\S]+user_id/i);
+  assert.match(body, /limit p_limit/i);
+  assert.match(body, /for update of l skip locked/i);
+  assert.match(body, /delete_authorization_token\s*=\s*null/i);
+  assert.match(body, /claim_token\s*=\s*null/i);
+  assert.match(body, /'recovered'[\s\S]+'expired_delete_authorization'/i);
+});
+
+test("product activity is filtered before the bounded cleanup claim", () => {
+  const body = functionBody("public.registration_cleanup_claim");
+  const claimCandidates = body.match(
+    /locked_candidates\s+as\s*\(([\s\S]*?)\),\s*claimed\s+as/i,
+  );
+
+  assert.ok(claimCandidates, "expected a dedicated bounded claim candidate CTE");
+  const candidateBody = claimCandidates[1];
+  assert.match(candidateBody, /not private\.registration_has_product_activity/i);
+  assert.ok(
+    candidateBody.indexOf("registration_has_product_activity") <
+      candidateBody.indexOf("limit p_limit"),
+    "activity filtering must happen before LIMIT",
+  );
 });
 
 test("hold transitions preserve cleanup authorization until worker completion", () => {
