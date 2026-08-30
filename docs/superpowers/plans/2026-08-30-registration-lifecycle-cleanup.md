@@ -551,19 +551,19 @@ git commit -m "feat(auth): add pending registration confirmation flow"
 - Consumes: migration, gateway and worker from Tasks 1-4.
 - Produces: repeatable read-only/report-only production evidence before deletion is enabled.
 
-- [ ] **Step 1: Write a failing smoke-script contract test**
+- [x] **Step 1: Write a failing smoke-script contract test**
 
 Create `tests/unit/registration-cleanup-smoke-contract.test.mjs` asserting the script requires explicit `REGISTRATION_CLEANUP_SMOKE=1`, never prints email/phone fields, and supports `--report-only`.
 
-- [ ] **Step 2: Implement the smoke script**
+- [x] **Step 2: Implement the smoke script**
 
 The script loads the existing ignored production env, calls only lifecycle count/report RPCs, prints aggregate counts by `signup_kind` and reason, and exits non-zero if a candidate has confirmation, sign-in or activity evidence.
 
-- [ ] **Step 3: Verify a fresh server backup and transaction rehearsal**
+- [x] **Step 3: Verify a fresh server backup and transaction rehearsal**
 
 Use the existing self-hosted backup workflow. Record only the backup path and timestamp, not credentials. Run the migration inside `BEGIN`/`ROLLBACK`, check tables, functions, grants and query plans, then apply only after the rehearsal passes.
 
-- [ ] **Step 4: Deploy gateway and worker in report-only mode**
+- [x] **Step 4: Deploy gateway and worker in report-only mode**
 
 Set these Coolify values without printing them:
 
@@ -576,11 +576,11 @@ REGISTRATION_CLEANUP_INTERVAL_SECONDS=3600
 
 Deploy the gateway and worker, then verify health checks and one report-only interval.
 
-- [ ] **Step 5: Backfill and inspect existing unconfirmed registrations**
+- [x] **Step 5: Backfill and inspect existing unconfirmed registrations**
 
 Call the service-role backfill with the recorded enablement timestamp. Confirm every inserted row has at least 24 hours of grace and that known owner/admin accounts are absent.
 
-- [ ] **Step 6: Run complete validation**
+- [x] **Step 6: Run complete validation**
 
 Run:
 
@@ -596,13 +596,24 @@ node --test tests/unit/registration-lifecycle-schema-contract.test.mjs tests/sec
 
 Expected: all PASS. Record warnings and deliberate private-schema type exclusions.
 
-- [ ] **Step 7: Enable deletion only after report approval**
+- [!] **Step 7: Enable deletion only after report approval**
 
 Change only `REGISTRATION_CLEANUP_REPORT_ONLY=false`, redeploy, and observe one bounded batch. Confirm deleted candidates were still unconfirmed and unused at final recheck. Keep the feature flag available for immediate rollback.
 
-- [ ] **Step 8: Update the tracker and commit operational evidence**
+Status on 2026-08-30: intentionally deferred. The report-only canary is healthy, but no deletion approval has been given and `REGISTRATION_CLEANUP_REPORT_ONLY` remains `true`.
+
+- [x] **Step 8: Update the tracker and commit operational evidence**
 
 ```powershell
 git add scripts/registration-cleanup-smoke.mjs tests/unit/registration-cleanup-smoke-contract.test.mjs docs/operations/registration-lifecycle-cleanup.md docs/PRODUCTION_PRIORITY_TRACKER.md
 git commit -m "docs(auth): record registration cleanup rollout"
 ```
+
+Production evidence (secret-safe):
+
+- fresh backup: `/srv/letscube/backups/automated/20260830-065858`; archive checksums and `pg_restore -l` passed;
+- the complete migration rehearsed inside `BEGIN`/`ROLLBACK`, including relations, grants and expected lifecycle indexes, then the exact proposal committed successfully;
+- auth gateway and worker deployed with committed-file hash checks and report-only flags;
+- backfill inserted one invite lifecycle, preserved the required grace period and found no privileged account without a hold;
+- the aggregate smoke reported one `lifecycle / invite / not_due` row and no candidate, deletion or failure rows;
+- deletion remains disabled pending a separate review and bounded canary decision.

@@ -11,8 +11,8 @@ Execution ownership:
 
 Approved architecture handoff (2026-08-30):
 
-- `[x]` Registration lifecycle cleanup Tasks 1-4 are implemented and reviewed locally: the unapplied schema proposal, auth-gateway lifecycle recording, disabled/report-only trusted worker, and confirmation/resend UI have focused regression coverage. Task 5A local smoke/runbook preparation is complete; it did not contact production.
-- `[ ]` Registration lifecycle cleanup Task 5B is pending task review and whole-branch review: fresh backup, rolled-back rehearsal, migration apply, report-only worker deployment, backfill, aggregate inspection and any later deletion decision remain operator-owned production operations.
+- `[x]` Registration lifecycle cleanup Tasks 1-5 are implemented, reviewed and deployed in report-only mode. A fresh production backup, checksum/restore-list verification, rolled-back migration rehearsal, exact migration apply, auth-gateway deployment, trusted worker deployment, bounded backfill and aggregate smoke all passed. The worker is healthy with `REGISTRATION_CLEANUP_ENABLED=true` and `REGISTRATION_CLEANUP_REPORT_ONLY=true`; the observed report contained one not-due invite lifecycle and no candidates or failures.
+- `[!]` Automatic deletion remains deliberately disabled. Changing `REGISTRATION_CLEANUP_REPORT_ONLY=false` requires a separate aggregate report review and an explicitly observed bounded deletion canary; do not infer that approval from the completed report-only rollout.
 - `[~]` LETSCUBE Bot API, the public app/download home, compact Stable changelog and shared motion system remain specified in `docs/superpowers/specs/2026-08-30-registration-lifecycle-bot-platform-public-home-design.md`; their implementation has not started in this stage.
 - The specification contains a mandatory macOS/iOS handoff. Apple clients must consume the shared registration, bot identity, notification, release/changelog and motion contracts instead of creating parallel backend behavior. iPhone/iPad PWA implementation remains externally owned and is not modified by this stage.
 
