@@ -8,6 +8,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.105.1",
     "@types/node": "catalog:",
     "tsx": "catalog:"
   }

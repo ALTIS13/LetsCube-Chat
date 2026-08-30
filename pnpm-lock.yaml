@@ -720,6 +720,9 @@ importers:
 
   scripts:
     devDependencies:
+      '@supabase/supabase-js':
+        specifier: ^2.105.1
+        version: 2.105.1
       '@types/node':
         specifier: 'catalog:'
         version: 25.3.5

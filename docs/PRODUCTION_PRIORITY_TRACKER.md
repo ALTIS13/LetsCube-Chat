@@ -1,6 +1,6 @@
 # LETSCUBE Production Priority Tracker
 
-Status: active production-hardening tracker, updated 2026-08-26.
+Status: active production-hardening tracker, updated 2026-08-30.
 
 This file is the working source of truth for the next production stages. Before starting any new production task, read this file first, then update the relevant checkboxes/status when work is completed, blocked, or intentionally deferred.
 
@@ -11,7 +11,9 @@ Execution ownership:
 
 Approved architecture handoff (2026-08-30):
 
-- `[~]` Registration lifecycle cleanup, LETSCUBE Bot API, the public app/download home, compact Stable changelog and shared motion system are specified in `docs/superpowers/specs/2026-08-30-registration-lifecycle-bot-platform-public-home-design.md`. The product design is approved; implementation plans and code are not started yet.
+- `[x]` Registration lifecycle cleanup Tasks 1-4 are implemented and reviewed locally: the unapplied schema proposal, auth-gateway lifecycle recording, disabled/report-only trusted worker, and confirmation/resend UI have focused regression coverage. Task 5A local smoke/runbook preparation is complete; it did not contact production.
+- `[ ]` Registration lifecycle cleanup Task 5B is pending task review and whole-branch review: fresh backup, rolled-back rehearsal, migration apply, report-only worker deployment, backfill, aggregate inspection and any later deletion decision remain operator-owned production operations.
+- `[~]` LETSCUBE Bot API, the public app/download home, compact Stable changelog and shared motion system remain specified in `docs/superpowers/specs/2026-08-30-registration-lifecycle-bot-platform-public-home-design.md`; their implementation has not started in this stage.
 - The specification contains a mandatory macOS/iOS handoff. Apple clients must consume the shared registration, bot identity, notification, release/changelog and motion contracts instead of creating parallel backend behavior. iPhone/iPad PWA implementation remains externally owned and is not modified by this stage.
 
 Legend:

@@ -14,6 +14,7 @@ const publicRpcs = [
   ["registration_cleanup_claim", "integer,uuid,timestamptz"],
   ["registration_cleanup_recheck", "uuid,uuid,timestamptz"],
   ["registration_cleanup_finish", "uuid,uuid,text,text"],
+  ["registration_cleanup_report", "timestamptz,timestamptz"],
   ["registration_lifecycle_backfill_internal", "integer,timestamptz"],
 ];
 
@@ -242,5 +243,69 @@ test("recheck durably holds identities that become exempt after registration", (
   assert.match(
     body,
     /registration_identity_requires_hold[\s\S]+update private\.registration_lifecycles[\s\S]+admin_hold_at/i,
+  );
+});
+
+test("report-only completion clears a claim without creating an administrative hold", () => {
+  const body = functionBody("public.registration_cleanup_finish");
+
+  assert.match(body, /admin_hold_at\s*=\s*l\.admin_hold_at/i);
+  assert.doesNotMatch(
+    body,
+    /when\s+p_action\s*=\s*'reported'[\s\S]{0,160}admin_hold_at/i,
+  );
+  assert.match(body, /claim_token\s*=\s*null/i);
+  assert.match(body, /claimed_at\s*=\s*null/i);
+  assert.match(body, /insert into private\.registration_cleanup_audit/i);
+});
+
+test("registration cleanup report is bounded, aggregate-only and service-role-only", () => {
+  const definition = functionDefinition("public.registration_cleanup_report");
+  const body = functionBody("public.registration_cleanup_report");
+
+  assert.match(
+    definition,
+    /returns table\(\s*report_scope text,\s*signup_kind text,\s*reason_code text,\s*item_count bigint\s*\)/i,
+  );
+  assert.match(definition, /security definer/i);
+  assert.match(
+    definition,
+    /set search_path = pg_catalog, public, private, auth, storage/i,
+  );
+  assert.match(body, /p_now is null or p_audit_since is null/i);
+  assert.match(body, /p_audit_since > p_now/i);
+  assert.match(body, /p_audit_since < p_now - interval '31 days'/i);
+  assert.match(body, /registration_cleanup_report_invalid_window/i);
+
+  const expectedReasons = [
+    "claimed_unsafe_identity",
+    "claimed_unsafe_email_confirmed",
+    "claimed_unsafe_phone_confirmed",
+    "claimed_unsafe_signed_in",
+    "claimed_unsafe_product_activity",
+    "admin_hold",
+    "identity_exempt",
+    "email_confirmed",
+    "phone_confirmed",
+    "signed_in",
+    "product_activity",
+    "not_due",
+    "eligible_due",
+  ];
+  for (const reason of expectedReasons) {
+    assert.match(body, new RegExp(`'${reason}'`, "i"), reason);
+  }
+
+  assert.match(
+    body,
+    /claim_token is not null[\s\S]+claimed_unsafe_identity[\s\S]+claimed_unsafe_email_confirmed[\s\S]+claimed_unsafe_phone_confirmed[\s\S]+claimed_unsafe_signed_in[\s\S]+claimed_unsafe_product_activity/i,
+  );
+  assert.match(body, /'audit'::text as report_scope/i);
+  assert.match(body, /'all'::text as signup_kind/i);
+  assert.match(body, /a\.action\s*\|\|\s*':'\s*\|\|\s*a\.reason_code/i);
+  assert.match(body, /count\(\*\)::bigint as item_count/i);
+  assert.match(
+    body,
+    /select report_scope, signup_kind, reason_code, item_count\s+from lifecycle_aggregates\s+union all\s+select report_scope, signup_kind, reason_code, item_count\s+from audit_aggregates/i,
   );
 });

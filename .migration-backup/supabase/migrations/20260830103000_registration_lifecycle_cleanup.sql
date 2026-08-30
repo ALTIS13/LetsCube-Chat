@@ -503,11 +503,7 @@ begin
   update private.registration_lifecycles l
   set claim_token = null,
       claimed_at = null,
-      admin_hold_at = case
-        when p_action = 'reported'
-          then coalesce(l.admin_hold_at, pg_catalog.now())
-        else l.admin_hold_at
-      end,
+      admin_hold_at = l.admin_hold_at,
       last_error_code = case when p_action = 'failed' then p_reason_code else null end,
       updated_at = pg_catalog.now()
   where l.user_id = p_user_id
@@ -526,6 +522,89 @@ $function$;
 revoke all on function public.registration_cleanup_finish(uuid,uuid,text,text)
   from public, anon, authenticated, service_role;
 grant execute on function public.registration_cleanup_finish(uuid,uuid,text,text)
+  to service_role;
+
+create or replace function public.registration_cleanup_report(
+  p_now timestamptz default now(),
+  p_audit_since timestamptz default now() - interval '24 hours'
+)
+returns table(
+  report_scope text,
+  signup_kind text,
+  reason_code text,
+  item_count bigint
+)
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, auth, storage
+as $function$
+begin
+  if p_now is null or p_audit_since is null
+    or p_audit_since > p_now
+    or p_audit_since < p_now - interval '31 days' then
+    raise exception 'registration_cleanup_report_invalid_window' using errcode = '22023';
+  end if;
+
+  return query
+  with lifecycle_rows as (
+    select
+      l.signup_kind::text as signup_kind,
+      case
+        when l.claim_token is not null
+          and private.registration_identity_requires_hold(l.user_id)
+          then 'claimed_unsafe_identity'
+        when l.claim_token is not null and u.email_confirmed_at is not null
+          then 'claimed_unsafe_email_confirmed'
+        when l.claim_token is not null and u.phone_confirmed_at is not null
+          then 'claimed_unsafe_phone_confirmed'
+        when l.claim_token is not null and u.last_sign_in_at is not null
+          then 'claimed_unsafe_signed_in'
+        when l.claim_token is not null
+          and private.registration_has_product_activity(l.user_id)
+          then 'claimed_unsafe_product_activity'
+        when l.admin_hold_at is not null then 'admin_hold'
+        when private.registration_identity_requires_hold(l.user_id)
+          then 'identity_exempt'
+        when u.email_confirmed_at is not null then 'email_confirmed'
+        when u.phone_confirmed_at is not null then 'phone_confirmed'
+        when u.last_sign_in_at is not null then 'signed_in'
+        when private.registration_has_product_activity(l.user_id)
+          then 'product_activity'
+        when l.eligible_at > p_now then 'not_due'
+        else 'eligible_due'
+      end as reason_code
+    from private.registration_lifecycles l
+    join auth.users u on u.id = l.user_id
+  ), lifecycle_aggregates as (
+    select
+      'lifecycle'::text as report_scope,
+      lifecycle_rows.signup_kind,
+      lifecycle_rows.reason_code,
+      count(*)::bigint as item_count
+    from lifecycle_rows
+    group by lifecycle_rows.signup_kind, lifecycle_rows.reason_code
+  ), audit_aggregates as (
+    select
+      'audit'::text as report_scope,
+      'all'::text as signup_kind,
+      a.action || ':' || a.reason_code as reason_code,
+      count(*)::bigint as item_count
+    from private.registration_cleanup_audit a
+    where a.created_at >= p_audit_since
+      and a.created_at <= p_now
+    group by a.action, a.reason_code
+  )
+  select report_scope, signup_kind, reason_code, item_count
+  from lifecycle_aggregates
+  union all
+  select report_scope, signup_kind, reason_code, item_count
+  from audit_aggregates;
+end
+$function$;
+
+revoke all on function public.registration_cleanup_report(timestamptz,timestamptz)
+  from public, anon, authenticated, service_role;
+grant execute on function public.registration_cleanup_report(timestamptz,timestamptz)
   to service_role;
 
 create or replace function public.registration_lifecycle_backfill_internal(

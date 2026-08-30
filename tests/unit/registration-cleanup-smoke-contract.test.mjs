@@ -1,0 +1,83 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import test from "node:test";
+
+const root = new URL("../../", import.meta.url);
+const scriptPath = new URL(
+  "../../scripts/registration-cleanup-smoke.mjs",
+  import.meta.url,
+);
+const composePath = new URL("../../docker-compose.yml", import.meta.url);
+
+async function source(file) {
+  return readFile(file, "utf8").catch(() => "");
+}
+
+function runSmoke(args, env = {}) {
+  return spawnSync(process.execPath, [scriptPath.pathname, ...args], {
+    cwd: path.resolve(root.pathname),
+    encoding: "utf8",
+    env: { ...process.env, ...env },
+  });
+}
+
+test("smoke script fails closed until both the explicit guard and report-only flag are present", async () => {
+  const script = await source(scriptPath);
+  assert.match(script, /REGISTRATION_CLEANUP_SMOKE\s*!==\s*["']1["']/);
+  assert.match(script, /--report-only/);
+  assert.match(script, /process\.exitCode\s*=\s*1/);
+
+  for (const [args, env] of [
+    [["--report-only"], { REGISTRATION_CLEANUP_SMOKE: "" }],
+    [[], { REGISTRATION_CLEANUP_SMOKE: "1" }],
+    [["--report-only", "--execute"], { REGISTRATION_CLEANUP_SMOKE: "1" }],
+  ]) {
+    const result = runSmoke(args, env);
+    assert.notEqual(result.status, 0);
+    assert.doesNotMatch(
+      `${result.stdout}${result.stderr}`,
+      /@|https?:\/\/|token|key|secret/i,
+    );
+  }
+});
+
+test("smoke script only calls the aggregate report RPC and projects safe aggregate fields", async () => {
+  const script = await source(scriptPath);
+
+  assert.match(script, /createClient\(/);
+  assert.match(script, /persistSession:\s*false/);
+  assert.match(script, /autoRefreshToken:\s*false/);
+  assert.match(script, /\.rpc\(["']registration_cleanup_report["']/);
+  assert.doesNotMatch(
+    script,
+    /\.rpc\(["']registration_cleanup_(?:claim|recheck|finish)["']/,
+  );
+  for (const field of [
+    "report_scope",
+    "signup_kind",
+    "reason_code",
+    "item_count",
+  ]) {
+    assert.match(script, new RegExp(`['\"]${field}['\"]`));
+  }
+  assert.match(script, /claimed_unsafe_/);
+  assert.doesNotMatch(
+    script,
+    /console\.(?:log|error)[\s\S]{0,160}(?:email|phone|user_id|user_reference|claim_token|endpoint|token|secret)/i,
+  );
+});
+
+test("active worker compose defaults keep cleanup disabled and report-only", async () => {
+  const compose = await source(composePath);
+
+  for (const [name, value] of [
+    ["REGISTRATION_CLEANUP_ENABLED", "false"],
+    ["REGISTRATION_CLEANUP_REPORT_ONLY", "true"],
+    ["REGISTRATION_CLEANUP_BATCH_SIZE", "50"],
+    ["REGISTRATION_CLEANUP_INTERVAL_SECONDS", "3600"],
+  ]) {
+    assert.match(compose, new RegExp(`${name}:\\s*\\$\\{${name}:-${value}\\}`));
+  }
+});

@@ -38,6 +38,7 @@ const serviceRoleOnlyFunctions = new Set([
   "registration_cleanup_claim",
   "registration_cleanup_recheck",
   "registration_cleanup_finish",
+  "registration_cleanup_report",
   "registration_lifecycle_backfill_internal",
 ]);
 
