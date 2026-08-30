@@ -594,10 +594,18 @@ begin
       and a.created_at <= p_now
     group by a.action, a.reason_code
   )
-  select report_scope, signup_kind, reason_code, item_count
+  select
+    lifecycle_aggregates.report_scope,
+    lifecycle_aggregates.signup_kind,
+    lifecycle_aggregates.reason_code,
+    lifecycle_aggregates.item_count
   from lifecycle_aggregates
   union all
-  select report_scope, signup_kind, reason_code, item_count
+  select
+    audit_aggregates.report_scope,
+    audit_aggregates.signup_kind,
+    audit_aggregates.reason_code,
+    audit_aggregates.item_count
   from audit_aggregates;
 end
 $function$;

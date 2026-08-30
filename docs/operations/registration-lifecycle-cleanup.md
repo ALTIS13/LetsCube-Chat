@@ -20,16 +20,38 @@ outer wrapper lines and supplies an enclosing transaction that is rolled back.
 
 Run these on the production server during the approved maintenance window. The
 operator account must use `sudo -n`; it cannot test the backup program's execute
-bit without sudo.
+bit without sudo. This script records the strict-format directory set before the
+run and accepts only one directory created by this invocation. It never falls
+back to a pre-existing backup.
 
 ```bash
+set -euo pipefail
+
+backup_root=/srv/letscube/backups/automated
+strict_backup_name='^[0-9]{8}-[0-9]{6}$'
+before_backup_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+before_backup_dirs="$(sudo -n find "$backup_root" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | awk -v pattern="$strict_backup_name" '$0 ~ pattern' | LC_ALL=C sort)"
+printf 'backup_started_at=%s\n' "$before_backup_at"
+
 sudo -n test -x /srv/letscube/scripts/letscube-backup.sh
 sudo -n /srv/letscube/scripts/letscube-backup.sh check
 sudo -n /srv/letscube/scripts/letscube-backup.sh run
-latest="$(sudo -n find /srv/letscube/backups/automated -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort | tail -n1)"
-latest="/srv/letscube/backups/automated/$latest"
-printf '%s\n' "$latest"
+
+after_backup_dirs="$(sudo -n find "$backup_root" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | awk -v pattern="$strict_backup_name" '$0 ~ pattern' | LC_ALL=C sort)"
+new_backup_dirs="$(comm -13 <(printf '%s\n' "$before_backup_dirs") <(printf '%s\n' "$after_backup_dirs"))"
+new_backup_count="$(printf '%s\n' "$new_backup_dirs" | sed '/^$/d' | wc -l | tr -d ' ')"
+
+[ "$new_backup_count" -eq 1 ]
+latest="$(printf '%s\n' "$new_backup_dirs" | sed '/^$/d')"
+[[ "$latest" =~ ^[0-9]{8}-[0-9]{6}$ ]]
+if printf '%s\n' "$before_backup_dirs" | grep -Fxq "$latest"; then
+  printf '%s\n' 'backup directory existed before this run' >&2
+  exit 1
+fi
+
+latest="$backup_root/$latest"
 sudo -n test -d "$latest"
+printf 'backup_path=%s\n' "$latest"
 sudo -n sh -c 'cd "$1" && sha256sum -c SHA256SUMS && pg_restore -l db/supabase-postgres.custom >/tmp/registration-cleanup-pg-restore-list.txt' sh "$latest"
 ```
 
@@ -64,16 +86,20 @@ select
   has_function_privilege('anon', 'public.registration_cleanup_report(timestamptz,timestamptz)', 'execute') as anon_can_execute,
   has_function_privilege('authenticated', 'public.registration_cleanup_report(timestamptz,timestamptz)', 'execute') as authenticated_can_execute,
   has_function_privilege('service_role', 'public.registration_cleanup_report(timestamptz,timestamptz)', 'execute') as service_role_can_execute;
-explain (costs off) select * from public.registration_cleanup_report();
+set local role service_role;
+select report_scope, signup_kind, reason_code, item_count
+from public.registration_cleanup_report()
+order by report_scope, signup_kind, reason_code;
 rollback;
 SQL
 } | sudo -n docker exec -i supabase-db psql -v ON_ERROR_STOP=1 -U postgres -d postgres
 ```
 
 Proceed only when the two relations and report function resolve, the grant check
-is `false`, `false`, `true`, and the transaction ends at `ROLLBACK` without a
-SQL error. If it fails before rollback, stop and inspect the SQL locally; ending
-the `psql` connection rolls back the uncommitted outer transaction.
+is `false`, `false`, `true`, the service-role report returns aggregate-only rows,
+and the transaction ends at `ROLLBACK` without a SQL error. If it fails before
+rollback, stop and inspect the SQL locally; ending the `psql` connection rolls
+back the uncommitted outer transaction.
 
 ## 4. Apply The Reviewed Migration
 
@@ -110,16 +136,86 @@ SQL
 The grant result must remain `false`, `false`, `true`. Preserve only aggregate
 scope/kind/reason/count output in the change record.
 
-## 6. Deploy Report-Only Worker And Backfill
+## 6. Deploy Report-Only letscube-worker And Backfill
 
-Set these exact `kub-worker` environment values in Coolify, then deploy the
-reviewed worker and wait for its `/api/healthz` health check:
+The live `letscube-worker` is a Dockerfile application that sources
+`/run/secrets/letscube-infra.env` at runtime. The root `docker-compose.yml`
+defaults are portability defaults only; they do not wire the live worker.
 
-```text
+On the production server, atomically prepare the existing server-local env file.
+This retains every unrelated line, mode, and owner; only the four non-secret
+cleanup flags are replaced. It prints only those flag names and values.
+
+```bash
+set -euo pipefail
+
+env_file=/run/secrets/letscube-infra.env
+env_dir=/run/secrets
+rollback_file="$(sudo -n mktemp "$env_dir/.letscube-infra.env.rollback.XXXXXX")"
+candidate_file="$(sudo -n mktemp "$env_dir/.letscube-infra.env.candidate.XXXXXX")"
+cleanup_candidate() { sudo -n rm -f -- "$candidate_file"; }
+trap cleanup_candidate EXIT
+
+sudo -n test -f "$env_file"
+sudo -n cp --preserve=mode,ownership "$env_file" "$rollback_file"
+sudo -n cp --preserve=mode,ownership "$env_file" "$candidate_file"
+sudo -n awk -F= '
+  $1 != "REGISTRATION_CLEANUP_ENABLED" &&
+  $1 != "REGISTRATION_CLEANUP_REPORT_ONLY" &&
+  $1 != "REGISTRATION_CLEANUP_BATCH_SIZE" &&
+  $1 != "REGISTRATION_CLEANUP_INTERVAL_SECONDS" { print }
+' "$env_file" | sudo -n tee "$candidate_file" >/dev/null
+sudo -n tee -a "$candidate_file" >/dev/null <<'EOF'
 REGISTRATION_CLEANUP_ENABLED=true
 REGISTRATION_CLEANUP_REPORT_ONLY=true
 REGISTRATION_CLEANUP_BATCH_SIZE=50
 REGISTRATION_CLEANUP_INTERVAL_SECONDS=3600
+EOF
+sudo -n awk -F= '
+  $1 == "REGISTRATION_CLEANUP_ENABLED" && $2 == "true" { enabled = 1 }
+  $1 == "REGISTRATION_CLEANUP_REPORT_ONLY" && $2 == "true" { report_only = 1 }
+  $1 == "REGISTRATION_CLEANUP_BATCH_SIZE" && $2 == "50" { batch_size = 1 }
+  $1 == "REGISTRATION_CLEANUP_INTERVAL_SECONDS" && $2 == "3600" { interval = 1 }
+  END { exit !(enabled && report_only && batch_size && interval) }
+' "$candidate_file"
+sudo -n awk -F= '$1 ~ /^REGISTRATION_CLEANUP_(ENABLED|REPORT_ONLY|BATCH_SIZE|INTERVAL_SECONDS)$/ { print $1 "=" $2 }' "$candidate_file"
+sudo -n mv -f -- "$candidate_file" "$env_file"
+deploy_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+printf 'deploy_started_at=%s\n' "$deploy_started_at"
+```
+
+Deploy the reviewed `letscube-worker` application through Coolify. If that
+deploy fails, restore the preserved server-local file before retrying or
+investigating, then redeploy the previous reviewed worker configuration:
+
+```bash
+sudo -n mv -f -- "$rollback_file" "$env_file"
+```
+
+After a successful deploy, confirm the dedicated local worker status from inside
+the deployed container. Do not rely on the generic health endpoint. The command
+requires the effective enabled/report-only state and a success timestamp later
+than the recorded deployment start; its output is limited to the safe status and
+aggregate result.
+
+```bash
+worker_container="$(sudo -n docker ps --filter name=letscube-worker --format '{{.ID}}' | head -n1)"
+test -n "$worker_container"
+sudo -n docker exec -e DEPLOY_STARTED_AT="$deploy_started_at" "$worker_container" node -e '
+const response = await fetch("http://127.0.0.1:8096/api/healthz/registration-cleanup");
+if (!response.ok) process.exit(1);
+const status = await response.json();
+const successAt = Date.parse(status.lastSuccessAt || "");
+const deployAt = Date.parse(process.env.DEPLOY_STARTED_AT || "");
+if (status.configured !== true || status.enabled !== true || status.reportOnly !== true || !Number.isFinite(successAt) || successAt < deployAt) process.exit(1);
+console.log(JSON.stringify({ configured: status.configured, enabled: status.enabled, reportOnly: status.reportOnly, lastRunAt: status.lastRunAt, lastSuccessAt: status.lastSuccessAt, lastFailureAt: status.lastFailureAt, lastResult: status.lastResult }));
+'
+```
+
+Only after the status command succeeds, remove the temporary rollback copy:
+
+```bash
+sudo -n rm -f -- "$rollback_file"
 ```
 
 Record the enablement timestamp in UTC before backfill. On the production
@@ -161,8 +257,10 @@ Any nonzero exit, including any `claimed_unsafe_*` aggregate, is a stop signal.
 
 ## 7. Report-Only Rollback And Deletion Gate
 
-For any deployment, health, backfill, or aggregate-report concern, immediately
-set these `kub-worker` values in Coolify and deploy the worker again:
+For a worker deployment, status, backfill, or aggregate-report concern, restore
+the preserved `/run/secrets/letscube-infra.env` rollback file as shown above,
+then deploy the previous reviewed `letscube-worker` configuration. If no
+rollback file remains, perform the same atomic procedure with only these values:
 
 ```text
 REGISTRATION_CLEANUP_ENABLED=false

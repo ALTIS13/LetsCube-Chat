@@ -10,8 +10,40 @@ export type CleanupBatchResult = {
   failed: number;
 };
 
-let started = false;
-let starting = false;
+export type RegistrationCleanupWorkerStatus = {
+  configured: boolean;
+  enabled: boolean;
+  reportOnly: boolean;
+  lastRunAt: string | null;
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  lastResult: CleanupBatchResult | null;
+};
+
+type RuntimeOptions = {
+  readConfig?: (environment: NodeJS.ProcessEnv) => RegistrationCleanupConfig;
+  createRepository?: (
+    environment: NodeJS.ProcessEnv,
+  ) => Promise<RegistrationCleanupRepository>;
+  runBatch?: (
+    config: RegistrationCleanupConfig,
+    repository: RegistrationCleanupRepository,
+  ) => Promise<CleanupBatchResult | null>;
+  now?: () => Date;
+  schedule?: (callback: () => void, delayMs: number) => void;
+};
+
+function emptyStatus(): RegistrationCleanupWorkerStatus {
+  return {
+    configured: false,
+    enabled: false,
+    reportOnly: true,
+    lastRunAt: null,
+    lastSuccessAt: null,
+    lastFailureAt: null,
+    lastResult: null,
+  };
+}
 
 function emptyResult(): CleanupBatchResult {
   return { claimed: 0, reported: 0, deleted: 0, skipped: 0, failed: 0 };
@@ -33,7 +65,7 @@ async function finishAfterCandidateFailure(
 export async function runRegistrationCleanupBatch(
   config: RegistrationCleanupConfig,
   repository: RegistrationCleanupRepository,
-): Promise<CleanupBatchResult> {
+): Promise<CleanupBatchResult | null> {
   const result = emptyResult();
   const claimToken = randomUUID();
   const now = new Date().toISOString();
@@ -42,7 +74,7 @@ export async function runRegistrationCleanupBatch(
   try {
     candidates = await repository.claim(config.batchSize, claimToken, now);
   } catch {
-    return result;
+    return null;
   }
 
   result.claimed = candidates.length;
@@ -104,48 +136,131 @@ export async function runRegistrationCleanupBatch(
   return result;
 }
 
+async function loadRegistrationCleanupRepository(
+  environment: NodeJS.ProcessEnv,
+): Promise<RegistrationCleanupRepository> {
+  const { createRegistrationCleanupRepository } =
+    await import("./registrationCleanupRepository");
+  return createRegistrationCleanupRepository(environment);
+}
+
+export function createRegistrationCleanupWorkerRuntime(
+  options: RuntimeOptions = {},
+): {
+  start(environment?: NodeJS.ProcessEnv): Promise<void>;
+  status(): RegistrationCleanupWorkerStatus;
+} {
+  let started = false;
+  let starting = false;
+  let current = emptyStatus();
+  const now = options.now ?? (() => new Date());
+  const schedule =
+    options.schedule ??
+    ((callback, delayMs) => {
+      const timer = setTimeout(callback, delayMs);
+      timer.unref();
+    });
+
+  const status = (): RegistrationCleanupWorkerStatus => ({
+    ...current,
+    lastResult: current.lastResult ? { ...current.lastResult } : null,
+  });
+
+  const markFailure = (): void => {
+    current.lastFailureAt = now().toISOString();
+  };
+
+  const scheduleRun = (
+    config: RegistrationCleanupConfig,
+    repository: RegistrationCleanupRepository,
+  ): void => {
+    schedule(() => {
+      void runAndSchedule(config, repository);
+    }, config.intervalMs);
+  };
+
+  const runAndSchedule = async (
+    config: RegistrationCleanupConfig,
+    repository: RegistrationCleanupRepository,
+  ): Promise<void> => {
+    current.lastRunAt = now().toISOString();
+    try {
+      const result = await (options.runBatch ?? runRegistrationCleanupBatch)(
+        config,
+        repository,
+      );
+      if (!result) {
+        markFailure();
+        return;
+      }
+
+      current.lastResult = { ...result };
+      if (result.failed > 0) {
+        markFailure();
+        return;
+      }
+
+      current.lastSuccessAt = now().toISOString();
+    } catch {
+      markFailure();
+    } finally {
+      scheduleRun(config, repository);
+    }
+  };
+
+  return {
+    async start(environment = process.env): Promise<void> {
+      if (started || starting) return;
+      starting = true;
+      try {
+        const readConfig = options.readConfig ?? (
+          await import("./registrationCleanupRules")
+        ).readRegistrationCleanupConfig;
+        const config = readConfig(environment);
+        current = {
+          ...current,
+          configured: true,
+          enabled: config.enabled,
+          reportOnly: config.reportOnly,
+        };
+        if (!config.enabled) return;
+
+        const repository = await (options.createRepository ??
+          loadRegistrationCleanupRepository)(environment);
+        started = true;
+        await runAndSchedule(config, repository);
+      } catch {
+        markFailure();
+      } finally {
+        starting = false;
+      }
+    },
+    status,
+  };
+}
+
+const registrationCleanupWorkerRuntime = createRegistrationCleanupWorkerRuntime();
+
 export function startRegistrationCleanupWorker(
   environment: NodeJS.ProcessEnv = process.env,
 ): void {
-  if (started || starting) return;
-
-  starting = true;
-  void startEnabledRegistrationCleanupWorker(environment);
+  void registrationCleanupWorkerRuntime.start(environment);
 }
 
-async function startEnabledRegistrationCleanupWorker(
-  environment: NodeJS.ProcessEnv,
-): Promise<void> {
-  try {
-    const { readRegistrationCleanupConfig } =
-      await import("./registrationCleanupRules");
-    const config = readRegistrationCleanupConfig(environment);
-    if (!config.enabled) return;
+export function getRegistrationCleanupWorkerStatus(): RegistrationCleanupWorkerStatus {
+  return registrationCleanupWorkerRuntime.status();
+}
 
-    const { createRegistrationCleanupRepository } =
-      await import("./registrationCleanupRepository");
-    const repository = createRegistrationCleanupRepository(environment);
-    started = true;
-
-    const scheduleNext = (): void => {
-      const timer = setTimeout(() => {
-        void runAndSchedule();
-      }, config.intervalMs);
-      timer.unref();
-    };
-
-    const runAndSchedule = async (): Promise<void> => {
-      try {
-        await runRegistrationCleanupBatch(config, repository);
-      } finally {
-        scheduleNext();
-      }
-    };
-
-    void runAndSchedule();
-  } catch {
-    // Keep startup fail-closed without exposing credentials or backend details.
-  } finally {
-    starting = false;
-  }
+export function registrationCleanupHealthPayload(
+  status: RegistrationCleanupWorkerStatus & Record<string, unknown>,
+): RegistrationCleanupWorkerStatus {
+  return {
+    configured: status.configured,
+    enabled: status.enabled,
+    reportOnly: status.reportOnly,
+    lastRunAt: status.lastRunAt,
+    lastSuccessAt: status.lastSuccessAt,
+    lastFailureAt: status.lastFailureAt,
+    lastResult: status.lastResult ? { ...status.lastResult } : null,
+  };
 }

@@ -306,6 +306,6 @@ test("registration cleanup report is bounded, aggregate-only and service-role-on
   assert.match(body, /count\(\*\)::bigint as item_count/i);
   assert.match(
     body,
-    /select report_scope, signup_kind, reason_code, item_count\s+from lifecycle_aggregates\s+union all\s+select report_scope, signup_kind, reason_code, item_count\s+from audit_aggregates/i,
+    /select\s+lifecycle_aggregates\.report_scope,\s+lifecycle_aggregates\.signup_kind,\s+lifecycle_aggregates\.reason_code,\s+lifecycle_aggregates\.item_count\s+from lifecycle_aggregates\s+union all\s+select\s+audit_aggregates\.report_scope,\s+audit_aggregates\.signup_kind,\s+audit_aggregates\.reason_code,\s+audit_aggregates\.item_count\s+from audit_aggregates/i,
   );
 });

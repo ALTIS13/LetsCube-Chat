@@ -10,6 +10,15 @@ const scriptPath = new URL(
   import.meta.url,
 );
 const composePath = new URL("../../docker-compose.yml", import.meta.url);
+const dockerfilePath = new URL("../../docs/deploy/Dockerfile", import.meta.url);
+const healthRoutePath = new URL(
+  "../../artifacts/api-server/src/routes/health.ts",
+  import.meta.url,
+);
+const runbookPath = new URL(
+  "../../docs/operations/registration-lifecycle-cleanup.md",
+  import.meta.url,
+);
 
 async function source(file) {
   return readFile(file, "utf8").catch(() => "");
@@ -69,7 +78,7 @@ test("smoke script only calls the aggregate report RPC and projects safe aggrega
   );
 });
 
-test("active worker compose defaults keep cleanup disabled and report-only", async () => {
+test("portable compose defaults keep cleanup disabled and report-only", async () => {
   const compose = await source(composePath);
 
   for (const [name, value] of [
@@ -80,4 +89,30 @@ test("active worker compose defaults keep cleanup disabled and report-only", asy
   ]) {
     assert.match(compose, new RegExp(`${name}:\\s*\\$\\{${name}:-${value}\\}`));
   }
+});
+
+test("Dockerfile worker runtime sources the local secret env and exposes cleanup health", async () => {
+  const [dockerfile, healthRoute, runbook] = await Promise.all([
+    source(dockerfilePath),
+    source(healthRoutePath),
+    source(runbookPath),
+  ]);
+
+  assert.match(dockerfile, /\/run\/secrets\/letscube-infra\.env/);
+  assert.match(dockerfile, /set -a;\s*\. \/run\/secrets\/letscube-infra\.env;\s*set \+a/);
+  assert.match(dockerfile, /artifacts\/api-server\/dist\/index\.mjs/);
+  assert.match(healthRoute, /\/healthz\/registration-cleanup/);
+  assert.match(healthRoute, /registrationCleanupHealthPayload/);
+  assert.match(runbook, /letscube-worker/);
+  assert.match(runbook, /set -euo pipefail/);
+  assert.match(runbook, /REGISTRATION_CLEANUP_ENABLED=true/);
+  assert.match(runbook, /REGISTRATION_CLEANUP_REPORT_ONLY=true/);
+  assert.match(runbook, /api\/healthz\/registration-cleanup/);
+  assert.match(runbook, /lastSuccessAt/);
+  assert.match(runbook, /mktemp/);
+  assert.match(runbook, /mv -f --/);
+  assert.match(runbook, /YYYYMMDD-HHMMSS/);
+  assert.match(runbook, /before_backup_dirs/);
+  assert.match(runbook, /after_backup_dirs/);
+  assert.match(runbook, /set local role service_role[\s\S]+registration_cleanup_report\(\)/i);
 });
