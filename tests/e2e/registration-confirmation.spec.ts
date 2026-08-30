@@ -257,6 +257,17 @@ async function installCaptchaMock(page: Page): Promise<void> {
         remove: (widgetId: string) => callbacks.delete(widgetId),
       },
     });
+    Object.defineProperty(window, "smartCaptcha", {
+      configurable: true,
+      value: {
+        render,
+        reset: (widgetId?: string) => {
+          window.__playwrightCaptchaResets = (window.__playwrightCaptchaResets ?? 0) + 1;
+          issueToken(widgetId ? callbacks.get(widgetId) : undefined);
+        },
+        destroy: (widgetId: string) => callbacks.delete(widgetId),
+      },
+    });
   });
 }
 
