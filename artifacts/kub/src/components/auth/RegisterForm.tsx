@@ -95,6 +95,8 @@ export function RegisterForm() {
 
   const showRegistrationConfirmation = (normalizedEmail: string) => {
     setSubmittedEmail(normalizedEmail);
+    setEmail("");
+    setPassword("");
     setResendCaptchaToken("");
     setResendError("");
     setResendSuccess("");
@@ -191,7 +193,6 @@ export function RegisterForm() {
   };
 
   const handleUseDifferentEmail = () => {
-    setEmail("");
     setSubmittedEmail("");
     setResendCaptchaToken("");
     setResendError("");
@@ -239,9 +240,9 @@ export function RegisterForm() {
                 <KubIcon name="mailCheck" size={28} label="Письмо отправлено" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-[color:var(--kub-text)]">
+                <h1 className="text-xl font-bold text-[color:var(--kub-text)]">
                   Проверьте почту
-                </h2>
+                </h1>
                 <div className="mt-2 space-y-2 text-sm leading-6 text-[color:var(--kub-muted)]">
                   <p>Если к этому адресу электронной почты ещё не привязан аккаунт, мы отправим письмо для подтверждения регистрации.</p>
                   <p>Если письмо не пришло, проверьте папку «Спам» и правильность указанного адреса. При ошибке вернитесь и зарегистрируйтесь с корректным email.</p>
@@ -253,7 +254,7 @@ export function RegisterForm() {
               </p>
               <div className="relative">
                 <AuthCaptcha
-                  disabled={resendLocked || resending}
+                  disabled={resendLocked}
                   onTokenChange={setResendCaptchaToken}
                   resetSignal={resendCaptchaResetSignal}
                 />
@@ -275,6 +276,7 @@ export function RegisterForm() {
                   disabled={resendLocked || resending}
                   loading={resending}
                   onClick={handleResend}
+                  className="!h-auto min-h-16 px-4 py-3 leading-5 whitespace-normal"
                 >
                   {resendLocked ? `Отправить письмо повторно через ${resendCountdown} сек.` : "Отправить письмо повторно"}
                 </KubButton>
