@@ -212,6 +212,13 @@ Group privacy is enabled by default. A bot receives only:
 - callback events from its buttons;
 - membership events relevant to the bot.
 
+Message and edited-message updates are projected from the authoritative
+`messages` row by database triggers. Callers provide only the bot, update kind
+and authoritative source identifier; they cannot supply arbitrary sender,
+contact or message payloads. Callback and membership contexts use separate,
+strict allowlists. The projection exposes only public display identity and the
+bounded chat/message fields required by the Bot API.
+
 Full visibility of new group messages requires both a request by the bot owner
 and approval from a group administrator. A bot never receives history from
 before it joined. Removing a bot immediately stops new updates and invalidates
@@ -286,6 +293,14 @@ IP literals, loopback, private, link-local and metadata networks. DNS is checked
 again at connection time, redirects are bounded and cannot cross into a blocked
 network, and response size and duration are capped.
 
+Webhook signing material is encrypted by the trusted application boundary
+before persistence. The private database table stores only versioned
+ciphertext and a non-secret fingerprint. Claim operations return ciphertext
+only to `service_role`; the trusted worker decrypts it outside PostgreSQL.
+Expired worker claims are recovered atomically in bounded batches, and attempts
+at the retry ceiling move to dead letter instead of remaining permanently
+claimed.
+
 ### 7.4 Tokens
 
 The full token is shown once at creation or rotation. Storage contains only a
@@ -304,7 +319,9 @@ The migration is additive and uses the following logical entities:
 - `chat_bot_members`: membership, group privacy and approved permissions;
 - `bot_updates`: pending update delivery with monotonic `update_id`;
 - `bot_webhooks`: private destination and delivery configuration;
-- `bot_delivery_attempts`: metadata-only retry and dead-letter history.
+- `bot_delivery_attempts`: metadata-only retry and dead-letter history;
+- `bot_upload_grants`: short-lived, single-use authorization for one bot, chat,
+  bucket and object path.
 
 `messages` gains nullable `bot_id`. Existing non-system rows whose profile was
 deleted are preserved as legacy tombstones with both sender columns null. A
@@ -313,6 +330,9 @@ sender columns null. A `BEFORE INSERT` guard applies the stricter live-write
 rule: every new non-system message has exactly one of the human sender column
 or `bot_id`. Profile-FK `ON DELETE SET NULL` may still turn an existing human
 message into a preserved tombstone; no migration rewrites or deletes history.
+The update guard accepts this transition only while an exact transaction-local
+profile-delete marker names the deleted profile; generic trigger depth is not
+an authorization signal.
 
 Chat lists, message rendering, search, notifications, read sync and audit must
 recognize bot identities without inserting bot rows into human profile tables.
@@ -323,6 +343,18 @@ Private token, webhook and delivery tables are not exposed through the public
 Supabase Data API. Public bot metadata and ownership projections use RLS and
 narrow server/RPC operations. Anonymous and ordinary authenticated users cannot
 read another owner's management metadata.
+
+Bot creation locks the creator row before enforcing the active-bot limit. Token
+rotation locks the bot row and a partial unique index permits only one
+non-revoked token per bot. All internal bot RPCs revoke execution from `PUBLIC`,
+`anon` and `authenticated`, grant only `service_role`, use an empty
+`search_path`, and fully qualify database objects and callable functions.
+
+Bots receive no direct `storage.objects` policy or grant. The trusted gateway
+uploads through its server boundary, then authorizes the exact object using a
+short-lived private grant. A media send locks and consumes that grant in the
+same transaction. Topic and reply identifiers must belong to the target chat,
+and replies must be visible to the bot after its `joined_at` boundary.
 
 ## 9. Delivery, Ordering And Limits
 
@@ -469,6 +501,8 @@ state without raw Auth or database errors.
 - undelivered `getUpdates` payloads: 24 hours;
 - acknowledged update payloads: removed after confirmation;
 - webhook attempt metadata without payloads: 14 days;
+- expired upload grants: removed on replacement or bounded cleanup; consumed
+  upload grants: 24 hours;
 - bot-management and cleanup audit metadata: 90 days;
 - bot messages: existing chat-message retention policy;
 - pending bot deletion: 7 days before finalization.

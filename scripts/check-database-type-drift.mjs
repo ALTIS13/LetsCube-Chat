@@ -39,6 +39,7 @@ const serviceRoleOnlyFunctions = new Set([
   "bot_token_lookup_internal",
   "bot_token_touch_internal",
   "bot_membership_authorize_internal",
+  "bot_upload_authorize_internal",
   "bot_send_message_internal",
   "bot_updates_poll_internal",
   "bot_updates_ack_internal",

@@ -98,6 +98,9 @@ create table private.bot_tokens (
 create unique index bot_tokens_active_prefix_idx
   on private.bot_tokens(token_prefix)
   where revoked_at is null;
+create unique index bot_tokens_one_active_per_bot_idx
+  on private.bot_tokens(bot_id)
+  where revoked_at is null;
 create index bot_tokens_bot_active_idx
   on private.bot_tokens(bot_id, created_at desc)
   where revoked_at is null;
@@ -137,7 +140,13 @@ create table private.bot_webhooks (
   bot_id uuid primary key references public.bots(id) on delete restrict,
   target_url text not null
     check (pg_catalog.octet_length(target_url) between 10 and 2048),
-  secret_hash text not null check (secret_hash ~ '^[0-9a-f]{64}$'),
+  secret_ciphertext text not null
+    check (
+      pg_catalog.octet_length(secret_ciphertext) between 55 and 4103
+      and secret_ciphertext ~ '^enc:v1:[A-Za-z0-9_-]+$'
+    ),
+  secret_fingerprint text not null
+    check (secret_fingerprint ~ '^[0-9a-f]{16,64}$'),
   state text not null default 'enabled'
     check (state in ('enabled','paused','disabled')),
   failure_count integer not null default 0 check (failure_count between 0 and 20),
@@ -203,6 +212,41 @@ create table private.bot_message_idempotency (
 create index bot_message_idempotency_retention_idx
   on private.bot_message_idempotency(created_at, bot_id);
 
+create table private.bot_upload_grants (
+  id uuid primary key default gen_random_uuid(),
+  bot_id uuid not null references public.bots(id) on delete restrict,
+  chat_id uuid not null references public.chats(id) on delete cascade,
+  bucket_id text not null check (bucket_id = 'chat-media'),
+  object_path text not null
+    check (pg_catalog.octet_length(object_path) between 80 and 1024),
+  content_type text not null
+    check (pg_catalog.octet_length(content_type) between 3 and 128),
+  byte_size bigint not null check (byte_size between 1 and 104857600),
+  expires_at timestamptz not null,
+  consumed_at timestamptz null,
+  consumed_message_id uuid null
+    references public.messages(id) on delete restrict,
+  created_at timestamptz not null default pg_catalog.now(),
+  constraint bot_upload_grants_expiry_check check (
+    expires_at > created_at
+    and expires_at <= created_at + interval '15 minutes'
+  ),
+  constraint bot_upload_grants_consumption_check check (
+    (consumed_at is null and consumed_message_id is null)
+    or (consumed_at is not null and consumed_message_id is not null)
+  )
+);
+
+create unique index bot_upload_grants_active_object_idx
+  on private.bot_upload_grants(bot_id, chat_id, bucket_id, object_path)
+  where consumed_at is null;
+create index bot_upload_grants_expiry_idx
+  on private.bot_upload_grants(expires_at, id)
+  where consumed_at is null;
+create index bot_upload_grants_consumed_idx
+  on private.bot_upload_grants(consumed_at, id)
+  where consumed_at is not null;
+
 create table private.bot_delivery_leases (
   bot_id uuid primary key references public.bots(id) on delete restrict,
   delivery_mode text not null check (delivery_mode in ('polling','webhook')),
@@ -218,6 +262,7 @@ revoke all on table private.bot_webhooks from public, anon, authenticated, servi
 revoke all on table private.bot_delivery_attempts from public, anon, authenticated, service_role;
 revoke all on table private.bot_rate_limit_buckets from public, anon, authenticated, service_role;
 revoke all on table private.bot_message_idempotency from public, anon, authenticated, service_role;
+revoke all on table private.bot_upload_grants from public, anon, authenticated, service_role;
 revoke all on table private.bot_delivery_leases from public, anon, authenticated, service_role;
 
 alter table private.bot_tokens enable row level security;
@@ -227,6 +272,7 @@ alter table private.bot_webhooks enable row level security;
 alter table private.bot_delivery_attempts enable row level security;
 alter table private.bot_rate_limit_buckets enable row level security;
 alter table private.bot_message_idempotency enable row level security;
+alter table private.bot_upload_grants enable row level security;
 alter table private.bot_delivery_leases enable row level security;
 
 revoke all on table public.bots from public, anon, authenticated, service_role;
@@ -321,7 +367,7 @@ comment on constraint messages_sender_shape_check on public.messages is
 create or replace function private.enforce_message_sender_on_insert()
 returns trigger
 language plpgsql
-set search_path = pg_catalog, public, private
+set search_path = ''
 as $function$
 begin
   if coalesce(new.type, 'text') = 'system' then
@@ -343,10 +389,34 @@ create trigger trg_messages_sender_on_insert
   before insert on public.messages
   for each row execute function private.enforce_message_sender_on_insert();
 
+create or replace function private.mark_profile_delete_message_tombstones()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+begin
+  perform pg_catalog.set_config(
+    'letscube.profile_delete_tombstone_user_id',
+    old.id::text,
+    true
+  );
+  return old;
+end
+$function$;
+
+revoke all on function private.mark_profile_delete_message_tombstones()
+  from public, anon, authenticated, service_role;
+
+drop trigger if exists trg_profiles_mark_message_tombstones on public.profiles;
+create trigger trg_profiles_mark_message_tombstones
+  before delete on public.profiles
+  for each row execute function private.mark_profile_delete_message_tombstones();
+
 create or replace function private.enforce_message_sender_on_update()
 returns trigger
 language plpgsql
-set search_path = pg_catalog, public, private
+set search_path = ''
 as $function$
 begin
   if new.bot_id is distinct from old.bot_id
@@ -355,14 +425,19 @@ begin
   end if;
 
   if new.user_id is distinct from old.user_id then
-    -- The profiles FK is ON DELETE SET NULL. PostgreSQL invokes this child-row
-    -- update from its RI trigger, preserving the historical message as a
-    -- legacy tombstone. Direct client sender rewrites remain forbidden.
     if not (
       old.user_id is not null
       and new.user_id is null
       and new.bot_id is null
-      and pg_catalog.pg_trigger_depth() > 1
+      and pg_catalog.current_setting(
+        'letscube.profile_delete_tombstone_user_id',
+        true
+      ) = old.user_id::text
+      and not exists (
+        select 1
+        from public.profiles profile
+        where profile.id = old.user_id
+      )
     ) then
       raise exception 'message_sender_immutable' using errcode = '23514';
     end if;
@@ -408,7 +483,7 @@ returns table(
 )
 language plpgsql
 security definer
-set search_path = pg_catalog, public, private, auth, storage
+set search_path = ''
 as $function$
 declare
   v_bot public.bots%rowtype;
@@ -418,7 +493,10 @@ declare
   v_description text := coalesce(p_description, '');
 begin
   if p_actor_id is null
-     or not exists (select 1 from public.profiles p where p.id = p_actor_id) then
+     or p_username is null
+     or p_display_name is null
+     or p_token_prefix is null
+     or p_token_hash is null then
     raise exception 'bot_actor_invalid' using errcode = '22023';
   end if;
   if v_username !~ '^[a-z][a-z0-9_]{4,31}$'
@@ -427,6 +505,14 @@ begin
      or p_token_prefix !~ '^[A-Za-z0-9_-]{8,24}$'
      or p_token_hash !~ '^[0-9a-f]{64}$' then
     raise exception 'bot_input_invalid' using errcode = '22023';
+  end if;
+
+  perform 1
+  from public.profiles actor_profile
+  where actor_profile.id = p_actor_id
+  for update of actor_profile;
+  if not found then
+    raise exception 'bot_actor_invalid' using errcode = '22023';
   end if;
 
   if not exists (
@@ -510,7 +596,7 @@ returns table(
 language sql
 stable
 security definer
-set search_path = pg_catalog, public, private, auth, storage
+set search_path = ''
 as $function$
   select
     bot.id,
@@ -557,25 +643,27 @@ create or replace function public.bot_rotate_token_internal(
 returns table(token_id uuid, token_prefix text, created_at timestamptz)
 language plpgsql
 security definer
-set search_path = pg_catalog, public, private, auth, storage
+set search_path = ''
 as $function$
 declare
   v_token private.bot_tokens%rowtype;
 begin
   if p_actor_id is null or p_bot_id is null
+     or p_token_prefix is null
+     or p_token_hash is null
      or p_token_prefix !~ '^[A-Za-z0-9_-]{8,24}$'
      or p_token_hash !~ '^[0-9a-f]{64}$' then
     raise exception 'bot_token_input_invalid' using errcode = '22023';
   end if;
-  if not exists (
-    select 1
-    from public.bot_owners owner_row
-    join public.bots bot on bot.id = owner_row.bot_id
-    where owner_row.bot_id = p_bot_id
+  perform 1
+    from public.bots bot
+    join public.bot_owners owner_row on owner_row.bot_id = bot.id
+    where bot.id = p_bot_id
       and owner_row.user_id = p_actor_id
       and owner_row.role = 'owner'
       and bot.state not in ('pending_delete','deleted')
-  ) then
+    for update of bot;
+  if not found then
     raise exception 'bot_owner_required' using errcode = '42501';
   end if;
 
@@ -614,7 +702,7 @@ returns table(
 language sql
 stable
 security definer
-set search_path = pg_catalog, public, private, auth, storage
+set search_path = ''
 as $function$
   select
     stored_token.id,
@@ -643,7 +731,7 @@ create or replace function public.bot_token_touch_internal(
 returns boolean
 language plpgsql
 security definer
-set search_path = pg_catalog, public, private, auth, storage
+set search_path = ''
 as $function$
 begin
   if p_token_id is null or p_used_at is null
@@ -678,15 +766,16 @@ returns jsonb
 language plpgsql
 stable
 security definer
-set search_path = pg_catalog, public, private, auth, storage
+set search_path = ''
 as $function$
 declare
   v_member record;
   v_allowed boolean := false;
 begin
   if p_bot_id is null or p_chat_id is null
+     or p_operation is null
      or p_operation not in ('send_message','receive_message','receive_all','read_file','manage') then
-    return jsonb_build_object('allowed', false, 'reason', 'invalid_request');
+    return pg_catalog.jsonb_build_object('allowed', false, 'reason', 'invalid_request');
   end if;
 
   select member_row.*,
@@ -701,7 +790,7 @@ begin
     and member_row.removed_at is null;
 
   if not found or v_member.bot_state <> 'active' then
-    return jsonb_build_object('allowed', false, 'reason', 'inactive_membership');
+    return pg_catalog.jsonb_build_object('allowed', false, 'reason', 'inactive_membership');
   end if;
 
   v_allowed := case
@@ -713,7 +802,7 @@ begin
     else true
   end;
 
-  return jsonb_build_object(
+  return pg_catalog.jsonb_build_object(
     'allowed', v_allowed,
     'privacy_mode', v_member.privacy_mode,
     'joined_at', v_member.joined_at,
@@ -727,6 +816,233 @@ revoke all on function public.bot_membership_authorize_internal(uuid,uuid,text)
 grant execute on function public.bot_membership_authorize_internal(uuid,uuid,text)
   to service_role;
 
+create or replace function private.bot_can_receive_message(
+  p_bot_id uuid,
+  p_message_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+  select exists (
+    select 1
+    from public.messages message_row
+    join public.chat_bot_members member_row
+      on member_row.chat_id = message_row.chat_id
+     and member_row.bot_id = p_bot_id
+    join public.chats chat on chat.id = message_row.chat_id
+    join public.bots receiver_bot on receiver_bot.id = p_bot_id
+    where message_row.id = p_message_id
+      and receiver_bot.state = 'active'
+      and member_row.removed_at is null
+      and message_row.created_at >= member_row.joined_at
+      and (
+        message_row.bot_id = p_bot_id
+        or chat.type = 'private'
+        or (
+          member_row.privacy_mode = 'full'
+          and member_row.full_visibility_approved_by is not null
+        )
+        or (
+          member_row.privacy_mode = 'restricted'
+          and (
+            pg_catalog.lower(coalesce(message_row.content, '')) ~ (
+              '^/[a-z][a-z0-9_]{0,31}@'
+              || receiver_bot.username
+              || '([[:space:]]|$)'
+            )
+            or pg_catalog.lower(coalesce(message_row.content, '')) ~ (
+              '(^|[^a-z0-9_])@'
+              || receiver_bot.username
+              || '([^a-z0-9_]|$)'
+            )
+            or exists (
+              select 1
+              from public.messages replied_message
+              where replied_message.id = message_row.reply_to_id
+                and replied_message.chat_id = message_row.chat_id
+                and replied_message.bot_id = p_bot_id
+                and replied_message.created_at >= member_row.joined_at
+            )
+          )
+        )
+      )
+  );
+$function$;
+
+revoke all on function private.bot_can_receive_message(uuid,uuid)
+  from public, anon, authenticated, service_role;
+
+create or replace function private.bot_message_update_payload(
+  p_bot_id uuid,
+  p_message_id uuid
+)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+  select pg_catalog.jsonb_build_object(
+    'message',
+    pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+      'id', message_row.id,
+      'chat_id', message_row.chat_id,
+      'topic_id', message_row.topic_id,
+      'reply_to_message_id', message_row.reply_to_id,
+      'date', message_row.created_at,
+      'type', message_row.type,
+      'text', case
+        when message_row.content is null then null
+        else pg_catalog.left(message_row.content, 4096)
+      end,
+      'from', pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+        'id', message_row.user_id,
+        'bot_id', message_row.bot_id,
+        'is_bot', message_row.bot_id is not null,
+        'display_name', coalesce(profile.full_name, sender_bot.display_name),
+        'username', coalesce(profile.username, sender_bot.username)
+      )),
+      'chat', pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+        'id', chat.id,
+        'type', chat.type,
+        'name', chat.name
+      )),
+      'attachment', case
+        when message_row.media_bucket is null or message_row.media_path is null then null
+        else pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+          'file_id', message_row.id,
+          'kind', message_row.type,
+          'mime_type', message_row.media_metadata->>'mime_type',
+          'file_name', pg_catalog.left(message_row.media_metadata->>'file_name', 255),
+          'byte_size', message_row.media_metadata->>'size',
+          'width', message_row.media_metadata->>'width',
+          'height', message_row.media_metadata->>'height',
+          'duration', message_row.media_metadata->>'duration'
+        ))
+      end
+    ))
+  )
+  from public.messages message_row
+  join public.chats chat on chat.id = message_row.chat_id
+  left join public.profiles profile on profile.id = message_row.user_id
+  left join public.bots sender_bot on sender_bot.id = message_row.bot_id
+  where message_row.id = p_message_id
+    and p_bot_id is not null;
+$function$;
+
+revoke all on function private.bot_message_update_payload(uuid,uuid)
+  from public, anon, authenticated, service_role;
+
+create or replace function public.bot_upload_authorize_internal(
+  p_bot_id uuid,
+  p_chat_id uuid,
+  p_bucket_id text,
+  p_object_path text,
+  p_content_type text,
+  p_byte_size bigint,
+  p_expires_in_seconds integer
+)
+returns table(
+  grant_id uuid,
+  bucket_id text,
+  object_path text,
+  expires_at timestamptz
+)
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_grant private.bot_upload_grants%rowtype;
+  v_expected_prefix text;
+begin
+  v_expected_prefix := p_chat_id::text || '/bots/' || p_bot_id::text || '/';
+  if p_bot_id is null or p_chat_id is null
+     or p_bucket_id is null
+     or p_object_path is null
+     or p_content_type is null
+     or p_byte_size is null
+     or p_expires_in_seconds is null
+     or p_bucket_id <> 'chat-media'
+     or p_content_type not in (
+       'image/jpeg','image/png','image/webp','image/gif',
+       'video/mp4','video/webm',
+       'audio/webm','audio/ogg','audio/mpeg',
+       'application/pdf'
+     )
+     or p_byte_size not between 1 and 104857600
+     or p_expires_in_seconds not between 60 and 900
+     or pg_catalog.octet_length(p_object_path) not between 80 and 1024
+     or p_object_path not like v_expected_prefix || '%'
+     or p_object_path like '%..%'
+     or p_object_path like '%//%'
+     or p_object_path like '%/' then
+    raise exception 'bot_upload_input_invalid' using errcode = '22023';
+  end if;
+
+  if coalesce((public.bot_membership_authorize_internal(
+       p_bot_id,
+       p_chat_id,
+       'send_message'
+     )->>'allowed')::boolean, false) is not true then
+    raise exception 'bot_chat_forbidden' using errcode = '42501';
+  end if;
+
+  if not exists (
+    select 1
+    from storage.objects stored_object
+    where stored_object.bucket_id = p_bucket_id
+      and stored_object.name = p_object_path
+  ) then
+    raise exception 'bot_upload_object_missing' using errcode = '22023';
+  end if;
+
+  delete from private.bot_upload_grants stale_grant
+  where stale_grant.bot_id = p_bot_id
+    and stale_grant.chat_id = p_chat_id
+    and stale_grant.bucket_id = p_bucket_id
+    and stale_grant.object_path = p_object_path
+    and stale_grant.consumed_at is null
+    and stale_grant.expires_at <= pg_catalog.now();
+
+  insert into private.bot_upload_grants(
+    bot_id,
+    chat_id,
+    bucket_id,
+    object_path,
+    content_type,
+    byte_size,
+    expires_at
+  ) values (
+    p_bot_id,
+    p_chat_id,
+    p_bucket_id,
+    p_object_path,
+    p_content_type,
+    p_byte_size,
+    pg_catalog.now() + pg_catalog.make_interval(secs => p_expires_in_seconds)
+  )
+  returning * into v_grant;
+
+  return query select
+    v_grant.id,
+    v_grant.bucket_id,
+    v_grant.object_path,
+    v_grant.expires_at;
+exception
+  when unique_violation then
+    raise exception 'bot_upload_grant_conflict' using errcode = '23505';
+end
+$function$;
+
+revoke all on function public.bot_upload_authorize_internal(uuid,uuid,text,text,text,bigint,integer)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_upload_authorize_internal(uuid,uuid,text,text,text,bigint,integer)
+  to service_role;
+
 create or replace function public.bot_send_message_internal(
   p_bot_id uuid,
   p_chat_id uuid,
@@ -737,7 +1053,7 @@ create or replace function public.bot_send_message_internal(
 returns jsonb
 language plpgsql
 security definer
-set search_path = pg_catalog, public, private, auth, storage
+set search_path = ''
 as $function$
 declare
   v_existing_message_id uuid;
@@ -749,13 +1065,23 @@ declare
   v_media_metadata jsonb;
   v_topic_id uuid;
   v_reply_to_id uuid;
+  v_upload_grant_id uuid;
 begin
   if p_bot_id is null or p_chat_id is null
+     or p_method is null
+     or p_idempotency_key is null
      or p_method not in ('sendMessage','sendPhoto','sendVideo','sendDocument','sendVoice')
      or p_idempotency_key !~ '^[A-Za-z0-9._:-]{8,128}$'
      or p_payload is null
-     or jsonb_typeof(p_payload) <> 'object'
-     or pg_catalog.octet_length(p_payload::text) > 65536 then
+     or pg_catalog.jsonb_typeof(p_payload) <> 'object'
+     or pg_catalog.octet_length(p_payload::text) > 65536
+     or exists (
+       select 1
+       from pg_catalog.jsonb_object_keys(p_payload) payload_key
+       where payload_key not in (
+         'text','media_bucket','media_path','media_metadata','topic_id','reply_to_id'
+       )
+     ) then
     raise exception 'bot_message_input_invalid' using errcode = '22023';
   end if;
 
@@ -780,7 +1106,7 @@ begin
 
   if found then
     return (
-      select jsonb_build_object(
+      select pg_catalog.jsonb_build_object(
         'message_id', message_row.id,
         'chat_id', message_row.chat_id,
         'bot_id', message_row.bot_id,
@@ -813,7 +1139,7 @@ begin
   v_media_bucket := nullif(p_payload->>'media_bucket', '');
   v_media_path := nullif(p_payload->>'media_path', '');
   v_media_metadata := case
-    when jsonb_typeof(p_payload->'media_metadata') = 'object'
+    when pg_catalog.jsonb_typeof(p_payload->'media_metadata') = 'object'
       then p_payload->'media_metadata'
     else '{}'::jsonb
   end;
@@ -832,18 +1158,68 @@ begin
   ) then
     raise exception 'bot_message_media_required' using errcode = '22023';
   end if;
+  if pg_catalog.octet_length(v_media_metadata::text) > 4096
+     or exists (
+       select 1
+       from pg_catalog.jsonb_object_keys(v_media_metadata) metadata_key
+       where metadata_key not in (
+         'mime_type','file_name','size','width','height','duration','kind'
+       )
+     ) then
+    raise exception 'bot_message_media_metadata_invalid' using errcode = '22023';
+  end if;
 
   if nullif(p_payload->>'topic_id', '') is not null then
     if (p_payload->>'topic_id') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then
       raise exception 'bot_topic_invalid' using errcode = '22023';
     end if;
     v_topic_id := (p_payload->>'topic_id')::uuid;
+    if not exists (
+      select 1
+      from public.topics topic
+      where topic.id = v_topic_id
+        and topic.chat_id = p_chat_id
+        and topic.archived is false
+    ) then
+      raise exception 'bot_topic_forbidden' using errcode = '42501';
+    end if;
   end if;
   if nullif(p_payload->>'reply_to_id', '') is not null then
     if (p_payload->>'reply_to_id') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then
       raise exception 'bot_reply_invalid' using errcode = '22023';
     end if;
     v_reply_to_id := (p_payload->>'reply_to_id')::uuid;
+    if private.bot_can_receive_message(p_bot_id, v_reply_to_id) is not true then
+      raise exception 'bot_reply_forbidden' using errcode = '42501';
+    end if;
+  end if;
+
+  if v_message_type <> 'text' then
+    select upload_grant.id
+    into v_upload_grant_id
+    from private.bot_upload_grants upload_grant
+    where upload_grant.bot_id = p_bot_id
+      and upload_grant.chat_id = p_chat_id
+      and upload_grant.bucket_id = v_media_bucket
+      and upload_grant.object_path = v_media_path
+      and upload_grant.expires_at > pg_catalog.now()
+      and upload_grant.consumed_at is null
+      and (
+        nullif(v_media_metadata->>'mime_type', '') is null
+        or upload_grant.content_type = v_media_metadata->>'mime_type'
+      )
+      and exists (
+        select 1
+        from storage.objects stored_object
+        where stored_object.bucket_id = upload_grant.bucket_id
+          and stored_object.name = upload_grant.object_path
+      )
+    order by upload_grant.created_at desc
+    limit 1
+    for update of upload_grant;
+    if not found then
+      raise exception 'bot_media_grant_required' using errcode = '42501';
+    end if;
   end if;
 
   insert into public.messages(
@@ -883,8 +1259,19 @@ begin
     v_message_id
   );
 
+  if v_upload_grant_id is not null then
+    update private.bot_upload_grants upload_grant
+    set consumed_at = pg_catalog.now(),
+        consumed_message_id = v_message_id
+    where upload_grant.id = v_upload_grant_id
+      and upload_grant.consumed_at is null;
+    if not found then
+      raise exception 'bot_media_grant_required' using errcode = '42501';
+    end if;
+  end if;
+
   return (
-    select jsonb_build_object(
+    select pg_catalog.jsonb_build_object(
       'message_id', message_row.id,
       'chat_id', message_row.chat_id,
       'bot_id', message_row.bot_id,
@@ -906,21 +1293,30 @@ grant execute on function public.bot_send_message_internal(uuid,uuid,text,jsonb,
 create or replace function public.bot_update_enqueue_internal(
   p_bot_id uuid,
   p_update_type text,
-  p_payload jsonb
+  p_source_id uuid,
+  p_context jsonb
 )
 returns bigint
 language plpgsql
 security definer
-set search_path = pg_catalog, public, private, auth, storage
+set search_path = ''
 as $function$
 declare
   v_update_id bigint;
+  v_payload jsonb;
+  v_message_chat_id uuid;
+  v_actor_id uuid;
+  v_callback_id uuid;
+  v_callback_data text;
+  v_membership public.chat_bot_members%rowtype;
+  v_membership_action text;
 begin
-  if p_bot_id is null
+  if p_bot_id is null or p_source_id is null
+     or p_update_type is null
      or p_update_type not in ('message','edited_message','callback_query','membership')
-     or p_payload is null
-     or jsonb_typeof(p_payload) <> 'object'
-     or pg_catalog.octet_length(p_payload::text) > 65536
+     or p_context is null
+     or pg_catalog.jsonb_typeof(p_context) <> 'object'
+     or pg_catalog.octet_length(p_context::text) > 4096
      or not exists (
        select 1 from public.bots bot
        where bot.id = p_bot_id and bot.state = 'active'
@@ -929,21 +1325,134 @@ begin
   end if;
 
   if p_update_type in ('message','edited_message') then
-    if coalesce(p_payload->>'chat_id', '') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
-       or coalesce(p_payload->>'message_id', '') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
-       or not exists (
-         select 1
-         from public.messages message_row
-         join public.chat_bot_members member_row
-           on member_row.chat_id = message_row.chat_id
-          and member_row.bot_id = p_bot_id
-         where message_row.id = (p_payload->>'message_id')::uuid
-           and message_row.chat_id = (p_payload->>'chat_id')::uuid
-           and member_row.removed_at is null
-           and message_row.created_at >= member_row.joined_at
-       ) then
+    if p_context <> '{}'::jsonb then
+      raise exception 'bot_update_context_invalid' using errcode = '22023';
+    end if;
+    if not exists (
+      select 1
+      from public.messages message_row
+      join public.chat_bot_members member_row
+        on member_row.chat_id = message_row.chat_id
+       and member_row.bot_id = p_bot_id
+      where message_row.id = p_source_id
+        and member_row.removed_at is null
+        and message_row.created_at >= member_row.joined_at
+    ) then
       raise exception 'bot_update_history_forbidden' using errcode = '42501';
     end if;
+    if private.bot_can_receive_message(p_bot_id, p_source_id) is not true then
+      raise exception 'restricted_command_or_mention_required' using errcode = '42501';
+    end if;
+    v_payload := private.bot_message_update_payload(p_bot_id, p_source_id);
+  elsif p_update_type = 'callback_query' then
+    if exists (
+      select 1
+      from pg_catalog.jsonb_object_keys(p_context) context_key
+      where context_key not in ('callback_id','actor_id','data')
+    )
+       or coalesce(p_context->>'callback_id', '') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+       or coalesce(p_context->>'actor_id', '') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+       or pg_catalog.octet_length(coalesce(p_context->>'data', '')) not between 1 and 128 then
+      raise exception 'bot_update_context_invalid' using errcode = '22023';
+    end if;
+    v_callback_id := (p_context->>'callback_id')::uuid;
+    v_actor_id := (p_context->>'actor_id')::uuid;
+    v_callback_data := p_context->>'data';
+
+    select message_row.chat_id
+    into v_message_chat_id
+    from public.messages message_row
+    join public.chat_bot_members member_row
+      on member_row.chat_id = message_row.chat_id
+     and member_row.bot_id = p_bot_id
+    where message_row.id = p_source_id
+      and message_row.bot_id = p_bot_id
+      and message_row.created_at >= member_row.joined_at
+      and member_row.removed_at is null
+      and exists (
+        select 1
+        from public.chat_members human_member
+        where human_member.chat_id = message_row.chat_id
+          and human_member.user_id = v_actor_id
+          and human_member.hidden_at is null
+      );
+    if not found then
+      raise exception 'bot_update_not_eligible' using errcode = '42501';
+    end if;
+
+    select pg_catalog.jsonb_build_object(
+      'callback_query',
+      pg_catalog.jsonb_build_object(
+        'id', v_callback_id,
+        'data', v_callback_data,
+        'from', pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+          'id', profile.id,
+          'display_name', profile.full_name,
+          'username', profile.username,
+          'is_bot', false
+        )),
+        'message', pg_catalog.jsonb_build_object(
+          'id', p_source_id,
+          'chat_id', v_message_chat_id
+        )
+      )
+    )
+    into v_payload
+    from public.profiles profile
+    where profile.id = v_actor_id;
+  else
+    if exists (
+      select 1
+      from pg_catalog.jsonb_object_keys(p_context) context_key
+      where context_key not in ('action','actor_id')
+    )
+       or p_context->>'action' not in ('added','removed','privacy_changed')
+       or (
+         nullif(p_context->>'actor_id', '') is not null
+         and p_context->>'actor_id' !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+       ) then
+      raise exception 'bot_update_context_invalid' using errcode = '22023';
+    end if;
+    v_membership_action := p_context->>'action';
+    v_actor_id := nullif(p_context->>'actor_id', '')::uuid;
+
+    select member_row.*
+    into v_membership
+    from public.chat_bot_members member_row
+    where member_row.chat_id = p_source_id
+      and member_row.bot_id = p_bot_id;
+    if not found
+       or (v_membership_action = 'removed' and v_membership.removed_at is null)
+       or (v_membership_action <> 'removed' and v_membership.removed_at is not null) then
+      raise exception 'bot_update_not_eligible' using errcode = '42501';
+    end if;
+
+    v_payload := pg_catalog.jsonb_build_object(
+      'membership',
+      pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+        'chat_id', v_membership.chat_id,
+        'bot_id', v_membership.bot_id,
+        'action', v_membership_action,
+        'privacy_mode', v_membership.privacy_mode,
+        'joined_at', v_membership.joined_at,
+        'removed_at', v_membership.removed_at,
+        'actor', (
+          select pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+            'id', profile.id,
+            'display_name', profile.full_name,
+            'username', profile.username
+          ))
+          from public.profiles profile
+          where profile.id = v_actor_id
+        )
+      ))
+    );
+  end if;
+
+  if v_payload is null
+     or pg_catalog.jsonb_typeof(v_payload) <> 'object'
+     or pg_catalog.octet_length(v_payload::text) > 65536 then
+    raise exception 'bot_update_not_eligible' using errcode = '42501';
   end if;
 
   insert into private.bot_update_counters(bot_id, next_update_id)
@@ -953,7 +1462,7 @@ begin
   returning next_update_id into v_update_id;
 
   insert into private.bot_updates(bot_id, update_id, update_type, payload)
-  values (p_bot_id, v_update_id, p_update_type, p_payload);
+  values (p_bot_id, v_update_id, p_update_type, v_payload);
 
   insert into private.bot_delivery_attempts(bot_id, update_id)
   select p_bot_id, v_update_id
@@ -966,10 +1475,89 @@ begin
 end
 $function$;
 
-revoke all on function public.bot_update_enqueue_internal(uuid,text,jsonb)
+revoke all on function public.bot_update_enqueue_internal(uuid,text,uuid,jsonb)
   from public, anon, authenticated, service_role;
-grant execute on function public.bot_update_enqueue_internal(uuid,text,jsonb)
+grant execute on function public.bot_update_enqueue_internal(uuid,text,uuid,jsonb)
   to service_role;
+
+create or replace function private.enqueue_bot_message_updates_after_insert()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_bot_id uuid;
+begin
+  for v_bot_id in
+    select member_row.bot_id
+    from public.chat_bot_members member_row
+    where member_row.chat_id = new.chat_id
+      and member_row.removed_at is null
+      and member_row.bot_id is distinct from new.bot_id
+      and private.bot_can_receive_message(member_row.bot_id, new.id)
+  loop
+    perform public.bot_update_enqueue_internal(
+      v_bot_id,
+      'message',
+      new.id,
+      '{}'::jsonb
+    );
+  end loop;
+  return null;
+end
+$function$;
+
+revoke all on function private.enqueue_bot_message_updates_after_insert()
+  from public, anon, authenticated, service_role;
+
+drop trigger if exists trg_enqueue_bot_message_updates_after_insert
+  on public.messages;
+create trigger trg_enqueue_bot_message_updates_after_insert
+  after insert on public.messages
+  for each row execute function private.enqueue_bot_message_updates_after_insert();
+
+create or replace function private.enqueue_bot_membership_update()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_action text;
+  v_actor_id uuid;
+begin
+  if tg_op = 'INSERT' then
+    v_action := 'added';
+  elsif new.removed_at is not null and old.removed_at is null then
+    v_action := 'removed';
+  elsif new.privacy_mode is distinct from old.privacy_mode then
+    v_action := 'privacy_changed';
+  else
+    return null;
+  end if;
+  v_actor_id := new.full_visibility_approved_by;
+  perform public.bot_update_enqueue_internal(
+    new.bot_id,
+    'membership',
+    new.chat_id,
+    pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+      'action', v_action,
+      'actor_id', v_actor_id
+    ))
+  );
+  return null;
+end
+$function$;
+
+revoke all on function private.enqueue_bot_membership_update()
+  from public, anon, authenticated, service_role;
+
+drop trigger if exists trg_enqueue_bot_membership_updates
+  on public.chat_bot_members;
+create trigger trg_enqueue_bot_membership_updates
+  after insert or update of privacy_mode, removed_at on public.chat_bot_members
+  for each row execute function private.enqueue_bot_membership_update();
 
 create or replace function public.bot_updates_poll_internal(
   p_bot_id uuid,
@@ -986,10 +1574,13 @@ returns table(
 )
 language plpgsql
 security definer
-set search_path = pg_catalog, public, private, auth, storage
+set search_path = ''
 as $function$
 begin
-  if p_bot_id is null or p_offset < 0
+  if p_bot_id is null
+     or p_offset is null
+     or p_limit is null
+     or p_offset < 0
      or p_limit not between 1 and 100
      or p_timeout_marker is null then
     raise exception 'bot_poll_input_invalid' using errcode = '22023';
@@ -1069,12 +1660,14 @@ create or replace function public.bot_updates_ack_internal(
 returns integer
 language plpgsql
 security definer
-set search_path = pg_catalog, public, private, auth, storage
+set search_path = ''
 as $function$
 declare
   v_count integer;
 begin
-  if p_bot_id is null or p_through_update_id < 0 then
+  if p_bot_id is null
+     or p_through_update_id is null
+     or p_through_update_id < 0 then
     return 0;
   end if;
   update private.bot_updates queued
@@ -1095,25 +1688,30 @@ grant execute on function public.bot_updates_ack_internal(uuid,bigint)
 create or replace function public.bot_webhook_set_internal(
   p_bot_id uuid,
   p_url text,
-  p_secret_hash text
+  p_secret_ciphertext text,
+  p_secret_fingerprint text
 )
 returns boolean
 language plpgsql
 security definer
-set search_path = pg_catalog, public, private, auth, storage
+set search_path = ''
 as $function$
 declare
-  v_lease_token uuid := gen_random_uuid();
+  v_lease_token uuid := pg_catalog.gen_random_uuid();
 begin
   -- The gateway performs DNS, address-range and redirect validation before this
   -- trusted persistence boundary. The database still enforces HTTPS, bounded
   -- input and credential-free authority syntax.
   if p_bot_id is null
      or p_url is null
+     or p_secret_ciphertext is null
+     or p_secret_fingerprint is null
      or pg_catalog.octet_length(p_url) not between 10 and 2048
      or p_url !~ '^https://[^/@[:space:]]+(?::[0-9]{1,5})?(/|$)'
      or p_url ~ '^https://[^/]*@'
-     or p_secret_hash !~ '^[0-9a-f]{64}$'
+     or pg_catalog.octet_length(p_secret_ciphertext) not between 55 and 4103
+     or p_secret_ciphertext !~ '^enc:v1:[A-Za-z0-9_-]+$'
+     or p_secret_fingerprint !~ '^[0-9a-f]{16,64}$'
      or not exists (
        select 1 from public.bots bot
        where bot.id = p_bot_id and bot.state = 'active'
@@ -1149,7 +1747,8 @@ begin
   insert into private.bot_webhooks(
     bot_id,
     target_url,
-    secret_hash,
+    secret_ciphertext,
+    secret_fingerprint,
     state,
     failure_count,
     last_error_code,
@@ -1157,7 +1756,8 @@ begin
   ) values (
     p_bot_id,
     p_url,
-    p_secret_hash,
+    p_secret_ciphertext,
+    p_secret_fingerprint,
     'enabled',
     0,
     null,
@@ -1165,7 +1765,8 @@ begin
   )
   on conflict (bot_id) do update
   set target_url = excluded.target_url,
-      secret_hash = excluded.secret_hash,
+      secret_ciphertext = excluded.secret_ciphertext,
+      secret_fingerprint = excluded.secret_fingerprint,
       state = 'enabled',
       failure_count = 0,
       last_error_code = null,
@@ -1182,9 +1783,9 @@ begin
 end
 $function$;
 
-revoke all on function public.bot_webhook_set_internal(uuid,text,text)
+revoke all on function public.bot_webhook_set_internal(uuid,text,text,text)
   from public, anon, authenticated, service_role;
-grant execute on function public.bot_webhook_set_internal(uuid,text,text)
+grant execute on function public.bot_webhook_set_internal(uuid,text,text,text)
   to service_role;
 
 create or replace function public.bot_webhook_delete_internal(
@@ -1193,7 +1794,7 @@ create or replace function public.bot_webhook_delete_internal(
 returns boolean
 language plpgsql
 security definer
-set search_path = pg_catalog, public, private, auth, storage
+set search_path = ''
 as $function$
 declare
   v_webhook_rows integer := 0;
@@ -1227,14 +1828,52 @@ returns table(
   bot_id uuid,
   update_id bigint,
   target_url text,
-  secret_hash text,
+  secret_ciphertext text,
+  secret_fingerprint text,
   payload jsonb,
   attempt_count integer
 )
-language sql
+language plpgsql
 security definer
-set search_path = pg_catalog, public, private, auth, storage
+set search_path = ''
 as $function$
+begin
+  if p_limit is null
+     or p_limit not between 1 and 100
+     or p_claim_token is null then
+    raise exception 'bot_delivery_claim_input_invalid' using errcode = '22023';
+  end if;
+
+  with stale_candidates as (
+    select attempt.id
+    from private.bot_delivery_attempts attempt
+    where attempt.status = 'claimed'
+      and attempt.claimed_at <= pg_catalog.now() - interval '2 minutes'
+    order by attempt.claimed_at, attempt.id
+    limit least(p_limit, 100)
+    for update of attempt skip locked
+  )
+  update private.bot_delivery_attempts attempt
+  set status = case
+        when attempt.attempt_count >= 12 then 'dead_letter'
+        else 'retry'
+      end,
+      available_at = case
+        when attempt.attempt_count >= 12 then attempt.available_at
+        else pg_catalog.now()
+      end,
+      claim_token = null,
+      claimed_at = null,
+      error_code = 'worker_claim_timeout',
+      updated_at = pg_catalog.now(),
+      completed_at = case
+        when attempt.attempt_count >= 12 then pg_catalog.now()
+        else null
+      end
+  from stale_candidates stale
+  where attempt.id = stale.id;
+
+  return query
   with candidates as (
     select attempt.id
     from private.bot_delivery_attempts attempt
@@ -1243,16 +1882,15 @@ as $function$
      and queued.update_id = attempt.update_id
     join private.bot_webhooks webhook on webhook.bot_id = attempt.bot_id
     join public.bots bot on bot.id = attempt.bot_id
-    where p_limit between 1 and 100
-      and p_claim_token is not null
-      and attempt.status in ('pending','retry')
+    where attempt.status in ('pending','retry')
+      and attempt.attempt_count < 12
       and attempt.available_at <= pg_catalog.now()
       and queued.acknowledged_at is null
       and queued.expires_at > pg_catalog.now()
       and webhook.state = 'enabled'
       and bot.state = 'active'
     order by attempt.available_at, attempt.id
-    limit p_limit
+    limit least(p_limit, 100)
     for update of attempt skip locked
   ), claimed as (
     update private.bot_delivery_attempts attempt
@@ -1270,7 +1908,8 @@ as $function$
     claimed.bot_id,
     claimed.update_id,
     webhook.target_url,
-    webhook.secret_hash,
+    webhook.secret_ciphertext,
+    webhook.secret_fingerprint,
     queued.payload,
     claimed.attempt_count
   from claimed
@@ -1279,6 +1918,7 @@ as $function$
    and queued.update_id = claimed.update_id
   join private.bot_webhooks webhook on webhook.bot_id = claimed.bot_id
   order by claimed.id;
+end
 $function$;
 
 revoke all on function public.bot_delivery_claim_internal(integer,uuid)
@@ -1295,13 +1935,14 @@ create or replace function public.bot_delivery_finish_internal(
 returns boolean
 language plpgsql
 security definer
-set search_path = pg_catalog, public, private, auth, storage
+set search_path = ''
 as $function$
 declare
   v_attempt private.bot_delivery_attempts%rowtype;
   v_next_status text;
 begin
   if p_attempt_id is null or p_claim_token is null
+     or p_status is null
      or p_status not in ('delivered','retry','dead_letter')
      or (
        p_error_code is not null
@@ -1381,15 +2022,18 @@ create or replace function public.bot_delivery_cleanup_internal(
 returns jsonb
 language plpgsql
 security definer
-set search_path = pg_catalog, public, private, auth, storage
+set search_path = ''
 as $function$
 declare
   v_updates integer := 0;
   v_attempts integer := 0;
   v_limits integer := 0;
   v_idempotency integer := 0;
+  v_upload_grants integer := 0;
 begin
-  if p_now is null or p_limit not between 1 and 1000
+  if p_now is null
+     or p_limit is null
+     or p_limit not between 1 and 1000
      or p_now > pg_catalog.now() + interval '1 minute' then
     raise exception 'bot_cleanup_input_invalid' using errcode = '22023';
   end if;
@@ -1454,11 +2098,27 @@ begin
   delete from private.bot_delivery_leases lease
   where lease.expires_at <= p_now;
 
-  return jsonb_build_object(
+  with doomed as (
+    select upload_grant.id
+    from private.bot_upload_grants upload_grant
+    where upload_grant.expires_at <= p_now
+       or upload_grant.consumed_at <= p_now - interval '24 hours'
+    order by coalesce(upload_grant.consumed_at, upload_grant.expires_at),
+      upload_grant.id
+    limit p_limit
+    for update of upload_grant skip locked
+  )
+  delete from private.bot_upload_grants upload_grant
+  using doomed
+  where upload_grant.id = doomed.id;
+  get diagnostics v_upload_grants = row_count;
+
+  return pg_catalog.jsonb_build_object(
     'updates_deleted', v_updates,
     'attempts_deleted', v_attempts,
     'rate_limits_deleted', v_limits,
-    'idempotency_deleted', v_idempotency
+    'idempotency_deleted', v_idempotency,
+    'upload_grants_deleted', v_upload_grants
   );
 end
 $function$;
@@ -1472,7 +2132,7 @@ create or replace function public.enqueue_message_notifications()
 returns trigger
 language plpgsql
 security definer
-set search_path = pg_catalog, public, private
+set search_path = ''
 as $function$
 declare
   v_sender_kind text;
@@ -1517,7 +2177,7 @@ begin
   v_preview := case
     when v_message_type = 'text' then nullif(
       pg_catalog.left(
-        regexp_replace(coalesce(new.content, ''), '\s+', ' ', 'g'),
+        pg_catalog.regexp_replace(coalesce(new.content, ''), '\s+', ' ', 'g'),
         160
       ),
       ''
@@ -1541,7 +2201,7 @@ begin
   select
     member_row.user_id,
     'message',
-    jsonb_build_object(
+    pg_catalog.jsonb_build_object(
       'chat_id', new.chat_id,
       'message_id', new.id,
       'sender_kind', v_sender_kind,
