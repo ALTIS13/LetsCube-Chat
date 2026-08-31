@@ -23,7 +23,7 @@ const sizeClass: Record<Size, string> = {
 
 const variantClass: Record<Variant, string> = {
   primary:
-    "text-[color:var(--kub-bg)] font-semibold bg-[var(--kub-cyan)] hover:bg-[var(--kub-cyan-hover)] kub-glow-soft hover:kub-glow-cyan disabled:bg-[var(--kub-surface-3)] disabled:text-[color:var(--kub-muted)] disabled:shadow-none",
+    "text-[color:var(--kub-action-primary-foreground)] font-semibold bg-[var(--kub-action-primary-background)] hover:bg-[var(--kub-action-primary-hover)] kub-glow-soft hover:kub-glow-cyan disabled:bg-[var(--kub-surface-3)] disabled:text-[color:var(--kub-muted)] disabled:shadow-none",
   accent:
     "text-white font-semibold bg-[var(--kub-pink)] hover:brightness-110 kub-glow-pink disabled:bg-[var(--kub-surface-3)] disabled:text-[color:var(--kub-muted)] disabled:shadow-none",
   secondary:

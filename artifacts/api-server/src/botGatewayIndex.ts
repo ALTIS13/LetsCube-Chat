@@ -1,4 +1,8 @@
 import { createBotGatewayApp } from "./bot/app";
+import {
+  createBotDeletionFinalizerRepository,
+  createBotDeletionFinalizerRuntime,
+} from "./bot/deletionFinalizer";
 import { resolveBotManagementOrigins } from "./bot/managementAuth";
 import {
   combineBotMethodHandlers,
@@ -69,6 +73,9 @@ export function startBotGateway(
     repository: createWebhookWorkerRepository(client),
     encryptionKey: webhookEncryptionKey,
   });
+  const deletionFinalizer = createBotDeletionFinalizerRuntime({
+    repository: createBotDeletionFinalizerRepository(client),
+  });
   const app = createBotGatewayApp({
     logger,
     handlers,
@@ -84,9 +91,13 @@ export function startBotGateway(
   const server = app.listen(port, "0.0.0.0");
   server.once("listening", () => {
     webhookWorker.start();
+    deletionFinalizer.start();
     logger.info({ port }, "Bot Gateway listening");
   });
-  server.once("close", () => webhookWorker.stop());
+  server.once("close", () => {
+    webhookWorker.stop();
+    deletionFinalizer.stop();
+  });
   server.once("error", () => {
     logger.error("Bot Gateway listen failed");
     process.exitCode = 1;

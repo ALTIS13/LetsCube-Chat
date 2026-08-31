@@ -226,7 +226,7 @@ create table private.bot_audit_events (
     'bot_created','bot_profile_updated','bot_commands_updated',
     'bot_paused','bot_resumed','bot_developer_added','bot_developer_removed',
     'bot_token_rotated','bot_token_revoked',
-    'bot_deletion_requested','bot_deletion_cancelled',
+    'bot_deletion_requested','bot_deletion_cancelled','bot_deleted',
     'bot_privacy_requested','bot_privacy_cancelled',
     'bot_management_webhook_set','bot_management_webhook_deleted',
     'bot_suspended','bot_unsuspended'
@@ -1855,6 +1855,104 @@ $function$;
 revoke all on function public.bot_cancel_deletion_internal(uuid,uuid,text)
   from public, anon, authenticated, service_role;
 grant execute on function public.bot_cancel_deletion_internal(uuid,uuid,text)
+  to service_role;
+
+create or replace function public.bot_deletion_finalize_internal(
+  p_limit integer,
+  p_request_id text
+)
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_candidate record;
+  v_bot public.bots%rowtype;
+  v_finalized integer := 0;
+  v_finalized_at timestamptz;
+begin
+  if p_limit is null or p_limit not between 1 and 100
+     or p_request_id is null
+     or p_request_id !~ '^[A-Za-z0-9._:-]{1,128}$' then
+    raise exception 'bot_deletion_finalize_input_invalid' using errcode = '22023';
+  end if;
+
+  for v_candidate in
+    select bot.id
+    from public.bots bot
+    where bot.state = 'pending_delete'
+      and bot.delete_after is not null
+      and bot.delete_after <= pg_catalog.now()
+    order by bot.delete_after, bot.id
+    limit least(p_limit, 100)
+    for update of bot skip locked
+  loop
+    select bot.* into v_bot
+    from public.bots bot
+    where bot.id = v_candidate.id
+    for update of bot;
+
+    if not found
+       or v_bot.state <> 'pending_delete'
+       or v_bot.delete_after is null
+       or v_bot.delete_after > pg_catalog.now() then
+      continue;
+    end if;
+
+    v_finalized_at := pg_catalog.now();
+    update public.bots bot
+    set state = 'deleted',
+        delete_after = null,
+        updated_at = v_finalized_at
+    where bot.id = v_bot.id;
+
+    update private.bot_tokens stored_token
+    set revoked_at = coalesce(stored_token.revoked_at, v_finalized_at)
+    where stored_token.bot_id = v_bot.id;
+
+    update private.bot_webhooks webhook
+    set state = 'disabled',
+        webhook_epoch = webhook.webhook_epoch + 1,
+        updated_at = v_finalized_at
+    where webhook.bot_id = v_bot.id;
+
+    update private.bot_delivery_attempts attempt
+    set status = 'dead_letter',
+        claim_token = null,
+        claimed_at = null,
+        webhook_epoch = null,
+        error_code = 'bot_deleted',
+        updated_at = v_finalized_at,
+        completed_at = v_finalized_at
+    where attempt.bot_id = v_bot.id
+      and attempt.status in ('pending','claimed','dispatching','retry');
+
+    delete from private.bot_delivery_leases lease
+    where lease.bot_id = v_bot.id;
+
+    insert into private.bot_audit_events(bot_id, action, metadata)
+    values (
+      v_bot.id,
+      'bot_deleted',
+      pg_catalog.jsonb_build_object(
+        'actor', 'system',
+        'request_id', p_request_id,
+        'scheduled_for', v_bot.delete_after,
+        'finalized_at', v_finalized_at,
+        'result', 'success'
+      )
+    );
+    v_finalized := v_finalized + 1;
+  end loop;
+
+  return v_finalized;
+end
+$function$;
+
+revoke all on function public.bot_deletion_finalize_internal(integer,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_deletion_finalize_internal(integer,text)
   to service_role;
 
 create or replace function public.bot_privacy_request_internal(

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { KubBadge, KubButton, KubEmptyState, KubIcon, KubInput } from "@/components/kub";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBotMutations } from "@/hooks/useBots";
-import { botManagement, type BotCommand, type BotDetail } from "@/lib/botManagement";
+import { BotManagementError, botManagement, type BotCommand, type BotDetail } from "@/lib/botManagement";
 
 type Props = {
   detail: BotDetail;
@@ -50,11 +50,29 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
     }
   };
 
-  const rotate = () => run(async () => {
-    const result = await botManagement.rotateOnce(bot.id, bot.token?.prefix ?? null);
-    onToken(result.token);
-    await mutations.refresh();
-  });
+  const rotate = async () => {
+    setError(null);
+    try {
+      const result = await botManagement.rotateOnce(bot.id, bot.token?.prefix ?? null);
+      onToken(result.token);
+      setConfirm(null);
+      await mutations.refresh();
+    } catch (cause) {
+      setConfirm(null);
+      if (cause instanceof BotManagementError && cause.code === "uncertain_result") {
+        try {
+          await mutations.refresh();
+        } catch {
+          // Recovery remains explicit even when the refresh itself is unavailable.
+        }
+        setError(
+          "Запрос мог выполниться. Мы обновили данные бота. Проверьте префикс токена; если новый токен недоступен, повторно выпустите новый токен явным действием.",
+        );
+      } else {
+        setError(cause instanceof Error ? cause.message : "Не удалось выпустить токен.");
+      }
+    }
+  };
 
   const saveWebhook = () => run(async () => {
     await botManagement.setWebhook(bot.id, {
@@ -193,7 +211,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
         <TabsContent value="diagnostics" className="m-0 p-4 sm:p-6">
           <Section title="Агрегированная диагностика" description={`Обновлено ${formatDate(detail.diagnostics.refreshed_at)}`}>
             <dl className="grid gap-px overflow-hidden rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-border-color)] sm:grid-cols-2">
-              <Metric label="Режим доставки" value={detail.diagnostics.delivery_mode === "webhook" ? "Webhook" : "getUpdates"} />
+              <Metric label="Режим доставки" value={detail.diagnostics.delivery_mode === null ? "Не настроен" : detail.diagnostics.delivery_mode === "webhook" ? "Webhook" : "getUpdates"} />
               <Metric label="Ожидают доставки" value={String(detail.diagnostics.pending_update_count)} />
               <Metric label="Ошибки webhook" value={String(detail.diagnostics.failure_count)} />
               <Metric label="Последняя ошибка" value={detail.diagnostics.last_error_code ?? "Нет"} />
@@ -243,7 +261,7 @@ function ConfirmDialog({ action, onClose, onConfirm }: { action: ConfirmAction; 
   } as const;
   if (!action) return null;
   const [title, description, confirmLabel] = copy[action];
-  return <AlertDialog.Root open onOpenChange={(open) => !open && onClose()}><AlertDialog.Portal><AlertDialog.Overlay className="fixed inset-0 z-[75] bg-black/70" /><AlertDialog.Content className="fixed left-1/2 top-1/2 z-[76] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-5 shadow-2xl"><AlertDialog.Title className="text-lg font-semibold text-[color:var(--kub-text)]">{title}</AlertDialog.Title><AlertDialog.Description className="mt-2 text-sm leading-6 text-[color:var(--kub-muted)]">{description}</AlertDialog.Description><div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><AlertDialog.Cancel asChild><KubButton variant="secondary" className="min-h-11">Отмена</KubButton></AlertDialog.Cancel><AlertDialog.Action asChild><KubButton variant={action === "pause" || action === "rotate" ? "primary" : "danger"} className="min-h-11" onClick={() => void onConfirm()}>{confirmLabel}</KubButton></AlertDialog.Action></div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>;
+  return <AlertDialog.Root open onOpenChange={(open) => !open && onClose()}><AlertDialog.Portal><AlertDialog.Overlay className="fixed inset-0 z-[75] bg-black/70" /><AlertDialog.Content className="bots-management-surface fixed left-1/2 top-1/2 z-[76] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-5 shadow-2xl"><AlertDialog.Title className="text-lg font-semibold text-[color:var(--kub-text)]">{title}</AlertDialog.Title><AlertDialog.Description className="mt-2 text-sm leading-6 text-[color:var(--kub-muted)]">{description}</AlertDialog.Description><div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><AlertDialog.Cancel asChild><KubButton variant="secondary" className="min-h-11">Отмена</KubButton></AlertDialog.Cancel><AlertDialog.Action asChild><KubButton variant={action === "pause" || action === "rotate" ? "primary" : "danger"} className="min-h-11" onClick={() => void onConfirm()}>{confirmLabel}</KubButton></AlertDialog.Action></div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>;
 }
 
 function formatDate(value: string) {

@@ -311,6 +311,80 @@ test("management rejects untrusted origins before user authentication", async (t
   assert.deepEqual(calls, []);
 });
 
+test("management parser failures retain route-scoped CORS and security headers", async (t) => {
+  let authCalls = 0;
+  const calls: ManagementCall[] = [];
+  const server = await listen(
+    createManagementApp({
+      calls,
+      async getUser() {
+        authCalls += 1;
+        return { data: { user: { id: USER_ID } }, error: null };
+      },
+    }),
+  );
+  t.after(() => close(server));
+
+  for (const current of [
+    { body: "{", status: 400 },
+    { body: JSON.stringify({ description: "x".repeat(300_000) }), status: 413 },
+  ]) {
+    const response = await call(server, "/bot/manage/v1/bots", {
+      method: "POST",
+      headers: {
+        origin: TRUSTED_ORIGIN,
+        authorization: `Bearer ${ACCESS_TOKEN}`,
+        "content-type": "application/json",
+        "content-length": Buffer.byteLength(current.body).toString(),
+      },
+      body: current.body,
+    });
+    assert.equal(response.status, current.status, JSON.stringify(response));
+    assert.equal(response.headers["access-control-allow-origin"], TRUSTED_ORIGIN);
+    assert.equal(response.headers["cache-control"], "no-store, private");
+    assert.equal(response.headers.pragma, "no-cache");
+    assert.equal(response.headers["referrer-policy"], "no-referrer");
+  }
+  assert.equal(authCalls, 0);
+  assert.deepEqual(calls, []);
+});
+
+test("untrusted origins are rejected before malformed or oversized management JSON", async (t) => {
+  let authCalls = 0;
+  const calls: ManagementCall[] = [];
+  const server = await listen(
+    createManagementApp({
+      calls,
+      async getUser() {
+        authCalls += 1;
+        return { data: { user: { id: USER_ID } }, error: null };
+      },
+    }),
+  );
+  t.after(() => close(server));
+
+  for (const body of [
+    "{",
+    JSON.stringify({ description: "x".repeat(300_000) }),
+  ]) {
+    const response = await call(server, "/bot/manage/v1/bots", {
+      method: "POST",
+      headers: {
+        origin: "https://attacker.example",
+        authorization: `Bearer ${ACCESS_TOKEN}`,
+        "content-type": "application/json",
+        "content-length": Buffer.byteLength(body).toString(),
+      },
+      body,
+    });
+    assert.equal(response.status, 403, JSON.stringify(response));
+    assert.equal(response.headers["access-control-allow-origin"], undefined);
+    assert.equal(response.headers["cache-control"], "no-store, private");
+  }
+  assert.equal(authCalls, 0);
+  assert.deepEqual(calls, []);
+});
+
 test("public Bot API remains non-CORS when management CORS is enabled", async (t) => {
   const server = await listen(createManagementApp());
   t.after(() => close(server));
@@ -769,6 +843,36 @@ test("creation eligibility failures remain generic", async (t) => {
     },
   });
   assert.equal(JSON.stringify(response.body).includes("phone"), false);
+});
+
+test("actor-scoped missing and unauthorized bot ids have one response", async () => {
+  const responses: HttpResult[] = [];
+  for (const code of ["P0002", "42501"]) {
+    const server = await listen(
+      createManagementApp({
+        async rpc() {
+          return { data: null, error: { code, message: "private detail" } };
+        },
+      }),
+    );
+    responses.push(
+      await call(server, `/bot/manage/v1/bots/${BOT_ID}`, {
+        headers: { authorization: `Bearer ${ACCESS_TOKEN}` },
+      }),
+    );
+    await close(server);
+  }
+
+  assert.deepEqual(responses[0], responses[1]);
+  assert.equal(responses[0]?.status, 404);
+  assert.deepEqual(responses[0]?.body, {
+    ok: false,
+    error: {
+      code: "not_found",
+      message: "Not found",
+      request_id: REQUEST_ID,
+    },
+  });
 });
 
 test("owner and developer management verbs map to fixed RPCs", async (t) => {

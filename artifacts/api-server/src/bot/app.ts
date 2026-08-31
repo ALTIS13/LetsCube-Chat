@@ -70,7 +70,6 @@ export function createBotGatewayApp(input: {
       },
     }),
   );
-  app.use(express.json({ limit: "256kb", strict: true }));
   app.get("/healthz", (_request, response) => {
     response.json({ ok: true, service: "letscube-bot-gateway" });
   });
@@ -82,6 +81,7 @@ export function createBotGatewayApp(input: {
   }
   app.post(
     "/bot/v1/:method",
+    express.json({ limit: "256kb", strict: true }),
     createBotMethodRouter({
       handlers: input.handlers,
       tokenRepository: input.tokenRepository,

@@ -14,6 +14,8 @@ test.describe("authenticated bot management", () => {
   });
 
   test("creates and rotates a token without retaining it", async ({ page }) => {
+    const consoleMessages: string[] = [];
+    page.on("console", (message) => consoleMessages.push(message.text()));
     await installManagementFixture(page);
     await page.goto("/bots");
 
@@ -32,7 +34,16 @@ test.describe("authenticated bot management", () => {
     expect(await browserStorageContains(page, RAW_TOKEN)).toBe(false);
     await tokenDialog.getByRole("button", { name: "Готово, закрыть" }).click();
     await expect(page.getByText(RAW_TOKEN)).toHaveCount(0);
-    expect(await browserStorageContains(page, RAW_TOKEN)).toBe(false);
+    expect(await browserTokenResidue(page, RAW_TOKEN, consoleMessages)).toEqual({
+      queryClient: false,
+      cacheStorage: false,
+      indexedDb: false,
+      historyOrUrl: false,
+      console: false,
+      dom: false,
+      localStorage: false,
+      sessionStorage: false,
+    });
 
     const createdRow = page.getByRole("button", { name: /Release bot/ });
     if (await createdRow.isVisible().catch(() => false)) await createdRow.click();
@@ -42,6 +53,98 @@ test.describe("authenticated bot management", () => {
     await expect(tokenDialog).toContainText(RAW_TOKEN);
     await tokenDialog.getByRole("button", { name: "Готово, закрыть" }).click();
     await expect(page.getByText(RAW_TOKEN)).toHaveCount(0);
+    expect(await browserTokenResidue(page, RAW_TOKEN, consoleMessages)).toEqual({
+      queryClient: false,
+      cacheStorage: false,
+      indexedDb: false,
+      historyOrUrl: false,
+      console: false,
+      dom: false,
+      localStorage: false,
+      sessionStorage: false,
+    });
+  });
+
+  test("uses field-specific create errors with stable accessible descriptions", async ({ page }) => {
+    await installManagementFixture(page);
+    await page.goto("/bots");
+
+    await page.getByRole("button", { name: "Создать бота" }).click();
+    await page.getByLabel("Название").fill("x");
+    await page.getByLabel("Имя пользователя").fill("valid_bot");
+    await page.getByRole("button", { name: "Создать", exact: true }).click();
+
+    const displayName = page.getByLabel("Название");
+    const username = page.getByLabel("Имя пользователя");
+    await expect(displayName).toHaveAttribute("aria-invalid", "true");
+    await expect(displayName).toHaveAttribute("aria-describedby", "bot-create-display-name-error");
+    await expect(page.locator("#bot-create-display-name-error")).toBeVisible();
+    await expect(username).toHaveAttribute("aria-invalid", "false");
+    await expect(username).not.toHaveAttribute("aria-describedby", "bot-create-display-name-error");
+  });
+
+  test("keeps light-theme primary actions at AA contrast inside bot dialogs", async ({ page }) => {
+    await installManagementFixture(page);
+    await page.goto("/bots");
+    await page.evaluate(() => localStorage.setItem("kub-theme", "light"));
+    await page.reload();
+
+    await expect.poll(() => buttonContrast(page.getByRole("button", { name: "Создать бота" }))).toBeGreaterThanOrEqual(4.5);
+    await page.getByRole("button", { name: "Создать бота" }).click();
+    await expect.poll(() => buttonContrast(page.getByRole("button", { name: "Создать", exact: true }))).toBeGreaterThanOrEqual(4.5);
+    await page.getByRole("button", { name: "Отмена" }).click();
+
+    await page.getByRole("button", { name: /Owner bot/ }).click();
+    await page.getByRole("tab", { name: "API" }).click();
+    await page.getByRole("button", { name: "Выпустить новый токен" }).click();
+    await expect.poll(() => buttonContrast(page.getByRole("button", { name: "Подтвердить выпуск" }))).toBeGreaterThanOrEqual(4.5);
+    await page.getByRole("button", { name: "Подтвердить выпуск" }).click();
+    await expect.poll(() => buttonContrast(page.getByRole("button", { name: "Готово, закрыть" }))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test("treats an interrupted create as uncertain and refreshes without offering a repeat", async ({ page }) => {
+    let listReads = 0;
+    await installManagementFixture(page);
+    await page.route(`${API}/bots`, async (route) => {
+      if (route.request().method() === "POST") {
+        await route.abort("failed");
+        return;
+      }
+      listReads += 1;
+      await route.fallback();
+    });
+    await page.goto("/bots");
+
+    await page.getByRole("button", { name: "Создать бота" }).click();
+    await page.getByLabel("Название").fill("Uncertain bot");
+    await page.getByLabel("Имя пользователя").fill("uncertain_bot");
+    await page.getByRole("button", { name: "Создать", exact: true }).click();
+
+    await expect(page.getByRole("alert")).toContainText("Запрос мог выполниться");
+    await expect(page.getByRole("alert")).toContainText("Не повторяйте создание");
+    await expect(page.getByRole("button", { name: "Создать", exact: true })).toBeDisabled();
+    await expect.poll(() => listReads).toBeGreaterThan(1);
+  });
+
+  test("treats an interrupted rotation as uncertain and guides explicit recovery", async ({ page }) => {
+    let detailReads = 0;
+    await installManagementFixture(page);
+    await page.route(`${API}/bots/${OWNER_BOT_ID}`, async (route) => {
+      detailReads += 1;
+      await route.fallback();
+    });
+    await page.route(`${API}/bots/${OWNER_BOT_ID}/token/rotate`, (route) => route.abort("failed"));
+    await page.goto(`/bots?bot=${OWNER_BOT_ID}`);
+
+    await page.getByRole("tab", { name: "API" }).click();
+    await page.getByRole("button", { name: "Выпустить новый токен" }).click();
+    await page.getByRole("button", { name: "Подтвердить выпуск" }).click();
+
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText("Запрос мог выполниться");
+    await expect(alert).toContainText("повторно выпустите новый токен");
+    await expect(page.getByRole("dialog", { name: "Выпустить новый токен?" })).toHaveCount(0);
+    await expect.poll(() => detailReads).toBeGreaterThan(1);
   });
 
   test("enforces owner and developer controls through lifecycle states", async ({ page }) => {
@@ -53,6 +156,9 @@ test.describe("authenticated bot management", () => {
     await page.getByRole("button", { name: "Поставить на паузу" }).click();
     await page.getByRole("button", { name: "Подтвердить паузу" }).click();
     await expect(page.getByTestId("bots-detail-pane").getByText("На паузе").first()).toBeVisible();
+
+    await page.getByRole("tab", { name: "Диагностика" }).click();
+    await expect(page.getByText("Не настроен", { exact: true })).toBeVisible();
 
     await page.getByRole("tab", { name: "Команда" }).click();
     await expect(page.getByRole("button", { name: "Добавить разработчика" })).toBeVisible();
@@ -243,7 +349,7 @@ function detail(bot: ReturnType<typeof summary>) {
     }],
     webhook: { configured: false, url: null },
     diagnostics: {
-      delivery_mode: "polling",
+      delivery_mode: null,
       pending_update_count: 0,
       failure_count: 0,
       last_error_code: null,
@@ -258,6 +364,93 @@ async function browserStorageContains(page: Page, value: string) {
       Object.values(storage).some((entry) => entry.includes(needle)),
     );
   }, value);
+}
+
+async function browserTokenResidue(page: Page, value: string, consoleMessages: string[]) {
+  const browserResidue = await page.evaluate(async (needle) => {
+    const contains = (candidate: unknown) => {
+      try {
+        return JSON.stringify(candidate).includes(needle);
+      } catch {
+        return String(candidate).includes(needle);
+      }
+    };
+    const appModule = await import("/src/App.tsx");
+    const queryClient = appModule.queryClient;
+    const queryData = queryClient
+      ? {
+          queries: queryClient.getQueryCache().getAll().map((query: { state: unknown }) => query.state),
+          mutations: queryClient.getMutationCache().getAll().map((mutation: { state: unknown }) => mutation.state),
+        }
+      : { missingQueryClientExport: needle };
+
+    let cacheStorage = false;
+    for (const cacheName of await caches.keys()) {
+      const cache = await caches.open(cacheName);
+      for (const request of await cache.keys()) {
+        const response = await cache.match(request);
+        if (request.url.includes(needle) || (response && (await response.clone().text()).includes(needle))) {
+          cacheStorage = true;
+        }
+      }
+    }
+
+    let indexedDb = false;
+    for (const info of await indexedDB.databases()) {
+      if (!info.name) continue;
+      const database = await new Promise<IDBDatabase | null>((resolve) => {
+        const open = indexedDB.open(info.name!);
+        open.onsuccess = () => resolve(open.result);
+        open.onerror = () => resolve(null);
+      });
+      if (!database || database.objectStoreNames.length === 0) {
+        database?.close();
+        continue;
+      }
+      const transaction = database.transaction(Array.from(database.objectStoreNames), "readonly");
+      for (const storeName of Array.from(database.objectStoreNames)) {
+        const values = await new Promise<unknown[]>((resolve) => {
+          const request = transaction.objectStore(storeName).getAll();
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => resolve([]);
+        });
+        if (contains(values)) indexedDb = true;
+      }
+      database.close();
+    }
+
+    return {
+      queryClient: contains(queryData),
+      cacheStorage,
+      indexedDb,
+      historyOrUrl: location.href.includes(needle) || contains(history.state),
+      dom: document.documentElement.innerHTML.includes(needle),
+      localStorage: Object.values(localStorage).some((entry) => entry.includes(needle)),
+      sessionStorage: Object.values(sessionStorage).some((entry) => entry.includes(needle)),
+    };
+  }, value);
+
+  return {
+    ...browserResidue,
+    console: consoleMessages.some((message) => message.includes(value)),
+  };
+}
+
+async function buttonContrast(locator: ReturnType<Page["getByRole"]>) {
+  return locator.evaluate((element) => {
+    const parse = (value: string) => value.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [];
+    const luminance = (channels: number[]) => {
+      const linear = channels.map((channel) => {
+        const value = channel / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * linear[0]! + 0.7152 * linear[1]! + 0.0722 * linear[2]!;
+    };
+    const style = getComputedStyle(element);
+    const [bright, dark] = [luminance(parse(style.color)), luminance(parse(style.backgroundColor))]
+      .sort((left, right) => right - left);
+    return (bright + 0.05) / (dark + 0.05);
+  });
 }
 
 async function assertNoHorizontalOverflow(locator: ReturnType<Page["getByTestId"]>) {

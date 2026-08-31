@@ -39,10 +39,12 @@ export function BotsPage() {
     void queryClient.invalidateQueries({ queryKey: ["bot-management", "list"] });
     select(botId);
   };
+  const refreshAfterUncertainCreate = () =>
+    queryClient.refetchQueries({ queryKey: ["bot-management", "list"] });
   const eligibility = list.data?.eligibility;
 
   return (
-    <main data-testid="bots-page" className="flex h-[100dvh] min-w-0 flex-col overflow-hidden bg-[var(--kub-bg)] text-[color:var(--kub-text)]">
+    <main data-testid="bots-page" className="bots-management-surface flex h-[100dvh] min-w-0 flex-col overflow-hidden bg-[var(--kub-bg)] text-[color:var(--kub-text)]">
       <KubHeader
         title={<h1 className="truncate text-sm font-semibold">Мои боты</h1>}
         subtitle={eligibility ? `${eligibility.active_bot_count} из ${eligibility.max_bots}` : "Управление Bot API"}
@@ -82,7 +84,7 @@ export function BotsPage() {
         </section>
       </div>
 
-      <BotCreateModal open={createOpen} onOpenChange={setCreateOpen} onCreated={created} />
+      <BotCreateModal open={createOpen} onOpenChange={setCreateOpen} onCreated={created} onUncertain={refreshAfterUncertainCreate} />
       <BotTokenDialog ref={tokenDialog} />
     </main>
   );

@@ -173,6 +173,7 @@ begin
       ('public.bot_revoke_token_internal(uuid,uuid,text)'),
       ('public.bot_request_deletion_internal(uuid,uuid,text)'),
       ('public.bot_cancel_deletion_internal(uuid,uuid,text)'),
+      ('public.bot_deletion_finalize_internal(integer,text)'),
       ('public.bot_privacy_request_internal(uuid,uuid,uuid,boolean,text)'),
       ('public.bot_management_webhook_set_internal(uuid,uuid,text,text,text,boolean,text)'),
       ('public.bot_management_webhook_delete_internal(uuid,uuid,boolean,text)'),

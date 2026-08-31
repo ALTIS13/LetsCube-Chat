@@ -5,13 +5,14 @@ interface KubInputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   hint?: string;
   error?: string | null;
+  errorId?: string;
   leftIcon?: ReactNode;
   rightSlot?: ReactNode;
   containerClassName?: string;
 }
 
 export const KubInput = forwardRef<HTMLInputElement, KubInputProps>(
-  ({ label, hint, error, leftIcon, rightSlot, containerClassName, className, id, ...rest }, ref) => {
+  ({ label, hint, error, errorId, leftIcon, rightSlot, containerClassName, className, id, ...rest }, ref) => {
     const autoId = useId();
     const inputId = id ?? autoId;
 
@@ -51,7 +52,7 @@ export const KubInput = forwardRef<HTMLInputElement, KubInputProps>(
           {rightSlot}
         </div>
         {error ? (
-          <p className="text-xs text-[color:var(--kub-danger)]">{error}</p>
+          <p id={errorId} className="text-xs text-[color:var(--kub-danger)]">{error}</p>
         ) : hint ? (
           <p className="text-xs text-[color:var(--kub-muted)]">{hint}</p>
         ) : null}

@@ -48,6 +48,7 @@ const serviceRoleOnlyFunctions = new Set([
   "bot_revoke_token_internal",
   "bot_request_deletion_internal",
   "bot_cancel_deletion_internal",
+  "bot_deletion_finalize_internal",
   "bot_privacy_request_internal",
   "bot_management_webhook_set_internal",
   "bot_management_webhook_delete_internal",

@@ -46,7 +46,7 @@ export const BotTokenDialog = forwardRef<BotTokenDialogHandle>(function BotToken
           aria-describedby="bot-token-description"
           onEscapeKeyDown={(event) => event.preventDefault()}
           onPointerDownOutside={(event) => event.preventDefault()}
-          className="fixed left-1/2 top-1/2 z-[81] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-5 shadow-2xl focus:outline-none sm:p-6"
+          className="bots-management-surface fixed left-1/2 top-1/2 z-[81] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-5 shadow-2xl focus:outline-none sm:p-6"
         >
           <Dialog.Title className="text-lg font-semibold text-[color:var(--kub-text)]">
             Токен бота

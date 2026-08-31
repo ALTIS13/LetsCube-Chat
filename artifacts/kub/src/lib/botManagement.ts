@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/client";
+import { resolveBotManagementOrigin } from "@/lib/botManagementOrigin";
 
 const env = import.meta.env as Record<string, string | undefined>;
 const botStateSchema = z.enum(["active", "paused", "suspended", "pending_delete", "deleted"]);
@@ -106,7 +107,8 @@ type SafeErrorCode =
   | "validation_failed"
   | "not_found"
   | "rate_limited"
-  | "network_error";
+  | "network_error"
+  | "uncertain_result";
 
 const ERROR_MESSAGES: Record<SafeErrorCode, string> = {
   session_expired: "Сессия истекла. Войдите снова.",
@@ -117,6 +119,7 @@ const ERROR_MESSAGES: Record<SafeErrorCode, string> = {
   not_found: "Бот не найден или больше недоступен.",
   rate_limited: "Слишком много запросов. Повторите позже.",
   network_error: "Не удалось связаться с сервером. Попробуйте снова.",
+  uncertain_result: "Результат запроса неизвестен. Обновите данные перед следующим действием.",
 };
 
 export class BotManagementError extends Error {
@@ -129,15 +132,18 @@ export class BotManagementError extends Error {
 function managementBaseUrl() {
   const value = env.VITE_BOT_MANAGEMENT_URL ?? "https://api.letscube.ru";
   try {
-    const parsed = new URL(value);
-    if (parsed.origin !== value || !["https:", "http:"].includes(parsed.protocol)) throw new Error();
-    return parsed.origin;
+    return resolveBotManagementOrigin(value);
   } catch {
     throw new BotManagementError("network_error");
   }
 }
 
-async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
+async function request<T>(
+  path: string,
+  schema: z.ZodType<T>,
+  init?: RequestInit,
+  options: { uncertainOnTransportFailure?: boolean } = {},
+): Promise<T> {
   const { data, error } = await createClient().auth.getSession();
   const accessToken = data.session?.access_token;
   if (error || !accessToken) throw new BotManagementError("session_expired");
@@ -154,14 +160,16 @@ async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit
       },
     });
   } catch {
-    throw new BotManagementError("network_error");
+    throw new BotManagementError(options.uncertainOnTransportFailure ? "uncertain_result" : "network_error");
   }
 
   let body: unknown;
   try {
     body = await response.json();
   } catch {
-    throw new BotManagementError("network_error");
+    throw new BotManagementError(
+      response.ok && options.uncertainOnTransportFailure ? "uncertain_result" : "network_error",
+    );
   }
   if (!response.ok) {
     const parsed = z.object({
@@ -174,9 +182,13 @@ async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit
     throw new BotManagementError("network_error");
   }
   const envelope = z.object({ ok: z.literal(true), result: z.unknown() }).strict().safeParse(body);
-  if (!envelope.success) throw new BotManagementError("network_error");
+  if (!envelope.success) {
+    throw new BotManagementError(options.uncertainOnTransportFailure ? "uncertain_result" : "network_error");
+  }
   const parsed = schema.safeParse(envelope.data.result);
-  if (!parsed.success) throw new BotManagementError("network_error");
+  if (!parsed.success) {
+    throw new BotManagementError(options.uncertainOnTransportFailure ? "uncertain_result" : "network_error");
+  }
   return parsed.data;
 }
 
@@ -189,9 +201,9 @@ export const botManagement = {
   detail: (botId: string) => request(`/bots/${botId}`, detailSchema),
   diagnostics: (botId: string) => request(`/bots/${botId}/diagnostics`, diagnosticsSchema),
   createOnce: (input: { username: string; display_name: string; description: string }) =>
-    request("/bots", createSchema, json("POST", input)),
+    request("/bots", createSchema, json("POST", input), { uncertainOnTransportFailure: true }),
   rotateOnce: (botId: string, expectedTokenPrefix: string | null) =>
-    request(`/bots/${botId}/token/rotate`, rotateSchema, json("POST", { expected_token_prefix: expectedTokenPrefix })),
+    request(`/bots/${botId}/token/rotate`, rotateSchema, json("POST", { expected_token_prefix: expectedTokenPrefix }), { uncertainOnTransportFailure: true }),
   updateProfile: (botId: string, input: { display_name: string; description: string }) =>
     request(`/bots/${botId}/profile`, successSchema, json("PATCH", input)),
   updateCommands: (botId: string, commands: BotCommand[]) =>

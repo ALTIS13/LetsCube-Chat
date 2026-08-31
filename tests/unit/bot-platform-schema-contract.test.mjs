@@ -45,6 +45,7 @@ const serviceRoleFunctions = [
   ["bot_revoke_token_internal", "uuid,uuid,text"],
   ["bot_request_deletion_internal", "uuid,uuid,text"],
   ["bot_cancel_deletion_internal", "uuid,uuid,text"],
+  ["bot_deletion_finalize_internal", "integer,text"],
   ["bot_privacy_request_internal", "uuid,uuid,uuid,boolean,text"],
   ["bot_management_webhook_set_internal", "uuid,uuid,text,text,text,boolean,text"],
   ["bot_management_webhook_delete_internal", "uuid,uuid,boolean,text"],
@@ -151,6 +152,22 @@ test("creation and token rotation serialize and enforce one active token", () =>
     normalizedSql,
     /create or replace function public\.bot_rotate_token_internal\([\s\S]*from public\.bots bot[\s\S]*for update of bot/,
   );
+});
+
+test("due deletion finalization locks and rechecks each bot before disabling access", () => {
+  const body = functionBody("bot_deletion_finalize_internal");
+  assert.match(body, /p_limit is null/);
+  assert.match(body, /for update of bot skip locked/);
+  assert.match(body, /select bot\.\* into v_bot[\s\S]*for update of bot/);
+  assert.match(body, /v_bot\.state <> 'pending_delete'/);
+  assert.match(body, /v_bot\.delete_after is null[\s\S]*v_bot\.delete_after > pg_catalog\.now\(\)/);
+  assert.match(body, /set state = 'deleted'/);
+  assert.match(body, /update private\.bot_tokens[\s\S]*set revoked_at = coalesce/);
+  assert.match(body, /update private\.bot_webhooks[\s\S]*set state = 'disabled'/);
+  assert.match(body, /update private\.bot_delivery_attempts[\s\S]*status = 'dead_letter'/);
+  assert.match(body, /delete from private\.bot_delivery_leases/);
+  assert.match(body, /'bot_deleted'/);
+  assert.doesNotMatch(body, /delete from public\.(messages|bots)/);
 });
 
 test("management permission is dedicated and seeded only to critical system roles", () => {
@@ -611,7 +628,7 @@ test("webhook info counts only a bounded pending-update subquery", () => {
   );
 });
 
-test("two-session concurrency probe covers claim ordering and poll/webhook locking", () => {
+test("two-session concurrency probe covers delivery plus management authorization races", () => {
   const normalizedProbe = concurrencyProbe.replace(/\s+/g, " ").toLowerCase();
   assert.match(normalizedProbe, /dblink_connect\('claim_session_a'/);
   assert.match(normalizedProbe, /dblink_connect\('claim_session_b'/);
@@ -619,6 +636,12 @@ test("two-session concurrency probe covers claim ordering and poll/webhook locki
   assert.match(normalizedProbe, /claim_session_b_bypassed_per_bot_ordering_or_skip_locked/);
   assert.match(normalizedProbe, /dblink_is_busy\('claim_session_b'\)/);
   assert.match(normalizedProbe, /webhook_mutation_did_not_wait_for_polling_lease_lock/);
+  assert.match(normalizedProbe, /developer_removal_race/);
+  assert.match(normalizedProbe, /suspend_resume_race/);
+  assert.match(normalizedProbe, /rotate_delete_race/);
+  assert.match(normalizedProbe, /cancel_finalize_race/);
+  assert.match(normalizedProbe, /bot_deletion_finalize_internal/);
+  assert.match(normalizedProbe, /dblink_is_busy\('management_session_b'\)/);
   assert.match(normalizedProbe, /bot_platform_db_concurrency_probe_ok/);
 });
 

@@ -1,4 +1,4 @@
-import { Router, type RequestHandler } from "express";
+import { json, Router, type RequestHandler } from "express";
 import { z } from "zod";
 
 import { BotApiError, botSuccess, toBotApiErrorResponse } from "#bot/errors";
@@ -339,13 +339,19 @@ function managementCors(allowedOrigins: readonly string[]): RequestHandler {
   };
 }
 
-function databaseError(error: unknown, creation = false): BotApiError {
+function databaseError(
+  error: unknown,
+  options: { creation?: boolean; actorScoped?: boolean },
+): BotApiError {
   const code =
     error && typeof error === "object" && "code" in error
       ? (error as { code?: unknown }).code
       : undefined;
-  if (creation && code === "42501") {
+  if (options.creation && code === "42501") {
     return new BotApiError("bot_creation_not_allowed");
+  }
+  if (options.actorScoped && (code === "42501" || code === "P0002")) {
+    return new BotApiError("not_found");
   }
   switch (code) {
     case "22023":
@@ -367,7 +373,7 @@ async function callRpc(
   client: BotManagementClient,
   name: string,
   args: Record<string, unknown>,
-  options: { creation?: boolean } = {},
+  options: { creation?: boolean; actorScoped?: boolean } = {},
 ): Promise<unknown> {
   let result: Awaited<ReturnType<BotRpcClient["rpc"]>>;
   try {
@@ -375,7 +381,7 @@ async function callRpc(
   } catch {
     throw new BotApiError("internal_error");
   }
-  if (result.error) throw databaseError(result.error, options.creation);
+  if (result.error) throw databaseError(result.error, options);
   return result.data;
 }
 
@@ -480,15 +486,21 @@ function mutationRoute(
     request: Parameters<RequestHandler>[0],
     context: ManagementContext,
   ) => Record<string, unknown>,
+  options: { actorScoped?: boolean } = { actorScoped: true },
 ): RequestHandler {
   return managementRoute(input, async (request, response, context) => {
     const { botId } = botParams(request);
-    await callRpc(input.client, rpcName, {
-      p_actor_id: context.actorId,
-      p_bot_id: botId,
-      ...args(request, context),
-      p_request_id: context.requestId,
-    });
+    await callRpc(
+      input.client,
+      rpcName,
+      {
+        p_actor_id: context.actorId,
+        p_bot_id: botId,
+        ...args(request, context),
+        p_request_id: context.requestId,
+      },
+      options,
+    );
     response.json(botSuccess({ success: true }));
   });
 }
@@ -499,6 +511,7 @@ export function createBotManagementRouter(
   const router = Router();
   router.use(managementHeaders());
   router.use(managementCors(input.allowedOrigins));
+  router.use(json({ limit: "256kb", strict: true }));
 
   router.get(
     "/bots",
@@ -568,14 +581,19 @@ export function createBotManagementRouter(
       const body = rotateInputSchema.parse(request.body);
       const token = createBotToken(input.randomBytes);
       const row = oneRow(
-        await callRpc(input.client, "bot_rotate_token_internal", {
-          p_actor_id: context.actorId,
-          p_bot_id: botId,
-          p_expected_token_prefix: body.expected_token_prefix,
-          p_token_prefix: token.prefix,
-          p_token_hash: hashBotToken(token.raw, input.tokenPepper),
-          p_request_id: context.requestId,
-        }),
+        await callRpc(
+          input.client,
+          "bot_rotate_token_internal",
+          {
+            p_actor_id: context.actorId,
+            p_bot_id: botId,
+            p_expected_token_prefix: body.expected_token_prefix,
+            p_token_prefix: token.prefix,
+            p_token_hash: hashBotToken(token.raw, input.tokenPepper),
+            p_request_id: context.requestId,
+          },
+          { actorScoped: true },
+        ),
         rotateRowSchema,
       );
       response.json(
@@ -658,10 +676,15 @@ export function createBotManagementRouter(
     managementRoute(input, async (request, response, context) => {
       const { botId } = botParams(request);
       const row = oneRow(
-        await callRpc(input.client, "bot_management_detail_internal", {
-          p_actor_id: context.actorId,
-          p_bot_id: botId,
-        }),
+        await callRpc(
+          input.client,
+          "bot_management_detail_internal",
+          {
+            p_actor_id: context.actorId,
+            p_bot_id: botId,
+          },
+          { actorScoped: true },
+        ),
         detailRowSchema,
       );
       response.json(
@@ -691,10 +714,15 @@ export function createBotManagementRouter(
     managementRoute(input, async (request, response, context) => {
       const { botId } = botParams(request);
       const row = oneRow(
-        await callRpc(input.client, "bot_management_diagnostics_internal", {
-          p_actor_id: context.actorId,
-          p_bot_id: botId,
-        }),
+        await callRpc(
+          input.client,
+          "bot_management_diagnostics_internal",
+          {
+            p_actor_id: context.actorId,
+            p_bot_id: botId,
+          },
+          { actorScoped: true },
+        ),
         diagnosticsRowSchema,
       );
       response.json(botSuccess(diagnostics(row)));
@@ -718,15 +746,20 @@ export function createBotManagementRouter(
         body.secret,
         input.webhookEncryptionKey,
       );
-      await callRpc(input.client, "bot_management_webhook_set_internal", {
-        p_actor_id: context.actorId,
-        p_bot_id: botId,
-        p_url: target.url.href,
-        p_secret_ciphertext: sealed.ciphertext,
-        p_secret_fingerprint: sealed.fingerprint,
-        p_drop_pending_updates: body.drop_pending_updates,
-        p_request_id: context.requestId,
-      });
+      await callRpc(
+        input.client,
+        "bot_management_webhook_set_internal",
+        {
+          p_actor_id: context.actorId,
+          p_bot_id: botId,
+          p_url: target.url.href,
+          p_secret_ciphertext: sealed.ciphertext,
+          p_secret_fingerprint: sealed.fingerprint,
+          p_drop_pending_updates: body.drop_pending_updates,
+          p_request_id: context.requestId,
+        },
+        { actorScoped: true },
+      );
       response.json(botSuccess({ success: true }));
     }),
   );
@@ -776,7 +809,7 @@ export function createBotManagementRouter(
       path,
       mutationRoute(input, "bot_suspend_internal", () => ({
         p_suspend: suspend,
-      })),
+      }), { actorScoped: false }),
     );
   }
 

@@ -136,6 +136,9 @@
   --kub-border-color: var(--brand-border);
   --kub-cyan: var(--brand-blue);
   --kub-cyan-hover: #5b96d4;
+  --kub-action-primary-background: var(--kub-cyan);
+  --kub-action-primary-foreground: var(--kub-bg);
+  --kub-action-primary-hover: var(--kub-cyan-hover);
   --kub-blue: var(--brand-blue);
   --kub-pink: var(--brand-magenta);
   --kub-online: #4DCD5E;
@@ -266,6 +269,9 @@
   --kub-border-color: var(--brand-border);
   --kub-cyan: var(--brand-blue);
   --kub-cyan-hover: #2d6fac;
+  --kub-action-primary-background: var(--kub-cyan);
+  --kub-action-primary-foreground: var(--kub-bg);
+  --kub-action-primary-hover: var(--kub-cyan-hover);
   --kub-blue: var(--brand-blue);
   --kub-pink: var(--brand-magenta);
   --kub-online: #4FAE4E;
@@ -373,6 +379,12 @@
   --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+.light .bots-management-surface {
+  --kub-action-primary-background: #2563A8;
+  --kub-action-primary-foreground: #FFFFFF;
+  --kub-action-primary-hover: #1D4F88;
 }
 
 @layer base {

@@ -27,12 +27,15 @@ test("Bot Gateway entry fails closed on PORT and private auth configuration", ()
   assert.match(entry, /BOT_TOKEN_PEPPER/);
   assert.match(entry, /resolveWebhookEncryptionKey/);
   assert.match(entry, /createWebhookWorkerRuntime/);
+  assert.match(entry, /createBotDeletionFinalizerRuntime/);
   assert.match(entry, /createUpdateDeliveryHandlers/);
   assert.match(entry, /resolveBotManagementOrigins/);
   assert.match(entry, /management:\s*\{/);
   assert.match(entry, /tokenPepper:\s*authConfig\.pepper/);
   assert.match(entry, /webhookEncryptionKey/);
   assert.match(entry, /validateWebhookTarget/);
+  assert.match(entry, /deletionFinalizer\.start\(\)/);
+  assert.match(entry, /deletionFinalizer\.stop\(\)/);
   assert.doesNotMatch(entry, /VITE_BOT_TOKEN_PEPPER|PUBLIC_BOT_TOKEN_PEPPER/);
   assert.doesNotMatch(
     entry,
