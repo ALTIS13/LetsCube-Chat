@@ -134,6 +134,20 @@ EXPOSE 8097
 
 CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/supportMailIndex.mjs"]
 
+# ---------- Dedicated Bot Gateway runtime ----------
+FROM base AS bot-gateway-runtime
+
+ENV NODE_ENV=production \
+    PORT=8098
+
+COPY --chown=node:node --from=build /app/ ./
+
+USER node
+
+EXPOSE 8098
+
+CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/botGatewayIndex.mjs"]
+
 # ---------- Stage 3: runtime ----------
 FROM nginx:alpine AS runtime
 

@@ -21,6 +21,7 @@ import { BannedScreen } from "@/components/BannedScreen";
 import { AdminLayout } from "@/pages/admin/AdminLayout";
 import { TasksPage } from "@/pages/tasks/TasksPage";
 import { BotsPage } from "@/pages/bots/BotsPage";
+import { BotDocsPage } from "@/pages/public/BotDocsPage";
 import { PrivacyPage } from "@/pages/public/PrivacyPage";
 import { SupportPage } from "@/pages/public/SupportPage";
 import NotFound from "@/pages/not-found";
@@ -394,6 +395,7 @@ function RootRoutes() {
   if (isPublicRoute(location)) {
     return (
       <Switch>
+        <Route path="/bots/docs" component={BotDocsPage} />
         <Route path="/privacy" component={PrivacyPage} />
         <Route path="/support" component={SupportPage} />
         <Route component={NotFound} />

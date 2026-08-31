@@ -25,6 +25,18 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.letscube-bot-docs.rule=Host(`api.letscube.ru`) && (Path(`/bots/docs`) || Path(`/bots/docs/`))"
+      - "traefik.http.routers.letscube-bot-docs.priority=210"
+      - "traefik.http.routers.letscube-bot-docs.entrypoints=https"
+      - "traefik.http.routers.letscube-bot-docs.tls=true"
+      - "traefik.http.routers.letscube-bot-docs.middlewares=letscube-bot-docs-redirect"
+      - "traefik.http.routers.letscube-bot-docs.service=letscube-bot-docs"
+      - "traefik.http.services.letscube-bot-docs.loadbalancer.server.port=80"
+      - "traefik.http.middlewares.letscube-bot-docs-redirect.redirectregex.regex=^https://api[.]letscube[.]ru/bots/docs(.*)"
+      - "traefik.http.middlewares.letscube-bot-docs-redirect.redirectregex.replacement=https://app.letscube.ru/bots/docs$${1}"
+      - "traefik.http.middlewares.letscube-bot-docs-redirect.redirectregex.permanent=true"
 
   kub-worker:
     build:
@@ -61,3 +73,42 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+  letscube-bot-gateway:
+    build:
+      context: ../..
+      dockerfile: docs/deploy/Dockerfile
+      target: bot-gateway-runtime
+    image: letscube-bot-gateway:latest
+    restart: unless-stopped
+    init: true
+    environment:
+      PORT: 8098
+      SUPABASE_URL: ${SUPABASE_URL:?Configure SUPABASE_URL in Coolify}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?Configure SUPABASE_SERVICE_ROLE_KEY in Coolify}
+      BOT_TOKEN_PEPPER: ${BOT_TOKEN_PEPPER:?Configure BOT_TOKEN_PEPPER in Coolify}
+      BOT_WEBHOOK_ENCRYPTION_KEY: ${BOT_WEBHOOK_ENCRYPTION_KEY:?Configure BOT_WEBHOOK_ENCRYPTION_KEY in Coolify}
+      BOT_MANAGEMENT_ALLOWED_ORIGINS: ${BOT_MANAGEMENT_ALLOWED_ORIGINS:-}
+    expose:
+      - "8098"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8098/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.letscube-bot-gateway.rule=Host(`api.letscube.ru`) && (PathPrefix(`/bot/v1`) || PathPrefix(`/bot/manage/v1`))"
+      - "traefik.http.routers.letscube-bot-gateway.priority=200"
+      - "traefik.http.routers.letscube-bot-gateway.entrypoints=https"
+      - "traefik.http.routers.letscube-bot-gateway.tls=true"
+      - "traefik.http.routers.letscube-bot-gateway.service=letscube-bot-gateway"
+      - "traefik.http.services.letscube-bot-gateway.loadbalancer.server.port=8098"
