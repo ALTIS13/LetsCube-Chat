@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
@@ -432,8 +432,23 @@ test("publisher creates an immutable artifact and a matching atomic manifest", (
   assert.match(duplicate.stderr, /already exists/);
 });
 
+function resolveExecutable(command) {
+  if (isAbsolute(command)) return command;
+  if (process.platform === "win32") {
+    const result = spawnSync("where.exe", [command], { encoding: "utf8" });
+    if (result.status !== 0) return null;
+    return result.stdout.split(/\r?\n/).find((candidate) => candidate.trim())?.trim() ?? null;
+  }
+  const result = spawnSync("sh", ["-lc", "command -v \"$1\"", "sh", command], {
+    encoding: "utf8",
+  });
+  if (result.status !== 0) return null;
+  return result.stdout.trim() || null;
+}
+
 function findProductionJq() {
-  const executable = process.env.KUB_JQ_BIN || "jq";
+  const executable = resolveExecutable(process.env.KUB_JQ_BIN || "jq");
+  if (!executable) return null;
   const probe = spawnSync(executable, ["--version"], { encoding: "utf8" });
   if (probe.status !== 0) return null;
   return { executable, version: probe.stdout.trim() };
