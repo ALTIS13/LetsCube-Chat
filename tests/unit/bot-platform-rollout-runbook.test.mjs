@@ -500,6 +500,12 @@ test("combined rehearsal strips only the exact outer transaction markers", () =>
   assert.match(source, /\\set ON_ERROR_STOP on/);
   assert.match(source, /PL\/pgSQL[^\n]*BEGIN/i);
   assert.match(source, /psql\s+-X[^\n]*ON_ERROR_STOP=1/i);
+  assert.ok(
+    source.includes(
+      'test "$(full_line_count "$SMOKE_PATH" \'\\\\set on_error_stop on\')" -eq 1',
+    ),
+    "GNU awk -v must receive an escaped literal backslash for the psql meta line",
+  );
   assert.match(source, /one outer transaction|един[^\n]*внешн[^\n]*транзакц/i);
 });
 

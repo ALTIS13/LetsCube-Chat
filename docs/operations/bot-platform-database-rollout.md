@@ -963,7 +963,7 @@ test "$(full_line_count "$MIGRATION_PATH" 'rollback;')" -eq 0
 test "$(full_line_count "$SMOKE_PATH" 'begin;')" -eq 1
 test "$(full_line_count "$SMOKE_PATH" 'commit;')" -eq 0
 test "$(full_line_count "$SMOKE_PATH" 'rollback;')" -eq 1
-test "$(full_line_count "$SMOKE_PATH" '\set on_error_stop on')" -eq 1
+test "$(full_line_count "$SMOKE_PATH" '\\set on_error_stop on')" -eq 1
 
 awk '
   {
