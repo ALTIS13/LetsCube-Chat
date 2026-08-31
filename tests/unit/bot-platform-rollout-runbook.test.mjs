@@ -1,0 +1,100 @@
+import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import test from "node:test";
+
+const runbookPath = "docs/operations/bot-platform-database-rollout.md";
+const migrationPath =
+  ".migration-backup/supabase/migrations/20260831100000_bot_platform_foundation.sql";
+const smokePath = "tests/server/bot-platform-db-smoke.sql";
+
+function runbook() {
+  assert.equal(existsSync(runbookPath), true, `missing ${runbookPath}`);
+  return readFileSync(runbookPath, "utf8");
+}
+
+test("runbook pins reviewed inputs and treats the migration as a one-shot artifact", () => {
+  const source = runbook();
+
+  assert.match(source, new RegExp(migrationPath.replaceAll(".", "\\.")));
+  assert.match(source, new RegExp(smokePath.replaceAll(".", "\\.")));
+  assert.match(source, /git commit/i);
+  assert.match(source, /SHA-256/i);
+  assert.match(source, /timestamp/i);
+  assert.match(source, /parity/i);
+  assert.match(source, /one[- ]shot|одноразов/i);
+  assert.match(source, /migration ledger/i);
+  assert.match(source, /rerun[^\n]*(forbidden|запрещ)/i);
+  assert.match(source, /partial bot schema|частичн[^\n]*bot schema/i);
+});
+
+test("fresh backup and an isolated PG17 restore rehearsal are hard fail-stop gates", () => {
+  const source = runbook();
+
+  assert.match(source, /fresh backup[^\n]*current run|свеж[^\n]*backup[^\n]*текущ/i);
+  assert.match(source, /sha256sum\s+-c/i);
+  assert.match(source, /pg_restore\s+(?:--list|-l)/i);
+  assert.match(source, /tar\s+(?:-t|-tf|--list)/i);
+  assert.match(source, /isolated[^\n]*PG17|изолирован[^\n]*PG17/i);
+  assert.match(source, /hard gate|ж[её]стк[^\n]*рубеж/i);
+  assert.match(source, /fail[- ]stop/i);
+});
+
+test("production rehearsal is bounded, blocks writes, and audits trigger side effects", () => {
+  const source = runbook();
+
+  assert.match(source, /AccessExclusive/i);
+  assert.match(source, /maintenance window/i);
+  assert.match(source, /app[^\n]*worker[^\n]*(write|запис)[^\n]*(stop|останов)/i);
+  assert.match(source, /SET LOCAL lock_timeout/i);
+  assert.match(source, /SET LOCAL statement_timeout/i);
+  assert.match(source, /SET LOCAL idle_in_transaction_session_timeout/i);
+  assert.match(source, /trigger[^\n]*external[^\n]*nontransactional/i);
+  assert.match(source, /smoke[^\n]*(existing rows|существующ)/i);
+});
+
+test("combined rehearsal strips only the exact outer transaction markers", () => {
+  const source = runbook();
+
+  assert.match(source, /migration[^\n]*exactly[^\n]*1[^\n]*BEGIN[^\n]*1[^\n]*COMMIT/i);
+  assert.match(source, /smoke[^\n]*exactly[^\n]*1[^\n]*BEGIN[^\n]*1[^\n]*ROLLBACK/i);
+  assert.match(source, /smoke[^\n]*psql meta/i);
+  assert.match(source, /\\set ON_ERROR_STOP on/);
+  assert.match(source, /PL\/pgSQL[^\n]*BEGIN/i);
+  assert.match(source, /psql\s+-X[^\n]*ON_ERROR_STOP=1/i);
+  assert.match(source, /one outer transaction|един[^\n]*внешн[^\n]*транзакц/i);
+});
+
+test("baseline, aggregate privacy-safe probes, and post-rollback parity are mandatory", () => {
+  const source = runbook();
+
+  assert.match(source, /production baseline/i);
+  assert.match(source, /post-rollback parity/i);
+  assert.match(source, /tombstone/i);
+  assert.match(source, /dual[- ]sender/i);
+  assert.match(source, /system[- ]sender/i);
+  assert.match(source, /aggregate counts|агрегатн[^\n]*сч[её]тчик/i);
+  assert.match(source, /no raw user data|без сырых пользовательских данных/i);
+  assert.match(source, /functions?[^\n]*grants?[^\n]*polic/i);
+  assert.match(source, /invalid index|невалидн[^\n]*индекс/i);
+});
+
+test("apply and gateway rollout remain behind database verification", () => {
+  const source = runbook();
+
+  assert.match(source, /exact apply only after rehearsal|apply[^\n]*only after[^\n]*rehearsal/i);
+  assert.match(source, /NOTIFY pgrst,\s*'reload schema';/i);
+  assert.match(source, /standalone smoke/i);
+  assert.match(source, /gateway[^\n]*only after[^\n]*DB/i);
+  assert.match(source, /rollback[^\n]*verified backup/i);
+  assert.match(source, /no ad-hoc down SQL|ad-hoc down SQL[^\n]*(forbidden|запрещ)/i);
+});
+
+test("examples are paste-safe and do not expose credentials or destructive cleanup", () => {
+  const source = runbook();
+
+  assert.doesNotMatch(source, /postgres(?:ql)?:\/\/[^\s:@]+:[^\s@]+@/i);
+  assert.doesNotMatch(source, /(?:password|secret|service[_-]?role)\s*=\s*[^<$\s`]+/i);
+  assert.doesNotMatch(source, /(?:echo|printf)[^\n]*(?:DATABASE_URL|PSQL_DSN|PASSWORD|SECRET)/i);
+  assert.doesNotMatch(source, /\b(?:printenv|set\s+-x)\b/i);
+  assert.doesNotMatch(source, /rm\s+-rf|DROP\s+SCHEMA[^\n]*CASCADE/i);
+});
