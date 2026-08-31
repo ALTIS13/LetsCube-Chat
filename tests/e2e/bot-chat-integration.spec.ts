@@ -16,7 +16,33 @@ test.describe("bot chat integration", () => {
   });
 
   test("shows bot last-message identity, preview, and unread count before opening chat", async ({ page }) => {
+    const lastMessageRequestPromise = page.waitForRequest((request) => {
+      const url = new URL(request.url());
+      return (
+        request.method() === "GET" &&
+        url.pathname.includes("/rest/v1/messages") &&
+        url.searchParams.get("select")?.startsWith("*") === true
+      );
+    });
+    const unreadRequestPromise = page.waitForRequest((request) => {
+      const url = new URL(request.url());
+      return (
+        request.method() === "GET" &&
+        url.pathname.includes("/rest/v1/messages") &&
+        url.searchParams.get("select") === "id" &&
+        (request.headers().prefer ?? "").includes("count=exact")
+      );
+    });
     await page.goto("/");
+
+    const [lastMessageRequest, unreadRequest] = await Promise.all([
+      lastMessageRequestPromise,
+      unreadRequestPromise,
+    ]);
+    const lastMessageUrl = new URL(lastMessageRequest.url());
+    const unreadUrl = new URL(unreadRequest.url());
+    expect(lastMessageUrl.searchParams.get("order")).toBe("created_at.desc");
+    expect(unreadUrl.searchParams.get("or")).toContain("bot_id.not.is.null");
 
     const chatRow = page.locator(`[data-testid="chat-list-item"][data-chat-id="${CHAT_ID}"]`);
     await expect(chatRow).toBeVisible();
@@ -175,7 +201,7 @@ async function installSupabaseFixture(page: Page) {
     pinned_order: null,
     profile,
   };
-  const messages = [deletedBotMessage(), activeBotMessage()];
+  const messages = [activeBotMessage(), deletedBotMessage()];
   const notification = {
     id: NOTIFICATION_ID,
     user_id: USER_ID,
@@ -228,7 +254,12 @@ async function installSupabaseFixture(page: Page) {
       }]);
     }
     if (url.pathname.endsWith("/rpc/chat_list_summaries")) {
-      return json(route, [{ chat_id: CHAT_ID, last_message: activeBotMessage(), unread_count: 2 }]);
+      return json(route, {
+        code: "PGRST202",
+        details: null,
+        hint: null,
+        message: "Could not find the function public.chat_list_summaries",
+      }, 404);
     }
     if (url.pathname.endsWith("/rpc/search_public_bots")) {
       const payload = (request.postDataJSON() ?? {}) as { p_query?: unknown };
@@ -249,16 +280,40 @@ async function installSupabaseFixture(page: Page) {
     if (url.pathname.includes("/rest/v1/messages")) {
       if (request.method() !== "GET") return json(route, []);
       const exactCountRequested = (request.headers().prefer ?? "").includes("count=exact");
+      if (!exactCountRequested) {
+        const rows = [...messages];
+        if (url.searchParams.get("order") === "created_at.desc") {
+          rows.sort((left, right) => (
+            new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
+          ));
+        }
+        const limit = Number(url.searchParams.get("limit") ?? rows.length);
+        return json(route, rows.slice(0, Number.isFinite(limit) ? limit : rows.length));
+      }
+
+      const actorFilter = url.searchParams.get("or") ?? "";
+      const readFilter = url.searchParams.get("created_at") ?? "";
+      const readAfter = readFilter.startsWith("gt.")
+        ? new Date(readFilter.slice(3)).getTime()
+        : Number.POSITIVE_INFINITY;
+      const unreadRows = actorFilter.includes("bot_id.not.is.null")
+        ? messages.filter((message) => new Date(message.created_at).getTime() > readAfter)
+        : [];
+      const limit = Number(url.searchParams.get("limit") ?? unreadRows.length);
+      const returnedRows = unreadRows
+        .slice(0, Number.isFinite(limit) ? limit : unreadRows.length)
+        .map(({ id }) => ({ id }));
+      const contentRange = returnedRows.length > 0
+        ? `0-${returnedRows.length - 1}/${unreadRows.length}`
+        : `*/${unreadRows.length}`;
       return json(
         route,
-        exactCountRequested ? messages.slice(0, 1).map(({ id }) => ({ id })) : messages,
+        returnedRows,
         200,
-        exactCountRequested
-          ? {
-              "access-control-expose-headers": "Content-Range",
-              "content-range": `0-0/${messages.length}`,
-            }
-          : undefined,
+        {
+          "access-control-expose-headers": "Content-Range",
+          "content-range": contentRange,
+        },
       );
     }
     if (url.pathname.includes("/rest/v1/message_hidden_for_users")) return json(route, []);
