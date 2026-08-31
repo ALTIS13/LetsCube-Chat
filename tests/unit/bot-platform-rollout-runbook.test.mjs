@@ -131,12 +131,169 @@ test("restore gate binds the current run and exact backup to database and servic
 
   const apply = source.slice(source.indexOf("## Рубеж 8:"));
   assert.match(apply, /test -f "\$RESTORE_GATE"/);
-  assert.match(apply, /run_id=\$RUN_ID/);
-  assert.match(apply, /backup_dir=\$BACKUP_DIR/);
-  assert.match(apply, /backup_sha256sums_sha256=\$BACKUP_SHA256SUMS_SHA256/);
+  assert.match(apply, /test "\$\(gate_value run_id\)" = "\$RUN_ID"/);
+  assert.match(apply, /test "\$\(gate_value backup_dir\)" = "\$BACKUP_DIR"/);
+  assert.match(
+    apply,
+    /test "\$\(gate_value backup_sha256sums_sha256\)" = "\$BACKUP_SHA256SUMS_SHA256"/,
+  );
   assert.match(
     apply,
     /cd "\$ROLLOUT_DIR"[\s\S]{0,200}sha256sum -c restore-evidence\.sha256/,
+  );
+});
+
+test("restore flow executes the manifest-bound dump and rejects an empty or mismatched target", () => {
+  const source = runbook();
+  const restore = source.slice(
+    source.indexOf("## Рубеж 2:"),
+    source.indexOf("## Рубеж 3:"),
+  );
+
+  assert.match(restore, /BACKUP_DB_DUMP/);
+  assert.match(
+    restore,
+    /test "\$BACKUP_DB_DUMP" = "\$BACKUP_DIR\/db\/supabase-postgres\.custom"/,
+  );
+  assert.match(restore, /BACKUP_DB_DUMP_SHA256/);
+  assert.match(restore, /SHA256SUMS/);
+  assert.match(restore, /manifest_sha_for/);
+  assert.match(restore, /pg_restore[\s\S]{0,300}--exit-on-error/);
+  assert.match(restore, /--dbname="service=\$REHEARSAL_PGSERVICE"/);
+  assert.match(restore, /"\$BACKUP_DB_DUMP"[\s\S]{0,100}>"\$RESTORE_LOG" 2>&1/);
+  assert.match(restore, /chmod 600 "\$RESTORE_LOG"/);
+  assert.match(restore, /pg_restore[\s\S]{0,200}--data-only[\s\S]{0,200}--table="\$relation"/);
+  assert.match(restore, /COPY[\s\S]{0,500}rows > 1000000000/);
+
+  for (const count of [
+    "SOURCE_AUTH_USERS_COUNT",
+    "SOURCE_STORAGE_OBJECTS_COUNT",
+    "SOURCE_MESSAGES_COUNT",
+    "SOURCE_PROFILES_COUNT",
+    "TARGET_AUTH_USERS_COUNT",
+    "TARGET_STORAGE_OBJECTS_COUNT",
+    "TARGET_MESSAGES_COUNT",
+    "TARGET_PROFILES_COUNT",
+  ]) {
+    assert.match(restore, new RegExp(count));
+  }
+  assert.match(restore, /test "\$SOURCE_AUTH_USERS_COUNT" -gt 0/);
+  assert.match(restore, /test "\$SOURCE_STORAGE_OBJECTS_COUNT" -gt 0/);
+  assert.match(restore, /test "\$SOURCE_PROFILES_COUNT" -gt 0/);
+  assert.match(restore, /test "\$TARGET_AUTH_USERS_COUNT" = "\$SOURCE_AUTH_USERS_COUNT"/);
+  assert.match(
+    restore,
+    /test "\$TARGET_STORAGE_OBJECTS_COUNT" = "\$SOURCE_STORAGE_OBJECTS_COUNT"/,
+  );
+  assert.match(restore, /test "\$TARGET_MESSAGES_COUNT" = "\$SOURCE_MESSAGES_COUNT"/);
+  assert.match(restore, /test "\$TARGET_PROFILES_COUNT" = "\$SOURCE_PROFILES_COUNT"/);
+  assert.match(restore, /FRESH_USER_RELATION_COUNT/);
+  assert.match(restore, /test "\$FRESH_USER_RELATION_COUNT" -eq 0/);
+  assert.match(restore, /DB_IDENTITY_BEFORE/);
+  assert.match(restore, /DB_IDENTITY_AFTER/);
+  assert.match(restore, /test "\$DB_IDENTITY_AFTER" = "\$DB_IDENTITY_BEFORE"/);
+});
+
+test("rehearsal endpoints are derived from one internal compose network", () => {
+  const source = runbook();
+  const restore = source.slice(
+    source.indexOf("## Рубеж 2:"),
+    source.indexOf("## Рубеж 3:"),
+  );
+
+  assert.match(restore, /REHEARSAL_COMPOSE_PROJECT/);
+  assert.match(restore, /REHEARSAL_NETWORK/);
+  assert.match(restore, /com\.docker\.compose\.project/);
+  assert.match(restore, /com\.docker\.compose\.service/);
+  assert.match(restore, /\.Internal/);
+  assert.match(restore, /len \.NetworkSettings\.Networks/);
+  assert.match(restore, /DB_CONTAINER_IP/);
+  assert.match(restore, /INET_SERVER_ADDR/);
+  assert.match(restore, /test "\$INET_SERVER_ADDR" = "\$DB_CONTAINER_IP"/);
+  assert.match(restore, /AUTH_HEALTH_URL="http:\/\/\$\{REHEARSAL_AUTH_SERVICE\}:9999\/health"/);
+  assert.match(
+    restore,
+    /STORAGE_HEALTH_URL="http:\/\/\$\{REHEARSAL_STORAGE_SERVICE\}:5000\/status"/,
+  );
+  assert.match(
+    restore,
+    /POSTGREST_HEALTH_URL="http:\/\/\$\{REHEARSAL_POSTGREST_SERVICE\}:3000\/"/,
+  );
+  assert.match(restore, /docker run --rm --network "\$REHEARSAL_NETWORK"/);
+  assert.doesNotMatch(restore, /REHEARSAL_(?:AUTH|STORAGE|POSTGREST)_HEALTH_URL/);
+  assert.doesNotMatch(restore, /https?:\/\/(?:api|app)\.letscube\.ru/i);
+});
+
+test("storage restore and checksummed gate bind archive parity and all evidence", () => {
+  const source = runbook();
+  const restore = source.slice(
+    source.indexOf("## Рубеж 2:"),
+    source.indexOf("## Рубеж 3:"),
+  );
+  const apply = source.slice(source.indexOf("## Рубеж 8:"));
+
+  assert.match(restore, /supabase-storage\.tgz/);
+  assert.match(
+    restore,
+    /BACKUP_STORAGE_ARCHIVE="\$\(realpath -e "\$BACKUP_DIR\/storage\/supabase-storage\.tgz"\)"/,
+  );
+  assert.match(restore, /BACKUP_STORAGE_ARCHIVE_SHA256/);
+  assert.match(restore, /STORAGE_MOUNT_SOURCE/);
+  assert.match(restore, /\.Mounts/);
+  assert.match(restore, /SOURCE_STORAGE_FILE_COUNT/);
+  assert.match(restore, /SOURCE_STORAGE_TOTAL_BYTES/);
+  assert.match(restore, /TARGET_STORAGE_FILE_COUNT/);
+  assert.match(restore, /TARGET_STORAGE_TOTAL_BYTES/);
+  assert.match(restore, /test "\$SOURCE_STORAGE_FILE_COUNT" -gt 0/);
+  assert.match(restore, /test "\$SOURCE_STORAGE_TOTAL_BYTES" -gt 0/);
+  assert.match(restore, /test "\$TARGET_STORAGE_FILE_COUNT" = "\$SOURCE_STORAGE_FILE_COUNT"/);
+  assert.match(restore, /test "\$TARGET_STORAGE_TOTAL_BYTES" = "\$SOURCE_STORAGE_TOTAL_BYTES"/);
+
+  for (const binding of [
+    "backup_db_dump_sha256",
+    "backup_storage_archive_sha256",
+    "rehearsal_compose_project",
+    "rehearsal_network_name",
+    "rehearsal_network_id",
+    "rehearsal_db_container_id",
+    "rehearsal_db_system_identifier",
+    "target_identity_sha256",
+    "restore_log_sha256",
+    "database_evidence_sha256",
+    "source_auth_users_count",
+    "target_auth_users_count",
+    "source_storage_objects_count",
+    "target_storage_objects_count",
+    "source_storage_file_count",
+    "target_storage_file_count",
+    "source_storage_total_bytes",
+    "target_storage_total_bytes",
+    "auth_evidence_sha256",
+    "storage_evidence_sha256",
+    "storage_health_evidence_sha256",
+    "postgrest_evidence_sha256",
+    "restore-gate.env.sha256",
+  ]) {
+    assert.match(restore, new RegExp(binding.replaceAll(".", "\\.")));
+    assert.match(apply, new RegExp(binding.replaceAll(".", "\\.")));
+  }
+  assert.match(apply, /sha256sum -c restore-gate\.env\.sha256/);
+  assert.match(
+    apply,
+    /grep -Fxq "network_name=\$GATE_REHEARSAL_NETWORK_NAME" "\$TARGET_IDENTITY_EVIDENCE"/,
+  );
+  assert.match(
+    apply,
+    /grep -Fxq "database_container_id=\$GATE_REHEARSAL_DB_CONTAINER_ID" "\$TARGET_IDENTITY_EVIDENCE"/,
+  );
+  assert.match(
+    apply,
+    /grep -Fxq "database_system_identifier=\$GATE_REHEARSAL_DB_SYSTEM_IDENTIFIER" "\$TARGET_IDENTITY_EVIDENCE"/,
+  );
+  assert.match(apply, /test "\$GATE_SOURCE_AUTH_USERS_COUNT" = "\$GATE_TARGET_AUTH_USERS_COUNT"/);
+  assert.match(
+    apply,
+    /test "\$GATE_SOURCE_STORAGE_FILE_COUNT" = "\$GATE_TARGET_STORAGE_FILE_COUNT"/,
   );
 });
 

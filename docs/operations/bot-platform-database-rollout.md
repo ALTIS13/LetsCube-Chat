@@ -152,75 +152,424 @@ stat -c '%n %s %y' "$BACKUP_DIR" "$BACKUP_DIR/MANIFEST.txt" "$BACKUP_DIR/SHA256S
 
 ## Рубеж 2: полный isolated PG17 restore rehearsal
 
-1. Развернуть отдельный PG17/self-hosted Supabase без production routing, production workers и внешней доставки.
-2. Восстановить **этот** `BACKUP_DIR` полностью по `docs/infra/BACKUP_RESTORE_RUNBOOK.md`: database, Auth/Storage metadata, storage objects и необходимые конфигурационные архивы.
-3. Не использовать `--clean`, автоматическое удаление схем или destructive auto-cleanup. Rehearsal target должен быть новым и пустым.
-4. Подтвердить доступность Auth, Storage и PostgREST внутри isolated network; не направлять на него production DNS.
-5. Сохранить логи restore, health checks, source backup path и его SHA256SUMS в evidence текущего `RUN_ID`.
+1. Подготовить отдельный Compose-файл с чистым PG17, Auth, Storage и PostgREST. Project name обязан иметь вид `letscube-bot-rehearsal-*`, единственная сеть сервисов должна быть `internal: true`, а DB host-port для libpq service может быть опубликован только на loopback.
+2. Указать точный custom dump текущего backup в `BACKUP_DB_DUMP`. Flow ниже требует штатные `db/supabase-postgres.custom` и `storage/supabase-storage.tgz`, сверяя оба с текущим `BACKUP_DIR/SHA256SUMS`; ссылка на другой каталог или файл запрещена.
+3. Не инициализировать Supabase schema до запуска flow. Он требует ноль user relations в target DB и пустой private storage bind mount, затем сам выполняет fail-stop database и object restore.
+4. Не задавать health URL. Они выводятся только из проверенных Compose service labels и проверяются из той же internal Docker network. Production DNS, произвольный host и внешний network этим flow не принимаются.
+5. Не выводить restore log, health response, имена storage objects или строки таблиц. Evidence содержит только локальные container/network identity, SHA-256 и privacy-safe aggregate counts.
 
 ```bash
 set -euo pipefail
 : "${REHEARSAL_PGSERVICE:?Set an isolated PG17 libpq service name}"
-: "${REHEARSAL_AUTH_HEALTH_URL:?Set the isolated Auth health URL}"
-: "${REHEARSAL_STORAGE_HEALTH_URL:?Set the isolated Storage health URL}"
-: "${REHEARSAL_POSTGREST_HEALTH_URL:?Set the isolated PostgREST health URL}"
+: "${REHEARSAL_COMPOSE_FILE:?Set the isolated Compose file}"
+: "${REHEARSAL_COMPOSE_PROJECT:?Set the isolated Compose project}"
+: "${REHEARSAL_NETWORK:?Set the isolated Compose network name}"
+: "${REHEARSAL_DB_SERVICE:?Set the Compose database service}"
+: "${REHEARSAL_AUTH_SERVICE:?Set the Compose Auth service}"
+: "${REHEARSAL_STORAGE_SERVICE:?Set the Compose Storage service}"
+: "${REHEARSAL_POSTGREST_SERVICE:?Set the Compose PostgREST service}"
+: "${REHEARSAL_DB_NAME:?Set the blank rehearsal database name}"
 : "${RUN_ID:?Keep the current rollout RUN_ID}"
 : "${BACKUP_DIR:?Keep the exact current-run BACKUP_DIR}"
 : "${BACKUP_SHA256SUMS_SHA256:?Keep the exact SHA256SUMS digest}"
+: "${BACKUP_DB_DUMP:?Set the exact current backup custom dump}"
 
-PG_VERSION_NUM="$(psql -X "service=$REHEARSAL_PGSERVICE" -Atv ON_ERROR_STOP=1 -c 'show server_version_num')"
+[[ "$REHEARSAL_COMPOSE_PROJECT" =~ ^letscube-bot-rehearsal-[a-z0-9][a-z0-9_-]{0,40}$ ]]
+for service in \
+  "$REHEARSAL_DB_SERVICE" \
+  "$REHEARSAL_AUTH_SERVICE" \
+  "$REHEARSAL_STORAGE_SERVICE" \
+  "$REHEARSAL_POSTGREST_SERVICE"; do
+  [[ "$service" =~ ^[a-z0-9][a-z0-9_-]{0,40}$ ]]
+done
+[[ "$REHEARSAL_DB_NAME" =~ ^[a-zA-Z0-9_]+$ ]]
+
+REHEARSAL_COMPOSE_FILE="$(realpath -e "$REHEARSAL_COMPOSE_FILE")"
+BACKUP_DIR="$(realpath -e "$BACKUP_DIR")"
+BACKUP_DB_DUMP="$(realpath -e "$BACKUP_DB_DUMP")"
+BACKUP_STORAGE_ARCHIVE="$(realpath -e "$BACKUP_DIR/storage/supabase-storage.tgz")"
+case "$BACKUP_DB_DUMP" in
+  "$BACKUP_DIR"/*) ;;
+  *) exit 72 ;;
+esac
+test "$BACKUP_DB_DUMP" = "$BACKUP_DIR/db/supabase-postgres.custom"
+test "$BACKUP_STORAGE_ARCHIVE" = "$BACKUP_DIR/storage/supabase-storage.tgz"
+
+CURRENT_BACKUP_SHA256SUMS_SHA256="$(sha256sum "$BACKUP_DIR/SHA256SUMS" | awk '{print $1}')"
+test "$CURRENT_BACKUP_SHA256SUMS_SHA256" = "$BACKUP_SHA256SUMS_SHA256"
+BACKUP_DB_RELATIVE="$(realpath --relative-to="$BACKUP_DIR" "$BACKUP_DB_DUMP")"
+BACKUP_STORAGE_RELATIVE="$(realpath --relative-to="$BACKUP_DIR" "$BACKUP_STORAGE_ARCHIVE")"
+[[ "$BACKUP_DB_RELATIVE" != ../* ]]
+test "$BACKUP_STORAGE_RELATIVE" = "storage/supabase-storage.tgz"
+
+manifest_sha_for() {
+  local relative_path="$1"
+  awk -v wanted="$relative_path" '
+    {
+      digest = $1
+      name = $0
+      sub(/^[^[:space:]]+[[:space:]]+[* ]?/, "", name)
+      if (name == wanted || name == "./" wanted) {
+        matches++
+        value = digest
+      }
+    }
+    END {
+      if (matches != 1 || value !~ /^[0-9a-f]{64}$/) exit 73
+      print value
+    }
+  ' "$BACKUP_DIR/SHA256SUMS"
+}
+
+BACKUP_DB_DUMP_SHA256="$(manifest_sha_for "$BACKUP_DB_RELATIVE")"
+BACKUP_STORAGE_ARCHIVE_SHA256="$(manifest_sha_for "$BACKUP_STORAGE_RELATIVE")"
+test "$(sha256sum "$BACKUP_DB_DUMP" | awk '{print $1}')" = "$BACKUP_DB_DUMP_SHA256"
+test "$(sha256sum "$BACKUP_STORAGE_ARCHIVE" | awk '{print $1}')" = "$BACKUP_STORAGE_ARCHIVE_SHA256"
+pg_restore --list "$BACKUP_DB_DUMP" >/dev/null
+tar -tzf "$BACKUP_STORAGE_ARCHIVE" |
+  awk '$0 ~ /^\// || $0 ~ /(^|\/)\.\.(\/|$)/ { exit 74 }'
+tar -tvzf "$BACKUP_STORAGE_ARCHIVE" |
+  awk 'substr($1, 1, 1) !~ /^[-d]$/ { exit 75 }'
+
+count_dump_copy_rows() {
+  local relation="$1"
+  pg_restore \
+    --data-only \
+    --table="$relation" \
+    --file=- \
+    "$BACKUP_DB_DUMP" |
+    awk -v relation="$relation" '
+      BEGIN {
+        gsub(/[.]/, "[.]", relation)
+        copies = 0
+        rows = 0
+        in_copy = 0
+      }
+      $0 ~ ("^COPY " relation " \\(") && $0 ~ / FROM stdin;$/ {
+        copies++
+        in_copy = 1
+        next
+      }
+      in_copy && $0 == "\\." {
+        in_copy = 0
+        next
+      }
+      in_copy {
+        rows++
+        if (rows > 1000000000) exit 76
+      }
+      END {
+        if (copies != 1 || in_copy) exit 77
+        print rows
+      }
+    '
+}
+
+SOURCE_AUTH_USERS_COUNT="$(count_dump_copy_rows auth.users)"
+SOURCE_STORAGE_OBJECTS_COUNT="$(count_dump_copy_rows storage.objects)"
+SOURCE_MESSAGES_COUNT="$(count_dump_copy_rows public.messages)"
+SOURCE_PROFILES_COUNT="$(count_dump_copy_rows public.profiles)"
+for count in \
+  "$SOURCE_AUTH_USERS_COUNT" \
+  "$SOURCE_STORAGE_OBJECTS_COUNT" \
+  "$SOURCE_MESSAGES_COUNT" \
+  "$SOURCE_PROFILES_COUNT"; do
+  [[ "$count" =~ ^[0-9]+$ ]]
+done
+test "$SOURCE_AUTH_USERS_COUNT" -gt 0
+test "$SOURCE_STORAGE_OBJECTS_COUNT" -gt 0
+test "$SOURCE_PROFILES_COUNT" -gt 0
+
+REHEARSAL_STORAGE_ROOT="$ROLLOUT_DIR/rehearsal-storage"
+install -d -m 700 "$REHEARSAL_STORAGE_ROOT"
+test -z "$(find "$REHEARSAL_STORAGE_ROOT" -mindepth 1 -print -quit)"
+export REHEARSAL_STORAGE_ROOT
+
+compose() {
+  docker compose \
+    -f "$REHEARSAL_COMPOSE_FILE" \
+    -p "$REHEARSAL_COMPOSE_PROJECT" \
+    "$@"
+}
+
+compose up -d "$REHEARSAL_DB_SERVICE"
+compose create \
+  "$REHEARSAL_AUTH_SERVICE" \
+  "$REHEARSAL_STORAGE_SERVICE" \
+  "$REHEARSAL_POSTGREST_SERVICE"
+
+NETWORK_PROJECT="$(docker network inspect \
+  --format '{{index .Labels "com.docker.compose.project"}}' \
+  "$REHEARSAL_NETWORK")"
+NETWORK_INTERNAL="$(docker network inspect --format '{{.Internal}}' "$REHEARSAL_NETWORK")"
+REHEARSAL_NETWORK_ID="$(docker network inspect --format '{{.Id}}' "$REHEARSAL_NETWORK")"
+test "$NETWORK_PROJECT" = "$REHEARSAL_COMPOSE_PROJECT"
+test "$NETWORK_INTERNAL" = "true"
+[[ "$REHEARSAL_NETWORK_ID" =~ ^[0-9a-f]{64}$ ]]
+
+compose_container_id() {
+  local service="$1"
+  local container_ids
+  mapfile -t container_ids < <(compose ps --all -q "$service")
+  test "${#container_ids[@]}" -eq 1
+  test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "${container_ids[0]}")" = \
+    "$REHEARSAL_COMPOSE_PROJECT"
+  test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "${container_ids[0]}")" = \
+    "$service"
+  printf '%s\n' "${container_ids[0]}"
+}
+
+REHEARSAL_DB_CONTAINER_ID="$(compose_container_id "$REHEARSAL_DB_SERVICE")"
+REHEARSAL_STORAGE_CONTAINER_ID="$(compose_container_id "$REHEARSAL_STORAGE_SERVICE")"
+test "$(docker inspect --format '{{len .NetworkSettings.Networks}}' "$REHEARSAL_DB_CONTAINER_ID")" -eq 1
+DB_CONTAINER_IP="$(docker inspect \
+  --format "{{with index .NetworkSettings.Networks \"$REHEARSAL_NETWORK\"}}{{.IPAddress}}{{end}}" \
+  "$REHEARSAL_DB_CONTAINER_ID")"
+test -n "$DB_CONTAINER_IP"
+
+REHEARSAL_STORAGE_CONTAINER_PATH="/var/lib/storage"
+mapfile -t STORAGE_MOUNT_SOURCES < <(
+  docker inspect \
+    --format '{{range .Mounts}}{{printf "%s\t%s\n" .Source .Destination}}{{end}}' \
+    "$REHEARSAL_STORAGE_CONTAINER_ID" |
+    awk -F '\t' -v destination="$REHEARSAL_STORAGE_CONTAINER_PATH" \
+      '$2 == destination { print $1 }'
+)
+test "${#STORAGE_MOUNT_SOURCES[@]}" -eq 1
+STORAGE_MOUNT_SOURCE="$(realpath -e "${STORAGE_MOUNT_SOURCES[0]}")"
+test "$STORAGE_MOUNT_SOURCE" = "$(realpath -e "$REHEARSAL_STORAGE_ROOT")"
+
+DB_IDENTITY_SQL="select current_database(), coalesce(inet_server_addr()::text, ''), current_setting('server_version_num'), (select system_identifier::text from pg_control_system()), to_char(pg_postmaster_start_time() at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US')"
+DB_IDENTITY_BEFORE="$(psql -X "service=$REHEARSAL_PGSERVICE" -AtF '|' -v ON_ERROR_STOP=1 -c "$DB_IDENTITY_SQL")"
+IFS='|' read -r DB_NAME INET_SERVER_ADDR PG_VERSION_NUM DB_SYSTEM_IDENTIFIER DB_POSTMASTER_STARTED \
+  <<<"$DB_IDENTITY_BEFORE"
+test "$DB_NAME" = "$REHEARSAL_DB_NAME"
+test "$INET_SERVER_ADDR" = "$DB_CONTAINER_IP"
 test "$PG_VERSION_NUM" -ge 170000
-psql -X "service=$REHEARSAL_PGSERVICE" -v ON_ERROR_STOP=1 -c 'select 1' >/dev/null
+[[ "$DB_SYSTEM_IDENTIFIER" =~ ^[0-9]+$ ]]
+test -n "$DB_POSTMASTER_STARTED"
+
+FRESH_USER_RELATION_COUNT="$(psql -X "service=$REHEARSAL_PGSERVICE" -Atv ON_ERROR_STOP=1 <<'SQL'
+select count(*)
+from pg_catalog.pg_class c
+join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+where n.nspname not in ('pg_catalog', 'information_schema')
+  and n.nspname !~ '^pg_toast'
+  and c.relkind in ('r', 'p', 'v', 'm', 'S', 'f');
+SQL
+)"
+[[ "$FRESH_USER_RELATION_COUNT" =~ ^[0-9]+$ ]]
+test "$FRESH_USER_RELATION_COUNT" -eq 0
 
 RESTORE_EVIDENCE_DIR="$ROLLOUT_DIR/restore-evidence"
 install -d -m 700 "$RESTORE_EVIDENCE_DIR"
-printf 'database_restore=ok\nserver_version_num=%s\n' "$PG_VERSION_NUM" \
+RESTORE_LOG="$RESTORE_EVIDENCE_DIR/restore.log"
+install -m 600 /dev/null "$RESTORE_LOG"
+PGOPTIONS='-c statement_timeout=0' pg_restore \
+  --exit-on-error \
+  --verbose \
+  --dbname="service=$REHEARSAL_PGSERVICE" \
+  "$BACKUP_DB_DUMP" >"$RESTORE_LOG" 2>&1
+chmod 600 "$RESTORE_LOG"
+RESTORE_LOG_SHA256="$(sha256sum "$RESTORE_LOG" | awk '{print $1}')"
+
+DB_IDENTITY_AFTER="$(psql -X "service=$REHEARSAL_PGSERVICE" -AtF '|' -v ON_ERROR_STOP=1 -c "$DB_IDENTITY_SQL")"
+test "$DB_IDENTITY_AFTER" = "$DB_IDENTITY_BEFORE"
+TARGET_AUTH_USERS_COUNT="$(psql -X "service=$REHEARSAL_PGSERVICE" -Atv ON_ERROR_STOP=1 -c 'select count(*) from auth.users')"
+TARGET_STORAGE_OBJECTS_COUNT="$(psql -X "service=$REHEARSAL_PGSERVICE" -Atv ON_ERROR_STOP=1 -c 'select count(*) from storage.objects')"
+TARGET_MESSAGES_COUNT="$(psql -X "service=$REHEARSAL_PGSERVICE" -Atv ON_ERROR_STOP=1 -c 'select count(*) from public.messages')"
+TARGET_PROFILES_COUNT="$(psql -X "service=$REHEARSAL_PGSERVICE" -Atv ON_ERROR_STOP=1 -c 'select count(*) from public.profiles')"
+test "$TARGET_AUTH_USERS_COUNT" = "$SOURCE_AUTH_USERS_COUNT"
+test "$TARGET_STORAGE_OBJECTS_COUNT" = "$SOURCE_STORAGE_OBJECTS_COUNT"
+test "$TARGET_MESSAGES_COUNT" = "$SOURCE_MESSAGES_COUNT"
+test "$TARGET_PROFILES_COUNT" = "$SOURCE_PROFILES_COUNT"
+storage_aggregate() {
+  find "$1" -type f -printf '%s\n' |
+    awk '{ files++; bytes += $1 } END { printf "%.0f %.0f\n", files, bytes }'
+}
+
+SOURCE_STORAGE_SCAN_DIR="$(mktemp -d "$ROLLOUT_DIR/.storage-source.XXXXXX")"
+chmod 700 "$SOURCE_STORAGE_SCAN_DIR"
+cleanup_source_storage_scan() {
+  find "$SOURCE_STORAGE_SCAN_DIR" -depth -delete
+}
+trap cleanup_source_storage_scan EXIT
+tar --extract --gzip --file "$BACKUP_STORAGE_ARCHIVE" \
+  --directory "$SOURCE_STORAGE_SCAN_DIR" \
+  --no-same-owner --no-same-permissions
+read -r SOURCE_STORAGE_FILE_COUNT SOURCE_STORAGE_TOTAL_BYTES \
+  < <(storage_aggregate "$SOURCE_STORAGE_SCAN_DIR")
+test "$SOURCE_STORAGE_FILE_COUNT" -gt 0
+test "$SOURCE_STORAGE_TOTAL_BYTES" -gt 0
+
+tar --extract --gzip --file "$BACKUP_STORAGE_ARCHIVE" \
+  --directory "$REHEARSAL_STORAGE_ROOT" \
+  --no-same-owner --no-same-permissions
+read -r TARGET_STORAGE_FILE_COUNT TARGET_STORAGE_TOTAL_BYTES \
+  < <(storage_aggregate "$REHEARSAL_STORAGE_ROOT")
+test "$TARGET_STORAGE_FILE_COUNT" = "$SOURCE_STORAGE_FILE_COUNT"
+test "$TARGET_STORAGE_TOTAL_BYTES" = "$SOURCE_STORAGE_TOTAL_BYTES"
+cleanup_source_storage_scan
+trap - EXIT
+
+compose start \
+  "$REHEARSAL_AUTH_SERVICE" \
+  "$REHEARSAL_STORAGE_SERVICE" \
+  "$REHEARSAL_POSTGREST_SERVICE"
+REHEARSAL_AUTH_CONTAINER_ID="$(compose_container_id "$REHEARSAL_AUTH_SERVICE")"
+REHEARSAL_STORAGE_CONTAINER_ID_AFTER="$(compose_container_id "$REHEARSAL_STORAGE_SERVICE")"
+REHEARSAL_POSTGREST_CONTAINER_ID="$(compose_container_id "$REHEARSAL_POSTGREST_SERVICE")"
+test "$REHEARSAL_STORAGE_CONTAINER_ID_AFTER" = "$REHEARSAL_STORAGE_CONTAINER_ID"
+
+for container_id in \
+  "$REHEARSAL_DB_CONTAINER_ID" \
+  "$REHEARSAL_AUTH_CONTAINER_ID" \
+  "$REHEARSAL_STORAGE_CONTAINER_ID" \
+  "$REHEARSAL_POSTGREST_CONTAINER_ID"; do
+  test "$(docker inspect --format '{{len .NetworkSettings.Networks}}' "$container_id")" -eq 1
+  test -n "$(docker inspect \
+    --format "{{with index .NetworkSettings.Networks \"$REHEARSAL_NETWORK\"}}{{.IPAddress}}{{end}}" \
+    "$container_id")"
+done
+
+AUTH_HEALTH_URL="http://${REHEARSAL_AUTH_SERVICE}:9999/health"
+STORAGE_HEALTH_URL="http://${REHEARSAL_STORAGE_SERVICE}:5000/status"
+POSTGREST_HEALTH_URL="http://${REHEARSAL_POSTGREST_SERVICE}:3000/"
+HEALTH_RESPONSE_DIR="$ROLLOUT_DIR/.health-responses"
+install -d -m 700 "$HEALTH_RESPONSE_DIR"
+
+probe_health() {
+  local label="$1"
+  local container_id="$2"
+  local url="$3"
+  local evidence="$4"
+  local response="$HEALTH_RESPONSE_DIR/$label.response"
+  install -m 600 /dev/null "$response"
+  docker run --rm --network "$REHEARSAL_NETWORK" curlimages/curl:8.12.1 \
+    -fsS --max-time 15 "$url" >"$response"
+  printf '%s_health=ok\ncontainer_id=%s\nnetwork_id=%s\nresponse_sha256=%s\n' \
+    "$label" \
+    "$container_id" \
+    "$REHEARSAL_NETWORK_ID" \
+    "$(sha256sum "$response" | awk '{print $1}')" \
+    >"$evidence"
+  chmod 600 "$evidence"
+  find "$response" -delete
+}
+
+probe_health auth "$REHEARSAL_AUTH_CONTAINER_ID" "$AUTH_HEALTH_URL" \
+  "$RESTORE_EVIDENCE_DIR/auth-evidence.txt"
+probe_health storage "$REHEARSAL_STORAGE_CONTAINER_ID" "$STORAGE_HEALTH_URL" \
+  "$RESTORE_EVIDENCE_DIR/storage-health-evidence.txt"
+probe_health postgrest "$REHEARSAL_POSTGREST_CONTAINER_ID" "$POSTGREST_HEALTH_URL" \
+  "$RESTORE_EVIDENCE_DIR/postgrest-evidence.txt"
+find "$HEALTH_RESPONSE_DIR" -depth -delete
+
+printf 'database_restore=ok\nserver_version_num=%s\ndatabase_name=%s\nsystem_identifier=%s\ndump_sha256=%s\nrestore_log_sha256=%s\nsource_auth_users_count=%s\ntarget_auth_users_count=%s\nsource_storage_objects_count=%s\ntarget_storage_objects_count=%s\nsource_messages_count=%s\ntarget_messages_count=%s\nsource_profiles_count=%s\ntarget_profiles_count=%s\n' \
+  "$PG_VERSION_NUM" \
+  "$DB_NAME" \
+  "$DB_SYSTEM_IDENTIFIER" \
+  "$BACKUP_DB_DUMP_SHA256" \
+  "$RESTORE_LOG_SHA256" \
+  "$SOURCE_AUTH_USERS_COUNT" \
+  "$TARGET_AUTH_USERS_COUNT" \
+  "$SOURCE_STORAGE_OBJECTS_COUNT" \
+  "$TARGET_STORAGE_OBJECTS_COUNT" \
+  "$SOURCE_MESSAGES_COUNT" \
+  "$TARGET_MESSAGES_COUNT" \
+  "$SOURCE_PROFILES_COUNT" \
+  "$TARGET_PROFILES_COUNT" \
   >"$RESTORE_EVIDENCE_DIR/database-evidence.txt"
 
-AUTH_ROW_COUNT="$(psql -X "service=$REHEARSAL_PGSERVICE" -Atv ON_ERROR_STOP=1 -c 'select count(*) from auth.users')"
-curl -fsS -o /dev/null "$REHEARSAL_AUTH_HEALTH_URL"
-printf 'auth_restore=ok\nauth_row_count=%s\n' "$AUTH_ROW_COUNT" \
-  >"$RESTORE_EVIDENCE_DIR/auth-evidence.txt"
-
-STORAGE_ROW_COUNT="$(psql -X "service=$REHEARSAL_PGSERVICE" -Atv ON_ERROR_STOP=1 -c 'select count(*) from storage.objects')"
-curl -fsS -o /dev/null "$REHEARSAL_STORAGE_HEALTH_URL"
-printf 'storage_restore=ok\nstorage_metadata_row_count=%s\n' "$STORAGE_ROW_COUNT" \
+printf 'storage_restore=ok\narchive_sha256=%s\nsource_storage_file_count=%s\ntarget_storage_file_count=%s\nsource_storage_total_bytes=%s\ntarget_storage_total_bytes=%s\n' \
+  "$BACKUP_STORAGE_ARCHIVE_SHA256" \
+  "$SOURCE_STORAGE_FILE_COUNT" \
+  "$TARGET_STORAGE_FILE_COUNT" \
+  "$SOURCE_STORAGE_TOTAL_BYTES" \
+  "$TARGET_STORAGE_TOTAL_BYTES" \
   >"$RESTORE_EVIDENCE_DIR/storage-evidence.txt"
 
-curl -fsS -o /dev/null "$REHEARSAL_POSTGREST_HEALTH_URL"
-printf 'postgrest_restore=ok\n' \
-  >"$RESTORE_EVIDENCE_DIR/postgrest-evidence.txt"
+printf 'compose_project=%s\nnetwork_name=%s\nnetwork_id=%s\ndatabase_container_id=%s\ndatabase_system_identifier=%s\nauth_container_id=%s\nstorage_container_id=%s\npostgrest_container_id=%s\ndatabase_identity=%s\n' \
+  "$REHEARSAL_COMPOSE_PROJECT" \
+  "$REHEARSAL_NETWORK" \
+  "$REHEARSAL_NETWORK_ID" \
+  "$REHEARSAL_DB_CONTAINER_ID" \
+  "$DB_SYSTEM_IDENTIFIER" \
+  "$REHEARSAL_AUTH_CONTAINER_ID" \
+  "$REHEARSAL_STORAGE_CONTAINER_ID" \
+  "$REHEARSAL_POSTGREST_CONTAINER_ID" \
+  "$DB_IDENTITY_AFTER" \
+  >"$RESTORE_EVIDENCE_DIR/target-identity.txt"
 
 chmod 600 "$RESTORE_EVIDENCE_DIR"/*.txt
 (
   cd "$ROLLOUT_DIR"
   sha256sum \
+    restore-evidence/restore.log \
     restore-evidence/database-evidence.txt \
     restore-evidence/auth-evidence.txt \
     restore-evidence/storage-evidence.txt \
+    restore-evidence/storage-health-evidence.txt \
     restore-evidence/postgrest-evidence.txt \
+    restore-evidence/target-identity.txt \
     >restore-evidence.sha256
   sha256sum -c restore-evidence.sha256
 )
 
 RESTORE_EVIDENCE_SHA256="$(sha256sum "$ROLLOUT_DIR/restore-evidence.sha256" | awk '{print $1}')"
+DATABASE_EVIDENCE_SHA256="$(sha256sum "$RESTORE_EVIDENCE_DIR/database-evidence.txt" | awk '{print $1}')"
+AUTH_EVIDENCE_SHA256="$(sha256sum "$RESTORE_EVIDENCE_DIR/auth-evidence.txt" | awk '{print $1}')"
+STORAGE_EVIDENCE_SHA256="$(sha256sum "$RESTORE_EVIDENCE_DIR/storage-evidence.txt" | awk '{print $1}')"
+STORAGE_HEALTH_EVIDENCE_SHA256="$(sha256sum "$RESTORE_EVIDENCE_DIR/storage-health-evidence.txt" | awk '{print $1}')"
+POSTGREST_EVIDENCE_SHA256="$(sha256sum "$RESTORE_EVIDENCE_DIR/postgrest-evidence.txt" | awk '{print $1}')"
+TARGET_IDENTITY_SHA256="$(sha256sum "$RESTORE_EVIDENCE_DIR/target-identity.txt" | awk '{print $1}')"
 RESTORE_GATE="$ROLLOUT_DIR/restore-gate.env"
 {
-  printf 'version=1\n'
+  printf 'version=2\n'
   printf 'run_id=%s\n' "$RUN_ID"
   printf 'backup_dir=%s\n' "$BACKUP_DIR"
   printf 'backup_sha256sums_sha256=%s\n' "$BACKUP_SHA256SUMS_SHA256"
+  printf 'backup_db_dump_sha256=%s\n' "$BACKUP_DB_DUMP_SHA256"
+  printf 'backup_storage_archive_sha256=%s\n' "$BACKUP_STORAGE_ARCHIVE_SHA256"
+  printf 'rehearsal_compose_project=%s\n' "$REHEARSAL_COMPOSE_PROJECT"
+  printf 'rehearsal_network_name=%s\n' "$REHEARSAL_NETWORK"
+  printf 'rehearsal_network_id=%s\n' "$REHEARSAL_NETWORK_ID"
+  printf 'rehearsal_db_container_id=%s\n' "$REHEARSAL_DB_CONTAINER_ID"
+  printf 'rehearsal_db_system_identifier=%s\n' "$DB_SYSTEM_IDENTIFIER"
+  printf 'target_identity_sha256=%s\n' "$TARGET_IDENTITY_SHA256"
+  printf 'restore_log_sha256=%s\n' "$RESTORE_LOG_SHA256"
+  printf 'database_evidence_sha256=%s\n' "$DATABASE_EVIDENCE_SHA256"
+  printf 'auth_evidence_sha256=%s\n' "$AUTH_EVIDENCE_SHA256"
+  printf 'storage_evidence_sha256=%s\n' "$STORAGE_EVIDENCE_SHA256"
+  printf 'storage_health_evidence_sha256=%s\n' "$STORAGE_HEALTH_EVIDENCE_SHA256"
+  printf 'postgrest_evidence_sha256=%s\n' "$POSTGREST_EVIDENCE_SHA256"
   printf 'restore_evidence_sha256=%s\n' "$RESTORE_EVIDENCE_SHA256"
-  printf 'database=ok\n'
-  printf 'auth=ok\n'
-  printf 'storage=ok\n'
-  printf 'postgrest=ok\n'
+  printf 'source_auth_users_count=%s\n' "$SOURCE_AUTH_USERS_COUNT"
+  printf 'target_auth_users_count=%s\n' "$TARGET_AUTH_USERS_COUNT"
+  printf 'source_storage_objects_count=%s\n' "$SOURCE_STORAGE_OBJECTS_COUNT"
+  printf 'target_storage_objects_count=%s\n' "$TARGET_STORAGE_OBJECTS_COUNT"
+  printf 'source_messages_count=%s\n' "$SOURCE_MESSAGES_COUNT"
+  printf 'target_messages_count=%s\n' "$TARGET_MESSAGES_COUNT"
+  printf 'source_profiles_count=%s\n' "$SOURCE_PROFILES_COUNT"
+  printf 'target_profiles_count=%s\n' "$TARGET_PROFILES_COUNT"
+  printf 'source_storage_file_count=%s\n' "$SOURCE_STORAGE_FILE_COUNT"
+  printf 'target_storage_file_count=%s\n' "$TARGET_STORAGE_FILE_COUNT"
+  printf 'source_storage_total_bytes=%s\n' "$SOURCE_STORAGE_TOTAL_BYTES"
+  printf 'target_storage_total_bytes=%s\n' "$TARGET_STORAGE_TOTAL_BYTES"
 } >"$RESTORE_GATE.tmp"
 chmod 600 "$RESTORE_GATE.tmp"
 mv "$RESTORE_GATE.tmp" "$RESTORE_GATE"
+(
+  cd "$ROLLOUT_DIR"
+  sha256sum restore-gate.env >restore-gate.env.sha256
+  sha256sum -c restore-gate.env.sha256
+)
+chmod 600 "$ROLLOUT_DIR/restore-gate.env.sha256"
 ```
 
-Health URL должны принадлежать только isolated network; production URL запрещены. Aggregate counts не содержат сырых строк. `storage-evidence.txt` создаётся только после восстановления Storage metadata и object archive по основному restore runbook. Этот полный restore rehearsal является hard gate. Без связанного с текущими `RUN_ID`, `BACKUP_DIR`, SHA manifest и четырьмя evidence-файлами `restore-gate.env` дальнейшие команды не выполняются.
+`pg_restore --exit-on-error` является fail-stop эквивалентом `ON_ERROR_STOP` для custom dump; все SQL probes выполняются через `psql -v ON_ERROR_STOP=1`. Empty initialized Supabase не проходит `FRESH_USER_RELATION_COUNT=0`, а пустой или частично восстановленный target не проходит ненулевые source counts и exact source/target parity. Libpq service не может указывать production: server address должен совпасть с IP проверенного Compose DB container, каждый service имеет labels того же rehearsal project, единственную `internal: true` network и неизменный container/network identity. Health endpoints имеют фиксированные container-local host/port/path и не принимаются из окружения.
+
+Storage archive дважды извлекается без вывода имён: сначала во временный private source scan, затем в доказанно пустой bind mount под текущим `ROLLOUT_DIR`. File count и total uncompressed bytes должны быть ненулевыми и точно совпасть. Полные responses и restore log остаются mode `0600`; gate хранит только их hashes и privacy-safe counts. Без `restore-gate.env`, `restore-gate.env.sha256` и связанного evidence дальнейшие команды не выполняются.
 
 ## Рубеж 3: one-shot и partial-schema gate
 
@@ -500,24 +849,146 @@ set -euo pipefail
 : "${RUN_ID:?Keep the current rollout RUN_ID}"
 : "${BACKUP_DIR:?Keep the exact current-run BACKUP_DIR}"
 : "${BACKUP_SHA256SUMS_SHA256:?Keep the exact SHA256SUMS digest}"
+: "${BACKUP_DB_DUMP:?Set the exact current backup custom dump}"
 
 RESTORE_GATE="$ROLLOUT_DIR/restore-gate.env"
+RESTORE_GATE_CHECKSUM="$ROLLOUT_DIR/restore-gate.env.sha256"
 test -f "$RESTORE_GATE"
+test -f "$RESTORE_GATE_CHECKSUM"
 test "$(stat -c '%a' "$RESTORE_GATE")" = "600"
-grep -Fxq "run_id=$RUN_ID" "$RESTORE_GATE"
-grep -Fxq "backup_dir=$BACKUP_DIR" "$RESTORE_GATE"
-grep -Fxq "backup_sha256sums_sha256=$BACKUP_SHA256SUMS_SHA256" "$RESTORE_GATE"
-grep -Fxq 'database=ok' "$RESTORE_GATE"
-grep -Fxq 'auth=ok' "$RESTORE_GATE"
-grep -Fxq 'storage=ok' "$RESTORE_GATE"
-grep -Fxq 'postgrest=ok' "$RESTORE_GATE"
+test "$(stat -c '%a' "$RESTORE_GATE_CHECKSUM")" = "600"
+(
+  cd "$ROLLOUT_DIR"
+  sha256sum -c restore-gate.env.sha256
+)
+
+gate_value() {
+  local key="$1"
+  local values
+  mapfile -t values < <(sed -n "s/^${key}=//p" "$RESTORE_GATE")
+  test "${#values[@]}" -eq 1
+  printf '%s\n' "${values[0]}"
+}
+
+test "$(gate_value version)" = "2"
+test "$(gate_value run_id)" = "$RUN_ID"
+test "$(gate_value backup_dir)" = "$BACKUP_DIR"
+test "$(gate_value backup_sha256sums_sha256)" = "$BACKUP_SHA256SUMS_SHA256"
+
+GATE_BACKUP_DB_DUMP_SHA256="$(gate_value backup_db_dump_sha256)"
+GATE_BACKUP_STORAGE_ARCHIVE_SHA256="$(gate_value backup_storage_archive_sha256)"
+GATE_REHEARSAL_COMPOSE_PROJECT="$(gate_value rehearsal_compose_project)"
+GATE_REHEARSAL_NETWORK_NAME="$(gate_value rehearsal_network_name)"
+GATE_REHEARSAL_NETWORK_ID="$(gate_value rehearsal_network_id)"
+GATE_REHEARSAL_DB_CONTAINER_ID="$(gate_value rehearsal_db_container_id)"
+GATE_REHEARSAL_DB_SYSTEM_IDENTIFIER="$(gate_value rehearsal_db_system_identifier)"
+GATE_TARGET_IDENTITY_SHA256="$(gate_value target_identity_sha256)"
+GATE_RESTORE_LOG_SHA256="$(gate_value restore_log_sha256)"
+GATE_DATABASE_EVIDENCE_SHA256="$(gate_value database_evidence_sha256)"
+GATE_AUTH_EVIDENCE_SHA256="$(gate_value auth_evidence_sha256)"
+GATE_STORAGE_EVIDENCE_SHA256="$(gate_value storage_evidence_sha256)"
+GATE_STORAGE_HEALTH_EVIDENCE_SHA256="$(gate_value storage_health_evidence_sha256)"
+GATE_POSTGREST_EVIDENCE_SHA256="$(gate_value postgrest_evidence_sha256)"
+GATE_RESTORE_EVIDENCE_SHA256="$(gate_value restore_evidence_sha256)"
+[[ "$GATE_REHEARSAL_COMPOSE_PROJECT" =~ ^letscube-bot-rehearsal-[a-z0-9][a-z0-9_-]{0,40}$ ]]
+[[ "$GATE_REHEARSAL_NETWORK_NAME" =~ ^[a-z0-9][a-z0-9_-]{0,62}$ ]]
+[[ "$GATE_REHEARSAL_NETWORK_ID" =~ ^[0-9a-f]{64}$ ]]
+[[ "$GATE_REHEARSAL_DB_CONTAINER_ID" =~ ^[0-9a-f]{64}$ ]]
+[[ "$GATE_REHEARSAL_DB_SYSTEM_IDENTIFIER" =~ ^[0-9]+$ ]]
+
+BACKUP_DIR="$(realpath -e "$BACKUP_DIR")"
+BACKUP_DB_DUMP="$(realpath -e "$BACKUP_DB_DUMP")"
+BACKUP_STORAGE_ARCHIVE="$(realpath -e "$BACKUP_DIR/storage/supabase-storage.tgz")"
+case "$BACKUP_DB_DUMP" in
+  "$BACKUP_DIR"/*) ;;
+  *) exit 92 ;;
+esac
+test "$BACKUP_DB_DUMP" = "$BACKUP_DIR/db/supabase-postgres.custom"
+BACKUP_DB_RELATIVE="$(realpath --relative-to="$BACKUP_DIR" "$BACKUP_DB_DUMP")"
+
+manifest_sha_for() {
+  local relative_path="$1"
+  awk -v wanted="$relative_path" '
+    {
+      digest = $1
+      name = $0
+      sub(/^[^[:space:]]+[[:space:]]+[* ]?/, "", name)
+      if (name == wanted || name == "./" wanted) {
+        matches++
+        value = digest
+      }
+    }
+    END {
+      if (matches != 1 || value !~ /^[0-9a-f]{64}$/) exit 93
+      print value
+    }
+  ' "$BACKUP_DIR/SHA256SUMS"
+}
+
+test "$(manifest_sha_for "$BACKUP_DB_RELATIVE")" = "$GATE_BACKUP_DB_DUMP_SHA256"
+test "$(manifest_sha_for storage/supabase-storage.tgz)" = "$GATE_BACKUP_STORAGE_ARCHIVE_SHA256"
+test "$(sha256sum "$BACKUP_DB_DUMP" | awk '{print $1}')" = "$GATE_BACKUP_DB_DUMP_SHA256"
+test "$(sha256sum "$BACKUP_STORAGE_ARCHIVE" | awk '{print $1}')" = "$GATE_BACKUP_STORAGE_ARCHIVE_SHA256"
 
 CURRENT_RESTORE_EVIDENCE_SHA256="$(sha256sum "$ROLLOUT_DIR/restore-evidence.sha256" | awk '{print $1}')"
-grep -Fxq "restore_evidence_sha256=$CURRENT_RESTORE_EVIDENCE_SHA256" "$RESTORE_GATE"
+test "$CURRENT_RESTORE_EVIDENCE_SHA256" = "$GATE_RESTORE_EVIDENCE_SHA256"
 (
   cd "$ROLLOUT_DIR"
   sha256sum -c restore-evidence.sha256
 )
+test "$(sha256sum "$ROLLOUT_DIR/restore-evidence/restore.log" | awk '{print $1}')" = "$GATE_RESTORE_LOG_SHA256"
+test "$(sha256sum "$ROLLOUT_DIR/restore-evidence/database-evidence.txt" | awk '{print $1}')" = "$GATE_DATABASE_EVIDENCE_SHA256"
+test "$(sha256sum "$ROLLOUT_DIR/restore-evidence/auth-evidence.txt" | awk '{print $1}')" = "$GATE_AUTH_EVIDENCE_SHA256"
+test "$(sha256sum "$ROLLOUT_DIR/restore-evidence/storage-evidence.txt" | awk '{print $1}')" = "$GATE_STORAGE_EVIDENCE_SHA256"
+test "$(sha256sum "$ROLLOUT_DIR/restore-evidence/storage-health-evidence.txt" | awk '{print $1}')" = "$GATE_STORAGE_HEALTH_EVIDENCE_SHA256"
+test "$(sha256sum "$ROLLOUT_DIR/restore-evidence/postgrest-evidence.txt" | awk '{print $1}')" = "$GATE_POSTGREST_EVIDENCE_SHA256"
+TARGET_IDENTITY_EVIDENCE="$ROLLOUT_DIR/restore-evidence/target-identity.txt"
+test "$(sha256sum "$TARGET_IDENTITY_EVIDENCE" | awk '{print $1}')" = "$GATE_TARGET_IDENTITY_SHA256"
+grep -Fxq "compose_project=$GATE_REHEARSAL_COMPOSE_PROJECT" "$TARGET_IDENTITY_EVIDENCE"
+grep -Fxq "network_name=$GATE_REHEARSAL_NETWORK_NAME" "$TARGET_IDENTITY_EVIDENCE"
+grep -Fxq "network_id=$GATE_REHEARSAL_NETWORK_ID" "$TARGET_IDENTITY_EVIDENCE"
+grep -Fxq "database_container_id=$GATE_REHEARSAL_DB_CONTAINER_ID" "$TARGET_IDENTITY_EVIDENCE"
+grep -Fxq "database_system_identifier=$GATE_REHEARSAL_DB_SYSTEM_IDENTIFIER" "$TARGET_IDENTITY_EVIDENCE"
+
+GATE_SOURCE_AUTH_USERS_COUNT="$(gate_value source_auth_users_count)"
+GATE_TARGET_AUTH_USERS_COUNT="$(gate_value target_auth_users_count)"
+GATE_SOURCE_STORAGE_OBJECTS_COUNT="$(gate_value source_storage_objects_count)"
+GATE_TARGET_STORAGE_OBJECTS_COUNT="$(gate_value target_storage_objects_count)"
+GATE_SOURCE_MESSAGES_COUNT="$(gate_value source_messages_count)"
+GATE_TARGET_MESSAGES_COUNT="$(gate_value target_messages_count)"
+GATE_SOURCE_PROFILES_COUNT="$(gate_value source_profiles_count)"
+GATE_TARGET_PROFILES_COUNT="$(gate_value target_profiles_count)"
+GATE_SOURCE_STORAGE_FILE_COUNT="$(gate_value source_storage_file_count)"
+GATE_TARGET_STORAGE_FILE_COUNT="$(gate_value target_storage_file_count)"
+GATE_SOURCE_STORAGE_TOTAL_BYTES="$(gate_value source_storage_total_bytes)"
+GATE_TARGET_STORAGE_TOTAL_BYTES="$(gate_value target_storage_total_bytes)"
+for count in \
+  "$GATE_SOURCE_AUTH_USERS_COUNT" \
+  "$GATE_TARGET_AUTH_USERS_COUNT" \
+  "$GATE_SOURCE_STORAGE_OBJECTS_COUNT" \
+  "$GATE_TARGET_STORAGE_OBJECTS_COUNT" \
+  "$GATE_SOURCE_MESSAGES_COUNT" \
+  "$GATE_TARGET_MESSAGES_COUNT" \
+  "$GATE_SOURCE_PROFILES_COUNT" \
+  "$GATE_TARGET_PROFILES_COUNT" \
+  "$GATE_SOURCE_STORAGE_FILE_COUNT" \
+  "$GATE_TARGET_STORAGE_FILE_COUNT" \
+  "$GATE_SOURCE_STORAGE_TOTAL_BYTES" \
+  "$GATE_TARGET_STORAGE_TOTAL_BYTES"; do
+  [[ "$count" =~ ^[0-9]+$ ]]
+done
+test "$GATE_SOURCE_AUTH_USERS_COUNT" -gt 0
+test "$GATE_SOURCE_STORAGE_OBJECTS_COUNT" -gt 0
+test "$GATE_SOURCE_PROFILES_COUNT" -gt 0
+test "$GATE_SOURCE_STORAGE_FILE_COUNT" -gt 0
+test "$GATE_SOURCE_STORAGE_TOTAL_BYTES" -gt 0
+test "$GATE_SOURCE_AUTH_USERS_COUNT" = "$GATE_TARGET_AUTH_USERS_COUNT"
+test "$GATE_SOURCE_STORAGE_OBJECTS_COUNT" = "$GATE_TARGET_STORAGE_OBJECTS_COUNT"
+test "$GATE_SOURCE_MESSAGES_COUNT" = "$GATE_TARGET_MESSAGES_COUNT"
+test "$GATE_SOURCE_PROFILES_COUNT" = "$GATE_TARGET_PROFILES_COUNT"
+test "$GATE_SOURCE_STORAGE_FILE_COUNT" = "$GATE_TARGET_STORAGE_FILE_COUNT"
+test "$GATE_SOURCE_STORAGE_TOTAL_BYTES" = "$GATE_TARGET_STORAGE_TOTAL_BYTES"
+
 CURRENT_BACKUP_SHA256SUMS_SHA256="$(sha256sum "$BACKUP_DIR/SHA256SUMS" | awk '{print $1}')"
 test "$CURRENT_BACKUP_SHA256SUMS_SHA256" = "$BACKUP_SHA256SUMS_SHA256"
 
