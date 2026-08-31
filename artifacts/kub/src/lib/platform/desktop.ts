@@ -6,6 +6,10 @@ export type DesktopRuntimeInfo = {
 
 const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
+export function isDesktopShell(): boolean {
+  return typeof window !== "undefined" && Boolean(window.letscubeDesktop);
+}
+
 export function isDesktopApp(): boolean {
   return typeof window !== "undefined" && window.letscubeDesktop?.platform === "windows";
 }

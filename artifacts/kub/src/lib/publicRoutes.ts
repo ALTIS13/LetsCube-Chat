@@ -1,4 +1,4 @@
-const PUBLIC_ROUTES = new Set(["/bots/docs", "/privacy", "/support"]);
+const PUBLIC_ROUTES = new Set(["/bots/docs", "/download", "/privacy", "/support"]);
 const AUTH_ROUTES = new Set(["/login", "/register"]);
 
 export function isPublicRoute(location: string): boolean {

@@ -7,6 +7,8 @@ import {
 } from "../../artifacts/kub/src/lib/publicRoutes.ts";
 
 test("privacy and support routes are public without widening protected routes", () => {
+  assert.equal(isPublicRoute("/download"), true);
+  assert.equal(isPublicRoute("/download/?platform=windows"), true);
   assert.equal(isPublicRoute("/privacy"), true);
   assert.equal(isPublicRoute("/privacy/"), true);
   assert.equal(isPublicRoute("/support"), true);
@@ -17,6 +19,7 @@ test("privacy and support routes are public without widening protected routes", 
   assert.equal(isPublicRoute("/admin"), false);
   assert.equal(isPublicRoute("/support-admin"), false);
   assert.equal(isPublicRoute("/privacy-settings"), false);
+  assert.equal(isPublicRoute("/chats/direct-message"), false);
 });
 
 test("auth route matching preserves callback and recovery paths", () => {
@@ -28,5 +31,7 @@ test("auth route matching preserves callback and recovery paths", () => {
   assert.equal(isAuthRoute("/"), false);
   assert.equal(isAuthRoute("/privacy"), false);
   assert.equal(isAuthRoute("/support"), false);
+  assert.equal(isAuthRoute("/download"), false);
+  assert.equal(isAuthRoute("/chats/direct-message"), false);
   assert.equal(isAuthRoute("/login-history"), false);
 });

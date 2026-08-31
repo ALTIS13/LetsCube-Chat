@@ -8,6 +8,7 @@ import {
 import {
   getDesktopRuntimeInfo,
   isDesktopApp,
+  isDesktopShell,
 } from "../../artifacts/kub/src/lib/platform/desktop.ts";
 
 const IPHONE_UA =
@@ -87,6 +88,7 @@ test("Tauri desktop bridge is synchronous and wins over Windows browser heuristi
   } as typeof window;
 
   try {
+    assert.equal(isDesktopShell(), true);
     assert.equal(isDesktopApp(), true);
     assert.deepEqual(await getDesktopRuntimeInfo(), runtimeInfo);
     assert.equal(
@@ -98,6 +100,23 @@ test("Tauri desktop bridge is synchronous and wins over Windows browser heuristi
       }),
       "windows_native",
     );
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+test("desktop shell detection is platform-neutral without widening Windows capabilities", () => {
+  const previousWindow = globalThis.window;
+
+  globalThis.window = {
+    letscubeDesktop: {
+      platform: "macos",
+    },
+  } as unknown as typeof window;
+
+  try {
+    assert.equal(isDesktopShell(), true);
+    assert.equal(isDesktopApp(), false);
   } finally {
     globalThis.window = previousWindow;
   }

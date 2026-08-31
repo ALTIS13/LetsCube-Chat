@@ -10,7 +10,8 @@ import { useHeartbeat } from "@/hooks/useHeartbeat";
 import { usePushForegroundSession } from "@/hooks/usePushForegroundSession";
 import { useBanState } from "@/hooks/useBanState";
 import { usePushNotificationNavigation } from "@/hooks/usePush";
-import { supportsBrowserPush } from "@/lib/platform/capabilities";
+import { isNativeApp, supportsBrowserPush } from "@/lib/platform/capabilities";
+import { isDesktopShell } from "@/lib/platform/desktop";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { IframeAuthBanner } from "@/components/IframeAuthBanner";
 import { AppUpdateBanner } from "@/components/AppUpdateBanner";
@@ -22,7 +23,9 @@ import { AdminLayout } from "@/pages/admin/AdminLayout";
 import { TasksPage } from "@/pages/tasks/TasksPage";
 import { BotsPage } from "@/pages/bots/BotsPage";
 import { BotDocsPage } from "@/pages/public/BotDocsPage";
+import { DownloadPage } from "@/pages/public/DownloadPage";
 import { PrivacyPage } from "@/pages/public/PrivacyPage";
+import { PublicHomePage } from "@/pages/public/PublicHomePage";
 import { SupportPage } from "@/pages/public/SupportPage";
 import NotFound from "@/pages/not-found";
 import { ThemeSync } from "@/hooks/useTheme";
@@ -37,6 +40,7 @@ import {
   isPasswordRecoveryUrl,
 } from "@/lib/authRecovery";
 import { isAuthRoute, isPublicRoute } from "@/lib/publicRoutes";
+import { decideRootExperience } from "@/lib/publicHomeRouting";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -320,6 +324,13 @@ function AppRoutes() {
   const [location] = useLocation();
   const banState = useBanState();
   const authRoute = isAuthRoute(location);
+  const rootExperience = location === "/"
+    ? decideRootExperience({
+      loading: loading || Boolean(loadingError),
+      authenticated: Boolean(user),
+      nativeShell: isNativeApp() || isDesktopShell(),
+    })
+    : null;
 
   // Keep the user's online_at fresh while a session exists.
   useHeartbeat();
@@ -351,6 +362,18 @@ function AppRoutes() {
   // Auth callback always renders so it can exchange the code, regardless of session state.
   if (location.startsWith("/auth/callback")) {
     return <AuthCallback />;
+  }
+
+  if (location === "/") {
+    if (rootExperience === "loading") {
+      return <LoadingScreen error={loadingError} onRetry={retry} onSignOut={user ? signOut : undefined} />;
+    }
+    if (rootExperience === "public_home") {
+      return <PublicHomePage />;
+    }
+    if (rootExperience === "login") {
+      return <Redirect to="/login" />;
+    }
   }
 
   if (loading || loadingError) {
@@ -396,6 +419,7 @@ function RootRoutes() {
     return (
       <Switch>
         <Route path="/bots/docs" component={BotDocsPage} />
+        <Route path="/download" component={DownloadPage} />
         <Route path="/privacy" component={PrivacyPage} />
         <Route path="/support" component={SupportPage} />
         <Route component={NotFound} />
