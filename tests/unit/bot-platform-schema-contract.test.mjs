@@ -1016,6 +1016,18 @@ test("database smoke preserves history and rolls every probe back", () => {
     3,
     "restored auth profile triggers require all smoke profiles to be upserted",
   );
+  assert.match(
+    normalizedSmoke,
+    /insert into public\.chat_members\(chat_id, user_id, role\)[\s\S]*values \(v_delete_chat_id, v_recipient_id, 'owner'::public\.chat_member_role\)[\s\S]*on conflict \(chat_id, user_id\) do update set[\s\S]*role = excluded\.role/,
+    "the profile tombstone probe must preserve a second chat owner",
+  );
+  assert.equal(
+    normalizedSmoke.match(
+      /insert into public\.chat_members\([^)]+\)[\s\S]*?on conflict \(chat_id, user_id\) do update set/g,
+    )?.length,
+    6,
+    "restored chat-creation triggers require every smoke membership fixture to be idempotent",
+  );
   assert.match(normalizedSmoke, /rollback;$/);
   assert.doesNotMatch(normalizedSmoke, /delete from public\.messages/);
   assert.match(

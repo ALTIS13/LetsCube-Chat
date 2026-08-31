@@ -328,6 +328,10 @@ begin
     username = excluded.username;
   insert into public.chats(id, type, name, created_by)
   values (v_delete_chat_id, 'group', 'Tombstone smoke', v_profile_delete_id);
+  insert into public.chat_members(chat_id, user_id, role)
+  values (v_delete_chat_id, v_recipient_id, 'owner'::public.chat_member_role)
+  on conflict (chat_id, user_id) do update set
+    role = excluded.role;
   insert into public.messages(id, chat_id, user_id, content, type)
   values (
     gen_random_uuid(),
@@ -673,7 +677,9 @@ begin
   insert into public.chat_members(chat_id, user_id, role)
   values
     (v_lifecycle_chat_id, v_actor_id, 'owner'),
-    (v_lifecycle_chat_id, v_recipient_id, 'member');
+    (v_lifecycle_chat_id, v_recipient_id, 'member')
+  on conflict (chat_id, user_id) do update set
+    role = excluded.role;
   insert into public.chat_bot_members(chat_id, bot_id, joined_at)
   values (v_lifecycle_chat_id, v_second_bot_id, pg_catalog.now());
 
@@ -767,7 +773,9 @@ begin
   insert into public.chat_members(chat_id, user_id, role)
   values
     (v_chat_id, v_actor_id, 'owner'),
-    (v_chat_id, v_recipient_id, 'member');
+    (v_chat_id, v_recipient_id, 'member')
+  on conflict (chat_id, user_id) do update set
+    role = excluded.role;
 
   v_history_media_path := v_chat_id::text || '/bots/' || v_bot_id::text || '/' || gen_random_uuid()::text || '.pdf';
   insert into storage.objects(bucket_id, name)
@@ -814,7 +822,9 @@ begin
   insert into public.chat_members(chat_id, user_id, role)
   values
     (v_other_chat_id, v_actor_id, 'owner'),
-    (v_other_chat_id, v_recipient_id, 'member');
+    (v_other_chat_id, v_recipient_id, 'member')
+  on conflict (chat_id, user_id) do update set
+    role = excluded.role;
   insert into public.chat_bot_members(
     chat_id,
     bot_id,
@@ -1587,7 +1597,9 @@ begin
     (v_full_chat_id, v_actor_id, 'owner'),
     (v_full_chat_id, v_recipient_id, 'member'),
     (v_private_chat_id, v_actor_id, 'owner'),
-    (v_private_chat_id, v_recipient_id, 'member');
+    (v_private_chat_id, v_recipient_id, 'member')
+  on conflict (chat_id, user_id) do update set
+    role = excluded.role;
   insert into public.chat_bot_members(
     chat_id,
     bot_id,
@@ -2663,7 +2675,11 @@ begin
   insert into public.chat_members(chat_id, user_id, role, joined_at, last_read_at)
   values
     (v_task6_chat_id, v_actor_id, 'owner', pg_catalog.now() - interval '1 minute', pg_catalog.now() - interval '1 minute'),
-    (v_task6_chat_id, v_recipient_id, 'member', pg_catalog.now() - interval '1 minute', pg_catalog.now() - interval '1 minute');
+    (v_task6_chat_id, v_recipient_id, 'member', pg_catalog.now() - interval '1 minute', pg_catalog.now() - interval '1 minute')
+  on conflict (chat_id, user_id) do update set
+    role = excluded.role,
+    joined_at = excluded.joined_at,
+    last_read_at = excluded.last_read_at;
   insert into public.chat_bot_members(chat_id, bot_id, joined_at)
   values (v_task6_chat_id, v_bot_id, pg_catalog.now());
   insert into public.messages(chat_id, user_id, content, type, created_at)
