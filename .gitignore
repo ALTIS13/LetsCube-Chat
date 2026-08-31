@@ -53,6 +53,8 @@ attached_assets/
 .eslintcache
 .sass-cache/
 coverage/
+__pycache__/
+*.py[cod]
 
 # Editor and OS local files.
 .vscode/

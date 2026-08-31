@@ -8,6 +8,7 @@ const migrationPath =
   ".migration-backup/supabase/migrations/20260831100000_bot_platform_foundation.sql";
 const smokePath = "tests/server/bot-platform-db-smoke.sql";
 const planPath = "docs/superpowers/plans/2026-08-30-bot-platform.md";
+const restoreSafetyPath = "scripts/ops/supabase-restore-safety.py";
 
 function runbook() {
   assert.equal(existsSync(runbookPath), true, `missing ${runbookPath}`);
@@ -214,6 +215,21 @@ test("restore flow executes the manifest-bound dump and rejects an empty or mism
   assert.match(restore, /test "\$CRON_DATABASE_NAME" = "\$REHEARSAL_DB_NAME"/);
   assert.match(restore, /supabase_realtime_admin/);
   assert.match(restore, /pg_has_role\('postgres', 'supabase_realtime_admin', 'MEMBER'\)/);
+  assert.match(restore, new RegExp(restoreSafetyPath.replaceAll(".", "\\.")));
+  assert.match(restore, /filter-roles/);
+  assert.match(restore, /FILTERED_DB_ROLES/);
+  assert.match(
+    restore,
+    /psql[\s\S]{0,300}--file="\$FILTERED_DB_ROLES"/,
+  );
+  assert.match(restore, /pg_dumpall[\s\S]{0,300}--roles-only[\s\S]{0,300}--no-role-passwords/);
+  assert.match(restore, /ROLE_DUMP_PARITY/);
+  assert.match(restore, /test "\$ROLE_DUMP_PARITY" = "ok"/);
+  assert.ok(
+    restore.indexOf('--file="$FILTERED_DB_ROLES"') <
+      restore.indexOf("PGOPTIONS='-c statement_timeout=0' pg_restore"),
+    "global roles must be restored before the database archive",
+  );
   assert.match(restore, /restore_role=%s/);
   assert.match(apply, /grep -Fxq 'restore_role=supabase_admin' "\$TARGET_IDENTITY_EVIDENCE"/);
   assert.match(restore, /COPY[\s\S]{0,500}rows > 1000000000/);
@@ -371,6 +387,7 @@ test("storage restore and checksummed gate bind archive parity and all evidence"
     "target_identity_sha256",
     "restore_log_sha256",
     "database_evidence_sha256",
+    "role_restore_evidence_sha256",
     "source_auth_users_count",
     "target_auth_users_count",
     "source_storage_objects_count",
@@ -436,16 +453,9 @@ test("storage archive restores one exact storage root beside the bind source", (
       restoreScript.indexOf("compose create"),
     "storage bind child must exist before compose create",
   );
-  assert.match(restoreScript, /tar -tzf "\$BACKUP_STORAGE_ARCHIVE" \|\s+awk/);
-  assert.match(restoreScript, /tar -tvzf "\$BACKUP_STORAGE_ARCHIVE" \|\s+awk/);
-  assert.match(restoreScript, /entry_type == "h"/);
-  assert.match(restoreScript, /hardlink_marker = " link to "/);
-  assert.match(restoreScript, /hardlink_target/);
-  assert.match(restoreScript, /hardlink_target !~ \/\^storage\\\//);
-  assert.match(restoreScript, /entry_type !~ \/\^\[-dh\]\$\//);
-  assert.match(restoreScript, /\$0 == "storage\/"/);
-  assert.match(restoreScript, /root_entries != 1/);
-  assert.match(restoreScript, /\$0 !~ \/\^storage\\\//);
+  assert.match(restoreScript, new RegExp(restoreSafetyPath.replaceAll(".", "\\.")));
+  assert.match(restoreScript, /extract-storage/);
+  assert.doesNotMatch(restoreScript, /tar -tv/);
   assert.match(
     restoreScript,
     /SOURCE_SCAN="\$\(mktemp -d "\$ROLLOUT_DIR\/\.storage-source\.XXXXXX"\)"/,
@@ -453,17 +463,31 @@ test("storage archive restores one exact storage root beside the bind source", (
   assert.match(restoreScript, /"\$ROLLOUT_DIR"\/\.storage-source\.\?\?\?\?\?\?\) ;;/);
   assert.match(restoreScript, /find "\$SOURCE_SCAN" -xdev -depth -delete/);
   assert.match(restoreScript, /storage_aggregate "\$SOURCE_SCAN\/storage"/);
-  assert.match(
-    restoreScript,
-    /--directory "\$ARCHIVE_PARENT"[\s\S]{0,300}storage_aggregate "\$REHEARSAL_STORAGE_ROOT"/,
-  );
+  assert.match(restoreScript, /extract-storage[\s\S]{0,200}"\$ARCHIVE_PARENT"/);
+  assert.match(restoreScript, /storage_aggregate "\$REHEARSAL_STORAGE_ROOT"/);
   assert.match(
     restoreScript,
     /test "\$STORAGE_MOUNT_SOURCE" = "\$\(realpath -e "\$REHEARSAL_STORAGE_ROOT"\)"/,
   );
-  assert.match(restoreScript, /printf 'version=6\\n'/);
-  assert.match(apply, /test "\$\(gate_value version\)" = "6"/);
+  assert.match(restoreScript, /printf 'version=7\\n'/);
+  assert.match(apply, /test "\$\(gate_value version\)" = "7"/);
   assert.doesNotMatch(restoreScript, /\/var\/lib\/storage\/storage/);
+});
+
+test("restore safety helper rejects escaping hard links and verifies valid archives", () => {
+  assert.equal(existsSync(restoreSafetyPath), true, `missing ${restoreSafetyPath}`);
+
+  const candidates = process.platform === "win32" ? ["python", "python3"] : ["python3", "python"];
+  let result;
+  for (const candidate of candidates) {
+    result = spawnSync(candidate, ["tests/unit/supabase-restore-safety.test.py"], {
+      encoding: "utf8",
+    });
+    if (!result.error && result.status !== 9009) break;
+  }
+
+  assert.ok(result && !result.error, `Python runtime unavailable: ${result?.error ?? "unknown"}`);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
 test("combined rehearsal strips only the exact outer transaction markers", () => {

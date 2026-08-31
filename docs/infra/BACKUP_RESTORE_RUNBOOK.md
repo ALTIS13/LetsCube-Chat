@@ -68,7 +68,7 @@ Verify Postgres custom dumps are readable without restoring:
 pg_restore -l "$latest/db/supabase-postgres.custom" >/tmp/supabase-restore-list.txt
 pg_restore -l "$latest/db/coolify-postgres.custom" >/tmp/coolify-restore-list.txt
 test -s "$latest/db/supabase-roles.sql"
-! grep -Eq 'PASSWORD|SCRAM-SHA|md5[0-9a-f]{20,}' "$latest/db/supabase-roles.sql"
+! grep -Eqi 'PASSWORD|SCRAM-SHA|md5[0-9a-f]{20,}' "$latest/db/supabase-roles.sql"
 ```
 
 Verify archive readability without extracting:
