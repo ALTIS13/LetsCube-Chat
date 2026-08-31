@@ -126,6 +126,30 @@ test.describe("authenticated bot management", () => {
     await expect.poll(() => listReads).toBeGreaterThan(1);
   });
 
+  test("treats a create HTTP 500 as uncertain and refreshes without offering a repeat", async ({ page }) => {
+    let listReads = 0;
+    await installManagementFixture(page);
+    await page.route(`${API}/bots`, async (route) => {
+      if (route.request().method() === "POST") {
+        await failure(route, 500, "internal_error");
+        return;
+      }
+      listReads += 1;
+      await route.fallback();
+    });
+    await page.goto("/bots");
+
+    await page.getByRole("button", { name: "Создать бота" }).click();
+    await page.getByLabel("Название").fill("Uncertain server bot");
+    await page.getByLabel("Имя пользователя").fill("uncertain_server_bot");
+    await page.getByRole("button", { name: "Создать", exact: true }).click();
+
+    await expect(page.getByRole("alert")).toContainText("Запрос мог выполниться");
+    await expect(page.getByRole("alert")).toContainText("Не повторяйте создание");
+    await expect(page.getByRole("button", { name: "Создать", exact: true })).toBeDisabled();
+    await expect.poll(() => listReads).toBeGreaterThan(1);
+  });
+
   test("treats an interrupted rotation as uncertain and guides explicit recovery", async ({ page }) => {
     let detailReads = 0;
     await installManagementFixture(page);
@@ -145,6 +169,91 @@ test.describe("authenticated bot management", () => {
     await expect(alert).toContainText("повторно выпустите новый токен");
     await expect(page.getByRole("dialog", { name: "Выпустить новый токен?" })).toHaveCount(0);
     await expect.poll(() => detailReads).toBeGreaterThan(1);
+  });
+
+  test("treats a rotate HTTP 500 as uncertain and guides explicit recovery", async ({ page }) => {
+    let detailReads = 0;
+    await installManagementFixture(page);
+    await page.route(`${API}/bots/${OWNER_BOT_ID}`, async (route) => {
+      detailReads += 1;
+      await route.fallback();
+    });
+    await page.route(`${API}/bots/${OWNER_BOT_ID}/token/rotate`, (route) =>
+      failure(route, 500, "upstream_failure"),
+    );
+    await page.goto(`/bots?bot=${OWNER_BOT_ID}`);
+
+    await page.getByRole("tab", { name: "API" }).click();
+    await page.getByRole("button", { name: "Выпустить новый токен" }).click();
+    await page.getByRole("button", { name: "Подтвердить выпуск" }).click();
+
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText("Запрос мог выполниться");
+    await expect(alert).toContainText("повторно выпустите новый токен");
+    await expect(page.getByRole("dialog", { name: "Выпустить новый токен?" })).toHaveCount(0);
+    await expect.poll(() => detailReads).toBeGreaterThan(1);
+  });
+
+  test("keeps deterministic create 4xx responses out of uncertain recovery", async ({ page }) => {
+    const cases = [
+      {
+        displayName: "Validation failure",
+        status: 400,
+        serverCode: "validation_failed",
+        clientCode: "validation_failed",
+      },
+      {
+        displayName: "Auth failure",
+        status: 401,
+        serverCode: "unauthorized",
+        clientCode: "session_expired",
+      },
+      {
+        displayName: "Eligibility failure",
+        status: 403,
+        serverCode: "bot_creation_not_allowed",
+        clientCode: "bot_creation_not_allowed",
+      },
+      {
+        displayName: "Conflict failure",
+        status: 409,
+        serverCode: "conflict",
+        clientCode: "conflict",
+      },
+    ];
+    await installManagementFixture(page);
+    await page.route(`${API}/bots`, async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.fallback();
+        return;
+      }
+      const body = route.request().postDataJSON() as { display_name?: string };
+      const current = cases.find((item) => item.displayName === body.display_name);
+      if (!current) throw new Error("missing deterministic error fixture");
+      await failure(route, current.status, current.serverCode);
+    });
+    await page.goto("/bots");
+
+    const clientCodes = await page.evaluate(async (inputs) => {
+      const { botManagement } = await import("/src/lib/botManagement.ts");
+      const results: string[] = [];
+      for (const [index, current] of inputs.entries()) {
+        try {
+          await botManagement.createOnce({
+            display_name: current.displayName,
+            username: `failure_bot_${index}`,
+            description: "",
+          });
+          results.push("unexpected_success");
+        } catch (error) {
+          results.push(String((error as { code?: unknown }).code ?? "missing_code"));
+        }
+      }
+      return results;
+    }, cases);
+
+    expect(clientCodes).toEqual(cases.map((current) => current.clientCode));
+    expect(clientCodes).not.toContain("uncertain_result");
   });
 
   test("enforces owner and developer controls through lifecycle states", async ({ page }) => {
@@ -463,6 +572,13 @@ async function assertNoHorizontalOverflow(locator: ReturnType<Page["getByTestId"
 
 async function ok(route: Route, result: unknown, status = 200) {
   await json(route, { ok: true, result }, status);
+}
+
+async function failure(route: Route, status: number, code: string) {
+  await json(route, {
+    ok: false,
+    error: { code, message: "Request failed", request_id: "playwright-request" },
+  }, status);
 }
 
 async function json(route: Route, body: unknown, status = 200) {

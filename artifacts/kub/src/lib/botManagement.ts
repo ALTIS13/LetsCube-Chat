@@ -142,7 +142,7 @@ async function request<T>(
   path: string,
   schema: z.ZodType<T>,
   init?: RequestInit,
-  options: { uncertainOnTransportFailure?: boolean } = {},
+  options: { uncertainOnAmbiguousFailure?: boolean } = {},
 ): Promise<T> {
   const { data, error } = await createClient().auth.getSession();
   const accessToken = data.session?.access_token;
@@ -160,7 +160,7 @@ async function request<T>(
       },
     });
   } catch {
-    throw new BotManagementError(options.uncertainOnTransportFailure ? "uncertain_result" : "network_error");
+    throw new BotManagementError(options.uncertainOnAmbiguousFailure ? "uncertain_result" : "network_error");
   }
 
   let body: unknown;
@@ -168,7 +168,9 @@ async function request<T>(
     body = await response.json();
   } catch {
     throw new BotManagementError(
-      response.ok && options.uncertainOnTransportFailure ? "uncertain_result" : "network_error",
+      options.uncertainOnAmbiguousFailure && (response.ok || response.status >= 500)
+        ? "uncertain_result"
+        : "network_error",
     );
   }
   if (!response.ok) {
@@ -177,17 +179,23 @@ async function request<T>(
       error: z.object({ code: z.string().max(64) }).passthrough(),
     }).safeParse(body);
     const code = parsed.success ? parsed.data.error.code : "network_error";
+    if (
+      options.uncertainOnAmbiguousFailure &&
+      (response.status >= 500 || code === "internal_error")
+    ) {
+      throw new BotManagementError("uncertain_result");
+    }
     if (code === "unauthorized") throw new BotManagementError("session_expired");
     if (code in ERROR_MESSAGES) throw new BotManagementError(code as SafeErrorCode);
     throw new BotManagementError("network_error");
   }
   const envelope = z.object({ ok: z.literal(true), result: z.unknown() }).strict().safeParse(body);
   if (!envelope.success) {
-    throw new BotManagementError(options.uncertainOnTransportFailure ? "uncertain_result" : "network_error");
+    throw new BotManagementError(options.uncertainOnAmbiguousFailure ? "uncertain_result" : "network_error");
   }
   const parsed = schema.safeParse(envelope.data.result);
   if (!parsed.success) {
-    throw new BotManagementError(options.uncertainOnTransportFailure ? "uncertain_result" : "network_error");
+    throw new BotManagementError(options.uncertainOnAmbiguousFailure ? "uncertain_result" : "network_error");
   }
   return parsed.data;
 }
@@ -201,9 +209,9 @@ export const botManagement = {
   detail: (botId: string) => request(`/bots/${botId}`, detailSchema),
   diagnostics: (botId: string) => request(`/bots/${botId}/diagnostics`, diagnosticsSchema),
   createOnce: (input: { username: string; display_name: string; description: string }) =>
-    request("/bots", createSchema, json("POST", input), { uncertainOnTransportFailure: true }),
+    request("/bots", createSchema, json("POST", input), { uncertainOnAmbiguousFailure: true }),
   rotateOnce: (botId: string, expectedTokenPrefix: string | null) =>
-    request(`/bots/${botId}/token/rotate`, rotateSchema, json("POST", { expected_token_prefix: expectedTokenPrefix }), { uncertainOnTransportFailure: true }),
+    request(`/bots/${botId}/token/rotate`, rotateSchema, json("POST", { expected_token_prefix: expectedTokenPrefix }), { uncertainOnAmbiguousFailure: true }),
   updateProfile: (botId: string, input: { display_name: string; description: string }) =>
     request(`/bots/${botId}/profile`, successSchema, json("PATCH", input)),
   updateCommands: (botId: string, commands: BotCommand[]) =>
