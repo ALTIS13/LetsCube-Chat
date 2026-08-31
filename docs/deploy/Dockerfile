@@ -144,6 +144,10 @@ COPY --chown=node:node --from=build /app/artifacts/api-server/dist/botGatewayInd
 COPY --chown=node:node --from=build /app/artifacts/api-server/dist/pino-*.mjs /app/artifacts/api-server/dist/
 COPY --chown=node:node --from=build /app/artifacts/api-server/dist/thread-stream-worker.mjs /app/artifacts/api-server/dist/
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 USER node
 
 EXPOSE 8098

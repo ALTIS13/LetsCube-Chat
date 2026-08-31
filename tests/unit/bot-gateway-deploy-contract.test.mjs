@@ -48,6 +48,11 @@ test("bot gateway runtime starts only the dedicated entrypoint as an unprivilege
   assert.match(runtime, /thread-stream-worker\.mjs/);
   assert.doesNotMatch(runtime, /\/app\/\s+\.\//);
   assert.doesNotMatch(runtime, /node_modules|package\.json|\.mjs\.map|\/src\//);
+  assert.match(
+    runtime,
+    /apt-get install -y --no-install-recommends curl/,
+    "Coolify's Dockerfile healthcheck requires curl or wget in the runtime image",
+  );
   assert.match(runtime, /^USER\s+node\s*$/m);
   assert.match(runtime, /^EXPOSE\s+8098\s*$/m);
   assert.match(
