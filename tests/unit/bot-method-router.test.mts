@@ -286,6 +286,70 @@ test("getUpdates aborts after a fully received body when the response socket clo
   ]);
 });
 
+test("getUpdates installs disconnect lifecycle before delayed authentication", async () => {
+  let authenticationStarted!: () => void;
+  const authStarted = new Promise<void>((resolve) => {
+    authenticationStarted = resolve;
+  });
+  let resolveAuthentication!: (value: { botId: string; tokenId: string }) => void;
+  const authentication = new Promise<{ botId: string; tokenId: string }>(
+    (resolve) => {
+      resolveAuthentication = resolve;
+    },
+  );
+  let observedAborted: boolean | undefined;
+  const socket = Object.assign(new EventEmitter(), { destroyed: false });
+  const request = Object.assign(new EventEmitter(), {
+    id: REQUEST_ID,
+    params: { method: "getUpdates" },
+    body: { timeout: 30 },
+    rawHeaders: ["Authorization", AUTHORIZATION],
+    headersDistinct: { authorization: [AUTHORIZATION] },
+    aborted: false,
+    destroyed: false,
+    socket,
+  });
+  const response = Object.assign(new EventEmitter(), {
+    destroyed: false,
+    writableEnded: false,
+    writableFinished: false,
+    status() {
+      return this;
+    },
+    json() {
+      throw new Error("disconnected response must not be written");
+    },
+  });
+  const router = createBotMethodRouter({
+    handlers: {
+      getUpdates: async (context) => {
+        observedAborted = context.signal?.aborted;
+        return [];
+      },
+    },
+    tokenRepository: {
+      async authenticateBotToken() {
+        authenticationStarted();
+        return authentication;
+      },
+    },
+  });
+
+  const routing = router(request as any, response as any, () => undefined);
+  await authStarted;
+  response.destroyed = true;
+  socket.destroyed = true;
+  response.emit("close");
+  socket.emit("close");
+  resolveAuthentication({ botId: BOT_ID, tokenId: TOKEN_ID });
+  await routing;
+
+  assert.equal(observedAborted, true);
+  assert.equal(request.listenerCount("aborted"), 0);
+  assert.equal(response.listenerCount("close"), 0);
+  assert.equal(socket.listenerCount("close"), 0);
+});
+
 test("getUpdates removes request, response, and socket abort listeners after completion", async () => {
   const socket = new EventEmitter();
   const request = Object.assign(new EventEmitter(), {

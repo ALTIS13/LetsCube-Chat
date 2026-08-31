@@ -160,6 +160,43 @@ test("getUpdates preserves database webhook conflicts and always releases its po
   assert.equal(releases, 1);
 });
 
+test("getUpdates does not acquire or release a lease for an already aborted signal", async () => {
+  let pollCalls = 0;
+  let releaseCalls = 0;
+  const controller = new AbortController();
+  controller.abort();
+  const handlers = createUpdateDeliveryHandlers({
+    repository: repository({
+      async pollUpdates() {
+        pollCalls += 1;
+        return [];
+      },
+      async releasePollingLease() {
+        releaseCalls += 1;
+      },
+    }),
+    fingerprint: () => "a".repeat(64),
+    encryptionKey: KEY,
+    validateTarget: async () => {
+      throw new Error("unused");
+    },
+  });
+
+  await assert.rejects(
+    handlers.getUpdates?.(
+      {
+        bot: { botId: BOT_ID, tokenId: LEASE_ID },
+        requestId: "request-aborted-before-poll",
+        signal: controller.signal,
+      },
+      { timeout: 30 },
+    ),
+    (error: unknown) => error instanceof BotApiError && error.code === "conflict",
+  );
+  assert.equal(pollCalls, 0);
+  assert.equal(releaseCalls, 0);
+});
+
 test("setWebhook validates before encrypting/persisting and never returns secret material", async () => {
   const events: string[] = [];
   let persisted: Record<string, unknown> | undefined;

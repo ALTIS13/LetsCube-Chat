@@ -262,6 +262,7 @@ export function createUpdateDeliveryHandlers(input: {
 
   return {
     async getUpdates(context, methodInput) {
+      if (context.signal?.aborted) throw new BotApiError("conflict");
       const offset = methodInput.offset ?? 0;
       const limit = methodInput.limit ?? 100;
       const timeoutMs = (methodInput.timeout ?? 0) * 1_000;

@@ -105,6 +105,7 @@ export function createBotMethodRouter(input: {
 }): RequestHandler {
   return async (request, response) => {
     let cleanupAbortListeners = (): void => undefined;
+    let longPollSignal: AbortSignal | undefined;
     const requestId =
       typeof request.id === "string" && request.id.length <= 128
         ? request.id
@@ -118,11 +119,6 @@ export function createBotMethodRouter(input: {
       if (typeof handler !== "function") {
         throw new BotApiError("method_not_found");
       }
-      const bot = await input.tokenRepository.authenticateBotToken(
-        exactAuthorizationHeader(request),
-      );
-      const body = parseBotMethodInput(method, request.body);
-      const context: BotMethodContext = { bot, requestId };
       if (method === "getUpdates") {
         const abortController = new AbortController();
         const abort = (): void => abortController.abort();
@@ -137,8 +133,25 @@ export function createBotMethodRouter(input: {
           response.removeListener("close", abortIfResponseIncomplete);
           request.socket.removeListener("close", abortIfResponseIncomplete);
         };
-        context.signal = abortController.signal;
+        if (
+          request.aborted ||
+          request.destroyed ||
+          response.destroyed ||
+          response.closed ||
+          response.writableEnded ||
+          request.socket.destroyed ||
+          request.socket.closed
+        ) {
+          abort();
+        }
+        longPollSignal = abortController.signal;
       }
+      const bot = await input.tokenRepository.authenticateBotToken(
+        exactAuthorizationHeader(request),
+      );
+      const body = parseBotMethodInput(method, request.body);
+      const context: BotMethodContext = { bot, requestId };
+      if (longPollSignal) context.signal = longPollSignal;
       const result = await handler(context, body);
       if (!response.destroyed && !response.writableEnded) {
         response.json(botSuccess(result));
