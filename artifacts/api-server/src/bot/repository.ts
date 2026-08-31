@@ -89,6 +89,16 @@ export type BotFileMetadata = {
 
 export interface BotMethodRepository {
   getMe(botId: string): Promise<unknown>;
+  preflightMediaCommand(input: {
+    botId: string;
+    chatId: string;
+    kind: Extract<
+      BotMessageCommand["kind"],
+      "image" | "video" | "file" | "audio"
+    >;
+    idempotencyKey: string;
+    requestFingerprint: string;
+  }): Promise<BotOperationResult<unknown>>;
   executeMessageCommand(
     command: BotMessageCommand,
   ): Promise<BotOperationResult<unknown>>;
@@ -386,6 +396,18 @@ export function createBotMethodRepository(
           p_payload: command.payload,
           p_idempotency_key: command.idempotencyKey,
           p_request_fingerprint: command.requestFingerprint,
+        }),
+      );
+    },
+
+    async preflightMediaCommand(input) {
+      return operationResult(
+        await callRpc(client, "bot_media_command_preflight_internal", {
+          p_bot_id: input.botId,
+          p_chat_id: input.chatId,
+          p_method: METHOD_BY_KIND[input.kind],
+          p_idempotency_key: input.idempotencyKey,
+          p_request_fingerprint: input.requestFingerprint,
         }),
       );
     },

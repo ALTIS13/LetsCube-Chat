@@ -33,6 +33,7 @@ const serviceRoleFunctions = [
   ["bot_membership_authorize_internal", "uuid,uuid,text"],
   ["bot_upload_authorize_internal", "uuid,uuid,text,text,text,bigint,integer"],
   ["bot_send_message_internal", "uuid,uuid,text,jsonb,text"],
+  ["bot_media_command_preflight_internal", "uuid,uuid,text,text,text"],
   ["bot_get_me_internal", "uuid"],
   ["bot_message_command_internal", "uuid,uuid,text,jsonb,text,text"],
   ["bot_commands_replace_internal", "uuid,jsonb,text,text"],
@@ -331,6 +332,28 @@ test("message command RPC independently enforces method-specific send payloads",
   );
 });
 
+test("media preflight validates active membership and resolves completed idempotency read-only", () => {
+  const start = normalizedSql.indexOf(
+    "create or replace function public.bot_media_command_preflight_internal(",
+  );
+  const end = normalizedSql.indexOf("$function$;", start);
+  assert.ok(start >= 0 && end > start, "media preflight function must exist");
+  const body = normalizedSql.slice(start, end);
+
+  assert.match(
+    body,
+    /p_method not in \( 'sendphoto','sendvideo','senddocument','sendvoice' \)/,
+  );
+  const activeBot = body.indexOf("from public.bots bot");
+  const membership = body.indexOf("public.bot_membership_authorize_internal(");
+  const lookup = body.indexOf("private.bot_operation_idempotency_lookup(");
+  assert.ok(activeBot >= 0 && activeBot < membership);
+  assert.ok(membership >= 0 && membership < lookup);
+  assert.doesNotMatch(body, /(insert into|update|delete from) private\.bot_upload_grants/);
+  assert.match(body, /'result', v_existing->'result', 'duplicate', true/);
+  assert.match(body, /'result', null, 'duplicate', false/);
+});
+
 test("automatic message fanout isolates every bot while direct RPC remains strict", () => {
   for (const functionName of [
     "enqueue_bot_message_updates_after_insert",
@@ -557,6 +580,13 @@ test("database smoke preserves history and rolls every probe back", () => {
   assert.match(normalizedSmoke, /expired_upload_grant_not_replaced/);
   assert.match(normalizedSmoke, /bot_upload_exact_retry_failed/);
   assert.match(normalizedSmoke, /bot_upload_attribute_conflict_missing/);
+  assert.match(normalizedSmoke, /bot_media_preflight_inactive_membership_succeeded/);
+  assert.match(normalizedSmoke, /bot_media_preflight_changed_retry_missing/);
+  assert.match(normalizedSmoke, /bot_media_preflight_changed_method_retry_missing/);
+  assert.match(normalizedSmoke, /bot_media_preflight_changed_retry_created_grant/);
+  assert.match(normalizedSmoke, /bot_media_preflight_exact_retry_failed/);
+  assert.match(normalizedSmoke, /bot_media_preflight_new_request_failed/);
+  assert.match(normalizedSmoke, /bot_media_command_final_authority_failed/);
   assert.match(normalizedSmoke, /bot_send_fingerprint_conflict_missing/);
   assert.match(normalizedSmoke, /bot_send_method_conflict_missing/);
   assert.match(normalizedSmoke, /cross_chat_reply_succeeded/);

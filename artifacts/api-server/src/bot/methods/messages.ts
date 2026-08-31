@@ -58,6 +58,16 @@ async function sendMedia(
     throw new BotApiError("validation_failed");
   }
   const kind = MEDIA_KIND[method];
+  const requestFingerprint = fingerprint(method, input);
+  const preflight = await repository.preflightMediaCommand({
+    botId,
+    chatId: input.chat_id,
+    kind,
+    idempotencyKey: input.idempotency_key,
+    requestFingerprint,
+  });
+  if (preflight.duplicate) return preflight.result;
+
   await repository.authorizeMedia({
     botId,
     chatId: input.chat_id,
@@ -83,7 +93,7 @@ async function sendMedia(
       ...optionalReplyPayload(input),
     },
     idempotencyKey: input.idempotency_key,
-    requestFingerprint: fingerprint(method, input),
+    requestFingerprint,
   });
   return operation.result;
 }

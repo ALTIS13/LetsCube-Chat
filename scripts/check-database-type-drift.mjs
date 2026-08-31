@@ -41,6 +41,7 @@ const serviceRoleOnlyFunctions = new Set([
   "bot_membership_authorize_internal",
   "bot_upload_authorize_internal",
   "bot_send_message_internal",
+  "bot_media_command_preflight_internal",
   "bot_get_me_internal",
   "bot_message_command_internal",
   "bot_commands_replace_internal",

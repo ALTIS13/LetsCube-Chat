@@ -55,6 +55,7 @@ declare
   v_topic_id uuid;
   v_other_topic_id uuid;
   v_media_message_id uuid;
+  v_new_media_message_id uuid;
   v_markup_message_id uuid;
   v_delete_message_id uuid;
   v_muted_message_id uuid;
@@ -79,7 +80,9 @@ declare
   v_notification_id uuid;
   v_upload_grant_id uuid;
   v_second_upload_grant_id uuid;
+  v_new_upload_grant_id uuid;
   v_media_path text;
+  v_new_media_path text;
   v_history_media_path text;
   v_claim_token uuid := gen_random_uuid();
   v_stale_retry_attempt_id bigint;
@@ -143,6 +146,7 @@ begin
       ('public.bot_membership_authorize_internal(uuid,uuid,text)'),
       ('public.bot_upload_authorize_internal(uuid,uuid,text,text,text,bigint,integer)'),
       ('public.bot_send_message_internal(uuid,uuid,text,jsonb,text)'),
+      ('public.bot_media_command_preflight_internal(uuid,uuid,text,text,text)'),
       ('public.bot_get_me_internal(uuid)'),
       ('public.bot_message_command_internal(uuid,uuid,text,jsonb,text,text)'),
       ('public.bot_commands_replace_internal(uuid,jsonb,text,text)'),
@@ -1783,7 +1787,7 @@ begin
   ) then
     raise exception 'expired_upload_grant_not_replaced';
   end if;
-  select (public.bot_send_message_internal(
+  select public.bot_message_command_internal(
     v_bot_id,
     v_chat_id,
     'sendPhoto',
@@ -1793,8 +1797,10 @@ begin
       'media_path', v_media_path,
       'media_metadata', pg_catalog.jsonb_build_object('mime_type', 'image/jpeg')
     ),
-    'authorized-media-key'
-  )->>'message_id')::uuid into v_media_message_id;
+    'authorized-media-key',
+    pg_catalog.repeat('4', 64)
+  ) into v_first_operation;
+  v_media_message_id := (v_first_operation->'result'->>'message_id')::uuid;
   if not exists (
     select 1 from private.bot_upload_grants upload_grant
     where upload_grant.id = v_upload_grant_id
@@ -1802,6 +1808,185 @@ begin
       and upload_grant.consumed_at is not null
   ) then
     raise exception 'bot_media_grant_not_consumed';
+  end if;
+
+  v_rejected := false;
+  begin
+    perform public.bot_media_command_preflight_internal(
+      v_bot_id,
+      v_chat_id,
+      'sendPhoto',
+      'authorized-media-key',
+      pg_catalog.repeat('5', 64)
+    );
+  exception
+    when unique_violation then
+      if sqlerrm = 'bot_operation_idempotency_conflict' then
+        v_rejected := true;
+      else
+        raise;
+      end if;
+  end;
+  if not v_rejected then
+    raise exception 'bot_media_preflight_changed_retry_missing';
+  end if;
+
+  v_rejected := false;
+  begin
+    perform public.bot_media_command_preflight_internal(
+      v_bot_id,
+      v_chat_id,
+      'sendVideo',
+      'authorized-media-key',
+      pg_catalog.repeat('6', 64)
+    );
+  exception
+    when unique_violation then
+      if sqlerrm = 'bot_operation_idempotency_conflict' then
+        v_rejected := true;
+      else
+        raise;
+      end if;
+  end;
+  if not v_rejected then
+    raise exception 'bot_media_preflight_changed_method_retry_missing';
+  end if;
+  if exists (
+    select 1 from private.bot_upload_grants upload_grant
+    where upload_grant.bot_id = v_bot_id
+      and upload_grant.chat_id = v_chat_id
+      and upload_grant.object_path = v_media_path
+      and upload_grant.consumed_at is null
+      and upload_grant.expires_at > pg_catalog.now()
+  ) then
+    raise exception 'bot_media_preflight_changed_retry_created_grant';
+  end if;
+
+  select public.bot_media_command_preflight_internal(
+    v_bot_id,
+    v_chat_id,
+    'sendPhoto',
+    'authorized-media-key',
+    pg_catalog.repeat('4', 64)
+  ) into v_duplicate_operation;
+  if v_duplicate_operation->'result' is distinct from v_first_operation->'result'
+     or coalesce((v_duplicate_operation->>'duplicate')::boolean, false) is not true then
+    raise exception 'bot_media_preflight_exact_retry_failed';
+  end if;
+
+  v_rejected := false;
+  begin
+    perform public.bot_media_command_preflight_internal(
+      v_third_bot_id,
+      v_chat_id,
+      'sendPhoto',
+      'inactive-media-key',
+      pg_catalog.repeat('7', 64)
+    );
+  exception
+    when insufficient_privilege then
+      if sqlerrm = 'bot_chat_forbidden' then
+        v_rejected := true;
+      else
+        raise;
+      end if;
+  end;
+  if not v_rejected then
+    raise exception 'bot_media_preflight_inactive_membership_succeeded';
+  end if;
+
+  v_new_media_path := v_chat_id::text || '/bots/' || v_bot_id::text || '/'
+    || gen_random_uuid()::text || '.jpg';
+  insert into storage.objects(bucket_id, name)
+  values ('chat-media', v_new_media_path);
+  select public.bot_media_command_preflight_internal(
+    v_bot_id,
+    v_chat_id,
+    'sendPhoto',
+    'new-media-command-key',
+    pg_catalog.repeat('8', 64)
+  ) into v_first_operation;
+  select public.bot_media_command_preflight_internal(
+    v_bot_id,
+    v_chat_id,
+    'sendPhoto',
+    'new-media-command-key',
+    pg_catalog.repeat('8', 64)
+  ) into v_duplicate_operation;
+  if coalesce((v_first_operation->>'duplicate')::boolean, true)
+     or coalesce((v_duplicate_operation->>'duplicate')::boolean, true)
+     or v_first_operation->'result' <> 'null'::jsonb
+     or v_duplicate_operation->'result' <> 'null'::jsonb then
+    raise exception 'bot_media_preflight_new_request_failed';
+  end if;
+
+  select authorized.grant_id into v_new_upload_grant_id
+  from public.bot_upload_authorize_internal(
+    v_bot_id,
+    v_chat_id,
+    'chat-media',
+    v_new_media_path,
+    'image/jpeg',
+    2048,
+    60
+  ) authorized;
+  select authorized.grant_id into v_second_upload_grant_id
+  from public.bot_upload_authorize_internal(
+    v_bot_id,
+    v_chat_id,
+    'chat-media',
+    v_new_media_path,
+    'image/jpeg',
+    2048,
+    60
+  ) authorized;
+  if v_second_upload_grant_id is distinct from v_new_upload_grant_id then
+    raise exception 'bot_media_preflight_new_request_failed';
+  end if;
+
+  select public.bot_message_command_internal(
+    v_bot_id,
+    v_chat_id,
+    'sendPhoto',
+    pg_catalog.jsonb_build_object(
+      'media_bucket', 'chat-media',
+      'media_path', v_new_media_path,
+      'media_metadata', pg_catalog.jsonb_build_object(
+        'mime_type', 'image/jpeg',
+        'size', 2048,
+        'kind', 'image'
+      )
+    ),
+    'new-media-command-key',
+    pg_catalog.repeat('8', 64)
+  ) into v_first_operation;
+  v_new_media_message_id := (v_first_operation->'result'->>'message_id')::uuid;
+  select public.bot_message_command_internal(
+    v_bot_id,
+    v_chat_id,
+    'sendPhoto',
+    pg_catalog.jsonb_build_object(
+      'media_bucket', 'chat-media',
+      'media_path', v_new_media_path,
+      'media_metadata', pg_catalog.jsonb_build_object(
+        'mime_type', 'image/jpeg',
+        'size', 2048,
+        'kind', 'image'
+      )
+    ),
+    'new-media-command-key',
+    pg_catalog.repeat('8', 64)
+  ) into v_duplicate_operation;
+  if v_new_media_message_id is null
+     or v_duplicate_operation->'result' is distinct from v_first_operation->'result'
+     or coalesce((v_duplicate_operation->>'duplicate')::boolean, false) is not true
+     or not exists (
+       select 1 from private.bot_upload_grants upload_grant
+       where upload_grant.id = v_new_upload_grant_id
+         and upload_grant.consumed_message_id = v_new_media_message_id
+         and upload_grant.consumed_at is not null
+     ) then
+    raise exception 'bot_media_command_final_authority_failed';
   end if;
 
   if (public.bot_file_lookup_internal(v_bot_id, v_chat_id, v_media_message_id)->>'message_id')::uuid

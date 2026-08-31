@@ -330,18 +330,29 @@ function createRepository(overrides: Partial<BotMethodRepository> = {}): {
   repository: BotMethodRepository;
   commands: BotMessageCommand[];
   authorizations: unknown[];
+  preflights: unknown[];
+  events: string[];
 } {
   const commands: BotMessageCommand[] = [];
   const authorizations: unknown[] = [];
+  const preflights: unknown[] = [];
+  const events: string[] = [];
   const repository: BotMethodRepository = {
     async getMe() {
       return { id: BOT_ID, username: "cube_bot", is_bot: true };
     },
+    async preflightMediaCommand(input) {
+      events.push("preflight");
+      preflights.push(input);
+      return { result: null, duplicate: false };
+    },
     async executeMessageCommand(command) {
+      events.push("execute");
       commands.push(command);
       return { result: { message_id: MESSAGE_ID }, duplicate: false };
     },
     async authorizeMedia(input) {
+      events.push("authorize");
       authorizations.push(input);
     },
     async replaceCommands() {
@@ -369,7 +380,7 @@ function createRepository(overrides: Partial<BotMethodRepository> = {}): {
     },
     ...overrides,
   };
-  return { repository, commands, authorizations };
+  return { repository, commands, authorizations, preflights, events };
 }
 
 const context = {
@@ -377,8 +388,9 @@ const context = {
   requestId: REQUEST_ID,
 };
 
-test("media handlers authorize the exact object then send only normalized fields", async () => {
-  const { repository, commands, authorizations } = createRepository();
+test("new media requests preflight, authorize the exact object, then execute", async () => {
+  const { repository, commands, authorizations, preflights, events } =
+    createRepository();
   const handlers = createTask3MethodHandlers({
     repository,
     fingerprint: (method, input) =>
@@ -400,6 +412,15 @@ test("media handlers authorize the exact object then send only normalized fields
   });
 
   assert.deepEqual(result, { message_id: MESSAGE_ID });
+  assert.deepEqual(events, ["preflight", "authorize", "execute"]);
+  assert.equal(preflights.length, 1);
+  assert.deepEqual(preflights[0], {
+    botId: BOT_ID,
+    chatId: CHAT_ID,
+    kind: "image",
+    idempotencyKey: "photo:handler:1",
+    requestFingerprint: commands[0]?.requestFingerprint,
+  });
   assert.deepEqual(authorizations, [
     {
       botId: BOT_ID,
@@ -430,6 +451,46 @@ test("media handlers authorize the exact object then send only normalized fields
     idempotencyKey: "photo:handler:1",
     requestFingerprint: commands[0]?.requestFingerprint,
   });
+});
+
+test("completed media retries return the preflight result without grant mutation", async () => {
+  const preflights: unknown[] = [];
+  const { repository } = createRepository({
+    async preflightMediaCommand(input) {
+      preflights.push(input);
+      return { result: { message_id: MESSAGE_ID }, duplicate: true };
+    },
+    async authorizeMedia() {
+      throw new Error("completed retry must not authorize media");
+    },
+    async executeMessageCommand() {
+      throw new Error("completed retry must not execute the command");
+    },
+  });
+  const handlers = createTask3MethodHandlers({
+    repository,
+    fingerprint: (method, input) =>
+      createBotRequestFingerprint(PEPPER, method, input),
+    publishChatAction: async () => undefined,
+  });
+
+  const result = await handlers.sendPhoto!(context, {
+    chat_id: CHAT_ID,
+    media: {
+      bucket: "chat-media",
+      object_path: `${CHAT_ID}/bots/${BOT_ID}/completed.jpg`,
+      mime_type: "image/jpeg",
+      size_bytes: 2048,
+    },
+    idempotency_key: "photo:completed:1",
+  });
+
+  assert.deepEqual(result, { message_id: MESSAGE_ID });
+  assert.equal(preflights.length, 1);
+  assert.match(
+    String((preflights[0] as Record<string, unknown>).requestFingerprint),
+    /^[0-9a-f]{64}$/,
+  );
 });
 
 test("chat actions publish bounded bot identity only after non-duplicate database authorization", async () => {

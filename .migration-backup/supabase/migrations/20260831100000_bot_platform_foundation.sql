@@ -1602,6 +1602,69 @@ $function$;
 revoke all on function private.bot_operation_idempotency_store(uuid,text,text,text,jsonb)
   from public, anon, authenticated, service_role;
 
+create or replace function public.bot_media_command_preflight_internal(
+  p_bot_id uuid,
+  p_chat_id uuid,
+  p_method text,
+  p_idempotency_key text,
+  p_request_fingerprint text
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+declare
+  v_existing jsonb;
+begin
+  if p_bot_id is null or p_chat_id is null or p_method is null
+     or p_method not in (
+       'sendPhoto','sendVideo','sendDocument','sendVoice'
+     )
+     or p_idempotency_key is null
+     or p_idempotency_key !~ '^[A-Za-z0-9._:-]{8,128}$'
+     or p_request_fingerprint is null
+     or p_request_fingerprint !~ '^[0-9a-f]{64}$' then
+    raise exception 'bot_media_preflight_input_invalid' using errcode = '22023';
+  end if;
+
+  if not exists (
+    select 1 from public.bots bot
+    where bot.id = p_bot_id
+      and bot.state = 'active'
+  ) then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+  if coalesce((public.bot_membership_authorize_internal(
+       p_bot_id,
+       p_chat_id,
+       'send_message'
+     )->>'allowed')::boolean, false) is not true then
+    raise exception 'bot_chat_forbidden' using errcode = '42501';
+  end if;
+
+  v_existing := private.bot_operation_idempotency_lookup(
+    p_bot_id,
+    p_idempotency_key,
+    p_method,
+    p_request_fingerprint
+  );
+  if coalesce((v_existing->>'found')::boolean, false) then
+    return pg_catalog.jsonb_build_object(
+      'result', v_existing->'result',
+      'duplicate', true
+    );
+  end if;
+  return pg_catalog.jsonb_build_object('result', null, 'duplicate', false);
+end
+$function$;
+
+revoke all on function public.bot_media_command_preflight_internal(uuid,uuid,text,text,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_media_command_preflight_internal(uuid,uuid,text,text,text)
+  to service_role;
+
 create or replace function public.bot_get_me_internal(p_bot_id uuid)
 returns jsonb
 language plpgsql
