@@ -160,7 +160,9 @@ export function createMessageHandlers(
         payload: {
           message_id: input.message_id,
           text: input.text,
-          reply_markup: input.reply_markup ?? null,
+          ...(input.reply_markup !== undefined
+            ? { reply_markup: input.reply_markup }
+            : {}),
         },
         idempotencyKey: input.idempotency_key,
         requestFingerprint: fingerprint("editMessageText", input),

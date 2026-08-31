@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createServer, request as httpRequest, type Server } from "node:http";
+import { Writable } from "node:stream";
 import test from "node:test";
 
 import pino from "../../artifacts/api-server/node_modules/pino/pino.js";
@@ -285,6 +286,46 @@ test("strict JSON and the 256 KiB limit use stable public errors", async (t) => 
   });
 });
 
+test("logger records only the route template for token-shaped method paths", async (t) => {
+  const records: string[] = [];
+  const destination = new Writable({
+    write(chunk, _encoding, callback) {
+      records.push(chunk.toString("utf8"));
+      callback();
+    },
+  });
+  const tokenShapedMethod = `lc_bot_deadbeef00.${Buffer.alloc(32, 9).toString("base64url")}`;
+  const app = createBotGatewayApp({
+    logger: pino({ level: "info" }, destination),
+    handlers: { getMe: async () => ({}) },
+    requestId: () => REQUEST_ID,
+    tokenRepository: {
+      async authenticateBotToken() {
+        throw new Error("unknown methods must not authenticate");
+      },
+    },
+  });
+  const server = await listen(app);
+  t.after(() => close(server));
+
+  const response = await call(server, `/bot/v1/${tokenShapedMethod}`, {
+    method: "POST",
+    headers: {
+      authorization: AUTHORIZATION,
+      "content-type": "application/json",
+      "content-length": "2",
+    },
+    body: "{}",
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  const output = records.join("");
+  assert.equal(response.status, 404);
+  assert.match(output, /"path":"\/bot\/v1\/:method"/);
+  assert.equal(output.includes(tokenShapedMethod), false);
+  assert.equal(output.includes("deadbeef00"), false);
+});
+
 function createRepository(overrides: Partial<BotMethodRepository> = {}): {
   repository: BotMethodRepository;
   commands: BotMessageCommand[];
@@ -487,4 +528,27 @@ test("commands and callback answers bind idempotency to a cryptographic fingerpr
     (calls[0] as any).requestFingerprint,
     (calls[1] as any).requestFingerprint,
   );
+});
+
+test("edit without reply_markup omits the key so SQL can normalize it to clear", async () => {
+  const { repository, commands } = createRepository();
+  const handlers = createTask3MethodHandlers({
+    repository,
+    fingerprint: (method, input) =>
+      createBotRequestFingerprint(PEPPER, method, input),
+    publishChatAction: async () => undefined,
+  });
+
+  await handlers.editMessageText!(context, {
+    chat_id: CHAT_ID,
+    message_id: MESSAGE_ID,
+    text: "Clear keyboard",
+    idempotency_key: "edit:clear:1",
+  });
+
+  assert.deepEqual(commands[0]?.payload, {
+    message_id: MESSAGE_ID,
+    text: "Clear keyboard",
+  });
+  assert.equal("reply_markup" in (commands[0]?.payload ?? {}), false);
 });

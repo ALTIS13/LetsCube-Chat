@@ -218,6 +218,7 @@ create table private.bot_operation_idempotency (
     check (idempotency_key ~ '^[A-Za-z0-9._:-]{8,128}$'),
   method text not null
     check (method in (
+      'sendMessage','sendPhoto','sendVideo','sendDocument','sendVoice',
       'sendChatAction','editMessageText','deleteMessage',
       'setMyCommands','answerCallbackQuery'
     )),
@@ -227,7 +228,7 @@ create table private.bot_operation_idempotency (
   created_at timestamptz not null default pg_catalog.now(),
   primary key (bot_id, idempotency_key),
   constraint bot_operation_idempotency_result_size_check
-    check (pg_catalog.octet_length(result::text) <= 16384)
+    check (pg_catalog.octet_length(result::text) <= 32782)
 );
 
 create index bot_operation_idempotency_retention_idx
@@ -236,8 +237,8 @@ create index bot_operation_idempotency_retention_idx
 create table private.bot_callback_answers (
   bot_id uuid not null references public.bots(id) on delete restrict,
   callback_query_id uuid not null,
-  source_update_id bigint not null
-    references private.bot_updates(id) on delete cascade,
+  source_update_id bigint null
+    references private.bot_updates(id) on delete set null,
   text text null check (text is null or pg_catalog.length(text) between 1 and 200),
   show_alert boolean not null default false,
   answered_at timestamptz not null default pg_catalog.now(),
@@ -443,8 +444,41 @@ alter table public.messages
   drop constraint if exists messages_bot_reply_markup_check;
 alter table public.messages
   add constraint messages_bot_reply_markup_check
-  check (private.bot_inline_keyboard_valid(bot_reply_markup)) not valid;
+  check (
+    bot_reply_markup is null
+    or (
+      bot_id is not null
+      and pg_catalog.jsonb_typeof(bot_reply_markup) = 'object'
+      and pg_catalog.octet_length(bot_reply_markup::text) <= 16384
+    )
+  ) not valid;
 alter table public.messages validate constraint messages_bot_reply_markup_check;
+
+create or replace function private.validate_bot_reply_markup()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+begin
+  if new.bot_reply_markup is null then
+    return new;
+  end if;
+  if new.bot_id is null
+     or not private.bot_inline_keyboard_valid(new.bot_reply_markup) then
+    raise exception 'bot_reply_markup_invalid' using errcode = '22023';
+  end if;
+  return new;
+end
+$function$;
+
+revoke all on function private.validate_bot_reply_markup()
+  from public, anon, authenticated, service_role;
+
+drop trigger if exists trg_validate_bot_reply_markup on public.messages;
+create trigger trg_validate_bot_reply_markup
+  before insert or update of bot_id, bot_reply_markup on public.messages
+  for each row execute function private.validate_bot_reply_markup();
 
 alter table public.messages
   drop constraint if exists messages_sender_shape_check;
@@ -1142,6 +1176,41 @@ begin
     raise exception 'bot_upload_object_missing' using errcode = '22023';
   end if;
 
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      p_bot_id::text || ':' || p_chat_id::text || ':'
+      || p_bucket_id || ':' || p_object_path,
+      0
+    )
+  );
+
+  select upload_grant.*
+  into v_grant
+  from private.bot_upload_grants upload_grant
+  where upload_grant.bot_id = p_bot_id
+    and upload_grant.chat_id = p_chat_id
+    and upload_grant.bucket_id = p_bucket_id
+    and upload_grant.object_path = p_object_path
+    and upload_grant.consumed_at is null
+    and upload_grant.expires_at > pg_catalog.now()
+  order by upload_grant.created_at desc
+  limit 1
+  for update of upload_grant;
+  if found then
+    if v_grant.content_type = p_content_type
+       and v_grant.byte_size = p_byte_size
+       and v_grant.expires_at - v_grant.created_at
+         = pg_catalog.make_interval(secs => p_expires_in_seconds) then
+      return query select
+        v_grant.id,
+        v_grant.bucket_id,
+        v_grant.object_path,
+        v_grant.expires_at;
+      return;
+    end if;
+    raise exception 'bot_upload_grant_attribute_conflict' using errcode = '23505';
+  end if;
+
   delete from private.bot_upload_grants stale_grant
   where stale_grant.bot_id = p_bot_id
     and stale_grant.chat_id = p_chat_id
@@ -1176,6 +1245,9 @@ begin
     v_grant.expires_at;
 exception
   when unique_violation then
+    if sqlerrm = 'bot_upload_grant_attribute_conflict' then
+      raise;
+    end if;
     raise exception 'bot_upload_grant_conflict' using errcode = '23505';
 end
 $function$;
@@ -1505,7 +1577,7 @@ security definer
 set search_path = ''
 as $function$
 begin
-  if p_result is null or pg_catalog.octet_length(p_result::text) > 16384 then
+  if p_result is null or pg_catalog.octet_length(p_result::text) > 32782 then
     raise exception 'bot_operation_result_invalid' using errcode = '22023';
   end if;
   insert into private.bot_operation_idempotency(
@@ -1849,8 +1921,9 @@ begin
     v_message_id := (p_payload->>'message_id')::uuid;
     v_text := p_payload->>'text';
     v_reply_markup := case
-      when p_payload ? 'reply_markup' then p_payload->'reply_markup'
-      else null
+      when not (p_payload ? 'reply_markup')
+        or p_payload->'reply_markup' = 'null'::jsonb then null
+      else p_payload->'reply_markup'
     end;
     if not private.bot_inline_keyboard_valid(v_reply_markup) then
       raise exception 'bot_reply_markup_invalid' using errcode = '22023';
@@ -1873,20 +1946,6 @@ begin
     raise exception 'bot_chat_forbidden' using errcode = '42501';
   end if;
 
-  if p_method in ('sendMessage','sendPhoto','sendVideo','sendDocument','sendVoice') then
-    v_send_result := public.bot_send_message_internal(
-      p_bot_id,
-      p_chat_id,
-      p_method,
-      p_payload,
-      p_idempotency_key
-    );
-    return pg_catalog.jsonb_build_object(
-      'result', v_send_result - 'duplicate',
-      'duplicate', coalesce((v_send_result->>'duplicate')::boolean, false)
-    );
-  end if;
-
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(p_bot_id::text || ':' || p_idempotency_key, 0)
   );
@@ -1900,6 +1959,28 @@ begin
     return pg_catalog.jsonb_build_object(
       'result', v_existing->'result',
       'duplicate', true
+    );
+  end if;
+
+  if p_method in ('sendMessage','sendPhoto','sendVideo','sendDocument','sendVoice') then
+    v_send_result := public.bot_send_message_internal(
+      p_bot_id,
+      p_chat_id,
+      p_method,
+      p_payload,
+      p_idempotency_key
+    );
+    v_result := v_send_result - 'duplicate';
+    perform private.bot_operation_idempotency_store(
+      p_bot_id,
+      p_idempotency_key,
+      p_method,
+      p_request_fingerprint,
+      v_result
+    );
+    return pg_catalog.jsonb_build_object(
+      'result', v_result,
+      'duplicate', coalesce((v_send_result->>'duplicate')::boolean, false)
     );
   end if;
 
@@ -2058,19 +2139,6 @@ begin
   ) then
     raise exception 'bot_identity_not_found' using errcode = 'P0002';
   end if;
-  select queued.id
-  into v_source_update_id
-  from private.bot_updates queued
-  where queued.bot_id = p_bot_id
-    and queued.update_type = 'callback_query'
-    and queued.payload#>>'{callback_query,id}' = p_callback_query_id::text
-    and queued.expires_at > pg_catalog.now()
-    and queued.created_at >= pg_catalog.now() - interval '10 minutes'
-  order by queued.id desc
-  limit 1;
-  if v_source_update_id is null then
-    raise exception 'bot_callback_not_found' using errcode = 'P0002';
-  end if;
 
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(p_bot_id::text || ':' || p_idempotency_key, 0)
@@ -2086,6 +2154,20 @@ begin
       'result', v_existing->'result',
       'duplicate', true
     );
+  end if;
+
+  select queued.id
+  into v_source_update_id
+  from private.bot_updates queued
+  where queued.bot_id = p_bot_id
+    and queued.update_type = 'callback_query'
+    and queued.payload#>>'{callback_query,id}' = p_callback_query_id::text
+    and queued.expires_at > pg_catalog.now()
+    and queued.created_at >= pg_catalog.now() - interval '10 minutes'
+  order by queued.id desc
+  limit 1;
+  if v_source_update_id is null then
+    raise exception 'bot_callback_not_found' using errcode = 'P0002';
   end if;
 
   insert into private.bot_callback_answers(

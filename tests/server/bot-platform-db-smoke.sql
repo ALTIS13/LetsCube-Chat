@@ -41,6 +41,7 @@ declare
   v_third_bot_id uuid;
   v_message_id uuid;
   v_plain_message_id uuid;
+  v_human_message_id uuid;
   v_restricted_plain_message_id uuid;
   v_mention_message_id uuid;
   v_command_message_id uuid;
@@ -64,7 +65,9 @@ declare
   v_first_operation jsonb;
   v_duplicate_operation jsonb;
   v_command_list jsonb;
+  v_max_commands jsonb;
   v_callback_id uuid := gen_random_uuid();
+  v_callback_source_update_id bigint;
   v_safe_payload jsonb;
   v_legacy_tombstone_count integer;
   v_notification_count integer;
@@ -75,6 +78,7 @@ declare
   v_outbox_count integer;
   v_notification_id uuid;
   v_upload_grant_id uuid;
+  v_second_upload_grant_id uuid;
   v_media_path text;
   v_history_media_path text;
   v_claim_token uuid := gen_random_uuid();
@@ -599,6 +603,76 @@ begin
 
   perform pg_catalog.set_config('request.jwt.claim.sub', v_recipient_id::text, true);
   execute 'set local role authenticated';
+  begin
+    insert into public.messages(
+      chat_id,
+      user_id,
+      content,
+      type,
+      bot_reply_markup
+    ) values (
+      v_chat_id,
+      v_recipient_id,
+      'authenticated human message',
+      'text',
+      null
+    ) returning id into v_human_message_id;
+  exception
+    when others then
+      execute 'reset role';
+      raise exception 'authenticated_human_message_insert_failed: [%] %', sqlstate, sqlerrm;
+  end;
+
+  v_rejected := false;
+  begin
+    insert into public.messages(
+      chat_id,
+      user_id,
+      content,
+      type,
+      bot_reply_markup
+    ) values (
+      v_chat_id,
+      v_recipient_id,
+      'forged human keyboard',
+      'text',
+      pg_catalog.jsonb_build_object(
+        'inline_keyboard', pg_catalog.jsonb_build_array(
+          pg_catalog.jsonb_build_array(
+            pg_catalog.jsonb_build_object('text', 'x', 'callback_data', 'x')
+          )
+        )
+      )
+    );
+  exception
+    when check_violation or invalid_parameter_value then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    execute 'reset role';
+    raise exception 'authenticated_human_markup_insert_succeeded';
+  end if;
+
+  v_rejected := false;
+  begin
+    update public.messages message_row
+    set bot_reply_markup = pg_catalog.jsonb_build_object(
+      'inline_keyboard', pg_catalog.jsonb_build_array(
+        pg_catalog.jsonb_build_array(
+          pg_catalog.jsonb_build_object('text', 'x', 'callback_data', 'x')
+        )
+      )
+    )
+    where message_row.id = v_human_message_id;
+  exception
+    when check_violation or invalid_parameter_value then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    execute 'reset role';
+    raise exception 'authenticated_human_markup_update_succeeded';
+  end if;
+
   v_rejected := false;
   begin
     insert into public.messages(chat_id, user_id, bot_id, content, type)
@@ -610,6 +684,15 @@ begin
   execute 'reset role';
   if not v_rejected then
     raise exception 'authenticated_bot_forgery_succeeded';
+  end if;
+  if not exists (
+    select 1 from public.messages message_row
+    where message_row.id = v_human_message_id
+      and message_row.user_id = v_recipient_id
+      and message_row.bot_id is null
+      and message_row.bot_reply_markup is null
+  ) then
+    raise exception 'authenticated_human_message_insert_failed';
   end if;
 
   insert into public.messages(chat_id, user_id, content, type)
@@ -800,6 +883,72 @@ begin
     pg_catalog.repeat('1', 64)
   ) into v_first_operation;
   v_markup_message_id := (v_first_operation->'result'->>'message_id')::uuid;
+  select public.bot_message_command_internal(
+    v_bot_id,
+    v_chat_id,
+    'sendMessage',
+    pg_catalog.jsonb_build_object(
+      'text', 'Keyboard message',
+      'reply_markup', pg_catalog.jsonb_build_object(
+        'inline_keyboard', pg_catalog.jsonb_build_array(
+          pg_catalog.jsonb_build_array(
+            pg_catalog.jsonb_build_object('text', 'Open', 'callback_data', 'open:1')
+          )
+        )
+      )
+    ),
+    'markup-send-key',
+    pg_catalog.repeat('1', 64)
+  ) into v_duplicate_operation;
+  if v_first_operation->'result' is distinct from v_duplicate_operation->'result'
+     or coalesce((v_duplicate_operation->>'duplicate')::boolean, false) is not true then
+    raise exception 'bot_send_fingerprint_replay_failed';
+  end if;
+
+  v_rejected := false;
+  begin
+    perform public.bot_message_command_internal(
+      v_bot_id,
+      v_chat_id,
+      'sendMessage',
+      pg_catalog.jsonb_build_object('text', 'Changed payload'),
+      'markup-send-key',
+      pg_catalog.repeat('b', 64)
+    );
+  exception
+    when unique_violation then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'bot_send_fingerprint_conflict_missing';
+  end if;
+
+  v_rejected := false;
+  begin
+    perform public.bot_message_command_internal(
+      v_bot_id,
+      v_chat_id,
+      'sendPhoto',
+      pg_catalog.jsonb_build_object(
+        'media_bucket', 'chat-media',
+        'media_path', v_chat_id::text || '/bots/' || v_bot_id::text || '/method-conflict.jpg',
+        'media_metadata', pg_catalog.jsonb_build_object(
+          'mime_type', 'image/jpeg',
+          'size', 10,
+          'kind', 'image'
+        )
+      ),
+      'markup-send-key',
+      pg_catalog.repeat('c', 64)
+    );
+  exception
+    when unique_violation then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'bot_send_method_conflict_missing';
+  end if;
+
   select private.bot_message_update_payload(v_bot_id, v_markup_message_id)
   into v_safe_payload;
   if not exists (
@@ -913,6 +1062,47 @@ begin
     raise exception 'bot_edit_idempotency_failed';
   end if;
 
+  select public.bot_message_command_internal(
+    v_bot_id,
+    v_chat_id,
+    'editMessageText',
+    pg_catalog.jsonb_build_object(
+      'message_id', v_markup_message_id,
+      'text', 'Keyboard cleared'
+    ),
+    'edit-clear-key',
+    pg_catalog.repeat('d', 64)
+  ) into v_first_operation;
+  if not exists (
+    select 1 from public.messages message_row
+    where message_row.id = v_markup_message_id
+      and message_row.content = 'Keyboard cleared'
+      and message_row.bot_reply_markup is null
+  ) then
+    raise exception 'bot_edit_without_markup_failed';
+  end if;
+
+  select public.bot_message_command_internal(
+    v_bot_id,
+    v_chat_id,
+    'editMessageText',
+    pg_catalog.jsonb_build_object(
+      'message_id', v_markup_message_id,
+      'text', 'Keyboard null cleared',
+      'reply_markup', 'null'::jsonb
+    ),
+    'edit-null-clear-key',
+    pg_catalog.repeat('e', 64)
+  ) into v_first_operation;
+  if not exists (
+    select 1 from public.messages message_row
+    where message_row.id = v_markup_message_id
+      and message_row.content = 'Keyboard null cleared'
+      and message_row.bot_reply_markup is null
+  ) then
+    raise exception 'bot_edit_json_null_markup_failed';
+  end if;
+
   v_rejected := false;
   begin
     perform public.bot_message_command_internal(
@@ -1005,6 +1195,32 @@ begin
     raise exception 'bot_command_replace_failed';
   end if;
 
+  select pg_catalog.jsonb_agg(
+    pg_catalog.jsonb_build_object(
+      'command', 'c' || pg_catalog.lpad(command_number::text, 31, '0'),
+      'description', pg_catalog.repeat('d', 256)
+    ) order by command_number
+  )
+  into v_max_commands
+  from pg_catalog.generate_series(1, 100) command_number;
+  select public.bot_commands_replace_internal(
+    v_bot_id,
+    v_max_commands,
+    'commands-maximum-key',
+    pg_catalog.repeat('f', 64)
+  ) into v_first_operation;
+  select public.bot_commands_replace_internal(
+    v_bot_id,
+    v_max_commands,
+    'commands-maximum-key',
+    pg_catalog.repeat('f', 64)
+  ) into v_duplicate_operation;
+  if pg_catalog.jsonb_array_length(v_first_operation->'result'->'commands') <> 100
+     or v_first_operation->'result' is distinct from v_duplicate_operation->'result'
+     or coalesce((v_duplicate_operation->>'duplicate')::boolean, false) is not true then
+    raise exception 'bot_command_maximum_replay_failed';
+  end if;
+
   perform public.bot_update_enqueue_internal(
     v_bot_id,
     'callback_query',
@@ -1015,6 +1231,14 @@ begin
       'data', 'confirm'
     )
   );
+  select queued.id
+  into v_callback_source_update_id
+  from private.bot_updates queued
+  where queued.bot_id = v_bot_id
+    and queued.update_type = 'callback_query'
+    and queued.payload#>>'{callback_query,id}' = v_callback_id::text
+  order by queued.id desc
+  limit 1;
   if not exists (
     select 1
     from private.bot_updates queued
@@ -1052,6 +1276,32 @@ begin
     'callback-answer-key',
     pg_catalog.repeat('9', 64)
   ) into v_first_operation;
+  if not exists (
+       select 1 from private.bot_callback_answers answer
+       where answer.bot_id = v_bot_id
+         and answer.callback_query_id = v_callback_id
+         and answer.text = 'Done'
+         and answer.show_alert is true
+     ) then
+    raise exception 'bot_callback_idempotency_failed';
+  end if;
+
+  update private.bot_updates queued
+  set created_at = pg_catalog.now() - interval '11 minutes',
+      expires_at = pg_catalog.now() - interval '1 minute'
+  where queued.id = v_callback_source_update_id;
+  perform public.bot_delivery_cleanup_internal(pg_catalog.now(), 1000);
+  if exists (
+    select 1 from private.bot_updates queued
+    where queued.id = v_callback_source_update_id
+  ) or not exists (
+    select 1 from private.bot_callback_answers answer
+    where answer.bot_id = v_bot_id
+      and answer.callback_query_id = v_callback_id
+      and answer.source_update_id is null
+  ) then
+    raise exception 'bot_callback_answer_cascade_deleted';
+  end if;
   select public.bot_callback_answer_internal(
     v_bot_id,
     v_callback_id,
@@ -1061,15 +1311,8 @@ begin
     pg_catalog.repeat('9', 64)
   ) into v_duplicate_operation;
   if v_first_operation->'result' is distinct from v_duplicate_operation->'result'
-     or coalesce((v_duplicate_operation->>'duplicate')::boolean, false) is not true
-     or not exists (
-       select 1 from private.bot_callback_answers answer
-       where answer.bot_id = v_bot_id
-         and answer.callback_query_id = v_callback_id
-         and answer.text = 'Done'
-         and answer.show_alert is true
-     ) then
-    raise exception 'bot_callback_idempotency_failed';
+     or coalesce((v_duplicate_operation->>'duplicate')::boolean, false) is not true then
+    raise exception 'bot_callback_retry_after_source_cleanup_failed';
   end if;
 
   insert into public.messages(chat_id, user_id, content, type, reply_to_id)
@@ -1486,6 +1729,50 @@ begin
     1024,
     300
   ) authorized;
+  select authorized.grant_id into v_second_upload_grant_id
+  from public.bot_upload_authorize_internal(
+    v_bot_id,
+    v_chat_id,
+    'chat-media',
+    v_media_path,
+    'image/jpeg',
+    1024,
+    300
+  ) authorized;
+  if v_second_upload_grant_id is distinct from v_upload_grant_id
+     or (
+       select pg_catalog.count(*)
+       from private.bot_upload_grants upload_grant
+       where upload_grant.bot_id = v_bot_id
+         and upload_grant.chat_id = v_chat_id
+         and upload_grant.object_path = v_media_path
+         and upload_grant.consumed_at is null
+         and upload_grant.expires_at > pg_catalog.now()
+     ) <> 1 then
+    raise exception 'bot_upload_exact_retry_failed';
+  end if;
+  v_rejected := false;
+  begin
+    perform public.bot_upload_authorize_internal(
+      v_bot_id,
+      v_chat_id,
+      'chat-media',
+      v_media_path,
+      'image/jpeg',
+      1025,
+      300
+    );
+  exception
+    when unique_violation then
+      if sqlerrm = 'bot_upload_grant_attribute_conflict' then
+        v_rejected := true;
+      else
+        raise;
+      end if;
+  end;
+  if not v_rejected then
+    raise exception 'bot_upload_attribute_conflict_missing';
+  end if;
   if exists (
     select 1
     from private.bot_upload_grants upload_grant

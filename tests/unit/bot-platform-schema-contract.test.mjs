@@ -140,6 +140,11 @@ test("bot uploads require a private scoped grant and never storage RLS", () => {
     normalizedSql,
     /delete from private\.bot_upload_grants stale_grant[\s\S]*stale_grant\.expires_at <= pg_catalog\.now\(\)/,
   );
+  assert.match(normalizedSql, /bot_upload_grant_attribute_conflict/);
+  assert.match(
+    normalizedSql,
+    /v_grant\.content_type = p_content_type[\s\S]*v_grant\.byte_size = p_byte_size[\s\S]*v_grant\.expires_at - v_grant\.created_at = pg_catalog\.make_interval/,
+  );
   assert.match(normalizedSql, /'upload_grants_deleted', v_upload_grants/);
   assert.doesNotMatch(
     sql,
@@ -242,6 +247,22 @@ test("bot inline keyboards are durable, closed, bounded and edit-visible", () =>
   assert.match(normalizedSql, /pg_catalog\.jsonb_array_length\(p_markup->'inline_keyboard'\) not between 1 and 8/);
   assert.match(normalizedSql, /pg_catalog\.length\(v_button->>'text'\) not between 1 and 64/);
   assert.match(normalizedSql, /pg_catalog\.length\(v_button->>'callback_data'\) not between 1 and 128/);
+  assert.doesNotMatch(
+    normalizedSql,
+    /constraint messages_bot_reply_markup_check check \(private\.bot_inline_keyboard_valid/,
+  );
+  assert.match(
+    normalizedSql,
+    /constraint messages_bot_reply_markup_check check \( bot_reply_markup is null or \( bot_id is not null[\s\S]*pg_catalog\.jsonb_typeof\(bot_reply_markup\) = 'object'[\s\S]*pg_catalog\.octet_length\(bot_reply_markup::text\) <= 16384/,
+  );
+  assert.match(
+    normalizedSql,
+    /create trigger trg_validate_bot_reply_markup before insert or update of bot_id, bot_reply_markup on public\.messages/,
+  );
+  assert.match(
+    normalizedSql,
+    /create or replace function private\.validate_bot_reply_markup\(\)[\s\S]*security definer[\s\S]*private\.bot_inline_keyboard_valid\(new\.bot_reply_markup\)/,
+  );
   assert.match(normalizedSql, /'reply_markup', message_row\.bot_reply_markup/);
   assert.match(
     normalizedSql,
@@ -249,10 +270,14 @@ test("bot inline keyboards are durable, closed, bounded and edit-visible", () =>
   );
 });
 
-test("non-message core mutations use a private input-bound idempotency ledger", () => {
+test("all core mutations use a private input-bound idempotency ledger", () => {
   assert.match(normalizedSql, /create table private\.bot_operation_idempotency/);
   assert.match(normalizedSql, /request_fingerprint text not null check \(request_fingerprint ~ '\^\[0-9a-f\]\{64\}\$'\)/);
-  assert.match(normalizedSql, /check \(pg_catalog\.octet_length\(result::text\) <= 16384\)/);
+  assert.match(normalizedSql, /check \(pg_catalog\.octet_length\(result::text\) <= 32782\)/);
+  assert.match(
+    normalizedSql,
+    /method in \( 'sendmessage','sendphoto','sendvideo','senddocument','sendvoice',[\s\S]*'sendchataction','editmessagetext','deletemessage'/,
+  );
   assert.match(normalizedSql, /create index bot_operation_idempotency_retention_idx/);
   assert.match(normalizedSql, /bot_operation_idempotency_conflict/);
   assert.match(normalizedSql, /'operation_idempotency_deleted', v_operation_idempotency/);
@@ -276,6 +301,14 @@ test("core RPCs enforce identity, commands, file and callback boundaries", () =>
   assert.match(normalizedSql, /message_row\.chat_id = p_chat_id/);
   assert.match(normalizedSql, /message_row\.media_bucket is not null/);
   assert.match(normalizedSql, /create table private\.bot_callback_answers/);
+  assert.match(
+    normalizedSql,
+    /source_update_id bigint null references private\.bot_updates\(id\) on delete set null/,
+  );
+  assert.match(
+    normalizedSql,
+    /create or replace function public\.bot_callback_answer_internal\([\s\S]*private\.bot_operation_idempotency_lookup\([\s\S]*select queued\.id/,
+  );
   assert.match(normalizedSql, /queued\.update_type = 'callback_query'/);
   assert.match(normalizedSql, /queued\.expires_at > pg_catalog\.now\(\)/);
   assert.match(normalizedSql, /queued\.created_at >= pg_catalog\.now\(\) - interval '10 minutes'/);
@@ -288,6 +321,14 @@ test("message command RPC independently enforces method-specific send payloads",
   assert.match(normalizedSql, /p_method = 'senddocument'[\s\S]*application\/pdf/);
   assert.match(normalizedSql, /p_method = 'sendvoice'[\s\S]*audio\/webm[\s\S]*audio\/ogg[\s\S]*audio\/mpeg/);
   assert.match(normalizedSql, /p_payload->'media_metadata'->>'kind' <> v_expected_media_kind/);
+  assert.match(
+    normalizedSql,
+    /private\.bot_operation_idempotency_lookup\( p_bot_id, p_idempotency_key, p_method, p_request_fingerprint \)[\s\S]*public\.bot_send_message_internal/,
+  );
+  assert.match(
+    normalizedSql,
+    /public\.bot_send_message_internal\([\s\S]*private\.bot_operation_idempotency_store\( p_bot_id, p_idempotency_key, p_method, p_request_fingerprint, v_result \)/,
+  );
 });
 
 test("automatic message fanout isolates every bot while direct RPC remains strict", () => {
@@ -486,6 +527,9 @@ test("database smoke preserves history and rolls every probe back", () => {
   assert.match(normalizedSmoke, /bot_idempotency_failed/);
   assert.match(normalizedSmoke, /bot_webhook_disable_depended_on_lease/);
   assert.match(normalizedSmoke, /authenticated_bot_forgery_succeeded/);
+  assert.match(normalizedSmoke, /authenticated_human_message_insert_failed/);
+  assert.match(normalizedSmoke, /authenticated_human_markup_insert_succeeded/);
+  assert.match(normalizedSmoke, /authenticated_human_markup_update_succeeded/);
   assert.match(normalizedSmoke, /restricted_plain_message_was_projected/);
   assert.match(normalizedSmoke, /restricted_mention_not_projected/);
   assert.match(normalizedSmoke, /full_message_not_projected/);
@@ -498,15 +542,23 @@ test("database smoke preserves history and rolls every probe back", () => {
   assert.match(normalizedSmoke, /bot_reply_markup_validation_failed/);
   assert.match(normalizedSmoke, /bot_media_method_allowlist_failed/);
   assert.match(normalizedSmoke, /bot_edit_idempotency_failed/);
+  assert.match(normalizedSmoke, /bot_edit_without_markup_failed/);
   assert.match(normalizedSmoke, /bot_edit_idempotency_conflict_missing/);
   assert.match(normalizedSmoke, /cross_chat_edit_succeeded/);
   assert.match(normalizedSmoke, /cross_chat_delete_succeeded/);
   assert.match(normalizedSmoke, /bot_command_replace_failed/);
+  assert.match(normalizedSmoke, /bot_command_maximum_replay_failed/);
   assert.match(normalizedSmoke, /bot_file_cross_chat_lookup_succeeded/);
   assert.match(normalizedSmoke, /bot_file_pre_join_lookup_succeeded/);
   assert.match(normalizedSmoke, /bot_callback_wrong_owner_succeeded/);
   assert.match(normalizedSmoke, /bot_callback_idempotency_failed/);
+  assert.match(normalizedSmoke, /bot_callback_retry_after_source_cleanup_failed/);
+  assert.match(normalizedSmoke, /bot_callback_answer_cascade_deleted/);
   assert.match(normalizedSmoke, /expired_upload_grant_not_replaced/);
+  assert.match(normalizedSmoke, /bot_upload_exact_retry_failed/);
+  assert.match(normalizedSmoke, /bot_upload_attribute_conflict_missing/);
+  assert.match(normalizedSmoke, /bot_send_fingerprint_conflict_missing/);
+  assert.match(normalizedSmoke, /bot_send_method_conflict_missing/);
   assert.match(normalizedSmoke, /cross_chat_reply_succeeded/);
   assert.match(normalizedSmoke, /v_other_chat_id, v_bot_id, 'full'/);
   assert.match(normalizedSmoke, /cross_chat_topic_succeeded/);

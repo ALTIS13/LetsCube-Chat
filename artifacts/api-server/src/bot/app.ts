@@ -13,6 +13,14 @@ import type { BotTokenRepository } from "#bot/repository";
 
 const SAFE_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 
+function safeLogPath(value: unknown): string {
+  if (typeof value !== "string") return "unmatched";
+  const pathname = value.split("?", 1)[0];
+  if (pathname === "/healthz") return "/healthz";
+  if (pathname?.startsWith("/bot/v1/")) return "/bot/v1/:method";
+  return "unmatched";
+}
+
 export function createBotGatewayApp(input: {
   logger: Logger;
   handlers: BotMethodHandlers;
@@ -41,10 +49,7 @@ export function createBotGatewayApp(input: {
               typeof request.method === "string"
                 ? request.method.slice(0, 16)
                 : undefined,
-            path:
-              typeof request.url === "string"
-                ? request.url.split("?", 1)[0]?.slice(0, 256)
-                : undefined,
+            path: safeLogPath(request.url),
           };
         },
         res(response) {
