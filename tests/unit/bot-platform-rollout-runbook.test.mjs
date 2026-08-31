@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
@@ -17,6 +18,35 @@ function plan() {
   assert.equal(existsSync(planPath), true, `missing ${planPath}`);
   return readFileSync(planPath, "utf8");
 }
+
+function isIgnored(path) {
+  const result = spawnSync(
+    "git",
+    ["check-ignore", "--no-index", "--quiet", "--", path],
+    { encoding: "utf8" },
+  );
+  assert.ok(
+    result.status === 0 || result.status === 1,
+    `git check-ignore failed for ${path}: ${result.stderr}`,
+  );
+  return result.status === 0;
+}
+
+test("root rollout evidence is ignored without hiding nested product paths", () => {
+  const gitignore = readFileSync(".gitignore", "utf8");
+  const source = runbook();
+
+  assert.ok(
+    gitignore.split(/\r?\n/).includes("/.ops-local/"),
+    "missing root-anchored /.ops-local/ ignore",
+  );
+  assert.equal(isIgnored(".ops-local/contract-probe.txt"), true);
+  assert.equal(isIgnored("artifacts/kub/.ops-local/product-state.txt"), false);
+  assert.match(
+    source,
+    /ROLLOUT_DIR="\$REPO_ROOT\/\.ops-local\/bot-platform-rollout\/\$RUN_ID"/,
+  );
+});
 
 test("runbook pins reviewed inputs and treats the migration as a one-shot artifact", () => {
   const source = runbook();
