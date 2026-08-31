@@ -15,11 +15,14 @@ import {
   getMessageAckUserMessage,
   sanitizeMessageAckError,
 } from "@/lib/messageAckError";
+import { MESSAGE_SELECT_WITH_JOINS } from "@/lib/messageProjection";
+import {
+  actorClientMessageKey,
+  isIncomingMessage,
+} from "@/lib/messageActor";
 
 const MESSAGE_PAGE_SIZE = 100;
 const SEND_ACK_TIMEOUT_MS = 12_000;
-const MESSAGE_SELECT_WITH_JOINS =
-  "*, sender:profiles!user_id(*), reply_to:messages!reply_to_id(id, content, type, media_url, deleted_at, user_id, sender:profiles(id, full_name)), reactions(*)";
 
 type SendableMessageType = Extract<MessageWithSender["type"], "text" | "image" | "video" | "audio" | "file">;
 
@@ -226,7 +229,7 @@ export function useMessages(
         if (user) {
           const latestVisible = visibleFetched[visibleFetched.length - 1] ?? visibleExisting[visibleExisting.length - 1] ?? null;
           const latestIncoming = [...visibleFetched].reverse().find((message) =>
-            message.user_id && message.user_id !== user.id && !message.deleted_at
+            !message.deleted_at && isIncomingMessage(message, user.id)
           );
           if (latestVisible && document.visibilityState === "visible") {
             scheduleMarkChatRead(supabase, chatId, latestVisible.created_at);
@@ -597,7 +600,7 @@ export function useMessages(
           addMessage(payload.new.chat_id, provisional);
           updateChatLastMessage(payload.new.chat_id, provisional);
           const user = currentUserRef.current;
-          if (user && payload.new.user_id !== user.id) {
+          if (user && isIncomingMessage(payload.new, user.id)) {
             // Receipt state follows what was rendered, not the optional joined
             // enrichment below. That fetch can legitimately lag Realtime under
             // rapid sends, especially while a PWA is resuming on iOS.
@@ -777,7 +780,7 @@ export function useMessages(
       if (!activeChatId) return;
       const latestIncoming = [...(useAppStore.getState().messages[activeChatId] ?? [])]
         .reverse()
-        .find((message) => message.user_id && message.user_id !== userId && !message.deleted_at);
+        .find((message) => !message.deleted_at && isIncomingMessage(message, userId));
       if (latestIncoming) scheduleMarkChatRead(supabase, activeChatId, latestIncoming.created_at);
     };
     document.addEventListener("visibilitychange", markReadWhenVisible);
@@ -863,6 +866,8 @@ export function useMessages(
       chat_id: activeChatId,
       topic_id: messageTopicId,
       user_id: user.id,
+      bot_id: null,
+      bot_reply_markup: null,
       content: trimmedContent,
       type: input.type,
       media_bucket: input.mediaBucket ?? null,
@@ -1296,10 +1301,6 @@ function isLocalOnlyMessage(message: MessageWithSender): boolean {
   return message.id.startsWith("tmp:") || Boolean(message.pending || message.checking || message.failed);
 }
 
-function sameClientMessage(a: MessageWithSender, b: MessageWithSender): boolean {
-  return Boolean(a.client_message_id && b.client_message_id && a.client_message_id === b.client_message_id);
-}
-
 function chooseMergedMessage(current: MessageWithSender, next: MessageWithSender): MessageWithSender {
   if (isLocalOnlyMessage(current) && !isLocalOnlyMessage(next)) return next;
   if (!isLocalOnlyMessage(current) && isLocalOnlyMessage(next)) return current;
@@ -1317,18 +1318,20 @@ function mergeMessagesById(
 
   for (const message of [...fetched, ...existing]) {
     const idIndex = byId.get(message.id);
-    const clientIndex = message.client_message_id ? byClientId.get(message.client_message_id) : undefined;
+    const clientKey = actorClientMessageKey(message);
+    const clientIndex = clientKey ? byClientId.get(clientKey) : undefined;
     const index = idIndex ?? clientIndex;
     if (index === undefined) {
       byId.set(message.id, merged.length);
-      if (message.client_message_id) byClientId.set(message.client_message_id, merged.length);
+      if (clientKey) byClientId.set(clientKey, merged.length);
       merged.push(message);
       continue;
     }
     const chosen = chooseMergedMessage(merged[index], message);
     merged[index] = chosen;
     byId.set(chosen.id, index);
-    if (chosen.client_message_id) byClientId.set(chosen.client_message_id, index);
+    const chosenClientKey = actorClientMessageKey(chosen);
+    if (chosenClientKey) byClientId.set(chosenClientKey, index);
   }
   return merged.sort(
     (a, b) => {

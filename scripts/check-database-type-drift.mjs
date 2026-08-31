@@ -9,6 +9,7 @@ const generatedPath = path.join(root, "artifacts", "kub", "src", "types", "datab
 
 const criticalTables = [
   "messages",
+  "bots",
   "tasks",
   "chats",
   "chat_members",
@@ -25,6 +26,7 @@ const appFacingFunctions = [
   "global_search",
   "global_search_v2",
   "search_profiles_by_phone",
+  "search_public_bots",
   "search_chat_messages",
   "task_claim",
   "task_recurrence_run_due",

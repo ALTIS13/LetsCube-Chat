@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, typ
 import { createPortal } from "react-dom";
 import type { MessageWithSender } from "@/types/database";
 import { formatFullTime } from "@/lib/format";
-import { UserAvatar } from "@/components/ui/ChatAvatar";
+import { MessageActorAvatar } from "@/components/ui/ChatAvatar";
 import type { AvatarVariantUrls, MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 import { AudioMessage } from "./AudioMessage";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,10 @@ import { formatReplyMessagePreview } from "@/lib/messagePreview";
 import { getVideoPlaybackFallbackUrl, selectVideoPlaybackUrl } from "@/lib/mediaQuality";
 import { EmojiCategoryPicker } from "@/components/ui/EmojiCategoryPicker";
 import { MESSAGE_EMOJI_CATEGORIES, MESSAGE_EMOJI_SEARCH_TERMS } from "@/lib/emojiCatalog";
+import {
+  messageActorDisplayName,
+  resolveMessageActor,
+} from "@/lib/messageActor";
 
 const EMOJI_QUICK = ["👍", "❤️", "😂", "😮", "😢", "🔥", "👏", "🎉"];
 
@@ -63,7 +67,6 @@ interface MessageBubbleProps {
   onCloseActionMenu?: () => void;
   selected?: boolean;
   isSelectionMode?: boolean;
-  usersMap?: Record<string, string>;
   messagesMap?: Record<string, MessageWithSender>;
   mediaVariant?: MessageMediaVariantUrls;
   senderAvatarVariant?: AvatarVariantUrls;
@@ -426,7 +429,7 @@ export function MessageBubble({
   onRetrySend, onEditFailedSend, onDiscardLocalMessage,
   reactionMenuOpen = false, onToggleReactionMenu, onCloseReactionMenu,
   actionMenuOpen, onOpenActionMenu, onCloseActionMenu, selected = false, isSelectionMode = false,
-  usersMap = {}, messagesMap = {}, mediaVariant, senderAvatarVariant, deliveryState, groupReadInfo, onOpenGroupReadReceipts, isSavedChat,
+  messagesMap = {}, mediaVariant, senderAvatarVariant, deliveryState, groupReadInfo, onOpenGroupReadReceipts, isSavedChat,
 }: MessageBubbleProps) {
   const [showContext, setShowContext] = useState(false);
   const [reactionCatalogOpen, setReactionCatalogOpen] = useState(false);
@@ -447,6 +450,8 @@ export function MessageBubble({
     maxWidth: "calc(100vw - 16px)",
   });
   const { currentUser } = useAppStore();
+  const actor = resolveMessageActor(message);
+  const actorName = messageActorDisplayName(actor);
   const textContent = message.content ?? "";
   const mediaCaption = getVisibleMediaCaption(message);
   const mediaDimensions = getMessageMediaDimensions(message);
@@ -1088,8 +1093,8 @@ export function MessageBubble({
       >
         {!isMe && (
           <div className="flex-shrink-0 self-end mb-1 w-8">
-            {isLastInGroup && message.sender && (
-              <UserAvatar user={message.sender} size="sm" avatarVariant={senderAvatarVariant} />
+            {isLastInGroup && actor.kind !== "system" && (
+              <MessageActorAvatar actor={actor} size="sm" avatarVariant={senderAvatarVariant} />
             )}
           </div>
         )}
@@ -1100,9 +1105,14 @@ export function MessageBubble({
           style={stackStyle}
         >
 
-          {!isMe && isFirstInGroup && message.sender && (
-            <span className="text-xs font-semibold ml-3 mb-0.5 text-[color:var(--kub-cyan)]">
-              {message.sender.full_name}
+          {!isMe && isFirstInGroup && actor.kind !== "system" && (
+            <span className="ml-3 mb-0.5 inline-flex min-w-0 items-center gap-1.5 text-xs font-semibold text-[color:var(--kub-cyan)]">
+              <span className="truncate">{actorName}</span>
+              {actor.kind === "bot" && (
+                <span className="rounded-sm bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] px-1 py-px text-[9px] font-semibold uppercase text-[color:var(--kub-cyan)]">
+                  Бот
+                </span>
+              )}
             </span>
           )}
 
@@ -1163,11 +1173,10 @@ export function MessageBubble({
 
             {message.reply_to_id && (() => {
               const replyMsg = messagesMap[message.reply_to_id] ?? message.reply_to ?? null;
-              const replyUserId = replyMsg?.user_id ?? null;
               const replyName = replyMsg && !replyMsg.deleted_at
-                ? replyUserId === currentUser?.id
+                ? resolveMessageActor(replyMsg).kind === "user" && replyMsg.user_id === currentUser?.id
                   ? "Вы"
-                  : (replyUserId ? usersMap[replyUserId] : null) ?? replyMsg.sender?.full_name ?? "Без имени"
+                  : messageActorDisplayName(resolveMessageActor(replyMsg))
                 : "Ответ";
               const compactPreview = canUseCompactReplyInline;
               const compactPreviewCap = compactPreview
@@ -1743,7 +1752,7 @@ function createPlaybackItemFromMessage(
         : kind === "audio"
           ? "Аудио"
           : "Видео",
-    subtitle: isMe ? "Вы" : message.sender?.full_name ?? message.sender?.username ?? "Участник",
+    subtitle: isMe ? "Вы" : messageActorDisplayName(resolveMessageActor(message)),
     durationMs,
   };
 }

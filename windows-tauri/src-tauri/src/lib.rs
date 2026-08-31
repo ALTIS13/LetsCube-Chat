@@ -25,6 +25,7 @@ use updater::{
 };
 
 const PRODUCTION_ORIGIN: &str = "https://app.letscube.ru";
+const API_ORIGIN: &str = "https://api.letscube.ru";
 const PRODUCTION_URL: &str = "https://app.letscube.ru/";
 const BUNDLED_STARTUP_URL: &str = "http://tauri.localhost/startup.html";
 const PRODUCTION_PROFILE: &str = "webview-production-v1";
@@ -64,6 +65,7 @@ struct DesktopNotificationRequest {
     group: String,
     header: Option<DesktopNotificationHeader>,
     route: String,
+    icon: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -442,6 +444,28 @@ fn is_safe_notification_text(value: &str, max_chars: usize) -> bool {
         && !value.chars().any(|character| character == '\0')
 }
 
+fn is_safe_notification_icon(value: &str) -> bool {
+    if value.len() > 2048 || value.chars().any(char::is_control) {
+        return false;
+    }
+    Url::parse(value)
+        .map(|url| {
+            let lower = value.to_ascii_lowercase();
+            let origin = url.origin().ascii_serialization();
+            url.scheme() == "https"
+                && url.username().is_empty()
+                && url.password().is_none()
+                && url.port().is_none()
+                && (origin == PRODUCTION_ORIGIN || origin == API_ORIGIN)
+                && !lower.contains("/storage/v1/")
+                && !lower.contains("/object/sign/")
+                && !lower.contains("token=")
+                && !lower.contains("signedurl")
+                && !lower.contains("signed_url")
+        })
+        .unwrap_or(false)
+}
+
 fn notification_group(kind: &str) -> Option<&'static str> {
     match kind {
         "message" => Some("messages"),
@@ -472,6 +496,10 @@ fn validate_desktop_notification(
         || !is_safe_notification_route(&notification.route)
         || !is_safe_notification_text(&notification.title, 120)
         || !is_safe_notification_text(&notification.body, 280)
+        || notification
+            .icon
+            .as_deref()
+            .is_some_and(|icon| !is_safe_notification_icon(icon))
     {
         return Err("notification_invalid");
     }
@@ -578,10 +606,21 @@ fn windows_notification_xml(
             escape_xml(notification.body.trim()),
         )
     };
+    let image = notification
+        .icon
+        .as_ref()
+        .map(|icon| {
+            format!(
+                r#"<image placement="appLogoOverride" hint-crop="circle" src="{}"/>"#,
+                escape_xml(icon),
+            )
+        })
+        .unwrap_or_default();
     Ok(format!(
-        r#"<toast duration="short" activationType="protocol" launch="{}">{}<visual><binding template="ToastGeneric">{}</binding></visual></toast>"#,
+        r#"<toast duration="short" activationType="protocol" launch="{}">{}<visual><binding template="ToastGeneric">{}{}</binding></visual></toast>"#,
         escape_xml(&activation_url),
         header,
+        image,
         content,
     ))
 }
@@ -1489,6 +1528,7 @@ mod tests {
                 route: "/?chat=chat-1".into(),
             }),
             route: "/?chat=chat-1&message=message-1".into(),
+            icon: Some("https://api.letscube.ru/media/bots/helper.webp".into()),
         };
 
         validate_desktop_notification(&notification).unwrap();
@@ -1500,6 +1540,16 @@ mod tests {
         assert!(xml.contains("<text>Первое сообщение</text>"));
         assert!(xml.contains("route=%2F%3Fchat%3Dchat-1"));
         assert!(xml.contains("route=%2F%3Fchat%3Dchat-1%26message%3Dmessage-1"));
+        assert!(xml.contains("src=\"https://api.letscube.ru/media/bots/helper.webp\""));
+        assert!(is_safe_notification_icon(
+            "https://app.letscube.ru/media/bots/helper.webp"
+        ));
+        assert!(!is_safe_notification_icon(
+            "https://api.letscube.ru/storage/v1/object/sign/bots/helper.webp?token=secret"
+        ));
+        assert!(!is_safe_notification_icon(
+            "https://evil.example/media/bots/helper.webp"
+        ));
     }
 
     #[test]
@@ -1523,6 +1573,7 @@ mod tests {
                 route: "/tasks".into(),
             }),
             route: "/tasks?task=task-1".into(),
+            icon: None,
         };
         assert_eq!(
             validate_desktop_notification(&task_with_header),
@@ -1540,6 +1591,7 @@ mod tests {
             group: "task:0123abcd".into(),
             header: None,
             route: "/tasks?task=task-1".into(),
+            icon: None,
         };
 
         validate_desktop_notification(&notification).unwrap();

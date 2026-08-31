@@ -5,6 +5,7 @@ import { sortChatsForSidebar } from "@/lib/chatSort";
 import { showAppAlert } from "@/lib/appDialogs";
 import { useAppStore } from "@/store/app.store";
 import type { ChatWithLastMessage, Profile } from "@/types/database";
+import { MESSAGE_LAST_MESSAGE_SELECT } from "@/lib/messageProjection";
 
 const UNAVAILABLE_CHAT_MESSAGE = "Чат удалён или больше недоступен.";
 
@@ -72,7 +73,7 @@ async function hydrateChatSummary(chatId: string, currentUserId: string): Promis
 
   const { data: lastRows } = await supabase
     .from("messages")
-    .select("*, sender:profiles(*)")
+    .select(MESSAGE_LAST_MESSAGE_SELECT)
     .eq("chat_id", chatId)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })

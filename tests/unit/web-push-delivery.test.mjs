@@ -17,10 +17,18 @@ const messagePayload = {
   kind: "message",
   chatId: "chat-1",
   messageId: "message-1",
+  senderKind: "bot",
+  senderId: "",
+  botId: "bot-1",
+  senderName: "Помощник",
+  senderAvatarUrl: "https://api.letscube.ru/media/bots/helper.webp",
+  messageType: "text",
+  preview: "Привет",
+  groupTag: "message:chat:chat-1",
   renotify: false,
 };
 
-test("web push payload keeps the legacy contract and adds an iOS declarative fallback", () => {
+test("additive bot fields do not change the existing declarative PWA presentation", () => {
   const result = buildDeclarativeWebPushPayload(
     messagePayload,
     "https://app.letscube.ru",
@@ -35,6 +43,8 @@ test("web push payload keeps the legacy contract and adds an iOS declarative fal
     navigate: "https://app.letscube.ru/?chat=chat-1&message=message-1",
     tag: "message:chat:chat-1",
   });
+  assert.equal(result.senderKind, "bot");
+  assert.equal(result.botId, "bot-1");
 });
 
 test("declarative web push is omitted when the configured app origin is unsafe", () => {

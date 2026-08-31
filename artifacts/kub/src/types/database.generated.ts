@@ -94,6 +94,42 @@ export type Database = {
           },
         ]
       }
+      bots: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          delete_after: string | null
+          description: string
+          display_name: string
+          id: string
+          state: string
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          delete_after?: string | null
+          description?: string
+          display_name: string
+          id?: string
+          state?: string
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          delete_after?: string | null
+          description?: string
+          display_name?: string
+          id?: string
+          state?: string
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
       chat_members: {
         Row: {
           chat_id: string
@@ -504,6 +540,8 @@ export type Database = {
       }
       messages: {
         Row: {
+          bot_id: string | null
+          bot_reply_markup: Json | null
           chat_id: string
           client_message_id: string | null
           client_sent_at: string | null
@@ -524,6 +562,8 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          bot_id?: string | null
+          bot_reply_markup?: Json | null
           chat_id: string
           client_message_id?: string | null
           client_sent_at?: string | null
@@ -544,6 +584,8 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          bot_id?: string | null
+          bot_reply_markup?: Json | null
           chat_id?: string
           client_message_id?: string | null
           client_sent_at?: string | null
@@ -564,6 +606,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "messages_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "bots"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "messages_chat_id_fkey"
             columns: ["chat_id"]
@@ -1703,6 +1752,16 @@ export type Database = {
           id: string
           subtitle: string | null
           title: string
+        }[]
+      }
+      search_public_bots: {
+        Args: { p_limit?: number; p_query: string }
+        Returns: {
+          avatar_url: string | null
+          description: string
+          display_name: string
+          id: string
+          username: string
         }[]
       }
       group_invite_accept: { Args: { p_invite_id: string }; Returns: string }

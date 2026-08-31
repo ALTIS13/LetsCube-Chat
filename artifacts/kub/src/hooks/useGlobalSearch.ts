@@ -14,8 +14,9 @@ import {
 } from "@/lib/searchQuery";
 import { useAppStore } from "@/store/app.store";
 import type { ChatWithLastMessage, Location, MessageWithSender, Profile, TaskStatus } from "@/types/database";
+import { messageActorAvatarUrl, messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
 
-export type GlobalSearchResultType = "user" | "chat" | "message" | "task" | "location" | "command";
+export type GlobalSearchResultType = "user" | "bot" | "chat" | "message" | "task" | "location" | "command";
 export type GlobalSearchDataType = Exclude<GlobalSearchResultType, "command">;
 export type GlobalSearchSource = "rpc" | "fallback" | "command";
 
@@ -59,6 +60,14 @@ type RpcPhoneSearchRow = {
   created_at: string | null;
 };
 
+type RpcPublicBotSearchRow = {
+  id: string;
+  username: string;
+  display_name: string;
+  description: string | null;
+  avatar_url: string | null;
+};
+
 type FallbackTaskRow = {
   id: string;
   title: string;
@@ -95,8 +104,9 @@ interface UseGlobalSearchResult {
 let rpcAvailability: "unknown" | "available" | "missing" = "unknown";
 let rpcV2Availability: "unknown" | "available" | "missing" = "unknown";
 let phoneRpcAvailability: "unknown" | "available" | "missing" = "unknown";
+let botRpcAvailability: "unknown" | "available" | "missing" = "unknown";
 
-const DATA_TYPES: GlobalSearchDataType[] = ["user", "chat", "message", "task", "location"];
+const DATA_TYPES: GlobalSearchDataType[] = ["user", "bot", "chat", "message", "task", "location"];
 
 export function useGlobalSearch({
   query,
@@ -139,23 +149,21 @@ export function useGlobalSearch({
         limit,
       });
 
-      const remote = await fetchFallbackRemoteResults({
-        supabase,
-        query: searchQuery,
-        type: activeType,
-        filters,
-        currentUserId,
-        limit,
-      });
-      const phone = await fetchPhoneSearchResults({
-        supabase,
-        query: searchQuery,
-        type: activeType,
-        limit,
-      });
+      const [remote, phone, bots] = await Promise.all([
+        fetchFallbackRemoteResults({
+          supabase,
+          query: searchQuery,
+          type: activeType,
+          filters,
+          currentUserId,
+          limit,
+        }),
+        fetchPhoneSearchResults({ supabase, query: searchQuery, type: activeType, limit }),
+        fetchBotSearchResults({ supabase, query: searchQuery, type: activeType, limit }),
+      ]);
 
       if (requestIdRef.current !== currentRequestId) return;
-      setResults(applyResultFilters(mergeResults([...local, ...remote, ...phone], limit), filters).slice(0, limit));
+      setResults(applyResultFilters(mergeResults([...local, ...remote, ...phone, ...bots], limit), filters).slice(0, limit));
       setUsedFallback(true);
       setMigrationMissing(rpcAvailability === "missing");
       setFiltersLimited(hasAdvancedSearchFilters(filters));
@@ -184,6 +192,18 @@ export function useGlobalSearch({
     setLoading(true);
     setError(null);
 
+    if (type === "bot") {
+      void fetchBotSearchResults({ supabase, query: searchQuery, type, limit }).then((bots) => {
+        if (requestIdRef.current !== currentRequestId) return;
+        setResults(bots.slice(0, limit));
+        setUsedFallback(false);
+        setFiltersLimited(hasAdvancedSearchFilters(filters));
+        setError(null);
+        setLoading(false);
+      });
+      return;
+    }
+
     const activeTypes = type === "all" ? DATA_TYPES : [type];
     const hasAdvanced = hasAdvancedSearchFilters(filters);
 
@@ -203,12 +223,10 @@ export function useGlobalSearch({
           if (requestIdRef.current !== currentRequestId) return;
 
           if (!error) {
-            const phone = await fetchPhoneSearchResults({
-              supabase,
-              query: searchQuery,
-              type,
-              limit,
-            });
+            const [phone, bots] = await Promise.all([
+              fetchPhoneSearchResults({ supabase, query: searchQuery, type, limit }),
+              fetchBotSearchResults({ supabase, query: searchQuery, type, limit }),
+            ]);
             if (requestIdRef.current !== currentRequestId) return;
             rpcV2Availability = "available";
             setMigrationMissing(false);
@@ -221,6 +239,7 @@ export function useGlobalSearch({
                     .map(mapRpcRow)
                     .filter((result) => type === "all" || result.resultType === type || filters?.type === "media"),
                   ...phone,
+                  ...bots,
                 ],
                 limit,
               ),
@@ -269,12 +288,10 @@ export function useGlobalSearch({
         }
 
         rpcAvailability = "available";
-        const phone = await fetchPhoneSearchResults({
-          supabase,
-          query: searchQuery,
-          type,
-          limit,
-        });
+        const [phone, bots] = await Promise.all([
+          fetchPhoneSearchResults({ supabase, query: searchQuery, type, limit }),
+          fetchBotSearchResults({ supabase, query: searchQuery, type, limit }),
+        ]);
         if (requestIdRef.current !== currentRequestId) return;
         setMigrationMissing(false);
         setFiltersLimited(hasAdvanced);
@@ -284,7 +301,7 @@ export function useGlobalSearch({
             ((data ?? []) as RpcGlobalSearchRow[])
               .map(mapRpcRow)
               .filter((result) => type === "all" || result.resultType === type)
-              .concat(phone),
+              .concat(phone, bots),
             filters,
           )
             .sort(compareResults)
@@ -373,6 +390,52 @@ async function fetchPhoneSearchResults({
   }));
 }
 
+async function fetchBotSearchResults({
+  supabase,
+  query,
+  type,
+  limit,
+}: {
+  supabase: ReturnType<typeof createClient>;
+  query: string;
+  type: GlobalSearchDataType | "all";
+  limit: number;
+}): Promise<GlobalSearchResult[]> {
+  if (type !== "all" && type !== "bot") return [];
+  if (botRpcAvailability === "missing" || isPhoneOnlyQuery(query)) return [];
+
+  const { data, error } = await supabase.rpc("search_public_bots", {
+    p_query: query,
+    p_limit: Math.min(limit, 20),
+  });
+
+  if (error) {
+    if (isMissingSearchFunctionError(error, "search_public_bots")) {
+      botRpcAvailability = "missing";
+    } else if (import.meta.env.DEV) {
+      console.warn("[global-search] bot rpc failed", error);
+    }
+    return [];
+  }
+
+  botRpcAvailability = "available";
+  return ((data ?? []) as RpcPublicBotSearchRow[]).map((bot) => ({
+    resultType: "bot",
+    id: bot.id,
+    title: bot.display_name,
+    subtitle: `@${bot.username}`,
+    snippet: bot.description,
+    avatarUrl: bot.avatar_url,
+    createdAt: null,
+    rank: scoreText(`${bot.display_name} ${bot.username}`, searchableNeedle(query), bot.username),
+    source: "rpc",
+  }));
+}
+
+function isPhoneOnlyQuery(query: string): boolean {
+  return /^\+?[\d\s()-]+$/.test(query.trim()) && Boolean(normalizePhoneSearchQuery(query));
+}
+
 function normalizeResultType(value: string): GlobalSearchDataType {
   return DATA_TYPES.includes(value as GlobalSearchDataType) ? (value as GlobalSearchDataType) : "chat";
 }
@@ -422,7 +485,8 @@ function buildLocalResults({
         const mediaLabel = mediaLabelForMessage(message.type, message.content);
         const content = message.content?.trim() || mediaLabel || "";
         if (!content) continue;
-        const senderName = message.sender?.full_name ?? message.sender?.username ?? "";
+        const actor = resolveMessageActor(message);
+        const senderName = messageActorDisplayName(actor);
         const rank = needle
           ? scoreText([content, senderName, info?.title, mediaLabel].filter(Boolean).join(" "), needle)
           : filterOnlyRank(filters);
@@ -433,7 +497,7 @@ function buildLocalResults({
           title: info?.title ?? "Сообщение",
           subtitle: senderName || "Сообщение",
           snippet: mediaLabel ? `${mediaLabel}${message.content ? ` · ${message.content}` : ""}` : message.content,
-          avatarUrl: message.sender?.avatar_url ?? null,
+          avatarUrl: messageActorAvatarUrl(actor),
           chatId,
           messageId: message.id,
           createdAt: message.created_at,

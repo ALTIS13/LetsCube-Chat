@@ -79,6 +79,22 @@ export interface Database {
         }
         Relationships: []
       }
+      bots: {
+        Row: {
+          id: string
+          username: string
+          display_name: string
+          description: string
+          avatar_url: string | null
+          state: 'active' | 'paused' | 'suspended' | 'pending_delete' | 'deleted'
+          delete_after: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       locations: {
         Row: {
           id: string
@@ -625,6 +641,8 @@ export interface Database {
           chat_id: string
           topic_id: string | null
           user_id: string | null
+          bot_id: string | null
+          bot_reply_markup: Json | null
           content: string | null
           type: 'text' | 'image' | 'video' | 'audio' | 'file' | 'sticker' | 'system'
           media_bucket: string | null
@@ -645,6 +663,8 @@ export interface Database {
           chat_id: string
           topic_id?: string | null
           user_id?: string | null
+          bot_id?: string | null
+          bot_reply_markup?: Json | null
           content?: string | null
           type?: 'text' | 'image' | 'video' | 'audio' | 'file' | 'sticker' | 'system'
           media_bucket?: string | null
@@ -661,6 +681,8 @@ export interface Database {
           client_sent_at?: string | null
         }
         Update: {
+          bot_id?: string | null
+          bot_reply_markup?: Json | null
           content?: string | null
           edited_at?: string | null
           media_bucket?: string | null
@@ -672,6 +694,13 @@ export interface Database {
           client_sent_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "messages_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "bots"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "messages_user_id_fkey"
             columns: ["user_id"]
@@ -1313,6 +1342,19 @@ export interface Database {
           created_at: string | null
         }[]
       }
+      search_public_bots: {
+        Args: {
+          p_query: string
+          p_limit?: number
+        }
+        Returns: {
+          id: string
+          username: string
+          display_name: string
+          description: string
+          avatar_url: string | null
+        }[]
+      }
       search_chat_messages: {
         Args: {
           p_chat_id: string
@@ -1794,6 +1836,10 @@ export type Chat = Database['public']['Tables']['chats']['Row']
 export type ChatMember = Database['public']['Tables']['chat_members']['Row']
 export type GroupInvite = Database['public']['Tables']['group_invites']['Row']
 export type Message = Database['public']['Tables']['messages']['Row']
+export type BotProfile = Pick<
+  Database['public']['Tables']['bots']['Row'],
+  'id' | 'username' | 'display_name' | 'description' | 'avatar_url' | 'state' | 'created_at' | 'updated_at'
+>
 export type MessageHiddenForUser = Database['public']['Tables']['message_hidden_for_users']['Row']
 export type Reaction = Database['public']['Tables']['reactions']['Row']
 export type Folder = Database['public']['Tables']['folders']['Row']
@@ -1857,7 +1903,7 @@ export interface TaskEventWithActor extends TaskEvent {
 }
 
 export interface ChatWithLastMessage extends Chat {
-  last_message?: Message & { sender?: Profile }
+  last_message?: Message & { sender?: Profile | null; bot?: BotProfile | null }
   unread_count?: number
   members?: (ChatMember & { profile: Profile })[]
   other_user?: Profile  // for private chats
@@ -1870,7 +1916,8 @@ export interface ChatWithLastMessage extends Chat {
 }
 
 export interface MessageWithSender extends Message {
-  sender?: Profile
+  sender?: Profile | null
+  bot?: BotProfile | null
   reactions?: (Reaction & { user?: Profile })[]
   reply_to?: MessageWithSender
   /** Optimistic UI: true while the INSERT is in flight. Cleared once the server returns. */

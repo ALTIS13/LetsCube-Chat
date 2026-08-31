@@ -20,6 +20,7 @@ import {
   showDesktopNotificationForRow,
 } from "@/lib/platform/desktopNotifications";
 import type { Notification } from "@/types/database";
+import { isSelfMessageNotification } from "@/lib/messageNotificationProjection";
 
 const PAGE_SIZE = 30;
 
@@ -412,5 +413,5 @@ function isMessageNotification(item: Notification): boolean {
 
 function isOwnMessageNotification(item: Notification, userId: string | null): boolean {
   if (!userId || !isMessageNotification(item)) return false;
-  return payloadString(item.payload, "sender_id") === userId;
+  return isSelfMessageNotification(item.payload, userId);
 }

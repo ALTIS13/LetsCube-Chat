@@ -13,6 +13,7 @@ import {
   type ParsedSearchFilters,
 } from "@/lib/searchQuery";
 import type { MessageWithSender } from "@/types/database";
+import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
 
 interface ChatSearchBarProps {
   chatId: string;
@@ -262,7 +263,7 @@ function searchLoadedMessages(
       if (!messageMatchesHasFilter(message, filters.has)) return false;
       if (filters.before && new Date(message.created_at).getTime() >= Date.parse(`${filters.before}T23:59:59.999Z`)) return false;
       if (filters.after && new Date(message.created_at).getTime() < Date.parse(`${filters.after}T00:00:00Z`)) return false;
-      const senderName = message.sender?.full_name ?? message.sender?.username ?? "";
+      const senderName = messageActorDisplayName(resolveMessageActor(message));
       if (filters.from) {
         const from = filters.from.toLocaleLowerCase("ru-RU").replace(/^@+/, "");
         if (!senderName.toLocaleLowerCase("ru-RU").includes(from)) return false;
@@ -278,7 +279,7 @@ function searchLoadedMessages(
         id: message.id,
         snippet: message.content?.trim() || mediaLabel || "Сообщение",
         createdAt: message.created_at,
-        senderName: message.sender?.full_name ?? message.sender?.username ?? null,
+        senderName: messageActorDisplayName(resolveMessageActor(message)),
         topicId: message.topic_id ?? null,
         type: message.type,
         mediaUrl: message.media_url,

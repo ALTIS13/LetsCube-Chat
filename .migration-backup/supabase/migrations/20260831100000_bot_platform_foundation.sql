@@ -35,7 +35,20 @@ create table public.bots (
   description text not null default ''
     check (pg_catalog.length(description) <= 512),
   avatar_url text null
-    check (avatar_url is null or pg_catalog.octet_length(avatar_url) <= 2048),
+    check (
+      avatar_url is null
+      or (
+        pg_catalog.octet_length(avatar_url) <= 2048
+        and (
+          (avatar_url like '/%' and avatar_url not like '//%')
+          or avatar_url like 'https://app.letscube.ru/%'
+          or avatar_url like 'https://api.letscube.ru/%'
+        )
+        and pg_catalog.lower(avatar_url) not like '%/storage/v1/%'
+        and pg_catalog.lower(avatar_url) not like '%/object/sign/%'
+        and pg_catalog.lower(avatar_url) not like '%token=%'
+      )
+    ),
   state text not null default 'active'
     check (state in ('active','paused','suspended','pending_delete','deleted')),
   delete_after timestamptz null,
@@ -395,7 +408,83 @@ alter table public.chat_bot_members enable row level security;
 create policy "authenticated users read bot identities"
   on public.bots for select
   to authenticated
-  using (true);
+  using (
+    bots.state = 'active'
+    or exists (
+      select 1
+      from public.bot_owners owner_row
+      where owner_row.bot_id = bots.id
+        and owner_row.user_id = (select auth.uid())
+    )
+    or exists (
+      select 1
+      from public.chat_bot_members bot_member
+      join public.chat_members human_member
+        on human_member.chat_id = bot_member.chat_id
+      where bot_member.bot_id = bots.id
+        and bot_member.removed_at is null
+        and human_member.user_id = (select auth.uid())
+        and human_member.hidden_at is null
+    )
+  );
+
+create or replace function public.search_public_bots(
+  p_query text,
+  p_limit integer default 20
+)
+returns table (
+  id uuid,
+  username text,
+  display_name text,
+  description text,
+  avatar_url text
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+declare
+  v_raw text := pg_catalog.btrim(pg_catalog.left(coalesce(p_query, ''), 80));
+  v_query text;
+  v_limit integer := least(greatest(coalesce(p_limit, 20), 1), 40);
+begin
+  if (select auth.uid()) is null then
+    return;
+  end if;
+  v_query := pg_catalog.lower(pg_catalog.regexp_replace(v_raw, '^@+', ''));
+  if pg_catalog.length(v_query) < (case when v_raw like '@%' then 1 else 2 end) then
+    return;
+  end if;
+
+  return query
+  select
+    bot.id,
+    bot.username,
+    bot.display_name,
+    bot.description,
+    bot.avatar_url
+  from public.bots bot
+  where bot.state = 'active'
+    and (
+      pg_catalog.strpos(pg_catalog.lower(bot.username), v_query) > 0
+      or pg_catalog.strpos(pg_catalog.lower(bot.display_name), v_query) > 0
+    )
+  order by
+    case when pg_catalog.lower(bot.username) = v_query then 0
+         when pg_catalog.lower(bot.username) like v_query || '%' then 1
+         when pg_catalog.lower(bot.display_name) like v_query || '%' then 2
+         else 3 end,
+    bot.username,
+    bot.id
+  limit v_limit;
+end
+$function$;
+
+revoke all on function public.search_public_bots(text,integer)
+  from public, anon, authenticated, service_role;
+grant execute on function public.search_public_bots(text,integer)
+  to authenticated;
 
 create policy "bot owners read own ownership"
   on public.bot_owners for select
@@ -5226,6 +5315,335 @@ revoke all on function public.bot_delivery_cleanup_internal(timestamptz,integer)
 grant execute on function public.bot_delivery_cleanup_internal(timestamptz,integer)
   to service_role;
 
+create or replace function public.chat_list_summaries(
+  p_chat_ids uuid[] default null
+)
+returns table (
+  chat_id uuid,
+  last_message jsonb,
+  unread_count bigint
+)
+language sql
+stable
+security invoker
+set search_path = ''
+as $function$
+  with my_memberships as (
+    select
+      membership.chat_id,
+      membership.joined_at,
+      membership.last_read_at,
+      membership.cleared_at
+    from public.chat_members as membership
+    where membership.user_id = (select auth.uid())
+      and (p_chat_ids is null or membership.chat_id = any(p_chat_ids))
+  )
+  select
+    membership.chat_id,
+    latest_message.projected_message as last_message,
+    coalesce(unread.unread_count, 0)::bigint as unread_count
+  from my_memberships as membership
+  left join lateral (
+    select
+      pg_catalog.to_jsonb(message)
+      || pg_catalog.jsonb_build_object(
+        'sender', case when sender.id is null then null else pg_catalog.to_jsonb(sender) end,
+        'bot', case when bot.id is null then null else pg_catalog.jsonb_build_object(
+          'id', bot.id,
+          'username', bot.username,
+          'display_name', bot.display_name,
+          'description', bot.description,
+          'avatar_url', bot.avatar_url,
+          'state', bot.state,
+          'created_at', bot.created_at,
+          'updated_at', bot.updated_at
+        ) end
+      ) as projected_message
+    from public.messages as message
+    left join public.profiles as sender on sender.id = message.user_id
+    left join public.bots as bot on bot.id = message.bot_id
+    where message.chat_id = membership.chat_id
+      and message.deleted_at is null
+      and (membership.cleared_at is null or message.created_at > membership.cleared_at)
+      and not exists (
+        select 1
+        from public.message_hidden_for_users as hidden
+        where hidden.message_id = message.id
+          and hidden.user_id = (select auth.uid())
+      )
+    order by message.created_at desc, message.id desc
+    limit 1
+  ) as latest_message on true
+  left join lateral (
+    select pg_catalog.count(*)::bigint as unread_count
+    from public.messages as message
+    where message.chat_id = membership.chat_id
+      and message.deleted_at is null
+      and message.type <> 'system'
+      and (
+        (message.user_id is not null and message.bot_id is null and message.user_id <> (select auth.uid()))
+        or (message.bot_id is not null and message.user_id is null)
+      )
+      and message.created_at > greatest(
+        membership.joined_at,
+        coalesce(membership.last_read_at, membership.joined_at),
+        coalesce(membership.cleared_at, membership.joined_at)
+      )
+  ) as unread on true;
+$function$;
+
+revoke all on function public.chat_list_summaries(uuid[])
+  from public, anon, authenticated, service_role;
+grant execute on function public.chat_list_summaries(uuid[])
+  to authenticated;
+
+create or replace function public.search_chat_messages(
+  p_chat_id uuid,
+  p_query text,
+  p_filters jsonb default '{}'::jsonb,
+  p_limit integer default 80,
+  p_topic_id uuid default null,
+  p_all_topics boolean default false
+)
+returns table (
+  message_id uuid,
+  chat_id uuid,
+  topic_id uuid,
+  sender_name text,
+  snippet text,
+  message_type text,
+  media_url text,
+  mime_type text,
+  created_at timestamptz,
+  rank real
+)
+language plpgsql
+stable
+security invoker
+set search_path = ''
+as $function$
+declare
+  v_query text := pg_catalog.lower(pg_catalog.btrim(coalesce(p_query, '')));
+  v_plain text;
+  v_like text;
+  v_filters jsonb := coalesce(p_filters, '{}'::jsonb);
+  v_from text := pg_catalog.lower(pg_catalog.regexp_replace(pg_catalog.btrim(coalesce(v_filters->>'from', '')), '^@+', ''));
+  v_has text[];
+  v_before timestamptz;
+  v_after timestamptz;
+  v_limit integer := least(greatest(coalesce(p_limit, 80), 1), 120);
+begin
+  select coalesce(pg_catalog.array_agg(has_value.value), '{}'::text[])
+  into v_has
+  from pg_catalog.jsonb_array_elements_text(coalesce(v_filters->'has', '[]'::jsonb)) as has_value(value);
+
+  begin
+    if nullif(v_filters->>'before', '') is not null then
+      v_before := ((v_filters->>'before')::date + interval '1 day')::timestamptz;
+    end if;
+    if nullif(v_filters->>'after', '') is not null then
+      v_after := (v_filters->>'after')::date::timestamptz;
+    end if;
+  exception when others then
+    v_before := null;
+    v_after := null;
+  end;
+
+  v_plain := pg_catalog.regexp_replace(v_query, '^@+', '');
+  if pg_catalog.length(v_plain) < (case when v_query like '@%' then 1 else 2 end)
+     and coalesce(pg_catalog.array_length(v_has, 1), 0) = 0
+     and nullif(v_from, '') is null
+     and v_before is null
+     and v_after is null then
+    return;
+  end if;
+  v_like := '%' || v_plain || '%';
+
+  return query
+  select
+    message.id,
+    message.chat_id,
+    message.topic_id,
+    case
+      when message.bot_id is not null then coalesce(bot.display_name, bot.username, 'Удалённый бот')
+      when message.user_id is not null then coalesce(sender.full_name, sender.username, 'Участник')
+      when message.type = 'system' then 'Система'
+      else 'Удалённый пользователь'
+    end,
+    coalesce(
+      nullif(pg_catalog.left(pg_catalog.regexp_replace(coalesce(message.content, ''), '\s+', ' ', 'g'), 220), ''),
+      case
+        when message.type = 'image' then 'Фото'
+        when message.type = 'video' and coalesce(message.media_metadata->>'kind', '') = 'video_message' then 'Видеосообщение'
+        when message.type = 'video' then 'Видео'
+        when message.type = 'audio' then 'Голосовое'
+        when message.type = 'file' then 'Файл'
+        else 'Сообщение'
+      end
+    ),
+    message.type::text,
+    message.media_url,
+    message.media_metadata->>'mime_type',
+    message.created_at,
+    greatest(
+      extensions.similarity(pg_catalog.lower(coalesce(message.content, '')), v_plain),
+      extensions.similarity(pg_catalog.lower(coalesce(sender.full_name, '')), v_plain),
+      extensions.similarity(pg_catalog.lower(coalesce(sender.username, '')), v_plain),
+      extensions.similarity(pg_catalog.lower(coalesce(bot.display_name, '')), v_plain),
+      extensions.similarity(pg_catalog.lower(coalesce(bot.username, '')), v_plain)
+    )::real
+  from public.messages message
+  join public.chat_members membership
+    on membership.chat_id = message.chat_id
+   and membership.user_id = (select auth.uid())
+   and membership.hidden_at is null
+  left join public.profiles sender on sender.id = message.user_id
+  left join public.bots bot on bot.id = message.bot_id
+  left join public.message_hidden_for_users hidden
+    on hidden.message_id = message.id
+   and hidden.user_id = (select auth.uid())
+  where message.chat_id = p_chat_id
+    and message.deleted_at is null
+    and hidden.message_id is null
+    and (membership.cleared_at is null or message.created_at > membership.cleared_at)
+    and (p_all_topics is true or message.topic_id is not distinct from p_topic_id)
+    and (coalesce(v_filters->>'type', '') <> 'media' or message.type in ('image','video','audio','file') or message.media_url is not null)
+    and (v_after is null or message.created_at >= v_after)
+    and (v_before is null or message.created_at < v_before)
+    and (
+      nullif(v_from, '') is null
+      or pg_catalog.lower(coalesce(sender.username, '')) like '%' || v_from || '%'
+      or pg_catalog.lower(coalesce(sender.full_name, '')) like '%' || v_from || '%'
+      or pg_catalog.lower(coalesce(bot.username, '')) like '%' || v_from || '%'
+      or pg_catalog.lower(coalesce(bot.display_name, '')) like '%' || v_from || '%'
+    )
+    and (
+      coalesce(pg_catalog.array_length(v_has, 1), 0) = 0
+      or ('link' = any(v_has) and coalesce(message.content, '') ~* '(https?://|www\.)')
+      or ('image' = any(v_has) and (message.type = 'image' or coalesce(message.media_metadata->>'mime_type', '') like 'image/%'))
+      or ('video' = any(v_has) and (message.type = 'video' or coalesce(message.media_metadata->>'mime_type', '') like 'video/%'))
+      or ('audio' = any(v_has) and (message.type = 'audio' or coalesce(message.media_metadata->>'mime_type', '') like 'audio/%'))
+      or ('file' = any(v_has) and message.media_url is not null and message.type not in ('image','video','audio'))
+    )
+    and (
+      v_plain = ''
+      or pg_catalog.lower(coalesce(message.content, '')) like v_like
+      or pg_catalog.lower(coalesce(sender.full_name, '')) like v_like
+      or pg_catalog.lower(coalesce(sender.username, '')) like v_like
+      or pg_catalog.lower(coalesce(bot.display_name, '')) like v_like
+      or pg_catalog.lower(coalesce(bot.username, '')) like v_like
+      or (message.type in ('image','video','audio','file') and coalesce(pg_catalog.array_length(v_has, 1), 0) > 0)
+    )
+  order by rank desc, message.created_at desc
+  limit v_limit;
+end
+$function$;
+
+revoke all on function public.search_chat_messages(uuid,text,jsonb,integer,uuid,boolean)
+  from public, anon, authenticated, service_role;
+grant execute on function public.search_chat_messages(uuid,text,jsonb,integer,uuid,boolean)
+  to authenticated;
+
+create or replace function public._notification_push_payload(
+  p_kind text,
+  p_payload jsonb
+)
+returns jsonb
+language plpgsql
+immutable
+set search_path = ''
+as $function$
+declare
+  v_title text := 'LETSCUBE';
+  v_body text := 'Новое уведомление';
+  v_route text := '/';
+  v_tag text := 'kub-notification:' || p_kind;
+  v_task_id text := nullif(p_payload->>'task_id', '');
+  v_task_title text := nullif(p_payload->>'title', '');
+  v_invite_id text := nullif(p_payload->>'invite_id', '');
+  v_chat_name text := nullif(p_payload->>'chat_name', '');
+  v_chat_type text := nullif(p_payload->>'chat_type', '');
+  v_chat_id text := nullif(p_payload->>'chat_id', '');
+  v_message_id text := nullif(p_payload->>'message_id', '');
+  v_preview text := nullif(p_payload->>'preview', '');
+  v_sender_name text := nullif(p_payload->>'sender_name', '');
+  v_sender_avatar_url text := nullif(p_payload->>'sender_avatar_url', '');
+begin
+  if v_sender_avatar_url is not null and (
+    not (
+      (v_sender_avatar_url like '/%' and v_sender_avatar_url not like '//%')
+      or v_sender_avatar_url like 'https://app.letscube.ru/%'
+      or v_sender_avatar_url like 'https://api.letscube.ru/%'
+    )
+    or lower(v_sender_avatar_url) like '%/storage/v1/%'
+    or lower(v_sender_avatar_url) like '%/object/sign/%'
+    or lower(v_sender_avatar_url) like '%token=%'
+    or lower(v_sender_avatar_url) like '%signedurl%'
+    or lower(v_sender_avatar_url) like '%signed_url%'
+  ) then
+    v_sender_avatar_url := null;
+  end if;
+
+  if p_kind like 'task_%' then
+    v_body := coalesce('Задача: «' || v_task_title || '»', 'Обновление задачи');
+    v_route := '/tasks';
+    v_tag := 'task:' || coalesce(v_task_id, p_kind);
+  elsif p_kind = 'group_invite' then
+    v_body := coalesce('Приглашение в «' || v_chat_name || '»', 'Новое приглашение');
+    v_route := '/?notifications=1';
+    v_tag := 'invite:' || coalesce(v_invite_id, v_chat_id, p_kind);
+  elsif p_kind = 'chat_added' then
+    v_body := coalesce('Вас добавили в «' || v_chat_name || '»', 'Вас добавили в чат');
+    v_route := case when v_chat_id is not null then '/?chat=' || v_chat_id else '/' end;
+    v_tag := 'chat-added:' || coalesce(v_chat_id, p_kind);
+  elsif p_kind like '%message%' then
+    if v_chat_type = 'private' then
+      v_title := coalesce(v_sender_name, 'Новое сообщение');
+      v_body := coalesce(v_preview, 'Новое сообщение');
+    else
+      v_title := coalesce(v_chat_name, 'Новое сообщение');
+      v_body := case
+        when v_sender_name is not null and v_preview is not null then v_sender_name || ': ' || v_preview
+        when v_preview is not null then v_preview
+        else 'Новое сообщение'
+      end;
+    end if;
+    v_route := case
+      when v_chat_id is not null and v_message_id is not null then '/?chat=' || v_chat_id || '&message=' || v_message_id
+      when v_chat_id is not null then '/?chat=' || v_chat_id
+      else '/'
+    end;
+    v_tag := 'message:chat:' || coalesce(v_chat_id, v_message_id, 'unknown');
+  end if;
+
+  return pg_catalog.jsonb_build_object(
+    'title', v_title,
+    'body', v_body,
+    'url', v_route,
+    'tag', v_tag,
+    'kind', p_kind,
+    'chatId', v_chat_id,
+    'messageId', v_message_id,
+    'chat_id', v_chat_id,
+    'message_id', v_message_id,
+    'sender_kind', nullif(p_payload->>'sender_kind', ''),
+    'sender_id', nullif(p_payload->>'sender_id', ''),
+    'bot_id', nullif(p_payload->>'bot_id', ''),
+    'sender_name', v_sender_name,
+    'sender_avatar_url', v_sender_avatar_url,
+    'message_type', nullif(p_payload->>'message_type', ''),
+    'preview', v_preview,
+    'route', v_route,
+    'group_tag', v_tag
+  );
+end
+$function$;
+
+revoke all on function public._notification_push_payload(text,jsonb)
+  from public, anon, authenticated;
+grant execute on function public._notification_push_payload(text,jsonb)
+  to service_role;
+
 create or replace function public.enqueue_message_notifications()
 returns trigger
 language plpgsql
@@ -5235,6 +5653,7 @@ as $function$
 declare
   v_sender_kind text;
   v_sender_name text;
+  v_sender_avatar_url text;
   v_chat_name text;
   v_chat_type text;
   v_preview text;
@@ -5247,21 +5666,30 @@ begin
 
   if new.bot_id is not null then
     v_sender_kind := 'bot';
-    select coalesce(
-      nullif(pg_catalog.btrim(b.display_name), ''),
-      nullif('@' || b.username, '@'),
-      'Бот'
-    )
-    into v_sender_name
+    select
+      coalesce(
+        nullif(pg_catalog.btrim(b.display_name), ''),
+        nullif('@' || b.username, '@'),
+        'Бот'
+      ),
+      b.avatar_url
+    into v_sender_name, v_sender_avatar_url
     from public.bots b where b.id = new.bot_id;
   else
     v_sender_kind := 'user';
-    select coalesce(
-      nullif(pg_catalog.btrim(p.full_name), ''),
-      nullif('@' || p.username, '@'),
-      'Участник'
-    )
-    into v_sender_name
+    select
+      coalesce(
+        nullif(pg_catalog.btrim(p.full_name), ''),
+        nullif('@' || p.username, '@'),
+        'Участник'
+      ),
+      case
+        when p.avatar_url like '/%' and p.avatar_url not like '//%' then p.avatar_url
+        when p.avatar_url like 'https://app.letscube.ru/%' then p.avatar_url
+        when p.avatar_url like 'https://api.letscube.ru/%' then p.avatar_url
+        else null
+      end
+    into v_sender_name, v_sender_avatar_url
     from public.profiles p where p.id = new.user_id;
   end if;
 
@@ -5306,11 +5734,13 @@ begin
       'sender_id', new.user_id,
       'bot_id', new.bot_id,
       'sender_name', coalesce(v_sender_name, 'Участник'),
+      'sender_avatar_url', v_sender_avatar_url,
       'chat_name', coalesce(v_chat_name, 'Чат'),
       'chat_type', coalesce(v_chat_type, 'private'),
       'preview', v_preview,
       'message_type', v_message_type,
-      'route', '/?chat=' || new.chat_id::text || '&message=' || new.id::text
+      'route', '/?chat=' || new.chat_id::text || '&message=' || new.id::text,
+      'group_tag', 'message:chat:' || new.chat_id::text
     )
   from public.chat_members member_row
   where member_row.chat_id = new.chat_id

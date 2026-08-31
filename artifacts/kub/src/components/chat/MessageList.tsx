@@ -8,6 +8,12 @@ import { TypingIndicator } from "./TypingIndicator";
 import type { ChatMember, MessageWithSender, Profile } from "@/types/database";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app.store";
+import {
+  canUseHumanMessageControls,
+  isIncomingMessage,
+  messageActorGroupingKey,
+  resolveMessageActor,
+} from "@/lib/messageActor";
 import { getMessageDeliveryState } from "@/lib/messageDelivery";
 import { getGroupReadReceiptInfo, getReceiptDisplayName, type GroupReadReceiptInfo } from "@/lib/groupReadReceipts";
 import { requestAppConfirm } from "@/lib/appDialogs";
@@ -141,15 +147,6 @@ export function MessageList({
     [messages],
   );
 
-  // Build userId → fullName map and messageId → message map from loaded messages
-  const usersMap = React.useMemo(() => {
-    const map: Record<string, string> = {};
-    sortedMessages.forEach((m) => {
-      if (m.user_id && m.sender?.full_name) map[m.user_id] = m.sender.full_name;
-    });
-    return map;
-  }, [sortedMessages]);
-
   const messagesMap = React.useMemo(() => {
     const map: Record<string, MessageWithSender> = {};
     sortedMessages.forEach((m) => { map[m.id] = m; });
@@ -196,10 +193,10 @@ export function MessageList({
     [initialUnreadCount, initialUnreadSince, layoutKey],
   );
   const firstUnreadMessageId = React.useMemo(() => {
-    if (!initialUnreadCount) return null;
+    if (!initialUnreadCount || !userId) return null;
     const boundaryTime = initialUnreadSince ? new Date(initialUnreadSince).getTime() : null;
     const first = sortedMessages.find((message) => {
-      if (message.deleted_at || message.user_id === userId) return false;
+      if (message.deleted_at || !isIncomingMessage(message, userId)) return false;
       if (!boundaryTime || Number.isNaN(boundaryTime)) return true;
       return new Date(message.created_at).getTime() > boundaryTime;
     });
@@ -219,7 +216,7 @@ export function MessageList({
       onBulkDeleteForEveryone &&
       !isSavedChat &&
       selectedMessages.length > 0 &&
-      selectedMessages.every((message) => message.user_id === userId)
+      selectedMessages.every((message) => canUseHumanMessageControls(message, userId))
     ),
     [isSavedChat, onBulkDeleteForEveryone, selectedMessages, userId],
   );
@@ -607,11 +604,14 @@ export function MessageList({
           const prev = idx > 0 ? sortedMessages[idx - 1] : null;
           const next = idx < sortedMessages.length - 1 ? sortedMessages[idx + 1] : null;
           const showDate = shouldShowDateSeparator(prev, msg);
-          const isMe = msg.user_id === userId;
-          const isSameSenderAsPrev = !showDate && prev?.user_id === msg.user_id;
-          const isSameSenderAsNext = next?.user_id === msg.user_id &&
+          const actor = resolveMessageActor(msg);
+          const actorKey = messageActorGroupingKey(msg);
+          const isMe = actor.kind === "user" && actor.id === userId;
+          const isSameSenderAsPrev = !showDate && prev !== null && messageActorGroupingKey(prev) === actorKey;
+          const isSameSenderAsNext = next !== null && messageActorGroupingKey(next) === actorKey &&
             !shouldShowDateSeparator(msg, next);
           const isSystemMessage = msg.type === "system";
+          const canUseHumanControls = canUseHumanMessageControls(msg, userId);
 
           const canSelect = !msg.deleted_at && !isSystemMessage;
           const isLocalSend = msg.id.startsWith("tmp:") || Boolean(msg.pending || msg.checking || msg.failed);
@@ -709,8 +709,8 @@ export function MessageList({
                     }}
                     onJumpToReply={onJumpToReply}
                     onReaction={isLocalSend ? () => undefined : (emoji) => onReaction(msg.id, emoji)}
-                    onEdit={!isLocalSend && onEdit ? () => onEdit(msg) : undefined}
-                    onDelete={!isLocalSend && onDelete ? () => onDelete(msg) : undefined}
+                    onEdit={!isLocalSend && canUseHumanControls && onEdit ? () => onEdit(msg) : undefined}
+                    onDelete={!isLocalSend && canUseHumanControls && onDelete ? () => onDelete(msg) : undefined}
                     onHideForMe={!isLocalSend && onHideForMe ? () => onHideForMe(msg) : undefined}
                     onRetrySend={onRetrySend && msg.failed ? () => onRetrySend(msg) : undefined}
                     onEditFailedSend={onEditFailedSend && msg.failed ? () => onEditFailedSend(msg) : undefined}
@@ -740,7 +740,6 @@ export function MessageList({
                     onCloseActionMenu={() => setOpenActionMessageId(null)}
                     selected={selectionMode && selectedIds.has(msg.id)}
                     isSelectionMode={selectionMode}
-                    usersMap={usersMap}
                     messagesMap={messagesMap}
                     mediaVariant={messageMediaVariants[msg.id]}
                     senderAvatarVariant={msg.sender?.id ? senderAvatarVariants[msg.sender.id] : undefined}

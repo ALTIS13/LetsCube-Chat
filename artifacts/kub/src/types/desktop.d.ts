@@ -18,6 +18,7 @@ type LetscubeDesktopNotification = {
     route: string;
   };
   route: string;
+  icon?: string;
 };
 
 type LetscubeDesktopNotificationIdentity = Pick<

@@ -6,6 +6,7 @@ import { KubIcon } from "@/components/kub";
 import type { AvatarVariantUrls } from "@/hooks/useMediaVariants";
 import { isSavedChatLikeName } from "@/lib/chatDisplay";
 import { cn } from "@/lib/utils";
+import { messageActorAvatarUrl, messageActorDisplayName, type MessageActor } from "@/lib/messageActor";
 
 // Generate consistent color from string
 function getAvatarColor(str: string): string {
@@ -215,6 +216,49 @@ export function UserAvatar({
           }}
         />
       )}
+    </div>
+  );
+}
+
+export function MessageActorAvatar({
+  actor,
+  size = "sm",
+  className,
+  avatarVariant,
+}: {
+  actor: MessageActor;
+  size?: "sm" | "md" | "lg" | "xl";
+  className?: string;
+  avatarVariant?: AvatarVariantUrls;
+}) {
+  const name = messageActorDisplayName(actor);
+  const avatarUrl = messageActorAvatarUrl(actor);
+  const actorId = "id" in actor ? actor.id : actor.kind;
+  const iconName = actor.kind === "bot" || actor.kind === "deleted_bot" ? "bot" : "user";
+  const fallback = (
+    <div
+      className={cn(
+        "flex items-center justify-center rounded-full font-medium text-white",
+        sizeMap[size],
+      )}
+      style={{ background: getAvatarColor(actorId) }}
+      aria-label={name}
+    >
+      {actor.kind === "user" ? getInitials(name) : <KubIcon name={iconName} size={Math.max(12, Math.round(pixelMap[size] * 0.48))} />}
+    </div>
+  );
+
+  return (
+    <div className={cn("relative flex-shrink-0", className)} data-message-actor-kind={actor.kind}>
+      {avatarUrl ? (
+        <AvatarImage
+          name={name}
+          originalUrl={avatarUrl}
+          avatarVariant={actor.kind === "user" ? avatarVariant : undefined}
+          size={size}
+          fallback={fallback}
+        />
+      ) : fallback}
     </div>
   );
 }

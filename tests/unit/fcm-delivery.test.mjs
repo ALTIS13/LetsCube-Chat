@@ -33,6 +33,7 @@ test("FCM message delivery uses the messages channel and a stable chat collapse 
     message_id: "message-1",
     notification_id: "notification-1",
     tag: "message:chat:chat-1",
+    group_tag: "message:chat:chat-1",
   });
 });
 
@@ -69,6 +70,66 @@ test("FCM payload never exposes raw media or signed URLs", () => {
 
   assert.equal(result.message.notification.body, "Новое уведомление");
   assert.equal(result.message.data.route, "/?chat=chat-1");
+});
+
+test("FCM bot message preserves actor identity, grouping, route, and trusted avatar", () => {
+  const result = buildFcmMessage(
+    {
+      title: "Помощник",
+      body: "Готово",
+      kind: "message",
+      chatId: "chat-1",
+      messageId: "message-1",
+      senderKind: "bot",
+      senderId: "must-not-leak",
+      botId: "bot-1",
+      senderName: "Помощник",
+      senderAvatarUrl: "/media/bots/helper.webp",
+      messageType: "text",
+      preview: "Готово",
+      url: "/?chat=chat-1&message=message-1",
+    },
+    "device-token",
+  );
+
+  assert.equal(result.message.android.collapse_key, "message:chat:chat-1");
+  assert.equal(result.message.notification.image, "https://app.letscube.ru/media/bots/helper.webp");
+  assert.equal(result.message.android.notification.image, "https://app.letscube.ru/media/bots/helper.webp");
+  assert.deepEqual(result.message.data, {
+    type: "message",
+    route: "/?chat=chat-1&message=message-1",
+    chat_id: "chat-1",
+    message_id: "message-1",
+    tag: "message:chat:chat-1",
+    sender_kind: "bot",
+    bot_id: "bot-1",
+    sender_name: "Помощник",
+    sender_avatar_url: "https://app.letscube.ru/media/bots/helper.webp",
+    message_type: "text",
+    preview: "Готово",
+    group_tag: "message:chat:chat-1",
+  });
+});
+
+test("FCM bot avatar rejects external and signed media URLs", () => {
+  for (const senderAvatarUrl of [
+    "https://evil.example/bot.webp",
+    "https://api.letscube.ru/storage/v1/object/sign/bots/helper.webp?token=secret",
+  ]) {
+    const result = buildFcmMessage(
+      {
+        kind: "message",
+        chatId: "chat-1",
+        botId: "bot-1",
+        senderKind: "bot",
+        senderAvatarUrl,
+      },
+      "device-token",
+    );
+    assert.equal("image" in result.message.notification, false);
+    assert.equal("image" in result.message.android.notification, false);
+    assert.equal("sender_avatar_url" in result.message.data, false);
+  }
 });
 
 test("only permanent FCM token errors prune a device", () => {

@@ -14,8 +14,12 @@ export function buildWnsToast(payload: SafeWebPushPayload): string {
   const content = isMessage
     ? `<text>${escapeXml(body)}</text>`
     : `<text>${escapeXml(title)}</text><text>${escapeXml(body)}</text>`;
+  const avatarUrl = safeTrustedAvatarUrl(payload.senderAvatarUrl);
+  const image = isMessage && avatarUrl
+    ? `<image placement="appLogoOverride" hint-crop="circle" src="${escapeXml(avatarUrl)}"/>`
+    : "";
 
-  return `<toast duration="short" activationType="protocol" launch="${escapeXml(activation)}">${header}<visual><binding template="ToastGeneric">${content}</binding></visual></toast>`;
+  return `<toast duration="short" activationType="protocol" launch="${escapeXml(activation)}">${header}<visual><binding template="ToastGeneric">${image}${content}</binding></visual></toast>`;
 }
 
 export function isAllowedWnsChannelUrl(value: string): boolean {
@@ -82,6 +86,25 @@ function safeText(value: string, fallback: string, maxLength: number): string {
   const text = value.trim();
   if (!text || looksSensitive(text)) return fallback;
   return text.slice(0, maxLength);
+}
+
+function safeTrustedAvatarUrl(value: string): string | null {
+  if (!value || value.length > 2048 || looksSensitive(value)) return null;
+  try {
+    const url = new URL(value, "https://app.letscube.ru");
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.port ||
+      (url.origin !== "https://app.letscube.ru" && url.origin !== "https://api.letscube.ru")
+    ) {
+      return null;
+    }
+    return url.href;
+  } catch {
+    return null;
+  }
 }
 
 function safeStatusToken(value: string | null): string | null {

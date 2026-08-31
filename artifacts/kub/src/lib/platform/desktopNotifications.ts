@@ -7,6 +7,7 @@ import {
   supportNotificationTarget,
   supportNotificationTargetsRequester,
 } from "../support/notifications.ts";
+import { parseMessageNotificationProjection } from "../messageNotificationProjection.ts";
 
 export type DesktopMessageNotification = {
   title: string;
@@ -36,6 +37,7 @@ type DesktopNotificationPayload = {
   group: string;
   header?: DesktopNotificationHeader;
   route: string;
+  icon?: string;
 };
 
 type DesktopNotificationApi = {
@@ -137,6 +139,7 @@ export async function showDesktopMessageNotification(
           }
         : {}),
       route: notification.route ?? "/",
+      ...(notification.icon ? { icon: notification.icon } : {}),
     };
     return await api.sendNotification(payload);
   } catch {
@@ -238,14 +241,18 @@ function desktopPresentation(
 ): DesktopMessageNotification | null {
   const tag = notificationPresentationTag(item) ?? `system:${item.kind}`;
   const payload = asPayload(item.payload);
-  const chatId = payloadValue(payload, "chat_id");
-  const messageId = payloadValue(payload, "message_id");
+  const messageProjection = item.kind.includes("message")
+    ? parseMessageNotificationProjection(item.payload)
+    : null;
+  const chatId = messageProjection?.chatId ?? payloadValue(payload, "chat_id");
+  const messageId = messageProjection?.messageId ?? payloadValue(payload, "message_id");
   const taskId = payloadValue(payload, "task_id");
-  const sender = payloadText(payload, "sender_name");
+  const sender = messageProjection?.senderName ?? payloadText(payload, "sender_name");
   const chatName = payloadText(payload, "chat_name");
   const taskTitle = payloadText(payload, "title");
   const preview = sanitizeDesktopText(
-    payloadText(payload, "preview") ??
+    messageProjection?.preview ??
+      payloadText(payload, "preview") ??
       payloadText(payload, "body") ??
       payloadText(payload, "message") ??
       payloadText(payload, "content"),
@@ -285,17 +292,18 @@ function desktopPresentation(
             : preview || "Откройте чат, чтобы посмотреть сообщение.",
       ),
       tag: item.id,
-      groupTag: tag,
+      groupTag: messageProjection?.groupTag ?? tag,
       header: {
         title: truncateDesktopText(
           privateChat
             ? (sender ?? "Сообщения")
             : (chatName ?? "Сообщения"),
         ),
-        route: `/?chat=${encodeURIComponent(chatId)}`,
+        route: messageProjection?.route ?? `/?chat=${encodeURIComponent(chatId)}`,
       },
+      icon: nativeNotificationIcon(messageProjection?.senderAvatarUrl),
       kind: "message",
-      route: `/?chat=${encodeURIComponent(chatId)}${messageId ? `&message=${encodeURIComponent(messageId)}` : ""}`,
+      route: messageProjection?.route ?? `/?chat=${encodeURIComponent(chatId)}${messageId ? `&message=${encodeURIComponent(messageId)}` : ""}`,
     };
   }
 
@@ -335,6 +343,11 @@ function desktopPresentation(
     kind: "system",
     route: "/",
   };
+}
+
+function nativeNotificationIcon(value: string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  return value.startsWith("/") ? `https://app.letscube.ru${value}` : value;
 }
 
 function stableDesktopNotificationId(tag: string): number {

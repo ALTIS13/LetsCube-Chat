@@ -26,6 +26,7 @@ export type PreviewProfile = Pick<Profile, "id" | "full_name" | "username" | "av
 export const SEARCH_FILTERS: { id: SearchTypeFilter; label: string }[] = [
   { id: "all", label: "Все" },
   { id: "user", label: "Люди" },
+  { id: "bot", label: "Боты" },
   { id: "chat", label: "Чаты" },
   { id: "message", label: "Сообщения" },
   { id: "task", label: "Задачи" },
@@ -36,6 +37,7 @@ export const SEARCH_FILTERS: { id: SearchTypeFilter; label: string }[] = [
 
 export const SEARCH_SECTION_LABELS: Record<GlobalSearchResultType, string> = {
   user: "Люди",
+  bot: "Боты",
   chat: "Чаты",
   message: "Сообщения",
   task: "Задачи",
@@ -303,7 +305,9 @@ function SearchResultIcon({ result, compact = false }: { result: GlobalSearchRes
     );
   }
   const iconName =
-    result.resultType === "chat"
+    result.resultType === "bot"
+      ? "bot"
+      : result.resultType === "chat"
       ? "chatBubble"
       : result.resultType === "message"
         ? "chatRect"
@@ -353,6 +357,11 @@ export function useSearchResultActions({ onAfterOpen }: { onAfterOpen?: () => vo
             online_at: null,
           },
         );
+        return;
+      }
+
+      if (result.resultType === "bot") {
+        showAppAlert("Запуск чата с ботом пока недоступен.", "Бот");
         return;
       }
 
@@ -486,7 +495,7 @@ export function parseSearchTypeSyntax(query: string, selected: SearchTypeFilter)
 export function groupSearchResults(results: GlobalSearchResult[]): { type: GlobalSearchResultType; results: GlobalSearchResult[]; startIndex: number }[] {
   const groups: { type: GlobalSearchResultType; results: GlobalSearchResult[]; startIndex: number }[] = [];
   let cursor = 0;
-  const order: GlobalSearchResultType[] = ["chat", "user", "message", "task", "location", "command"];
+  const order: GlobalSearchResultType[] = ["chat", "user", "bot", "message", "task", "location", "command"];
   for (const type of order) {
     const items = results.filter((result) => result.resultType === type);
     if (items.length === 0) continue;

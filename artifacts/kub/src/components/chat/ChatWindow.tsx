@@ -21,6 +21,7 @@ import { showAppAlert } from "@/lib/appDialogs";
 import { KUB_CHAT_MESSAGE_JUMP_EVENT, requestChatMessageJump, type ChatMessageJumpDetail } from "@/lib/chatJumpEvents";
 import { isSavedChat } from "@/lib/chatDisplay";
 import { reportError } from "@/lib/monitoring";
+import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import {
   DEFAULT_MEDIA_QUALITY,
@@ -1017,9 +1018,10 @@ function createMediaPlaybackItem(
     : isVoiceMessageContent(message)
       ? "voice"
       : "audio";
-  const senderName = message.user_id === currentUserId
+  const actor = resolveMessageActor(message);
+  const senderName = actor.kind === "user" && actor.id === currentUserId
     ? "Вы"
-    : message.sender?.full_name ?? message.sender?.username ?? "Участник";
+    : messageActorDisplayName(actor);
   return {
     id: message.id,
     chatId,

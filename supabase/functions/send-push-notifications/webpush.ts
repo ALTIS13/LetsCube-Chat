@@ -6,6 +6,14 @@ export type SafeWebPushPayload = {
   kind: string;
   chatId: string;
   messageId: string;
+  senderKind: "user" | "bot" | "";
+  senderId: string;
+  botId: string;
+  senderName: string;
+  senderAvatarUrl: string;
+  messageType: string;
+  preview: string;
+  groupTag: string;
   renotify: boolean;
 };
 

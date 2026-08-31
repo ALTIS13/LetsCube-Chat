@@ -1,6 +1,6 @@
 import type { Json } from "@/types/database";
 
-export type SearchEntityFilter = "all" | "user" | "chat" | "message" | "task" | "location" | "command" | "media";
+export type SearchEntityFilter = "all" | "user" | "bot" | "chat" | "message" | "task" | "location" | "command" | "media";
 export type SearchHasFilter = "file" | "link" | "image" | "video" | "audio";
 
 export interface ParsedSearchFilters {
@@ -35,6 +35,8 @@ const ENTITY_ALIASES: Record<string, SearchEntityFilter | SearchHasFilter> = {
   user: "user",
   users: "user",
   people: "user",
+  bot: "bot",
+  bots: "bot",
   chat: "chat",
   chats: "chat",
   message: "message",
@@ -142,7 +144,7 @@ export function searchFiltersToRpc(filters: ParsedSearchFilters): Json {
   };
 }
 
-export function typeFilterToDataType(type: SearchEntityFilter): "user" | "chat" | "message" | "task" | "location" | "all" {
+export function typeFilterToDataType(type: SearchEntityFilter): "user" | "bot" | "chat" | "message" | "task" | "location" | "all" {
   if (type === "media") return "message";
   if (type === "command") return "all";
   return type;

@@ -38,6 +38,7 @@ declare
   v_other_chat_id uuid := gen_random_uuid();
   v_lifecycle_chat_id uuid := gen_random_uuid();
   v_delete_chat_id uuid := gen_random_uuid();
+  v_task6_chat_id uuid := gen_random_uuid();
   v_bot_id uuid;
   v_second_bot_id uuid;
   v_third_bot_id uuid;
@@ -63,6 +64,8 @@ declare
   v_muted_message_id uuid;
   v_history_message_id uuid;
   v_system_message_id uuid;
+  v_task6_bot_message_id uuid;
+  v_task6_human_message_id uuid;
   v_first_send jsonb;
   v_duplicate_send jsonb;
   v_first_operation jsonb;
@@ -107,6 +110,9 @@ declare
   v_function regprocedure;
   v_rejected boolean;
   v_webhook_disabled boolean;
+  v_bot_username text;
+  v_task6_summary record;
+  v_task6_push jsonb;
 begin
   select pg_catalog.count(*)
   into v_legacy_tombstone_count
@@ -2588,6 +2594,120 @@ begin
   ) then
     raise exception 'bot_drop_pending_not_transactional';
   end if;
+
+  update public.bots bot
+  set avatar_url = 'https://api.letscube.ru/media/bots/smoke.webp'
+  where bot.id = v_bot_id
+  returning bot.username into v_bot_username;
+
+  if pg_catalog.has_function_privilege('anon', 'public.search_public_bots(text,integer)', 'execute')
+     or not pg_catalog.has_function_privilege('authenticated', 'public.search_public_bots(text,integer)', 'execute') then
+    raise exception 'bot_public_search_role_grants_invalid';
+  end if;
+
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_recipient_id::text, true);
+  execute 'set local role authenticated';
+  if (select pg_catalog.count(*) from public.search_public_bots('@' || v_bot_username, 20)) <> 1 then
+    execute 'reset role';
+    raise exception 'active_bot_search_failed';
+  end if;
+  execute 'reset role';
+
+  update public.bots set state = 'paused' where id = v_bot_id;
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_recipient_id::text, true);
+  execute 'set local role authenticated';
+  if (select pg_catalog.count(*) from public.search_public_bots(v_bot_username, 20)) <> 0
+     or not exists (select 1 from public.bots bot where bot.id = v_bot_id) then
+    execute 'reset role';
+    raise exception 'inactive_shared_bot_visibility_or_search_invalid';
+  end if;
+  execute 'reset role';
+
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_actor_id::text, true);
+  execute 'set local role authenticated';
+  if not exists (select 1 from public.bots bot where bot.id = v_bot_id) then
+    execute 'reset role';
+    raise exception 'inactive_owner_bot_visibility_missing';
+  end if;
+  execute 'reset role';
+
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_admin_id::text, true);
+  execute 'set local role authenticated';
+  if exists (select 1 from public.bots bot where bot.id = v_bot_id) then
+    execute 'reset role';
+    raise exception 'inactive_bot_visible_to_unrelated_authenticated_user';
+  end if;
+  execute 'reset role';
+  update public.bots set state = 'active' where id = v_bot_id;
+
+  insert into public.chats(id, type, name, created_by)
+  values (v_task6_chat_id, 'group', 'Task 6 projection smoke', v_actor_id);
+  insert into public.chat_members(chat_id, user_id, role, joined_at, last_read_at)
+  values
+    (v_task6_chat_id, v_actor_id, 'owner', pg_catalog.now() - interval '1 minute', pg_catalog.now() - interval '1 minute'),
+    (v_task6_chat_id, v_recipient_id, 'member', pg_catalog.now() - interval '1 minute', pg_catalog.now() - interval '1 minute');
+  insert into public.chat_bot_members(chat_id, bot_id, joined_at)
+  values (v_task6_chat_id, v_bot_id, pg_catalog.now());
+  insert into public.messages(chat_id, user_id, content, type, created_at)
+  values (v_task6_chat_id, v_recipient_id, 'task6 own human', 'text', pg_catalog.now() - interval '4 seconds');
+  insert into public.messages(chat_id, user_id, content, type, created_at)
+  values (v_task6_chat_id, v_actor_id, 'task6 incoming human', 'text', pg_catalog.now() - interval '3 seconds')
+  returning id into v_task6_human_message_id;
+  insert into public.messages(chat_id, user_id, bot_id, content, type, created_at)
+  values (v_task6_chat_id, null, null, 'task6 system', 'system', pg_catalog.now() - interval '2 seconds');
+  insert into public.messages(chat_id, user_id, bot_id, content, type, created_at)
+  values (v_task6_chat_id, null, v_bot_id, 'task6 bot searchable', 'text', pg_catalog.now() - interval '1 second')
+  returning id into v_task6_bot_message_id;
+
+  select notification_row.payload
+  into v_task6_push
+  from public.notifications notification_row
+  where notification_row.user_id = v_recipient_id
+    and notification_row.payload->>'message_id' = v_task6_bot_message_id::text
+  order by notification_row.created_at desc
+  limit 1;
+  if v_task6_push is null
+     or v_task6_push->>'sender_kind' <> 'bot'
+     or nullif(v_task6_push->>'sender_id', '') is not null
+     or v_task6_push->>'bot_id' <> v_bot_id::text
+     or v_task6_push->>'sender_avatar_url' <> 'https://api.letscube.ru/media/bots/smoke.webp'
+     or v_task6_push->>'route' <> '/?chat=' || v_task6_chat_id::text || '&message=' || v_task6_bot_message_id::text
+     or v_task6_push->>'group_tag' <> 'message:chat:' || v_task6_chat_id::text then
+    raise exception 'bot_notification_projection_invalid';
+  end if;
+
+  v_task6_push := public._notification_push_payload('message', v_task6_push);
+  if v_task6_push->>'chat_id' <> v_task6_chat_id::text
+     or v_task6_push->>'message_id' <> v_task6_bot_message_id::text
+     or v_task6_push->>'sender_kind' <> 'bot'
+     or v_task6_push->>'bot_id' <> v_bot_id::text
+     or v_task6_push->>'route' <> '/?chat=' || v_task6_chat_id::text || '&message=' || v_task6_bot_message_id::text
+     or v_task6_push->>'group_tag' <> 'message:chat:' || v_task6_chat_id::text then
+    raise exception 'bot_notification_push_projection_invalid';
+  end if;
+
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_recipient_id::text, true);
+  execute 'set local role authenticated';
+  select summary.* into v_task6_summary
+  from public.chat_list_summaries(array[v_task6_chat_id]) summary;
+  if v_task6_summary.chat_id <> v_task6_chat_id
+     or v_task6_summary.unread_count <> 2
+     or v_task6_summary.last_message->>'id' <> v_task6_bot_message_id::text
+     or v_task6_summary.last_message->'bot'->>'id' <> v_bot_id::text
+     or v_task6_summary.last_message->'bot' ? 'delete_after' then
+    execute 'reset role';
+    raise exception 'bot_chat_summary_or_unread_invalid';
+  end if;
+  if not exists (
+    select 1
+    from public.search_chat_messages(v_task6_chat_id, 'task6 bot searchable', '{}'::jsonb, 20, null, true) result
+    where result.message_id = v_task6_bot_message_id
+      and result.sender_name = 'Smoke bot'
+  ) then
+    execute 'reset role';
+    raise exception 'bot_chat_message_search_failed';
+  end if;
+  execute 'reset role';
 
   insert into private.bot_updates(
     bot_id,

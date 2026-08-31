@@ -442,6 +442,57 @@ test("notification rows keep exact message cards under one chat group and isolat
   }
 });
 
+test("desktop bot notification preserves the exact actor route and trusted avatar", async () => {
+  const previousWindow = installDesktopBridge();
+  const sent: Array<Record<string, unknown>> = [];
+  try {
+    const delivered = await desktopNotifications.showDesktopNotificationForRow(
+      {
+        id: "notification-bot-1",
+        user_id: "user-2",
+        kind: "message",
+        read_at: null,
+        created_at: "2026-08-31T12:00:00.000Z",
+        payload: {
+          chat_id: "chat-1",
+          message_id: "message-bot-1",
+          chat_type: "private",
+          sender_kind: "bot",
+          sender_id: null,
+          bot_id: "bot-1",
+          sender_name: "Помощник",
+          sender_avatar_url: "https://api.letscube.ru/media/bots/helper.webp",
+          message_type: "text",
+          preview: "Ответ готов",
+          route: "/?chat=chat-1&message=message-bot-1",
+          group_tag: "message:chat:chat-1",
+        },
+      },
+      async () => ({
+        sendNotification: async (notification: Record<string, unknown>) => {
+          sent.push(notification);
+          return true;
+        },
+      }),
+      { visibilityState: "hidden" },
+    );
+
+    assert.equal(delivered, true);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0]?.title, "Помощник");
+    assert.equal(sent[0]?.body, "Ответ готов");
+    assert.equal(sent[0]?.route, "/?chat=chat-1&message=message-bot-1");
+    assert.equal(sent[0]?.icon, "https://api.letscube.ru/media/bots/helper.webp");
+    assert.deepEqual(sent[0]?.header, {
+      id: sent[0]?.group,
+      title: "Помощник",
+      route: "/?chat=chat-1&message=message-bot-1",
+    });
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
 test("support rows use bounded copy and a validated ticket route", async () => {
   const previousWindow = installDesktopBridge();
   const sent: Array<Record<string, unknown>> = [];

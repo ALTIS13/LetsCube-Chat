@@ -4,6 +4,7 @@ import { KubIcon } from "@/components/kub";
 import { formatFullTime } from "@/lib/format";
 import type { MessageWithSender } from "@/types/database";
 import { useEffect, useMemo, useState } from "react";
+import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
 
 interface PinnedMessageProps {
   messages: MessageWithSender[];
@@ -197,9 +198,5 @@ function getPinnedPreview(message: MessageWithSender): string {
 }
 
 function getSenderName(message: MessageWithSender): string {
-  return (
-    message.sender?.full_name?.trim() ||
-    message.sender?.username?.trim() ||
-    "Участник"
-  );
+  return messageActorDisplayName(resolveMessageActor(message));
 }

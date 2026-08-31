@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
 import { sortChatsForSidebar } from '@/lib/chatSort'
 import type { Profile, ChatWithLastMessage, MessageWithSender } from '@/types/database'
+import { sameActorClientMessage } from '@/lib/messageActor'
 
 interface AppState {
   // Current user
@@ -122,10 +123,6 @@ function compareMessages(a: MessageWithSender, b: MessageWithSender): number {
   return a.id.localeCompare(b.id);
 }
 
-function sameClientMessage(a: MessageWithSender, b: MessageWithSender): boolean {
-  return Boolean(a.client_message_id && b.client_message_id && a.client_message_id === b.client_message_id);
-}
-
 function sortMessages(messages: MessageWithSender[]): MessageWithSender[] {
   return [...messages].sort(compareMessages);
 }
@@ -139,7 +136,7 @@ function isSameLogicalMessage(
   return Boolean(
     current.client_message_id &&
     next.client_message_id &&
-    current.client_message_id === next.client_message_id,
+    sameActorClientMessage(current, next),
   );
 }
 
@@ -236,7 +233,7 @@ export const useAppStore = create<AppState>((set) => ({
   addMessage: (chatId, message) =>
     set((state) => {
       const existing = state.messages[chatId] || []
-      const idx = existing.findIndex((m) => m.id === message.id || sameClientMessage(m, message))
+      const idx = existing.findIndex((m) => m.id === message.id || sameActorClientMessage(m, message))
       // Upsert: if a message with this id is already in the store (e.g. optimistic copy
       // already replaced with real data, then realtime echo arrives), replace it in place
       // rather than appending a duplicate.
@@ -262,8 +259,8 @@ export const useAppStore = create<AppState>((set) => ({
   replaceMessage: (chatId, oldId, message) =>
     set((state) => {
       const existing = state.messages[chatId] || []
-      const withoutOld = existing.filter((m) => m.id !== oldId && !sameClientMessage(m, message))
-      const idx = withoutOld.findIndex((m) => m.id === message.id || sameClientMessage(m, message))
+      const withoutOld = existing.filter((m) => m.id !== oldId && !sameActorClientMessage(m, message))
+      const idx = withoutOld.findIndex((m) => m.id === message.id || sameActorClientMessage(m, message))
       const next = idx === -1
         ? [...withoutOld, message]
         : withoutOld.map((m, i) => (i === idx ? message : m))

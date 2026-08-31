@@ -543,16 +543,47 @@ async function deliver(
 }
 
 function safePayload(payload: Record<string, unknown>) {
+  const senderKind = safeSenderKind(payload.senderKind ?? payload.sender_kind);
+  const senderId = senderKind === "user" ? safeText(payload.senderId ?? payload.sender_id, "", 80) : "";
+  const botId = senderKind === "bot" ? safeText(payload.botId ?? payload.bot_id, "", 80) : "";
+  const chatId = safeText(payload.chatId ?? payload.chat_id, "", 80);
   return {
     title: safeText(payload.title, "LETSCUBE", 80),
     body: safeText(payload.body, "Новое уведомление", 180),
     url: safeRelativeUrl(payload.url),
     tag: safeText(payload.tag, "kub-notification", 80),
     kind: safeText(payload.kind, "notification", 60),
-    chatId: safeText(payload.chatId ?? payload.chat_id, "", 80),
+    chatId,
     messageId: safeText(payload.messageId ?? payload.message_id, "", 80),
+    senderKind: senderKind && ((senderKind === "user" && senderId) || (senderKind === "bot" && botId)) ? senderKind : "",
+    senderId,
+    botId,
+    senderName: safeText(payload.senderName ?? payload.sender_name, "", 128),
+    senderAvatarUrl: safeTrustedAvatarUrl(payload.senderAvatarUrl ?? payload.sender_avatar_url),
+    messageType: safeText(payload.messageType ?? payload.message_type, "", 32),
+    preview: safeText(payload.preview, "", 180),
+    groupTag: chatId ? `message:chat:${chatId}` : "",
     renotify: typeof payload.renotify === "boolean" ? payload.renotify : true,
   };
+}
+
+function safeSenderKind(value: unknown): "user" | "bot" | "" {
+  return value === "user" || value === "bot" ? value : "";
+}
+
+function safeTrustedAvatarUrl(value: unknown): string {
+  if (typeof value !== "string" || looksSensitive(value)) return "";
+  try {
+    const url = new URL(value, "https://app.letscube.ru");
+    return url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      (url.origin === "https://app.letscube.ru" || url.origin === "https://api.letscube.ru")
+      ? url.href.slice(0, 2048)
+      : "";
+  } catch {
+    return "";
+  }
 }
 
 function safeText(value: unknown, fallback: string, maxLength: number) {
@@ -576,10 +607,13 @@ function looksSensitive(value: string) {
   const lower = value.toLowerCase();
   return (
     lower.includes("/storage/v1/") ||
+    lower.includes("/object/sign/") ||
     lower.includes(".supabase.co/storage") ||
     lower.includes("token=") ||
     lower.includes("password=") ||
-    lower.includes("authorization=")
+    lower.includes("authorization=") ||
+    lower.includes("signedurl") ||
+    lower.includes("signed_url")
   );
 }
 

@@ -1,5 +1,6 @@
 import { PushNotifications } from "@capacitor/push-notifications";
 import { isNativeAndroid } from "./capabilities";
+import { parseMessageNotificationProjection } from "../messageNotificationProjection";
 
 export type NativePushResultStatus =
   | "native_unavailable"
@@ -221,6 +222,8 @@ async function waitForRegistration(
 function getNotificationTarget(data: unknown): string | null {
   if (!data || typeof data !== "object") return null;
   const payload = data as Record<string, unknown>;
+  const messageProjection = parseMessageNotificationProjection(payload);
+  if (messageProjection) return messageProjection.route;
   const route = typeof payload.route === "string" ? payload.route : null;
   if (route) return route;
 

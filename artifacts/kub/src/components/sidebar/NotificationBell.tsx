@@ -20,6 +20,7 @@ import {
 } from "@/lib/support/notifications";
 import type { GroupInviteStatus } from "@/lib/groupInvites";
 import type { Notification } from "@/types/database";
+import { parseMessageNotificationProjection } from "@/lib/messageNotificationProjection";
 
 type NotificationTarget =
   | { kind: "chat"; chatId: string }
@@ -32,6 +33,7 @@ type NotificationTarget =
 
 type NotificationDisplay = {
   icon: KubIconName;
+  avatarUrl?: string | null;
   title: string;
   body: string;
   typeLabel: string;
@@ -483,14 +485,7 @@ function NotificationItem({
       )}
     >
       <div className="flex min-w-0 items-start gap-3">
-        <div className={cn(
-          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
-          unread
-            ? "bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] text-[color:var(--kub-cyan)]"
-            : "bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)]",
-        )}>
-          <KubIcon name={display.icon} size={17} />
-        </div>
+        <NotificationSenderIcon icon={display.icon} avatarUrl={display.avatarUrl} unread={unread} />
 
         <div className="min-w-0 max-w-full flex-1 overflow-hidden">
           <div className="flex min-w-0 items-start justify-between gap-2">
@@ -558,10 +553,11 @@ function MessageGroupItem({
 }) {
   const latest = entry.latest;
   const unread = entry.unreadItems.length > 0;
+  const projection = parseMessageNotificationProjection(latest.payload);
   const chatName = payloadString(latest.payload, "chat_name");
-  const sender = payloadString(latest.payload, "sender_name");
+  const sender = projection?.senderName ?? payloadString(latest.payload, "sender_name");
   const chatType = payloadString(latest.payload, "chat_type");
-  const preview = sanitizeBody(payloadString(latest.payload, "preview"));
+  const preview = sanitizeBody(projection?.preview ?? payloadString(latest.payload, "preview"));
   const title = chatType === "private"
     ? sender ?? chatName ?? "Новые сообщения"
     : chatName ?? "Новые сообщения";
@@ -590,14 +586,7 @@ function MessageGroupItem({
       )}
     >
       <div className="flex min-w-0 items-start gap-3">
-        <div className={cn(
-          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
-          unread
-            ? "bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] text-[color:var(--kub-cyan)]"
-            : "bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)]",
-        )}>
-          <KubIcon name="chatBubble" size={17} />
-        </div>
+        <NotificationSenderIcon icon={projection?.senderKind === "bot" ? "bot" : "chatBubble"} avatarUrl={projection?.senderAvatarUrl} unread={unread} />
 
         <div className="min-w-0 max-w-full flex-1 overflow-hidden">
           <div className="flex min-w-0 items-start justify-between gap-2">
@@ -647,6 +636,35 @@ function NotificationState({ icon, title, body }: { icon: KubIconName; title: st
   );
 }
 
+function NotificationSenderIcon({
+  icon,
+  avatarUrl,
+  unread,
+}: {
+  icon: KubIconName;
+  avatarUrl?: string | null;
+  unread: boolean;
+}) {
+  return (
+    <div className={cn(
+      "relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl",
+      unread
+        ? "bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] text-[color:var(--kub-cyan)]"
+        : "bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)]",
+    )}>
+      <KubIcon name={icon} size={17} />
+      {avatarUrl && (
+        <img
+          src={avatarUrl}
+          alt=""
+          className="absolute inset-0 h-9 w-9 object-cover"
+          onError={(event) => event.currentTarget.remove()}
+        />
+      )}
+    </div>
+  );
+}
+
 function buildNotificationEntries(
   items: Notification[],
   canViewSupport: boolean,
@@ -656,7 +674,8 @@ function buildNotificationEntries(
 
   for (const item of items) {
     if (isMessageNotification(item)) {
-      const chatId = payloadString(item.payload, "chat_id");
+      const projection = parseMessageNotificationProjection(item.payload);
+      const chatId = projection?.chatId ?? payloadString(item.payload, "chat_id");
       if (chatId) {
         const existing = messageGroups.get(chatId);
         if (existing) {
@@ -664,7 +683,7 @@ function buildNotificationEntries(
           if (!item.read_at) existing.unreadItems.push(item);
           if (compareNotificationDate(item, existing.latest) < 0) {
             existing.latest = item;
-            existing.latestMessageId = payloadString(item.payload, "message_id");
+            existing.latestMessageId = projection?.messageId ?? payloadString(item.payload, "message_id");
           }
         } else {
           messageGroups.set(chatId, {
@@ -675,7 +694,7 @@ function buildNotificationEntries(
             latest: item,
             items: [item],
             unreadItems: item.read_at ? [] : [item],
-            latestMessageId: payloadString(item.payload, "message_id"),
+            latestMessageId: projection?.messageId ?? payloadString(item.payload, "message_id"),
           });
         }
         continue;
@@ -831,19 +850,24 @@ function formatNotification(item: Notification, inviteStatus?: GroupInviteStatus
       };
     default:
       if (item.kind.includes("message")) {
-        const isPrivateMessage = chatType === "private" || (!!sender && !!chatName && sender === chatName);
+        const projection = parseMessageNotificationProjection(item.payload);
+        const messageSender = projection?.senderName ?? sender;
+        const isPrivateMessage =
+          chatType === "private" ||
+          (!!messageSender && !!chatName && messageSender === chatName);
         const fallbackBody = "Откройте чат, чтобы посмотреть сообщение.";
-        const safeBody = body || fallbackBody;
+        const safeBody = sanitizeBody(projection?.preview) || body || fallbackBody;
         return {
-          icon: "chatBubble",
+          icon: projection?.senderKind === "bot" ? "bot" : "chatBubble",
+          avatarUrl: projection?.senderAvatarUrl,
           typeLabel: "Сообщение",
           title: isPrivateMessage
-            ? (sender ? truncateText(sender) : "Новое сообщение")
+            ? (messageSender ? truncateText(messageSender) : "Новое сообщение")
             : (chatName ? truncateText(chatName) : "Новое сообщение"),
           body: isPrivateMessage
             ? truncateText(safeBody)
-            : sender && body
-              ? `${truncateText(sender, 54)}: ${truncateText(body)}`
+            : messageSender && safeBody
+              ? `${truncateText(messageSender, 54)}: ${truncateText(safeBody)}`
               : truncateText(safeBody),
         };
       }
@@ -902,6 +926,10 @@ function navigateTarget(
     case "ban_issued":
       return { kind: "admin" };
     default: {
+      if (item.kind.includes("message")) {
+        const projection = parseMessageNotificationProjection(item.payload);
+        if (projection) return { kind: "message", chatId: projection.chatId, messageId: projection.messageId };
+      }
       const chatId = payloadString(item.payload, "chat_id");
       const messageId = payloadString(item.payload, "message_id");
       if (chatId && messageId && item.kind.includes("message")) return { kind: "message", chatId, messageId };

@@ -1,3 +1,5 @@
+import { parseMessageNotificationProjection } from "./messageNotificationProjection.ts";
+
 type NotificationPresentationLike = {
   kind: string;
   payload: unknown;
@@ -6,6 +8,10 @@ type NotificationPresentationLike = {
 export function notificationPresentationTag(
   item: NotificationPresentationLike,
 ): string | null {
+  if (item.kind.includes("message")) {
+    const projection = parseMessageNotificationProjection(item.payload);
+    if (projection) return projection.groupTag;
+  }
   const payload =
     item.payload && typeof item.payload === "object"
       ? (item.payload as Record<string, unknown>)

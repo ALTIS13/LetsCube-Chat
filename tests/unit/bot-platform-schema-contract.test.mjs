@@ -787,6 +787,80 @@ test("notification fanout projects bot identity without changing human exclusion
   );
 });
 
+test("public bot discovery is authenticated, active-only, bounded, and metadata-only", () => {
+  const body = functionBody("search_public_bots");
+  assert.match(body, /security definer/);
+  assert.match(body, /set search_path = ''/);
+  assert.match(body, /pg_catalog\.btrim\(pg_catalog\.left\(coalesce\(p_query, ''\), 80\)\)/);
+  assert.match(body, /bot\.state = 'active'/);
+  assert.match(body, /v_limit integer := least\(greatest\(coalesce\(p_limit, 20\), 1\), 40\)/);
+  assert.match(body, /limit v_limit/);
+  assert.match(
+    normalizedSql,
+    /returns table \( id uuid, username text, display_name text, description text, avatar_url text \)/,
+  );
+  assert.match(
+    normalizedSql,
+    /revoke all on function public\.search_public_bots\(text,integer\) from public, anon/,
+  );
+  assert.match(
+    normalizedSql,
+    /grant execute on function public\.search_public_bots\(text,integer\) to authenticated/,
+  );
+  assert.doesNotMatch(body, /bot_owners|bot_tokens|bot_webhooks|bot_updates|delivery|delete_after/);
+});
+
+test("inactive bot identities require ownership or a shared chat", () => {
+  assert.doesNotMatch(
+    normalizedSql,
+    /create policy "authenticated users read bot identities" on public\.bots for select to authenticated using \(true\)/,
+  );
+  assert.match(normalizedSql, /bots\.state = 'active'/);
+  assert.match(normalizedSql, /from public\.bot_owners owner_row/);
+  assert.match(normalizedSql, /from public\.chat_bot_members bot_member/);
+  assert.match(normalizedSql, /join public\.chat_members human_member/);
+});
+
+test("chat summaries project explicit bot identity and count only valid incoming senders", () => {
+  const body = functionBody("chat_list_summaries");
+  assert.match(
+    body,
+    /jsonb_build_object\( 'id', bot\.id, 'username', bot\.username, 'display_name', bot\.display_name, 'description', bot\.description, 'avatar_url', bot\.avatar_url, 'state', bot\.state, 'created_at', bot\.created_at, 'updated_at', bot\.updated_at \)/,
+  );
+  assert.match(body, /left join public\.bots as bot on bot\.id = message\.bot_id/);
+  assert.match(
+    body,
+    /message\.type <> 'system'[\s\S]*\( \(message\.user_id is not null and message\.bot_id is null and message\.user_id <> \(select auth\.uid\(\)\)\) or \(message\.bot_id is not null and message\.user_id is null\) \)/,
+  );
+});
+
+test("notification projection keeps exact routing fields and a bounded safe actor avatar", () => {
+  const body = functionBody("enqueue_message_notifications");
+  assert.match(body, /'sender_avatar_url', v_sender_avatar_url/);
+  assert.match(body, /'group_tag', 'message:chat:' \|\| new\.chat_id::text/);
+  assert.match(body, /'route', '\/\?chat=' \|\| new\.chat_id::text \|\| '&message=' \|\| new\.id::text/);
+  assert.match(body, /v_sender_kind := 'bot'/);
+  assert.match(body, /new\.user_id is null or member_row\.user_id <> new\.user_id/);
+
+  const pushBody = functionBody("_notification_push_payload");
+  for (const key of [
+    "sender_kind",
+    "sender_id",
+    "bot_id",
+    "sender_name",
+    "sender_avatar_url",
+    "chat_id",
+    "message_id",
+    "group_tag",
+    "route",
+  ]) {
+    assert.match(pushBody, new RegExp(`'${key}'`), `${key} must survive push projection`);
+  }
+  assert.match(pushBody, /\/storage\/v1\//);
+  assert.match(pushBody, /\/object\/sign\//);
+  assert.match(pushBody, /token=%/);
+});
+
 test("binding spec documents the tombstone-safe sender invariant", () => {
   assert.match(bindingSpec, /legacy tombstone/i);
   assert.match(bindingSpec, /before insert/i);
@@ -873,6 +947,15 @@ test("database smoke preserves history and rolls every probe back", () => {
   assert.match(normalizedSmoke, /removed_membership_privacy_update_not_persisted/);
   assert.match(normalizedSmoke, /membership_enqueue_failure_rolled_back_source/);
   assert.match(normalizedSmoke, /muted_bot_notification_enqueued_push/);
+  assert.match(normalizedSmoke, /bot_public_search_role_grants_invalid/);
+  assert.match(normalizedSmoke, /active_bot_search_failed/);
+  assert.match(normalizedSmoke, /inactive_shared_bot_visibility_or_search_invalid/);
+  assert.match(normalizedSmoke, /inactive_owner_bot_visibility_missing/);
+  assert.match(normalizedSmoke, /inactive_bot_visible_to_unrelated_authenticated_user/);
+  assert.match(normalizedSmoke, /bot_notification_projection_invalid/);
+  assert.match(normalizedSmoke, /bot_notification_push_projection_invalid/);
+  assert.match(normalizedSmoke, /bot_chat_summary_or_unread_invalid/);
+  assert.match(normalizedSmoke, /bot_chat_message_search_failed/);
   assert.match(normalizedSmoke, /profile_delete_tombstone_not_preserved/);
   assert.match(normalizedSmoke, /anon_can_access_private_bot_table/);
   assert.match(normalizedSmoke, /authenticated_can_execute_bot_internal_rpc/);

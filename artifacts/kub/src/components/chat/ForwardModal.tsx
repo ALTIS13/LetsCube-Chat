@@ -5,6 +5,7 @@ import { useAppStore } from "@/store/app.store";
 import { ChatAvatar } from "@/components/ui/ChatAvatar";
 import { KubIcon, KubModal } from "@/components/kub";
 import type { MessageWithSender } from "@/types/database";
+import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
 
 interface ForwardModalProps {
   message: MessageWithSender;
@@ -49,7 +50,7 @@ export function ForwardModal({ message, onClose, onForward }: ForwardModalProps)
     >
       <div className="rounded-xl px-3 py-2 text-xs bg-[var(--kub-surface-2)] border-l-2 border-[color:var(--kub-cyan)]">
         <div className="font-semibold text-[color:var(--kub-cyan)]">
-          {message.sender?.full_name ?? "Сообщение"}
+          {messageActorDisplayName(resolveMessageActor(message))}
         </div>
         <div className="truncate text-[color:var(--kub-muted)]">{preview}</div>
       </div>

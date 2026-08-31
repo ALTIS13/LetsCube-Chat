@@ -47,6 +47,7 @@ import {
 } from "@/lib/stagedUploadWorkflow";
 import { EmojiCategoryPicker } from "@/components/ui/EmojiCategoryPicker";
 import { MESSAGE_EMOJI_CATEGORIES, MESSAGE_EMOJI_SEARCH_TERMS } from "@/lib/emojiCatalog";
+import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
 
 const DRAFT_PREFIX = "kub:draft:";
 const draftKey = (chatId: string) => `${DRAFT_PREFIX}${chatId}`;
@@ -886,7 +887,7 @@ export function MessageInput({
             <KubIcon name="reply" size={13} tone="accent" className="flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="text-xs font-semibold text-[color:var(--kub-cyan)]">
-                {replyTo.sender?.full_name ?? "Вы"}
+                {messageActorDisplayName(resolveMessageActor(replyTo))}
               </div>
               <div className="text-xs truncate text-[color:var(--kub-muted)]">{formatReplyMessagePreview(replyTo)}</div>
             </div>
