@@ -85,8 +85,9 @@ test("fresh backup and an isolated PG17 restore rehearsal are hard fail-stop gat
   assert.match(source, /backup-command\.out/);
   assert.match(
     source,
-    /\^backup completed: \(\/srv\/letscube\/backups\/automated\/\[0-9\]\{8\}-\[0-9\]\{6\}\)\$/,
+    /\\\[\[0-9\]\{4\}-\[0-9\]\{2\}-\[0-9\]\{2\}T[\s\S]{0,160}backup completed: \(\/srv\/letscube\/backups\/automated\/\[0-9\]\{8\}-\[0-9\]\{6\}\)\$/,
   );
+  assert.match(source, /sed -nE "s#\$BACKUP_COMPLETED_RE#\\2#p"/);
   assert.match(source, /MANIFEST\.txt/);
   assert.match(source, /created_at=/);
   assert.match(source, /basename "\$BACKUP_DIR"/);

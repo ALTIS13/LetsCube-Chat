@@ -71,7 +71,7 @@ BACKUP_ROOT="/srv/letscube/backups/automated"
 BACKUP_SCRIPT="/srv/letscube/scripts/letscube-backup.sh"
 BACKUP_LOCK="/run/letscube-backup.lock"
 STRICT_BACKUP_NAME='^[0-9]{8}-[0-9]{6}$'
-BACKUP_COMPLETED_RE='^backup completed: (/srv/letscube/backups/automated/[0-9]{8}-[0-9]{6})$'
+BACKUP_COMPLETED_RE='^\[[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})\] backup completed: (/srv/letscube/backups/automated/[0-9]{8}-[0-9]{6})$'
 
 test -r "$BACKUP_SCRIPT"
 grep -Eq '^LOCK=(/run/letscube-backup[.]lock|"/run/letscube-backup[.]lock")$' "$BACKUP_SCRIPT"
@@ -91,7 +91,7 @@ if ! sudo "$BACKUP_SCRIPT" run >"$BACKUP_OUTPUT" 2>&1; then
 fi
 
 mapfile -t BACKUP_COMPLETIONS < <(
-  sed -nE "s|$BACKUP_COMPLETED_RE|\1|p" "$BACKUP_OUTPUT"
+  sed -nE "s#$BACKUP_COMPLETED_RE#\2#p" "$BACKUP_OUTPUT"
 )
 test "${#BACKUP_COMPLETIONS[@]}" -eq 1
 BACKUP_DIR="${BACKUP_COMPLETIONS[0]}"
@@ -156,7 +156,7 @@ chmod 600 "$ROLLOUT_DIR/backup-binding.env"
 stat -c '%n %s %y' "$BACKUP_DIR" "$BACKUP_DIR/MANIFEST.txt" "$BACKUP_DIR/SHA256SUMS" >"$ROLLOUT_DIR/backup-current-run.txt"
 ```
 
-Сам backup script владеет exclusive lock через fd 9 и `flock -n 9`; внешний wrapper не пытается повторно захватить тот же lock. При одновременном timer/manual запуске один процесс обязан завершиться неуспешно. Приватный `backup-command.out` не выводится в terminal; допустима ровно одна anchored final line `backup completed: /srv/letscube/backups/automated/YYYYMMDD-HHMMSS`. Она, before/after guard, basename каталога и `MANIFEST.txt` с `created_at=$STAMP` обязаны указывать один и тот же backup. Успешные `sha256sum -c`, `pg_restore --list` и `tar -tf` обязательны, но сами по себе не доказывают восстановимость.
+Сам backup script владеет exclusive lock через fd 9 и `flock -n 9`; внешний wrapper не пытается повторно захватить тот же lock. При одновременном timer/manual запуске один процесс обязан завершиться неуспешно. Приватный `backup-command.out` не выводится в terminal; допустима ровно одна anchored final line `[ISO-8601 timestamp] backup completed: /srv/letscube/backups/automated/YYYYMMDD-HHMMSS`. Timestamp обязан содержать секунды и `Z` либо numeric UTC offset. Эта строка, before/after guard, basename каталога и `MANIFEST.txt` с `created_at=$STAMP` обязаны указывать один и тот же backup. Успешные `sha256sum -c`, `pg_restore --list` и `tar -tf` обязательны, но сами по себе не доказывают восстановимость.
 
 ## Рубеж 2: полный isolated PG17 restore rehearsal
 
