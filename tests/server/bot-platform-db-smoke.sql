@@ -2,6 +2,14 @@
 
 begin;
 
+do $compatibility$
+begin
+  if pg_catalog.to_regclass('public.registration_invite_settings') is not null then
+    execute 'update public.registration_invite_settings set invite_only_enabled = false where id = true';
+  end if;
+end
+$compatibility$;
+
 create temporary table bot_sender_rewrite_probe(
   message_id uuid not null
 ) on commit drop;
@@ -275,7 +283,10 @@ begin
     v_admin_id,
     'Bot admin smoke',
     'bot_admin_' || pg_catalog.substr(v_admin_id::text, 1, 8)
-  );
+  )
+  on conflict (id) do update set
+    full_name = excluded.full_name,
+    username = excluded.username;
   insert into public.user_global_roles(user_id, role_id, assigned_by)
   select v_admin_id, role_row.id, null
   from public.roles role_row
@@ -311,7 +322,10 @@ begin
     pg_catalog.now()
   );
   insert into public.profiles(id, full_name, username)
-  values (v_profile_delete_id, 'Tombstone smoke', 'tombstone_' || pg_catalog.substr(v_profile_delete_id::text, 1, 8));
+  values (v_profile_delete_id, 'Tombstone smoke', 'tombstone_' || pg_catalog.substr(v_profile_delete_id::text, 1, 8))
+  on conflict (id) do update set
+    full_name = excluded.full_name,
+    username = excluded.username;
   insert into public.chats(id, type, name, created_by)
   values (v_delete_chat_id, 'group', 'Tombstone smoke', v_profile_delete_id);
   insert into public.messages(id, chat_id, user_id, content, type)
@@ -383,7 +397,10 @@ begin
       v_bulk_profile_two_id,
       'Bulk tombstone two',
       'bulk_two_' || pg_catalog.substr(v_bulk_profile_two_id::text, 1, 8)
-    );
+    )
+  on conflict (id) do update set
+    full_name = excluded.full_name,
+    username = excluded.username;
   insert into public.messages(chat_id, user_id, content, type)
   values (v_delete_chat_id, v_bulk_profile_one_id, 'bulk tombstone one', 'text')
   returning id into v_bulk_message_one_id;

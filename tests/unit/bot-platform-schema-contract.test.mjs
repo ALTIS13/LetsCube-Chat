@@ -1003,6 +1003,19 @@ test("database smoke preserves history and rolls every probe back", () => {
   assert.match(normalizedSmoke, /anon_can_access_private_bot_table/);
   assert.match(normalizedSmoke, /authenticated_can_execute_bot_internal_rpc/);
   assert.match(normalizedSmoke, /bot_history_delete_not_restricted/);
+  assert.match(
+    normalizedSmoke,
+    /to_regclass\('public\.registration_invite_settings'\)/,
+  );
+  assert.match(
+    normalizedSmoke,
+    /execute 'update public\.registration_invite_settings set invite_only_enabled = false where id = true'/,
+  );
+  assert.equal(
+    normalizedSmoke.match(/on conflict \(id\) do update set/g)?.length,
+    3,
+    "restored auth profile triggers require all smoke profiles to be upserted",
+  );
   assert.match(normalizedSmoke, /rollback;$/);
   assert.doesNotMatch(normalizedSmoke, /delete from public\.messages/);
   assert.match(
