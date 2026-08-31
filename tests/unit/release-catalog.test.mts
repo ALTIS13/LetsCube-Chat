@@ -9,6 +9,7 @@ import {
   getInstalledReleaseState,
   getReleaseManifestUrl,
   parseReleaseManifest,
+  type ReleasePlatform,
 } from "../../artifacts/kub/src/lib/releaseCatalog.ts";
 
 const SHA256 = "a".repeat(64);
@@ -47,6 +48,38 @@ test("parseReleaseManifest accepts a bounded Android release", () => {
   const manifest = parseReleaseManifest(androidManifest(), "android", "stable");
   assert.equal(manifest.platform, "android");
   assert.equal(manifest.artifact?.sha256, SHA256);
+});
+
+test("parseReleaseManifest accepts bounded optional highlights", () => {
+  const manifest = parseReleaseManifest(androidManifest({
+    highlights: ["Быстрее открываются большие чаты", "Улучшена доставка уведомлений"],
+  }), "android", "stable");
+  assert.deepEqual(manifest.highlights, [
+    "Быстрее открываются большие чаты",
+    "Улучшена доставка уведомлений",
+  ]);
+});
+
+test("highlights are capped without changing schema version", () => {
+  assert.throws(
+    () => parseReleaseManifest(androidManifest({ highlights: Array(7).fill("Изменение") }), "android"),
+    /highlights/,
+  );
+  assert.throws(
+    () => parseReleaseManifest(androidManifest({ highlights: ["x".repeat(141)] }), "android"),
+    /highlights/,
+  );
+});
+
+test("pre-highlights v1 manifests parse as empty highlights and ignore unknown fields", () => {
+  const legacyManifest = JSON.parse(readFileSync(
+    "tests/fixtures/release-manifest-v1-without-highlights.json",
+    "utf8",
+  ));
+  const manifest = parseReleaseManifest(legacyManifest, "android", "stable");
+
+  assert.equal(manifest.schemaVersion, 1);
+  assert.deepEqual(manifest.highlights, []);
 });
 
 test("parseReleaseManifest accepts an unavailable release without an artifact", () => {
@@ -116,6 +149,16 @@ test("getReleaseManifestUrl uses the fixed release catalog path", () => {
     getReleaseManifestUrl("windows", "stable"),
     "https://api.letscube.ru/releases/v1/windows/stable.json",
   );
+});
+
+test("release catalog URL supports future platform identifiers without activating distribution", () => {
+  const futurePlatforms: ReleasePlatform[] = ["macos", "ios", "web"];
+  for (const platform of futurePlatforms) {
+    assert.equal(
+      getReleaseManifestUrl(platform, "stable"),
+      `https://api.letscube.ru/releases/v1/${platform}/stable.json`,
+    );
+  }
 });
 
 test("Windows native updater endpoints are exact channel manifests", () => {

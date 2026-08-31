@@ -40,13 +40,17 @@ test("Android browser and Capacitor Android use APK distribution", () => {
   assert.equal(supportsPwaInstallForTarget("android_download"), false);
 });
 
-test("Windows browser uses EXE distribution and other systems stay web-only", () => {
+test("Windows browser uses EXE distribution and unsupported desktop systems stay web-only", () => {
   assert.equal(
     detectDistributionTarget({ userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140" }),
     "windows_download",
   );
   assert.equal(
     detectDistributionTarget({ userAgent: "Mozilla/5.0 (X11; Linux x86_64) Firefox/142" }),
+    "web_only",
+  );
+  assert.equal(
+    detectDistributionTarget({ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) Safari/605.1.15" }),
     "web_only",
   );
   assert.equal(supportsPwaInstallForTarget("windows_download"), false);

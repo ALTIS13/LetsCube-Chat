@@ -431,12 +431,144 @@ test("publisher creates an immutable artifact and a matching atomic manifest", (
   assert.match(duplicate.stderr, /already exists/);
 });
 
+test("legacy publisher accepts optional highlights and keeps jq and Python output identical", () => {
+  const fixtureHighlights = join(root, "tests/fixtures/release-highlights.json");
+  const makeFakeJq = (workspace) => {
+    const bin = join(workspace, "fake-jq-bin");
+    mkdirSync(bin);
+    const fakeJq = join(bin, "jq");
+    writeFileSync(fakeJq, `#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1" == "-ace" ]]; then
+  python - "$3" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as highlights_file:
+    print(json.dumps(json.load(highlights_file), separators=(",", ":")))
+PY
+  exit 0
+fi
+platform=""; channel=""; version=""; build=""; published_at=""; notes=""; url=""; size=""; sha256=""; highlights=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --arg)
+      case "$2" in
+        platform) platform="$3" ;;
+        channel) channel="$3" ;;
+        version) version="$3" ;;
+        publishedAt) published_at="$3" ;;
+        notes) notes="$3" ;;
+        url) url="$3" ;;
+        sha256) sha256="$3" ;;
+      esac
+      shift 3
+      ;;
+    --argjson)
+      case "$2" in
+        build) build="$3" ;;
+        size) size="$3" ;;
+        highlights) highlights="$3" ;;
+      esac
+      shift 3
+      ;;
+    *) shift ;;
+  esac
+done
+python - "$platform" "$channel" "$version" "$build" "$published_at" "$notes" "$url" "$size" "$sha256" "$highlights" <<'PY'
+import json
+import sys
+
+platform, channel, version, build, published_at, notes, url, size, sha256, highlights = sys.argv[1:]
+json.dump({
+    "schemaVersion": 1,
+    "platform": platform,
+    "channel": channel,
+    "available": True,
+    "version": version,
+    "build": int(build),
+    "publishedAt": published_at,
+    "minimumSupportedVersion": None,
+    "mandatory": False,
+    "notes": notes,
+    "highlights": json.loads(highlights),
+    "artifact": {"url": url, "size": int(size), "sha256": sha256},
+}, sys.stdout, indent=2)
+sys.stdout.write("\\n")
+PY
+`);
+    chmodSync(fakeJq, 0o755);
+    return bin;
+  };
+  const publish = (workspace, env, args) => {
+    const publicRoot = join(workspace, "public");
+    const artifact = join(workspace, "candidate.apk");
+    writeFileSync(artifact, "legacy Android artifact");
+    const result = spawnSync(
+      bash,
+      [publisherPath, "android", "stable", "0.3.0", "7", artifact, ...args],
+      { encoding: "utf8", env: { ...process.env, RELEASE_ROOT: publicRoot, ...env } },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    return JSON.parse(readFileSync(join(publicRoot, "releases/v1/android/stable.json"), "utf8"));
+  };
+
+  const pythonWorkspace = mkdtempSync(join(tmpdir(), "letscube-release-python-"));
+  const pythonManifest = publish(pythonWorkspace, {}, ["--highlights-file", fixtureHighlights]);
+  const jqWorkspace = mkdtempSync(join(tmpdir(), "letscube-release-jq-"));
+  const fakeJqBin = makeFakeJq(jqWorkspace);
+  const jqManifest = publish(
+    jqWorkspace,
+    { PATH: `${toBashPath(fakeJqBin)}:${process.env.PATH ?? ""}` },
+    ["Compact notes", "--highlights-file", fixtureHighlights],
+  );
+
+  assert.deepEqual(pythonManifest.highlights, JSON.parse(readFileSync(fixtureHighlights, "utf8")));
+  assert.deepEqual(jqManifest.highlights, pythonManifest.highlights);
+  assert.equal(pythonManifest.schemaVersion, 1);
+  assert.equal(jqManifest.schemaVersion, 1);
+});
+
+test("legacy publisher rejects invalid highlights before acquiring the publish lock", () => {
+  const workspace = mkdtempSync(join(tmpdir(), "letscube-release-invalid-highlights-"));
+  const publicRoot = join(workspace, "public");
+  const artifact = join(workspace, "candidate.apk");
+  const validHighlights = join(workspace, "valid-highlights.json");
+  const invalidHighlights = join(workspace, "invalid-highlights.json");
+  const overlongUnicodeHighlights = join(workspace, "overlong-unicode-highlights.json");
+  const linkedHighlights = join(workspace, "linked-highlights.json");
+  writeFileSync(artifact, "legacy Android artifact");
+  writeFileSync(validHighlights, '["One change"]\\n');
+  writeFileSync(invalidHighlights, '{"highlights":["not an array"]}\\n');
+  writeFileSync(overlongUnicodeHighlights, JSON.stringify(["🙂".repeat(71)]));
+  symlinkSync(validHighlights, linkedHighlights, "file");
+
+  const base = [publisherPath, "android", "stable", "0.3.1", "8", artifact];
+  const invalidInvocations = [
+    ["--highlights-file"],
+    ["--highlights-file", validHighlights, "--highlights-file", validHighlights],
+    ["--unknown-option"],
+    ["--highlights-file", linkedHighlights],
+    ["--highlights-file", invalidHighlights],
+    ["--highlights-file", overlongUnicodeHighlights],
+  ];
+  for (const args of invalidInvocations) {
+    const result = spawnSync(bash, [...base, ...args], {
+      encoding: "utf8",
+      env: { ...process.env, RELEASE_ROOT: publicRoot },
+    });
+    assert.notEqual(result.status, 0, `expected failure for ${args.join(" ")}`);
+    assert.equal(existsSync(publicRoot), false, `lock acquisition created release root for ${args.join(" ")}`);
+  }
+});
+
 test("publisher rejects unknown platforms and malformed versions", () => {
   const workspace = mkdtempSync(join(tmpdir(), "letscube-release-invalid-"));
   const artifact = join(workspace, "candidate.apk");
   writeFileSync(artifact, "fixture");
   for (const args of [
     ["ios", "stable", "0.1.0", "1", artifact],
+    ["macos", "stable", "0.1.0", "1", artifact],
     ["android", "stable", "v0.1", "1", artifact],
   ]) {
     const result = spawnSync(bash, [publisherPath, ...args], {

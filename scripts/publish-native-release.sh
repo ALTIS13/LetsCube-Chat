@@ -6,7 +6,7 @@ umask 022
 usage() {
   cat >&2 <<EOF
 Usage:
-  $0 PLATFORM CHANNEL VERSION BUILD ARTIFACT [NOTES]
+  $0 PLATFORM CHANNEL VERSION BUILD ARTIFACT [NOTES] [--highlights-file FILE]
   $0 windows VERSION INSTALLER NOTES --channel stable|test \\
     --updater-artifact SIGNED_BUNDLE --signature-file SIGNATURE
 EOF
@@ -104,6 +104,47 @@ find_json_writer() {
   fail "missing JSON writer: jq or Python"
 }
 
+load_highlights() {
+  local path="$1"
+  require_regular_file "$path" "highlights file"
+  if [[ "$json_writer" == "jq" ]]; then
+    highlights_json="$(jq -ace '
+      if type != "array" or length < 1 or length > 6 then error("highlights") else . end
+      | map(
+          if type != "string" or (gsub("^\\s+|\\s+$"; "") | length) < 1
+            or (gsub("^\\s+|\\s+$"; "") | explode | map(if . > 65535 then 2 else 1 end) | add) > 140
+          then error("highlights")
+          else gsub("^\\s+|\\s+$"; "")
+          end
+        )
+    ' "$path")" || fail "highlights must be a UTF-8 JSON array of 1 to 6 non-empty strings up to 140 characters"
+    return
+  fi
+
+  highlights_json="$("$json_writer" - "$path" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as highlights_file:
+    value = json.load(highlights_file)
+
+if not isinstance(value, list) or not 1 <= len(value) <= 6:
+    raise ValueError("highlights")
+
+normalized = []
+for item in value:
+    if not isinstance(item, str):
+        raise ValueError("highlights")
+    item = item.strip()
+    if not item or len(item.encode("utf-16-le")) // 2 > 140:
+        raise ValueError("highlights")
+    normalized.append(item)
+
+print(json.dumps(normalized, separators=(",", ":")))
+PY
+)" || fail "highlights must be a UTF-8 JSON array of 1 to 6 non-empty strings up to 140 characters"
+}
+
 acquire_publish_lock() {
   install -d -m 0755 "$release_root"
   require_confined_path "$release_root" "release root"
@@ -134,6 +175,7 @@ write_download_manifest() {
       --argjson build "$build" \
       --arg publishedAt "$published_at" \
       --arg notes "$notes" \
+      --argjson highlights "$highlights_json" \
       --arg url "$public_url" \
       --argjson size "$size" \
       --arg sha256 "$sha256" \
@@ -148,13 +190,14 @@ write_download_manifest() {
         minimumSupportedVersion: null,
         mandatory: false,
         notes: $notes,
+        highlights: $highlights,
         artifact: {url: $url, size: $size, sha256: $sha256}
       }' > "$output"
     return
   fi
 
   PLATFORM="$platform" CHANNEL="$channel" VERSION="$version" BUILD="$build" \
-    PUBLISHED_AT="$published_at" NOTES="$notes" PUBLIC_URL="$public_url" \
+    PUBLISHED_AT="$published_at" NOTES="$notes" HIGHLIGHTS="$highlights_json" PUBLIC_URL="$public_url" \
     ARTIFACT_SIZE="$size" ARTIFACT_SHA256="$sha256" \
     "$json_writer" - "$output" <<'PY'
 import json
@@ -172,6 +215,7 @@ document = {
     "minimumSupportedVersion": None,
     "mandatory": False,
     "notes": os.environ["NOTES"],
+    "highlights": json.loads(os.environ["HIGHLIGHTS"]),
     "artifact": {
         "url": os.environ["PUBLIC_URL"],
         "size": int(os.environ["ARTIFACT_SIZE"]),
@@ -243,13 +287,29 @@ PY
 }
 
 publish_download_catalog() {
-  [[ $# -ge 5 && $# -le 6 ]] || usage
+  [[ $# -ge 5 ]] || usage
   platform="$1"
   channel="$2"
   version="$3"
   build="$4"
   artifact="$(normalize_windows_path "$5")"
-  notes="${6:-}"
+  shift 5
+  notes=""
+  highlights_file=""
+  if [[ $# -gt 0 && "$1" != --* ]]; then
+    notes="$1"
+    shift
+  fi
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --highlights-file)
+        [[ -z "$highlights_file" && $# -ge 2 && "$2" != --* ]] || usage
+        highlights_file="$(normalize_windows_path "$2")"
+        shift 2
+        ;;
+      *) usage ;;
+    esac
+  done
 
   case "$platform" in
     android) extension="apk" ;;
@@ -262,6 +322,8 @@ publish_download_catalog() {
   require_regular_file "$artifact" "artifact"
   [[ "${artifact,,}" == *."$extension" ]] || fail "artifact extension must be .$extension"
   [[ ${#notes} -le 500 ]] || fail "notes exceed 500 characters"
+  highlights_json="[]"
+  [[ -z "$highlights_file" ]] || load_highlights "$highlights_file"
 
   local files_root="$release_root/releases/files/$platform"
   local manifest_root="$release_root/releases/v1/$platform"

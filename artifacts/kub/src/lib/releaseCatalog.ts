@@ -2,7 +2,7 @@ export const RELEASE_CATALOG_ORIGIN = "https://api.letscube.ru";
 export const RELEASE_CATALOG_TIMEOUT_MS = 5_000;
 export const RELEASE_CATALOG_TTL_MS = 6 * 60 * 60 * 1_000;
 
-export type ReleasePlatform = "android" | "windows";
+export type ReleasePlatform = "android" | "windows" | "macos" | "ios" | "web";
 export type ReleaseChannel = "stable";
 
 export type ReleaseArtifact = {
@@ -22,6 +22,7 @@ export type ReleaseManifest = {
   minimumSupportedVersion: string | null;
   mandatory: boolean;
   notes: string;
+  highlights: string[];
   artifact: ReleaseArtifact | null;
 };
 
@@ -56,6 +57,8 @@ type LoadOptions = {
 const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const MAX_NOTES_LENGTH = 500;
+const MAX_HIGHLIGHTS = 6;
+const MAX_HIGHLIGHT_LENGTH = 140;
 
 export class ReleaseCatalogError extends Error {
   readonly code: string;
@@ -88,6 +91,7 @@ export function parseReleaseManifest(
   if (typeof value.notes !== "string" || value.notes.length > MAX_NOTES_LENGTH) {
     throw new ReleaseCatalogError("notes");
   }
+  const highlights = parseHighlights(value.highlights);
 
   const artifact = value.artifact === null
     ? null
@@ -106,6 +110,7 @@ export function parseReleaseManifest(
     minimumSupportedVersion,
     mandatory: value.mandatory,
     notes: value.notes,
+    highlights,
     artifact,
   };
 }
@@ -211,6 +216,19 @@ function parseArtifact(input: unknown, platform: ReleasePlatform, version: strin
     throw new ReleaseCatalogError("artifact_sha256");
   }
   return { url: url.toString(), size, sha256: value.sha256 };
+}
+
+function parseHighlights(value: unknown): string[] {
+  if (value == null) return [];
+  if (!Array.isArray(value) || value.length > MAX_HIGHLIGHTS) {
+    throw new ReleaseCatalogError("highlights");
+  }
+  return value.map((item) => {
+    if (typeof item !== "string" || !item.trim() || item.trim().length > MAX_HIGHLIGHT_LENGTH) {
+      throw new ReleaseCatalogError("highlights");
+    }
+    return item.trim();
+  });
 }
 
 function requireSemVer(value: unknown, code: string): string {

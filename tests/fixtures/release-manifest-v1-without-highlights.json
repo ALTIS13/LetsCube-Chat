@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "platform": "android",
+  "channel": "stable",
+  "available": true,
+  "version": "0.1.0",
+  "build": 1,
+  "publishedAt": "2026-07-12T00:00:00.000Z",
+  "minimumSupportedVersion": null,
+  "mandatory": false,
+  "notes": "Legacy v1 release manifest",
+  "artifact": {
+    "url": "https://api.letscube.ru/releases/files/android/0.1.0/letscube-0.1.0.apk",
+    "size": 8734685,
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "futureMetadata": {
+    "ignored": true
+  }
+}
