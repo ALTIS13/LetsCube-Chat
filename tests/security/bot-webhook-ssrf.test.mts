@@ -12,6 +12,7 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  createPinnedWebhookLookup,
   decryptWebhookSecret,
   deliverWebhook,
   encryptWebhookSecret,
@@ -96,6 +97,12 @@ test("webhook DNS policy rejects special IPv6 and transition answers", async () 
     "fe80::1",
     "fec0::1",
     "ff02::1",
+    "3fff::1",
+    "3ffe::1",
+    "3000::1",
+    "5f00::1",
+    "100:0:0:1::1",
+    "4000::1",
   ]) {
     await assert.rejects(
       validateWebhookTarget("https://hooks.example.test/path", async () => [
@@ -103,6 +110,15 @@ test("webhook DNS policy rejects special IPv6 and transition answers", async () 
       ]),
       { message: "webhook_target_blocked" },
     );
+  }
+});
+
+test("webhook IPv6 policy admits representative public global-unicast addresses", async () => {
+  for (const address of ["2001:4860:4860::8888", "2606:2800:220:1:248:1893:25c8:1946"]) {
+    const target = await validateWebhookTarget("https://hooks.example.test/path", async () => [
+      { address, family: 6 },
+    ]);
+    assert.deepEqual(target.addresses, [{ address, family: 6 }]);
   }
 });
 
@@ -117,6 +133,64 @@ test("normal public HTTPS target preserves canonical hostname and all answers", 
     { address: "93.184.216.34", family: 4 },
     { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 },
   ]);
+});
+
+test("pinned lookup honors scalar and all callback contracts on the real Node HTTPS path", async () => {
+  const lookup = createPinnedWebhookLookup({
+    address: "93.184.216.34",
+    family: 4,
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    lookup("hooks.example.test", {}, (error, address, family) => {
+      try {
+        assert.ifError(error);
+        assert.equal(address, "93.184.216.34");
+        assert.equal(family, 4);
+        resolve();
+      } catch (caught) {
+        reject(caught);
+      }
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    lookup("hooks.example.test", { all: true }, (error, addresses) => {
+      try {
+        assert.ifError(error);
+        assert.deepEqual(addresses, [{ address: "93.184.216.34", family: 4 }]);
+        resolve();
+      } catch (caught) {
+        reject(caught);
+      }
+    });
+  });
+
+  let nodeRequestedAll = false;
+  const controller = new AbortController();
+  await new Promise<void>((resolve, reject) => {
+    const request = httpsRequest(
+      "https://hooks.example.test:443/",
+      {
+        agent: false,
+        autoSelectFamily: true,
+        lookup(hostname, options, callback) {
+          nodeRequestedAll = options.all === true;
+          lookup(hostname, options, (...callbackArguments: any[]) => {
+            (callback as (...args: any[]) => void)(...callbackArguments);
+            queueMicrotask(() => controller.abort());
+          });
+        },
+        signal: controller.signal,
+      },
+      () => reject(new Error("unexpected_public_response")),
+    );
+    request.once("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "ERR_INVALID_IP_ADDRESS") reject(error);
+      else resolve();
+    });
+    request.end();
+  });
+  assert.equal(nodeRequestedAll, true);
 });
 
 test("AES-256-GCM secret handling requires a canonical 32-byte key and rejects tampering", () => {
@@ -233,6 +307,47 @@ test("delivery classification retries only transient HTTP and network failures",
     errorCode: "http_client_error",
     httpStatus: 400,
   });
+});
+
+test("one per-hop deadline bounds DNS and passes only remaining time to HTTPS", async () => {
+  const startedAt = Date.now();
+  let transportCount = 0;
+  const timedOut = await deliverWebhook({
+    url: "https://hooks.example.test/hook",
+    payload: { update_id: 401 },
+    secret: TEST_WEBHOOK_SECRET,
+    perHopTimeoutMs: 30,
+    resolver: async () => await new Promise<never>(() => undefined),
+    transport: async () => {
+      transportCount += 1;
+      return { statusCode: 204 };
+    },
+  });
+  assert.deepEqual(timedOut, {
+    kind: "retry",
+    errorCode: "webhook_timeout",
+    httpStatus: null,
+  });
+  assert.equal(transportCount, 0);
+  assert.ok(Date.now() - startedAt < 500);
+
+  let remainingTimeout = 0;
+  const delivered = await deliverWebhook({
+    url: "https://hooks.example.test/hook",
+    payload: { update_id: 402 },
+    secret: TEST_WEBHOOK_SECRET,
+    perHopTimeoutMs: 100,
+    resolver: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      return [{ address: "93.184.216.34", family: 4 }];
+    },
+    transport: async (request) => {
+      remainingTimeout = request.timeoutMs;
+      return { statusCode: 204 };
+    },
+  });
+  assert.equal(delivered.kind, "delivered");
+  assert.ok(remainingTimeout > 0 && remainingTimeout < 100);
 });
 
 test("pinned HTTPS transport preserves TLS hostname and bounds timeout and chunked responses", async (t) => {

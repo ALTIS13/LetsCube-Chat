@@ -3208,12 +3208,17 @@ begin
     and webhook.state = 'enabled';
   v_configured := found;
 
-  select least(pg_catalog.count(*), 1000000)::integer
+  select pg_catalog.count(*)::integer
   into v_pending
-  from private.bot_updates queued
-  where queued.bot_id = p_bot_id
-    and queued.acknowledged_at is null
-    and queued.expires_at > pg_catalog.now();
+  from (
+    select 1
+    from private.bot_updates queued
+    where queued.bot_id = p_bot_id
+      and queued.acknowledged_at is null
+      and queued.expires_at > pg_catalog.now()
+    limit 1000001
+  ) bounded_pending;
+  v_pending := least(v_pending, 1000000);
 
   return pg_catalog.jsonb_build_object(
     'configured', v_configured,

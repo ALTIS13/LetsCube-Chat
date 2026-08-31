@@ -2364,7 +2364,14 @@ begin
   if coalesce((v_webhook_info->>'configured')::boolean, false) is not true
      or v_webhook_info ? 'target_url'
      or v_webhook_info ? 'secret_ciphertext'
-     or v_webhook_info ? 'secret_fingerprint' then
+     or v_webhook_info ? 'secret_fingerprint'
+     or (v_webhook_info->>'pending_update_count')::integer <> (
+       select least(pg_catalog.count(*), 1000000)::integer
+       from private.bot_updates queued
+       where queued.bot_id = v_bot_id
+         and queued.acknowledged_at is null
+         and queued.expires_at > pg_catalog.now()
+     ) then
     raise exception 'bot_webhook_info_exposed_private_data';
   end if;
 

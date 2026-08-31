@@ -104,6 +104,7 @@ export function createBotMethodRouter(input: {
   tokenRepository: BotTokenRepository;
 }): RequestHandler {
   return async (request, response) => {
+    let cleanupAbortListeners = (): void => undefined;
     const requestId =
       typeof request.id === "string" && request.id.length <= 128
         ? request.id
@@ -124,14 +125,30 @@ export function createBotMethodRouter(input: {
       const context: BotMethodContext = { bot, requestId };
       if (method === "getUpdates") {
         const abortController = new AbortController();
-        request.once("aborted", () => abortController.abort());
+        const abort = (): void => abortController.abort();
+        const abortIfResponseIncomplete = (): void => {
+          if (!response.writableFinished) abort();
+        };
+        request.once("aborted", abort);
+        response.once("close", abortIfResponseIncomplete);
+        request.socket.once("close", abortIfResponseIncomplete);
+        cleanupAbortListeners = () => {
+          request.removeListener("aborted", abort);
+          response.removeListener("close", abortIfResponseIncomplete);
+          request.socket.removeListener("close", abortIfResponseIncomplete);
+        };
         context.signal = abortController.signal;
       }
       const result = await handler(context, body);
-      response.json(botSuccess(result));
+      if (!response.destroyed && !response.writableEnded) {
+        response.json(botSuccess(result));
+      }
     } catch (error) {
+      if (response.destroyed || response.writableEnded) return;
       const failure = toBotApiErrorResponse(error, requestId);
       response.status(failure.status).json(failure.body);
+    } finally {
+      cleanupAbortListeners();
     }
   };
 }

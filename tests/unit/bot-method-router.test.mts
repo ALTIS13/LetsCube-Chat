@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { createServer, request as httpRequest, type Server } from "node:http";
+import { createConnection } from "node:net";
 import { Writable } from "node:stream";
 import test from "node:test";
 
@@ -8,6 +10,7 @@ import pino from "../../artifacts/api-server/node_modules/pino/pino.js";
 import { createBotGatewayApp } from "../../artifacts/api-server/src/bot/app.ts";
 import { BotApiError } from "../../artifacts/api-server/src/bot/errors.ts";
 import {
+  createBotMethodRouter,
   createBotRequestFingerprint,
   exactAuthorizationHeader,
   createTask3MethodHandlers,
@@ -221,6 +224,108 @@ test("router invokes only the selected authenticated handler with parsed input",
       },
     },
   ]);
+});
+
+test("getUpdates aborts after a fully received body when the response socket closes", async (t) => {
+  let handlerStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    handlerStarted = resolve;
+  });
+  let handlerAborted!: () => void;
+  const aborted = new Promise<void>((resolve) => {
+    handlerAborted = resolve;
+  });
+  const server = await listen(
+    createTestApp({
+      getUpdates: async (context) => {
+        handlerStarted();
+        assert.ok(context.signal);
+        await new Promise<void>((resolve) => {
+          context.signal?.addEventListener(
+            "abort",
+            () => {
+              handlerAborted();
+              resolve();
+            },
+            { once: true },
+          );
+        });
+        return [];
+      },
+    }),
+  );
+  t.after(() => close(server));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const body = JSON.stringify({ timeout: 30 });
+  const socket = createConnection({ host: "127.0.0.1", port: address.port });
+  t.after(() => socket.destroy());
+  await new Promise<void>((resolve, reject) => {
+    socket.once("connect", resolve);
+    socket.once("error", reject);
+  });
+  socket.write(
+    [
+      "POST /bot/v1/getUpdates HTTP/1.1",
+      `Host: 127.0.0.1:${address.port}`,
+      `Authorization: ${AUTHORIZATION}`,
+      "Content-Type: application/json",
+      `Content-Length: ${Buffer.byteLength(body)}`,
+      "Connection: close",
+      "",
+      body,
+    ].join("\r\n"),
+  );
+  await started;
+  socket.destroy();
+  await Promise.race([
+    aborted,
+    new Promise<never>((_resolve, reject) =>
+      setTimeout(() => reject(new Error("long_poll_not_aborted")), 500),
+    ),
+  ]);
+});
+
+test("getUpdates removes request, response, and socket abort listeners after completion", async () => {
+  const socket = new EventEmitter();
+  const request = Object.assign(new EventEmitter(), {
+    id: REQUEST_ID,
+    params: { method: "getUpdates" },
+    body: { timeout: 0 },
+    rawHeaders: ["Authorization", AUTHORIZATION],
+    headersDistinct: { authorization: [AUTHORIZATION] },
+    socket,
+  });
+  let responseBody: unknown;
+  const response = Object.assign(new EventEmitter(), {
+    destroyed: false,
+    writableEnded: false,
+    writableFinished: false,
+    status() {
+      return this;
+    },
+    json(value: unknown) {
+      responseBody = value;
+      this.writableEnded = true;
+      this.writableFinished = true;
+      return this;
+    },
+  });
+  const router = createBotMethodRouter({
+    handlers: { getUpdates: async () => [] },
+    tokenRepository: {
+      async authenticateBotToken() {
+        return { botId: BOT_ID, tokenId: TOKEN_ID };
+      },
+    },
+  });
+
+  await router(request as any, response as any, () => undefined);
+
+  assert.deepEqual(responseBody, { ok: true, result: [] });
+  assert.equal(request.listenerCount("aborted"), 0);
+  assert.equal(response.listenerCount("close"), 0);
+  assert.equal(socket.listenerCount("close"), 0);
 });
 
 test("unknown and uninstalled extension methods return method_not_found", async (t) => {

@@ -12,6 +12,10 @@ const bindingSpec = readFileSync(
   "utf8",
 );
 const dbSmoke = readFileSync("tests/server/bot-platform-db-smoke.sql", "utf8");
+const concurrencyProbe = readFileSync(
+  "tests/server/bot-platform-db-concurrency-probe.sql",
+  "utf8",
+);
 
 const publicTables = ["bots", "bot_owners", "bot_commands", "chat_bot_members"];
 const privateTables = [
@@ -435,6 +439,28 @@ test("webhook mutation drop and finish metadata are transactional and bounded", 
   assert.match(normalizedSql, /http_status = p_http_status/);
   assert.match(normalizedSql, /interval '14 days'/);
   assert.match(normalizedSql, /interval '90 days'/);
+});
+
+test("webhook info counts only a bounded pending-update subquery", () => {
+  assert.match(
+    normalizedSql,
+    /select pg_catalog\.count\(\*\)[\s\S]*from \([\s\S]*from private\.bot_updates queued[\s\S]*limit 1000001[\s\S]*\) bounded_pending/,
+  );
+  assert.doesNotMatch(
+    normalizedSql,
+    /select least\(pg_catalog\.count\(\*\), 1000000\)::integer[\s\S]*from private\.bot_updates queued/,
+  );
+});
+
+test("two-session concurrency probe covers claim ordering and poll/webhook locking", () => {
+  const normalizedProbe = concurrencyProbe.replace(/\s+/g, " ").toLowerCase();
+  assert.match(normalizedProbe, /dblink_connect\('claim_session_a'/);
+  assert.match(normalizedProbe, /dblink_connect\('claim_session_b'/);
+  assert.match(normalizedProbe, /bot_delivery_claim_internal/);
+  assert.match(normalizedProbe, /claim_session_b_bypassed_per_bot_ordering_or_skip_locked/);
+  assert.match(normalizedProbe, /dblink_is_busy\('claim_session_b'\)/);
+  assert.match(normalizedProbe, /webhook_mutation_did_not_wait_for_polling_lease_lock/);
+  assert.match(normalizedProbe, /bot_platform_db_concurrency_probe_ok/);
 });
 
 test("webhook disable result does not depend on delivery lease cleanup", () => {

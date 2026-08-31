@@ -20,6 +20,46 @@ const CIPHERTEXT_RE = /^enc:v1:([A-Za-z0-9_-]+)$/;
 
 const blockedIpv4 = new BlockList();
 const blockedIpv6 = new BlockList();
+const publicIpv6 = new BlockList();
+
+// IANA IPv6 Global Unicast Address Space allocations, reviewed 2026-08-31.
+// Unlisted parts of 2000::/3 remain reserved and therefore fail closed.
+for (const [network, prefix] of [
+  ["2001:200::", 23],
+  ["2001:400::", 23],
+  ["2001:600::", 23],
+  ["2001:800::", 22],
+  ["2001:c00::", 23],
+  ["2001:e00::", 23],
+  ["2001:1200::", 23],
+  ["2001:1400::", 22],
+  ["2001:1800::", 23],
+  ["2001:1a00::", 23],
+  ["2001:1c00::", 22],
+  ["2001:2000::", 19],
+  ["2001:4000::", 23],
+  ["2001:4200::", 23],
+  ["2001:4400::", 23],
+  ["2001:4600::", 23],
+  ["2001:4800::", 23],
+  ["2001:4a00::", 23],
+  ["2001:4c00::", 23],
+  ["2001:5000::", 20],
+  ["2001:8000::", 19],
+  ["2001:a000::", 20],
+  ["2001:b000::", 20],
+  ["2003::", 18],
+  ["2400::", 11],
+  ["2600::", 12],
+  ["2610::", 23],
+  ["2620::", 23],
+  ["2630::", 12],
+  ["2800::", 12],
+  ["2a00::", 11],
+  ["2c00::", 12],
+] as const) {
+  publicIpv6.addSubnet(network, prefix, "ipv6");
+}
 
 for (const [network, prefix] of [
   ["0.0.0.0", 8],
@@ -50,6 +90,7 @@ for (const [network, prefix] of [
   ["2001::", 23],
   ["2001:db8::", 32],
   ["2002::", 16],
+  ["3fff::", 20],
   ["fc00::", 7],
   ["fe80::", 10],
   ["fec0::", 10],
@@ -82,6 +123,7 @@ export type WebhookTransport = (input: {
   target: ValidatedWebhookTarget;
   body: Buffer;
   secret: string;
+  timeoutMs: number;
 }) => Promise<WebhookTransportResult>;
 
 export type WebhookDeliveryResult = {
@@ -118,7 +160,31 @@ function isBlockedAddress(answer: WebhookAddress): boolean {
   if (detectedFamily !== answer.family) return true;
   return answer.family === 4
     ? blockedIpv4.check(answer.address, "ipv4")
-    : blockedIpv6.check(answer.address, "ipv6");
+    : !publicIpv6.check(answer.address, "ipv6") ||
+        blockedIpv6.check(answer.address, "ipv6");
+}
+
+export function createPinnedWebhookLookup(
+  selected: WebhookAddress,
+): NonNullable<RequestOptions["lookup"]> {
+  return ((_hostname, options, callback) => {
+    if (typeof options === "object" && options.all === true) {
+      (
+        callback as (
+          error: NodeJS.ErrnoException | null,
+          addresses: LookupAddress[],
+        ) => void
+      )(null, [{ address: selected.address, family: selected.family }]);
+      return;
+    }
+    (
+      callback as (
+        error: NodeJS.ErrnoException | null,
+        address: string,
+        family: number,
+      ) => void
+    )(null, selected.address, selected.family);
+  }) as NonNullable<RequestOptions["lookup"]>;
 }
 
 export const resolveWebhookHostname: WebhookResolver = async (hostname) => {
@@ -283,9 +349,7 @@ export async function requestPinnedWebhook(input: {
         "content-length": input.body.byteLength,
         [WEBHOOK_SECRET_HEADER]: input.secret,
       },
-      lookup(_hostname, _options, callback) {
-        callback(null, selected.address, selected.family);
-      },
+      lookup: createPinnedWebhookLookup(selected),
       ...input.tls,
     };
     const requestFactory = input.request ?? httpsRequest;
@@ -350,40 +414,93 @@ function classifiedResult(
   return { kind, errorCode, httpStatus };
 }
 
+function withinDeadline<T>(operation: Promise<T>, deadline: number): Promise<T> {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    return Promise.reject(new WebhookTransportError("webhook_timeout"));
+  }
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const finish = (callback: () => void): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      callback();
+    };
+    const timer = setTimeout(
+      () =>
+        finish(() =>
+          reject(new WebhookTransportError("webhook_timeout")),
+        ),
+      remaining,
+    );
+    timer.unref();
+    operation.then(
+      (value) => finish(() => resolve(value)),
+      (error: unknown) => finish(() => reject(error)),
+    );
+  });
+}
+
 export async function deliverWebhook(input: {
   url: string;
   payload: Record<string, unknown>;
   secret: string;
   resolver?: WebhookResolver;
   transport?: WebhookTransport;
+  perHopTimeoutMs?: number;
 }): Promise<WebhookDeliveryResult> {
   const resolver = input.resolver ?? resolveWebhookHostname;
   const transport = input.transport ?? ((request) => requestPinnedWebhook(request));
   const body = Buffer.from(JSON.stringify(input.payload), "utf8");
+  const perHopTimeoutMs = Math.min(
+    REQUEST_TIMEOUT_MS,
+    Math.max(1, Math.trunc(input.perHopTimeoutMs ?? REQUEST_TIMEOUT_MS)),
+  );
   if (body.byteLength > MAX_RESPONSE_BYTES) {
     return classifiedResult("dead_letter", "payload_too_large", null);
   }
 
   let currentUrl = input.url;
   let initialOrigin: string | undefined;
+  let redirectStatus: number | null = null;
   for (let redirectCount = 0; ; redirectCount += 1) {
+    const hopDeadline = Date.now() + perHopTimeoutMs;
     let target: ValidatedWebhookTarget;
     try {
-      target = await validateWebhookTarget(currentUrl, resolver);
-    } catch {
+      target = await withinDeadline(
+        validateWebhookTarget(currentUrl, resolver),
+        hopDeadline,
+      );
+    } catch (error) {
+      if (
+        error instanceof WebhookTransportError &&
+        error.code === "webhook_timeout"
+      ) {
+        return classifiedResult("retry", error.code, null);
+      }
       return classifiedResult(
         "dead_letter",
         redirectCount === 0
           ? "webhook_target_invalid"
           : "redirect_target_invalid",
-        null,
+        redirectStatus,
       );
     }
     initialOrigin ??= target.url.origin;
 
     let response: WebhookTransportResult;
     try {
-      response = await transport({ target, body, secret: input.secret });
+      const remainingTimeoutMs = hopDeadline - Date.now();
+      if (remainingTimeoutMs <= 0) {
+        throw new WebhookTransportError("webhook_timeout");
+      }
+      response = await transport({
+        target,
+        body,
+        secret: input.secret,
+        timeoutMs: remainingTimeoutMs,
+      });
     } catch (error) {
       const code =
         error instanceof WebhookTransportError ? error.code : "network_error";
@@ -410,16 +527,11 @@ export async function deliverWebhook(input: {
       } catch {
         return classifiedResult("dead_letter", "redirect_invalid", status);
       }
-      let validatedRedirect: ValidatedWebhookTarget;
-      try {
-        validatedRedirect = await validateWebhookTarget(redirected.href, resolver);
-      } catch {
-        return classifiedResult("dead_letter", "redirect_target_invalid", status);
-      }
-      if (validatedRedirect.url.origin !== initialOrigin) {
+      if (redirected.origin !== initialOrigin) {
         return classifiedResult("dead_letter", "redirect_origin_invalid", status);
       }
-      currentUrl = validatedRedirect.url.href;
+      redirectStatus = status;
+      currentUrl = redirected.href;
       continue;
     }
     if ([408, 409, 425, 429].includes(status) || status >= 500) {

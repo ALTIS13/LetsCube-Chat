@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import test from "node:test";
 
 import { BotApiError } from "../../artifacts/api-server/src/bot/errors.ts";
+import { deliverWebhook } from "../../artifacts/api-server/src/bot/webhookSecurity.ts";
 import {
   createUpdateDeliveryHandlers,
   type BotDeliveryRepository,
@@ -357,4 +358,79 @@ test("worker skips claims invalidated by webhook replacement before dispatch", a
   });
   assert.equal(delivered, 0);
   assert.deepEqual(result, { claimed: 1, delivered: 0, retried: 0, deadLettered: 0 });
+});
+
+test("a never-settling resolver cannot block later claims in the sequential worker batch", async () => {
+  const finished: Array<{ attemptId: number; status: string; errorCode: string | null }> = [];
+  const workerRepository: WebhookWorkerRepository = {
+    async claim() {
+      return [
+        {
+          attemptId: 19,
+          botId: BOT_ID,
+          updateId: 53,
+          attemptCount: 1,
+          webhookEpoch: 6,
+        },
+        {
+          attemptId: 20,
+          botId: "33333333-3333-4333-8333-333333333333",
+          updateId: 54,
+          attemptCount: 1,
+          webhookEpoch: 1,
+        },
+      ];
+    },
+    async prepare({ attemptId }) {
+      return {
+        targetUrl:
+          attemptId === 19
+            ? "https://hooks.example.test/stuck"
+            : "https://hooks.example.test/ready",
+        secretCiphertext: "enc:v1:placeholder",
+        payload: { message: { attemptId } },
+      };
+    },
+    async finish(input) {
+      finished.push({
+        attemptId: input.attemptId,
+        status: input.status,
+        errorCode: input.errorCode,
+      });
+      return true;
+    },
+    async cleanup() {
+      return {};
+    },
+  };
+
+  const startedAt = Date.now();
+  const result = await runWebhookDeliveryBatch({
+    repository: workerRepository,
+    encryptionKey: KEY,
+    claimToken: LEASE_ID,
+    batchSize: 10,
+    decryptSecret: () => TEST_WEBHOOK_SECRET,
+    deliver: async (request) =>
+      deliverWebhook({
+        ...request,
+        perHopTimeoutMs: 30,
+        resolver: request.url.endsWith("/stuck")
+          ? async () => await new Promise<never>(() => undefined)
+          : async () => [{ address: "93.184.216.34", family: 4 }],
+        transport: async () => ({ statusCode: 204 }),
+      }),
+  });
+
+  assert.ok(Date.now() - startedAt < 500);
+  assert.deepEqual(result, {
+    claimed: 2,
+    delivered: 1,
+    retried: 1,
+    deadLettered: 0,
+  });
+  assert.deepEqual(finished, [
+    { attemptId: 19, status: "retry", errorCode: "webhook_timeout" },
+    { attemptId: 20, status: "delivered", errorCode: null },
+  ]);
 });
