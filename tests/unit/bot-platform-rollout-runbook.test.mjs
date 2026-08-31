@@ -179,6 +179,7 @@ test("restore flow executes the manifest-bound dump and rejects an empty or mism
     source.indexOf("## Рубеж 2:"),
     source.indexOf("## Рубеж 3:"),
   );
+  const apply = source.slice(source.indexOf("## Рубеж 8:"));
 
   assert.match(restore, /BACKUP_DB_DUMP/);
   assert.match(
@@ -186,13 +187,35 @@ test("restore flow executes the manifest-bound dump and rejects an empty or mism
     /test "\$BACKUP_DB_DUMP" = "\$BACKUP_DIR\/db\/supabase-postgres\.custom"/,
   );
   assert.match(restore, /BACKUP_DB_DUMP_SHA256/);
+  assert.match(
+    restore,
+    /test "\$BACKUP_DB_ROLES" = "\$BACKUP_DIR\/db\/supabase-roles\.sql"/,
+  );
+  assert.match(restore, /BACKUP_DB_ROLES_SHA256/);
+  assert.match(restore, /PASSWORD\|SCRAM-SHA\|md5/);
+  assert.match(restore, /CREATE ROLE supabase_realtime_admin/);
+  assert.match(restore, /ALTER ROLE supabase_realtime_admin WITH NOSUPERUSER NOINHERIT/);
   assert.match(restore, /SHA256SUMS/);
   assert.match(restore, /manifest_sha_for/);
   assert.match(restore, /pg_restore[\s\S]{0,300}--exit-on-error/);
   assert.match(restore, /--dbname="service=\$REHEARSAL_PGSERVICE"/);
   assert.match(restore, /"\$BACKUP_DB_DUMP"[\s\S]{0,100}>"\$RESTORE_LOG" 2>&1/);
   assert.match(restore, /chmod 600 "\$RESTORE_LOG"/);
-  assert.match(restore, /pg_restore[\s\S]{0,200}--data-only[\s\S]{0,200}--table="\$relation"/);
+  assert.match(
+    restore,
+    /pg_restore[\s\S]{0,240}--data-only[\s\S]{0,120}--schema="\$schema"[\s\S]{0,120}--table="\$table"/,
+  );
+  assert.match(restore, /relation="\$schema\.\$table"/);
+  assert.match(restore, /count_dump_copy_rows auth users/);
+  assert.match(restore, /host\(inet_server_addr\(\)\)/);
+  assert.match(restore, /RESTORE_ROLE=.*select current_user/);
+  assert.match(restore, /test "\$RESTORE_ROLE" = "supabase_admin"/);
+  assert.match(restore, /current_setting\('cron\.database_name', true\)/);
+  assert.match(restore, /test "\$CRON_DATABASE_NAME" = "\$REHEARSAL_DB_NAME"/);
+  assert.match(restore, /supabase_realtime_admin/);
+  assert.match(restore, /pg_has_role\('postgres', 'supabase_realtime_admin', 'MEMBER'\)/);
+  assert.match(restore, /restore_role=%s/);
+  assert.match(apply, /grep -Fxq 'restore_role=supabase_admin' "\$TARGET_IDENTITY_EVIDENCE"/);
   assert.match(restore, /COPY[\s\S]{0,500}rows > 1000000000/);
 
   for (const count of [
@@ -250,6 +273,10 @@ test("rehearsal endpoints are derived from one internal compose network", () => 
     /POSTGREST_HEALTH_URL="http:\/\/\$\{REHEARSAL_POSTGREST_SERVICE\}:3000\/"/,
   );
   assert.match(restore, /docker run --rm --network "\$REHEARSAL_NETWORK"/);
+  assert.match(restore, /for attempt in \$\(seq 1 30\)/);
+  assert.match(restore, /test "\$container_status" != "exited"/);
+  assert.match(restore, /sleep 2/);
+  assert.match(restore, /test "\$health_ready" = "1"/);
   assert.doesNotMatch(restore, /REHEARSAL_(?:AUTH|STORAGE|POSTGREST)_HEALTH_URL/);
   assert.doesNotMatch(restore, /https?:\/\/(?:api|app)\.letscube\.ru/i);
 });
@@ -265,6 +292,10 @@ test("published ports reject wildcards and are bound into the restore gate", () 
   assert.match(restore, /\.HostConfig\.PortBindings/);
   assert.match(restore, /\.NetworkSettings\.Ports/);
   assert.match(restore, /cmp --silent "\$host_config_ports" "\$network_settings_ports"/);
+  assert.match(
+    restore,
+    /sed -i '\/\^\[\[:space:\]\]\*\$\/d' "\$host_config_ports" "\$network_settings_ports"/,
+  );
   assert.match(restore, /127\.0\.0\.1\|::1\) ;;/);
   assert.match(restore, /""\|0\.0\.0\.0\|::\|\*\) exit [0-9]+ ;;/);
   assert.match(
@@ -330,6 +361,7 @@ test("storage restore and checksummed gate bind archive parity and all evidence"
 
   for (const binding of [
     "backup_db_dump_sha256",
+    "backup_db_roles_sha256",
     "backup_storage_archive_sha256",
     "rehearsal_compose_project",
     "rehearsal_network_name",
@@ -406,6 +438,11 @@ test("storage archive restores one exact storage root beside the bind source", (
   );
   assert.match(restoreScript, /tar -tzf "\$BACKUP_STORAGE_ARCHIVE" \|\s+awk/);
   assert.match(restoreScript, /tar -tvzf "\$BACKUP_STORAGE_ARCHIVE" \|\s+awk/);
+  assert.match(restoreScript, /entry_type == "h"/);
+  assert.match(restoreScript, /hardlink_marker = " link to "/);
+  assert.match(restoreScript, /hardlink_target/);
+  assert.match(restoreScript, /hardlink_target !~ \/\^storage\\\//);
+  assert.match(restoreScript, /entry_type !~ \/\^\[-dh\]\$\//);
   assert.match(restoreScript, /\$0 == "storage\/"/);
   assert.match(restoreScript, /root_entries != 1/);
   assert.match(restoreScript, /\$0 !~ \/\^storage\\\//);
@@ -424,8 +461,8 @@ test("storage archive restores one exact storage root beside the bind source", (
     restoreScript,
     /test "\$STORAGE_MOUNT_SOURCE" = "\$\(realpath -e "\$REHEARSAL_STORAGE_ROOT"\)"/,
   );
-  assert.match(restoreScript, /printf 'version=4\\n'/);
-  assert.match(apply, /test "\$\(gate_value version\)" = "4"/);
+  assert.match(restoreScript, /printf 'version=6\\n'/);
+  assert.match(apply, /test "\$\(gate_value version\)" = "6"/);
   assert.doesNotMatch(restoreScript, /\/var\/lib\/storage\/storage/);
 });
 

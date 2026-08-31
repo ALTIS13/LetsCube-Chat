@@ -153,7 +153,7 @@ stat -c '%n %s %y' "$BACKUP_DIR" "$BACKUP_DIR/MANIFEST.txt" "$BACKUP_DIR/SHA256S
 ## Рубеж 2: полный isolated PG17 restore rehearsal
 
 1. Подготовить отдельный Compose-файл с чистым PG17, Auth, Storage и PostgREST. Project name обязан иметь вид `letscube-bot-rehearsal-*`, единственная сеть сервисов должна быть `internal: true`, а DB host-port для libpq service может быть опубликован только на loopback.
-2. Указать точный custom dump текущего backup в `BACKUP_DB_DUMP`. Flow ниже требует штатные `db/supabase-postgres.custom` и `storage/supabase-storage.tgz`, сверяя оба с текущим `BACKUP_DIR/SHA256SUMS`; ссылка на другой каталог или файл запрещена.
+2. Указать точный custom dump текущего backup в `BACKUP_DB_DUMP`. Flow ниже требует штатные `db/supabase-postgres.custom`, password-free `db/supabase-roles.sql` и `storage/supabase-storage.tgz`, сверяя все три с текущим `BACKUP_DIR/SHA256SUMS`; ссылка на другой каталог или файл запрещена. Изолированный libpq service обязан аутентифицироваться штатной restore-ролью `supabase_admin`, иначе владельцы Supabase dump не могут быть восстановлены и flow останавливается до `pg_restore`.
 3. Не инициализировать Supabase schema до запуска flow. Он требует ноль user relations в target DB и пустой private storage bind mount, затем сам выполняет fail-stop database и object restore.
 4. Не задавать health URL. Они выводятся только из проверенных Compose service labels и проверяются из той же internal Docker network. Production DNS, произвольный host и внешний network этим flow не принимаются.
 5. Не выводить restore log, health response, имена storage objects или строки таблиц. Evidence содержит только локальные container/network identity, SHA-256 и privacy-safe aggregate counts.
@@ -187,19 +187,23 @@ done
 REHEARSAL_COMPOSE_FILE="$(realpath -e "$REHEARSAL_COMPOSE_FILE")"
 BACKUP_DIR="$(realpath -e "$BACKUP_DIR")"
 BACKUP_DB_DUMP="$(realpath -e "$BACKUP_DB_DUMP")"
+BACKUP_DB_ROLES="$(realpath -e "$BACKUP_DIR/db/supabase-roles.sql")"
 BACKUP_STORAGE_ARCHIVE="$(realpath -e "$BACKUP_DIR/storage/supabase-storage.tgz")"
 case "$BACKUP_DB_DUMP" in
   "$BACKUP_DIR"/*) ;;
   *) exit 72 ;;
 esac
 test "$BACKUP_DB_DUMP" = "$BACKUP_DIR/db/supabase-postgres.custom"
+test "$BACKUP_DB_ROLES" = "$BACKUP_DIR/db/supabase-roles.sql"
 test "$BACKUP_STORAGE_ARCHIVE" = "$BACKUP_DIR/storage/supabase-storage.tgz"
 
 CURRENT_BACKUP_SHA256SUMS_SHA256="$(sha256sum "$BACKUP_DIR/SHA256SUMS" | awk '{print $1}')"
 test "$CURRENT_BACKUP_SHA256SUMS_SHA256" = "$BACKUP_SHA256SUMS_SHA256"
 BACKUP_DB_RELATIVE="$(realpath --relative-to="$BACKUP_DIR" "$BACKUP_DB_DUMP")"
+BACKUP_DB_ROLES_RELATIVE="$(realpath --relative-to="$BACKUP_DIR" "$BACKUP_DB_ROLES")"
 BACKUP_STORAGE_RELATIVE="$(realpath --relative-to="$BACKUP_DIR" "$BACKUP_STORAGE_ARCHIVE")"
 [[ "$BACKUP_DB_RELATIVE" != ../* ]]
+test "$BACKUP_DB_ROLES_RELATIVE" = "db/supabase-roles.sql"
 test "$BACKUP_STORAGE_RELATIVE" = "storage/supabase-storage.tgz"
 
 manifest_sha_for() {
@@ -222,9 +226,17 @@ manifest_sha_for() {
 }
 
 BACKUP_DB_DUMP_SHA256="$(manifest_sha_for "$BACKUP_DB_RELATIVE")"
+BACKUP_DB_ROLES_SHA256="$(manifest_sha_for "$BACKUP_DB_ROLES_RELATIVE")"
 BACKUP_STORAGE_ARCHIVE_SHA256="$(manifest_sha_for "$BACKUP_STORAGE_RELATIVE")"
 test "$(sha256sum "$BACKUP_DB_DUMP" | awk '{print $1}')" = "$BACKUP_DB_DUMP_SHA256"
+test "$(sha256sum "$BACKUP_DB_ROLES" | awk '{print $1}')" = "$BACKUP_DB_ROLES_SHA256"
 test "$(sha256sum "$BACKUP_STORAGE_ARCHIVE" | awk '{print $1}')" = "$BACKUP_STORAGE_ARCHIVE_SHA256"
+if grep -Eq 'PASSWORD|SCRAM-SHA|md5[0-9a-f]{20,}' "$BACKUP_DB_ROLES"; then
+  exit 74
+fi
+grep -Fxq 'CREATE ROLE supabase_realtime_admin;' "$BACKUP_DB_ROLES"
+grep -Fxq 'ALTER ROLE supabase_realtime_admin WITH NOSUPERUSER NOINHERIT NOCREATEROLE NOCREATEDB NOLOGIN NOREPLICATION NOBYPASSRLS;' "$BACKUP_DB_ROLES"
+grep -Eq '^GRANT supabase_realtime_admin TO postgres( WITH INHERIT TRUE)? GRANTED BY supabase_admin;$' "$BACKUP_DB_ROLES"
 pg_restore --list "$BACKUP_DB_DUMP" >/dev/null
 tar -tzf "$BACKUP_STORAGE_ARCHIVE" |
   awk '
@@ -241,13 +253,28 @@ tar -tzf "$BACKUP_STORAGE_ARCHIVE" |
     }
   '
 tar -tvzf "$BACKUP_STORAGE_ARCHIVE" |
-  awk 'substr($1, 1, 1) !~ /^[-d]$/ { exit 75 }'
+  awk '
+    {
+      entry_type = substr($1, 1, 1)
+      if (entry_type !~ /^[-dh]$/) exit 75
+      if (entry_type == "h") {
+        hardlink_marker = " link to "
+        marker_position = index($0, hardlink_marker)
+        if (marker_position == 0) exit 75
+        hardlink_target = substr($0, marker_position + length(hardlink_marker))
+        if (hardlink_target !~ /^storage\// || hardlink_target == "storage/" || hardlink_target ~ /(^|\/)\.\.?($|\/)/) exit 75
+      }
+    }
+  '
 
 count_dump_copy_rows() {
-  local relation="$1"
+  local schema="$1"
+  local table="$2"
+  local relation="$schema.$table"
   pg_restore \
     --data-only \
-    --table="$relation" \
+    --schema="$schema" \
+    --table="$table" \
     --file=- \
     "$BACKUP_DB_DUMP" |
     awk -v relation="$relation" '
@@ -277,10 +304,10 @@ count_dump_copy_rows() {
     '
 }
 
-SOURCE_AUTH_USERS_COUNT="$(count_dump_copy_rows auth.users)"
-SOURCE_STORAGE_OBJECTS_COUNT="$(count_dump_copy_rows storage.objects)"
-SOURCE_MESSAGES_COUNT="$(count_dump_copy_rows public.messages)"
-SOURCE_PROFILES_COUNT="$(count_dump_copy_rows public.profiles)"
+SOURCE_AUTH_USERS_COUNT="$(count_dump_copy_rows auth users)"
+SOURCE_STORAGE_OBJECTS_COUNT="$(count_dump_copy_rows storage objects)"
+SOURCE_MESSAGES_COUNT="$(count_dump_copy_rows public messages)"
+SOURCE_PROFILES_COUNT="$(count_dump_copy_rows public profiles)"
 for count in \
   "$SOURCE_AUTH_USERS_COUNT" \
   "$SOURCE_STORAGE_OBJECTS_COUNT" \
@@ -358,6 +385,7 @@ snapshot_published_ports() {
   docker inspect --format \
     '{{range $container_port, $bindings := .NetworkSettings.Ports}}{{range $binding := $bindings}}{{printf "%s|%s|%s\n" $container_port $binding.HostIp $binding.HostPort}}{{end}}{{end}}' \
     "$container_id" >"$network_settings_ports"
+  sed -i '/^[[:space:]]*$/d' "$host_config_ports" "$network_settings_ports"
   LC_ALL=C sort -u -o "$host_config_ports" "$host_config_ports"
   LC_ALL=C sort -u -o "$network_settings_ports" "$network_settings_ports"
   cmp --silent "$host_config_ports" "$network_settings_ports"
@@ -409,7 +437,7 @@ test "${#STORAGE_MOUNT_SOURCES[@]}" -eq 1
 STORAGE_MOUNT_SOURCE="$(realpath -e "${STORAGE_MOUNT_SOURCES[0]}")"
 test "$STORAGE_MOUNT_SOURCE" = "$(realpath -e "$REHEARSAL_STORAGE_ROOT")"
 
-DB_IDENTITY_SQL="select current_database(), coalesce(inet_server_addr()::text, ''), current_setting('server_version_num'), (select system_identifier::text from pg_control_system()), to_char(pg_postmaster_start_time() at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US')"
+DB_IDENTITY_SQL="select current_database(), coalesce(host(inet_server_addr()), ''), current_setting('server_version_num'), (select system_identifier::text from pg_control_system()), to_char(pg_postmaster_start_time() at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US')"
 DB_IDENTITY_BEFORE="$(psql -X "service=$REHEARSAL_PGSERVICE" -AtF '|' -v ON_ERROR_STOP=1 -c "$DB_IDENTITY_SQL")"
 IFS='|' read -r DB_NAME INET_SERVER_ADDR PG_VERSION_NUM DB_SYSTEM_IDENTIFIER DB_POSTMASTER_STARTED \
   <<<"$DB_IDENTITY_BEFORE"
@@ -418,6 +446,14 @@ test "$INET_SERVER_ADDR" = "$DB_CONTAINER_IP"
 test "$PG_VERSION_NUM" -ge 170000
 [[ "$DB_SYSTEM_IDENTIFIER" =~ ^[0-9]+$ ]]
 test -n "$DB_POSTMASTER_STARTED"
+RESTORE_ROLE="$(psql -X "service=$REHEARSAL_PGSERVICE" -Atv ON_ERROR_STOP=1 -c 'select current_user')"
+test "$RESTORE_ROLE" = "supabase_admin"
+CRON_DATABASE_NAME="$(psql -X "service=$REHEARSAL_PGSERVICE" -Atv ON_ERROR_STOP=1 -c "select current_setting('cron.database_name', true)")"
+test "$CRON_DATABASE_NAME" = "$REHEARSAL_DB_NAME"
+REALTIME_ROLE_PROPERTIES="$(psql -X "service=$REHEARSAL_PGSERVICE" -AtF '|' -v ON_ERROR_STOP=1 -c "select rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolcanlogin, rolreplication, rolbypassrls from pg_roles where rolname = 'supabase_realtime_admin'")"
+test "$REALTIME_ROLE_PROPERTIES" = "f|f|f|f|f|f|f"
+REALTIME_ROLE_MEMBERSHIP="$(psql -X "service=$REHEARSAL_PGSERVICE" -Atv ON_ERROR_STOP=1 -c "select pg_has_role('postgres', 'supabase_realtime_admin', 'MEMBER')")"
+test "$REALTIME_ROLE_MEMBERSHIP" = "t"
 
 FRESH_USER_RELATION_COUNT="$(psql -X "service=$REHEARSAL_PGSERVICE" -Atv ON_ERROR_STOP=1 <<'SQL'
 select count(*)
@@ -536,9 +572,22 @@ probe_health() {
   local url="$3"
   local evidence="$4"
   local response="$HEALTH_RESPONSE_DIR/$label.response"
+  local health_ready=0
+  local container_status
   install -m 600 /dev/null "$response"
-  docker run --rm --network "$REHEARSAL_NETWORK" curlimages/curl:8.12.1 \
-    -fsS --max-time 15 "$url" >"$response"
+  for attempt in $(seq 1 30); do
+    : >"$response"
+    if docker run --rm --network "$REHEARSAL_NETWORK" curlimages/curl:8.12.1 \
+      -fsS --max-time 5 "$url" >"$response"; then
+      health_ready=1
+      break
+    fi
+    container_status="$(docker inspect --format '{{.State.Status}}' "$container_id")"
+    test "$container_status" != "exited"
+    test "$container_status" != "dead"
+    sleep 2
+  done
+  test "$health_ready" = "1"
   printf '%s_health=ok\ncontainer_id=%s\nnetwork_id=%s\nresponse_sha256=%s\n' \
     "$label" \
     "$container_id" \
@@ -581,12 +630,13 @@ printf 'storage_restore=ok\narchive_sha256=%s\nsource_storage_file_count=%s\ntar
   "$TARGET_STORAGE_TOTAL_BYTES" \
   >"$RESTORE_EVIDENCE_DIR/storage-evidence.txt"
 
-printf 'compose_project=%s\nnetwork_name=%s\nnetwork_id=%s\ndatabase_container_id=%s\ndatabase_system_identifier=%s\nauth_container_id=%s\nstorage_container_id=%s\npostgrest_container_id=%s\ndatabase_identity=%s\n' \
+printf 'compose_project=%s\nnetwork_name=%s\nnetwork_id=%s\ndatabase_container_id=%s\ndatabase_system_identifier=%s\nrestore_role=%s\nauth_container_id=%s\nstorage_container_id=%s\npostgrest_container_id=%s\ndatabase_identity=%s\n' \
   "$REHEARSAL_COMPOSE_PROJECT" \
   "$REHEARSAL_NETWORK" \
   "$REHEARSAL_NETWORK_ID" \
   "$REHEARSAL_DB_CONTAINER_ID" \
   "$DB_SYSTEM_IDENTIFIER" \
+  "$RESTORE_ROLE" \
   "$REHEARSAL_AUTH_CONTAINER_ID" \
   "$REHEARSAL_STORAGE_CONTAINER_ID" \
   "$REHEARSAL_POSTGREST_CONTAINER_ID" \
@@ -619,11 +669,12 @@ TARGET_IDENTITY_SHA256="$(sha256sum "$RESTORE_EVIDENCE_DIR/target-identity.txt" 
 PORT_BINDING_EVIDENCE_SHA256="$(sha256sum "$PORT_BINDING_EVIDENCE" | awk '{print $1}')"
 RESTORE_GATE="$ROLLOUT_DIR/restore-gate.env"
 {
-  printf 'version=4\n'
+  printf 'version=6\n'
   printf 'run_id=%s\n' "$RUN_ID"
   printf 'backup_dir=%s\n' "$BACKUP_DIR"
   printf 'backup_sha256sums_sha256=%s\n' "$BACKUP_SHA256SUMS_SHA256"
   printf 'backup_db_dump_sha256=%s\n' "$BACKUP_DB_DUMP_SHA256"
+  printf 'backup_db_roles_sha256=%s\n' "$BACKUP_DB_ROLES_SHA256"
   printf 'backup_storage_archive_sha256=%s\n' "$BACKUP_STORAGE_ARCHIVE_SHA256"
   printf 'rehearsal_compose_project=%s\n' "$REHEARSAL_COMPOSE_PROJECT"
   printf 'rehearsal_network_name=%s\n' "$REHEARSAL_NETWORK"
@@ -667,7 +718,7 @@ chmod 600 "$ROLLOUT_DIR/restore-gate.env.sha256"
 
 Published-port gate сравнивает `.HostConfig.PortBindings` и `.NetworkSettings.Ports` каждого rehearsal container. Auth, Storage и PostgREST обязаны не иметь published ports. DB также предпочтительно не публикуется; если host binding нужен для libpq service, разрешены только explicit `127.0.0.1` и `::1`. Empty `HostIp`, `0.0.0.0`, `::`, wildcard и любой другой адрес блокируют restore до первого SQL connection. Нормализованный evidence не содержит container names или application data и повторно проверяется exact apply gate.
 
-Storage archive обязан содержать ровно один top-level `storage/`, только его безопасные descendants и только обычные файлы/каталоги. Он дважды извлекается без вывода имён: сначала во временный private source scan с aggregate по `storage/`, затем в отдельный private archive parent под текущим `ROLLOUT_DIR`. Compose bind source и target aggregate указывают exact child `<archive-parent>/storage`, поэтому `/var/lib/storage/storage` не создаётся. File count и total uncompressed bytes должны быть ненулевыми и точно совпасть. Полные responses и restore log остаются mode `0600`; gate хранит только их hashes и privacy-safe counts. Без `restore-gate.env`, `restore-gate.env.sha256` и связанного evidence дальнейшие команды не выполняются.
+Storage archive обязан содержать ровно один top-level `storage/` и только его безопасные descendants. Разрешены каталоги, regular files и GNU tar hard links, причём target каждого hard link обязан оставаться внутри exact `storage/` root; symlink, device, FIFO и traversal блокируют restore. Archive дважды извлекается без вывода имён: сначала во временный private source scan с aggregate по `storage/`, затем в отдельный private archive parent под текущим `ROLLOUT_DIR`. Compose bind source и target aggregate указывают exact child `<archive-parent>/storage`, поэтому `/var/lib/storage/storage` не создаётся. File count и total uncompressed bytes должны быть ненулевыми и точно совпасть. Полные responses и restore log остаются mode `0600`; gate хранит только их hashes и privacy-safe counts. Без `restore-gate.env`, `restore-gate.env.sha256` и связанного evidence дальнейшие команды не выполняются.
 
 ## Рубеж 3: one-shot и partial-schema gate
 
@@ -968,12 +1019,13 @@ gate_value() {
   printf '%s\n' "${values[0]}"
 }
 
-test "$(gate_value version)" = "4"
+test "$(gate_value version)" = "6"
 test "$(gate_value run_id)" = "$RUN_ID"
 test "$(gate_value backup_dir)" = "$BACKUP_DIR"
 test "$(gate_value backup_sha256sums_sha256)" = "$BACKUP_SHA256SUMS_SHA256"
 
 GATE_BACKUP_DB_DUMP_SHA256="$(gate_value backup_db_dump_sha256)"
+GATE_BACKUP_DB_ROLES_SHA256="$(gate_value backup_db_roles_sha256)"
 GATE_BACKUP_STORAGE_ARCHIVE_SHA256="$(gate_value backup_storage_archive_sha256)"
 GATE_REHEARSAL_COMPOSE_PROJECT="$(gate_value rehearsal_compose_project)"
 GATE_REHEARSAL_NETWORK_NAME="$(gate_value rehearsal_network_name)"
@@ -999,13 +1051,17 @@ test "$GATE_PORT_BINDING_POLICY" = "internal-health-loopback-db-v1"
 
 BACKUP_DIR="$(realpath -e "$BACKUP_DIR")"
 BACKUP_DB_DUMP="$(realpath -e "$BACKUP_DB_DUMP")"
+BACKUP_DB_ROLES="$(realpath -e "$BACKUP_DIR/db/supabase-roles.sql")"
 BACKUP_STORAGE_ARCHIVE="$(realpath -e "$BACKUP_DIR/storage/supabase-storage.tgz")"
 case "$BACKUP_DB_DUMP" in
   "$BACKUP_DIR"/*) ;;
   *) exit 92 ;;
 esac
 test "$BACKUP_DB_DUMP" = "$BACKUP_DIR/db/supabase-postgres.custom"
+test "$BACKUP_DB_ROLES" = "$BACKUP_DIR/db/supabase-roles.sql"
 BACKUP_DB_RELATIVE="$(realpath --relative-to="$BACKUP_DIR" "$BACKUP_DB_DUMP")"
+BACKUP_DB_ROLES_RELATIVE="$(realpath --relative-to="$BACKUP_DIR" "$BACKUP_DB_ROLES")"
+test "$BACKUP_DB_ROLES_RELATIVE" = "db/supabase-roles.sql"
 
 manifest_sha_for() {
   local relative_path="$1"
@@ -1027,9 +1083,17 @@ manifest_sha_for() {
 }
 
 test "$(manifest_sha_for "$BACKUP_DB_RELATIVE")" = "$GATE_BACKUP_DB_DUMP_SHA256"
+test "$(manifest_sha_for "$BACKUP_DB_ROLES_RELATIVE")" = "$GATE_BACKUP_DB_ROLES_SHA256"
 test "$(manifest_sha_for storage/supabase-storage.tgz)" = "$GATE_BACKUP_STORAGE_ARCHIVE_SHA256"
 test "$(sha256sum "$BACKUP_DB_DUMP" | awk '{print $1}')" = "$GATE_BACKUP_DB_DUMP_SHA256"
+test "$(sha256sum "$BACKUP_DB_ROLES" | awk '{print $1}')" = "$GATE_BACKUP_DB_ROLES_SHA256"
 test "$(sha256sum "$BACKUP_STORAGE_ARCHIVE" | awk '{print $1}')" = "$GATE_BACKUP_STORAGE_ARCHIVE_SHA256"
+if grep -Eq 'PASSWORD|SCRAM-SHA|md5[0-9a-f]{20,}' "$BACKUP_DB_ROLES"; then
+  exit 95
+fi
+grep -Fxq 'CREATE ROLE supabase_realtime_admin;' "$BACKUP_DB_ROLES"
+grep -Fxq 'ALTER ROLE supabase_realtime_admin WITH NOSUPERUSER NOINHERIT NOCREATEROLE NOCREATEDB NOLOGIN NOREPLICATION NOBYPASSRLS;' "$BACKUP_DB_ROLES"
+grep -Eq '^GRANT supabase_realtime_admin TO postgres( WITH INHERIT TRUE)? GRANTED BY supabase_admin;$' "$BACKUP_DB_ROLES"
 
 CURRENT_RESTORE_EVIDENCE_SHA256="$(sha256sum "$ROLLOUT_DIR/restore-evidence.sha256" | awk '{print $1}')"
 test "$CURRENT_RESTORE_EVIDENCE_SHA256" = "$GATE_RESTORE_EVIDENCE_SHA256"
@@ -1050,6 +1114,7 @@ grep -Fxq "network_name=$GATE_REHEARSAL_NETWORK_NAME" "$TARGET_IDENTITY_EVIDENCE
 grep -Fxq "network_id=$GATE_REHEARSAL_NETWORK_ID" "$TARGET_IDENTITY_EVIDENCE"
 grep -Fxq "database_container_id=$GATE_REHEARSAL_DB_CONTAINER_ID" "$TARGET_IDENTITY_EVIDENCE"
 grep -Fxq "database_system_identifier=$GATE_REHEARSAL_DB_SYSTEM_IDENTIFIER" "$TARGET_IDENTITY_EVIDENCE"
+grep -Fxq 'restore_role=supabase_admin' "$TARGET_IDENTITY_EVIDENCE"
 
 PORT_BINDING_EVIDENCE="$ROLLOUT_DIR/restore-evidence/port-bindings-evidence.txt"
 test "$(sha256sum "$PORT_BINDING_EVIDENCE" | awk '{print $1}')" = \

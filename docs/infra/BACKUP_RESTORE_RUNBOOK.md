@@ -22,6 +22,7 @@ The latest read-only inventory is tracked in `docs/infra/BACKUP_RESTORE_STATUS_2
 The current script backs up:
 
 - Self-hosted Supabase Postgres: `db/supabase-postgres.custom`.
+- Supabase global roles without password material: `db/supabase-roles.sql`.
 - Supabase Storage volume: `storage/supabase-storage.tgz`.
 - Supabase functions, auth email templates, compose and env/config files: `config/letscube-configs.tgz`.
 - Coolify Postgres: `db/coolify-postgres.custom`.
@@ -66,6 +67,8 @@ Verify Postgres custom dumps are readable without restoring:
 ```bash
 pg_restore -l "$latest/db/supabase-postgres.custom" >/tmp/supabase-restore-list.txt
 pg_restore -l "$latest/db/coolify-postgres.custom" >/tmp/coolify-restore-list.txt
+test -s "$latest/db/supabase-roles.sql"
+! grep -Eq 'PASSWORD|SCRAM-SHA|md5[0-9a-f]{20,}' "$latest/db/supabase-roles.sql"
 ```
 
 Verify archive readability without extracting:
