@@ -327,6 +327,61 @@ DB_CONTAINER_IP="$(docker inspect \
   "$REHEARSAL_DB_CONTAINER_ID")"
 test -n "$DB_CONTAINER_IP"
 
+PORT_BINDING_WORK_DIR="$ROLLOUT_DIR/.port-bindings"
+install -d -m 700 "$PORT_BINDING_WORK_DIR"
+
+snapshot_published_ports() {
+  local container_id="$1"
+  local output_prefix="$2"
+  local host_config_ports="$output_prefix.host-config"
+  local network_settings_ports="$output_prefix.network-settings"
+  install -m 600 /dev/null "$host_config_ports"
+  install -m 600 /dev/null "$network_settings_ports"
+  docker inspect --format \
+    '{{range $container_port, $bindings := .HostConfig.PortBindings}}{{range $binding := $bindings}}{{printf "%s|%s|%s\n" $container_port $binding.HostIp $binding.HostPort}}{{end}}{{end}}' \
+    "$container_id" >"$host_config_ports"
+  docker inspect --format \
+    '{{range $container_port, $bindings := .NetworkSettings.Ports}}{{range $binding := $bindings}}{{printf "%s|%s|%s\n" $container_port $binding.HostIp $binding.HostPort}}{{end}}{{end}}' \
+    "$container_id" >"$network_settings_ports"
+  LC_ALL=C sort -u -o "$host_config_ports" "$host_config_ports"
+  LC_ALL=C sort -u -o "$network_settings_ports" "$network_settings_ports"
+  cmp --silent "$host_config_ports" "$network_settings_ports"
+}
+
+normalize_database_ports() {
+  local ports_file="$1"
+  if [[ ! -s "$ports_file" ]]; then
+    printf 'database=none\n'
+    return
+  fi
+
+  while IFS='|' read -r container_port host_ip host_port; do
+    [[ "$container_port" =~ ^[0-9]+/(tcp|udp|sctp)$ ]]
+    [[ "$host_port" =~ ^[0-9]+$ ]]
+    case "$host_ip" in
+      127.0.0.1|::1) ;;
+      ""|0.0.0.0|::|*) exit 78 ;;
+    esac
+    printf 'database=%s|%s|%s\n' "$container_port" "$host_ip" "$host_port"
+  done <"$ports_file"
+}
+
+require_no_published_ports() {
+  local label="$1"
+  local container_id="$2"
+  local output_prefix="$PORT_BINDING_WORK_DIR/$label"
+  snapshot_published_ports "$container_id" "$output_prefix"
+  test ! -s "$output_prefix.host-config"
+  test ! -s "$output_prefix.network-settings"
+  printf '%s=none\n' "$label" >"$output_prefix.normalized"
+  chmod 600 "$output_prefix.normalized"
+}
+
+snapshot_published_ports "$REHEARSAL_DB_CONTAINER_ID" "$PORT_BINDING_WORK_DIR/database"
+install -m 600 /dev/null "$PORT_BINDING_WORK_DIR/database.normalized"
+normalize_database_ports "$PORT_BINDING_WORK_DIR/database.host-config" \
+  >"$PORT_BINDING_WORK_DIR/database.normalized"
+
 REHEARSAL_STORAGE_CONTAINER_PATH="/var/lib/storage"
 mapfile -t STORAGE_MOUNT_SOURCES < <(
   docker inspect \
@@ -432,6 +487,23 @@ for container_id in \
     "$container_id")"
 done
 
+require_no_published_ports auth "$REHEARSAL_AUTH_CONTAINER_ID"
+require_no_published_ports storage "$REHEARSAL_STORAGE_CONTAINER_ID"
+require_no_published_ports postgrest "$REHEARSAL_POSTGREST_CONTAINER_ID"
+PORT_BINDING_POLICY="internal-health-loopback-db-v1"
+PORT_BINDING_EVIDENCE="$RESTORE_EVIDENCE_DIR/port-bindings-evidence.txt"
+{
+  printf 'version=1\n'
+  printf 'policy=%s\n' "$PORT_BINDING_POLICY"
+  printf 'hostconfig_networksettings_parity=ok\n'
+  cat "$PORT_BINDING_WORK_DIR/database.normalized"
+  printf 'auth=none\n'
+  printf 'storage=none\n'
+  printf 'postgrest=none\n'
+} >"$PORT_BINDING_EVIDENCE"
+chmod 600 "$PORT_BINDING_EVIDENCE"
+find "$PORT_BINDING_WORK_DIR" -depth -delete
+
 AUTH_HEALTH_URL="http://${REHEARSAL_AUTH_SERVICE}:9999/health"
 STORAGE_HEALTH_URL="http://${REHEARSAL_STORAGE_SERVICE}:5000/status"
 POSTGREST_HEALTH_URL="http://${REHEARSAL_POSTGREST_SERVICE}:3000/"
@@ -512,6 +584,7 @@ chmod 600 "$RESTORE_EVIDENCE_DIR"/*.txt
     restore-evidence/storage-health-evidence.txt \
     restore-evidence/postgrest-evidence.txt \
     restore-evidence/target-identity.txt \
+    restore-evidence/port-bindings-evidence.txt \
     >restore-evidence.sha256
   sha256sum -c restore-evidence.sha256
 )
@@ -523,9 +596,10 @@ STORAGE_EVIDENCE_SHA256="$(sha256sum "$RESTORE_EVIDENCE_DIR/storage-evidence.txt
 STORAGE_HEALTH_EVIDENCE_SHA256="$(sha256sum "$RESTORE_EVIDENCE_DIR/storage-health-evidence.txt" | awk '{print $1}')"
 POSTGREST_EVIDENCE_SHA256="$(sha256sum "$RESTORE_EVIDENCE_DIR/postgrest-evidence.txt" | awk '{print $1}')"
 TARGET_IDENTITY_SHA256="$(sha256sum "$RESTORE_EVIDENCE_DIR/target-identity.txt" | awk '{print $1}')"
+PORT_BINDING_EVIDENCE_SHA256="$(sha256sum "$PORT_BINDING_EVIDENCE" | awk '{print $1}')"
 RESTORE_GATE="$ROLLOUT_DIR/restore-gate.env"
 {
-  printf 'version=2\n'
+  printf 'version=3\n'
   printf 'run_id=%s\n' "$RUN_ID"
   printf 'backup_dir=%s\n' "$BACKUP_DIR"
   printf 'backup_sha256sums_sha256=%s\n' "$BACKUP_SHA256SUMS_SHA256"
@@ -537,6 +611,8 @@ RESTORE_GATE="$ROLLOUT_DIR/restore-gate.env"
   printf 'rehearsal_db_container_id=%s\n' "$REHEARSAL_DB_CONTAINER_ID"
   printf 'rehearsal_db_system_identifier=%s\n' "$DB_SYSTEM_IDENTIFIER"
   printf 'target_identity_sha256=%s\n' "$TARGET_IDENTITY_SHA256"
+  printf 'port_binding_policy=internal-health-loopback-db-v1\n'
+  printf 'port_binding_evidence_sha256=%s\n' "$PORT_BINDING_EVIDENCE_SHA256"
   printf 'restore_log_sha256=%s\n' "$RESTORE_LOG_SHA256"
   printf 'database_evidence_sha256=%s\n' "$DATABASE_EVIDENCE_SHA256"
   printf 'auth_evidence_sha256=%s\n' "$AUTH_EVIDENCE_SHA256"
@@ -568,6 +644,8 @@ chmod 600 "$ROLLOUT_DIR/restore-gate.env.sha256"
 ```
 
 `pg_restore --exit-on-error` является fail-stop эквивалентом `ON_ERROR_STOP` для custom dump; все SQL probes выполняются через `psql -v ON_ERROR_STOP=1`. Empty initialized Supabase не проходит `FRESH_USER_RELATION_COUNT=0`, а пустой или частично восстановленный target не проходит ненулевые source counts и exact source/target parity. Libpq service не может указывать production: server address должен совпасть с IP проверенного Compose DB container, каждый service имеет labels того же rehearsal project, единственную `internal: true` network и неизменный container/network identity. Health endpoints имеют фиксированные container-local host/port/path и не принимаются из окружения.
+
+Published-port gate сравнивает `.HostConfig.PortBindings` и `.NetworkSettings.Ports` каждого rehearsal container. Auth, Storage и PostgREST обязаны не иметь published ports. DB также предпочтительно не публикуется; если host binding нужен для libpq service, разрешены только explicit `127.0.0.1` и `::1`. Empty `HostIp`, `0.0.0.0`, `::`, wildcard и любой другой адрес блокируют restore до первого SQL connection. Нормализованный evidence не содержит container names или application data и повторно проверяется exact apply gate.
 
 Storage archive дважды извлекается без вывода имён: сначала во временный private source scan, затем в доказанно пустой bind mount под текущим `ROLLOUT_DIR`. File count и total uncompressed bytes должны быть ненулевыми и точно совпасть. Полные responses и restore log остаются mode `0600`; gate хранит только их hashes и privacy-safe counts. Без `restore-gate.env`, `restore-gate.env.sha256` и связанного evidence дальнейшие команды не выполняются.
 
@@ -870,7 +948,7 @@ gate_value() {
   printf '%s\n' "${values[0]}"
 }
 
-test "$(gate_value version)" = "2"
+test "$(gate_value version)" = "3"
 test "$(gate_value run_id)" = "$RUN_ID"
 test "$(gate_value backup_dir)" = "$BACKUP_DIR"
 test "$(gate_value backup_sha256sums_sha256)" = "$BACKUP_SHA256SUMS_SHA256"
@@ -883,6 +961,8 @@ GATE_REHEARSAL_NETWORK_ID="$(gate_value rehearsal_network_id)"
 GATE_REHEARSAL_DB_CONTAINER_ID="$(gate_value rehearsal_db_container_id)"
 GATE_REHEARSAL_DB_SYSTEM_IDENTIFIER="$(gate_value rehearsal_db_system_identifier)"
 GATE_TARGET_IDENTITY_SHA256="$(gate_value target_identity_sha256)"
+GATE_PORT_BINDING_POLICY="$(gate_value port_binding_policy)"
+GATE_PORT_BINDING_EVIDENCE_SHA256="$(gate_value port_binding_evidence_sha256)"
 GATE_RESTORE_LOG_SHA256="$(gate_value restore_log_sha256)"
 GATE_DATABASE_EVIDENCE_SHA256="$(gate_value database_evidence_sha256)"
 GATE_AUTH_EVIDENCE_SHA256="$(gate_value auth_evidence_sha256)"
@@ -895,6 +975,7 @@ GATE_RESTORE_EVIDENCE_SHA256="$(gate_value restore_evidence_sha256)"
 [[ "$GATE_REHEARSAL_NETWORK_ID" =~ ^[0-9a-f]{64}$ ]]
 [[ "$GATE_REHEARSAL_DB_CONTAINER_ID" =~ ^[0-9a-f]{64}$ ]]
 [[ "$GATE_REHEARSAL_DB_SYSTEM_IDENTIFIER" =~ ^[0-9]+$ ]]
+test "$GATE_PORT_BINDING_POLICY" = "internal-health-loopback-db-v1"
 
 BACKUP_DIR="$(realpath -e "$BACKUP_DIR")"
 BACKUP_DB_DUMP="$(realpath -e "$BACKUP_DB_DUMP")"
@@ -949,6 +1030,41 @@ grep -Fxq "network_name=$GATE_REHEARSAL_NETWORK_NAME" "$TARGET_IDENTITY_EVIDENCE
 grep -Fxq "network_id=$GATE_REHEARSAL_NETWORK_ID" "$TARGET_IDENTITY_EVIDENCE"
 grep -Fxq "database_container_id=$GATE_REHEARSAL_DB_CONTAINER_ID" "$TARGET_IDENTITY_EVIDENCE"
 grep -Fxq "database_system_identifier=$GATE_REHEARSAL_DB_SYSTEM_IDENTIFIER" "$TARGET_IDENTITY_EVIDENCE"
+
+PORT_BINDING_EVIDENCE="$ROLLOUT_DIR/restore-evidence/port-bindings-evidence.txt"
+test "$(sha256sum "$PORT_BINDING_EVIDENCE" | awk '{print $1}')" = \
+  "$GATE_PORT_BINDING_EVIDENCE_SHA256"
+grep -Fxq 'version=1' "$PORT_BINDING_EVIDENCE"
+grep -Fxq "policy=$GATE_PORT_BINDING_POLICY" "$PORT_BINDING_EVIDENCE"
+grep -Fxq 'hostconfig_networksettings_parity=ok' "$PORT_BINDING_EVIDENCE"
+grep -Fxq 'auth=none' "$PORT_BINDING_EVIDENCE"
+grep -Fxq 'storage=none' "$PORT_BINDING_EVIDENCE"
+grep -Fxq 'postgrest=none' "$PORT_BINDING_EVIDENCE"
+test "$(awk -F= '
+  $1 !~ /^(version|policy|hostconfig_networksettings_parity|database|auth|storage|postgrest)$/ {
+    unexpected++
+  }
+  END { print unexpected + 0 }
+' "$PORT_BINDING_EVIDENCE")" -eq 0
+
+mapfile -t GATE_DATABASE_BINDINGS < <(
+  sed -n 's/^database=//p' "$PORT_BINDING_EVIDENCE"
+)
+test "${#GATE_DATABASE_BINDINGS[@]}" -gt 0
+if [[ "${#GATE_DATABASE_BINDINGS[@]}" -eq 1 && "${GATE_DATABASE_BINDINGS[0]}" = "none" ]]; then
+  :
+else
+  for binding in "${GATE_DATABASE_BINDINGS[@]}"; do
+    test "$binding" != "none"
+    IFS='|' read -r container_port host_ip host_port <<<"$binding"
+    [[ "$container_port" =~ ^[0-9]+/(tcp|udp|sctp)$ ]]
+    [[ "$host_port" =~ ^[0-9]+$ ]]
+    case "$host_ip" in
+      127.0.0.1|::1) ;;
+      ""|0.0.0.0|::|*) exit 94 ;;
+    esac
+  done
+fi
 
 GATE_SOURCE_AUTH_USERS_COUNT="$(gate_value source_auth_users_count)"
 GATE_TARGET_AUTH_USERS_COUNT="$(gate_value target_auth_users_count)"

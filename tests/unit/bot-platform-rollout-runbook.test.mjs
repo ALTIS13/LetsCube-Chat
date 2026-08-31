@@ -224,6 +224,55 @@ test("rehearsal endpoints are derived from one internal compose network", () => 
   assert.doesNotMatch(restore, /https?:\/\/(?:api|app)\.letscube\.ru/i);
 });
 
+test("published ports reject wildcards and are bound into the restore gate", () => {
+  const source = runbook();
+  const restore = source.slice(
+    source.indexOf("## Рубеж 2:"),
+    source.indexOf("## Рубеж 3:"),
+  );
+  const apply = source.slice(source.indexOf("## Рубеж 8:"));
+
+  assert.match(restore, /\.HostConfig\.PortBindings/);
+  assert.match(restore, /\.NetworkSettings\.Ports/);
+  assert.match(restore, /cmp --silent "\$host_config_ports" "\$network_settings_ports"/);
+  assert.match(restore, /127\.0\.0\.1\|::1\) ;;/);
+  assert.match(restore, /""\|0\.0\.0\.0\|::\|\*\) exit [0-9]+ ;;/);
+  assert.match(
+    restore,
+    /require_no_published_ports auth "\$REHEARSAL_AUTH_CONTAINER_ID"/,
+  );
+  assert.match(
+    restore,
+    /require_no_published_ports storage "\$REHEARSAL_STORAGE_CONTAINER_ID"/,
+  );
+  assert.match(
+    restore,
+    /require_no_published_ports postgrest "\$REHEARSAL_POSTGREST_CONTAINER_ID"/,
+  );
+  assert.match(restore, /port-bindings-evidence\.txt/);
+  assert.match(restore, /hostconfig_networksettings_parity=ok/);
+  assert.match(restore, /auth=none/);
+  assert.match(restore, /storage=none/);
+  assert.match(restore, /postgrest=none/);
+  assert.match(restore, /port_binding_policy=internal-health-loopback-db-v1/);
+  assert.match(restore, /port_binding_evidence_sha256/);
+
+  assert.match(apply, /GATE_PORT_BINDING_POLICY="\$\(gate_value port_binding_policy\)"/);
+  assert.match(
+    apply,
+    /GATE_PORT_BINDING_EVIDENCE_SHA256="\$\(gate_value port_binding_evidence_sha256\)"/,
+  );
+  assert.match(
+    apply,
+    /sha256sum "\$PORT_BINDING_EVIDENCE"[\s\S]{0,150}"\$GATE_PORT_BINDING_EVIDENCE_SHA256"/,
+  );
+  assert.match(apply, /grep -Fxq 'auth=none' "\$PORT_BINDING_EVIDENCE"/);
+  assert.match(apply, /grep -Fxq 'storage=none' "\$PORT_BINDING_EVIDENCE"/);
+  assert.match(apply, /grep -Fxq 'postgrest=none' "\$PORT_BINDING_EVIDENCE"/);
+  assert.match(apply, /127\.0\.0\.1\|::1\) ;;/);
+  assert.match(apply, /""\|0\.0\.0\.0\|::\|\*\) exit [0-9]+ ;;/);
+});
+
 test("storage restore and checksummed gate bind archive parity and all evidence", () => {
   const source = runbook();
   const restore = source.slice(
