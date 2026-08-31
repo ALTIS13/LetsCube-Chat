@@ -6,6 +6,7 @@ import {
   supportsPwaInstallForTarget,
 } from "../../artifacts/kub/src/lib/platform/distribution.ts";
 import {
+  getDesktopBridge,
   getDesktopRuntimeInfo,
   isDesktopApp,
   isDesktopShell,
@@ -105,7 +106,7 @@ test("Tauri desktop bridge is synchronous and wins over Windows browser heuristi
   }
 });
 
-test("desktop shell detection is platform-neutral without widening Windows capabilities", () => {
+test("desktop shell detection is platform-neutral without widening Windows capabilities", async () => {
   const previousWindow = globalThis.window;
 
   globalThis.window = {
@@ -117,6 +118,8 @@ test("desktop shell detection is platform-neutral without widening Windows capab
   try {
     assert.equal(isDesktopShell(), true);
     assert.equal(isDesktopApp(), false);
+    assert.equal(getDesktopBridge(), null);
+    assert.equal(await getDesktopRuntimeInfo(), null);
   } finally {
     globalThis.window = previousWindow;
   }
