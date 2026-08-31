@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "imports": {
+    "#bot/*": "./src/bot/*.ts"
+  },
   "scripts": {
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
@@ -24,7 +27,8 @@
     "pino": "^9",
     "pino-http": "^10",
     "sharp": "^0.35.2",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
