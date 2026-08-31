@@ -197,8 +197,13 @@ history with a deleted-bot label instead of corrupting message references.
 Chat-membership writes do not depend on update delivery. Removing or re-adding
 a paused, suspended, pending-delete or deleted bot succeeds but emits no update;
 these inactive lifecycle events are skipped rather than queued or replayed.
+An enqueue failure for an active bot is likewise isolated from the source
+membership write and emits no partial update.
 For an active bot, a `removed_at` transition to null is a re-add and emits the
 same bounded `added` membership event as the initial join.
+Changing stored privacy configuration while both the old and new membership
+states are removed persists the source change without emitting a lifecycle
+event.
 
 ## 6. Bot Chat Access And Privacy
 
@@ -224,6 +229,20 @@ and authoritative source identifier; they cannot supply arbitrary sender,
 contact or message payloads. Callback and membership contexts use separate,
 strict allowlists. The projection exposes only public display identity and the
 bounded chat/message fields required by the Bot API.
+
+Bot message projection caps every variable-width scalar before JSON assembly:
+message text 4096 characters; message and attachment kind 32; display name 128;
+username 64; chat type 32; chat name 256; MIME type 128; file name 255; byte
+size and duration represented as text 32; width and height represented as text
+16. Empty bounded values become null and are stripped. UUID, timestamp and
+boolean fields are fixed-width. Even maximum JSON escaping keeps the resulting
+authoritative payload deterministically below 64 KiB.
+
+Automatic insert and edit fanout is isolated per bot. Eligibility, projection
+or enqueue failure for one bot is discarded without exception details and does
+not roll back the human message or prevent another eligible bot from receiving
+its update. Direct trusted service RPC calls remain strict and return their
+bounded error instead of silently succeeding.
 
 Full visibility of new group messages requires both a request by the bot owner
 and approval from a group administrator. A bot never receives history from

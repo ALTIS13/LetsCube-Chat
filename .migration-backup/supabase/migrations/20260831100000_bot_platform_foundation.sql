@@ -909,34 +909,58 @@ as $function$
       'topic_id', message_row.topic_id,
       'reply_to_message_id', message_row.reply_to_id,
       'date', message_row.created_at,
-      'type', message_row.type,
+      'type', nullif(pg_catalog.left(message_row.type, 32), ''),
       'text', case
         when message_row.content is null then null
-        else pg_catalog.left(message_row.content, 4096)
+        else nullif(pg_catalog.left(message_row.content, 4096), '')
       end,
       'from', pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
         'id', message_row.user_id,
         'bot_id', message_row.bot_id,
         'is_bot', message_row.bot_id is not null,
-        'display_name', coalesce(profile.full_name, sender_bot.display_name),
-        'username', coalesce(profile.username, sender_bot.username)
+        'display_name', nullif(pg_catalog.left(
+          coalesce(profile.full_name, sender_bot.display_name),
+          128
+        ), ''),
+        'username', nullif(pg_catalog.left(
+          coalesce(profile.username, sender_bot.username),
+          64
+        ), '')
       )),
       'chat', pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
         'id', chat.id,
-        'type', chat.type,
-        'name', chat.name
+        'type', nullif(pg_catalog.left(chat.type, 32), ''),
+        'name', nullif(pg_catalog.left(chat.name, 256), '')
       )),
       'attachment', case
         when message_row.media_bucket is null or message_row.media_path is null then null
         else pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
           'file_id', message_row.id,
-          'kind', message_row.type,
-          'mime_type', message_row.media_metadata->>'mime_type',
-          'file_name', pg_catalog.left(message_row.media_metadata->>'file_name', 255),
-          'byte_size', message_row.media_metadata->>'size',
-          'width', message_row.media_metadata->>'width',
-          'height', message_row.media_metadata->>'height',
-          'duration', message_row.media_metadata->>'duration'
+          'kind', nullif(pg_catalog.left(message_row.type, 32), ''),
+          'mime_type', nullif(pg_catalog.left(
+            message_row.media_metadata->>'mime_type',
+            128
+          ), ''),
+          'file_name', nullif(pg_catalog.left(
+            message_row.media_metadata->>'file_name',
+            255
+          ), ''),
+          'byte_size', nullif(pg_catalog.left(
+            message_row.media_metadata->>'size',
+            32
+          ), ''),
+          'width', nullif(pg_catalog.left(
+            message_row.media_metadata->>'width',
+            16
+          ), ''),
+          'height', nullif(pg_catalog.left(
+            message_row.media_metadata->>'height',
+            16
+          ), ''),
+          'duration', nullif(pg_catalog.left(
+            message_row.media_metadata->>'duration',
+            32
+          ), '')
         ))
       end
     ))
@@ -1520,14 +1544,20 @@ begin
     where member_row.chat_id = new.chat_id
       and member_row.removed_at is null
       and member_row.bot_id is distinct from new.bot_id
-      and private.bot_can_receive_message(member_row.bot_id, new.id)
   loop
-    perform public.bot_update_enqueue_internal(
-      v_bot_id,
-      'message',
-      new.id,
-      '{}'::jsonb
-    );
+    begin
+      if private.bot_can_receive_message(v_bot_id, new.id) is true then
+        perform public.bot_update_enqueue_internal(
+          v_bot_id,
+          'message',
+          new.id,
+          '{}'::jsonb
+        );
+      end if;
+    exception
+      when others then
+        null;
+    end;
   end loop;
   return null;
 end
@@ -1579,14 +1609,20 @@ begin
     where member_row.chat_id = new.chat_id
       and member_row.removed_at is null
       and member_row.bot_id is distinct from new.bot_id
-      and private.bot_can_receive_message(member_row.bot_id, new.id)
   loop
-    perform public.bot_update_enqueue_internal(
-      v_bot_id,
-      'edited_message',
-      new.id,
-      '{}'::jsonb
-    );
+    begin
+      if private.bot_can_receive_message(v_bot_id, new.id) is true then
+        perform public.bot_update_enqueue_internal(
+          v_bot_id,
+          'edited_message',
+          new.id,
+          '{}'::jsonb
+        );
+      end if;
+    exception
+      when others then
+        null;
+    end;
   end loop;
   return null;
 end
@@ -1618,6 +1654,8 @@ begin
     v_action := 'removed';
   elsif old.removed_at is not null and new.removed_at is null then
     v_action := 'added';
+  elsif old.removed_at is not null and new.removed_at is not null then
+    return null;
   elsif new.privacy_mode is distinct from old.privacy_mode then
     v_action := 'privacy_changed';
   else
@@ -1632,15 +1670,20 @@ begin
     return null;
   end if;
   v_actor_id := new.full_visibility_approved_by;
-  perform public.bot_update_enqueue_internal(
-    new.bot_id,
-    'membership',
-    new.chat_id,
-    pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
-      'action', v_action,
-      'actor_id', v_actor_id
-    ))
-  );
+  begin
+    perform public.bot_update_enqueue_internal(
+      new.bot_id,
+      'membership',
+      new.chat_id,
+      pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+        'action', v_action,
+        'actor_id', v_actor_id
+      ))
+    );
+  exception
+    when others then
+      null;
+  end;
   return null;
 end
 $function$;

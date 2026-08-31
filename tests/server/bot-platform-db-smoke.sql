@@ -45,6 +45,7 @@ declare
   v_mention_message_id uuid;
   v_command_message_id uuid;
   v_full_message_id uuid;
+  v_oversized_message_id uuid;
   v_private_message_id uuid;
   v_other_message_id uuid;
   v_bulk_message_one_id uuid;
@@ -58,6 +59,7 @@ declare
   v_system_message_id uuid;
   v_first_send jsonb;
   v_duplicate_send jsonb;
+  v_safe_payload jsonb;
   v_legacy_tombstone_count integer;
   v_notification_count integer;
   v_bot_message_count integer;
@@ -832,6 +834,211 @@ begin
       and queued.payload->'message'->>'text' = 'ordinary full message edited'
   ) then
     raise exception 'full_message_edit_not_projected';
+  end if;
+
+  insert into public.chat_bot_members(
+    chat_id,
+    bot_id,
+    privacy_mode,
+    full_visibility_requested_at,
+    full_visibility_approved_by,
+    joined_at
+  ) values (
+    v_full_chat_id,
+    v_third_bot_id,
+    'full',
+    pg_catalog.now(),
+    v_actor_id,
+    pg_catalog.now()
+  );
+  update private.bot_update_counters counter
+  set next_update_id = 9223372036854775807
+  where counter.bot_id = v_third_bot_id;
+
+  insert into public.messages(
+    chat_id,
+    user_id,
+    content,
+    type,
+    media_bucket,
+    media_path,
+    media_metadata
+  ) values (
+    v_full_chat_id,
+    v_recipient_id,
+    pg_catalog.repeat('x', 4096),
+    'image',
+    'chat-media',
+    'human/oversized-metadata.jpg',
+    pg_catalog.jsonb_build_object(
+      'mime_type', pg_catalog.repeat('m', 20000),
+      'file_name', pg_catalog.repeat('f', 20000),
+      'size', pg_catalog.repeat('9', 20000),
+      'width', pg_catalog.repeat('8', 20000),
+      'height', pg_catalog.repeat('7', 20000),
+      'duration', pg_catalog.repeat('6', 20000)
+    )
+  ) returning id into v_oversized_message_id;
+  if not exists (
+    select 1
+    from public.messages message_row
+    where message_row.id = v_oversized_message_id
+      and pg_catalog.length(message_row.media_metadata->>'mime_type') = 20000
+  ) then
+    raise exception 'oversized_metadata_message_not_persisted';
+  end if;
+
+  select queued.payload
+  into v_safe_payload
+  from private.bot_updates queued
+  where queued.bot_id = v_bot_id
+    and queued.update_type = 'message'
+    and queued.payload->'message'->>'id' = v_oversized_message_id::text;
+  if v_safe_payload is null
+     or pg_catalog.octet_length(v_safe_payload::text) >= 65536
+     or pg_catalog.length(v_safe_payload#>>'{message,text}') > 4096
+     or pg_catalog.length(v_safe_payload#>>'{message,from,display_name}') > 128
+     or pg_catalog.length(v_safe_payload#>>'{message,from,username}') > 64
+     or pg_catalog.length(v_safe_payload#>>'{message,chat,type}') > 32
+     or pg_catalog.length(v_safe_payload#>>'{message,chat,name}') > 256
+     or pg_catalog.length(v_safe_payload#>>'{message,attachment,kind}') > 32
+     or pg_catalog.length(v_safe_payload#>>'{message,attachment,mime_type}') > 128
+     or pg_catalog.length(v_safe_payload#>>'{message,attachment,file_name}') > 255
+     or pg_catalog.length(v_safe_payload#>>'{message,attachment,byte_size}') > 32
+     or pg_catalog.length(v_safe_payload#>>'{message,attachment,width}') > 16
+     or pg_catalog.length(v_safe_payload#>>'{message,attachment,height}') > 16
+     or pg_catalog.length(v_safe_payload#>>'{message,attachment,duration}') > 32 then
+    raise exception 'oversized_metadata_projection_not_bounded';
+  end if;
+  if exists (
+    select 1
+    from private.bot_updates queued
+    where queued.bot_id = v_third_bot_id
+      and queued.payload->'message'->>'id' = v_oversized_message_id::text
+  ) then
+    raise exception 'broken_bot_unsafe_insert_update_queued';
+  end if;
+
+  v_rejected := false;
+  begin
+    perform public.bot_update_enqueue_internal(
+      v_third_bot_id,
+      'message',
+      v_oversized_message_id,
+      '{}'::jsonb
+    );
+  exception
+    when numeric_value_out_of_range then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'direct_bot_enqueue_failure_was_swallowed';
+  end if;
+
+  update public.messages
+  set media_metadata = pg_catalog.jsonb_build_object(
+    'mime_type', pg_catalog.repeat('e', 22000),
+    'file_name', pg_catalog.repeat('g', 22000),
+    'size', pg_catalog.repeat('5', 22000),
+    'width', pg_catalog.repeat('4', 22000),
+    'height', pg_catalog.repeat('3', 22000),
+    'duration', pg_catalog.repeat('2', 22000)
+  )
+  where id = v_oversized_message_id;
+  if not exists (
+    select 1
+    from public.messages message_row
+    where message_row.id = v_oversized_message_id
+      and pg_catalog.length(message_row.media_metadata->>'mime_type') = 22000
+  ) then
+    raise exception 'oversized_metadata_edit_not_persisted';
+  end if;
+  select queued.payload
+  into v_safe_payload
+  from private.bot_updates queued
+  where queued.bot_id = v_bot_id
+    and queued.update_type = 'edited_message'
+    and queued.payload->'message'->>'id' = v_oversized_message_id::text;
+  if v_safe_payload is null
+     or pg_catalog.octet_length(v_safe_payload::text) >= 65536
+     or pg_catalog.length(v_safe_payload#>>'{message,attachment,mime_type}') > 128
+     or pg_catalog.length(v_safe_payload#>>'{message,attachment,file_name}') > 255
+     or pg_catalog.length(v_safe_payload#>>'{message,attachment,byte_size}') > 32
+     or pg_catalog.length(v_safe_payload#>>'{message,attachment,width}') > 16
+     or pg_catalog.length(v_safe_payload#>>'{message,attachment,height}') > 16
+     or pg_catalog.length(v_safe_payload#>>'{message,attachment,duration}') > 32 then
+    raise exception 'oversized_metadata_edit_projection_not_bounded';
+  end if;
+  if exists (
+    select 1
+    from private.bot_updates queued
+    where queued.bot_id = v_third_bot_id
+      and queued.update_type = 'edited_message'
+      and queued.payload->'message'->>'id' = v_oversized_message_id::text
+  ) then
+    raise exception 'broken_bot_unsafe_edit_update_queued';
+  end if;
+
+  update public.chat_bot_members
+  set removed_at = pg_catalog.now()
+  where chat_id = v_lifecycle_chat_id
+    and bot_id = v_second_bot_id;
+  select pg_catalog.count(*)
+  into v_update_count_before
+  from private.bot_updates queued
+  where queued.bot_id = v_second_bot_id
+    and queued.update_type = 'membership';
+  update public.chat_bot_members
+  set privacy_mode = 'full',
+      full_visibility_requested_at = pg_catalog.now(),
+      full_visibility_approved_by = v_actor_id
+  where chat_id = v_lifecycle_chat_id
+    and bot_id = v_second_bot_id;
+  select pg_catalog.count(*)
+  into v_update_count
+  from private.bot_updates queued
+  where queued.bot_id = v_second_bot_id
+    and queued.update_type = 'membership';
+  if v_update_count <> v_update_count_before then
+    raise exception 'removed_membership_privacy_update_was_queued';
+  end if;
+  if not exists (
+    select 1
+    from public.chat_bot_members member_row
+    where member_row.chat_id = v_lifecycle_chat_id
+      and member_row.bot_id = v_second_bot_id
+      and member_row.removed_at is not null
+      and member_row.privacy_mode = 'full'
+      and member_row.full_visibility_approved_by = v_actor_id
+  ) then
+    raise exception 'removed_membership_privacy_update_not_persisted';
+  end if;
+  update private.bot_update_counters counter
+  set next_update_id = 9223372036854775807
+  where counter.bot_id = v_second_bot_id;
+  select pg_catalog.count(*)
+  into v_update_count_before
+  from private.bot_updates queued
+  where queued.bot_id = v_second_bot_id
+    and queued.update_type = 'membership';
+  update public.chat_bot_members
+  set removed_at = null
+  where chat_id = v_lifecycle_chat_id
+    and bot_id = v_second_bot_id;
+  select pg_catalog.count(*)
+  into v_update_count
+  from private.bot_updates queued
+  where queued.bot_id = v_second_bot_id
+    and queued.update_type = 'membership';
+  if v_update_count <> v_update_count_before
+     or not exists (
+       select 1
+       from public.chat_bot_members member_row
+       where member_row.chat_id = v_lifecycle_chat_id
+         and member_row.bot_id = v_second_bot_id
+         and member_row.removed_at is null
+     ) then
+    raise exception 'membership_enqueue_failure_rolled_back_source';
   end if;
 
   insert into public.messages(chat_id, user_id, content, type)

@@ -180,6 +180,79 @@ test("updates use authoritative safe projections and real triggers", () => {
   );
 });
 
+test("message projection caps every variable-width scalar below the queue limit", () => {
+  const caps = [
+    ["type", /'type', nullif\(pg_catalog\.left\(message_row\.type, 32\), ''\)/],
+    ["text", /pg_catalog\.left\(message_row\.content, 4096\)/],
+    [
+      "display_name",
+      /'display_name', nullif\(pg_catalog\.left\(\s*coalesce\(profile\.full_name, sender_bot\.display_name\), 128\s*\), ''\)/,
+    ],
+    [
+      "username",
+      /'username', nullif\(pg_catalog\.left\(\s*coalesce\(profile\.username, sender_bot\.username\), 64\s*\), ''\)/,
+    ],
+    ["chat_type", /'type', nullif\(pg_catalog\.left\(chat\.type, 32\), ''\)/],
+    ["chat_name", /'name', nullif\(pg_catalog\.left\(chat\.name, 256\), ''\)/],
+    ["kind", /'kind', nullif\(pg_catalog\.left\(message_row\.type, 32\), ''\)/],
+    [
+      "mime_type",
+      /'mime_type', nullif\(pg_catalog\.left\(\s*message_row\.media_metadata->>'mime_type', 128\s*\), ''\)/,
+    ],
+    [
+      "file_name",
+      /'file_name', nullif\(pg_catalog\.left\(\s*message_row\.media_metadata->>'file_name', 255\s*\), ''\)/,
+    ],
+    [
+      "byte_size",
+      /'byte_size', nullif\(pg_catalog\.left\(\s*message_row\.media_metadata->>'size', 32\s*\), ''\)/,
+    ],
+    ["width", /'width', nullif\(pg_catalog\.left\(\s*message_row\.media_metadata->>'width', 16\s*\), ''\)/],
+    ["height", /'height', nullif\(pg_catalog\.left\(\s*message_row\.media_metadata->>'height', 16\s*\), ''\)/],
+    [
+      "duration",
+      /'duration', nullif\(pg_catalog\.left\(\s*message_row\.media_metadata->>'duration', 32\s*\), ''\)/,
+    ],
+  ];
+  for (const [field, pattern] of caps) {
+    assert.match(normalizedSql, pattern, `${field} projection must be bounded`);
+  }
+  assert.match(bindingSpec, /bot message projection caps/i);
+  assert.match(bindingSpec, /64 kib/i);
+});
+
+test("automatic message fanout isolates every bot while direct RPC remains strict", () => {
+  for (const functionName of [
+    "enqueue_bot_message_updates_after_insert",
+    "enqueue_bot_message_updates_after_update",
+  ]) {
+    const start = normalizedSql.indexOf(`create or replace function private.${functionName}()`);
+    const end = normalizedSql.indexOf("$function$;", start);
+    assert.ok(start >= 0 && end > start, `${functionName} body must exist`);
+    const body = normalizedSql.slice(start, end);
+    assert.match(body, /loop begin if private\.bot_can_receive_message\(v_bot_id, new\.id\) is true then/);
+    assert.match(body, /exception when others then null; end; end loop/);
+    assert.doesNotMatch(body, /raise (notice|warning|log)/);
+  }
+  assert.match(normalizedSql, /raise exception 'bot_update_not_eligible'/);
+});
+
+test("removed membership privacy changes persist without lifecycle delivery", () => {
+  assert.match(
+    normalizedSql,
+    /elsif old\.removed_at is not null and new\.removed_at is not null then return null; elsif new\.privacy_mode is distinct from old\.privacy_mode then/,
+  );
+  const start = normalizedSql.indexOf(
+    "create or replace function private.enqueue_bot_membership_update()",
+  );
+  const end = normalizedSql.indexOf("$function$;", start);
+  const body = normalizedSql.slice(start, end);
+  assert.match(
+    body,
+    /begin perform public\.bot_update_enqueue_internal[\s\S]*exception when others then null; end/,
+  );
+});
+
 test("stale delivery claims are recovered atomically and boundedly", () => {
   assert.match(normalizedSql, /attempt\.status = 'claimed'/);
   assert.match(normalizedSql, /attempt\.claimed_at <= pg_catalog\.now\(\) - interval '2 minutes'/);
@@ -365,6 +438,15 @@ test("database smoke preserves history and rolls every probe back", () => {
   assert.match(normalizedSmoke, /restricted_plain_message_edit_was_projected/);
   assert.match(normalizedSmoke, /message_edit_noop_or_internal_update_was_projected/);
   assert.match(normalizedSmoke, /full_message_edit_not_projected/);
+  assert.match(normalizedSmoke, /oversized_metadata_message_not_persisted/);
+  assert.match(normalizedSmoke, /oversized_metadata_projection_not_bounded/);
+  assert.match(normalizedSmoke, /broken_bot_unsafe_insert_update_queued/);
+  assert.match(normalizedSmoke, /direct_bot_enqueue_failure_was_swallowed/);
+  assert.match(normalizedSmoke, /oversized_metadata_edit_not_persisted/);
+  assert.match(normalizedSmoke, /broken_bot_unsafe_edit_update_queued/);
+  assert.match(normalizedSmoke, /removed_membership_privacy_update_was_queued/);
+  assert.match(normalizedSmoke, /removed_membership_privacy_update_not_persisted/);
+  assert.match(normalizedSmoke, /membership_enqueue_failure_rolled_back_source/);
   assert.match(normalizedSmoke, /muted_bot_notification_enqueued_push/);
   assert.match(normalizedSmoke, /profile_delete_tombstone_not_preserved/);
   assert.match(normalizedSmoke, /anon_can_access_private_bot_table/);
