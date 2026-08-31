@@ -834,6 +834,24 @@ test("chat summaries project explicit bot identity and count only valid incoming
   );
 });
 
+test("deleted bot chat search masks former identity in display, filters, and rank", () => {
+  const body = functionBody("search_chat_messages");
+  assert.match(
+    body,
+    /when bot\.id is null or bot\.state = 'deleted' then 'Удалённый бот'/i,
+  );
+  assert.match(body, /bot_identity\.sender_name/);
+  assert.match(body, /bot_identity\.search_text/);
+  assert.doesNotMatch(
+    body,
+    /similarity\(pg_catalog\.lower\(coalesce\(bot\.(display_name|username)/,
+  );
+  assert.doesNotMatch(
+    body,
+    /or pg_catalog\.lower\(coalesce\(bot\.(display_name|username)/,
+  );
+});
+
 test("notification projection keeps exact routing fields and a bounded safe actor avatar", () => {
   const body = functionBody("enqueue_message_notifications");
   assert.match(body, /'sender_avatar_url', v_sender_avatar_url/);
@@ -841,6 +859,10 @@ test("notification projection keeps exact routing fields and a bounded safe acto
   assert.match(body, /'route', '\/\?chat=' \|\| new\.chat_id::text \|\| '&message=' \|\| new\.id::text/);
   assert.match(body, /v_sender_kind := 'bot'/);
   assert.match(body, /new\.user_id is null or member_row\.user_id <> new\.user_id/);
+  assert.match(
+    body,
+    /v_sender_avatar_url := public\._sanitize_notification_avatar_url\(v_sender_avatar_url\)/,
+  );
 
   const pushBody = functionBody("_notification_push_payload");
   for (const key of [
@@ -856,9 +878,26 @@ test("notification projection keeps exact routing fields and a bounded safe acto
   ]) {
     assert.match(pushBody, new RegExp(`'${key}'`), `${key} must survive push projection`);
   }
-  assert.match(pushBody, /\/storage\/v1\//);
-  assert.match(pushBody, /\/object\/sign\//);
-  assert.match(pushBody, /token=%/);
+  assert.match(
+    pushBody,
+    /public\._sanitize_notification_avatar_url\(\s*nullif\(p_payload->>'sender_avatar_url', ''\)\s*\)/,
+  );
+
+  const avatarBody = functionBody("_sanitize_notification_avatar_url");
+  assert.match(avatarBody, /v_value like '\/%' and v_value not like '\/\/%'/);
+  assert.match(avatarBody, /https:\/\/app\.letscube\.ru\//);
+  assert.match(avatarBody, /https:\/\/api\.letscube\.ru\//);
+  for (const sensitivePattern of [
+    "/storage/v1/",
+    "/object/sign/",
+    "token=",
+    "password=",
+    "authorization=",
+    "signedurl",
+    "signed_url",
+  ]) {
+    assert.match(avatarBody, new RegExp(sensitivePattern.replaceAll("/", "\\/")));
+  }
 });
 
 test("binding spec documents the tombstone-safe sender invariant", () => {
@@ -954,8 +993,12 @@ test("database smoke preserves history and rolls every probe back", () => {
   assert.match(normalizedSmoke, /inactive_bot_visible_to_unrelated_authenticated_user/);
   assert.match(normalizedSmoke, /bot_notification_projection_invalid/);
   assert.match(normalizedSmoke, /bot_notification_push_projection_invalid/);
+  assert.match(normalizedSmoke, /human_notification_raw_avatar_not_sanitized/);
+  assert.match(normalizedSmoke, /bot_notification_raw_avatar_not_sanitized/);
   assert.match(normalizedSmoke, /bot_chat_summary_or_unread_invalid/);
   assert.match(normalizedSmoke, /bot_chat_message_search_failed/);
+  assert.match(normalizedSmoke, /deleted_bot_chat_search_identity_leaked/);
+  assert.match(normalizedSmoke, /deleted_bot_old_identity_searchable/);
   assert.match(normalizedSmoke, /profile_delete_tombstone_not_preserved/);
   assert.match(normalizedSmoke, /anon_can_access_private_bot_table/);
   assert.match(normalizedSmoke, /authenticated_can_execute_bot_internal_rpc/);

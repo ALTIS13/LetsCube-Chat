@@ -65,6 +65,7 @@ declare
   v_history_message_id uuid;
   v_system_message_id uuid;
   v_task6_bot_message_id uuid;
+  v_task6_unsafe_bot_message_id uuid;
   v_task6_human_message_id uuid;
   v_first_send jsonb;
   v_duplicate_send jsonb;
@@ -2650,11 +2651,46 @@ begin
   values (v_task6_chat_id, v_bot_id, pg_catalog.now());
   insert into public.messages(chat_id, user_id, content, type, created_at)
   values (v_task6_chat_id, v_recipient_id, 'task6 own human', 'text', pg_catalog.now() - interval '4 seconds');
+  update public.profiles
+  set avatar_url = 'https://app.letscube.ru/storage/v1/object/sign/avatars/human.webp?token=human-secret'
+  where id = v_actor_id;
   insert into public.messages(chat_id, user_id, content, type, created_at)
   values (v_task6_chat_id, v_actor_id, 'task6 incoming human', 'text', pg_catalog.now() - interval '3 seconds')
   returning id into v_task6_human_message_id;
+  select notification_row.payload
+  into v_task6_push
+  from public.notifications notification_row
+  where notification_row.user_id = v_recipient_id
+    and notification_row.payload->>'message_id' = v_task6_human_message_id::text
+  order by notification_row.created_at desc
+  limit 1;
+  if v_task6_push is null
+     or nullif(v_task6_push->>'sender_avatar_url', '') is not null then
+    raise exception 'human_notification_raw_avatar_not_sanitized';
+  end if;
+  update public.profiles set avatar_url = null where id = v_actor_id;
   insert into public.messages(chat_id, user_id, bot_id, content, type, created_at)
   values (v_task6_chat_id, null, null, 'task6 system', 'system', pg_catalog.now() - interval '2 seconds');
+  update public.bots
+  set avatar_url = 'https://api.letscube.ru/media/bots/smoke.webp?password=bot-secret&authorization=bearer&signed_url=private'
+  where id = v_bot_id;
+  insert into public.messages(chat_id, user_id, bot_id, content, type, created_at)
+  values (v_task6_chat_id, null, v_bot_id, 'task6 unsafe avatar bot', 'text', pg_catalog.now() - interval '1500 milliseconds')
+  returning id into v_task6_unsafe_bot_message_id;
+  select notification_row.payload
+  into v_task6_push
+  from public.notifications notification_row
+  where notification_row.user_id = v_recipient_id
+    and notification_row.payload->>'message_id' = v_task6_unsafe_bot_message_id::text
+  order by notification_row.created_at desc
+  limit 1;
+  if v_task6_push is null
+     or nullif(v_task6_push->>'sender_avatar_url', '') is not null then
+    raise exception 'bot_notification_raw_avatar_not_sanitized';
+  end if;
+  update public.bots
+  set avatar_url = 'https://api.letscube.ru/media/bots/smoke.webp'
+  where id = v_bot_id;
   insert into public.messages(chat_id, user_id, bot_id, content, type, created_at)
   values (v_task6_chat_id, null, v_bot_id, 'task6 bot searchable', 'text', pg_catalog.now() - interval '1 second')
   returning id into v_task6_bot_message_id;
@@ -2691,7 +2727,7 @@ begin
   select summary.* into v_task6_summary
   from public.chat_list_summaries(array[v_task6_chat_id]) summary;
   if v_task6_summary.chat_id <> v_task6_chat_id
-     or v_task6_summary.unread_count <> 2
+     or v_task6_summary.unread_count <> 3
      or v_task6_summary.last_message->>'id' <> v_task6_bot_message_id::text
      or v_task6_summary.last_message->'bot'->>'id' <> v_bot_id::text
      or v_task6_summary.last_message->'bot' ? 'delete_after' then
@@ -2706,6 +2742,39 @@ begin
   ) then
     execute 'reset role';
     raise exception 'bot_chat_message_search_failed';
+  end if;
+  execute 'reset role';
+  update public.bots set state = 'deleted' where id = v_bot_id;
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_recipient_id::text, true);
+  execute 'set local role authenticated';
+  if not exists (
+    select 1
+    from public.search_chat_messages(v_task6_chat_id, 'удалённый бот', '{}'::jsonb, 20, null, true) result
+    where result.message_id = v_task6_bot_message_id
+      and result.sender_name = 'Удалённый бот'
+      and result.rank > 0.9
+  ) then
+    execute 'reset role';
+    raise exception 'deleted_bot_chat_search_identity_leaked';
+  end if;
+  if exists (
+    select 1
+    from public.search_chat_messages(v_task6_chat_id, 'Smoke bot', '{}'::jsonb, 20, null, true) result
+    where result.message_id = v_task6_bot_message_id
+  ) or exists (
+    select 1
+    from public.search_chat_messages(
+      v_task6_chat_id,
+      '',
+      pg_catalog.jsonb_build_object('from', v_bot_username),
+      20,
+      null,
+      true
+    ) result
+    where result.message_id = v_task6_bot_message_id
+  ) then
+    execute 'reset role';
+    raise exception 'deleted_bot_old_identity_searchable';
   end if;
   execute 'reset role';
 

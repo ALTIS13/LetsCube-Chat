@@ -15,6 +15,21 @@ test.describe("bot chat integration", () => {
     await installSupabaseFixture(page);
   });
 
+  test("shows bot last-message identity, preview, and unread count before opening chat", async ({ page }) => {
+    await page.goto("/");
+
+    const chatRow = page.locator(`[data-testid="chat-list-item"][data-chat-id="${CHAT_ID}"]`);
+    await expect(chatRow).toBeVisible();
+    await expect.poll(() => page.evaluate(async () => {
+      const { useAppStore } = await import("/src/store/app.store.ts");
+      return useAppStore.getState().selectedChatId;
+    })).toBeNull();
+    await expect(page.locator(`[data-message-id="${BOT_MESSAGE_ID}"]`)).toHaveCount(0);
+    await expect(chatRow).toContainText("Automation Bot: Deployment check complete");
+    await expect(chatRow).toHaveAttribute("data-unread-count", "2");
+    await expect(chatRow.getByText("2", { exact: true })).toBeVisible();
+  });
+
   test("renders active and deleted bot actors without human mutation controls", async ({ page }, testInfo) => {
     test.skip(!testInfo.project.name.includes("desktop"), "hover action coverage runs on desktop");
     await page.goto("/");
@@ -240,7 +255,7 @@ async function installSupabaseFixture(page: Page) {
 }
 
 function activeBotMessage() {
-  return message(BOT_MESSAGE_ID, BOT_ID, "Automation Bot message", {
+  return message(BOT_MESSAGE_ID, BOT_ID, "Deployment check complete", {
     id: BOT_ID,
     username: "automation_probe_bot",
     display_name: "Automation Bot",

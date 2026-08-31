@@ -141,7 +141,13 @@ export async function showDesktopMessageNotification(
       route: notification.route ?? "/",
       ...(notification.icon ? { icon: notification.icon } : {}),
     };
-    return await api.sendNotification(payload);
+    try {
+      return await api.sendNotification(payload);
+    } catch (error) {
+      if (!payload.icon || !isUnknownIconFieldError(error)) throw error;
+      const { icon: _icon, ...legacyPayload } = payload;
+      return await api.sendNotification(legacyPayload);
+    }
   } catch {
     return false;
   }
@@ -364,6 +370,17 @@ function nativeNotificationGroup(
   groupTag: string,
 ): string {
   return `${kind}:${stableDesktopNotificationId(groupTag).toString(16).padStart(8, "0")}`;
+}
+
+function isUnknownIconFieldError(error: unknown): boolean {
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : error && typeof error === "object" && "message" in error && typeof error.message === "string"
+        ? error.message
+        : "";
+  return /unknown field\s+(?:[`'"]icon[`'"]|icon\b)/i.test(message);
 }
 
 function safeDesktopRoute(value: unknown): string | null {

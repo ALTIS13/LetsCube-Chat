@@ -12,6 +12,7 @@ import type { AvatarVariantUrls } from "@/hooks/useMediaVariants";
 import { formatChatMessagePreview } from "@/lib/messagePreview";
 import { getMessageDeliveryState } from "@/lib/messageDelivery";
 import { isUserOnline } from "@/lib/presence";
+import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
 import {
   getGroupReadReceiptAriaLabel,
   getGroupReadReceiptCompactLabel,
@@ -92,7 +93,11 @@ export function ChatListItem({
 
   const getMessagePreview = () => {
     if (!lastMsg) return chat.cleared_at ? "История очищена" : "Сообщений пока нет";
-    return formatChatMessagePreview(lastMsg);
+    const preview = formatChatMessagePreview(lastMsg);
+    const actor = resolveMessageActor(lastMsg);
+    return chat.type !== "private" && (actor.kind === "bot" || actor.kind === "deleted_bot")
+      ? `${messageActorDisplayName(actor)}: ${preview}`
+      : preview;
   };
 
   return (

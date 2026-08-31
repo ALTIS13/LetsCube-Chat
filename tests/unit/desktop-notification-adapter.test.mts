@@ -215,6 +215,95 @@ test("desktop notification adapter reports a sanitized native delivery failure",
   }
 });
 
+test("desktop notification adapter retries the exact legacy payload when icon is unknown", async () => {
+  const previousWindow = installDesktopBridge();
+  const sent: Array<Record<string, unknown>> = [];
+
+  try {
+    const delivered = await showDesktopMessageNotification(
+      {
+        title: "Помощник",
+        body: "Ответ готов",
+        tag: "notification-bot-legacy",
+        groupTag: "message:chat:chat-legacy",
+        header: { title: "Помощник", route: "/?chat=chat-legacy" },
+        icon: "https://api.letscube.ru/media/bots/helper.webp",
+        kind: "message",
+        route: "/?chat=chat-legacy&message=message-legacy",
+      },
+      async () => ({
+        sendNotification: async (notification: Record<string, unknown>) => {
+          sent.push(structuredClone(notification));
+          if (sent.length === 1) {
+            throw new Error("invalid args for notify: unknown field `icon`, expected `route`");
+          }
+          return true;
+        },
+      }),
+      { visibilityState: "hidden" },
+    );
+
+    assert.equal(delivered, true);
+    assert.equal(sent.length, 2);
+    assert.equal(sent[0]?.icon, "https://api.letscube.ru/media/bots/helper.webp");
+    const { icon: _icon, ...expectedLegacyPayload } = sent[0] ?? {};
+    assert.deepEqual(sent[1], expectedLegacyPayload);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+test("desktop notification adapter does not retry unrelated bridge errors", async () => {
+  const previousWindow = installDesktopBridge();
+  let calls = 0;
+
+  try {
+    const delivered = await showDesktopMessageNotification(
+      {
+        title: "Помощник",
+        body: "Ответ готов",
+        tag: "notification-bot-offline",
+        icon: "https://api.letscube.ru/media/bots/helper.webp",
+      },
+      async () => ({
+        sendNotification: async () => {
+          calls += 1;
+          throw new Error("invalid args for notify: unknown field iconography");
+        },
+      }),
+      { visibilityState: "hidden" },
+    );
+
+    assert.equal(delivered, false);
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
+test("desktop notification adapter does not duplicate iconless bridge calls", async () => {
+  const previousWindow = installDesktopBridge();
+  let calls = 0;
+
+  try {
+    const delivered = await showDesktopMessageNotification(
+      { title: "LETSCUBE", body: "Новое сообщение", tag: "notification-legacy-iconless" },
+      async () => ({
+        sendNotification: async () => {
+          calls += 1;
+          throw new Error("invalid args for notify: unknown field `icon`");
+        },
+      }),
+      { visibilityState: "hidden" },
+    );
+
+    assert.equal(delivered, false);
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.window = previousWindow;
+  }
+});
+
 test("desktop notification adapter removes a read notification by the same stable tag and group", async () => {
   const previousWindow = installDesktopBridge();
   const removed: Array<Record<string, unknown>> = [];

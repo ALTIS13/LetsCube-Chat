@@ -1,17 +1,27 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "../..");
 const container = `letscube-bot-task6-pg17-${process.pid}`;
 const image = "postgres:17-alpine";
+const commandDriver = process.env.BOT_PG_SMOKE_COMMAND_DRIVER || null;
+const temp = mkdtempSync(join(tmpdir(), "letscube-bot-task6-pg17-"));
 const files = {
   fixture: resolve(root, ".superpowers/sdd/2026-08-30-bot-platform/task-3-controller-disposable-fixture.sql"),
   migration: resolve(root, ".migration-backup/supabase/migrations/20260831100000_bot_platform_foundation.sql"),
   smoke: resolve(root, "tests/server/bot-platform-db-smoke.sql"),
   concurrency: resolve(root, "tests/server/bot-platform-db-concurrency-probe.sql"),
 };
+const rehearsalMigration = resolve(temp, "migration-rehearsal.sql");
+writeFileSync(
+  rehearsalMigration,
+  stripProposalTransaction(readFileSync(files.migration, "utf8")),
+  "utf8",
+);
 
 let started = false;
 try {
@@ -33,9 +43,25 @@ $roles$;
   for (const [name, source] of Object.entries(files)) {
     run("docker", ["cp", source, `${container}:/tmp/${name}.sql`]);
   }
+  run("docker", ["cp", rehearsalMigration, `${container}:/tmp/migration-rehearsal.sql`]);
 
   runPsqlFile("/tmp/fixture.sql", "compatibility fixture");
   installProposalCompatibilitySchema();
+
+  const schemaBefore = dumpSchema();
+  console.log("Running proposal rollback rehearsal...");
+  runPsql(`
+begin;
+\\i /tmp/migration-rehearsal.sql
+rollback;
+`);
+  const schemaAfter = dumpSchema();
+  assert(
+    schemaAfter === schemaBefore,
+    `proposal rollback changed schema: ${firstDifference(schemaBefore, schemaAfter)}`,
+  );
+  console.log("Proposal rollback rehearsal restored schema.");
+
   runPsqlFile("/tmp/migration.sql", "fresh proposal apply");
   runPsqlFile("/tmp/smoke.sql", "rollback smoke and role probes");
 
@@ -49,15 +75,16 @@ $roles$;
   console.log(`bot_chat_search_notification_smoke_ok|${rollbackProbe}`);
 } finally {
   if (started) {
-    spawnSync("docker", ["rm", "-fv", container], { cwd: root, encoding: "utf8", stdio: "ignore" });
+    spawnCommand("docker", ["rm", "-fv", container], { cwd: root, encoding: "utf8", stdio: "ignore" });
   }
+  rmSync(temp, { recursive: true, force: true });
 }
 
 function waitForPostgres() {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     // The official image briefly starts an init-only server on the Unix socket.
     // Probe TCP so the smoke continues only after the final server is listening.
-    const ready = spawnSync("docker", ["exec", container, "pg_isready", "-h", "127.0.0.1", "-U", "postgres"], {
+    const ready = spawnCommand("docker", ["exec", container, "pg_isready", "-h", "127.0.0.1", "-U", "postgres"], {
       cwd: root,
       encoding: "utf8",
       stdio: "ignore",
@@ -66,6 +93,31 @@ function waitForPostgres() {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
   }
   throw new Error("PostgreSQL 17 did not become ready");
+}
+
+function dumpSchema() {
+  const dump = run(
+    "docker",
+    [
+      "exec",
+      container,
+      "pg_dump",
+      "-U",
+      "postgres",
+      "-d",
+      "postgres",
+      "--schema-only",
+      "--no-owner",
+      "--no-privileges",
+    ],
+    { quiet: true },
+  );
+  return dump
+    .replaceAll("\r\n", "\n")
+    .split("\n")
+    .filter((line) => !/^\\(?:un)?restrict\b/.test(line.trim()))
+    .join("\n")
+    .trimEnd();
 }
 
 function runPsqlFile(path, label) {
@@ -145,7 +197,7 @@ function runPsql(sql, { tuplesOnly = false } = {}) {
 }
 
 function run(command, args, { input, quiet = false } = {}) {
-  const result = spawnSync(command, args, {
+  const result = spawnCommand(command, args, {
     cwd: root,
     encoding: "utf8",
     input,
@@ -156,6 +208,38 @@ function run(command, args, { input, quiet = false } = {}) {
     throw new Error(`${command} ${args.join(" ")} failed with exit ${result.status}${detail ? `: ${detail}` : ""}`);
   }
   return result.stdout ?? "";
+}
+
+function spawnCommand(command, args, options) {
+  return commandDriver
+    ? spawnSync(process.execPath, [commandDriver, command, ...args], options)
+    : spawnSync(command, args, options);
+}
+
+function stripProposalTransaction(source) {
+  const lines = source.replaceAll("\r\n", "\n").split("\n");
+  const executable = lines
+    .map((line, index) => ({ index, value: line.trim() }))
+    .filter(({ value }) => value && !value.startsWith("--"));
+  const first = executable[0];
+  const last = executable.at(-1);
+  assert(first && /^begin;$/i.test(first.value), "proposal must start with top-level BEGIN");
+  assert(last && /^commit;$/i.test(last.value), "proposal must end with top-level COMMIT");
+  lines.splice(last.index, 1);
+  lines.splice(first.index, 1);
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
+function firstDifference(before, after) {
+  const beforeLines = before.split("\n");
+  const afterLines = after.split("\n");
+  const limit = Math.max(beforeLines.length, afterLines.length);
+  for (let index = 0; index < limit; index += 1) {
+    if (beforeLines[index] !== afterLines[index]) {
+      return `line ${index + 1}: before=${JSON.stringify(beforeLines[index] ?? null)} after=${JSON.stringify(afterLines[index] ?? null)}`;
+    }
+  }
+  return "unknown mismatch";
 }
 
 function assert(condition, message) {

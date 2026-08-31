@@ -5465,7 +5465,7 @@ begin
     message.chat_id,
     message.topic_id,
     case
-      when message.bot_id is not null then coalesce(bot.display_name, bot.username, 'Удалённый бот')
+      when message.bot_id is not null then bot_identity.sender_name
       when message.user_id is not null then coalesce(sender.full_name, sender.username, 'Участник')
       when message.type = 'system' then 'Система'
       else 'Удалённый пользователь'
@@ -5489,8 +5489,7 @@ begin
       extensions.similarity(pg_catalog.lower(coalesce(message.content, '')), v_plain),
       extensions.similarity(pg_catalog.lower(coalesce(sender.full_name, '')), v_plain),
       extensions.similarity(pg_catalog.lower(coalesce(sender.username, '')), v_plain),
-      extensions.similarity(pg_catalog.lower(coalesce(bot.display_name, '')), v_plain),
-      extensions.similarity(pg_catalog.lower(coalesce(bot.username, '')), v_plain)
+      extensions.similarity(pg_catalog.lower(coalesce(bot_identity.search_text, '')), v_plain)
     )::real
   from public.messages message
   join public.chat_members membership
@@ -5499,6 +5498,24 @@ begin
    and membership.hidden_at is null
   left join public.profiles sender on sender.id = message.user_id
   left join public.bots bot on bot.id = message.bot_id
+  left join lateral (
+    select
+      case
+        when bot.id is null or bot.state = 'deleted' then 'Удалённый бот'
+        else coalesce(
+          nullif(pg_catalog.btrim(bot.display_name), ''),
+          nullif(pg_catalog.btrim(bot.username), ''),
+          'Бот'
+        )
+      end as sender_name,
+      case
+        when bot.id is null or bot.state = 'deleted' then 'Удалённый бот'
+        else coalesce(
+          nullif(pg_catalog.btrim(pg_catalog.concat_ws(' ', bot.display_name, bot.username)), ''),
+          'Бот'
+        )
+      end as search_text
+  ) bot_identity on message.bot_id is not null
   left join public.message_hidden_for_users hidden
     on hidden.message_id = message.id
    and hidden.user_id = (select auth.uid())
@@ -5514,8 +5531,7 @@ begin
       nullif(v_from, '') is null
       or pg_catalog.lower(coalesce(sender.username, '')) like '%' || v_from || '%'
       or pg_catalog.lower(coalesce(sender.full_name, '')) like '%' || v_from || '%'
-      or pg_catalog.lower(coalesce(bot.username, '')) like '%' || v_from || '%'
-      or pg_catalog.lower(coalesce(bot.display_name, '')) like '%' || v_from || '%'
+      or pg_catalog.lower(coalesce(bot_identity.search_text, '')) like '%' || v_from || '%'
     )
     and (
       coalesce(pg_catalog.array_length(v_has, 1), 0) = 0
@@ -5530,8 +5546,7 @@ begin
       or pg_catalog.lower(coalesce(message.content, '')) like v_like
       or pg_catalog.lower(coalesce(sender.full_name, '')) like v_like
       or pg_catalog.lower(coalesce(sender.username, '')) like v_like
-      or pg_catalog.lower(coalesce(bot.display_name, '')) like v_like
-      or pg_catalog.lower(coalesce(bot.username, '')) like v_like
+      or pg_catalog.lower(coalesce(bot_identity.search_text, '')) like v_like
       or (message.type in ('image','video','audio','file') and coalesce(pg_catalog.array_length(v_has, 1), 0) > 0)
     )
   order by rank desc, message.created_at desc
@@ -5543,6 +5558,40 @@ revoke all on function public.search_chat_messages(uuid,text,jsonb,integer,uuid,
   from public, anon, authenticated, service_role;
 grant execute on function public.search_chat_messages(uuid,text,jsonb,integer,uuid,boolean)
   to authenticated;
+
+create or replace function public._sanitize_notification_avatar_url(p_value text)
+returns text
+language plpgsql
+immutable
+set search_path = ''
+as $function$
+declare
+  v_value text := nullif(pg_catalog.btrim(coalesce(p_value, '')), '');
+begin
+  if v_value is null
+     or pg_catalog.length(v_value) > 2048
+     or not (
+       (v_value like '/%' and v_value not like '//%')
+       or v_value like 'https://app.letscube.ru/%'
+       or v_value like 'https://api.letscube.ru/%'
+     )
+     or pg_catalog.lower(v_value) like '%/storage/v1/%'
+     or pg_catalog.lower(v_value) like '%/object/sign/%'
+     or pg_catalog.lower(v_value) like '%token=%'
+     or pg_catalog.lower(v_value) like '%password=%'
+     or pg_catalog.lower(v_value) like '%authorization=%'
+     or pg_catalog.lower(v_value) like '%signedurl%'
+     or pg_catalog.lower(v_value) like '%signed_url%' then
+    return null;
+  end if;
+  return v_value;
+end
+$function$;
+
+revoke all on function public._sanitize_notification_avatar_url(text)
+  from public, anon, authenticated;
+grant execute on function public._sanitize_notification_avatar_url(text)
+  to service_role;
 
 create or replace function public._notification_push_payload(
   p_kind text,
@@ -5567,23 +5616,10 @@ declare
   v_message_id text := nullif(p_payload->>'message_id', '');
   v_preview text := nullif(p_payload->>'preview', '');
   v_sender_name text := nullif(p_payload->>'sender_name', '');
-  v_sender_avatar_url text := nullif(p_payload->>'sender_avatar_url', '');
+  v_sender_avatar_url text := public._sanitize_notification_avatar_url(
+    nullif(p_payload->>'sender_avatar_url', '')
+  );
 begin
-  if v_sender_avatar_url is not null and (
-    not (
-      (v_sender_avatar_url like '/%' and v_sender_avatar_url not like '//%')
-      or v_sender_avatar_url like 'https://app.letscube.ru/%'
-      or v_sender_avatar_url like 'https://api.letscube.ru/%'
-    )
-    or lower(v_sender_avatar_url) like '%/storage/v1/%'
-    or lower(v_sender_avatar_url) like '%/object/sign/%'
-    or lower(v_sender_avatar_url) like '%token=%'
-    or lower(v_sender_avatar_url) like '%signedurl%'
-    or lower(v_sender_avatar_url) like '%signed_url%'
-  ) then
-    v_sender_avatar_url := null;
-  end if;
-
   if p_kind like 'task_%' then
     v_body := coalesce('Задача: «' || v_task_title || '»', 'Обновление задачи');
     v_route := '/tasks';
@@ -5683,15 +5719,12 @@ begin
         nullif('@' || p.username, '@'),
         'Участник'
       ),
-      case
-        when p.avatar_url like '/%' and p.avatar_url not like '//%' then p.avatar_url
-        when p.avatar_url like 'https://app.letscube.ru/%' then p.avatar_url
-        when p.avatar_url like 'https://api.letscube.ru/%' then p.avatar_url
-        else null
-      end
+      p.avatar_url
     into v_sender_name, v_sender_avatar_url
     from public.profiles p where p.id = new.user_id;
   end if;
+
+  v_sender_avatar_url := public._sanitize_notification_avatar_url(v_sender_avatar_url);
 
   select
     coalesce(nullif(pg_catalog.btrim(chat.name), ''), v_sender_name, 'Чат'),
