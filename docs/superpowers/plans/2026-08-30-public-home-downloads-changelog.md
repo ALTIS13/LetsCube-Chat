@@ -39,6 +39,7 @@
 - Modify: `tests/unit/release-catalog-deploy.test.mjs`
 - Modify: `tests/unit/distribution-platform.test.mts`
 - Create: `tests/fixtures/release-highlights.json`
+- Create: `tests/fixtures/release-manifest-v1-without-highlights.json`
 
 **Interfaces:**
 - `ReleasePlatform` becomes `"android" | "windows" | "macos" | "ios" | "web"`.
@@ -63,6 +64,10 @@ test("highlights are capped without changing schema version", () => {
   assert.throws(() => parseReleaseManifest(androidManifest({ highlights: ["x".repeat(141)] }), "android"), /highlights/);
 });
 ```
+
+Also keep a raw pre-highlights v1 fixture and assert it parses to
+`highlights: []`. Unknown JSON fields remain ignored. This is the explicit
+backward-compatibility gate for installed clients and old manifests.
 
 - [ ] **Step 2: Run the focused tests and verify they fail**
 
@@ -106,6 +111,19 @@ Older manifest files without `highlights` parse as an empty list. Existing insta
 
 Extend legacy publish syntax with `--highlights-file FILE`. The file must be a UTF-8 JSON array of one to six strings, each 1-140 characters. Validate it before acquiring the publish lock. Pass the parsed array to both jq and Python writers as `highlights`.
 
+The exact legacy grammar becomes:
+
+```text
+publish-native-release.sh PLATFORM CHANNEL VERSION BUILD ARTIFACT [NOTES] [--highlights-file FILE]
+```
+
+The first non-flag argument after `ARTIFACT` is the optional notes value.
+`--highlights-file` may appear once after it or directly after `ARTIFACT`; an
+unknown option, duplicate flag, missing file argument, symlink or invalid JSON
+fails before `acquire_publish_lock`. Existing five- and six-positional-argument
+invocations remain unchanged. Tests exercise both jq and Python writer paths and
+assert identical optional-field output.
+
 Example fixture:
 
 ```json
@@ -124,7 +142,7 @@ The TypeScript client recognizes future platform identifiers, but `publish-nativ
 ```powershell
 pnpm.cmd release:catalog:test
 node --test tests/unit/distribution-platform.test.mts
-git add artifacts/kub/src/lib/releaseCatalog.ts scripts/publish-native-release.sh tests/unit/release-catalog.test.mts tests/unit/release-catalog-deploy.test.mjs tests/unit/distribution-platform.test.mts tests/fixtures/release-highlights.json
+git add artifacts/kub/src/lib/releaseCatalog.ts scripts/publish-native-release.sh tests/unit/release-catalog.test.mts tests/unit/release-catalog-deploy.test.mjs tests/unit/distribution-platform.test.mts tests/fixtures/release-highlights.json tests/fixtures/release-manifest-v1-without-highlights.json
 git commit -m "feat(release): add compact Stable changelog metadata"
 ```
 
@@ -137,7 +155,7 @@ git commit -m "feat(release): add compact Stable changelog metadata"
 - Create: `artifacts/kub/src/pages/public/PublicHomePage.tsx`
 - Create: `artifacts/kub/src/pages/public/DownloadPage.tsx`
 - Modify: `artifacts/kub/src/lib/publicRoutes.ts`
-- Modify: `artifacts/kub/src/lib/platform/distribution.ts`
+- Modify: `artifacts/kub/src/lib/platform/desktop.ts`
 - Modify: `artifacts/kub/src/App.tsx`
 - Modify: `tests/unit/public-routes.test.mjs`
 - Create: `tests/unit/public-home-routing.test.mts`
@@ -146,6 +164,8 @@ git commit -m "feat(release): add compact Stable changelog metadata"
 - Produces: `decideRootExperience(input) -> "public_home" | "login" | "messenger" | "loading"`.
 - Adds public route `/download`.
 - Does not alter `/privacy`, `/support` or `/auth/callback` precedence.
+- `nativeShell` is sourced only from `isNativeApp() || isDesktopShell()`; user-agent
+  distribution classification is not an authority for root routing.
 
 - [ ] **Step 1: Write failing root-decision tests**
 
@@ -167,6 +187,11 @@ test("authenticated users enter messenger", () => {
 });
 ```
 
+Add precedence coverage for loading, auth callback/recovery, unauthenticated
+protected deep links, Capacitor Android, future Capacitor iOS, Tauri Windows and
+future Tauri macOS. iPhone/iPad browser sessions remain browsers and therefore
+keep their externally owned `ios_pwa` behavior.
+
 - [ ] **Step 2: Run tests and verify they fail**
 
 Run: `node --test tests/unit/public-home-routing.test.mts tests/unit/public-routes.test.mjs`
@@ -187,7 +212,13 @@ export function decideRootExperience(input: {
 }
 ```
 
-Use existing Capacitor and Tauri runtime detection; do not rely only on user-agent strings for native shells.
+Add platform-neutral `isDesktopShell()` to `platform/desktop.ts`; it detects the
+presence of the trusted LETSCUBE desktop bridge independently of the bridge's
+reported platform. Root routing uses `isNativeApp() || isDesktopShell()`. Keep
+the existing Windows-only `isDesktopApp()` unchanged for updater, notification
+and Windows capability calls, so a future macOS bridge does not inherit Windows
+privileges. Do not rely on user-agent strings or download-target classification
+for native shells.
 
 - [ ] **Step 4: Restructure routing without weakening protected routes**
 
@@ -200,9 +231,9 @@ Create semantic `main`, header, hero and platform sections with visible `Отк�
 - [ ] **Step 6: Run route tests and commit**
 
 ```powershell
-node --test tests/unit/public-home-routing.test.mts tests/unit/public-routes.test.mjs
+node --test tests/unit/public-home-routing.test.mts tests/unit/public-routes.test.mjs tests/unit/distribution-platform.test.mts
 pnpm.cmd --filter @workspace/kub run typecheck
-git add artifacts/kub/src/App.tsx artifacts/kub/src/lib/publicHomeRouting.ts artifacts/kub/src/lib/publicRoutes.ts artifacts/kub/src/lib/platform/distribution.ts artifacts/kub/src/pages/public/PublicHomePage.tsx artifacts/kub/src/pages/public/DownloadPage.tsx tests/unit/public-home-routing.test.mts tests/unit/public-routes.test.mjs
+git add artifacts/kub/src/App.tsx artifacts/kub/src/lib/publicHomeRouting.ts artifacts/kub/src/lib/publicRoutes.ts artifacts/kub/src/lib/platform/desktop.ts artifacts/kub/src/pages/public/PublicHomePage.tsx artifacts/kub/src/pages/public/DownloadPage.tsx tests/unit/public-home-routing.test.mts tests/unit/public-routes.test.mjs tests/unit/distribution-platform.test.mts
 git commit -m "feat(public): route guests to LETSCUBE home"
 ```
 
@@ -213,6 +244,9 @@ git commit -m "feat(public): route guests to LETSCUBE home"
 **Files:**
 - Create: `tests/fixtures/public-home-demo.json`
 - Create: `scripts/capture-public-home-previews.mjs`
+- Create: `artifacts/kub/src/lib/publicPreviewFixture.ts`
+- Create: `artifacts/kub/src/pages/public/PublicPreviewCapturePage.tsx`
+- Modify: `artifacts/kub/src/App.tsx`
 - Create: `artifacts/kub/public/product/windows-messenger-dark.webp`
 - Create: `artifacts/kub/public/product/windows-messenger-light.webp`
 - Create: `artifacts/kub/public/product/android-messenger-dark.webp`
@@ -224,10 +258,12 @@ git commit -m "feat(public): route guests to LETSCUBE home"
 **Interfaces:**
 - Produces deterministic public assets with demo-only content.
 - Assets are WebP, bounded in dimensions and file size, and contain no production account data.
+- Produces a capture-only route that exists only when both `import.meta.env.DEV`
+  and `VITE_PUBLIC_PREVIEW_FIXTURE=1` are true.
 
 - [ ] **Step 1: Write the asset contract test**
 
-The test reads every asset with `sharp` and asserts: WebP format, width between 720 and 1800, height between 450 and 1200, size below 350 KiB, and no filenames or fixture text matching production QA account names, email patterns or phone patterns.
+The test reads every asset with `sharp` and asserts: WebP format, width between 720 and 1800, height between 450 and 1200, size below 350 KiB, and no filenames or fixture text matching production QA account names, email patterns or phone patterns. A production build contract also asserts the capture route marker and fixture payload are absent. Retain a documented human visual privacy sign-off for the generated pixels; compressed-byte string scans are not accepted as proof of image privacy.
 
 - [ ] **Step 2: Add a deterministic demo fixture**
 
@@ -249,7 +285,13 @@ Use only fictional neutral content:
 
 - [ ] **Step 3: Implement a local-only capture route or fixture injection**
 
-The script starts the existing Vite app with a test-only query flag guarded by `import.meta.env.DEV`, injects the fixture without Supabase, captures desktop and Android-shaped interface states, and writes through `sharp` as WebP quality 82. Production builds must tree-shake or reject this injection path.
+The script starts the existing Vite app with
+`VITE_PUBLIC_PREVIEW_FIXTURE=1` in a clean browser context with no storage state.
+`App.tsx` exposes `/__qa/public-preview` only behind the two-part DEV guard and
+lazy-loads `PublicPreviewCapturePage`; `publicPreviewFixture.ts` validates the
+checked-in fictional fixture without Supabase or authentication. Query flags
+alone never enable capture mode. Production builds must omit the route marker
+and fixture payload, which the asset contract test verifies.
 
 - [ ] **Step 4: Produce future-platform visuals without fake downloads**
 
@@ -260,7 +302,7 @@ The macOS/iOS images may show the same sanitized LETSCUBE conversation inside pl
 ```powershell
 node scripts/capture-public-home-previews.mjs
 node --test tests/unit/public-product-assets.test.mjs
-git add tests/fixtures/public-home-demo.json scripts/capture-public-home-previews.mjs artifacts/kub/public/product tests/unit/public-product-assets.test.mjs
+git add tests/fixtures/public-home-demo.json scripts/capture-public-home-previews.mjs artifacts/kub/src/lib/publicPreviewFixture.ts artifacts/kub/src/pages/public/PublicPreviewCapturePage.tsx artifacts/kub/src/App.tsx artifacts/kub/public/product tests/unit/public-product-assets.test.mjs
 git commit -m "feat(public): add sanitized LETSCUBE product previews"
 ```
 
@@ -280,10 +322,12 @@ git commit -m "feat(public): add sanitized LETSCUBE product previews"
 - Modify: `artifacts/kub/src/pages/public/DownloadPage.tsx`
 - Modify: `artifacts/kub/src/index.css`
 - Modify: `artifacts/kub/index.html`
+- Modify: `artifacts/kub/src/hooks/useTheme.ts`
 - Create: `tests/e2e/public-home.spec.ts`
 
 **Interfaces:**
-- Produces ordered platform view models with `available`, `loading`, `stale`, `unavailable` and `error` states.
+- Produces ordered platform view models with `loading`, `available`, `unavailable`
+  and `error` states plus an independent `stale` boolean overlay.
 - Download anchors use only validated manifest artifact URLs.
 - Changelog uses at most six current Stable highlights.
 
@@ -306,6 +350,8 @@ export type PublicPlatformState = {
 ```
 
 Only Android and Windows are requested as active download manifests. macOS and iOS render unavailable until their owning agent adds valid catalog support.
+For macOS and iOS, tests require `href: null`, no download control and no App
+Store availability claim. Preview imagery never implies release availability.
 
 - [ ] **Step 3: Build an immersive first viewport**
 
@@ -321,11 +367,15 @@ Show the newest available Stable release, platform, version, date and up to six 
 
 - [ ] **Step 6: Preserve pre-paint theme behavior**
 
-Keep the inline bootstrap in `index.html` synchronized with `THEME_INIT_SCRIPT`. Add `color-scheme: light dark` and theme-correct `theme-color` handling without a React paint in the wrong theme.
+Keep the inline bootstrap in `index.html` synchronized with `THEME_INIT_SCRIPT`
+in `useTheme.ts` through a parity test. Add `color-scheme: light dark` and
+theme-correct `theme-color` handling before React paint and on resolved-theme
+changes. The existing iPhone/iPad-only PWA manifest injection block remains
+behaviorally unchanged and is covered by its current distribution regression.
 
 - [ ] **Step 7: Add responsive and accessibility tests**
 
-At `1920x1080`, `1440x900`, `390x844` and `412x915`, assert no horizontal scroll, no clipped buttons, actual images loaded, next section visible from hero, correct light/dark screenshots, keyboard navigation and reduced-motion support. Assert no visible computer-club terminology.
+At `1920x1080`, `1440x900`, `390x844` and `412x915`, assert no horizontal scroll, no clipped buttons, actual images loaded, next section visible from hero, correct light/dark screenshots, keyboard navigation and reduced-motion support. Assert no visible computer-club terminology. For macOS/iOS cards assert no artifact `href`, no download action and no store-availability claim.
 
 - [ ] **Step 8: Run tests and commit**
 
@@ -333,7 +383,7 @@ At `1920x1080`, `1440x900`, `390x844` and `412x915`, assert no horizontal scroll
 node --test tests/unit/public-release-model.test.mts tests/unit/release-catalog.test.mts
 pnpm.cmd --filter @workspace/kub run typecheck
 pnpm.cmd exec playwright test tests/e2e/public-home.spec.ts tests/e2e/privacy-support-public.spec.ts tests/e2e/letscube-brand-auth-layout.spec.ts
-git add artifacts/kub/src/components/public artifacts/kub/src/hooks/usePublicReleaseCatalog.ts artifacts/kub/src/lib/publicReleaseModel.ts artifacts/kub/src/pages/public artifacts/kub/src/index.css artifacts/kub/index.html tests/unit/public-release-model.test.mts tests/e2e/public-home.spec.ts
+git add artifacts/kub/src/components/public artifacts/kub/src/hooks/usePublicReleaseCatalog.ts artifacts/kub/src/hooks/useTheme.ts artifacts/kub/src/lib/publicReleaseModel.ts artifacts/kub/src/pages/public artifacts/kub/src/index.css artifacts/kub/index.html tests/unit/public-release-model.test.mts tests/e2e/public-home.spec.ts
 git commit -m "feat(public): add LETSCUBE app showcase"
 ```
 
@@ -343,6 +393,8 @@ git commit -m "feat(public): add LETSCUBE app showcase"
 
 **Files:**
 - Create: `docs/operations/public-home-release.md`
+- Create: `scripts/verify-public-release-artifact.mjs`
+- Create: `tests/unit/public-release-artifact-verification.test.mjs`
 - Modify: `docs/PRODUCTION_PRIORITY_TRACKER.md`
 
 **Interfaces:**
@@ -355,16 +407,26 @@ git commit -m "feat(public): add LETSCUBE app showcase"
 git diff --check
 pnpm.cmd typecheck
 pnpm.cmd release:catalog:test
+node --test tests/unit/public-release-artifact-verification.test.mjs
 pnpm.cmd e2e:smoke
 pnpm.cmd exec playwright test tests/e2e/public-home.spec.ts tests/e2e/visual-style-layout.spec.ts tests/e2e/release-distribution-settings.spec.ts
 cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"
 ```
 
-Expected: all PASS; no PWA-specific iPhone files changed.
+Expected: all PASS. The shared `index.html` theme bootstrap may change, but the
+iPhone/iPad-only manifest injection and `ios_pwa` ownership contract must remain
+behaviorally unchanged and covered by regression tests.
 
 - [ ] **Step 2: Check release catalog production responses**
 
-Fetch Android and Windows Stable manifests without printing private values. Verify HTTPS, `content-type`, artifact origin, SHA-256 shape, size, availability and optional highlights. Missing macOS/iOS manifests remain a valid unavailable state.
+Fetch Android and Windows Stable manifests without printing private values.
+Verify HTTPS, `content-type`, artifact origin, availability and optional
+highlights, then stream each available immutable artifact through
+`verify-public-release-artifact.mjs`. The verifier accepts only the exact
+catalog origin/path, enforces a bounded maximum size, hashes the actual bytes and
+requires both byte count and SHA-256 to equal the manifest before a public link
+is considered eligible. Missing macOS/iOS manifests remain a valid unavailable
+state.
 
 - [ ] **Step 3: Deploy the web application**
 
@@ -372,7 +434,11 @@ Push the validated commit, verify Coolify auto-deploy uses the exact commit and 
 
 - [ ] **Step 4: Run production visual QA**
 
-Verify unauthenticated `/`, `/download`, `/privacy`, `/support`, authenticated `/`, Windows native startup and Android native startup. Capture dark/light desktop and mobile screenshots and verify the download artifacts begin from `api.letscube.ru` without login.
+Verify unauthenticated `/`, `/download`, `/privacy`, `/support`, authenticated
+`/`, Windows native startup and Android native startup. Native startup must show
+no public-home flash or redirect. Capture dark/light desktop and mobile
+screenshots and verify the byte-validated download artifacts begin from
+`api.letscube.ru` without login.
 
 - [ ] **Step 5: Record rollout evidence and commit**
 
