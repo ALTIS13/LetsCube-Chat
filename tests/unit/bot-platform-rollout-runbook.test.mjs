@@ -31,8 +31,13 @@ test("fresh backup and an isolated PG17 restore rehearsal are hard fail-stop gat
   const source = runbook();
 
   assert.match(source, /fresh backup[^\n]*current run|свеж[^\n]*backup[^\n]*текущ/i);
+  assert.match(source, /BEFORE_BACKUPS/);
+  assert.match(source, /AFTER_BACKUPS/);
+  assert.match(source, /comm\s+-13/i);
+  assert.match(source, /wc\s+-l/i);
   assert.match(source, /sha256sum\s+-c/i);
   assert.match(source, /pg_restore\s+(?:--list|-l)/i);
+  assert.match(source, /-name '\*\.custom'/i);
   assert.match(source, /tar\s+(?:-t|-tf|--list)/i);
   assert.match(source, /isolated[^\n]*PG17|изолирован[^\n]*PG17/i);
   assert.match(source, /hard gate|ж[её]стк[^\n]*рубеж/i);
@@ -50,6 +55,20 @@ test("production rehearsal is bounded, blocks writes, and audits trigger side ef
   assert.match(source, /SET LOCAL idle_in_transaction_session_timeout/i);
   assert.match(source, /trigger[^\n]*external[^\n]*nontransactional/i);
   assert.match(source, /smoke[^\n]*(existing rows|существующ)/i);
+  for (const touchedRelation of [
+    "('auth', 'users')",
+    "('public', 'chat_members')",
+    "('public', 'chat_notification_preferences')",
+    "('public', 'messages')",
+    "('public', 'notification_preferences')",
+    "('public', 'profiles')",
+    "('public', 'push_subscriptions')",
+    "('public', 'topics')",
+    "('public', 'user_global_roles')",
+    "('storage', 'objects')",
+  ]) {
+    assert.ok(source.includes(touchedRelation), `missing trigger audit scope: ${touchedRelation}`);
+  }
 });
 
 test("combined rehearsal strips only the exact outer transaction markers", () => {

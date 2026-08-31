@@ -46,16 +46,33 @@ Backup должен быть создан именно в current run после
 set -euo pipefail
 
 BACKUP_ROOT="/srv/letscube/backups/automated"
-BACKUP_STARTED_EPOCH="$(date +%s)"
+STRICT_BACKUP_NAME='^[0-9]{8}-[0-9]{6}$'
+mapfile -t BEFORE_BACKUPS < <(
+  find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' |
+    awk -v pattern="$STRICT_BACKUP_NAME" '$0 ~ pattern' | LC_ALL=C sort
+)
+
+sudo /srv/letscube/scripts/letscube-backup.sh check
 sudo /srv/letscube/scripts/letscube-backup.sh run
 
-mapfile -t BACKUP_CANDIDATES < <(
-  find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' |
-    sort -nr | awk '{sub(/^[^ ]+ /, ""); print}'
+mapfile -t AFTER_BACKUPS < <(
+  find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' |
+    awk -v pattern="$STRICT_BACKUP_NAME" '$0 ~ pattern' | LC_ALL=C sort
 )
-test "${#BACKUP_CANDIDATES[@]}" -gt 0
-BACKUP_DIR="${BACKUP_CANDIDATES[0]}"
-test "$(stat -c %Y "$BACKUP_DIR")" -ge "$BACKUP_STARTED_EPOCH"
+NEW_BACKUPS="$({
+  comm -13 \
+    <(printf '%s\n' "${BEFORE_BACKUPS[@]}") \
+    <(printf '%s\n' "${AFTER_BACKUPS[@]}")
+} | sed '/^$/d')"
+test "$(printf '%s\n' "$NEW_BACKUPS" | sed '/^$/d' | wc -l | tr -d ' ')" -eq 1
+BACKUP_NAME="$(printf '%s\n' "$NEW_BACKUPS" | sed '/^$/d')"
+[[ "$BACKUP_NAME" =~ ^[0-9]{8}-[0-9]{6}$ ]]
+if printf '%s\n' "${BEFORE_BACKUPS[@]}" | grep -Fxq "$BACKUP_NAME"; then
+  exit 71
+fi
+
+BACKUP_DIR="$BACKUP_ROOT/$BACKUP_NAME"
+test -d "$BACKUP_DIR"
 test -f "$BACKUP_DIR/SHA256SUMS"
 
 (
@@ -63,7 +80,10 @@ test -f "$BACKUP_DIR/SHA256SUMS"
   sha256sum -c SHA256SUMS
 )
 
-mapfile -d '' DB_DUMPS < <(find "$BACKUP_DIR" -type f \( -name '*.dump' -o -name '*.backup' \) -print0)
+mapfile -d '' DB_DUMPS < <(
+  find "$BACKUP_DIR" -type f \
+    \( -name '*.custom' -o -name '*.dump' -o -name '*.backup' \) -print0
+)
 test "${#DB_DUMPS[@]}" -gt 0
 for dump in "${DB_DUMPS[@]}"; do
   pg_restore --list "$dump" >/dev/null
@@ -205,8 +225,20 @@ join pg_catalog.pg_class ct on ct.oid = t.tgrelid
 join pg_catalog.pg_namespace nt on nt.oid = ct.relnamespace
 join pg_catalog.pg_proc p on p.oid = t.tgfoid
 where not t.tgisinternal
-  and nt.nspname in ('public', 'private')
-  and ct.relname in ('messages', 'profiles', 'notifications', 'push_subscriptions');
+  and (nt.nspname, ct.relname) in (
+    ('auth', 'users'),
+    ('public', 'chat_members'),
+    ('public', 'chat_notification_preferences'),
+    ('public', 'chats'),
+    ('public', 'messages'),
+    ('public', 'notification_preferences'),
+    ('public', 'notifications'),
+    ('public', 'profiles'),
+    ('public', 'push_subscriptions'),
+    ('public', 'topics'),
+    ('public', 'user_global_roles'),
+    ('storage', 'objects')
+  );
 SQL
 
 if grep -Eiq 'net[.]http|http_(get|post)|dblink|pg_background|COPY[[:space:]]+PROGRAM|lo_export' \
