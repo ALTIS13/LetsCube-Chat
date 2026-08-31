@@ -25,7 +25,7 @@ test.describe("bot chat integration", () => {
       return useAppStore.getState().selectedChatId;
     })).toBeNull();
     await expect(page.locator(`[data-message-id="${BOT_MESSAGE_ID}"]`)).toHaveCount(0);
-    await expect(chatRow).toContainText("Automation Bot: Deployment check complete");
+    await expect(chatRow).toContainText("Удалённый бот: Deleted bot message");
     await expect(chatRow).toHaveAttribute("data-unread-count", "2");
     await expect(chatRow.getByText("2", { exact: true })).toBeVisible();
   });
@@ -246,7 +246,21 @@ async function installSupabaseFixture(page: Page) {
       }]);
     }
     if (url.pathname.endsWith("/rpc/global_search_v2")) return json(route, []);
-    if (url.pathname.includes("/rest/v1/messages")) return json(route, request.method() === "GET" ? messages : []);
+    if (url.pathname.includes("/rest/v1/messages")) {
+      if (request.method() !== "GET") return json(route, []);
+      const exactCountRequested = (request.headers().prefer ?? "").includes("count=exact");
+      return json(
+        route,
+        exactCountRequested ? messages.slice(0, 1).map(({ id }) => ({ id })) : messages,
+        200,
+        exactCountRequested
+          ? {
+              "access-control-expose-headers": "Content-Range",
+              "content-range": `0-0/${messages.length}`,
+            }
+          : undefined,
+      );
+    }
     if (url.pathname.includes("/rest/v1/message_hidden_for_users")) return json(route, []);
     if (url.pathname.includes("/rest/v1/notifications")) return json(route, request.method() === "GET" ? [notification] : []);
     if (url.pathname.includes("/rest/v1/rpc/")) return json(route, null);
@@ -311,6 +325,16 @@ function message(id: string, botId: string, content: string, bot: Record<string,
   };
 }
 
-async function json(route: Route, body: unknown, status = 200) {
-  await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+async function json(
+  route: Route,
+  body: unknown,
+  status = 200,
+  headers?: Record<string, string>,
+) {
+  await route.fulfill({
+    status,
+    contentType: "application/json",
+    headers,
+    body: JSON.stringify(body),
+  });
 }
