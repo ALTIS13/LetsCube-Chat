@@ -46,7 +46,7 @@
 - `ReleaseManifest` gains optional `highlights: string[]` while `schemaVersion` remains `1`.
 - Existing Android/Windows publishers remain the only active artifact publishers until another platform has a real distribution format.
 
-- [ ] **Step 1: Write failing parser tests**
+- [x] **Step 1: Write failing parser tests**
 
 ```ts
 test("parseReleaseManifest accepts bounded optional highlights", () => {
@@ -69,13 +69,13 @@ Also keep a raw pre-highlights v1 fixture and assert it parses to
 `highlights: []`. Unknown JSON fields remain ignored. This is the explicit
 backward-compatibility gate for installed clients and old manifests.
 
-- [ ] **Step 2: Run the focused tests and verify they fail**
+- [x] **Step 2: Run the focused tests and verify they fail**
 
 Run: `node --test tests/unit/release-catalog.test.mts`
 
 Expected: FAIL because parsed manifests do not expose `highlights`.
 
-- [ ] **Step 3: Extend the parser additively**
+- [x] **Step 3: Extend the parser additively**
 
 ```ts
 export type ReleaseManifest = {
@@ -107,7 +107,7 @@ function parseHighlights(value: unknown): string[] {
 
 Older manifest files without `highlights` parse as an empty list. Existing installed clients ignore the new JSON field.
 
-- [ ] **Step 4: Add an optional highlights file to the publisher**
+- [x] **Step 4: Add an optional highlights file to the publisher**
 
 Extend legacy publish syntax with `--highlights-file FILE`. The file must be a UTF-8 JSON array of one to six strings, each 1-140 characters. Validate it before acquiring the publish lock. Pass the parsed array to both jq and Python writers as `highlights`.
 
@@ -133,11 +133,11 @@ Example fixture:
 ]
 ```
 
-- [ ] **Step 5: Preserve active publisher platform restrictions**
+- [x] **Step 5: Preserve active publisher platform restrictions**
 
 The TypeScript client recognizes future platform identifiers, but `publish-native-release.sh` continues to publish only `android` APK and `windows` EXE until real macOS/iOS distribution is designed. Tests must assert an attempted fake macOS artifact still fails rather than publishing a dead link.
 
-- [ ] **Step 6: Run release tests and commit**
+- [x] **Step 6: Run release tests and commit**
 
 ```powershell
 pnpm.cmd release:catalog:test
