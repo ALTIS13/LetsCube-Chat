@@ -7,7 +7,7 @@ import pino from "../../artifacts/api-server/node_modules/pino/pino.js";
 import { createBotGatewayApp } from "../../artifacts/api-server/src/bot/app.ts";
 import { BotApiError } from "../../artifacts/api-server/src/bot/errors.ts";
 import { parseManagementAuthorization } from "../../artifacts/api-server/src/bot/managementAuth.ts";
-import { createBotManagementRateLimiter } from "../../artifacts/api-server/src/bot/managementRoutes.ts";
+import * as managementRoutes from "../../artifacts/api-server/src/bot/managementRoutes.ts";
 import { exactAuthorizationHeader } from "../../artifacts/api-server/src/bot/methodRouter.ts";
 import {
   createBotToken,
@@ -111,6 +111,7 @@ function createManagementApp(input: {
   rateLimiter?: {
     consume: (actorId: string, operation: string) => number | null;
   };
+  canCreateBot?: (actorId: string) => boolean;
 } = {}) {
   const calls = input.calls ?? [];
   const managementClient = {
@@ -156,9 +157,87 @@ function createManagementApp(input: {
         addresses: [{ address: "203.0.113.10", family: 4 as const }],
       }),
       rateLimiter: input.rateLimiter,
+      canCreateBot: input.canCreateBot ?? (() => true),
     },
   } as Parameters<typeof createBotGatewayApp>[0]);
 }
+
+test("bot creation rollout is disabled by default and bounded to an explicit canary cohort", () => {
+  const resolveBotCreationAdmission = (
+    managementRoutes as typeof managementRoutes & {
+      resolveBotCreationAdmission?: (
+        environment: NodeJS.ProcessEnv,
+      ) => (actorId: string) => boolean;
+    }
+  ).resolveBotCreationAdmission;
+
+  assert.equal(typeof resolveBotCreationAdmission, "function");
+  assert.equal(resolveBotCreationAdmission?.({})(USER_ID), false);
+  assert.equal(
+    resolveBotCreationAdmission?.({
+      BOT_CREATION_ENABLED: "true",
+      BOT_CREATION_CANARY_USER_IDS: USER_ID,
+    })(USER_ID),
+    true,
+  );
+  assert.equal(
+    resolveBotCreationAdmission?.({
+      BOT_CREATION_ENABLED: "true",
+      BOT_CREATION_CANARY_USER_IDS: USER_ID,
+    })(DEVELOPER_ID),
+    false,
+  );
+  assert.equal(
+    resolveBotCreationAdmission?.({
+      BOT_CREATION_ENABLED: "false",
+      BOT_CREATION_CANARY_USER_IDS: USER_ID,
+    })(USER_ID),
+    false,
+  );
+
+  assert.throws(
+    () =>
+      resolveBotCreationAdmission?.({
+        BOT_CREATION_ENABLED: "true",
+      }),
+    /bot_gateway_config_invalid/,
+  );
+  assert.throws(
+    () =>
+      resolveBotCreationAdmission?.({
+        BOT_CREATION_ENABLED: "TRUE",
+        BOT_CREATION_CANARY_USER_IDS: USER_ID,
+      }),
+    /bot_gateway_config_invalid/,
+  );
+  assert.throws(
+    () =>
+      resolveBotCreationAdmission?.({
+        BOT_CREATION_ENABLED: "true",
+        BOT_CREATION_CANARY_USER_IDS: `${USER_ID},${USER_ID}`,
+      }),
+    /bot_gateway_config_invalid/,
+  );
+  assert.throws(
+    () =>
+      resolveBotCreationAdmission?.({
+        BOT_CREATION_ENABLED: "true",
+        BOT_CREATION_CANARY_USER_IDS: "not-a-user-id",
+      }),
+    /bot_gateway_config_invalid/,
+  );
+  assert.throws(
+    () =>
+      resolveBotCreationAdmission?.({
+        BOT_CREATION_ENABLED: "true",
+        BOT_CREATION_CANARY_USER_IDS: Array.from(
+          { length: 26 },
+          (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+        ).join(","),
+      }),
+    /bot_gateway_config_invalid/,
+  );
+});
 
 test("management rate limits by verified user and normalized operation before mutation", async (t) => {
   const calls: ManagementCall[] = [];
@@ -206,7 +285,7 @@ test("management rate limits by verified user and normalized operation before mu
 
 test("default management rate limiter isolates users and operations", () => {
   let now = 1_000;
-  const limiter = createBotManagementRateLimiter(() => now);
+  const limiter = managementRoutes.createBotManagementRateLimiter(() => now);
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     assert.equal(limiter.consume(USER_ID, "POST /bots"), null);
@@ -723,6 +802,74 @@ test("creation returns deterministic token material once and stores only HMAC da
     },
   ]);
   assert.equal(JSON.stringify(calls).includes(expectedToken.raw), false);
+});
+
+test("creation admission rejects a non-canary user before SQL while list remains available", async (t) => {
+  const calls: ManagementCall[] = [];
+  const server = await listen(
+    createManagementApp({
+      calls,
+      canCreateBot: () => false,
+      async rpc(name) {
+        if (name === "bot_list_owned_internal") return { data: [], error: null };
+        if (name === "bot_creation_eligibility_internal") {
+          return {
+            data: [
+              {
+                email_verified: true,
+                phone_verified: true,
+                account_age_met: true,
+                not_banned: true,
+                under_limit: true,
+                active_bot_count: 0,
+                max_bots: 3,
+                can_create: true,
+              },
+            ],
+            error: null,
+          };
+        }
+        throw new Error(`unexpected RPC: ${name}`);
+      },
+    }),
+  );
+  t.after(() => close(server));
+
+  const listed = await call(server, "/bot/manage/v1/bots", {
+    headers: { authorization: `Bearer ${ACCESS_TOKEN}` },
+  });
+  assert.equal(listed.status, 200, JSON.stringify(listed));
+  assert.equal(
+    (listed.body as { result?: { eligibility?: { can_create?: unknown } } })
+      .result?.eligibility?.can_create,
+    false,
+  );
+
+  const created = await call(server, "/bot/manage/v1/bots", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${ACCESS_TOKEN}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      username: "closed_bot",
+      display_name: "Closed bot",
+      description: "",
+    }),
+  });
+  assert.equal(created.status, 403, JSON.stringify(created));
+  assert.deepEqual(created.body, {
+    ok: false,
+    error: {
+      code: "bot_creation_not_allowed",
+      message: "Bot creation is not allowed",
+      request_id: REQUEST_ID,
+    },
+  });
+  assert.deepEqual(
+    calls.map((call) => call.name),
+    ["bot_list_owned_internal", "bot_creation_eligibility_internal"],
+  );
 });
 
 test("rotation requires the observed prefix and never sends raw token to SQL", async (t) => {

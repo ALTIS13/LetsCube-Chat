@@ -140,13 +140,15 @@ FROM base AS bot-gateway-runtime
 ENV NODE_ENV=production \
     PORT=8098
 
-COPY --chown=node:node --from=build /app/ ./
+COPY --chown=node:node --from=build /app/artifacts/api-server/dist/botGatewayIndex.mjs /app/artifacts/api-server/dist/
+COPY --chown=node:node --from=build /app/artifacts/api-server/dist/pino-*.mjs /app/artifacts/api-server/dist/
+COPY --chown=node:node --from=build /app/artifacts/api-server/dist/thread-stream-worker.mjs /app/artifacts/api-server/dist/
 
 USER node
 
 EXPOSE 8098
 
-CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/botGatewayIndex.mjs"]
+CMD ["node", "artifacts/api-server/dist/botGatewayIndex.mjs"]
 
 # ---------- Stage 3: runtime ----------
 FROM nginx:alpine AS runtime

@@ -40,20 +40,57 @@ test("bot gateway runtime starts only the dedicated entrypoint as an unprivilege
   const runtime = dockerStage(dockerfile, "bot-gateway-runtime");
 
   assert.match(runtime, /ENV\s+NODE_ENV=production\s+\\?\r?\n\s*PORT=8098/);
-  assert.match(runtime, /COPY\s+--chown=node:node\s+--from=build\s+\/app\/\s+\.\//);
+  assert.match(
+    runtime,
+    /COPY\s+--chown=node:node\s+--from=build\s+\/app\/artifacts\/api-server\/dist\/botGatewayIndex\.mjs/,
+  );
+  assert.match(runtime, /pino-\*\.mjs/);
+  assert.match(runtime, /thread-stream-worker\.mjs/);
+  assert.doesNotMatch(runtime, /\/app\/\s+\.\//);
+  assert.doesNotMatch(runtime, /node_modules|package\.json|\.mjs\.map|\/src\//);
   assert.match(runtime, /^USER\s+node\s*$/m);
   assert.match(runtime, /^EXPOSE\s+8098\s*$/m);
   assert.match(
     runtime,
-    /^CMD\s+\["node",\s*"--enable-source-maps",\s*"artifacts\/api-server\/dist\/botGatewayIndex\.mjs"\]\s*$/m,
+    /^CMD\s+\["node",\s*"artifacts\/api-server\/dist\/botGatewayIndex\.mjs"\]\s*$/m,
   );
   assert.doesNotMatch(runtime, /(?:^|\/)dist\/index\.mjs|supportMailIndex\.mjs/);
   assert.doesNotMatch(runtime, /CMD\s+\[?\s*"?(?:sh|bash)|VITE_[A-Z0-9_]+|BOT_TOKEN_PEPPER/);
 });
 
+test("Docker build context excludes private operations, credentials, signing material, backups and review evidence", async () => {
+  const dockerignore = await source(".dockerignore");
+
+  for (const pattern of [
+    ".ops-private",
+    ".ops-local",
+    "**/.env",
+    "**/.env.*",
+    "**/*.pem",
+    "**/*.key",
+    "**/*.p12",
+    "**/*.pfx",
+    "**/*.jks",
+    "**/*.keystore",
+    "**/google-services.json",
+    "**/GoogleService-Info.plist",
+    "**/backups",
+    ".superpowers",
+    "**/review-artifacts",
+  ]) {
+    assert.ok(
+      dockerignore.split(/\r?\n/).includes(pattern),
+      `missing Docker exclusion: ${pattern}`,
+    );
+  }
+  assert.doesNotMatch(dockerignore, /^!.*\.env/m);
+});
+
 test("Coolify service keeps gateway secrets runtime-only and fails closed when required values are absent", async () => {
   const compose = await source("docs/deploy/docker-compose.coolify.yml");
+  const dockerfile = await source("docs/deploy/Dockerfile");
   const gateway = composeService(compose, "letscube-bot-gateway");
+  const web = composeService(compose, "kub-web");
 
   assert.match(gateway, /target:\s*bot-gateway-runtime/);
   assert.doesNotMatch(gateway, /^\s+args:\s*$/m);
@@ -69,12 +106,22 @@ test("Coolify service keeps gateway secrets runtime-only and fails closed when r
     gateway,
     /BOT_WEBHOOK_ENCRYPTION_KEY:\s*\$\{BOT_WEBHOOK_ENCRYPTION_KEY:\?/,
   );
+  assert.match(
+    gateway,
+    /BOT_CREATION_ENABLED:\s*\$\{BOT_CREATION_ENABLED:-false\}/,
+  );
+  assert.match(
+    gateway,
+    /BOT_CREATION_CANARY_USER_IDS:\s*\$\{BOT_CREATION_CANARY_USER_IDS:-\}/,
+  );
   assert.match(gateway, /expose:\s*\r?\n\s+-\s+"8098"/);
   assert.match(gateway, /http:\/\/127\.0\.0\.1:8098\/healthz/);
   assert.doesNotMatch(gateway, /^\s+ports:\s*$/m);
   assert.match(gateway, /read_only:\s*true/);
   assert.match(gateway, /cap_drop:\s*\r?\n\s+-\s+ALL/);
   assert.match(gateway, /no-new-privileges:true/);
+  assert.doesNotMatch(dockerfile, /ARG\s+BOT_CREATION_/);
+  assert.doesNotMatch(web, /BOT_CREATION_/);
 });
 
 test("Traefik routes Bot API and redirects public docs above the release catch-all without claiming assets, release, or health paths", async () => {
@@ -83,8 +130,16 @@ test("Traefik routes Bot API and redirects public docs above the release catch-a
   const web = composeService(compose, "kub-web");
 
   assert.match(gateway, /Host\(`api\.letscube\.ru`\)/);
-  assert.match(gateway, /PathPrefix\(`\/bot\/v1`\)/);
-  assert.match(gateway, /PathPrefix\(`\/bot\/manage\/v1`\)/);
+  assert.match(
+    gateway,
+    /Path\(`\/bot\/v1`\)\s*\|\|\s*PathPrefix\(`\/bot\/v1\/`\)/,
+  );
+  assert.match(
+    gateway,
+    /Path\(`\/bot\/manage\/v1`\)\s*\|\|\s*PathPrefix\(`\/bot\/manage\/v1\/`\)/,
+  );
+  assert.doesNotMatch(gateway, /PathPrefix\(`\/bot\/v1`\)/);
+  assert.doesNotMatch(gateway, /PathPrefix\(`\/bot\/manage\/v1`\)/);
   assert.match(
     gateway,
     /traefik\.http\.services\.letscube-bot-gateway\.loadbalancer\.server\.port=8098/,

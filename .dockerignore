@@ -15,6 +15,16 @@
 .gitignore
 .github
 
+# Private operations and local state.
+.ops-private
+**/.ops-private
+.ops-local
+**/.ops-local
+.superpowers
+docs/superpowers
+**/review-artifacts
+**/review_artifacts
+
 # Replit and local state.
 .local
 .agents
@@ -33,6 +43,17 @@ attached_assets
 playwright-report
 test-results
 output
+coverage
+.nyc_output
+
+# Backup and database evidence must never enter a build context.
+**/backups
+**/backup
+**/*.dump
+**/*.dump.*
+**/*.sql.gz
+**/SHA256SUMS
+**/MANIFEST.txt
 
 # SQL migration source backup is not needed in the web image.
 .migration-backup
@@ -48,11 +69,34 @@ output
 .DS_Store
 Thumbs.db
 
-# Real env files must never end up in any Docker layer.
-# Templates with *.example suffix are kept on purpose.
+# Environment files must never end up in any Docker layer.
 .env
 .env.*
-!.env.example
-!.env.production.example
-!**/.env.example
-!**/.env.production.example
+**/.env
+**/.env.*
+*.env
+*.env.*
+
+# Private keys, signing stores and mobile service configuration.
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.jks
+**/*.keystore
+**/*.der
+**/*.cer
+**/*.crt
+**/*.sig
+**/*.asc
+**/*.mobileprovision
+**/*.provisionprofile
+**/id_rsa
+**/id_rsa.*
+**/id_ed25519
+**/id_ed25519.*
+**/signing
+**/.signing
+**/*signing*
+**/google-services.json
+**/GoogleService-Info.plist

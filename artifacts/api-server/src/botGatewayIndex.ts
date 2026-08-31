@@ -4,6 +4,7 @@ import {
   createBotDeletionFinalizerRuntime,
 } from "./bot/deletionFinalizer";
 import { resolveBotManagementOrigins } from "./bot/managementAuth";
+import { resolveBotCreationAdmission } from "./bot/managementRoutes";
 import {
   combineBotMethodHandlers,
   createBotRequestFingerprint,
@@ -86,6 +87,7 @@ export function startBotGateway(
       allowedOrigins: resolveBotManagementOrigins(environment),
       webhookEncryptionKey,
       validateWebhookTarget,
+      canCreateBot: resolveBotCreationAdmission(environment),
     },
   });
   const server = app.listen(port, "0.0.0.0");

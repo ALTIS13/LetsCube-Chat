@@ -28,7 +28,15 @@ by the Bot Gateway.
 The Docker target is `bot-gateway-runtime`. It starts only
 `artifacts/api-server/dist/botGatewayIndex.mjs`, runs as the unprivileged
 `node` user, exposes container port `8098`, has no shell wrapper and does not
-load an environment file from the image.
+load an environment file from the image. The runtime stage copies only that
+compiled bundle and its required compiled Pino worker files. It contains no
+workspace source tree, package manifests, `node_modules`, source maps, local
+operations evidence or private files.
+
+The repository-root `.dockerignore` excludes `.ops-private`, `.ops-local`, all
+environment files, private keys and signing stores, mobile service
+configuration, backup trees and review evidence before any build stage can
+read them. Do not weaken those exclusions to debug a deployment.
 
 The Coolify service adds these controls:
 
@@ -57,6 +65,8 @@ runtime settings.
 | `BOT_TOKEN_PEPPER` | Required server-only pepper: 32–1024 UTF-8 bytes with at least eight distinct characters. |
 | `BOT_WEBHOOK_ENCRYPTION_KEY` | Required 32-byte key encoded as exactly 43 base64url characters. Runtime secret. |
 | `BOT_MANAGEMENT_ALLOWED_ORIGINS` | Optional comma-separated exact HTTPS origins. `https://app.letscube.ru` is always allowed by the runtime. |
+| `BOT_CREATION_ENABLED` | Exact `true` enables canary admission evaluation. Missing, empty or `false` keeps creation disabled. Runtime only. |
+| `BOT_CREATION_CANARY_USER_IDS` | Required only when creation is enabled: 1–25 unique authenticated user UUIDs, comma-separated. Runtime only. |
 
 Never print these values, copy them into a ticket, include them in a Compose
 render, or inspect a running container's environment. Rotate the bot-token
@@ -72,6 +82,15 @@ its value. The existing worker alias remains unchanged; do not rename or remove
 it as part of Task 7. If the canonical binding is absent, Compose validation
 must fail instead of silently substituting a public or empty key.
 
+Bot creation requires both `BOT_CREATION_ENABLED=true` and membership of the
+authenticated user ID in the bounded cohort. The default denies every create
+request with generic `403 bot_creation_not_allowed`; list and detail management
+remain available and list eligibility reports `can_create=false`. Invalid
+enabled configuration fails gateway startup with the generic configuration
+error. Never add either rollout variable to Docker build args, `VITE_*`, SPA
+configuration, logs or a committed environment file. Expansion beyond 25
+users requires a separately reviewed rollout mechanism, not a larger string.
+
 ## Local Packaging Checks
 
 These commands build and inspect image metadata without supplying runtime
@@ -80,13 +99,16 @@ secrets:
 ```powershell
 docker build --target bot-gateway-runtime -f docs/deploy/Dockerfile -t letscube-bot-gateway:local .
 docker image inspect letscube-bot-gateway:local --format '{{json .Config.User}} {{json .Config.Cmd}} {{json .Config.ExposedPorts}}'
+docker run --rm --entrypoint node letscube-bot-gateway:local -e "const fs=require('node:fs'); const names=fs.readdirSync('/app/artifacts/api-server/dist').sort(); const expected=['botGatewayIndex.mjs','pino-file.mjs','pino-pretty.mjs','pino-worker.mjs','thread-stream-worker.mjs']; if(JSON.stringify(names)!==JSON.stringify(expected)) process.exit(1)"
 docker run --rm letscube-bot-gateway:local
 ```
 
 The inspect output must show user `node`, only the `botGatewayIndex.mjs`
-command and port `8098/tcp`. The final command intentionally omits runtime
-configuration: it must exit non-zero instead of listening. Do not add example
-secret values to make that negative check start.
+command and port `8098/tcp`. The content check requires exactly five compiled
+`.mjs` files and rejects source, source maps, manifests and private evidence.
+The final command intentionally omits runtime configuration: it must exit
+non-zero instead of listening. Do not add example secret values to make that
+negative check start.
 
 Where the approved Coolify runtime environment is already attached, validate
 Compose interpolation without rendering it to the terminal:
@@ -107,8 +129,8 @@ unchanged. The Compose labels add only higher-priority, narrower routers:
 | Priority | Public path | Target | Behavior |
 | --- | --- | --- | --- |
 | `210` | Exact `/bots/docs` or `/bots/docs/` | Redirect middleware | Permanent redirect to `https://app.letscube.ru/bots/docs`; query/suffix is preserved. |
-| `200` | `/bot/v1/*` | `letscube-bot-gateway:8098` | Preserve `/bot/v1`; the gateway routes methods. |
-| `200` | `/bot/manage/v1/*` | `letscube-bot-gateway:8098` | Preserve `/bot/manage/v1`; the authenticated app routes management calls. |
+| `200` | Exact `/bot/v1` or `/bot/v1/*` | `letscube-bot-gateway:8098` | Rule is `Path('/bot/v1') || PathPrefix('/bot/v1/')`; sibling names such as `/bot/v10` do not match. |
+| `200` | Exact `/bot/manage/v1` or `/bot/manage/v1/*` | `letscube-bot-gateway:8098` | Rule is `Path('/bot/manage/v1') || PathPrefix('/bot/manage/v1/')`; sibling names do not match. |
 
 Traefik chooses these rules ahead of the lower-priority release catch-all only
 for the listed paths. The documentation redirect is intentional: Vite builds

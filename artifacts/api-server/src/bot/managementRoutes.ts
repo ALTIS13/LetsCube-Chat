@@ -23,6 +23,8 @@ export interface BotManagementRateLimiter {
   consume(actorId: string, operation: string): number | null;
 }
 
+export type BotCreationAdmission = (actorId: string) => boolean;
+
 export type BotManagementDependencies = {
   client: BotManagementClient;
   tokenPepper: string;
@@ -31,6 +33,7 @@ export type BotManagementDependencies = {
   webhookEncryptionKey: Buffer;
   validateWebhookTarget?: (rawUrl: string) => Promise<ValidatedWebhookTarget>;
   rateLimiter?: BotManagementRateLimiter;
+  canCreateBot: BotCreationAdmission;
 };
 
 const CORS_METHODS = "GET,POST,PUT,PATCH,DELETE,OPTIONS";
@@ -38,6 +41,7 @@ const CORS_HEADERS = "Authorization,Content-Type";
 const ALLOWED_METHODS = new Set(CORS_METHODS.split(","));
 const ALLOWED_HEADERS = new Set(["authorization", "content-type"]);
 const uuidSchema = z.string().uuid();
+const MAX_BOT_CREATION_CANARY_USERS = 25;
 const timestampSchema = z.string().datetime({ offset: true });
 const botStateSchema = z.enum([
   "active",
@@ -47,6 +51,31 @@ const botStateSchema = z.enum([
   "deleted",
 ]);
 const tokenPrefixSchema = z.string().regex(/^lc_bot_[0-9a-f]{10}$/);
+
+export function resolveBotCreationAdmission(
+  environment: NodeJS.ProcessEnv,
+): BotCreationAdmission {
+  const enabled = environment.BOT_CREATION_ENABLED;
+  if (enabled === undefined || enabled === "" || enabled === "false") {
+    return () => false;
+  }
+  if (enabled !== "true") throw new Error("bot_gateway_config_invalid");
+
+  const entries = (environment.BOT_CREATION_CANARY_USER_IDS ?? "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase());
+  if (
+    entries.length === 0 ||
+    entries.length > MAX_BOT_CREATION_CANARY_USERS ||
+    entries.some((value) => !uuidSchema.safeParse(value).success) ||
+    new Set(entries).size !== entries.length
+  ) {
+    throw new Error("bot_gateway_config_invalid");
+  }
+
+  const cohort = new Set(entries);
+  return (actorId) => cohort.has(actorId.toLowerCase());
+}
 const botSummaryRowSchema = z
   .object({
     bot_id: uuidSchema,
@@ -530,7 +559,11 @@ export function createBotManagementRouter(
       response.json(
         botSuccess({
           bots: parsedBots.data.map(botSummary),
-          eligibility,
+          eligibility: {
+            ...eligibility,
+            can_create:
+              eligibility.can_create && input.canCreateBot(context.actorId),
+          },
         }),
       );
     }),
@@ -539,6 +572,9 @@ export function createBotManagementRouter(
   router.post(
     "/bots",
     managementRoute(input, async (request, response, context) => {
+      if (!input.canCreateBot(context.actorId)) {
+        throw new BotApiError("bot_creation_not_allowed");
+      }
       const body = createInputSchema.parse(request.body);
       const token = createBotToken(input.randomBytes);
       const row = oneRow(

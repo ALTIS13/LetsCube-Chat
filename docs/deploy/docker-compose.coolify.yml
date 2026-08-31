@@ -89,6 +89,8 @@ services:
       BOT_TOKEN_PEPPER: ${BOT_TOKEN_PEPPER:?Configure BOT_TOKEN_PEPPER in Coolify}
       BOT_WEBHOOK_ENCRYPTION_KEY: ${BOT_WEBHOOK_ENCRYPTION_KEY:?Configure BOT_WEBHOOK_ENCRYPTION_KEY in Coolify}
       BOT_MANAGEMENT_ALLOWED_ORIGINS: ${BOT_MANAGEMENT_ALLOWED_ORIGINS:-}
+      BOT_CREATION_ENABLED: ${BOT_CREATION_ENABLED:-false}
+      BOT_CREATION_CANARY_USER_IDS: ${BOT_CREATION_CANARY_USER_IDS:-}
     expose:
       - "8098"
     read_only: true
@@ -106,7 +108,7 @@ services:
       start_period: 15s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.letscube-bot-gateway.rule=Host(`api.letscube.ru`) && (PathPrefix(`/bot/v1`) || PathPrefix(`/bot/manage/v1`))"
+      - "traefik.http.routers.letscube-bot-gateway.rule=Host(`api.letscube.ru`) && (Path(`/bot/v1`) || PathPrefix(`/bot/v1/`) || Path(`/bot/manage/v1`) || PathPrefix(`/bot/manage/v1/`))"
       - "traefik.http.routers.letscube-bot-gateway.priority=200"
       - "traefik.http.routers.letscube-bot-gateway.entrypoints=https"
       - "traefik.http.routers.letscube-bot-gateway.tls=true"

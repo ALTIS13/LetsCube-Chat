@@ -596,21 +596,23 @@ Assert the Docker target runs only `dist/botGatewayIndex.mjs`, uses an unprivile
 ```dockerfile
 FROM base AS bot-gateway-runtime
 ENV NODE_ENV=production PORT=8098
-COPY --chown=node:node --from=build /app/ ./
+COPY --chown=node:node --from=build /app/artifacts/api-server/dist/botGatewayIndex.mjs /app/artifacts/api-server/dist/
+COPY --chown=node:node --from=build /app/artifacts/api-server/dist/pino-*.mjs /app/artifacts/api-server/dist/
+COPY --chown=node:node --from=build /app/artifacts/api-server/dist/thread-stream-worker.mjs /app/artifacts/api-server/dist/
 USER node
 EXPOSE 8098
-CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/botGatewayIndex.mjs"]
+CMD ["node", "artifacts/api-server/dist/botGatewayIndex.mjs"]
 ```
 
 - [x] **Step 3: Add Coolify service configuration**
 
-Add a service using the new target, healthcheck `http://127.0.0.1:8098/healthz`, runtime-only Supabase/pepper values and route labels for `/bot/v1`. Do not route release catalog paths through this container.
+Add a service using the new target, healthcheck `http://127.0.0.1:8098/healthz`, runtime-only Supabase/pepper values, disabled-by-default creation admission with a maximum 25-user canary cohort, and exact-boundary route labels for `/bot/v1` and `/bot/manage/v1`. Do not route release catalog paths through this container.
 
 - [x] **Step 4: Publish developer documentation**
 
 Document token safety, cURL/JavaScript/Python `getMe` and `sendMessage`, commands, callback buttons, group privacy, webhook verification, retries, idempotency, rate limits and update deduplication. State clearly that Telegram concepts are familiar but protocol compatibility is not claimed.
 
-- [x] **Step 5: Run full local validation**
+- [ ] **Step 5: Run full local validation**
 
 ```powershell
 git diff --check
@@ -622,6 +624,12 @@ pnpm.cmd rls:smoke
 node --test tests/unit/bot-platform-schema-contract.test.mjs tests/unit/bot-token-auth.test.mts tests/unit/bot-api-schemas.test.mts tests/unit/bot-method-router.test.mts tests/unit/bot-gateway-packaging.test.mjs tests/unit/bot-update-delivery.test.mts tests/security/bot-webhook-ssrf.test.mts tests/unit/bot-management-auth.test.mts tests/unit/bot-message-projection.test.mts tests/unit/bot-gateway-deploy-contract.test.mjs
 pnpm.cmd exec playwright test tests/e2e/bot-api-docs.spec.ts tests/e2e/bot-management.spec.ts tests/e2e/bot-chat-integration.spec.ts
 ```
+
+Local validation is complete for the packaging, API, type, build and browser
+checks recorded in the implementer report. **External-env security gate pending:**
+`pnpm.cmd rls:smoke` skipped without a configured disposable Supabase target,
+so Step 5 remains unchecked until it passes against the isolated restored PG17
+stack from Step 6. Production is not an acceptable substitute for this gate.
 
 - [ ] **Step 6: Rehearse and apply the migration after backup**
 

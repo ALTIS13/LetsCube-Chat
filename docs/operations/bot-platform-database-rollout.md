@@ -29,14 +29,28 @@ install -d -m 700 "$ROLLOUT_DIR"
 
 test -f "$MIGRATION_PATH"
 test -f "$SMOKE_PATH"
-git diff --exit-code -- "$MIGRATION_PATH" "$SMOKE_PATH"
-git rev-parse HEAD >"$ROLLOUT_DIR/git-commit.txt"
+git diff HEAD --exit-code -- "$MIGRATION_PATH" "$SMOKE_PATH"
+
+HEAD_COMMIT="$(git rev-parse --verify 'HEAD^{commit}')"
+git show "$HEAD_COMMIT:$MIGRATION_PATH" >"$ROLLOUT_DIR/migration.head.sql"
+git show "$HEAD_COMMIT:$SMOKE_PATH" >"$ROLLOUT_DIR/smoke.head.sql"
+cmp --silent "$MIGRATION_PATH" "$ROLLOUT_DIR/migration.head.sql"
+cmp --silent "$SMOKE_PATH" "$ROLLOUT_DIR/smoke.head.sql"
+
+CURRENT_MIGRATION_SHA="$(sha256sum "$MIGRATION_PATH" | awk '{print $1}')"
+HEAD_MIGRATION_SHA="$(sha256sum "$ROLLOUT_DIR/migration.head.sql" | awk '{print $1}')"
+CURRENT_SMOKE_SHA="$(sha256sum "$SMOKE_PATH" | awk '{print $1}')"
+HEAD_SMOKE_SHA="$(sha256sum "$ROLLOUT_DIR/smoke.head.sql" | awk '{print $1}')"
+test "$CURRENT_MIGRATION_SHA" = "$HEAD_MIGRATION_SHA"
+test "$CURRENT_SMOKE_SHA" = "$HEAD_SMOKE_SHA"
+
+printf '%s\n' "$HEAD_COMMIT" >"$ROLLOUT_DIR/git-commit.txt"
 date -u +%Y-%m-%dT%H:%M:%SZ >"$ROLLOUT_DIR/timestamp-utc.txt"
 sha256sum "$MIGRATION_PATH" "$SMOKE_PATH" >"$ROLLOUT_DIR/reviewed-inputs.sha256"
 sha256sum -c "$ROLLOUT_DIR/reviewed-inputs.sha256"
 ```
 
-Перед передачей на isolated host и production DB host сравнить SHA-256 каждой загруженной копии с `reviewed-inputs.sha256`. Требуется SHA-256 parity локального reviewed файла, rehearsal-копии и production-копии. Фиксируются git commit, SHA-256 и timestamp; изменённая после review копия не используется.
+`git diff HEAD --exit-code` одновременно отвергает staged и unstaged изменения этих двух файлов. `git show` плюс `cmp` и отдельная SHA-256 parity доказывают, что рабочие копии байт-в-байт равны blob-объектам записанного `HEAD_COMMIT`. Перед передачей на isolated host и production DB host сравнить SHA-256 каждой загруженной копии с `reviewed-inputs.sha256`. Требуется SHA-256 parity локального reviewed файла, rehearsal-копии и production-копии. Фиксируются git commit, SHA-256 и timestamp; изменённая после review копия не используется.
 
 ## Рубеж 1: свежий backup текущего запуска
 
@@ -46,14 +60,35 @@ Backup должен быть создан именно в current run после
 set -euo pipefail
 
 BACKUP_ROOT="/srv/letscube/backups/automated"
+BACKUP_SCRIPT="/srv/letscube/scripts/letscube-backup.sh"
+BACKUP_LOCK="/run/letscube-backup.lock"
 STRICT_BACKUP_NAME='^[0-9]{8}-[0-9]{6}$'
+BACKUP_COMPLETED_RE='^backup completed: (/srv/letscube/backups/automated/[0-9]{8}-[0-9]{6})$'
+
+test -r "$BACKUP_SCRIPT"
+grep -Eq '^LOCK=(/run/letscube-backup[.]lock|"/run/letscube-backup[.]lock")$' "$BACKUP_SCRIPT"
+grep -Eq 'flock[[:space:]]+-n[[:space:]]+9' "$BACKUP_SCRIPT"
+grep -Eq 'exec[[:space:]]+9>|9>.*\$\{?LOCK\}?' "$BACKUP_SCRIPT"
 mapfile -t BEFORE_BACKUPS < <(
   find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' |
     awk -v pattern="$STRICT_BACKUP_NAME" '$0 ~ pattern' | LC_ALL=C sort
 )
 
-sudo /srv/letscube/scripts/letscube-backup.sh check
-sudo /srv/letscube/scripts/letscube-backup.sh run
+sudo "$BACKUP_SCRIPT" check
+BACKUP_OUTPUT="$ROLLOUT_DIR/backup-command.out"
+: >"$BACKUP_OUTPUT"
+chmod 600 "$BACKUP_OUTPUT"
+if ! sudo "$BACKUP_SCRIPT" run >"$BACKUP_OUTPUT" 2>&1; then
+  exit 70
+fi
+
+mapfile -t BACKUP_COMPLETIONS < <(
+  sed -nE "s|$BACKUP_COMPLETED_RE|\1|p" "$BACKUP_OUTPUT"
+)
+test "${#BACKUP_COMPLETIONS[@]}" -eq 1
+BACKUP_DIR="${BACKUP_COMPLETIONS[0]}"
+BACKUP_NAME="$(basename "$BACKUP_DIR")"
+[[ "$BACKUP_NAME" =~ ^[0-9]{8}-[0-9]{6}$ ]]
 
 mapfile -t AFTER_BACKUPS < <(
   find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' |
@@ -65,15 +100,21 @@ NEW_BACKUPS="$({
     <(printf '%s\n' "${AFTER_BACKUPS[@]}")
 } | sed '/^$/d')"
 test "$(printf '%s\n' "$NEW_BACKUPS" | sed '/^$/d' | wc -l | tr -d ' ')" -eq 1
-BACKUP_NAME="$(printf '%s\n' "$NEW_BACKUPS" | sed '/^$/d')"
-[[ "$BACKUP_NAME" =~ ^[0-9]{8}-[0-9]{6}$ ]]
+test "$(printf '%s\n' "$NEW_BACKUPS" | sed '/^$/d')" = "$BACKUP_NAME"
 if printf '%s\n' "${BEFORE_BACKUPS[@]}" | grep -Fxq "$BACKUP_NAME"; then
   exit 71
 fi
 
-BACKUP_DIR="$BACKUP_ROOT/$BACKUP_NAME"
+test "$BACKUP_DIR" = "$BACKUP_ROOT/$BACKUP_NAME"
 test -d "$BACKUP_DIR"
+test -f "$BACKUP_DIR/MANIFEST.txt"
 test -f "$BACKUP_DIR/SHA256SUMS"
+
+mapfile -t MANIFEST_CREATED_AT < <(
+  sed -n 's/^created_at=//p' "$BACKUP_DIR/MANIFEST.txt"
+)
+test "${#MANIFEST_CREATED_AT[@]}" -eq 1
+test "${MANIFEST_CREATED_AT[0]}" = "$BACKUP_NAME"
 
 (
   cd "$BACKUP_DIR"
@@ -95,10 +136,19 @@ for archive in "${TAR_ARCHIVES[@]}"; do
   tar -tf "$archive" >/dev/null
 done
 
-stat -c '%n %s %y' "$BACKUP_DIR" "$BACKUP_DIR/SHA256SUMS" >"$ROLLOUT_DIR/backup-current-run.txt"
+BACKUP_SHA256SUMS_SHA256="$(sha256sum "$BACKUP_DIR/SHA256SUMS" | awk '{print $1}')"
+[[ "$BACKUP_SHA256SUMS_SHA256" =~ ^[0-9a-f]{64}$ ]]
+{
+  printf 'run_id=%s\n' "$RUN_ID"
+  printf 'backup_dir=%s\n' "$BACKUP_DIR"
+  printf 'backup_name=%s\n' "$BACKUP_NAME"
+  printf 'backup_sha256sums_sha256=%s\n' "$BACKUP_SHA256SUMS_SHA256"
+} >"$ROLLOUT_DIR/backup-binding.env"
+chmod 600 "$ROLLOUT_DIR/backup-binding.env"
+stat -c '%n %s %y' "$BACKUP_DIR" "$BACKUP_DIR/MANIFEST.txt" "$BACKUP_DIR/SHA256SUMS" >"$ROLLOUT_DIR/backup-current-run.txt"
 ```
 
-Успешные `sha256sum -c`, `pg_restore --list` и `tar -tf` обязательны, но сами по себе не доказывают восстановимость.
+Сам backup script владеет exclusive lock через fd 9 и `flock -n 9`; внешний wrapper не пытается повторно захватить тот же lock. При одновременном timer/manual запуске один процесс обязан завершиться неуспешно. Приватный `backup-command.out` не выводится в terminal; допустима ровно одна anchored final line `backup completed: /srv/letscube/backups/automated/YYYYMMDD-HHMMSS`. Она, before/after guard, basename каталога и `MANIFEST.txt` с `created_at=$STAMP` обязаны указывать один и тот же backup. Успешные `sha256sum -c`, `pg_restore --list` и `tar -tf` обязательны, но сами по себе не доказывают восстановимость.
 
 ## Рубеж 2: полный isolated PG17 restore rehearsal
 
@@ -111,13 +161,66 @@ stat -c '%n %s %y' "$BACKUP_DIR" "$BACKUP_DIR/SHA256SUMS" >"$ROLLOUT_DIR/backup-
 ```bash
 set -euo pipefail
 : "${REHEARSAL_PGSERVICE:?Set an isolated PG17 libpq service name}"
+: "${REHEARSAL_AUTH_HEALTH_URL:?Set the isolated Auth health URL}"
+: "${REHEARSAL_STORAGE_HEALTH_URL:?Set the isolated Storage health URL}"
+: "${REHEARSAL_POSTGREST_HEALTH_URL:?Set the isolated PostgREST health URL}"
+: "${RUN_ID:?Keep the current rollout RUN_ID}"
+: "${BACKUP_DIR:?Keep the exact current-run BACKUP_DIR}"
+: "${BACKUP_SHA256SUMS_SHA256:?Keep the exact SHA256SUMS digest}"
 
 PG_VERSION_NUM="$(psql -X "service=$REHEARSAL_PGSERVICE" -Atv ON_ERROR_STOP=1 -c 'show server_version_num')"
 test "$PG_VERSION_NUM" -ge 170000
 psql -X "service=$REHEARSAL_PGSERVICE" -v ON_ERROR_STOP=1 -c 'select 1' >/dev/null
+
+RESTORE_EVIDENCE_DIR="$ROLLOUT_DIR/restore-evidence"
+install -d -m 700 "$RESTORE_EVIDENCE_DIR"
+printf 'database_restore=ok\nserver_version_num=%s\n' "$PG_VERSION_NUM" \
+  >"$RESTORE_EVIDENCE_DIR/database-evidence.txt"
+
+AUTH_ROW_COUNT="$(psql -X "service=$REHEARSAL_PGSERVICE" -Atv ON_ERROR_STOP=1 -c 'select count(*) from auth.users')"
+curl -fsS -o /dev/null "$REHEARSAL_AUTH_HEALTH_URL"
+printf 'auth_restore=ok\nauth_row_count=%s\n' "$AUTH_ROW_COUNT" \
+  >"$RESTORE_EVIDENCE_DIR/auth-evidence.txt"
+
+STORAGE_ROW_COUNT="$(psql -X "service=$REHEARSAL_PGSERVICE" -Atv ON_ERROR_STOP=1 -c 'select count(*) from storage.objects')"
+curl -fsS -o /dev/null "$REHEARSAL_STORAGE_HEALTH_URL"
+printf 'storage_restore=ok\nstorage_metadata_row_count=%s\n' "$STORAGE_ROW_COUNT" \
+  >"$RESTORE_EVIDENCE_DIR/storage-evidence.txt"
+
+curl -fsS -o /dev/null "$REHEARSAL_POSTGREST_HEALTH_URL"
+printf 'postgrest_restore=ok\n' \
+  >"$RESTORE_EVIDENCE_DIR/postgrest-evidence.txt"
+
+chmod 600 "$RESTORE_EVIDENCE_DIR"/*.txt
+(
+  cd "$ROLLOUT_DIR"
+  sha256sum \
+    restore-evidence/database-evidence.txt \
+    restore-evidence/auth-evidence.txt \
+    restore-evidence/storage-evidence.txt \
+    restore-evidence/postgrest-evidence.txt \
+    >restore-evidence.sha256
+  sha256sum -c restore-evidence.sha256
+)
+
+RESTORE_EVIDENCE_SHA256="$(sha256sum "$ROLLOUT_DIR/restore-evidence.sha256" | awk '{print $1}')"
+RESTORE_GATE="$ROLLOUT_DIR/restore-gate.env"
+{
+  printf 'version=1\n'
+  printf 'run_id=%s\n' "$RUN_ID"
+  printf 'backup_dir=%s\n' "$BACKUP_DIR"
+  printf 'backup_sha256sums_sha256=%s\n' "$BACKUP_SHA256SUMS_SHA256"
+  printf 'restore_evidence_sha256=%s\n' "$RESTORE_EVIDENCE_SHA256"
+  printf 'database=ok\n'
+  printf 'auth=ok\n'
+  printf 'storage=ok\n'
+  printf 'postgrest=ok\n'
+} >"$RESTORE_GATE.tmp"
+chmod 600 "$RESTORE_GATE.tmp"
+mv "$RESTORE_GATE.tmp" "$RESTORE_GATE"
 ```
 
-Этот полный restore rehearsal является hard gate. При его отсутствии дальнейшие команды этого runbook не выполняются.
+Health URL должны принадлежать только isolated network; production URL запрещены. Aggregate counts не содержат сырых строк. `storage-evidence.txt` создаётся только после восстановления Storage metadata и object archive по основному restore runbook. Этот полный restore rehearsal является hard gate. Без связанного с текущими `RUN_ID`, `BACKUP_DIR`, SHA manifest и четырьмя evidence-файлами `restore-gate.env` дальнейшие команды не выполняются.
 
 ## Рубеж 3: one-shot и partial-schema gate
 
@@ -233,18 +336,44 @@ where not t.tgisinternal
     ('public', 'messages'),
     ('public', 'notification_preferences'),
     ('public', 'notifications'),
+    ('public', 'permissions'),
     ('public', 'profiles'),
     ('public', 'push_subscriptions'),
+    ('public', 'role_permissions'),
     ('public', 'topics'),
     ('public', 'user_global_roles'),
     ('storage', 'objects')
   );
 SQL
 
-if grep -Eiq 'net[.]http|http_(get|post)|dblink|pg_background|COPY[[:space:]]+PROGRAM|lo_export' \
-  "$ROLLOUT_DIR/trigger-side-effect-audit.txt"; then
+psql -X "service=$PGSERVICE" -v ON_ERROR_STOP=1 -At >"$ROLLOUT_DIR/all-user-function-definitions.txt" <<'SQL'
+select format('%I.%I|%s', n.nspname, p.proname, pg_get_functiondef(p.oid))
+from pg_catalog.pg_proc p
+join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+where n.nspname not in ('pg_catalog', 'information_schema')
+  and n.nspname !~ '^pg_toast'
+  and p.prokind in ('f', 'p')
+  and not exists (
+    select 1
+    from pg_catalog.pg_depend dep
+    where dep.classid = 'pg_catalog.pg_proc'::regclass
+      and dep.objid = p.oid
+      and dep.deptype = 'e'
+  );
+SQL
+
+psql -X "service=$PGSERVICE" -v ON_ERROR_STOP=1 -At >"$ROLLOUT_DIR/foreign-server-audit.txt" <<'SQL'
+select format('%I|%I', fdw.fdwname, srv.srvname)
+from pg_catalog.pg_foreign_server srv
+join pg_catalog.pg_foreign_data_wrapper fdw on fdw.oid = srv.srvfdw;
+SQL
+
+if grep -Eiq 'http_request|http_(get|post|put|patch|delete)|net[.]http_|http[.]|dblink|postgres_fdw|foreign data wrapper|pg_background|COPY[[:space:]]+PROGRAM|lo_export|aws_lambda|LANGUAGE[[:space:]]+(c|plpython|plperlu|pljava)|[[:space:]]PROGRAM[[:space:]]' \
+  "$ROLLOUT_DIR/trigger-side-effect-audit.txt" \
+  "$ROLLOUT_DIR/all-user-function-definitions.txt"; then
   exit 72
 fi
+test ! -s "$ROLLOUT_DIR/foreign-server-audit.txt"
 
 LONG_TX="$(psql -X "service=$PGSERVICE" -Atv ON_ERROR_STOP=1 <<'SQL'
 select count(*)
@@ -258,7 +387,7 @@ SQL
 test "$LONG_TX" = "0"
 ```
 
-Не продолжать, пока оркестратор не подтверждает остановку app/worker и production health не показывает новых write requests.
+`all-user-function-definitions.txt` намеренно расширяет audit за пределы прямых trigger bodies: wrapper functions также проверяются на `http_request`, `net.http_*`, HTTP extensions, FDW/dblink, background workers и внешние программы. Это консервативный blocker с возможными false positives; разрешать его автоматически запрещено. Не продолжать, пока оркестратор не подтверждает остановку app/worker и production health не показывает новых write requests.
 
 ## Рубеж 6: точная сборка combined rehearsal
 
@@ -368,6 +497,29 @@ Apply разрешён только для исходного migration-файл
 ```bash
 set -euo pipefail
 : "${PGSERVICE:?Set the production libpq service name}"
+: "${RUN_ID:?Keep the current rollout RUN_ID}"
+: "${BACKUP_DIR:?Keep the exact current-run BACKUP_DIR}"
+: "${BACKUP_SHA256SUMS_SHA256:?Keep the exact SHA256SUMS digest}"
+
+RESTORE_GATE="$ROLLOUT_DIR/restore-gate.env"
+test -f "$RESTORE_GATE"
+test "$(stat -c '%a' "$RESTORE_GATE")" = "600"
+grep -Fxq "run_id=$RUN_ID" "$RESTORE_GATE"
+grep -Fxq "backup_dir=$BACKUP_DIR" "$RESTORE_GATE"
+grep -Fxq "backup_sha256sums_sha256=$BACKUP_SHA256SUMS_SHA256" "$RESTORE_GATE"
+grep -Fxq 'database=ok' "$RESTORE_GATE"
+grep -Fxq 'auth=ok' "$RESTORE_GATE"
+grep -Fxq 'storage=ok' "$RESTORE_GATE"
+grep -Fxq 'postgrest=ok' "$RESTORE_GATE"
+
+CURRENT_RESTORE_EVIDENCE_SHA256="$(sha256sum "$ROLLOUT_DIR/restore-evidence.sha256" | awk '{print $1}')"
+grep -Fxq "restore_evidence_sha256=$CURRENT_RESTORE_EVIDENCE_SHA256" "$RESTORE_GATE"
+(
+  cd "$ROLLOUT_DIR"
+  sha256sum -c restore-evidence.sha256
+)
+CURRENT_BACKUP_SHA256SUMS_SHA256="$(sha256sum "$BACKUP_DIR/SHA256SUMS" | awk '{print $1}')"
+test "$CURRENT_BACKUP_SHA256SUMS_SHA256" = "$BACKUP_SHA256SUMS_SHA256"
 
 sha256sum -c "$ROLLOUT_DIR/reviewed-inputs.sha256"
 PGOPTIONS="-c lock_timeout=5s -c statement_timeout=15min -c idle_in_transaction_session_timeout=60s" \
@@ -393,6 +545,10 @@ do $check$
 declare
   invalid_count integer;
   unvalidated_count integer;
+  table_row record;
+  routine_row record;
+  privilege_name text;
+  expected_service_role_execute boolean;
 begin
   select count(*) into invalid_count
   from pg_catalog.pg_index i
@@ -416,15 +572,72 @@ begin
     raise exception 'unvalidated constraint count: %', unvalidated_count;
   end if;
 
-  if has_table_privilege('anon', 'private.bot_tokens', 'SELECT')
-     or has_table_privilege('authenticated', 'private.bot_tokens', 'SELECT')
-     or has_table_privilege('service_role', 'private.bot_tokens', 'SELECT') then
-    raise exception 'private bot token grants are too broad';
-  end if;
+  for table_row in
+    select c.oid as object_oid, format('%I.%I', n.nspname, c.relname) as object_name
+    from pg_catalog.pg_class c
+    join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'private'
+      and c.relkind in ('r', 'p')
+      and c.relname like 'bot\_%' escape '\'
+  loop
+    foreach privilege_name in array array[
+      'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'
+    ]
+    loop
+      if has_table_privilege('anon', table_row.object_oid, privilege_name)
+         or has_table_privilege('authenticated', table_row.object_oid, privilege_name)
+         or has_table_privilege('service_role', table_row.object_oid, privilege_name) then
+        raise exception 'unexpected table grant: % %', table_row.object_name, privilege_name;
+      end if;
+    end loop;
+
+    foreach privilege_name in array array['SELECT', 'INSERT', 'UPDATE', 'REFERENCES']
+    loop
+      if has_any_column_privilege('anon', table_row.object_oid, privilege_name)
+         or has_any_column_privilege('authenticated', table_row.object_oid, privilege_name)
+         or has_any_column_privilege('service_role', table_row.object_oid, privilege_name) then
+        raise exception 'unexpected column grant: % %', table_row.object_name, privilege_name;
+      end if;
+    end loop;
+  end loop;
+
+  for routine_row in
+    select
+      p.oid as object_oid,
+      n.nspname as schema_name,
+      p.proname,
+      p.oid::regprocedure::text as object_name
+    from pg_catalog.pg_proc p
+    join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+    where n.nspname in ('public', 'private')
+      and p.proname like 'bot\_%' escape '\'
+  loop
+    if has_function_privilege('anon', routine_row.object_oid, 'EXECUTE')
+       or has_function_privilege('authenticated', routine_row.object_oid, 'EXECUTE') then
+      raise exception 'client role can execute bot routine: %', routine_row.object_name;
+    end if;
+
+    expected_service_role_execute :=
+      routine_row.schema_name = 'public'
+      and routine_row.proname like 'bot\_%\_internal' escape '\';
+    if has_function_privilege('service_role', routine_row.object_oid, 'EXECUTE')
+       is distinct from expected_service_role_execute then
+      raise exception 'unexpected service_role EXECUTE: % expected=%',
+        routine_row.object_name,
+        expected_service_role_execute;
+    end if;
+  end loop;
 end
 $check$;
 SQL
 ```
+
+Этот DO-block динамически перечисляет каждую `private.bot_*` table и каждую
+`public`/`private` routine `bot_*`. Для private tables запрещены table-level и
+column-level grants ролям `anon`, `authenticated` и `service_role`. Для routines
+клиентские роли всегда запрещены; `service_role` должен иметь `EXECUTE` ровно
+на public `bot_*_internal`, а private helper routines должны оставаться без
+такого grant. Новая bot table или routine автоматически попадает в audit.
 
 Проверить наличие и definitions ключевых indexes: active token prefix, due updates, due delivery attempts, active membership и `messages_bot_created_idx`. Сохранить catalog-only EXPLAIN/plans для token-prefix, delivery-due и update-due запросов; не включать реальные токены или пользовательские значения.
 
