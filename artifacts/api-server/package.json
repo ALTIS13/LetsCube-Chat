@@ -10,6 +10,7 @@
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
+    "start:bot": "node --enable-source-maps ./dist/botGatewayIndex.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:registration-cleanup": "node --test ../../tests/unit/registration-cleanup-rules.test.mts ../../tests/unit/registration-cleanup-worker-contract.test.mjs"
   },

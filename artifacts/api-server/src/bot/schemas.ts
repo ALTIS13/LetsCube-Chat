@@ -21,7 +21,15 @@ export const inlineKeyboardSchema = z
       .min(1)
       .max(8),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (Buffer.byteLength(JSON.stringify(value), "utf8") > 16_384) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "inline_keyboard_too_large",
+      });
+    }
+  });
 
 const safeObjectPathSchema = z
   .string()
@@ -82,18 +90,34 @@ export const sendMessageSchema = z
   })
   .strict();
 
-const mediaMessageFields = {
-  chat_id: uuidSchema,
-  media: storageObjectReferenceSchema,
-  caption: z.string().min(1).max(4096).optional(),
-  ...optionalReplyFields,
-  idempotency_key: idempotencyKeySchema,
-};
+function mediaMessageSchema(allowedMimeTypes: readonly string[]) {
+  return z
+    .object({
+      chat_id: uuidSchema,
+      media: storageObjectReferenceSchema.refine(
+        (media) => allowedMimeTypes.includes(media.mime_type),
+        "media_mime_type_not_allowed",
+      ),
+      caption: z.string().min(1).max(4096).optional(),
+      ...optionalReplyFields,
+      idempotency_key: idempotencyKeySchema,
+    })
+    .strict();
+}
 
-const sendPhotoSchema = z.object(mediaMessageFields).strict();
-const sendVideoSchema = z.object(mediaMessageFields).strict();
-const sendDocumentSchema = z.object(mediaMessageFields).strict();
-const sendVoiceSchema = z.object(mediaMessageFields).strict();
+const sendPhotoSchema = mediaMessageSchema([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+const sendVideoSchema = mediaMessageSchema(["video/mp4", "video/webm"]);
+const sendDocumentSchema = mediaMessageSchema(["application/pdf"]);
+const sendVoiceSchema = mediaMessageSchema([
+  "audio/webm",
+  "audio/ogg",
+  "audio/mpeg",
+]);
 
 const sendChatActionSchema = z
   .object({
@@ -105,6 +129,7 @@ const sendChatActionSchema = z
       "upload_document",
       "record_voice",
     ]),
+    topic_id: uuidSchema.optional(),
     idempotency_key: idempotencyKeySchema,
   })
   .strict();

@@ -212,6 +212,41 @@ create table private.bot_message_idempotency (
 create index bot_message_idempotency_retention_idx
   on private.bot_message_idempotency(created_at, bot_id);
 
+create table private.bot_operation_idempotency (
+  bot_id uuid not null references public.bots(id) on delete restrict,
+  idempotency_key text not null
+    check (idempotency_key ~ '^[A-Za-z0-9._:-]{8,128}$'),
+  method text not null
+    check (method in (
+      'sendChatAction','editMessageText','deleteMessage',
+      'setMyCommands','answerCallbackQuery'
+    )),
+  request_fingerprint text not null
+    check (request_fingerprint ~ '^[0-9a-f]{64}$'),
+  result jsonb not null,
+  created_at timestamptz not null default pg_catalog.now(),
+  primary key (bot_id, idempotency_key),
+  constraint bot_operation_idempotency_result_size_check
+    check (pg_catalog.octet_length(result::text) <= 16384)
+);
+
+create index bot_operation_idempotency_retention_idx
+  on private.bot_operation_idempotency(created_at, bot_id);
+
+create table private.bot_callback_answers (
+  bot_id uuid not null references public.bots(id) on delete restrict,
+  callback_query_id uuid not null,
+  source_update_id bigint not null
+    references private.bot_updates(id) on delete cascade,
+  text text null check (text is null or pg_catalog.length(text) between 1 and 200),
+  show_alert boolean not null default false,
+  answered_at timestamptz not null default pg_catalog.now(),
+  primary key (bot_id, callback_query_id)
+);
+
+create index bot_callback_answers_retention_idx
+  on private.bot_callback_answers(answered_at, bot_id);
+
 create table private.bot_upload_grants (
   id uuid primary key default gen_random_uuid(),
   bot_id uuid not null references public.bots(id) on delete restrict,
@@ -262,6 +297,8 @@ revoke all on table private.bot_webhooks from public, anon, authenticated, servi
 revoke all on table private.bot_delivery_attempts from public, anon, authenticated, service_role;
 revoke all on table private.bot_rate_limit_buckets from public, anon, authenticated, service_role;
 revoke all on table private.bot_message_idempotency from public, anon, authenticated, service_role;
+revoke all on table private.bot_operation_idempotency from public, anon, authenticated, service_role;
+revoke all on table private.bot_callback_answers from public, anon, authenticated, service_role;
 revoke all on table private.bot_upload_grants from public, anon, authenticated, service_role;
 revoke all on table private.bot_delivery_leases from public, anon, authenticated, service_role;
 
@@ -272,6 +309,8 @@ alter table private.bot_webhooks enable row level security;
 alter table private.bot_delivery_attempts enable row level security;
 alter table private.bot_rate_limit_buckets enable row level security;
 alter table private.bot_message_idempotency enable row level security;
+alter table private.bot_operation_idempotency enable row level security;
+alter table private.bot_callback_answers enable row level security;
 alter table private.bot_upload_grants enable row level security;
 alter table private.bot_delivery_leases enable row level security;
 
@@ -341,9 +380,71 @@ create policy "chat members and owners read bot membership"
     )
   );
 
+create or replace function private.bot_inline_keyboard_valid(p_markup jsonb)
+returns boolean
+language plpgsql
+immutable
+set search_path = ''
+as $function$
+declare
+  v_row jsonb;
+  v_button jsonb;
+begin
+  if p_markup is null then
+    return true;
+  end if;
+  if pg_catalog.jsonb_typeof(p_markup) <> 'object'
+     or pg_catalog.octet_length(p_markup::text) > 16384
+     or not (p_markup ? 'inline_keyboard')
+     or (select pg_catalog.count(*) from pg_catalog.jsonb_object_keys(p_markup)) <> 1
+     or pg_catalog.jsonb_typeof(p_markup->'inline_keyboard') <> 'array'
+     or pg_catalog.jsonb_array_length(p_markup->'inline_keyboard') not between 1 and 8 then
+    return false;
+  end if;
+
+  for v_row in
+    select row_element.value
+    from pg_catalog.jsonb_array_elements(p_markup->'inline_keyboard') row_element(value)
+  loop
+    if pg_catalog.jsonb_typeof(v_row) <> 'array'
+       or pg_catalog.jsonb_array_length(v_row) not between 1 and 8 then
+      return false;
+    end if;
+    for v_button in
+      select button_element.value
+      from pg_catalog.jsonb_array_elements(v_row) button_element(value)
+    loop
+      if pg_catalog.jsonb_typeof(v_button) <> 'object'
+         or (select pg_catalog.count(*) from pg_catalog.jsonb_object_keys(v_button)) <> 2
+         or not (v_button ? 'text')
+         or not (v_button ? 'callback_data')
+         or pg_catalog.jsonb_typeof(v_button->'text') <> 'string'
+         or pg_catalog.jsonb_typeof(v_button->'callback_data') <> 'string'
+         or pg_catalog.length(v_button->>'text') not between 1 and 64
+         or pg_catalog.length(v_button->>'callback_data') not between 1 and 128 then
+        return false;
+      end if;
+    end loop;
+  end loop;
+  return true;
+end
+$function$;
+
+revoke all on function private.bot_inline_keyboard_valid(jsonb)
+  from public, anon, authenticated, service_role;
+
 alter table public.messages
   add column if not exists bot_id uuid null
     references public.bots(id) on delete restrict;
+
+alter table public.messages
+  add column if not exists bot_reply_markup jsonb null;
+alter table public.messages
+  drop constraint if exists messages_bot_reply_markup_check;
+alter table public.messages
+  add constraint messages_bot_reply_markup_check
+  check (private.bot_inline_keyboard_valid(bot_reply_markup)) not valid;
+alter table public.messages validate constraint messages_bot_reply_markup_check;
 
 alter table public.messages
   drop constraint if exists messages_sender_shape_check;
@@ -914,6 +1015,7 @@ as $function$
         when message_row.content is null then null
         else nullif(pg_catalog.left(message_row.content, 4096), '')
       end,
+      'reply_markup', message_row.bot_reply_markup,
       'from', pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
         'id', message_row.user_id,
         'bot_id', message_row.bot_id,
@@ -1105,6 +1207,7 @@ declare
   v_media_metadata jsonb;
   v_topic_id uuid;
   v_reply_to_id uuid;
+  v_reply_markup jsonb;
   v_upload_grant_id uuid;
 begin
   if p_bot_id is null or p_chat_id is null
@@ -1119,7 +1222,8 @@ begin
        select 1
        from pg_catalog.jsonb_object_keys(p_payload) payload_key
        where payload_key not in (
-         'text','media_bucket','media_path','media_metadata','topic_id','reply_to_id'
+         'text','media_bucket','media_path','media_metadata','topic_id','reply_to_id',
+         'reply_markup'
        )
      ) then
     raise exception 'bot_message_input_invalid' using errcode = '22023';
@@ -1183,6 +1287,10 @@ begin
       then p_payload->'media_metadata'
     else '{}'::jsonb
   end;
+  v_reply_markup := case
+    when p_payload ? 'reply_markup' then p_payload->'reply_markup'
+    else null
+  end;
 
   if v_content is not null and pg_catalog.length(v_content) > 4096 then
     raise exception 'bot_message_too_long' using errcode = '22023';
@@ -1207,6 +1315,9 @@ begin
        )
      ) then
     raise exception 'bot_message_media_metadata_invalid' using errcode = '22023';
+  end if;
+  if not private.bot_inline_keyboard_valid(v_reply_markup) then
+    raise exception 'bot_reply_markup_invalid' using errcode = '22023';
   end if;
 
   if nullif(p_payload->>'topic_id', '') is not null then
@@ -1257,6 +1368,10 @@ begin
         nullif(v_media_metadata->>'mime_type', '') is null
         or upload_grant.content_type = v_media_metadata->>'mime_type'
       )
+      and (
+        nullif(v_media_metadata->>'size', '') is null
+        or upload_grant.byte_size::text = v_media_metadata->>'size'
+      )
       and exists (
         select 1
         from storage.objects stored_object
@@ -1281,7 +1396,8 @@ begin
     media_bucket,
     media_path,
     media_metadata,
-    reply_to_id
+    reply_to_id,
+    bot_reply_markup
   ) values (
     p_chat_id,
     v_topic_id,
@@ -1292,7 +1408,8 @@ begin
     v_media_bucket,
     v_media_path,
     v_media_metadata,
-    v_reply_to_id
+    v_reply_to_id,
+    v_reply_markup
   )
   returning id into v_message_id;
 
@@ -1337,6 +1454,670 @@ $function$;
 revoke all on function public.bot_send_message_internal(uuid,uuid,text,jsonb,text)
   from public, anon, authenticated, service_role;
 grant execute on function public.bot_send_message_internal(uuid,uuid,text,jsonb,text)
+  to service_role;
+
+create or replace function private.bot_operation_idempotency_lookup(
+  p_bot_id uuid,
+  p_idempotency_key text,
+  p_method text,
+  p_request_fingerprint text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_row private.bot_operation_idempotency%rowtype;
+begin
+  select operation_row.*
+  into v_row
+  from private.bot_operation_idempotency operation_row
+  where operation_row.bot_id = p_bot_id
+    and operation_row.idempotency_key = p_idempotency_key;
+  if not found then
+    return pg_catalog.jsonb_build_object('found', false);
+  end if;
+  if v_row.method <> p_method
+     or v_row.request_fingerprint <> p_request_fingerprint then
+    raise exception 'bot_operation_idempotency_conflict' using errcode = '23505';
+  end if;
+  return pg_catalog.jsonb_build_object(
+    'found', true,
+    'result', v_row.result
+  );
+end
+$function$;
+
+revoke all on function private.bot_operation_idempotency_lookup(uuid,text,text,text)
+  from public, anon, authenticated, service_role;
+
+create or replace function private.bot_operation_idempotency_store(
+  p_bot_id uuid,
+  p_idempotency_key text,
+  p_method text,
+  p_request_fingerprint text,
+  p_result jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+begin
+  if p_result is null or pg_catalog.octet_length(p_result::text) > 16384 then
+    raise exception 'bot_operation_result_invalid' using errcode = '22023';
+  end if;
+  insert into private.bot_operation_idempotency(
+    bot_id,
+    idempotency_key,
+    method,
+    request_fingerprint,
+    result
+  ) values (
+    p_bot_id,
+    p_idempotency_key,
+    p_method,
+    p_request_fingerprint,
+    p_result
+  );
+exception
+  when unique_violation then
+    raise exception 'bot_operation_idempotency_conflict' using errcode = '23505';
+end
+$function$;
+
+revoke all on function private.bot_operation_idempotency_store(uuid,text,text,text,jsonb)
+  from public, anon, authenticated, service_role;
+
+create or replace function public.bot_get_me_internal(p_bot_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+declare
+  v_result jsonb;
+begin
+  if p_bot_id is null then
+    raise exception 'bot_identity_input_invalid' using errcode = '22023';
+  end if;
+  select pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+    'id', bot.id,
+    'username', bot.username,
+    'display_name', bot.display_name,
+    'description', bot.description,
+    'avatar_url', bot.avatar_url,
+    'is_bot', true,
+    'can_join_groups', true,
+    'supports_inline_keyboards', true
+  ))
+  into v_result
+  from public.bots bot
+  where bot.id = p_bot_id
+    and bot.state = 'active';
+  if v_result is null then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+  return v_result;
+end
+$function$;
+
+revoke all on function public.bot_get_me_internal(uuid)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_get_me_internal(uuid)
+  to service_role;
+
+create or replace function public.bot_commands_list_internal(p_bot_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+declare
+  v_result jsonb;
+begin
+  if p_bot_id is null then
+    raise exception 'bot_commands_input_invalid' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1 from public.bots bot
+    where bot.id = p_bot_id and bot.state = 'active'
+  ) then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+  select coalesce(
+    pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_object(
+        'command', command_row.command,
+        'description', command_row.description
+      ) order by command_row.sort_order, command_row.command
+    ),
+    '[]'::jsonb
+  )
+  into v_result
+  from public.bot_commands command_row
+  where command_row.bot_id = p_bot_id;
+  return v_result;
+end
+$function$;
+
+revoke all on function public.bot_commands_list_internal(uuid)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_commands_list_internal(uuid)
+  to service_role;
+
+create or replace function public.bot_commands_replace_internal(
+  p_bot_id uuid,
+  p_commands jsonb,
+  p_idempotency_key text,
+  p_request_fingerprint text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_existing jsonb;
+  v_result jsonb;
+  v_locked_bot_id uuid;
+begin
+  if p_bot_id is null
+     or p_commands is null
+     or pg_catalog.jsonb_typeof(p_commands) <> 'array'
+     or pg_catalog.jsonb_array_length(p_commands) > 100
+     or pg_catalog.octet_length(p_commands::text) > 32768
+     or p_idempotency_key is null
+     or p_idempotency_key !~ '^[A-Za-z0-9._:-]{8,128}$'
+     or p_request_fingerprint is null
+     or p_request_fingerprint !~ '^[0-9a-f]{64}$'
+     or exists (
+       select 1
+       from pg_catalog.jsonb_array_elements(p_commands) command_element(value)
+       where pg_catalog.jsonb_typeof(command_element.value) <> 'object'
+          or (select pg_catalog.count(*) from pg_catalog.jsonb_object_keys(command_element.value)) <> 2
+          or not (command_element.value ? 'command')
+          or not (command_element.value ? 'description')
+          or pg_catalog.jsonb_typeof(command_element.value->'command') <> 'string'
+          or pg_catalog.jsonb_typeof(command_element.value->'description') <> 'string'
+          or (command_element.value->>'command') !~ '^[a-z][a-z0-9_]{0,31}$'
+          or command_element.value->>'description' <> pg_catalog.btrim(command_element.value->>'description')
+          or pg_catalog.length(command_element.value->>'description') not between 1 and 256
+     )
+     or (
+       select pg_catalog.count(*) <> pg_catalog.count(distinct command_element.value->>'command')
+       from pg_catalog.jsonb_array_elements(p_commands) command_element(value)
+     ) then
+    raise exception 'bot_commands_input_invalid' using errcode = '22023';
+  end if;
+  select bot.id
+  into v_locked_bot_id
+  from public.bots bot
+  where bot.id = p_bot_id
+    and bot.state = 'active'
+  for update of bot;
+  if not found then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(p_bot_id::text || ':' || p_idempotency_key, 0)
+  );
+  v_existing := private.bot_operation_idempotency_lookup(
+    p_bot_id,
+    p_idempotency_key,
+    'setMyCommands',
+    p_request_fingerprint
+  );
+  if coalesce((v_existing->>'found')::boolean, false) then
+    return pg_catalog.jsonb_build_object(
+      'result', v_existing->'result',
+      'duplicate', true
+    );
+  end if;
+
+  delete from public.bot_commands command_row
+  where command_row.bot_id = p_bot_id;
+  insert into public.bot_commands(
+    bot_id,
+    command,
+    description,
+    sort_order
+  )
+  select
+    p_bot_id,
+    command_element.value->>'command',
+    command_element.value->>'description',
+    (command_element.ordinality - 1)::integer
+  from pg_catalog.jsonb_array_elements(p_commands)
+    with ordinality command_element(value, ordinality);
+
+  v_result := pg_catalog.jsonb_build_object(
+    'commands', public.bot_commands_list_internal(p_bot_id)
+  );
+  perform private.bot_operation_idempotency_store(
+    p_bot_id,
+    p_idempotency_key,
+    'setMyCommands',
+    p_request_fingerprint,
+    v_result
+  );
+  return pg_catalog.jsonb_build_object('result', v_result, 'duplicate', false);
+end
+$function$;
+
+revoke all on function public.bot_commands_replace_internal(uuid,jsonb,text,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_commands_replace_internal(uuid,jsonb,text,text)
+  to service_role;
+
+create or replace function public.bot_message_command_internal(
+  p_bot_id uuid,
+  p_chat_id uuid,
+  p_method text,
+  p_payload jsonb,
+  p_idempotency_key text,
+  p_request_fingerprint text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_existing jsonb;
+  v_result jsonb;
+  v_send_result jsonb;
+  v_target public.messages%rowtype;
+  v_message_id uuid;
+  v_topic_id uuid;
+  v_text text;
+  v_reply_markup jsonb;
+  v_expected_media_kind text;
+begin
+  if p_bot_id is null or p_chat_id is null or p_method is null
+     or p_method not in (
+       'sendMessage','sendPhoto','sendVideo','sendDocument','sendVoice',
+       'sendChatAction','editMessageText','deleteMessage'
+     )
+     or p_payload is null
+     or pg_catalog.jsonb_typeof(p_payload) <> 'object'
+     or pg_catalog.octet_length(p_payload::text) > 65536
+     or p_idempotency_key is null
+     or p_idempotency_key !~ '^[A-Za-z0-9._:-]{8,128}$'
+     or p_request_fingerprint is null
+     or p_request_fingerprint !~ '^[0-9a-f]{64}$' then
+    raise exception 'bot_message_command_input_invalid' using errcode = '22023';
+  end if;
+
+  if p_method = 'sendMessage' then
+    if not (p_payload ? 'text')
+       or pg_catalog.jsonb_typeof(p_payload->'text') <> 'string'
+       or pg_catalog.length(p_payload->>'text') not between 1 and 4096
+       or exists (
+         select 1 from pg_catalog.jsonb_object_keys(p_payload) payload_key
+         where payload_key not in ('text','topic_id','reply_to_id','reply_markup')
+       ) then
+      raise exception 'bot_send_text_input_invalid' using errcode = '22023';
+    end if;
+  elsif p_method in ('sendPhoto','sendVideo','sendDocument','sendVoice') then
+    v_expected_media_kind := case p_method
+      when 'sendPhoto' then 'image'
+      when 'sendVideo' then 'video'
+      when 'sendDocument' then 'file'
+      when 'sendVoice' then 'audio'
+    end;
+    if not (p_payload ? 'media_bucket')
+       or not (p_payload ? 'media_path')
+       or not (p_payload ? 'media_metadata')
+       or pg_catalog.jsonb_typeof(p_payload->'media_bucket') <> 'string'
+       or p_payload->>'media_bucket' <> 'chat-media'
+       or pg_catalog.jsonb_typeof(p_payload->'media_path') <> 'string'
+       or pg_catalog.octet_length(p_payload->>'media_path') not between 1 and 1024
+       or pg_catalog.jsonb_typeof(p_payload->'media_metadata') <> 'object'
+       or exists (
+         select 1 from pg_catalog.jsonb_object_keys(p_payload) payload_key
+         where payload_key not in (
+           'text','media_bucket','media_path','media_metadata',
+           'topic_id','reply_to_id','reply_markup'
+         )
+       )
+       or exists (
+         select 1 from pg_catalog.jsonb_object_keys(p_payload->'media_metadata') metadata_key
+         where metadata_key not in ('mime_type','size','kind')
+       )
+       or pg_catalog.jsonb_typeof(p_payload->'media_metadata'->'mime_type') <> 'string'
+       or pg_catalog.jsonb_typeof(p_payload->'media_metadata'->'size') <> 'number'
+       or (p_payload->'media_metadata'->>'size') !~ '^[0-9]{1,9}$'
+       or (p_payload->'media_metadata'->>'size')::bigint not between 1 and 104857600
+       or pg_catalog.jsonb_typeof(p_payload->'media_metadata'->'kind') <> 'string'
+       or p_payload->'media_metadata'->>'kind' <> v_expected_media_kind
+       or (p_payload ? 'text' and (
+         pg_catalog.jsonb_typeof(p_payload->'text') <> 'string'
+         or pg_catalog.length(p_payload->>'text') not between 1 and 4096
+       ))
+       or (p_method = 'sendPhoto' and p_payload->'media_metadata'->>'mime_type' not in (
+         'image/jpeg','image/png','image/webp','image/gif'
+       ))
+       or (p_method = 'sendVideo' and p_payload->'media_metadata'->>'mime_type' not in (
+         'video/mp4','video/webm'
+       ))
+       or (p_method = 'sendDocument' and p_payload->'media_metadata'->>'mime_type' not in (
+         'application/pdf'
+       ))
+       or (p_method = 'sendVoice' and p_payload->'media_metadata'->>'mime_type' not in (
+         'audio/webm','audio/ogg','audio/mpeg'
+       )) then
+      raise exception 'bot_send_media_input_invalid' using errcode = '22023';
+    end if;
+  end if;
+
+  if p_method = 'sendChatAction' then
+    if not (p_payload ? 'action')
+       or pg_catalog.jsonb_typeof(p_payload->'action') <> 'string'
+       or p_payload->>'action' not in (
+         'typing','upload_photo','upload_video','upload_document','record_voice'
+       )
+       or exists (
+         select 1 from pg_catalog.jsonb_object_keys(p_payload) payload_key
+         where payload_key not in ('action','topic_id')
+       ) then
+      raise exception 'bot_chat_action_input_invalid' using errcode = '22023';
+    end if;
+    if nullif(p_payload->>'topic_id', '') is not null then
+      if (p_payload->>'topic_id') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then
+        raise exception 'bot_topic_invalid' using errcode = '22023';
+      end if;
+      v_topic_id := (p_payload->>'topic_id')::uuid;
+    end if;
+  elsif p_method = 'editMessageText' then
+    if not (p_payload ? 'message_id')
+       or not (p_payload ? 'text')
+       or pg_catalog.jsonb_typeof(p_payload->'message_id') <> 'string'
+       or pg_catalog.jsonb_typeof(p_payload->'text') <> 'string'
+       or (p_payload->>'message_id') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+       or pg_catalog.length(p_payload->>'text') not between 1 and 4096
+       or exists (
+         select 1 from pg_catalog.jsonb_object_keys(p_payload) payload_key
+         where payload_key not in ('message_id','text','reply_markup')
+       ) then
+      raise exception 'bot_edit_input_invalid' using errcode = '22023';
+    end if;
+    v_message_id := (p_payload->>'message_id')::uuid;
+    v_text := p_payload->>'text';
+    v_reply_markup := case
+      when p_payload ? 'reply_markup' then p_payload->'reply_markup'
+      else null
+    end;
+    if not private.bot_inline_keyboard_valid(v_reply_markup) then
+      raise exception 'bot_reply_markup_invalid' using errcode = '22023';
+    end if;
+  elsif p_method = 'deleteMessage' then
+    if not (p_payload ? 'message_id')
+       or pg_catalog.jsonb_typeof(p_payload->'message_id') <> 'string'
+       or (p_payload->>'message_id') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+       or (select pg_catalog.count(*) from pg_catalog.jsonb_object_keys(p_payload)) <> 1 then
+      raise exception 'bot_delete_input_invalid' using errcode = '22023';
+    end if;
+    v_message_id := (p_payload->>'message_id')::uuid;
+  end if;
+
+  if coalesce((public.bot_membership_authorize_internal(
+       p_bot_id,
+       p_chat_id,
+       'send_message'
+     )->>'allowed')::boolean, false) is not true then
+    raise exception 'bot_chat_forbidden' using errcode = '42501';
+  end if;
+
+  if p_method in ('sendMessage','sendPhoto','sendVideo','sendDocument','sendVoice') then
+    v_send_result := public.bot_send_message_internal(
+      p_bot_id,
+      p_chat_id,
+      p_method,
+      p_payload,
+      p_idempotency_key
+    );
+    return pg_catalog.jsonb_build_object(
+      'result', v_send_result - 'duplicate',
+      'duplicate', coalesce((v_send_result->>'duplicate')::boolean, false)
+    );
+  end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(p_bot_id::text || ':' || p_idempotency_key, 0)
+  );
+  v_existing := private.bot_operation_idempotency_lookup(
+    p_bot_id,
+    p_idempotency_key,
+    p_method,
+    p_request_fingerprint
+  );
+  if coalesce((v_existing->>'found')::boolean, false) then
+    return pg_catalog.jsonb_build_object(
+      'result', v_existing->'result',
+      'duplicate', true
+    );
+  end if;
+
+  if p_method = 'sendChatAction' then
+    if v_topic_id is not null and not exists (
+      select 1 from public.topics topic
+      where topic.id = v_topic_id
+        and topic.chat_id = p_chat_id
+        and topic.archived is false
+    ) then
+      raise exception 'bot_topic_forbidden' using errcode = '42501';
+    end if;
+    v_result := pg_catalog.to_jsonb(true);
+  else
+    select message_row.*
+    into v_target
+    from public.messages message_row
+    where message_row.id = v_message_id
+      and message_row.chat_id = p_chat_id
+      and message_row.bot_id = p_bot_id
+      and message_row.deleted_at is null
+    for update of message_row;
+    if not found then
+      raise exception 'bot_message_not_found' using errcode = 'P0002';
+    end if;
+
+    if p_method = 'editMessageText' then
+      update public.messages message_row
+      set content = v_text,
+          bot_reply_markup = v_reply_markup,
+          edited_at = pg_catalog.now()
+      where message_row.id = v_target.id;
+      v_result := pg_catalog.jsonb_build_object(
+        'message_id', v_target.id,
+        'chat_id', v_target.chat_id,
+        'text', v_text,
+        'reply_markup', v_reply_markup,
+        'edited_at', pg_catalog.now()
+      );
+    else
+      update public.messages message_row
+      set deleted_at = pg_catalog.now()
+      where message_row.id = v_target.id;
+      v_result := pg_catalog.jsonb_build_object(
+        'message_id', v_target.id,
+        'chat_id', v_target.chat_id,
+        'deleted', true
+      );
+    end if;
+  end if;
+
+  perform private.bot_operation_idempotency_store(
+    p_bot_id,
+    p_idempotency_key,
+    p_method,
+    p_request_fingerprint,
+    v_result
+  );
+  return pg_catalog.jsonb_build_object('result', v_result, 'duplicate', false);
+end
+$function$;
+
+revoke all on function public.bot_message_command_internal(uuid,uuid,text,jsonb,text,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_message_command_internal(uuid,uuid,text,jsonb,text,text)
+  to service_role;
+
+create or replace function public.bot_file_lookup_internal(
+  p_bot_id uuid,
+  p_chat_id uuid,
+  p_message_id uuid
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+declare
+  v_result jsonb;
+begin
+  if p_bot_id is null or p_chat_id is null or p_message_id is null then
+    raise exception 'bot_file_input_invalid' using errcode = '22023';
+  end if;
+  if coalesce((public.bot_membership_authorize_internal(
+       p_bot_id,
+       p_chat_id,
+       'read_file'
+     )->>'allowed')::boolean, false) is not true then
+    raise exception 'bot_chat_forbidden' using errcode = '42501';
+  end if;
+  select pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+    'message_id', message_row.id,
+    'bucket_id', message_row.media_bucket,
+    'object_path', message_row.media_path,
+    'mime_type', nullif(pg_catalog.left(message_row.media_metadata->>'mime_type', 128), ''),
+    'file_name', nullif(pg_catalog.left(message_row.media_metadata->>'file_name', 255), ''),
+    'size_bytes', case
+      when message_row.media_metadata->>'size' ~ '^[0-9]{1,12}$'
+        then message_row.media_metadata->>'size'
+      else null
+    end
+  ))
+  into v_result
+  from public.messages message_row
+  where message_row.id = p_message_id
+    and message_row.chat_id = p_chat_id
+    and message_row.deleted_at is null
+    and message_row.media_bucket is not null
+    and message_row.media_bucket = 'chat-media'
+    and message_row.media_path is not null
+    and pg_catalog.octet_length(message_row.media_path) between 1 and 1024
+    and private.bot_can_receive_message(p_bot_id, message_row.id);
+  if v_result is null then
+    raise exception 'bot_file_not_found' using errcode = 'P0002';
+  end if;
+  return v_result;
+end
+$function$;
+
+revoke all on function public.bot_file_lookup_internal(uuid,uuid,uuid)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_file_lookup_internal(uuid,uuid,uuid)
+  to service_role;
+
+create or replace function public.bot_callback_answer_internal(
+  p_bot_id uuid,
+  p_callback_query_id uuid,
+  p_text text,
+  p_show_alert boolean,
+  p_idempotency_key text,
+  p_request_fingerprint text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_source_update_id bigint;
+  v_existing jsonb;
+  v_result jsonb := pg_catalog.to_jsonb(true);
+begin
+  if p_bot_id is null or p_callback_query_id is null
+     or (p_text is not null and pg_catalog.length(p_text) not between 1 and 200)
+     or p_show_alert is null
+     or p_idempotency_key is null
+     or p_idempotency_key !~ '^[A-Za-z0-9._:-]{8,128}$'
+     or p_request_fingerprint is null
+     or p_request_fingerprint !~ '^[0-9a-f]{64}$' then
+    raise exception 'bot_callback_answer_input_invalid' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1 from public.bots bot
+    where bot.id = p_bot_id and bot.state = 'active'
+  ) then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+  select queued.id
+  into v_source_update_id
+  from private.bot_updates queued
+  where queued.bot_id = p_bot_id
+    and queued.update_type = 'callback_query'
+    and queued.payload#>>'{callback_query,id}' = p_callback_query_id::text
+    and queued.expires_at > pg_catalog.now()
+    and queued.created_at >= pg_catalog.now() - interval '10 minutes'
+  order by queued.id desc
+  limit 1;
+  if v_source_update_id is null then
+    raise exception 'bot_callback_not_found' using errcode = 'P0002';
+  end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(p_bot_id::text || ':' || p_idempotency_key, 0)
+  );
+  v_existing := private.bot_operation_idempotency_lookup(
+    p_bot_id,
+    p_idempotency_key,
+    'answerCallbackQuery',
+    p_request_fingerprint
+  );
+  if coalesce((v_existing->>'found')::boolean, false) then
+    return pg_catalog.jsonb_build_object(
+      'result', v_existing->'result',
+      'duplicate', true
+    );
+  end if;
+
+  insert into private.bot_callback_answers(
+    bot_id,
+    callback_query_id,
+    source_update_id,
+    text,
+    show_alert
+  ) values (
+    p_bot_id,
+    p_callback_query_id,
+    v_source_update_id,
+    p_text,
+    p_show_alert
+  );
+  perform private.bot_operation_idempotency_store(
+    p_bot_id,
+    p_idempotency_key,
+    'answerCallbackQuery',
+    p_request_fingerprint,
+    v_result
+  );
+  return pg_catalog.jsonb_build_object('result', v_result, 'duplicate', false);
+exception
+  when unique_violation then
+    raise exception 'bot_callback_answer_conflict' using errcode = '23505';
+end
+$function$;
+
+revoke all on function public.bot_callback_answer_internal(uuid,uuid,text,boolean,text,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_callback_answer_internal(uuid,uuid,text,boolean,text,text)
   to service_role;
 
 create or replace function public.bot_update_enqueue_internal(
@@ -1587,14 +2368,16 @@ begin
     old.media_path,
     old.media_metadata,
     old.topic_id,
-    old.reply_to_id
+    old.reply_to_id,
+    old.bot_reply_markup
   ) is not distinct from row(
     new.content,
     new.media_bucket,
     new.media_path,
     new.media_metadata,
     new.topic_id,
-    new.reply_to_id
+    new.reply_to_id,
+    new.bot_reply_markup
   ) then
     return null;
   end if;
@@ -1634,7 +2417,7 @@ revoke all on function private.enqueue_bot_message_updates_after_update()
 drop trigger if exists trg_enqueue_bot_message_updates_after_update
   on public.messages;
 create trigger trg_enqueue_bot_message_updates_after_update
-  after update of content, media_bucket, media_path, media_metadata, topic_id, reply_to_id
+  after update of content, media_bucket, media_path, media_metadata, topic_id, reply_to_id, bot_reply_markup
   on public.messages
   for each row execute function private.enqueue_bot_message_updates_after_update();
 
@@ -2167,6 +2950,8 @@ declare
   v_attempts integer := 0;
   v_limits integer := 0;
   v_idempotency integer := 0;
+  v_operation_idempotency integer := 0;
+  v_callback_answers integer := 0;
   v_upload_grants integer := 0;
 begin
   if p_now is null
@@ -2175,6 +2960,20 @@ begin
      or p_now > pg_catalog.now() + interval '1 minute' then
     raise exception 'bot_cleanup_input_invalid' using errcode = '22023';
   end if;
+
+  with doomed as (
+    select answer.bot_id, answer.callback_query_id
+    from private.bot_callback_answers answer
+    where answer.answered_at < p_now - interval '24 hours'
+    order by answer.answered_at, answer.bot_id
+    limit p_limit
+    for update of answer skip locked
+  )
+  delete from private.bot_callback_answers answer
+  using doomed
+  where answer.bot_id = doomed.bot_id
+    and answer.callback_query_id = doomed.callback_query_id;
+  get diagnostics v_callback_answers = row_count;
 
   with doomed as (
     select queued.id
@@ -2233,6 +3032,20 @@ begin
     and idem.idempotency_key = doomed.idempotency_key;
   get diagnostics v_idempotency = row_count;
 
+  with doomed as (
+    select operation_row.bot_id, operation_row.idempotency_key
+    from private.bot_operation_idempotency operation_row
+    where operation_row.created_at < p_now - interval '24 hours'
+    order by operation_row.created_at, operation_row.bot_id
+    limit p_limit
+    for update of operation_row skip locked
+  )
+  delete from private.bot_operation_idempotency operation_row
+  using doomed
+  where operation_row.bot_id = doomed.bot_id
+    and operation_row.idempotency_key = doomed.idempotency_key;
+  get diagnostics v_operation_idempotency = row_count;
+
   delete from private.bot_delivery_leases lease
   where lease.expires_at <= p_now;
 
@@ -2256,6 +3069,8 @@ begin
     'attempts_deleted', v_attempts,
     'rate_limits_deleted', v_limits,
     'idempotency_deleted', v_idempotency,
+    'operation_idempotency_deleted', v_operation_idempotency,
+    'callback_answers_deleted', v_callback_answers,
     'upload_grants_deleted', v_upload_grants
   );
 end

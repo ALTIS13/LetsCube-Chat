@@ -22,6 +22,29 @@ export interface BotRpcClient {
   rpc(name: string, args?: Record<string, unknown>): PromiseLike<BotRpcResult>;
 }
 
+type SignedUrlResult = {
+  data: { signedUrl?: unknown } | null;
+  error: unknown;
+};
+
+export interface BotServiceClient extends BotRpcClient {
+  storage: {
+    from(bucket: string): {
+      createSignedUrl(
+        objectPath: string,
+        expiresInSeconds: number,
+      ): PromiseLike<SignedUrlResult>;
+    };
+  };
+  channel(
+    name: string,
+    options?: Record<string, unknown>,
+  ): {
+    send(message: Record<string, unknown>): PromiseLike<unknown>;
+  };
+  removeChannel(channel: unknown): PromiseLike<unknown>;
+}
+
 export type AuthenticatedBot = {
   botId: string;
   tokenId: string;
@@ -31,6 +54,78 @@ export interface BotTokenRepository {
   authenticateBotToken(
     header: string | readonly string[] | undefined,
   ): Promise<AuthenticatedBot>;
+}
+
+export type BotMessageCommand = {
+  botId: string;
+  chatId: string;
+  kind:
+    | "text"
+    | "image"
+    | "video"
+    | "file"
+    | "audio"
+    | "chat_action"
+    | "edit"
+    | "delete";
+  payload: Record<string, unknown>;
+  idempotencyKey: string;
+  requestFingerprint: string;
+};
+
+export type BotOperationResult<T> = {
+  result: T;
+  duplicate: boolean;
+};
+
+export type BotFileMetadata = {
+  messageId: string;
+  bucket: string;
+  objectPath: string;
+  mimeType: string | null;
+  fileName: string | null;
+  sizeBytes: number | null;
+};
+
+export interface BotMethodRepository {
+  getMe(botId: string): Promise<unknown>;
+  executeMessageCommand(
+    command: BotMessageCommand,
+  ): Promise<BotOperationResult<unknown>>;
+  authorizeMedia(input: {
+    botId: string;
+    chatId: string;
+    bucket: string;
+    objectPath: string;
+    mimeType: string;
+    sizeBytes: number;
+    expiresInSeconds: 60;
+  }): Promise<void>;
+  replaceCommands(input: {
+    botId: string;
+    commands: Array<{ command: string; description: string }>;
+    idempotencyKey: string;
+    requestFingerprint: string;
+  }): Promise<BotOperationResult<{ commands: unknown[] }>>;
+  getCommands(botId: string): Promise<unknown[]>;
+  lookupFile(
+    botId: string,
+    chatId: string,
+    messageId: string,
+  ): Promise<BotFileMetadata>;
+  createSignedFileUrl(
+    bucket: string,
+    objectPath: string,
+    expiresInSeconds: 60,
+  ): Promise<string>;
+  answerCallback(input: {
+    botId: string;
+    callbackQueryId: string;
+    text: string | null;
+    showAlert: boolean;
+    idempotencyKey: string;
+    requestFingerprint: string;
+  }): Promise<BotOperationResult<boolean>>;
 }
 
 type TokenLookupRow = {
@@ -92,7 +187,9 @@ function projectTokenLookup(value: unknown): TokenLookupRow {
   };
 }
 
-function createServiceRoleClient(environment: NodeJS.ProcessEnv): BotRpcClient {
+export function createBotServiceClient(
+  environment: NodeJS.ProcessEnv = process.env,
+): BotServiceClient {
   const { url, serviceRoleKey } = resolveBotAuthConfig(environment);
   return createClient(url, serviceRoleKey, {
     auth: {
@@ -100,12 +197,12 @@ function createServiceRoleClient(environment: NodeJS.ProcessEnv): BotRpcClient {
       autoRefreshToken: false,
       detectSessionInUrl: false,
     },
-  }) as unknown as BotRpcClient;
+  }) as unknown as BotServiceClient;
 }
 
 export function createBotTokenRepository(
   environment: NodeJS.ProcessEnv = process.env,
-  client: BotRpcClient = createServiceRoleClient(environment),
+  client: BotRpcClient = createBotServiceClient(environment),
   now: () => Date = () => new Date(),
 ): BotTokenRepository {
   const { pepper } = resolveBotAuthConfig(environment);
@@ -164,4 +261,253 @@ export async function authenticateBotToken(
   repository: BotTokenRepository = createBotTokenRepository(),
 ): Promise<AuthenticatedBot> {
   return repository.authenticateBotToken(header);
+}
+
+function databaseError(error: unknown): BotApiError {
+  const code =
+    error && typeof error === "object" && "code" in error
+      ? (error as { code?: unknown }).code
+      : undefined;
+  switch (code) {
+    case "22023":
+    case "22P02":
+      return new BotApiError("validation_failed");
+    case "42501":
+      return new BotApiError("forbidden");
+    case "23505":
+      return new BotApiError("conflict");
+    case "P0002":
+      return new BotApiError("not_found");
+    default:
+      return internalError();
+  }
+}
+
+async function callRpc(
+  client: BotRpcClient,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  let response: BotRpcResult;
+  try {
+    response = await client.rpc(name, args);
+  } catch {
+    throw internalError();
+  }
+  if (response.error) throw databaseError(response.error);
+  return response.data;
+}
+
+function operationResult<T>(value: unknown): BotOperationResult<T> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw internalError();
+  }
+  const row = value as Record<string, unknown>;
+  if (!("result" in row) || typeof row.duplicate !== "boolean") {
+    throw internalError();
+  }
+  return { result: row.result as T, duplicate: row.duplicate };
+}
+
+const METHOD_BY_KIND: Record<BotMessageCommand["kind"], string> = {
+  text: "sendMessage",
+  image: "sendPhoto",
+  video: "sendVideo",
+  file: "sendDocument",
+  audio: "sendVoice",
+  chat_action: "sendChatAction",
+  edit: "editMessageText",
+  delete: "deleteMessage",
+};
+
+function fileMetadata(value: unknown): BotFileMetadata {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw internalError();
+  }
+  const row = value as Record<string, unknown>;
+  const messageId = row.message_id;
+  const bucket = row.bucket_id;
+  const objectPath = row.object_path;
+  const mimeType = row.mime_type;
+  const fileName = row.file_name;
+  const rawSize = row.size_bytes;
+  const sizeBytes =
+    typeof rawSize === "number"
+      ? rawSize
+      : typeof rawSize === "string" && /^\d{1,12}$/.test(rawSize)
+        ? Number(rawSize)
+        : null;
+  if (
+    typeof messageId !== "string" ||
+    !UUID_RE.test(messageId) ||
+    bucket !== "chat-media" ||
+    typeof objectPath !== "string" ||
+    objectPath.length < 1 ||
+    objectPath.length > 1024 ||
+    (mimeType !== null &&
+      (typeof mimeType !== "string" || mimeType.length > 128)) ||
+    (fileName !== null &&
+      (typeof fileName !== "string" || fileName.length > 255)) ||
+    (sizeBytes !== null &&
+      (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > 104_857_600))
+  ) {
+    throw internalError();
+  }
+  return {
+    messageId,
+    bucket,
+    objectPath,
+    mimeType,
+    fileName,
+    sizeBytes,
+  };
+}
+
+export function createBotMethodRepository(
+  client: BotServiceClient = createBotServiceClient(),
+): BotMethodRepository {
+  return {
+    async getMe(botId) {
+      const value = await callRpc(client, "bot_get_me_internal", {
+        p_bot_id: botId,
+      });
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw internalError();
+      }
+      return value;
+    },
+
+    async executeMessageCommand(command) {
+      return operationResult(
+        await callRpc(client, "bot_message_command_internal", {
+          p_bot_id: command.botId,
+          p_chat_id: command.chatId,
+          p_method: METHOD_BY_KIND[command.kind],
+          p_payload: command.payload,
+          p_idempotency_key: command.idempotencyKey,
+          p_request_fingerprint: command.requestFingerprint,
+        }),
+      );
+    },
+
+    async authorizeMedia(input) {
+      await callRpc(client, "bot_upload_authorize_internal", {
+        p_bot_id: input.botId,
+        p_chat_id: input.chatId,
+        p_bucket_id: input.bucket,
+        p_object_path: input.objectPath,
+        p_content_type: input.mimeType,
+        p_byte_size: input.sizeBytes,
+        p_expires_in_seconds: input.expiresInSeconds,
+      });
+    },
+
+    async replaceCommands(input) {
+      return operationResult(
+        await callRpc(client, "bot_commands_replace_internal", {
+          p_bot_id: input.botId,
+          p_commands: input.commands,
+          p_idempotency_key: input.idempotencyKey,
+          p_request_fingerprint: input.requestFingerprint,
+        }),
+      );
+    },
+
+    async getCommands(botId) {
+      const value = await callRpc(client, "bot_commands_list_internal", {
+        p_bot_id: botId,
+      });
+      if (!Array.isArray(value) || value.length > 100) throw internalError();
+      return value;
+    },
+
+    async lookupFile(botId, chatId, messageId) {
+      return fileMetadata(
+        await callRpc(client, "bot_file_lookup_internal", {
+          p_bot_id: botId,
+          p_chat_id: chatId,
+          p_message_id: messageId,
+        }),
+      );
+    },
+
+    async createSignedFileUrl(bucket, objectPath, expiresInSeconds) {
+      let response: SignedUrlResult;
+      try {
+        response = await client.storage
+          .from(bucket)
+          .createSignedUrl(objectPath, expiresInSeconds);
+      } catch {
+        throw internalError();
+      }
+      const signedUrl = response.data?.signedUrl;
+      if (
+        response.error ||
+        typeof signedUrl !== "string" ||
+        signedUrl.length > 4096
+      ) {
+        throw internalError();
+      }
+      try {
+        const parsed = new URL(signedUrl);
+        if (
+          !["https:", "http:"].includes(parsed.protocol) ||
+          parsed.username ||
+          parsed.password
+        ) {
+          throw internalError();
+        }
+      } catch (error) {
+        if (error instanceof BotApiError) throw error;
+        throw internalError();
+      }
+      return signedUrl;
+    },
+
+    async answerCallback(input) {
+      return operationResult<boolean>(
+        await callRpc(client, "bot_callback_answer_internal", {
+          p_bot_id: input.botId,
+          p_callback_query_id: input.callbackQueryId,
+          p_text: input.text,
+          p_show_alert: input.showAlert,
+          p_idempotency_key: input.idempotencyKey,
+          p_request_fingerprint: input.requestFingerprint,
+        }),
+      );
+    },
+  };
+}
+
+export function createBotChatActionPublisher(client: BotServiceClient): (
+  payload: {
+    botId: string;
+    chatId: string;
+    action: string;
+    topicId?: string;
+  },
+) => Promise<void> {
+  return async (payload) => {
+    const channel = client.channel(`bot-chat-actions:${payload.chatId}`, {
+      config: { broadcast: { self: false } },
+    });
+    try {
+      const status = await channel.send({
+        type: "broadcast",
+        event: "bot_chat_action",
+        payload: {
+          botId: payload.botId,
+          action: payload.action,
+          ...(payload.topicId ? { topicId: payload.topicId } : {}),
+        },
+      });
+      if (status !== "ok") throw internalError();
+    } finally {
+      try {
+        await client.removeChannel(channel);
+      } catch {
+        // Channel cleanup is best effort after a bounded publish attempt.
+      }
+    }
+  };
 }

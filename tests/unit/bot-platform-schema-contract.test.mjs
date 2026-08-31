@@ -21,6 +21,8 @@ const privateTables = [
   "bot_delivery_attempts",
   "bot_rate_limit_buckets",
   "bot_upload_grants",
+  "bot_operation_idempotency",
+  "bot_callback_answers",
 ];
 const serviceRoleFunctions = [
   ["bot_create_internal", "uuid,text,text,text,text,text"],
@@ -31,6 +33,12 @@ const serviceRoleFunctions = [
   ["bot_membership_authorize_internal", "uuid,uuid,text"],
   ["bot_upload_authorize_internal", "uuid,uuid,text,text,text,bigint,integer"],
   ["bot_send_message_internal", "uuid,uuid,text,jsonb,text"],
+  ["bot_get_me_internal", "uuid"],
+  ["bot_message_command_internal", "uuid,uuid,text,jsonb,text,text"],
+  ["bot_commands_replace_internal", "uuid,jsonb,text,text"],
+  ["bot_commands_list_internal", "uuid"],
+  ["bot_file_lookup_internal", "uuid,uuid,uuid"],
+  ["bot_callback_answer_internal", "uuid,uuid,text,boolean,text,text"],
   ["bot_updates_poll_internal", "uuid,bigint,integer,uuid"],
   ["bot_updates_ack_internal", "uuid,bigint"],
   ["bot_webhook_set_internal", "uuid,text,text,text"],
@@ -155,11 +163,11 @@ test("updates use authoritative safe projections and real triggers", () => {
   );
   assert.match(
     normalizedSql,
-    /create trigger trg_enqueue_bot_message_updates_after_update after update of content, media_bucket, media_path, media_metadata, topic_id, reply_to_id on public\.messages/,
+    /create trigger trg_enqueue_bot_message_updates_after_update after update of content, media_bucket, media_path, media_metadata, topic_id, reply_to_id, bot_reply_markup on public\.messages/,
   );
   assert.match(
     normalizedSql,
-    /create or replace function private\.enqueue_bot_message_updates_after_update\(\)[\s\S]*row\(\s*old\.content, old\.media_bucket, old\.media_path, old\.media_metadata, old\.topic_id, old\.reply_to_id \) is not distinct from row\( new\.content, new\.media_bucket, new\.media_path, new\.media_metadata, new\.topic_id, new\.reply_to_id \)/,
+    /create or replace function private\.enqueue_bot_message_updates_after_update\(\)[\s\S]*row\(\s*old\.content, old\.media_bucket, old\.media_path, old\.media_metadata, old\.topic_id, old\.reply_to_id, old\.bot_reply_markup \) is not distinct from row\( new\.content, new\.media_bucket, new\.media_path, new\.media_metadata, new\.topic_id, new\.reply_to_id, new\.bot_reply_markup \)/,
   );
   assert.match(
     normalizedSql,
@@ -219,6 +227,67 @@ test("message projection caps every variable-width scalar below the queue limit"
   }
   assert.match(bindingSpec, /bot message projection caps/i);
   assert.match(bindingSpec, /64 kib/i);
+});
+
+test("bot inline keyboards are durable, closed, bounded and edit-visible", () => {
+  assert.match(
+    normalizedSql,
+    /add column if not exists bot_reply_markup jsonb null/,
+  );
+  assert.match(
+    normalizedSql,
+    /create or replace function private\.bot_inline_keyboard_valid\(p_markup jsonb\)/,
+  );
+  assert.match(normalizedSql, /pg_catalog\.octet_length\(p_markup::text\) > 16384/);
+  assert.match(normalizedSql, /pg_catalog\.jsonb_array_length\(p_markup->'inline_keyboard'\) not between 1 and 8/);
+  assert.match(normalizedSql, /pg_catalog\.length\(v_button->>'text'\) not between 1 and 64/);
+  assert.match(normalizedSql, /pg_catalog\.length\(v_button->>'callback_data'\) not between 1 and 128/);
+  assert.match(normalizedSql, /'reply_markup', message_row\.bot_reply_markup/);
+  assert.match(
+    normalizedSql,
+    /after update of content, media_bucket, media_path, media_metadata, topic_id, reply_to_id, bot_reply_markup on public\.messages/,
+  );
+});
+
+test("non-message core mutations use a private input-bound idempotency ledger", () => {
+  assert.match(normalizedSql, /create table private\.bot_operation_idempotency/);
+  assert.match(normalizedSql, /request_fingerprint text not null check \(request_fingerprint ~ '\^\[0-9a-f\]\{64\}\$'\)/);
+  assert.match(normalizedSql, /check \(pg_catalog\.octet_length\(result::text\) <= 16384\)/);
+  assert.match(normalizedSql, /create index bot_operation_idempotency_retention_idx/);
+  assert.match(normalizedSql, /bot_operation_idempotency_conflict/);
+  assert.match(normalizedSql, /'operation_idempotency_deleted', v_operation_idempotency/);
+});
+
+test("core RPCs enforce identity, commands, file and callback boundaries", () => {
+  assert.match(normalizedSql, /create or replace function public\.bot_get_me_internal\(/);
+  assert.match(normalizedSql, /create or replace function public\.bot_message_command_internal\(/);
+  assert.match(normalizedSql, /message_row\.bot_id = p_bot_id/);
+  assert.match(normalizedSql, /message_row\.deleted_at is null/);
+  assert.match(normalizedSql, /set deleted_at = pg_catalog\.now\(\)/);
+  assert.match(normalizedSql, /set content = v_text,[\s\S]*bot_reply_markup = v_reply_markup,[\s\S]*edited_at = pg_catalog\.now\(\)/);
+  assert.match(normalizedSql, /create or replace function public\.bot_commands_replace_internal\(/);
+  assert.match(normalizedSql, /with ordinality/);
+  assert.match(
+    normalizedSql,
+    /create or replace function public\.bot_commands_replace_internal\([\s\S]*select bot\.id[\s\S]*from public\.bots bot[\s\S]*for update/,
+  );
+  assert.match(normalizedSql, /create or replace function public\.bot_file_lookup_internal\(/);
+  assert.match(normalizedSql, /private\.bot_can_receive_message\(p_bot_id, message_row\.id\)/);
+  assert.match(normalizedSql, /message_row\.chat_id = p_chat_id/);
+  assert.match(normalizedSql, /message_row\.media_bucket is not null/);
+  assert.match(normalizedSql, /create table private\.bot_callback_answers/);
+  assert.match(normalizedSql, /queued\.update_type = 'callback_query'/);
+  assert.match(normalizedSql, /queued\.expires_at > pg_catalog\.now\(\)/);
+  assert.match(normalizedSql, /queued\.created_at >= pg_catalog\.now\(\) - interval '10 minutes'/);
+});
+
+test("message command RPC independently enforces method-specific send payloads", () => {
+  assert.match(normalizedSql, /p_method = 'sendmessage'[\s\S]*payload_key not in \('text','topic_id','reply_to_id','reply_markup'\)/);
+  assert.match(normalizedSql, /p_method = 'sendphoto'[\s\S]*image\/jpeg[\s\S]*image\/png[\s\S]*image\/webp[\s\S]*image\/gif/);
+  assert.match(normalizedSql, /p_method = 'sendvideo'[\s\S]*video\/mp4[\s\S]*video\/webm/);
+  assert.match(normalizedSql, /p_method = 'senddocument'[\s\S]*application\/pdf/);
+  assert.match(normalizedSql, /p_method = 'sendvoice'[\s\S]*audio\/webm[\s\S]*audio\/ogg[\s\S]*audio\/mpeg/);
+  assert.match(normalizedSql, /p_payload->'media_metadata'->>'kind' <> v_expected_media_kind/);
 });
 
 test("automatic message fanout isolates every bot while direct RPC remains strict", () => {
@@ -425,6 +494,18 @@ test("database smoke preserves history and rolls every probe back", () => {
   assert.match(normalizedSmoke, /bot_owner_limit_not_enforced/);
   assert.match(normalizedSmoke, /bot_media_without_grant_succeeded/);
   assert.match(normalizedSmoke, /bot_media_grant_not_consumed/);
+  assert.match(normalizedSmoke, /bot_reply_markup_projection_missing/);
+  assert.match(normalizedSmoke, /bot_reply_markup_validation_failed/);
+  assert.match(normalizedSmoke, /bot_media_method_allowlist_failed/);
+  assert.match(normalizedSmoke, /bot_edit_idempotency_failed/);
+  assert.match(normalizedSmoke, /bot_edit_idempotency_conflict_missing/);
+  assert.match(normalizedSmoke, /cross_chat_edit_succeeded/);
+  assert.match(normalizedSmoke, /cross_chat_delete_succeeded/);
+  assert.match(normalizedSmoke, /bot_command_replace_failed/);
+  assert.match(normalizedSmoke, /bot_file_cross_chat_lookup_succeeded/);
+  assert.match(normalizedSmoke, /bot_file_pre_join_lookup_succeeded/);
+  assert.match(normalizedSmoke, /bot_callback_wrong_owner_succeeded/);
+  assert.match(normalizedSmoke, /bot_callback_idempotency_failed/);
   assert.match(normalizedSmoke, /expired_upload_grant_not_replaced/);
   assert.match(normalizedSmoke, /cross_chat_reply_succeeded/);
   assert.match(normalizedSmoke, /v_other_chat_id, v_bot_id, 'full'/);

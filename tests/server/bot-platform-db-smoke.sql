@@ -54,11 +54,17 @@ declare
   v_topic_id uuid;
   v_other_topic_id uuid;
   v_media_message_id uuid;
+  v_markup_message_id uuid;
+  v_delete_message_id uuid;
   v_muted_message_id uuid;
   v_history_message_id uuid;
   v_system_message_id uuid;
   v_first_send jsonb;
   v_duplicate_send jsonb;
+  v_first_operation jsonb;
+  v_duplicate_operation jsonb;
+  v_command_list jsonb;
+  v_callback_id uuid := gen_random_uuid();
   v_safe_payload jsonb;
   v_legacy_tombstone_count integer;
   v_notification_count integer;
@@ -70,6 +76,7 @@ declare
   v_notification_id uuid;
   v_upload_grant_id uuid;
   v_media_path text;
+  v_history_media_path text;
   v_claim_token uuid := gen_random_uuid();
   v_stale_retry_attempt_id bigint;
   v_stale_dead_attempt_id bigint;
@@ -114,7 +121,10 @@ begin
 
   if pg_catalog.has_table_privilege('anon', 'private.bot_tokens', 'SELECT')
      or pg_catalog.has_table_privilege('authenticated', 'private.bot_tokens', 'SELECT')
-     or pg_catalog.has_table_privilege('service_role', 'private.bot_tokens', 'SELECT') then
+     or pg_catalog.has_table_privilege('service_role', 'private.bot_tokens', 'SELECT')
+     or pg_catalog.has_table_privilege('anon', 'private.bot_operation_idempotency', 'SELECT')
+     or pg_catalog.has_table_privilege('authenticated', 'private.bot_callback_answers', 'SELECT')
+     or pg_catalog.has_table_privilege('service_role', 'private.bot_callback_answers', 'SELECT') then
     raise exception 'anon_can_access_private_bot_table';
   end if;
 
@@ -129,6 +139,12 @@ begin
       ('public.bot_membership_authorize_internal(uuid,uuid,text)'),
       ('public.bot_upload_authorize_internal(uuid,uuid,text,text,text,bigint,integer)'),
       ('public.bot_send_message_internal(uuid,uuid,text,jsonb,text)'),
+      ('public.bot_get_me_internal(uuid)'),
+      ('public.bot_message_command_internal(uuid,uuid,text,jsonb,text,text)'),
+      ('public.bot_commands_replace_internal(uuid,jsonb,text,text)'),
+      ('public.bot_commands_list_internal(uuid)'),
+      ('public.bot_file_lookup_internal(uuid,uuid,uuid)'),
+      ('public.bot_callback_answer_internal(uuid,uuid,text,boolean,text,text)'),
       ('public.bot_updates_poll_internal(uuid,bigint,integer,uuid)'),
       ('public.bot_updates_ack_internal(uuid,bigint)'),
       ('public.bot_webhook_set_internal(uuid,text,text,text)'),
@@ -499,17 +515,30 @@ begin
     (v_chat_id, v_actor_id, 'owner'),
     (v_chat_id, v_recipient_id, 'member');
 
+  v_history_media_path := v_chat_id::text || '/bots/' || v_bot_id::text || '/' || gen_random_uuid()::text || '.pdf';
+  insert into storage.objects(bucket_id, name)
+  values ('chat-media', v_history_media_path);
   insert into public.messages(
     chat_id,
     user_id,
     content,
     type,
+    media_bucket,
+    media_path,
+    media_metadata,
     created_at
   ) values (
     v_chat_id,
     v_recipient_id,
     'pre-join smoke message',
-    'text',
+    'file',
+    'chat-media',
+    v_history_media_path,
+    pg_catalog.jsonb_build_object(
+      'mime_type', 'application/pdf',
+      'file_name', 'pre-join.pdf',
+      'size', 10
+    ),
     pg_catalog.now() - interval '1 minute'
   ) returning id into v_history_message_id;
 
@@ -525,6 +554,28 @@ begin
   ) then
     raise exception 'restricted_membership_not_projected';
   end if;
+
+  insert into public.chats(id, type, name, created_by)
+  values (v_other_chat_id, 'group', 'Other bot smoke', v_actor_id);
+  insert into public.chat_members(chat_id, user_id, role)
+  values
+    (v_other_chat_id, v_actor_id, 'owner'),
+    (v_other_chat_id, v_recipient_id, 'member');
+  insert into public.chat_bot_members(
+    chat_id,
+    bot_id,
+    privacy_mode,
+    full_visibility_requested_at,
+    full_visibility_approved_by,
+    joined_at
+  ) values (
+    v_other_chat_id,
+    v_bot_id,
+    'full',
+    pg_catalog.now(),
+    v_actor_id,
+    pg_catalog.now()
+  );
 
   v_rejected := false;
   begin
@@ -731,12 +782,235 @@ begin
     raise exception 'bot_idempotency_failed';
   end if;
 
+  select public.bot_message_command_internal(
+    v_bot_id,
+    v_chat_id,
+    'sendMessage',
+    pg_catalog.jsonb_build_object(
+      'text', 'Keyboard message',
+      'reply_markup', pg_catalog.jsonb_build_object(
+        'inline_keyboard', pg_catalog.jsonb_build_array(
+          pg_catalog.jsonb_build_array(
+            pg_catalog.jsonb_build_object('text', 'Open', 'callback_data', 'open:1')
+          )
+        )
+      )
+    ),
+    'markup-send-key',
+    pg_catalog.repeat('1', 64)
+  ) into v_first_operation;
+  v_markup_message_id := (v_first_operation->'result'->>'message_id')::uuid;
+  select private.bot_message_update_payload(v_bot_id, v_markup_message_id)
+  into v_safe_payload;
+  if not exists (
+    select 1
+    from public.messages message_row
+    where message_row.id = v_markup_message_id
+      and message_row.bot_reply_markup#>>'{inline_keyboard,0,0,callback_data}' = 'open:1'
+  ) or v_safe_payload#>>'{message,reply_markup,inline_keyboard,0,0,callback_data}' <> 'open:1' then
+    raise exception 'bot_reply_markup_projection_missing';
+  end if;
+
+  v_rejected := false;
+  begin
+    perform public.bot_send_message_internal(
+      v_bot_id,
+      v_chat_id,
+      'sendMessage',
+      pg_catalog.jsonb_build_object(
+        'text', 'Invalid keyboard',
+        'reply_markup', pg_catalog.jsonb_build_object(
+          'inline_keyboard', pg_catalog.to_jsonb(array_fill(
+            pg_catalog.jsonb_build_array(
+              pg_catalog.jsonb_build_object('text', 'x', 'callback_data', 'x')
+            ),
+            array[9]
+          ))
+        )
+      ),
+      'invalid-markup-key'
+    );
+  exception
+    when invalid_parameter_value then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'bot_reply_markup_validation_failed';
+  end if;
+
+  v_rejected := false;
+  begin
+    perform public.bot_message_command_internal(
+      v_bot_id,
+      v_chat_id,
+      'sendPhoto',
+      pg_catalog.jsonb_build_object(
+        'media_bucket', 'chat-media',
+        'media_path', v_chat_id::text || '/bots/' || v_bot_id::text || '/wrong.ogg',
+        'media_metadata', pg_catalog.jsonb_build_object(
+          'mime_type', 'audio/ogg',
+          'size', 10,
+          'kind', 'image'
+        )
+      ),
+      'invalid-media-method-key',
+      pg_catalog.repeat('a', 64)
+    );
+  exception
+    when invalid_parameter_value then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'bot_media_method_allowlist_failed';
+  end if;
+
+  select public.bot_message_command_internal(
+    v_bot_id,
+    v_chat_id,
+    'editMessageText',
+    pg_catalog.jsonb_build_object(
+      'message_id', v_markup_message_id,
+      'text', 'Keyboard edited',
+      'reply_markup', pg_catalog.jsonb_build_object(
+        'inline_keyboard', pg_catalog.jsonb_build_array(
+          pg_catalog.jsonb_build_array(
+            pg_catalog.jsonb_build_object('text', 'Close', 'callback_data', 'close:1')
+          )
+        )
+      )
+    ),
+    'edit-operation-key',
+    pg_catalog.repeat('2', 64)
+  ) into v_first_operation;
+  select public.bot_message_command_internal(
+    v_bot_id,
+    v_chat_id,
+    'editMessageText',
+    pg_catalog.jsonb_build_object(
+      'message_id', v_markup_message_id,
+      'text', 'Keyboard edited',
+      'reply_markup', pg_catalog.jsonb_build_object(
+        'inline_keyboard', pg_catalog.jsonb_build_array(
+          pg_catalog.jsonb_build_array(
+            pg_catalog.jsonb_build_object('text', 'Close', 'callback_data', 'close:1')
+          )
+        )
+      )
+    ),
+    'edit-operation-key',
+    pg_catalog.repeat('2', 64)
+  ) into v_duplicate_operation;
+  if v_first_operation->'result' is distinct from v_duplicate_operation->'result'
+     or coalesce((v_duplicate_operation->>'duplicate')::boolean, false) is not true
+     or not exists (
+       select 1
+       from public.messages message_row
+       where message_row.id = v_markup_message_id
+         and message_row.content = 'Keyboard edited'
+         and message_row.bot_reply_markup#>>'{inline_keyboard,0,0,callback_data}' = 'close:1'
+         and message_row.edited_at is not null
+     ) then
+    raise exception 'bot_edit_idempotency_failed';
+  end if;
+
+  v_rejected := false;
+  begin
+    perform public.bot_message_command_internal(
+      v_bot_id,
+      v_chat_id,
+      'editMessageText',
+      pg_catalog.jsonb_build_object('message_id', v_markup_message_id, 'text', 'Changed input'),
+      'edit-operation-key',
+      pg_catalog.repeat('3', 64)
+    );
+  exception
+    when unique_violation then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'bot_edit_idempotency_conflict_missing';
+  end if;
+
+  v_rejected := false;
+  begin
+    perform public.bot_message_command_internal(
+      v_bot_id,
+      v_other_chat_id,
+      'editMessageText',
+      pg_catalog.jsonb_build_object('message_id', v_markup_message_id, 'text', 'Cross chat'),
+      'cross-chat-edit-key',
+      pg_catalog.repeat('4', 64)
+    );
+  exception
+    when no_data_found or insufficient_privilege then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'cross_chat_edit_succeeded';
+  end if;
+
+  select (public.bot_send_message_internal(
+    v_bot_id,
+    v_chat_id,
+    'sendMessage',
+    pg_catalog.jsonb_build_object('text', 'Delete target'),
+    'delete-target-key'
+  )->>'message_id')::uuid into v_delete_message_id;
+  v_rejected := false;
+  begin
+    perform public.bot_message_command_internal(
+      v_bot_id,
+      v_other_chat_id,
+      'deleteMessage',
+      pg_catalog.jsonb_build_object('message_id', v_delete_message_id),
+      'cross-chat-delete-key',
+      pg_catalog.repeat('5', 64)
+    );
+  exception
+    when no_data_found or insufficient_privilege then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'cross_chat_delete_succeeded';
+  end if;
+  perform public.bot_message_command_internal(
+    v_bot_id,
+    v_chat_id,
+    'deleteMessage',
+    pg_catalog.jsonb_build_object('message_id', v_delete_message_id),
+    'delete-operation-key',
+    pg_catalog.repeat('6', 64)
+  );
+  if not exists (
+    select 1 from public.messages message_row
+    where message_row.id = v_delete_message_id
+      and message_row.deleted_at is not null
+  ) then
+    raise exception 'bot_delete_soft_delete_failed';
+  end if;
+
+  select public.bot_commands_replace_internal(
+    v_bot_id,
+    pg_catalog.jsonb_build_array(
+      pg_catalog.jsonb_build_object('command', 'start', 'description', 'Start'),
+      pg_catalog.jsonb_build_object('command', 'help', 'description', 'Help')
+    ),
+    'commands-operation-key',
+    pg_catalog.repeat('7', 64)
+  ) into v_first_operation;
+  select public.bot_commands_list_internal(v_bot_id) into v_command_list;
+  if v_command_list#>>'{0,command}' <> 'start'
+     or v_command_list#>>'{1,command}' <> 'help'
+     or (select pg_catalog.count(*) from public.bot_commands command_row where command_row.bot_id = v_bot_id) <> 2 then
+    raise exception 'bot_command_replace_failed';
+  end if;
+
   perform public.bot_update_enqueue_internal(
     v_bot_id,
     'callback_query',
     v_message_id,
     pg_catalog.jsonb_build_object(
-      'callback_id', gen_random_uuid(),
+      'callback_id', v_callback_id,
       'actor_id', v_recipient_id,
       'data', 'confirm'
     )
@@ -751,6 +1025,51 @@ begin
       and not (queued.payload::text ~* '(email|phone|support|security)')
   ) then
     raise exception 'restricted_callback_not_projected';
+  end if;
+
+  v_rejected := false;
+  begin
+    perform public.bot_callback_answer_internal(
+      v_second_bot_id,
+      v_callback_id,
+      'wrong bot',
+      false,
+      'wrong-callback-key',
+      pg_catalog.repeat('8', 64)
+    );
+  exception
+    when no_data_found or insufficient_privilege then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'bot_callback_wrong_owner_succeeded';
+  end if;
+  select public.bot_callback_answer_internal(
+    v_bot_id,
+    v_callback_id,
+    'Done',
+    true,
+    'callback-answer-key',
+    pg_catalog.repeat('9', 64)
+  ) into v_first_operation;
+  select public.bot_callback_answer_internal(
+    v_bot_id,
+    v_callback_id,
+    'Done',
+    true,
+    'callback-answer-key',
+    pg_catalog.repeat('9', 64)
+  ) into v_duplicate_operation;
+  if v_first_operation->'result' is distinct from v_duplicate_operation->'result'
+     or coalesce((v_duplicate_operation->>'duplicate')::boolean, false) is not true
+     or not exists (
+       select 1 from private.bot_callback_answers answer
+       where answer.bot_id = v_bot_id
+         and answer.callback_query_id = v_callback_id
+         and answer.text = 'Done'
+         and answer.show_alert is true
+     ) then
+    raise exception 'bot_callback_idempotency_failed';
   end if;
 
   insert into public.messages(chat_id, user_id, content, type, reply_to_id)
@@ -769,16 +1088,13 @@ begin
   insert into public.chats(id, type, name, created_by)
   values
     (v_full_chat_id, 'group', 'Full bot smoke', v_actor_id),
-    (v_private_chat_id, 'private', 'Private bot smoke', v_actor_id),
-    (v_other_chat_id, 'group', 'Other bot smoke', v_actor_id);
+    (v_private_chat_id, 'private', 'Private bot smoke', v_actor_id);
   insert into public.chat_members(chat_id, user_id, role)
   values
     (v_full_chat_id, v_actor_id, 'owner'),
     (v_full_chat_id, v_recipient_id, 'member'),
     (v_private_chat_id, v_actor_id, 'owner'),
-    (v_private_chat_id, v_recipient_id, 'member'),
-    (v_other_chat_id, v_actor_id, 'owner'),
-    (v_other_chat_id, v_recipient_id, 'member');
+    (v_private_chat_id, v_recipient_id, 'member');
   insert into public.chat_bot_members(
     chat_id,
     bot_id,
@@ -796,21 +1112,6 @@ begin
   );
   insert into public.chat_bot_members(chat_id, bot_id, privacy_mode, joined_at)
   values (v_private_chat_id, v_bot_id, 'restricted', pg_catalog.now());
-  insert into public.chat_bot_members(
-    chat_id,
-    bot_id,
-    privacy_mode,
-    full_visibility_requested_at,
-    full_visibility_approved_by,
-    joined_at
-  ) values (
-    v_other_chat_id,
-    v_bot_id,
-    'full',
-    pg_catalog.now(),
-    v_actor_id,
-    pg_catalog.now()
-  );
 
   insert into public.messages(chat_id, user_id, content, type)
   values (v_full_chat_id, v_recipient_id, 'ordinary full message', 'text')
@@ -1214,6 +1515,31 @@ begin
       and upload_grant.consumed_at is not null
   ) then
     raise exception 'bot_media_grant_not_consumed';
+  end if;
+
+  if (public.bot_file_lookup_internal(v_bot_id, v_chat_id, v_media_message_id)->>'message_id')::uuid
+       is distinct from v_media_message_id then
+    raise exception 'bot_file_lookup_failed';
+  end if;
+  v_rejected := false;
+  begin
+    perform public.bot_file_lookup_internal(v_bot_id, v_other_chat_id, v_media_message_id);
+  exception
+    when no_data_found or insufficient_privilege then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'bot_file_cross_chat_lookup_succeeded';
+  end if;
+  v_rejected := false;
+  begin
+    perform public.bot_file_lookup_internal(v_bot_id, v_chat_id, v_history_message_id);
+  exception
+    when no_data_found or insufficient_privilege then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'bot_file_pre_join_lookup_succeeded';
   end if;
 
   select pg_catalog.count(*)

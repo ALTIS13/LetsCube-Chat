@@ -101,6 +101,26 @@ test("sendMessage rejects oversized or unknown input before database access", ()
   }
 });
 
+test("inline keyboards reject serialized payloads over 16 KiB", () => {
+  const oversizedMarkup = {
+    inline_keyboard: Array.from({ length: 8 }, () =>
+      Array.from({ length: 8 }, () => ({
+        text: "я".repeat(64),
+        callback_data: "я".repeat(128),
+      })),
+    ),
+  };
+  assert.ok(Buffer.byteLength(JSON.stringify(oversizedMarkup), "utf8") > 16_384);
+  assert.throws(() =>
+    parseBotMethodInput("sendMessage", {
+      chat_id: CHAT_ID,
+      text: "ok",
+      idempotency_key: "message:markup:1",
+      reply_markup: oversizedMarkup,
+    }),
+  );
+});
+
 test("media methods accept only approved Storage object references and never URLs", () => {
   const storage = {
     bucket: "chat-media",
@@ -161,6 +181,44 @@ test("media methods accept only approved Storage object references and never URL
         chat_id: CHAT_ID,
         media,
         idempotency_key: "video:20260831:1",
+      }),
+    );
+  }
+});
+
+test("each media method accepts only its own MIME category", () => {
+  const cases = [
+    ["sendPhoto", "image/jpeg", "video/mp4"],
+    ["sendVideo", "video/webm", "audio/ogg"],
+    ["sendVoice", "audio/mpeg", "image/png"],
+    ["sendDocument", "application/pdf", "video/webm"],
+  ] as const;
+
+  for (const [method, accepted, rejected] of cases) {
+    const base = {
+      chat_id: CHAT_ID,
+      idempotency_key: `media:${method}:1`,
+    };
+    assert.doesNotThrow(() =>
+      parseBotMethodInput(method, {
+        ...base,
+        media: {
+          bucket: "chat-media",
+          object_path: `${CHAT_ID}/bots/${BOT_ID}/object.bin`,
+          mime_type: accepted,
+          size_bytes: 1,
+        },
+      }),
+    );
+    assert.throws(() =>
+      parseBotMethodInput(method, {
+        ...base,
+        media: {
+          bucket: "chat-media",
+          object_path: `${CHAT_ID}/bots/${BOT_ID}/object.bin`,
+          mime_type: rejected,
+          size_bytes: 1,
+        },
       }),
     );
   }

@@ -5,7 +5,9 @@ export const BOT_API_ERROR_STATUS = {
   unauthorized: 401,
   forbidden: 403,
   not_found: 404,
+  method_not_found: 404,
   conflict: 409,
+  payload_too_large: 413,
   rate_limited: 429,
   internal_error: 500,
 } as const;
@@ -17,7 +19,9 @@ const BOT_API_ERROR_MESSAGE: Record<BotApiErrorCode, string> = {
   unauthorized: "Unauthorized",
   forbidden: "Forbidden",
   not_found: "Not found",
+  method_not_found: "Method not found",
   conflict: "Conflict",
+  payload_too_large: "Payload too large",
   rate_limited: "Too many requests",
   internal_error: "Internal server error",
 };

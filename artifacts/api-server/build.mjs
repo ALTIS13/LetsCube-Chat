@@ -17,6 +17,7 @@ async function buildAll() {
   await esbuild({
     entryPoints: [
       path.resolve(artifactDir, "src/index.ts"),
+      path.resolve(artifactDir, "src/botGatewayIndex.ts"),
       path.resolve(artifactDir, "src/supportMailIndex.ts"),
       path.resolve(artifactDir, "src/workers/mediaVariantRules.ts"),
       path.resolve(artifactDir, "src/workers/registrationCleanupWorker.ts"),
