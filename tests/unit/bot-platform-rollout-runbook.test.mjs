@@ -346,6 +346,59 @@ test("storage restore and checksummed gate bind archive parity and all evidence"
   );
 });
 
+test("storage archive restores one exact storage root beside the bind source", () => {
+  const source = runbook();
+  const restore = source.slice(
+    source.indexOf("## Рубеж 2:"),
+    source.indexOf("## Рубеж 3:"),
+  );
+  const scriptStart = restore.indexOf("```bash\n");
+  const restoreScript = restore.slice(
+    scriptStart,
+    restore.indexOf("\n```", scriptStart),
+  );
+  const apply = source.slice(source.indexOf("## Рубеж 8:"));
+
+  assert.match(
+    restoreScript,
+    /ARCHIVE_PARENT="\$\(mktemp -d "\$ROLLOUT_DIR\/\.rehearsal-storage\.XXXXXX"\)"/,
+  );
+  assert.match(restoreScript, /REHEARSAL_STORAGE_ROOT="\$ARCHIVE_PARENT\/storage"/);
+  assert.match(restoreScript, /install -d -m 700 "\$REHEARSAL_STORAGE_ROOT"/);
+  assert.match(
+    restoreScript,
+    /test -z "\$\(find "\$REHEARSAL_STORAGE_ROOT" -mindepth 1 -print -quit\)"/,
+  );
+  assert.ok(
+    restoreScript.indexOf('install -d -m 700 "$REHEARSAL_STORAGE_ROOT"') <
+      restoreScript.indexOf("compose create"),
+    "storage bind child must exist before compose create",
+  );
+  assert.match(restoreScript, /tar -tzf "\$BACKUP_STORAGE_ARCHIVE" \|\s+awk/);
+  assert.match(restoreScript, /tar -tvzf "\$BACKUP_STORAGE_ARCHIVE" \|\s+awk/);
+  assert.match(restoreScript, /\$0 == "storage\/"/);
+  assert.match(restoreScript, /root_entries != 1/);
+  assert.match(restoreScript, /\$0 !~ \/\^storage\\\//);
+  assert.match(
+    restoreScript,
+    /SOURCE_SCAN="\$\(mktemp -d "\$ROLLOUT_DIR\/\.storage-source\.XXXXXX"\)"/,
+  );
+  assert.match(restoreScript, /"\$ROLLOUT_DIR"\/\.storage-source\.\?\?\?\?\?\?\) ;;/);
+  assert.match(restoreScript, /find "\$SOURCE_SCAN" -xdev -depth -delete/);
+  assert.match(restoreScript, /storage_aggregate "\$SOURCE_SCAN\/storage"/);
+  assert.match(
+    restoreScript,
+    /--directory "\$ARCHIVE_PARENT"[\s\S]{0,300}storage_aggregate "\$REHEARSAL_STORAGE_ROOT"/,
+  );
+  assert.match(
+    restoreScript,
+    /test "\$STORAGE_MOUNT_SOURCE" = "\$\(realpath -e "\$REHEARSAL_STORAGE_ROOT"\)"/,
+  );
+  assert.match(restoreScript, /printf 'version=4\\n'/);
+  assert.match(apply, /test "\$\(gate_value version\)" = "4"/);
+  assert.doesNotMatch(restoreScript, /\/var\/lib\/storage\/storage/);
+});
+
 test("combined rehearsal strips only the exact outer transaction markers", () => {
   const source = runbook();
 

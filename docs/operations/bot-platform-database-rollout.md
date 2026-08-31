@@ -227,7 +227,19 @@ test "$(sha256sum "$BACKUP_DB_DUMP" | awk '{print $1}')" = "$BACKUP_DB_DUMP_SHA2
 test "$(sha256sum "$BACKUP_STORAGE_ARCHIVE" | awk '{print $1}')" = "$BACKUP_STORAGE_ARCHIVE_SHA256"
 pg_restore --list "$BACKUP_DB_DUMP" >/dev/null
 tar -tzf "$BACKUP_STORAGE_ARCHIVE" |
-  awk '$0 ~ /^\// || $0 ~ /(^|\/)\.\.(\/|$)/ { exit 74 }'
+  awk '
+    {
+      entries++
+      if ($0 == "storage/") {
+        root_entries++
+        next
+      }
+      if ($0 !~ /^storage\/[^/]/ || $0 ~ /(^|\/)\.\.?($|\/)/) exit 74
+    }
+    END {
+      if (entries == 0 || root_entries != 1) exit 74
+    }
+  '
 tar -tvzf "$BACKUP_STORAGE_ARCHIVE" |
   awk 'substr($1, 1, 1) !~ /^[-d]$/ { exit 75 }'
 
@@ -280,7 +292,10 @@ test "$SOURCE_AUTH_USERS_COUNT" -gt 0
 test "$SOURCE_STORAGE_OBJECTS_COUNT" -gt 0
 test "$SOURCE_PROFILES_COUNT" -gt 0
 
-REHEARSAL_STORAGE_ROOT="$ROLLOUT_DIR/rehearsal-storage"
+ARCHIVE_PARENT="$(mktemp -d "$ROLLOUT_DIR/.rehearsal-storage.XXXXXX")"
+chmod 700 "$ARCHIVE_PARENT"
+test -z "$(find "$ARCHIVE_PARENT" -mindepth 1 -print -quit)"
+REHEARSAL_STORAGE_ROOT="$ARCHIVE_PARENT/storage"
 install -d -m 700 "$REHEARSAL_STORAGE_ROOT"
 test -z "$(find "$REHEARSAL_STORAGE_ROOT" -mindepth 1 -print -quit)"
 export REHEARSAL_STORAGE_ROOT
@@ -443,22 +458,27 @@ storage_aggregate() {
     awk '{ files++; bytes += $1 } END { printf "%.0f %.0f\n", files, bytes }'
 }
 
-SOURCE_STORAGE_SCAN_DIR="$(mktemp -d "$ROLLOUT_DIR/.storage-source.XXXXXX")"
-chmod 700 "$SOURCE_STORAGE_SCAN_DIR"
+SOURCE_SCAN="$(mktemp -d "$ROLLOUT_DIR/.storage-source.XXXXXX")"
+chmod 700 "$SOURCE_SCAN"
 cleanup_source_storage_scan() {
-  find "$SOURCE_STORAGE_SCAN_DIR" -depth -delete
+  case "$SOURCE_SCAN" in
+    "$ROLLOUT_DIR"/.storage-source.??????) ;;
+    *) return 79 ;;
+  esac
+  find "$SOURCE_SCAN" -xdev -depth -delete
 }
 trap cleanup_source_storage_scan EXIT
 tar --extract --gzip --file "$BACKUP_STORAGE_ARCHIVE" \
-  --directory "$SOURCE_STORAGE_SCAN_DIR" \
+  --directory "$SOURCE_SCAN" \
   --no-same-owner --no-same-permissions
+test -d "$SOURCE_SCAN/storage"
 read -r SOURCE_STORAGE_FILE_COUNT SOURCE_STORAGE_TOTAL_BYTES \
-  < <(storage_aggregate "$SOURCE_STORAGE_SCAN_DIR")
+  < <(storage_aggregate "$SOURCE_SCAN/storage")
 test "$SOURCE_STORAGE_FILE_COUNT" -gt 0
 test "$SOURCE_STORAGE_TOTAL_BYTES" -gt 0
 
 tar --extract --gzip --file "$BACKUP_STORAGE_ARCHIVE" \
-  --directory "$REHEARSAL_STORAGE_ROOT" \
+  --directory "$ARCHIVE_PARENT" \
   --no-same-owner --no-same-permissions
 read -r TARGET_STORAGE_FILE_COUNT TARGET_STORAGE_TOTAL_BYTES \
   < <(storage_aggregate "$REHEARSAL_STORAGE_ROOT")
@@ -599,7 +619,7 @@ TARGET_IDENTITY_SHA256="$(sha256sum "$RESTORE_EVIDENCE_DIR/target-identity.txt" 
 PORT_BINDING_EVIDENCE_SHA256="$(sha256sum "$PORT_BINDING_EVIDENCE" | awk '{print $1}')"
 RESTORE_GATE="$ROLLOUT_DIR/restore-gate.env"
 {
-  printf 'version=3\n'
+  printf 'version=4\n'
   printf 'run_id=%s\n' "$RUN_ID"
   printf 'backup_dir=%s\n' "$BACKUP_DIR"
   printf 'backup_sha256sums_sha256=%s\n' "$BACKUP_SHA256SUMS_SHA256"
@@ -647,7 +667,7 @@ chmod 600 "$ROLLOUT_DIR/restore-gate.env.sha256"
 
 Published-port gate сравнивает `.HostConfig.PortBindings` и `.NetworkSettings.Ports` каждого rehearsal container. Auth, Storage и PostgREST обязаны не иметь published ports. DB также предпочтительно не публикуется; если host binding нужен для libpq service, разрешены только explicit `127.0.0.1` и `::1`. Empty `HostIp`, `0.0.0.0`, `::`, wildcard и любой другой адрес блокируют restore до первого SQL connection. Нормализованный evidence не содержит container names или application data и повторно проверяется exact apply gate.
 
-Storage archive дважды извлекается без вывода имён: сначала во временный private source scan, затем в доказанно пустой bind mount под текущим `ROLLOUT_DIR`. File count и total uncompressed bytes должны быть ненулевыми и точно совпасть. Полные responses и restore log остаются mode `0600`; gate хранит только их hashes и privacy-safe counts. Без `restore-gate.env`, `restore-gate.env.sha256` и связанного evidence дальнейшие команды не выполняются.
+Storage archive обязан содержать ровно один top-level `storage/`, только его безопасные descendants и только обычные файлы/каталоги. Он дважды извлекается без вывода имён: сначала во временный private source scan с aggregate по `storage/`, затем в отдельный private archive parent под текущим `ROLLOUT_DIR`. Compose bind source и target aggregate указывают exact child `<archive-parent>/storage`, поэтому `/var/lib/storage/storage` не создаётся. File count и total uncompressed bytes должны быть ненулевыми и точно совпасть. Полные responses и restore log остаются mode `0600`; gate хранит только их hashes и privacy-safe counts. Без `restore-gate.env`, `restore-gate.env.sha256` и связанного evidence дальнейшие команды не выполняются.
 
 ## Рубеж 3: one-shot и partial-schema gate
 
@@ -948,7 +968,7 @@ gate_value() {
   printf '%s\n' "${values[0]}"
 }
 
-test "$(gate_value version)" = "3"
+test "$(gate_value version)" = "4"
 test "$(gate_value run_id)" = "$RUN_ID"
 test "$(gate_value backup_dir)" = "$BACKUP_DIR"
 test "$(gate_value backup_sha256sums_sha256)" = "$BACKUP_SHA256SUMS_SHA256"
