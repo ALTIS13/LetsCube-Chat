@@ -612,7 +612,7 @@ Add a service using the new target, healthcheck `http://127.0.0.1:8098/healthz`,
 
 Document token safety, cURL/JavaScript/Python `getMe` and `sendMessage`, commands, callback buttons, group privacy, webhook verification, retries, idempotency, rate limits and update deduplication. State clearly that Telegram concepts are familiar but protocol compatibility is not claimed.
 
-- [ ] **Step 5: Run full local validation**
+- [x] **Step 5: Run full local validation**
 
 ```powershell
 git diff --check
@@ -625,21 +625,34 @@ node --test tests/unit/bot-platform-schema-contract.test.mjs tests/unit/bot-toke
 pnpm.cmd exec playwright test tests/e2e/bot-api-docs.spec.ts tests/e2e/bot-management.spec.ts tests/e2e/bot-chat-integration.spec.ts
 ```
 
-Local validation is complete for the packaging, API, type, build and browser
-checks recorded in the implementer report. **External-env security gate pending:**
-`pnpm.cmd rls:smoke` skipped without a configured disposable Supabase target,
-so Step 5 remains unchecked until it passes against the isolated restored PG17
-stack from Step 6. Production is not an acceptable substitute for this gate.
+Local validation is complete for the packaging, API, type and browser checks
+recorded in the implementer report. The external RLS gate subsequently passed
+against the isolated restored PG17 stack from Step 6 before production apply.
 
-- [ ] **Step 6: Rehearse and apply the migration after backup**
+- [x] **Step 6: Rehearse and apply the migration after backup**
 
 Verify a fresh production backup, run `tests/server/bot-platform-db-smoke.sql` in a rolled-back transaction, inspect grants and query plans, then apply the migration. Regenerate database types and rerun RLS smoke.
 
-- [ ] **Step 7: Canary with one internal bot**
+Completed on 2026-08-31 after fresh backup
+`/srv/letscube/backups/automated/20260831-163741`. The PG17 restore,
+transactional schema smoke, isolated RLS smoke and production post-apply checks
+passed before the Bot Gateway was exposed.
+
+- [x] **Step 7: Canary with one internal bot**
 
 Deploy with public bot creation disabled. Verify token creation/rotation, private and restricted-group updates, webhook/getUpdates exclusion, one bot message, notification grouping/read sync, and no raw token in logs. Then enable creation only for a bounded canary cohort.
 
-- [ ] **Step 8: Update tracker and commit rollout evidence**
+Completed on 2026-08-31 against exact commit
+`01d26a9225fee1cda0b8e9676b4ab03b084dec64`. Deployment
+`z9rvt9gh3qtos2oqp3lcxoh5` finished healthy with creation admission restricted
+to one internal owner. The canary proved current-token acceptance and prior-token
+rejection, private delivery, restricted-group plain-message exclusion, mention
+delivery, membership updates, polling/webhook mutual exclusion, idempotent bot
+sends, two-message per-chat notification grouping, chat read-sync, no bot-message
+echo and zero raw-token log hits. Two push-free QA participants were used; exact
+fixture cleanup passed independently and left no pending state.
+
+- [x] **Step 8: Update tracker and commit rollout evidence**
 
 ```powershell
 git add docs/deploy docs/operations/bot-gateway.md artifacts/kub/src/pages/public/BotDocsPage.tsx artifacts/kub/src/content/botApiDocs.ts artifacts/kub/src/lib/publicRoutes.ts artifacts/kub/src/App.tsx tests/unit/bot-gateway-deploy-contract.test.mjs tests/e2e/bot-api-docs.spec.ts docs/PRODUCTION_PRIORITY_TRACKER.md

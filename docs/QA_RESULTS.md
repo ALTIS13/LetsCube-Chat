@@ -1,5 +1,13 @@
 # QA Results
 
+## 2026-08-31 - Bot API production canary
+
+- Applied the Bot Platform migration after fresh backup `/srv/letscube/backups/automated/20260831-163741`, isolated PG17 restore, transactional schema smoke and isolated RLS validation.
+- Deployed the dedicated Bot Gateway from exact commit `01d26a9225fee1cda0b8e9676b4ab03b084dec64`; Coolify deployment `z9rvt9gh3qtos2oqp3lcxoh5` completed healthy. Bot creation remains restricted to one pinned internal owner.
+- Token creation/rotation passed: the current token authenticated and the previous token returned `401`. No token or credential was printed, committed or persisted in tracked files.
+- The production canary passed private updates, restricted-group plain-message exclusion, restricted mentions, membership updates, polling/webhook mutual exclusion, idempotent send retry, two-message notification grouping, chat read-sync and bot-message no-echo behavior.
+- Two dedicated QA participants with no active browser/native push destinations were used. Cleanup independently confirmed zero remaining canary chats, messages, notifications, updates, webhook rows, delivery attempts, leases and bot memberships; root-only evidence contains no raw token pattern.
+
 ## 2026-07-12 - Native release catalog and iOS-only PWA policy
 
 - Added strict Android/Windows release manifest validation, SemVer plus Android build comparison, five-second timeout, six-hour cache, stale fallback and safe download URL allow-listing for `api.letscube.ru`.

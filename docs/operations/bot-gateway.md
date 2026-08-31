@@ -197,6 +197,37 @@ the original `idempotency_key`; a changed body with the same key is a conflict.
 Rate-limit responses include `retry_after`, which callers must honor without
 creating a retry burst.
 
+## 2026-08-31 Production Canary
+
+The production migration was applied only after fresh backup
+`/srv/letscube/backups/automated/20260831-163741`, isolated PG17 restore,
+transactional schema smoke and isolated RLS validation. Coolify deployment
+`z9rvt9gh3qtos2oqp3lcxoh5` runs exact commit
+`01d26a9225fee1cda0b8e9676b4ab03b084dec64` using the dedicated
+`bot-gateway-runtime` target.
+
+Public bot creation remains disabled except for one explicitly pinned internal
+owner. The production canary verified:
+
+- token creation and rotation, including rejection of the previous token;
+- private updates and restricted-group mention delivery;
+- exclusion of restricted-group messages that do not mention the bot;
+- membership updates and no echo of bot-authored messages;
+- mutual exclusion between long polling and webhook delivery;
+- idempotent send retry and two distinct bot messages;
+- one notification row per human recipient and message with a shared per-chat
+  group tag, followed by chat-scoped read synchronization;
+- zero raw bot-token matches in gateway logs;
+- exact cleanup of canary chats, messages, notifications, updates, delivery
+  attempts, leases, webhook state and bot memberships.
+
+The chat participants were two dedicated QA users with no active browser or
+native push destinations, so the canary could validate the in-app source of
+truth without generating external device notifications. Root-only evidence is
+kept under `/srv/letscube/ops/bot-platform-rollout/20260831T133211Z`; it contains
+no raw bot token or account credential. Do not copy this directory into the
+repository or broaden the current creation cohort without a separate review.
+
 ## Rollback
 
 1. Disable the `letscube-bot-gateway` service and the two scoped bot routers.
