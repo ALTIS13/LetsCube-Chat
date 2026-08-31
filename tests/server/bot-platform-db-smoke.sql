@@ -85,8 +85,20 @@ declare
   v_new_media_path text;
   v_history_media_path text;
   v_claim_token uuid := gen_random_uuid();
+  v_second_claim_token uuid := gen_random_uuid();
+  v_poll_token uuid := gen_random_uuid();
+  v_other_poll_token uuid := gen_random_uuid();
   v_stale_retry_attempt_id bigint;
   v_stale_dead_attempt_id bigint;
+  v_ordered_update_one bigint;
+  v_ordered_update_two bigint;
+  v_ordered_update_three bigint;
+  v_polled_update_id bigint;
+  v_claimed_attempt_id bigint;
+  v_claimed_epoch bigint;
+  v_claimed_rows integer;
+  v_prepared jsonb;
+  v_webhook_info jsonb;
   v_function regprocedure;
   v_rejected boolean;
   v_webhook_disabled boolean;
@@ -129,6 +141,9 @@ begin
   if pg_catalog.has_table_privilege('anon', 'private.bot_tokens', 'SELECT')
      or pg_catalog.has_table_privilege('authenticated', 'private.bot_tokens', 'SELECT')
      or pg_catalog.has_table_privilege('service_role', 'private.bot_tokens', 'SELECT')
+     or pg_catalog.has_table_privilege('anon', 'private.bot_audit_events', 'SELECT')
+     or pg_catalog.has_table_privilege('authenticated', 'private.bot_audit_events', 'SELECT')
+     or pg_catalog.has_table_privilege('service_role', 'private.bot_audit_events', 'SELECT')
      or pg_catalog.has_table_privilege('anon', 'private.bot_operation_idempotency', 'SELECT')
      or pg_catalog.has_table_privilege('authenticated', 'private.bot_callback_answers', 'SELECT')
      or pg_catalog.has_table_privilege('service_role', 'private.bot_callback_answers', 'SELECT') then
@@ -153,13 +168,16 @@ begin
       ('public.bot_commands_list_internal(uuid)'),
       ('public.bot_file_lookup_internal(uuid,uuid,uuid)'),
       ('public.bot_callback_answer_internal(uuid,uuid,text,boolean,text,text)'),
-      ('public.bot_updates_poll_internal(uuid,bigint,integer,uuid)'),
+      ('public.bot_updates_poll_internal(uuid,bigint,integer,text[],uuid)'),
+      ('public.bot_updates_poll_release_internal(uuid,uuid)'),
       ('public.bot_updates_ack_internal(uuid,bigint)'),
-      ('public.bot_webhook_set_internal(uuid,text,text,text)'),
-      ('public.bot_webhook_delete_internal(uuid)'),
+      ('public.bot_webhook_set_internal(uuid,text,text,text,boolean,text,text)'),
+      ('public.bot_webhook_delete_internal(uuid,boolean,text,text)'),
+      ('public.bot_webhook_info_internal(uuid)'),
       ('public.bot_update_enqueue_internal(uuid,text,uuid,jsonb)'),
       ('public.bot_delivery_claim_internal(integer,uuid)'),
-      ('public.bot_delivery_finish_internal(bigint,uuid,text,text)'),
+      ('public.bot_delivery_prepare_internal(bigint,uuid,bigint)'),
+      ('public.bot_delivery_finish_internal(bigint,uuid,text,text,integer)'),
       ('public.bot_delivery_cleanup_internal(timestamptz,integer)')
     ) signatures(function_signature)
   loop
@@ -351,11 +369,19 @@ begin
     v_bot_id,
     'https://bot-smoke.invalid/webhook',
     'enc:v1:' || pg_catalog.repeat('B', 64),
-    pg_catalog.repeat('b', 16)
+    pg_catalog.repeat('b', 16),
+    false,
+    'webhook-smoke-set-early',
+    pg_catalog.repeat('b', 64)
   );
   delete from private.bot_delivery_leases lease
   where lease.bot_id = v_bot_id;
-  select public.bot_webhook_delete_internal(v_bot_id)
+  select (public.bot_webhook_delete_internal(
+    v_bot_id,
+    false,
+    'webhook-smoke-delete-early',
+    pg_catalog.repeat('d', 64)
+  )->>'result')::boolean
   into v_webhook_disabled;
   if v_webhook_disabled is not true then
     raise exception 'bot_webhook_disable_depended_on_lease';
@@ -2109,11 +2135,96 @@ begin
     raise exception 'muted_bot_notification_enqueued_push';
   end if;
 
+  select coalesce(pg_catalog.max(queued.update_id), 0) + 1
+  into v_ordered_update_one
+  from private.bot_updates queued
+  where queued.bot_id = v_bot_id;
+  v_ordered_update_two := v_ordered_update_one + 1;
+  v_ordered_update_three := v_ordered_update_one + 2;
+  insert into private.bot_updates(bot_id, update_id, update_type, payload)
+  values
+    (v_bot_id, v_ordered_update_one, 'message', '{"message":{"id":"order-one"}}'),
+    (v_bot_id, v_ordered_update_two, 'callback_query', '{"callback_query":{"id":"order-two"}}'),
+    (v_bot_id, v_ordered_update_three, 'message', '{"message":{"id":"order-three"}}');
+
+  select polled.update_id into v_polled_update_id
+  from public.bot_updates_poll_internal(
+    v_bot_id,
+    v_ordered_update_two,
+    1,
+    array['message']::text[],
+    v_poll_token
+  ) polled;
+  if v_polled_update_id <> v_ordered_update_three
+     or not exists (
+       select 1 from private.bot_updates queued
+       where queued.bot_id = v_bot_id
+         and queued.update_id = v_ordered_update_one
+         and queued.acknowledged_at is not null
+     )
+     or exists (
+       select 1 from private.bot_updates queued
+       where queued.bot_id = v_bot_id
+         and queued.update_id in (v_ordered_update_two, v_ordered_update_three)
+         and queued.acknowledged_at is not null
+     ) then
+    raise exception 'bot_poll_filter_or_ack_invalid';
+  end if;
+
+  v_rejected := false;
+  begin
+    perform * from public.bot_updates_poll_internal(
+      v_bot_id,
+      0,
+      100,
+      array[]::text[],
+      v_other_poll_token
+    );
+  exception
+    when sqlstate '55000' then
+      v_rejected := true;
+  end;
+  if not v_rejected
+     or public.bot_updates_poll_release_internal(v_bot_id, v_other_poll_token)
+     or public.bot_updates_poll_release_internal(v_bot_id, v_poll_token) is not true then
+    raise exception 'bot_poll_lease_isolation_failed';
+  end if;
+
+  perform * from public.bot_updates_poll_internal(
+    v_bot_id,
+    0,
+    100,
+    array[]::text[],
+    v_poll_token
+  );
+  v_rejected := false;
+  begin
+    perform public.bot_webhook_set_internal(
+      v_bot_id,
+      'https://bot-smoke.invalid/webhook',
+      'enc:v1:' || pg_catalog.repeat('P', 64),
+      pg_catalog.repeat('f', 16),
+      false,
+      'webhook-smoke-poll-conflict',
+      pg_catalog.repeat('f', 64)
+    );
+  exception
+    when sqlstate '55000' then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'bot_webhook_did_not_conflict_with_poll';
+  end if;
+  perform public.bot_updates_poll_release_internal(v_bot_id, v_poll_token);
+
   perform public.bot_webhook_set_internal(
     v_bot_id,
     'https://bot-smoke.invalid/webhook',
     'enc:v1:' || pg_catalog.repeat('C', 64),
-    pg_catalog.repeat('c', 16)
+    pg_catalog.repeat('c', 16),
+    false,
+    'webhook-smoke-set-delivery',
+    pg_catalog.repeat('e', 64)
   );
   select attempt.id into v_stale_retry_attempt_id
   from private.bot_delivery_attempts attempt
@@ -2137,6 +2248,11 @@ begin
       end,
       claim_token = gen_random_uuid(),
       claimed_at = pg_catalog.now() - interval '3 minutes',
+      webhook_epoch = (
+        select webhook.webhook_epoch
+        from private.bot_webhooks webhook
+        where webhook.bot_id = attempt.bot_id
+      ),
       available_at = pg_catalog.now() - interval '3 minutes'
   where attempt.id in (v_stale_retry_attempt_id, v_stale_dead_attempt_id);
 
@@ -2156,6 +2272,171 @@ begin
       and attempt.claim_token is null
   ) then
     raise exception 'stale_claim_not_recovered';
+  end if;
+
+  select pg_catalog.count(*)::integer
+  into v_claimed_rows
+  from private.bot_delivery_attempts attempt
+  where attempt.bot_id = v_bot_id
+    and attempt.status = 'claimed'
+    and attempt.claim_token = v_claim_token;
+  if v_claimed_rows <> 1 then
+    raise exception 'bot_claimed_multiple_updates_out_of_order';
+  end if;
+
+  select attempt.id, attempt.webhook_epoch
+  into v_claimed_attempt_id, v_claimed_epoch
+  from private.bot_delivery_attempts attempt
+  where attempt.bot_id = v_bot_id
+    and attempt.status = 'claimed'
+    and attempt.claim_token = v_claim_token;
+  v_prepared := public.bot_delivery_prepare_internal(
+    v_claimed_attempt_id,
+    v_claim_token,
+    v_claimed_epoch
+  );
+  if v_prepared is null
+     or v_prepared ? 'secret_fingerprint'
+     or not (v_prepared ? 'secret_ciphertext') then
+    raise exception 'bot_delivery_prepare_invalid';
+  end if;
+
+  v_rejected := false;
+  begin
+    perform public.bot_webhook_delete_internal(
+      v_bot_id,
+      false,
+      'webhook-smoke-delete-in-flight',
+      pg_catalog.repeat('1', 64)
+    );
+  exception
+    when sqlstate '55000' then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'bot_webhook_mutated_during_dispatch';
+  end if;
+  if public.bot_delivery_finish_internal(
+    v_claimed_attempt_id,
+    v_claim_token,
+    'retry',
+    'network_error',
+    null
+  ) is not true then
+    raise exception 'bot_delivery_finish_failed';
+  end if;
+
+  insert into private.bot_updates(bot_id, update_id, update_type, payload)
+  values (
+    v_bot_id,
+    v_ordered_update_three + 1,
+    'message',
+    '{"message":{"id":"claim-invalidation"}}'
+  );
+  insert into private.bot_delivery_attempts(bot_id, update_id)
+  values (v_bot_id, v_ordered_update_three + 1);
+
+  select claimed.attempt_id, claimed.webhook_epoch
+  into v_claimed_attempt_id, v_claimed_epoch
+  from public.bot_delivery_claim_internal(100, v_second_claim_token) claimed
+  limit 1;
+  if v_claimed_attempt_id is null then
+    raise exception 'bot_claim_invalidation_probe_missing';
+  end if;
+  perform public.bot_webhook_set_internal(
+    v_bot_id,
+    'https://bot-smoke.invalid/replaced',
+    'enc:v1:' || pg_catalog.repeat('R', 64),
+    pg_catalog.repeat('a', 16),
+    false,
+    'webhook-smoke-replace-claim',
+    pg_catalog.repeat('2', 64)
+  );
+  if public.bot_delivery_prepare_internal(
+    v_claimed_attempt_id,
+    v_second_claim_token,
+    v_claimed_epoch
+  ) is not null then
+    raise exception 'bot_replaced_claim_remained_dispatchable';
+  end if;
+
+  v_webhook_info := public.bot_webhook_info_internal(v_bot_id);
+  if coalesce((v_webhook_info->>'configured')::boolean, false) is not true
+     or v_webhook_info ? 'target_url'
+     or v_webhook_info ? 'secret_ciphertext'
+     or v_webhook_info ? 'secret_fingerprint' then
+    raise exception 'bot_webhook_info_exposed_private_data';
+  end if;
+
+  perform public.bot_webhook_delete_internal(
+    v_bot_id,
+    true,
+    'webhook-smoke-delete-drop',
+    pg_catalog.repeat('3', 64)
+  );
+  if exists (
+    select 1 from private.bot_updates queued
+    where queued.bot_id = v_bot_id
+      and queued.acknowledged_at is null
+  ) or exists (
+    select 1 from private.bot_delivery_attempts attempt
+    where attempt.bot_id = v_bot_id
+      and attempt.status in ('pending','claimed','dispatching','retry')
+  ) then
+    raise exception 'bot_drop_pending_not_transactional';
+  end if;
+
+  insert into private.bot_updates(
+    bot_id,
+    update_id,
+    update_type,
+    payload,
+    acknowledged_at
+  ) values (
+    v_bot_id,
+    v_ordered_update_three + 2,
+    'message',
+    '{"message":{"id":"retention-payload"}}',
+    pg_catalog.now()
+  );
+  insert into private.bot_delivery_attempts(
+    bot_id,
+    update_id,
+    status,
+    attempt_count,
+    completed_at
+  ) values (
+    v_bot_id,
+    v_ordered_update_three + 2,
+    'succeeded',
+    1,
+    pg_catalog.now()
+  );
+  update private.bot_audit_events audit
+  set created_at = pg_catalog.now() - interval '91 days'
+  where audit.id = (
+    select oldest.id
+    from private.bot_audit_events oldest
+    where oldest.bot_id = v_bot_id
+    order by oldest.id
+    limit 1
+  );
+  perform public.bot_delivery_cleanup_internal(pg_catalog.now(), 1000);
+  if exists (
+    select 1 from private.bot_updates queued
+    where queued.bot_id = v_bot_id
+      and queued.update_id = v_ordered_update_three + 2
+  ) or not exists (
+    select 1 from private.bot_delivery_attempts attempt
+    where attempt.bot_id = v_bot_id
+      and attempt.update_id = v_ordered_update_three + 2
+      and attempt.status = 'succeeded'
+  ) or exists (
+    select 1 from private.bot_audit_events audit
+    where audit.bot_id = v_bot_id
+      and audit.created_at < pg_catalog.now() - interval '90 days'
+  ) then
+    raise exception 'bot_delivery_retention_invalid';
   end if;
 
   insert into public.messages(chat_id, user_id, bot_id, content, type)

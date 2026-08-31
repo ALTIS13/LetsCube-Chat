@@ -215,6 +215,7 @@ const webhookUrlSchema = z
 const setWebhookSchema = z
   .object({
     url: webhookUrlSchema,
+    secret_token: z.string().regex(/^[A-Za-z0-9_-]{16,256}$/),
     drop_pending_updates: z.boolean().optional(),
     idempotency_key: idempotencyKeySchema,
   })

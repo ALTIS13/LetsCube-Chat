@@ -25,7 +25,14 @@ test("Bot Gateway entry fails closed on PORT and private auth configuration", ()
   assert.match(entry, /resolveBotGatewayPort/);
   assert.match(entry, /resolveBotAuthConfig/);
   assert.match(entry, /BOT_TOKEN_PEPPER/);
+  assert.match(entry, /resolveWebhookEncryptionKey/);
+  assert.match(entry, /createWebhookWorkerRuntime/);
+  assert.match(entry, /createUpdateDeliveryHandlers/);
   assert.doesNotMatch(entry, /VITE_BOT_TOKEN_PEPPER|PUBLIC_BOT_TOKEN_PEPPER/);
+  assert.doesNotMatch(
+    entry,
+    /VITE_BOT_WEBHOOK_ENCRYPTION_KEY|PUBLIC_BOT_WEBHOOK_ENCRYPTION_KEY/,
+  );
 });
 
 test("Bot Gateway dependency graph excludes unrelated API workers", () => {

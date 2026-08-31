@@ -24,6 +24,7 @@ import {
 export type BotMethodContext = {
   bot: AuthenticatedBot;
   requestId: string;
+  signal?: AbortSignal;
 };
 
 export type BotMethodHandler<Method extends BotMethodName = BotMethodName> = (
@@ -64,6 +65,12 @@ export function createTask3MethodHandlers(input: {
     ),
     ...createCommandHandlers(input.repository, input.fingerprint),
   };
+}
+
+export function combineBotMethodHandlers(
+  ...handlerSets: BotMethodHandlers[]
+): BotMethodHandlers {
+  return Object.assign({}, ...handlerSets);
 }
 
 export function exactAuthorizationHeader(request: Request): string | undefined {
@@ -114,7 +121,13 @@ export function createBotMethodRouter(input: {
         exactAuthorizationHeader(request),
       );
       const body = parseBotMethodInput(method, request.body);
-      const result = await handler({ bot, requestId }, body);
+      const context: BotMethodContext = { bot, requestId };
+      if (method === "getUpdates") {
+        const abortController = new AbortController();
+        request.once("aborted", () => abortController.abort());
+        context.signal = abortController.signal;
+      }
+      const result = await handler(context, body);
       response.json(botSuccess(result));
     } catch (error) {
       const failure = toBotApiErrorResponse(error, requestId);

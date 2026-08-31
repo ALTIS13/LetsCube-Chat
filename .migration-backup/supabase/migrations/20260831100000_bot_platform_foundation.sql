@@ -147,6 +147,7 @@ create table private.bot_webhooks (
     ),
   secret_fingerprint text not null
     check (secret_fingerprint ~ '^[0-9a-f]{16,64}$'),
+  webhook_epoch bigint not null default 1 check (webhook_epoch > 0),
   state text not null default 'enabled'
     check (state in ('enabled','paused','disabled')),
   failure_count integer not null default 0 check (failure_count between 0 and 20),
@@ -162,17 +163,32 @@ create table private.bot_delivery_attempts (
   update_id bigint not null,
   payload jsonb null default null check (payload is null),
   status text not null default 'pending'
-    check (status in ('pending','claimed','retry','succeeded','dead_letter')),
+    check (status in ('pending','claimed','dispatching','retry','succeeded','dead_letter')),
   attempt_count integer not null default 0 check (attempt_count between 0 and 12),
   available_at timestamptz not null default pg_catalog.now(),
   claim_token uuid null,
   claimed_at timestamptz null,
+  webhook_epoch bigint null check (webhook_epoch is null or webhook_epoch > 0),
   http_status integer null check (http_status between 100 and 599),
   error_code text null
     check (error_code is null or error_code ~ '^[a-z][a-z0-9_]{0,63}$'),
   created_at timestamptz not null default pg_catalog.now(),
   updated_at timestamptz not null default pg_catalog.now(),
   completed_at timestamptz null,
+  constraint bot_delivery_attempts_claim_shape_check check (
+    (
+      status in ('claimed','dispatching')
+      and claim_token is not null
+      and claimed_at is not null
+      and webhook_epoch is not null
+    )
+    or (
+      status not in ('claimed','dispatching')
+      and claim_token is null
+      and claimed_at is null
+      and webhook_epoch is null
+    )
+  ),
   unique (bot_id, update_id)
 );
 
@@ -181,6 +197,21 @@ create index bot_delivery_attempts_due_idx
   where status in ('pending','retry');
 create index bot_delivery_attempts_retention_idx
   on private.bot_delivery_attempts(coalesce(completed_at, updated_at), id);
+
+create table private.bot_audit_events (
+  id bigint generated always as identity primary key,
+  bot_id uuid not null references public.bots(id) on delete restrict,
+  action text not null check (action in ('webhook_set','webhook_deleted')),
+  metadata jsonb not null default '{}'::jsonb
+    check (
+      pg_catalog.jsonb_typeof(metadata) = 'object'
+      and pg_catalog.octet_length(metadata::text) <= 2048
+    ),
+  created_at timestamptz not null default pg_catalog.now()
+);
+
+create index bot_audit_events_retention_idx
+  on private.bot_audit_events(created_at, id);
 
 create table private.bot_rate_limit_buckets (
   bot_id uuid not null references public.bots(id) on delete restrict,
@@ -220,7 +251,7 @@ create table private.bot_operation_idempotency (
     check (method in (
       'sendMessage','sendPhoto','sendVideo','sendDocument','sendVoice',
       'sendChatAction','editMessageText','deleteMessage',
-      'setMyCommands','answerCallbackQuery'
+      'setMyCommands','answerCallbackQuery','setWebhook','deleteWebhook'
     )),
   request_fingerprint text not null
     check (request_fingerprint ~ '^[0-9a-f]{64}$'),
@@ -296,6 +327,7 @@ revoke all on table private.bot_update_counters from public, anon, authenticated
 revoke all on table private.bot_updates from public, anon, authenticated, service_role;
 revoke all on table private.bot_webhooks from public, anon, authenticated, service_role;
 revoke all on table private.bot_delivery_attempts from public, anon, authenticated, service_role;
+revoke all on table private.bot_audit_events from public, anon, authenticated, service_role;
 revoke all on table private.bot_rate_limit_buckets from public, anon, authenticated, service_role;
 revoke all on table private.bot_message_idempotency from public, anon, authenticated, service_role;
 revoke all on table private.bot_operation_idempotency from public, anon, authenticated, service_role;
@@ -308,6 +340,7 @@ alter table private.bot_update_counters enable row level security;
 alter table private.bot_updates enable row level security;
 alter table private.bot_webhooks enable row level security;
 alter table private.bot_delivery_attempts enable row level security;
+alter table private.bot_audit_events enable row level security;
 alter table private.bot_rate_limit_buckets enable row level security;
 alter table private.bot_message_idempotency enable row level security;
 alter table private.bot_operation_idempotency enable row level security;
@@ -2629,6 +2662,7 @@ create or replace function public.bot_updates_poll_internal(
   p_bot_id uuid,
   p_offset bigint,
   p_limit integer,
+  p_allowed_updates text[],
   p_timeout_marker uuid
 )
 returns table(
@@ -2646,9 +2680,18 @@ begin
   if p_bot_id is null
      or p_offset is null
      or p_limit is null
+     or p_allowed_updates is null
      or p_offset < 0
      or p_limit not between 1 and 100
-     or p_timeout_marker is null then
+     or p_timeout_marker is null
+     or pg_catalog.cardinality(p_allowed_updates) > 4
+     or exists (
+       select 1
+       from pg_catalog.unnest(p_allowed_updates) allowed_update
+       where allowed_update not in (
+         'message','edited_message','callback_query','membership'
+       )
+     ) then
     raise exception 'bot_poll_input_invalid' using errcode = '22023';
   end if;
   if not exists (
@@ -2674,7 +2717,7 @@ begin
     p_bot_id,
     'polling',
     p_timeout_marker,
-    pg_catalog.now() + interval '35 seconds',
+    pg_catalog.now() + interval '31 seconds',
     pg_catalog.now()
   )
   on conflict (bot_id) do update
@@ -2683,7 +2726,10 @@ begin
       expires_at = excluded.expires_at,
       updated_at = excluded.updated_at
   where private.bot_delivery_leases.expires_at <= pg_catalog.now()
-     or private.bot_delivery_leases.delivery_mode = 'polling';
+     or (
+       private.bot_delivery_leases.delivery_mode = 'polling'
+       and private.bot_delivery_leases.lease_token = excluded.lease_token
+     );
 
   if not found then
     raise exception 'bot_delivery_mode_conflict' using errcode = '55000';
@@ -2706,6 +2752,10 @@ begin
   from private.bot_updates queued
   where queued.bot_id = p_bot_id
     and queued.update_id >= greatest(p_offset, 0)
+    and (
+      pg_catalog.cardinality(p_allowed_updates) = 0
+      or queued.update_type = any(p_allowed_updates)
+    )
     and queued.available_at <= pg_catalog.now()
     and queued.acknowledged_at is null
     and queued.expires_at > pg_catalog.now()
@@ -2714,9 +2764,35 @@ begin
 end
 $function$;
 
-revoke all on function public.bot_updates_poll_internal(uuid,bigint,integer,uuid)
+revoke all on function public.bot_updates_poll_internal(uuid,bigint,integer,text[],uuid)
   from public, anon, authenticated, service_role;
-grant execute on function public.bot_updates_poll_internal(uuid,bigint,integer,uuid)
+grant execute on function public.bot_updates_poll_internal(uuid,bigint,integer,text[],uuid)
+  to service_role;
+
+create or replace function public.bot_updates_poll_release_internal(
+  p_bot_id uuid,
+  p_timeout_marker uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+begin
+  if p_bot_id is null or p_timeout_marker is null then
+    return false;
+  end if;
+  delete from private.bot_delivery_leases lease
+  where lease.bot_id = p_bot_id
+    and lease.delivery_mode = 'polling'
+    and lease.lease_token = p_timeout_marker;
+  return found;
+end
+$function$;
+
+revoke all on function public.bot_updates_poll_release_internal(uuid,uuid)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_updates_poll_release_internal(uuid,uuid)
   to service_role;
 
 create or replace function public.bot_updates_ack_internal(
@@ -2755,15 +2831,21 @@ create or replace function public.bot_webhook_set_internal(
   p_bot_id uuid,
   p_url text,
   p_secret_ciphertext text,
-  p_secret_fingerprint text
+  p_secret_fingerprint text,
+  p_drop_pending_updates boolean,
+  p_idempotency_key text,
+  p_request_fingerprint text
 )
-returns boolean
+returns jsonb
 language plpgsql
 security definer
 set search_path = ''
 as $function$
 declare
   v_lease_token uuid := pg_catalog.gen_random_uuid();
+  v_existing jsonb;
+  v_result jsonb := 'true'::jsonb;
+  v_webhook_epoch bigint;
 begin
   -- The gateway performs DNS, address-range and redirect validation before this
   -- trusted persistence boundary. The database still enforces HTTPS, bounded
@@ -2772,17 +2854,74 @@ begin
      or p_url is null
      or p_secret_ciphertext is null
      or p_secret_fingerprint is null
+     or p_drop_pending_updates is null
+     or p_idempotency_key is null
+     or p_idempotency_key !~ '^[A-Za-z0-9._:-]{8,128}$'
+     or p_request_fingerprint is null
+     or p_request_fingerprint !~ '^[0-9a-f]{64}$'
      or pg_catalog.octet_length(p_url) not between 10 and 2048
      or p_url !~ '^https://[^/@[:space:]]+(?::[0-9]{1,5})?(/|$)'
      or p_url ~ '^https://[^/]*@'
      or pg_catalog.octet_length(p_secret_ciphertext) not between 55 and 4103
      or p_secret_ciphertext !~ '^enc:v1:[A-Za-z0-9_-]+$'
      or p_secret_fingerprint !~ '^[0-9a-f]{16,64}$'
-     or not exists (
-       select 1 from public.bots bot
-       where bot.id = p_bot_id and bot.state = 'active'
-     ) then
+     then
     raise exception 'bot_webhook_input_invalid' using errcode = '22023';
+  end if;
+
+  perform 1
+  from public.bots bot
+  where bot.id = p_bot_id and bot.state = 'active'
+  for update of bot;
+  if not found then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(p_bot_id::text || ':' || p_idempotency_key, 0)
+  );
+  v_existing := private.bot_operation_idempotency_lookup(
+    p_bot_id,
+    p_idempotency_key,
+    'setWebhook',
+    p_request_fingerprint
+  );
+  if coalesce((v_existing->>'found')::boolean, false) then
+    return pg_catalog.jsonb_build_object(
+      'result', v_existing->'result',
+      'duplicate', true
+    );
+  end if;
+
+  update private.bot_delivery_attempts attempt
+  set status = case
+        when attempt.attempt_count >= 12 then 'dead_letter'
+        else 'retry'
+      end,
+      available_at = case
+        when attempt.attempt_count >= 12 then attempt.available_at
+        else pg_catalog.now()
+      end,
+      claim_token = null,
+      claimed_at = null,
+      webhook_epoch = null,
+      error_code = 'worker_claim_timeout',
+      updated_at = pg_catalog.now(),
+      completed_at = case
+        when attempt.attempt_count >= 12 then pg_catalog.now()
+        else null
+      end
+  where attempt.bot_id = p_bot_id
+    and attempt.status in ('claimed','dispatching')
+    and attempt.claimed_at <= pg_catalog.now() - interval '2 minutes';
+
+  if exists (
+    select 1
+    from private.bot_delivery_attempts attempt
+    where attempt.bot_id = p_bot_id
+      and attempt.status = 'dispatching'
+  ) then
+    raise exception 'bot_delivery_in_flight' using errcode = '55000';
   end if;
 
   insert into private.bot_delivery_leases(
@@ -2815,6 +2954,7 @@ begin
     target_url,
     secret_ciphertext,
     secret_fingerprint,
+    webhook_epoch,
     state,
     failure_count,
     last_error_code,
@@ -2824,6 +2964,7 @@ begin
     p_url,
     p_secret_ciphertext,
     p_secret_fingerprint,
+    1,
     'enabled',
     0,
     null,
@@ -2833,10 +2974,37 @@ begin
   set target_url = excluded.target_url,
       secret_ciphertext = excluded.secret_ciphertext,
       secret_fingerprint = excluded.secret_fingerprint,
+      webhook_epoch = private.bot_webhooks.webhook_epoch + 1,
       state = 'enabled',
       failure_count = 0,
       last_error_code = null,
-      updated_at = pg_catalog.now();
+      updated_at = pg_catalog.now()
+  returning webhook_epoch into v_webhook_epoch;
+
+  update private.bot_delivery_attempts attempt
+  set status = 'retry',
+      attempt_count = greatest(attempt.attempt_count - 1, 0),
+      available_at = pg_catalog.now(),
+      claim_token = null,
+      claimed_at = null,
+      webhook_epoch = null,
+      error_code = 'webhook_reconfigured',
+      updated_at = pg_catalog.now(),
+      completed_at = null
+  where attempt.bot_id = p_bot_id
+    and attempt.status = 'claimed';
+
+  if p_drop_pending_updates then
+    delete from private.bot_delivery_attempts attempt
+    using private.bot_updates queued
+    where queued.bot_id = p_bot_id
+      and queued.acknowledged_at is null
+      and attempt.bot_id = queued.bot_id
+      and attempt.update_id = queued.update_id;
+    delete from private.bot_updates queued
+    where queued.bot_id = p_bot_id
+      and queued.acknowledged_at is null;
+  end if;
 
   insert into private.bot_delivery_attempts(bot_id, update_id)
   select queued.bot_id, queued.update_id
@@ -2845,44 +3013,220 @@ begin
     and queued.acknowledged_at is null
     and queued.expires_at > pg_catalog.now()
   on conflict (bot_id, update_id) do nothing;
-  return true;
+
+  insert into private.bot_audit_events(bot_id, action, metadata)
+  values (
+    p_bot_id,
+    'webhook_set',
+    pg_catalog.jsonb_build_object(
+      'webhook_epoch', v_webhook_epoch,
+      'drop_pending_updates', p_drop_pending_updates
+    )
+  );
+  perform private.bot_operation_idempotency_store(
+    p_bot_id,
+    p_idempotency_key,
+    'setWebhook',
+    p_request_fingerprint,
+    v_result
+  );
+  return pg_catalog.jsonb_build_object('result', v_result, 'duplicate', false);
 end
 $function$;
 
-revoke all on function public.bot_webhook_set_internal(uuid,text,text,text)
+revoke all on function public.bot_webhook_set_internal(uuid,text,text,text,boolean,text,text)
   from public, anon, authenticated, service_role;
-grant execute on function public.bot_webhook_set_internal(uuid,text,text,text)
+grant execute on function public.bot_webhook_set_internal(uuid,text,text,text,boolean,text,text)
   to service_role;
 
 create or replace function public.bot_webhook_delete_internal(
-  p_bot_id uuid
+  p_bot_id uuid,
+  p_drop_pending_updates boolean,
+  p_idempotency_key text,
+  p_request_fingerprint text
 )
-returns boolean
+returns jsonb
 language plpgsql
 security definer
 set search_path = ''
 as $function$
 declare
   v_webhook_rows integer := 0;
+  v_existing jsonb;
+  v_result jsonb;
 begin
-  if p_bot_id is null then
-    return false;
+  if p_bot_id is null
+     or p_drop_pending_updates is null
+     or p_idempotency_key is null
+     or p_idempotency_key !~ '^[A-Za-z0-9._:-]{8,128}$'
+     or p_request_fingerprint is null
+     or p_request_fingerprint !~ '^[0-9a-f]{64}$' then
+    raise exception 'bot_webhook_input_invalid' using errcode = '22023';
   end if;
+
+  perform 1 from public.bots bot
+  where bot.id = p_bot_id
+  for update of bot;
+  if not found then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(p_bot_id::text || ':' || p_idempotency_key, 0)
+  );
+  v_existing := private.bot_operation_idempotency_lookup(
+    p_bot_id,
+    p_idempotency_key,
+    'deleteWebhook',
+    p_request_fingerprint
+  );
+  if coalesce((v_existing->>'found')::boolean, false) then
+    return pg_catalog.jsonb_build_object(
+      'result', v_existing->'result',
+      'duplicate', true
+    );
+  end if;
+
+  update private.bot_delivery_attempts attempt
+  set status = case
+        when attempt.attempt_count >= 12 then 'dead_letter'
+        else 'retry'
+      end,
+      available_at = case
+        when attempt.attempt_count >= 12 then attempt.available_at
+        else pg_catalog.now()
+      end,
+      claim_token = null,
+      claimed_at = null,
+      webhook_epoch = null,
+      error_code = 'worker_claim_timeout',
+      updated_at = pg_catalog.now(),
+      completed_at = case
+        when attempt.attempt_count >= 12 then pg_catalog.now()
+        else null
+      end
+  where attempt.bot_id = p_bot_id
+    and attempt.status in ('claimed','dispatching')
+    and attempt.claimed_at <= pg_catalog.now() - interval '2 minutes';
+
+  if exists (
+    select 1
+    from private.bot_delivery_attempts attempt
+    where attempt.bot_id = p_bot_id
+      and attempt.status = 'dispatching'
+  ) then
+    raise exception 'bot_delivery_in_flight' using errcode = '55000';
+  end if;
+
   update private.bot_webhooks webhook
   set state = 'disabled',
+      webhook_epoch = webhook.webhook_epoch + 1,
       updated_at = pg_catalog.now()
   where webhook.bot_id = p_bot_id;
   get diagnostics v_webhook_rows = row_count;
+
+  update private.bot_delivery_attempts attempt
+  set status = 'retry',
+      attempt_count = greatest(attempt.attempt_count - 1, 0),
+      available_at = pg_catalog.now(),
+      claim_token = null,
+      claimed_at = null,
+      webhook_epoch = null,
+      error_code = 'webhook_disabled',
+      updated_at = pg_catalog.now(),
+      completed_at = null
+  where attempt.bot_id = p_bot_id
+    and attempt.status = 'claimed';
+
+  if p_drop_pending_updates then
+    delete from private.bot_delivery_attempts attempt
+    using private.bot_updates queued
+    where queued.bot_id = p_bot_id
+      and queued.acknowledged_at is null
+      and attempt.bot_id = queued.bot_id
+      and attempt.update_id = queued.update_id;
+    delete from private.bot_updates queued
+    where queued.bot_id = p_bot_id
+      and queued.acknowledged_at is null;
+  end if;
+
   delete from private.bot_delivery_leases lease
   where lease.bot_id = p_bot_id
     and lease.delivery_mode = 'webhook';
-  return v_webhook_rows > 0;
+
+  v_result := pg_catalog.to_jsonb(v_webhook_rows > 0);
+  if v_webhook_rows > 0 then
+    insert into private.bot_audit_events(bot_id, action, metadata)
+    values (
+      p_bot_id,
+      'webhook_deleted',
+      pg_catalog.jsonb_build_object(
+        'drop_pending_updates', p_drop_pending_updates
+      )
+    );
+  end if;
+  perform private.bot_operation_idempotency_store(
+    p_bot_id,
+    p_idempotency_key,
+    'deleteWebhook',
+    p_request_fingerprint,
+    v_result
+  );
+  return pg_catalog.jsonb_build_object('result', v_result, 'duplicate', false);
 end
 $function$;
 
-revoke all on function public.bot_webhook_delete_internal(uuid)
+revoke all on function public.bot_webhook_delete_internal(uuid,boolean,text,text)
   from public, anon, authenticated, service_role;
-grant execute on function public.bot_webhook_delete_internal(uuid)
+grant execute on function public.bot_webhook_delete_internal(uuid,boolean,text,text)
+  to service_role;
+
+create or replace function public.bot_webhook_info_internal(
+  p_bot_id uuid
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+declare
+  v_webhook private.bot_webhooks%rowtype;
+  v_pending integer;
+  v_configured boolean := false;
+begin
+  if p_bot_id is null then
+    raise exception 'bot_webhook_input_invalid' using errcode = '22023';
+  end if;
+  if not exists (select 1 from public.bots bot where bot.id = p_bot_id) then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+
+  select webhook.* into v_webhook
+  from private.bot_webhooks webhook
+  where webhook.bot_id = p_bot_id
+    and webhook.state = 'enabled';
+  v_configured := found;
+
+  select least(pg_catalog.count(*), 1000000)::integer
+  into v_pending
+  from private.bot_updates queued
+  where queued.bot_id = p_bot_id
+    and queued.acknowledged_at is null
+    and queued.expires_at > pg_catalog.now();
+
+  return pg_catalog.jsonb_build_object(
+    'configured', v_configured,
+    'pending_update_count', coalesce(v_pending, 0),
+    'failure_count', coalesce(v_webhook.failure_count, 0),
+    'last_error_code', v_webhook.last_error_code
+  );
+end
+$function$;
+
+revoke all on function public.bot_webhook_info_internal(uuid)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_webhook_info_internal(uuid)
   to service_role;
 
 create or replace function public.bot_delivery_claim_internal(
@@ -2893,11 +3237,8 @@ returns table(
   attempt_id bigint,
   bot_id uuid,
   update_id bigint,
-  target_url text,
-  secret_ciphertext text,
-  secret_fingerprint text,
-  payload jsonb,
-  attempt_count integer
+  attempt_count integer,
+  webhook_epoch bigint
 )
 language plpgsql
 security definer
@@ -2913,7 +3254,7 @@ begin
   with stale_candidates as (
     select attempt.id
     from private.bot_delivery_attempts attempt
-    where attempt.status = 'claimed'
+    where attempt.status in ('claimed','dispatching')
       and attempt.claimed_at <= pg_catalog.now() - interval '2 minutes'
     order by attempt.claimed_at, attempt.id
     limit least(p_limit, 100)
@@ -2930,6 +3271,7 @@ begin
       end,
       claim_token = null,
       claimed_at = null,
+      webhook_epoch = null,
       error_code = 'worker_claim_timeout',
       updated_at = pg_catalog.now(),
       completed_at = case
@@ -2955,6 +3297,13 @@ begin
       and queued.expires_at > pg_catalog.now()
       and webhook.state = 'enabled'
       and bot.state = 'active'
+      and not exists (
+        select 1
+        from private.bot_delivery_attempts earlier
+        where earlier.bot_id = attempt.bot_id
+          and earlier.update_id < attempt.update_id
+          and earlier.status in ('pending','claimed','dispatching','retry')
+      )
     order by attempt.available_at, attempt.id
     limit least(p_limit, 100)
     for update of attempt skip locked
@@ -2963,26 +3312,21 @@ begin
     set status = 'claimed',
         claim_token = p_claim_token,
         claimed_at = pg_catalog.now(),
+        webhook_epoch = webhook.webhook_epoch,
         attempt_count = attempt.attempt_count + 1,
         updated_at = pg_catalog.now()
-    from candidates candidate
+    from candidates candidate, private.bot_webhooks webhook
     where attempt.id = candidate.id
+      and webhook.bot_id = attempt.bot_id
     returning attempt.*
   )
   select
     claimed.id,
     claimed.bot_id,
     claimed.update_id,
-    webhook.target_url,
-    webhook.secret_ciphertext,
-    webhook.secret_fingerprint,
-    queued.payload,
-    claimed.attempt_count
+    claimed.attempt_count,
+    claimed.webhook_epoch
   from claimed
-  join private.bot_updates queued
-    on queued.bot_id = claimed.bot_id
-   and queued.update_id = claimed.update_id
-  join private.bot_webhooks webhook on webhook.bot_id = claimed.bot_id
   order by claimed.id;
 end
 $function$;
@@ -2992,11 +3336,114 @@ revoke all on function public.bot_delivery_claim_internal(integer,uuid)
 grant execute on function public.bot_delivery_claim_internal(integer,uuid)
   to service_role;
 
+create or replace function public.bot_delivery_prepare_internal(
+  p_attempt_id bigint,
+  p_claim_token uuid,
+  p_webhook_epoch bigint
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_attempt private.bot_delivery_attempts%rowtype;
+  v_webhook private.bot_webhooks%rowtype;
+  v_payload jsonb;
+begin
+  if p_attempt_id is null
+     or p_claim_token is null
+     or p_webhook_epoch is null
+     or p_webhook_epoch < 1 then
+    return null;
+  end if;
+
+  perform 1
+  from public.bots bot
+  join private.bot_delivery_attempts attempt on attempt.bot_id = bot.id
+  where attempt.id = p_attempt_id
+    and bot.state = 'active'
+  for update of bot;
+  if not found then
+    return null;
+  end if;
+
+  select attempt.* into v_attempt
+  from private.bot_delivery_attempts attempt
+  where attempt.id = p_attempt_id
+    and attempt.status = 'claimed'
+    and attempt.claim_token = p_claim_token
+    and attempt.webhook_epoch = p_webhook_epoch
+    and attempt.claimed_at > pg_catalog.now() - interval '2 minutes'
+  for update of attempt;
+  if not found then
+    return null;
+  end if;
+
+  select webhook.* into v_webhook
+  from private.bot_webhooks webhook
+  where webhook.bot_id = v_attempt.bot_id
+    and webhook.state = 'enabled'
+    and webhook.webhook_epoch = p_webhook_epoch
+  for update of webhook;
+  if not found then
+    update private.bot_delivery_attempts attempt
+    set status = 'retry',
+        attempt_count = greatest(attempt.attempt_count - 1, 0),
+        available_at = pg_catalog.now(),
+        claim_token = null,
+        claimed_at = null,
+        webhook_epoch = null,
+        error_code = 'webhook_claim_invalidated',
+        updated_at = pg_catalog.now()
+    where attempt.id = v_attempt.id;
+    return null;
+  end if;
+
+  select queued.payload into v_payload
+  from private.bot_updates queued
+  where queued.bot_id = v_attempt.bot_id
+    and queued.update_id = v_attempt.update_id
+    and queued.acknowledged_at is null
+    and queued.expires_at > pg_catalog.now()
+  for update of queued;
+  if not found then
+    update private.bot_delivery_attempts attempt
+    set status = 'dead_letter',
+        claim_token = null,
+        claimed_at = null,
+        webhook_epoch = null,
+        error_code = 'update_unavailable',
+        completed_at = pg_catalog.now(),
+        updated_at = pg_catalog.now()
+    where attempt.id = v_attempt.id;
+    return null;
+  end if;
+
+  update private.bot_delivery_attempts attempt
+  set status = 'dispatching',
+      updated_at = pg_catalog.now()
+  where attempt.id = v_attempt.id;
+
+  return pg_catalog.jsonb_build_object(
+    'target_url', v_webhook.target_url,
+    'secret_ciphertext', v_webhook.secret_ciphertext,
+    'payload', v_payload
+  );
+end
+$function$;
+
+revoke all on function public.bot_delivery_prepare_internal(bigint,uuid,bigint)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_delivery_prepare_internal(bigint,uuid,bigint)
+  to service_role;
+
 create or replace function public.bot_delivery_finish_internal(
   p_attempt_id bigint,
   p_claim_token uuid,
   p_status text,
-  p_error_code text
+  p_error_code text,
+  p_http_status integer
 )
 returns boolean
 language plpgsql
@@ -3010,6 +3457,9 @@ begin
   if p_attempt_id is null or p_claim_token is null
      or p_status is null
      or p_status not in ('delivered','retry','dead_letter')
+     or (p_status = 'delivered' and p_error_code is not null)
+     or (p_status <> 'delivered' and p_error_code is null)
+     or (p_http_status is not null and p_http_status not between 100 and 599)
      or (
        p_error_code is not null
        and p_error_code !~ '^[a-z][a-z0-9_]{0,63}$'
@@ -3020,7 +3470,7 @@ begin
   select * into v_attempt
   from private.bot_delivery_attempts attempt
   where attempt.id = p_attempt_id
-    and attempt.status = 'claimed'
+    and attempt.status = 'dispatching'
     and attempt.claim_token = p_claim_token
     and attempt.claimed_at > pg_catalog.now() - interval '15 minutes'
   for update;
@@ -3038,6 +3488,8 @@ begin
   set status = v_next_status,
       claim_token = null,
       claimed_at = null,
+      webhook_epoch = null,
+      http_status = p_http_status,
       error_code = case when v_next_status = 'succeeded' then null else p_error_code end,
       available_at = case
         when v_next_status = 'retry' then pg_catalog.now() + least(
@@ -3076,9 +3528,9 @@ begin
 end
 $function$;
 
-revoke all on function public.bot_delivery_finish_internal(bigint,uuid,text,text)
+revoke all on function public.bot_delivery_finish_internal(bigint,uuid,text,text,integer)
   from public, anon, authenticated, service_role;
-grant execute on function public.bot_delivery_finish_internal(bigint,uuid,text,text)
+grant execute on function public.bot_delivery_finish_internal(bigint,uuid,text,text,integer)
   to service_role;
 
 create or replace function public.bot_delivery_cleanup_internal(
@@ -3098,6 +3550,7 @@ declare
   v_operation_idempotency integer := 0;
   v_callback_answers integer := 0;
   v_upload_grants integer := 0;
+  v_audit integer := 0;
 begin
   if p_now is null
      or p_limit is null
@@ -3123,8 +3576,17 @@ begin
   with doomed as (
     select queued.id
     from private.bot_updates queued
-    where queued.expires_at <= p_now
-       or queued.acknowledged_at is not null
+    where (
+      queued.expires_at <= p_now
+      or queued.acknowledged_at is not null
+    )
+      and not exists (
+        select 1
+        from private.bot_delivery_attempts active_attempt
+        where active_attempt.bot_id = queued.bot_id
+          and active_attempt.update_id = queued.update_id
+          and active_attempt.status in ('claimed','dispatching')
+      )
     order by coalesce(queued.acknowledged_at, queued.expires_at), queued.id
     limit p_limit
     for update of queued skip locked
@@ -3209,6 +3671,19 @@ begin
   where upload_grant.id = doomed.id;
   get diagnostics v_upload_grants = row_count;
 
+  with doomed as (
+    select audit.id
+    from private.bot_audit_events audit
+    where audit.created_at < p_now - interval '90 days'
+    order by audit.created_at, audit.id
+    limit p_limit
+    for update of audit skip locked
+  )
+  delete from private.bot_audit_events audit
+  using doomed
+  where audit.id = doomed.id;
+  get diagnostics v_audit = row_count;
+
   return pg_catalog.jsonb_build_object(
     'updates_deleted', v_updates,
     'attempts_deleted', v_attempts,
@@ -3216,7 +3691,8 @@ begin
     'idempotency_deleted', v_idempotency,
     'operation_idempotency_deleted', v_operation_idempotency,
     'callback_answers_deleted', v_callback_answers,
-    'upload_grants_deleted', v_upload_grants
+    'upload_grants_deleted', v_upload_grants,
+    'audit_deleted', v_audit
   );
 end
 $function$;

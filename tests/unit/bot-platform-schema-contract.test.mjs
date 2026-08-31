@@ -19,6 +19,7 @@ const privateTables = [
   "bot_updates",
   "bot_webhooks",
   "bot_delivery_attempts",
+  "bot_audit_events",
   "bot_rate_limit_buckets",
   "bot_upload_grants",
   "bot_operation_idempotency",
@@ -40,13 +41,16 @@ const serviceRoleFunctions = [
   ["bot_commands_list_internal", "uuid"],
   ["bot_file_lookup_internal", "uuid,uuid,uuid"],
   ["bot_callback_answer_internal", "uuid,uuid,text,boolean,text,text"],
-  ["bot_updates_poll_internal", "uuid,bigint,integer,uuid"],
+  ["bot_updates_poll_internal", "uuid,bigint,integer,text[],uuid"],
+  ["bot_updates_poll_release_internal", "uuid,uuid"],
   ["bot_updates_ack_internal", "uuid,bigint"],
-  ["bot_webhook_set_internal", "uuid,text,text,text"],
-  ["bot_webhook_delete_internal", "uuid"],
+  ["bot_webhook_set_internal", "uuid,text,text,text,boolean,text,text"],
+  ["bot_webhook_delete_internal", "uuid,boolean,text,text"],
+  ["bot_webhook_info_internal", "uuid"],
   ["bot_update_enqueue_internal", "uuid,text,uuid,jsonb"],
   ["bot_delivery_claim_internal", "integer,uuid"],
-  ["bot_delivery_finish_internal", "bigint,uuid,text,text"],
+  ["bot_delivery_prepare_internal", "bigint,uuid,bigint"],
+  ["bot_delivery_finish_internal", "bigint,uuid,text,text,integer"],
   ["bot_delivery_cleanup_internal", "timestamptz,integer"],
 ];
 
@@ -394,10 +398,49 @@ test("stale delivery claims are recovered atomically and boundedly", () => {
   assert.match(normalizedSql, /limit least\(p_limit, 100\)/);
 });
 
+test("polling filters eligible updates before limit and releases only the owning lease", () => {
+  assert.match(normalizedSql, /p_allowed_updates text\[\]/);
+  assert.match(normalizedSql, /queued\.update_type = any\(p_allowed_updates\)/);
+  assert.match(
+    normalizedSql,
+    /create or replace function public\.bot_updates_poll_release_internal\( p_bot_id uuid, p_timeout_marker uuid \)/,
+  );
+  assert.match(normalizedSql, /lease\.lease_token = p_timeout_marker/);
+});
+
+test("webhook mutations bind claims to an epoch and prepare before dispatch", () => {
+  assert.match(normalizedSql, /webhook_epoch bigint not null default 1/);
+  assert.match(normalizedSql, /status in \('pending','claimed','dispatching','retry','succeeded','dead_letter'\)/);
+  assert.match(
+    normalizedSql,
+    /create or replace function public\.bot_delivery_prepare_internal\(/,
+  );
+  assert.match(normalizedSql, /attempt\.status = 'dispatching'/);
+  assert.match(normalizedSql, /attempt\.webhook_epoch = p_webhook_epoch/);
+  assert.match(normalizedSql, /bot_delivery_in_flight/);
+});
+
+test("claim selection excludes every later active update for the same bot", () => {
+  assert.match(
+    normalizedSql,
+    /earlier\.bot_id = attempt\.bot_id[\s\S]*earlier\.update_id < attempt\.update_id[\s\S]*earlier\.status in \('pending','claimed','dispatching','retry'\)/,
+  );
+  assert.match(normalizedSql, /for update of attempt skip locked/);
+});
+
+test("webhook mutation drop and finish metadata are transactional and bounded", () => {
+  assert.match(normalizedSql, /p_drop_pending_updates boolean/);
+  assert.match(normalizedSql, /delete from private\.bot_updates queued[\s\S]*queued\.acknowledged_at is null/);
+  assert.match(normalizedSql, /p_http_status integer/);
+  assert.match(normalizedSql, /http_status = p_http_status/);
+  assert.match(normalizedSql, /interval '14 days'/);
+  assert.match(normalizedSql, /interval '90 days'/);
+});
+
 test("webhook disable result does not depend on delivery lease cleanup", () => {
   assert.match(
     normalizedSql,
-    /create or replace function public\.bot_webhook_delete_internal\([\s\S]*v_webhook_rows integer := 0;[\s\S]*get diagnostics v_webhook_rows = row_count;[\s\S]*return v_webhook_rows > 0/,
+    /create or replace function public\.bot_webhook_delete_internal\([\s\S]*v_webhook_rows integer := 0;[\s\S]*get diagnostics v_webhook_rows = row_count;[\s\S]*v_result := pg_catalog\.to_jsonb\(v_webhook_rows > 0\)/,
   );
 });
 
@@ -458,7 +501,10 @@ test("bot replies are constrained to the target chat as well as visibility", () 
 
 test("all gateway RPCs are fixed-search-path and service-role only", () => {
   for (const [name, signature] of serviceRoleFunctions) {
-    const escapedSignature = signature.replaceAll(",", ",\\s*");
+    const escapedSignature = signature
+      .split(",")
+      .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join(",\\s*");
     assert.match(
       normalizedSql,
       new RegExp(`create or replace function public\\.${name}\\(`),
@@ -508,14 +554,13 @@ test("bounded internal RPC inputs fail closed on null values", () => {
 test("webhook claims return encrypted material for trusted worker decryption", () => {
   assert.match(
     normalizedSql,
-    /create or replace function public\.bot_webhook_set_internal\( p_bot_id uuid, p_url text, p_secret_ciphertext text, p_secret_fingerprint text \)/,
+    /create or replace function public\.bot_webhook_set_internal\( p_bot_id uuid, p_url text, p_secret_ciphertext text, p_secret_fingerprint text, p_drop_pending_updates boolean, p_idempotency_key text, p_request_fingerprint text \)/,
   );
   assert.match(normalizedSql, /p_secret_ciphertext !~ '\^enc:v1:/);
   assert.match(normalizedSql, /p_secret_ciphertext is null/);
   assert.match(normalizedSql, /p_secret_fingerprint is null/);
   assert.match(normalizedSql, /secret_ciphertext = excluded\.secret_ciphertext/);
-  assert.match(normalizedSql, /webhook\.secret_ciphertext/);
-  assert.match(normalizedSql, /webhook\.secret_fingerprint/);
+  assert.match(normalizedSql, /'secret_ciphertext', v_webhook\.secret_ciphertext/);
   assert.doesNotMatch(normalizedSql, /target_url text, secret_hash text/);
 });
 

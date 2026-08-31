@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import test from "node:test";
 
 import {
@@ -17,6 +18,7 @@ const CHAT_ID = "11111111-1111-4111-8111-111111111111";
 const MESSAGE_ID = "22222222-2222-4222-8222-222222222222";
 const BOT_ID = "33333333-3333-4333-8333-333333333333";
 const REQUEST_ID = "req_20260831_001";
+const TEST_WEBHOOK_SECRET = randomBytes(24).toString("base64url");
 
 const EXPECTED_METHODS = [
   "getMe",
@@ -289,6 +291,7 @@ test("webhook input is bounded and HTTPS-only before SSRF validation", () => {
   assert.equal(
     parseBotMethodInput("setWebhook", {
       url: "https://bot.example.test/hook",
+      secret_token: TEST_WEBHOOK_SECRET,
       drop_pending_updates: true,
       idempotency_key: "webhook:20260831:1",
     }).url,
@@ -302,6 +305,26 @@ test("webhook input is bounded and HTTPS-only before SSRF validation", () => {
     assert.throws(() =>
       parseBotMethodInput("setWebhook", {
         url,
+        secret_token: TEST_WEBHOOK_SECRET,
+        idempotency_key: "webhook:20260831:1",
+      }),
+    );
+  }
+  assert.throws(() =>
+    parseBotMethodInput("setWebhook", {
+      url: "https://bot.example.test/hook",
+      idempotency_key: "webhook:20260831:1",
+    }),
+  );
+  for (const secret_token of [
+    "too-short",
+    "x".repeat(257),
+    "invalid secret token",
+  ]) {
+    assert.throws(() =>
+      parseBotMethodInput("setWebhook", {
+        url: "https://bot.example.test/hook",
+        secret_token,
         idempotency_key: "webhook:20260831:1",
       }),
     );

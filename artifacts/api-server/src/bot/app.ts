@@ -37,7 +37,11 @@ export function createBotGatewayApp(input: {
         const generated = requestId();
         return SAFE_ID.test(generated) ? generated : randomUUID();
       },
-      redact: ["req.headers.authorization"],
+      redact: [
+        "req.headers.authorization",
+        "req.headers.x-letscube-bot-webhook-secret",
+        "req.headers['x-letscube-bot-webhook-secret']",
+      ],
       serializers: {
         req(request) {
           return {
