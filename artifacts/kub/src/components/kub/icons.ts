@@ -7,6 +7,9 @@ import {
   At,
   Bell,
   BellSlash,
+  Robot,
+  Key,
+  WebhooksLogo,
   BookmarkSimple,
   Camera,
   CaretDown,
@@ -98,6 +101,7 @@ export type KubIconName =
   | "back"
   | "ban"
   | "bookmark"
+  | "bot"
   | "camera"
   | "channel"
   | "chatBubble"
@@ -132,6 +136,7 @@ export type KubIconName =
   | "help"
   | "image"
   | "info"
+  | "key"
   | "lock"
   | "logout"
   | "mail"
@@ -177,6 +182,7 @@ export type KubIconName =
   | "voice"
   | "volume"
   | "warning"
+  | "webhook"
   | "zap";
 
 interface IconEntry {
@@ -199,6 +205,7 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   back: { Icon: ArrowLeft },
   ban: { Icon: Prohibit },
   bookmark: { Icon: BookmarkSimple },
+  bot: { Icon: Robot },
   camera: { Icon: Camera },
   channel: { Icon: Hash },
   chatBubble: { Icon: ChatCircle },
@@ -233,6 +240,7 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   help: { Icon: Question },
   image: { Icon: ImageIcon },
   info: { Icon: Info },
+  key: { Icon: Key },
   lock: { Icon: Lock },
   logout: { Icon: SignOut },
   mail: { Icon: Envelope },
@@ -278,5 +286,6 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   voice: { Icon: Waveform },
   volume: { Icon: SpeakerHigh },
   warning: { Icon: Warning },
+  webhook: { Icon: WebhooksLogo },
   zap: { Icon: Lightning, weight: "fill" },
 };

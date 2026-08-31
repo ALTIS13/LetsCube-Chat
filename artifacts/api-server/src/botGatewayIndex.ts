@@ -1,4 +1,5 @@
 import { createBotGatewayApp } from "./bot/app";
+import { resolveBotManagementOrigins } from "./bot/managementAuth";
 import {
   combineBotMethodHandlers,
   createBotRequestFingerprint,
@@ -72,6 +73,13 @@ export function startBotGateway(
     logger,
     handlers,
     tokenRepository: createBotTokenRepository(environment, client),
+    management: {
+      client,
+      tokenPepper: authConfig.pepper,
+      allowedOrigins: resolveBotManagementOrigins(environment),
+      webhookEncryptionKey,
+      validateWebhookTarget,
+    },
   });
   const server = app.listen(port, "0.0.0.0");
   server.once("listening", () => {

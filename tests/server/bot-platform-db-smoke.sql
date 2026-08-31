@@ -27,6 +27,8 @@ do $smoke$
 declare
   v_actor_id uuid;
   v_recipient_id uuid;
+  v_admin_id uuid := gen_random_uuid();
+  v_recipient_username text;
   v_profile_delete_id uuid := gen_random_uuid();
   v_bulk_profile_one_id uuid := gen_random_uuid();
   v_bulk_profile_two_id uuid := gen_random_uuid();
@@ -99,6 +101,9 @@ declare
   v_claimed_rows integer;
   v_prepared jsonb;
   v_webhook_info jsonb;
+  v_admin_projection jsonb;
+  v_eligibility record;
+  v_current_token_prefix text;
   v_function regprocedure;
   v_rejected boolean;
   v_webhook_disabled boolean;
@@ -153,9 +158,26 @@ begin
   for v_function in
     select function_signature::regprocedure
     from (values
-      ('public.bot_create_internal(uuid,text,text,text,text,text)'),
+      ('public.bot_create_internal(uuid,text,text,text,text,text,text)'),
       ('public.bot_list_owned_internal(uuid)'),
-      ('public.bot_rotate_token_internal(uuid,uuid,text,text)'),
+      ('public.bot_creation_eligibility_internal(uuid)'),
+      ('public.bot_management_detail_internal(uuid,uuid)'),
+      ('public.bot_management_diagnostics_internal(uuid,uuid)'),
+      ('public.bot_update_profile_internal(uuid,uuid,text,text,text)'),
+      ('public.bot_management_commands_replace_internal(uuid,uuid,jsonb,text)'),
+      ('public.bot_pause_internal(uuid,uuid,text)'),
+      ('public.bot_resume_internal(uuid,uuid,text)'),
+      ('public.bot_developer_add_internal(uuid,uuid,text,text)'),
+      ('public.bot_developer_remove_internal(uuid,uuid,uuid,text)'),
+      ('public.bot_rotate_token_internal(uuid,uuid,text,text,text,text)'),
+      ('public.bot_revoke_token_internal(uuid,uuid,text)'),
+      ('public.bot_request_deletion_internal(uuid,uuid,text)'),
+      ('public.bot_cancel_deletion_internal(uuid,uuid,text)'),
+      ('public.bot_privacy_request_internal(uuid,uuid,uuid,boolean,text)'),
+      ('public.bot_management_webhook_set_internal(uuid,uuid,text,text,text,boolean,text)'),
+      ('public.bot_management_webhook_delete_internal(uuid,uuid,boolean,text)'),
+      ('public.bot_admin_list_internal(uuid)'),
+      ('public.bot_suspend_internal(uuid,uuid,boolean,text)'),
       ('public.bot_token_lookup_internal(text)'),
       ('public.bot_token_touch_internal(uuid,timestamptz)'),
       ('public.bot_membership_authorize_internal(uuid,uuid,text)'),
@@ -225,6 +247,48 @@ begin
 
   if v_actor_id is null or v_recipient_id is null then
     raise exception 'bot_smoke_requires_two_profiles_and_one_eligible_owner';
+  end if;
+  select profile.username into v_recipient_username
+  from public.profiles profile where profile.id = v_recipient_id;
+
+  insert into auth.users(
+    id, aud, role, email, email_confirmed_at, created_at, updated_at
+  ) values (
+    v_admin_id,
+    'authenticated',
+    'authenticated',
+    'bot-admin-smoke-' || v_admin_id::text || '@invalid',
+    pg_catalog.now(),
+    pg_catalog.now() - interval '48 hours',
+    pg_catalog.now()
+  );
+  insert into public.profiles(id, full_name, username)
+  values (
+    v_admin_id,
+    'Bot admin smoke',
+    'bot_admin_' || pg_catalog.substr(v_admin_id::text, 1, 8)
+  );
+  insert into public.user_global_roles(user_id, role_id, assigned_by)
+  select v_admin_id, role_row.id, null
+  from public.roles role_row
+  where role_row.key = 'tech_admin';
+  if not public.has_permission(v_admin_id, 'bots.suspend')
+     or (
+       select pg_catalog.count(*)
+       from public.role_permissions role_permission
+       join public.roles role_row on role_row.id = role_permission.role_id
+       where role_permission.permission_key = 'bots.suspend'
+         and role_row.key in ('owner','tech_admin')
+         and role_row.is_system is true
+     ) <> 2
+     or exists (
+       select 1
+       from public.role_permissions role_permission
+       join public.roles role_row on role_row.id = role_permission.role_id
+       where role_permission.permission_key = 'bots.suspend'
+         and role_row.key not in ('owner','tech_admin')
+     ) then
+    raise exception 'bot_suspend_permission_seed_invalid';
   end if;
 
   insert into auth.users(
@@ -406,6 +470,19 @@ begin
     pg_catalog.repeat('d', 64)
   ) created;
 
+  select * into v_eligibility
+  from public.bot_creation_eligibility_internal(v_actor_id);
+  if v_eligibility.email_verified is not true
+     or v_eligibility.phone_verified is not true
+     or v_eligibility.account_age_met is not true
+     or v_eligibility.not_banned is not true
+     or v_eligibility.under_limit is not false
+     or v_eligibility.active_bot_count <> 3
+     or v_eligibility.max_bots <> 3
+     or v_eligibility.can_create is not false then
+    raise exception 'bot_management_eligibility_invalid';
+  end if;
+
   v_rejected := false;
   begin
     perform public.bot_create_internal(
@@ -428,17 +505,44 @@ begin
     raise exception 'bot_owner_limit_not_enforced';
   end if;
 
+  select stored_token.token_prefix into v_current_token_prefix
+  from private.bot_tokens stored_token
+  where stored_token.bot_id = v_bot_id and stored_token.revoked_at is null;
   perform public.bot_rotate_token_internal(
     v_actor_id,
     v_bot_id,
     pg_catalog.substr(pg_catalog.replace(gen_random_uuid()::text, '-', ''), 1, 12),
-    pg_catalog.repeat('f', 64)
+    pg_catalog.repeat('f', 64),
+    v_current_token_prefix,
+    'smoke-rotate-one'
   );
+  v_rejected := false;
+  begin
+    perform public.bot_rotate_token_internal(
+      v_actor_id,
+      v_bot_id,
+      pg_catalog.substr(pg_catalog.replace(gen_random_uuid()::text, '-', ''), 1, 12),
+      pg_catalog.repeat('1', 64),
+      v_current_token_prefix,
+      'smoke-rotate-stale'
+    );
+  exception
+    when sqlstate '55000' then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'bot_stale_rotation_succeeded';
+  end if;
+  select stored_token.token_prefix into v_current_token_prefix
+  from private.bot_tokens stored_token
+  where stored_token.bot_id = v_bot_id and stored_token.revoked_at is null;
   perform public.bot_rotate_token_internal(
     v_actor_id,
     v_bot_id,
     pg_catalog.substr(pg_catalog.replace(gen_random_uuid()::text, '-', ''), 1, 12),
-    pg_catalog.repeat('1', 64)
+    pg_catalog.repeat('2', 64),
+    v_current_token_prefix,
+    'smoke-rotate-two'
   );
   select pg_catalog.count(*) into v_active_token_count
   from private.bot_tokens stored_token
@@ -447,6 +551,97 @@ begin
   if v_active_token_count <> 1 then
     raise exception 'active_token_count_invalid: %', v_active_token_count;
   end if;
+
+  perform public.bot_developer_add_internal(
+    v_actor_id, v_bot_id, v_recipient_username, 'smoke-developer-add'
+  );
+  perform public.bot_management_commands_replace_internal(
+    v_recipient_id,
+    v_bot_id,
+    '[{"command":"help","description":"Help"}]'::jsonb,
+    'smoke-developer-command'
+  );
+  if not exists (
+    select 1 from public.bot_commands command_row
+    where command_row.bot_id = v_bot_id and command_row.command = 'help'
+  ) then
+    raise exception 'bot_developer_command_update_failed';
+  end if;
+  v_rejected := false;
+  begin
+    perform public.bot_update_profile_internal(
+      v_recipient_id, v_bot_id, 'Forbidden developer edit', '', 'smoke-developer-profile'
+    );
+  exception
+    when insufficient_privilege then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'bot_developer_owner_action_succeeded';
+  end if;
+
+  select pg_catalog.to_jsonb(admin_bot) into v_admin_projection
+  from public.bot_admin_list_internal(v_admin_id) admin_bot
+  where admin_bot.bot_id = v_bot_id;
+  if v_admin_projection is null
+     or v_admin_projection ? 'token_prefix'
+     or v_admin_projection ? 'token_hash'
+     or v_admin_projection ? 'webhook_url'
+     or v_admin_projection ? 'secret_ciphertext'
+     or v_admin_projection ? 'payload' then
+    raise exception 'bot_admin_projection_exposed_private_data';
+  end if;
+  perform public.bot_suspend_internal(v_admin_id, v_bot_id, true, 'smoke-suspend');
+  v_rejected := false;
+  begin
+    perform public.bot_resume_internal(v_actor_id, v_bot_id, 'smoke-owner-resume-suspended');
+  exception
+    when sqlstate '55000' then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'bot_owner_resumed_suspended_bot';
+  end if;
+  perform public.bot_suspend_internal(v_admin_id, v_bot_id, false, 'smoke-unsuspend');
+  perform public.bot_resume_internal(v_actor_id, v_bot_id, 'smoke-resume-after-admin');
+
+  perform public.bot_request_deletion_internal(v_actor_id, v_bot_id, 'smoke-delete-request');
+  v_rejected := false;
+  begin
+    perform public.bot_rotate_token_internal(
+      v_actor_id,
+      v_bot_id,
+      pg_catalog.substr(pg_catalog.replace(gen_random_uuid()::text, '-', ''), 1, 12),
+      pg_catalog.repeat('3', 64),
+      null,
+      'smoke-pending-delete-rotate'
+    );
+  exception
+    when sqlstate '55000' then
+      v_rejected := true;
+  end;
+  if not v_rejected then
+    raise exception 'bot_pending_delete_rotation_succeeded';
+  end if;
+  perform public.bot_cancel_deletion_internal(v_actor_id, v_bot_id, 'smoke-delete-cancel');
+  if not exists (
+       select 1 from public.bots bot
+       where bot.id = v_bot_id and bot.state = 'paused' and bot.delete_after is null
+     ) or exists (
+       select 1 from private.bot_tokens stored_token
+       where stored_token.bot_id = v_bot_id and stored_token.revoked_at is null
+     ) then
+    raise exception 'bot_cancel_delete_token_or_state_invalid';
+  end if;
+  perform public.bot_rotate_token_internal(
+    v_actor_id,
+    v_bot_id,
+    pg_catalog.substr(pg_catalog.replace(gen_random_uuid()::text, '-', ''), 1, 12),
+    pg_catalog.repeat('4', 64),
+    null,
+    'smoke-delete-recovery-token'
+  );
+  perform public.bot_resume_internal(v_actor_id, v_bot_id, 'smoke-delete-recovery-resume');
 
   insert into public.chats(id, type, name, created_by)
   values (v_lifecycle_chat_id, 'group', 'Bot lifecycle smoke', v_actor_id);

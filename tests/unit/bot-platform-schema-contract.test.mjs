@@ -30,9 +30,26 @@ const privateTables = [
   "bot_callback_answers",
 ];
 const serviceRoleFunctions = [
-  ["bot_create_internal", "uuid,text,text,text,text,text"],
+  ["bot_create_internal", "uuid,text,text,text,text,text,text"],
   ["bot_list_owned_internal", "uuid"],
-  ["bot_rotate_token_internal", "uuid,uuid,text,text"],
+  ["bot_creation_eligibility_internal", "uuid"],
+  ["bot_management_detail_internal", "uuid,uuid"],
+  ["bot_management_diagnostics_internal", "uuid,uuid"],
+  ["bot_update_profile_internal", "uuid,uuid,text,text,text"],
+  ["bot_management_commands_replace_internal", "uuid,uuid,jsonb,text"],
+  ["bot_pause_internal", "uuid,uuid,text"],
+  ["bot_resume_internal", "uuid,uuid,text"],
+  ["bot_developer_add_internal", "uuid,uuid,text,text"],
+  ["bot_developer_remove_internal", "uuid,uuid,uuid,text"],
+  ["bot_rotate_token_internal", "uuid,uuid,text,text,text,text"],
+  ["bot_revoke_token_internal", "uuid,uuid,text"],
+  ["bot_request_deletion_internal", "uuid,uuid,text"],
+  ["bot_cancel_deletion_internal", "uuid,uuid,text"],
+  ["bot_privacy_request_internal", "uuid,uuid,uuid,boolean,text"],
+  ["bot_management_webhook_set_internal", "uuid,uuid,text,text,text,boolean,text"],
+  ["bot_management_webhook_delete_internal", "uuid,uuid,boolean,text"],
+  ["bot_admin_list_internal", "uuid"],
+  ["bot_suspend_internal", "uuid,uuid,boolean,text"],
   ["bot_token_lookup_internal", "text"],
   ["bot_token_touch_internal", "uuid,timestamptz"],
   ["bot_membership_authorize_internal", "uuid,uuid,text"],
@@ -57,6 +74,15 @@ const serviceRoleFunctions = [
   ["bot_delivery_finish_internal", "bigint,uuid,text,text,integer"],
   ["bot_delivery_cleanup_internal", "timestamptz,integer"],
 ];
+
+function functionBody(name) {
+  const start = normalizedSql.indexOf(
+    `create or replace function public.${name}(`,
+  );
+  const end = normalizedSql.indexOf("$function$;", start);
+  assert.ok(start >= 0 && end > start, `${name} body must exist`);
+  return normalizedSql.slice(start, end);
+}
 
 test("bot identities remain separate from auth users and use archive-only lifecycle", () => {
   assert.match(normalizedSql, /create table public\.bots/);
@@ -124,6 +150,138 @@ test("creation and token rotation serialize and enforce one active token", () =>
   assert.match(
     normalizedSql,
     /create or replace function public\.bot_rotate_token_internal\([\s\S]*from public\.bots bot[\s\S]*for update of bot/,
+  );
+});
+
+test("management permission is dedicated and seeded only to critical system roles", () => {
+  assert.match(
+    normalizedSql,
+    /insert into public\.permissions \(key, name, description, category\)[\s\S]*'bots\.suspend'/,
+  );
+  assert.match(
+    normalizedSql,
+    /join public\.roles role_row[\s\S]*role_row\.key in \('owner','tech_admin'\)[\s\S]*'bots\.suspend'/,
+  );
+  assert.doesNotMatch(
+    normalizedSql,
+    /\('admin',\s*'bots\.suspend'\)|\('manager',\s*'bots\.suspend'\)|\('user',\s*'bots\.suspend'\)/,
+  );
+});
+
+test("management eligibility is current-user-only and exposes each actionable prerequisite", () => {
+  const body = functionBody("bot_creation_eligibility_internal");
+  assert.match(body, /p_actor_id is not null/);
+  assert.match(body, /email_confirmed_at is not null/);
+  assert.match(body, /contact\.phone_verified is true/);
+  assert.match(body, /interval '24 hours'/);
+  assert.match(body, /from public\.bans ban/);
+  assert.match(body, /active_bot_count/);
+  assert.match(body, /max_bots/);
+  assert.match(body, /can_create/);
+});
+
+test("every management mutation locks the bot before closed role and state checks", () => {
+  const ownerOnly = [
+    "bot_update_profile_internal",
+    "bot_pause_internal",
+    "bot_resume_internal",
+    "bot_developer_add_internal",
+    "bot_developer_remove_internal",
+    "bot_rotate_token_internal",
+    "bot_revoke_token_internal",
+    "bot_request_deletion_internal",
+    "bot_cancel_deletion_internal",
+  ];
+  const ownerOrDeveloper = [
+    "bot_management_commands_replace_internal",
+    "bot_privacy_request_internal",
+    "bot_management_webhook_set_internal",
+    "bot_management_webhook_delete_internal",
+  ];
+  for (const name of ownerOnly) {
+    const body = functionBody(name);
+    assert.match(body, /for update of bot/, `${name} must lock the bot row`);
+    assert.match(body, /owner_row\.role = 'owner'/, `${name} must require owner`);
+    assert.match(body, /insert into private\.bot_audit_events/, `${name} must audit`);
+    assert.match(body, /'actor_id'/, `${name} audit must include actor`);
+    assert.match(body, /'request_id'/, `${name} audit must include request id`);
+    assert.match(body, /'result', 'success'/, `${name} audit must include result`);
+  }
+  for (const name of ownerOrDeveloper) {
+    const body = functionBody(name);
+    assert.match(body, /for update of bot/, `${name} must lock the bot row`);
+    assert.match(
+      body,
+      /owner_row\.role in \('owner','developer'\)/,
+      `${name} must use the closed developer allowlist`,
+    );
+  }
+});
+
+test("owner lifecycle cannot override suspension or pending deletion", () => {
+  assert.match(functionBody("bot_pause_internal"), /v_bot\.state <> 'active'/);
+  assert.match(functionBody("bot_resume_internal"), /v_bot\.state <> 'paused'/);
+  assert.match(
+    functionBody("bot_resume_internal"),
+    /from private\.bot_tokens[\s\S]*revoked_at is null/,
+  );
+  assert.match(
+    functionBody("bot_request_deletion_internal"),
+    /state = 'pending_delete'[\s\S]*delete_after = pg_catalog\.now\(\) \+ interval '7 days'/,
+  );
+  assert.match(
+    functionBody("bot_request_deletion_internal"),
+    /update private\.bot_tokens[\s\S]*revoked_at = pg_catalog\.now\(\)/,
+  );
+  assert.match(
+    functionBody("bot_cancel_deletion_internal"),
+    /v_bot\.state <> 'pending_delete'[\s\S]*v_bot\.delete_after <= pg_catalog\.now\(\)[\s\S]*state = 'paused'/,
+  );
+  assert.doesNotMatch(functionBody("bot_cancel_deletion_internal"), /insert into private\.bot_tokens/);
+});
+
+test("rotation has a stale-prefix precondition and raw token material never enters SQL", () => {
+  const body = functionBody("bot_rotate_token_internal");
+  assert.match(body, /p_expected_token_prefix text/);
+  assert.match(body, /is distinct from p_expected_token_prefix/);
+  assert.match(body, /bot_token_precondition_failed/);
+  assert.doesNotMatch(normalizedSql, /p_raw_token|raw_token text/);
+});
+
+test("detail and admin projections are structurally safe", () => {
+  const detail = functionBody("bot_management_detail_internal");
+  assert.match(detail, /token_prefix/);
+  assert.match(detail, /commands/);
+  assert.match(detail, /developers/);
+  assert.match(detail, /privacy/);
+  assert.match(detail, /pending_update_count/);
+  assert.doesNotMatch(detail, /token_hash|secret_ciphertext|secret_fingerprint|payload/);
+
+  const admin = functionBody("bot_admin_list_internal");
+  assert.match(admin, /public\.has_permission\(p_actor_id, 'bots\.suspend'\)/);
+  assert.doesNotMatch(admin, /private\.bot_tokens|private\.bot_webhooks|payload/);
+
+  const suspension = functionBody("bot_suspend_internal");
+  assert.match(suspension, /public\.has_permission\(p_actor_id, 'bots\.suspend'\)/);
+  assert.match(suspension, /for update of bot/);
+  assert.match(suspension, /p_suspend[\s\S]*state = 'suspended'/);
+  assert.match(suspension, /not p_suspend[\s\S]*state = 'paused'/);
+});
+
+test("per-chat privacy requests never create a global visibility switch", () => {
+  const body = functionBody("bot_privacy_request_internal");
+  assert.match(body, /p_chat_id uuid/);
+  assert.match(body, /from public\.chat_bot_members bot_member/);
+  assert.match(body, /bot_member\.removed_at is null/);
+  assert.match(body, /full_visibility_requested_at/);
+  assert.doesNotMatch(normalizedSql, /global_full_visibility|global_privacy_mode/);
+});
+
+test("management audit metadata allowlist contains no secret-bearing values", () => {
+  assert.match(normalizedSql, /action in \([^)]+bot_created[^)]+bot_suspended[^)]+\)/);
+  assert.doesNotMatch(
+    normalizedSql,
+    /insert into private\.bot_audit_events[^;]*?(token_hash|raw_token|secret_ciphertext|secret_fingerprint|target_url|payload)/,
   );
 });
 
@@ -442,12 +600,13 @@ test("webhook mutation drop and finish metadata are transactional and bounded", 
 });
 
 test("webhook info counts only a bounded pending-update subquery", () => {
+  const body = functionBody("bot_webhook_info_internal");
   assert.match(
-    normalizedSql,
+    body,
     /select pg_catalog\.count\(\*\)[\s\S]*from \([\s\S]*from private\.bot_updates queued[\s\S]*limit 1000001[\s\S]*\) bounded_pending/,
   );
   assert.doesNotMatch(
-    normalizedSql,
+    body,
     /select least\(pg_catalog\.count\(\*\), 1000000\)::integer[\s\S]*from private\.bot_updates queued/,
   );
 });
@@ -630,6 +789,15 @@ test("database smoke preserves history and rolls every probe back", () => {
   assert.match(normalizedSmoke, /stale_claim_not_recovered/);
   assert.match(normalizedSmoke, /active_token_count_invalid/);
   assert.match(normalizedSmoke, /bot_owner_limit_not_enforced/);
+  assert.match(normalizedSmoke, /bot_management_eligibility_invalid/);
+  assert.match(normalizedSmoke, /bot_stale_rotation_succeeded/);
+  assert.match(normalizedSmoke, /bot_developer_command_update_failed/);
+  assert.match(normalizedSmoke, /bot_developer_owner_action_succeeded/);
+  assert.match(normalizedSmoke, /bot_owner_resumed_suspended_bot/);
+  assert.match(normalizedSmoke, /bot_pending_delete_rotation_succeeded/);
+  assert.match(normalizedSmoke, /bot_cancel_delete_token_or_state_invalid/);
+  assert.match(normalizedSmoke, /bot_admin_projection_exposed_private_data/);
+  assert.match(normalizedSmoke, /bot_suspend_permission_seed_invalid/);
   assert.match(normalizedSmoke, /bot_media_without_grant_succeeded/);
   assert.match(normalizedSmoke, /bot_media_grant_not_consumed/);
   assert.match(normalizedSmoke, /bot_reply_markup_projection_missing/);

@@ -16,6 +16,7 @@ const STORAGE_URL_RE = /https?:\/\/[^\s"']*\/storage\/v1\/[^\s"']+/gi;
 const JWT_RE = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
 const SUPABASE_KEY_RE = /\bsb_(?:publishable|secret)_[A-Za-z0-9_.-]+\b/g;
 const BEARER_RE = /\bBearer\s+[A-Za-z0-9._-]+\b/gi;
+const BOT_TOKEN_RE = /\blc_bot_[0-9a-f]{10}\.[A-Za-z0-9_-]{43}\b/g;
 const QUERY_SECRET_RE = /([?&](?:token|access_token|refresh_token|apikey|signature|expires|X-Amz-Signature)=)[^&#\s]+/gi;
 const EMAIL_RE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 
@@ -178,6 +179,7 @@ function sanitizeString(value: string): string {
   const sanitized = value
     .replace(STORAGE_URL_RE, "[media-url]")
     .replace(BEARER_RE, "Bearer [Redacted]")
+    .replace(BOT_TOKEN_RE, "[bot-token]")
     .replace(JWT_RE, "[jwt]")
     .replace(SUPABASE_KEY_RE, "[supabase-key]")
     .replace(QUERY_SECRET_RE, "$1[Redacted]")

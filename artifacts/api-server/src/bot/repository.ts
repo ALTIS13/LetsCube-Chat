@@ -28,6 +28,12 @@ type SignedUrlResult = {
 };
 
 export interface BotServiceClient extends BotRpcClient {
+  auth: {
+    getUser(accessToken: string): PromiseLike<{
+      data: { user: { id?: unknown } | null } | null;
+      error: unknown;
+    }>;
+  };
   storage: {
     from(bucket: string): {
       createSignedUrl(

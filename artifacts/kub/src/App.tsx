@@ -20,6 +20,7 @@ import { GlobalSearchPalette } from "@/components/search/GlobalSearchPalette";
 import { BannedScreen } from "@/components/BannedScreen";
 import { AdminLayout } from "@/pages/admin/AdminLayout";
 import { TasksPage } from "@/pages/tasks/TasksPage";
+import { BotsPage } from "@/pages/bots/BotsPage";
 import { PrivacyPage } from "@/pages/public/PrivacyPage";
 import { SupportPage } from "@/pages/public/SupportPage";
 import NotFound from "@/pages/not-found";
@@ -379,6 +380,7 @@ function AppRoutes() {
         <Route path="/admin/:rest*" component={AdminLayout} />
         <Route path="/admin" component={AdminLayout} />
         <Route path="/tasks" component={TasksPage} />
+        <Route path="/bots" component={BotsPage} />
         <Route path="/" component={MainLayout} />
         <Route component={NotFound} />
       </Switch>

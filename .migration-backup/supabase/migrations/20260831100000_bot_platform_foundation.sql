@@ -6,6 +6,26 @@ begin;
 create schema if not exists private;
 revoke all on schema private from public, anon, authenticated, service_role;
 
+insert into public.permissions (key, name, description, category)
+values (
+  'bots.suspend',
+  'Приостановка ботов',
+  'Платформенная приостановка и восстановление ботов без доступа к токенам.',
+  'bots'
+)
+on conflict (key) do update
+set name = excluded.name,
+    description = excluded.description,
+    category = excluded.category;
+
+insert into public.role_permissions (role_id, permission_key)
+select role_row.id, permission_row.key
+from public.permissions permission_row
+join public.roles role_row on role_row.key in ('owner','tech_admin')
+where permission_row.key = 'bots.suspend'
+  and role_row.is_system is true
+on conflict do nothing;
+
 create table public.bots (
   id uuid primary key default gen_random_uuid(),
   username text not null unique
@@ -201,7 +221,16 @@ create index bot_delivery_attempts_retention_idx
 create table private.bot_audit_events (
   id bigint generated always as identity primary key,
   bot_id uuid not null references public.bots(id) on delete restrict,
-  action text not null check (action in ('webhook_set','webhook_deleted')),
+  action text not null check (action in (
+    'webhook_set','webhook_deleted',
+    'bot_created','bot_profile_updated','bot_commands_updated',
+    'bot_paused','bot_resumed','bot_developer_added','bot_developer_removed',
+    'bot_token_rotated','bot_token_revoked',
+    'bot_deletion_requested','bot_deletion_cancelled',
+    'bot_privacy_requested','bot_privacy_cancelled',
+    'bot_management_webhook_set','bot_management_webhook_deleted',
+    'bot_suspended','bot_unsuspended'
+  )),
   metadata jsonb not null default '{}'::jsonb
     check (
       pg_catalog.jsonb_typeof(metadata) = 'object'
@@ -654,12 +683,14 @@ create or replace function public.bot_create_internal(
   p_display_name text,
   p_description text,
   p_token_prefix text,
-  p_token_hash text
+  p_token_hash text,
+  p_request_id text default null
 )
 returns table(
   bot_id uuid,
   username text,
   display_name text,
+  description text,
   state text,
   token_id uuid,
   token_prefix text,
@@ -675,6 +706,7 @@ declare
   v_username text := pg_catalog.lower(pg_catalog.btrim(p_username));
   v_display_name text := pg_catalog.btrim(p_display_name);
   v_description text := coalesce(p_description, '');
+  v_request_id text := coalesce(p_request_id, 'unknown');
 begin
   if p_actor_id is null
      or p_username is null
@@ -688,6 +720,10 @@ begin
      or pg_catalog.length(v_description) > 512
      or p_token_prefix !~ '^[A-Za-z0-9_-]{8,24}$'
      or p_token_hash !~ '^[0-9a-f]{64}$' then
+    raise exception 'bot_input_invalid' using errcode = '22023';
+  end if;
+  if p_request_id is not null
+     and p_request_id !~ '^[A-Za-z0-9._:-]{1,128}$' then
     raise exception 'bot_input_invalid' using errcode = '22023';
   end if;
 
@@ -740,10 +776,22 @@ begin
   values (v_bot.id, p_token_prefix, p_token_hash)
   returning * into v_token;
 
+  insert into private.bot_audit_events(bot_id, action, metadata)
+  values (
+    v_bot.id,
+    'bot_created',
+    pg_catalog.jsonb_build_object(
+      'actor_id', p_actor_id,
+      'request_id', v_request_id,
+      'result', 'success'
+    )
+  );
+
   return query select
     v_bot.id,
     v_bot.username,
     v_bot.display_name,
+    v_bot.description,
     v_bot.state,
     v_token.id,
     v_token.token_prefix,
@@ -754,9 +802,9 @@ exception
 end
 $function$;
 
-revoke all on function public.bot_create_internal(uuid,text,text,text,text,text)
+revoke all on function public.bot_create_internal(uuid,text,text,text,text,text,text)
   from public, anon, authenticated, service_role;
-grant execute on function public.bot_create_internal(uuid,text,text,text,text,text)
+grant execute on function public.bot_create_internal(uuid,text,text,text,text,text,text)
   to service_role;
 
 create or replace function public.bot_list_owned_internal(
@@ -818,11 +866,324 @@ revoke all on function public.bot_list_owned_internal(uuid)
 grant execute on function public.bot_list_owned_internal(uuid)
   to service_role;
 
+create or replace function public.bot_creation_eligibility_internal(
+  p_actor_id uuid
+)
+returns table(
+  email_verified boolean,
+  phone_verified boolean,
+  account_age_met boolean,
+  not_banned boolean,
+  under_limit boolean,
+  active_bot_count integer,
+  max_bots integer,
+  can_create boolean
+)
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+  with eligibility as (
+    select
+      p_actor_id is not null and exists (
+        select 1
+        from auth.users auth_user
+        where auth_user.id = p_actor_id
+          and auth_user.email_confirmed_at is not null
+      ) as email_verified,
+      p_actor_id is not null and exists (
+        select 1
+        from public.profile_contacts contact
+        where contact.user_id = p_actor_id
+          and contact.phone_verified is true
+          and contact.phone_verified_at is not null
+      ) as phone_verified,
+      p_actor_id is not null and exists (
+        select 1
+        from auth.users auth_user
+        where auth_user.id = p_actor_id
+          and auth_user.created_at <= pg_catalog.now() - interval '24 hours'
+      ) as account_age_met,
+      p_actor_id is not null and not exists (
+        select 1
+        from public.bans ban
+        where ban.user_id = p_actor_id
+          and (ban.expires_at is null or ban.expires_at > pg_catalog.now())
+      ) as not_banned,
+      (
+        select pg_catalog.count(*)::integer
+        from public.bot_owners owner_row
+        join public.bots owned_bot on owned_bot.id = owner_row.bot_id
+        where owner_row.user_id = p_actor_id
+          and owner_row.role = 'owner'
+          and owned_bot.state <> 'deleted'
+      ) as active_bot_count
+  )
+  select
+    eligibility.email_verified,
+    eligibility.phone_verified,
+    eligibility.account_age_met,
+    eligibility.not_banned,
+    eligibility.active_bot_count < 3 as under_limit,
+    eligibility.active_bot_count,
+    3 as max_bots,
+    eligibility.email_verified
+      and eligibility.phone_verified
+      and eligibility.account_age_met
+      and eligibility.not_banned
+      and eligibility.active_bot_count < 3 as can_create
+  from eligibility;
+$function$;
+
+revoke all on function public.bot_creation_eligibility_internal(uuid)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_creation_eligibility_internal(uuid)
+  to service_role;
+
+create or replace function public.bot_management_detail_internal(
+  p_actor_id uuid,
+  p_bot_id uuid
+)
+returns table(
+  bot_id uuid,
+  username text,
+  display_name text,
+  description text,
+  avatar_url text,
+  state text,
+  delete_after timestamptz,
+  owner_role text,
+  active_token_prefix text,
+  token_created_at timestamptz,
+  token_last_used_at timestamptz,
+  created_at timestamptz,
+  updated_at timestamptz,
+  commands jsonb,
+  developers jsonb,
+  privacy jsonb,
+  webhook_configured boolean,
+  webhook_url text,
+  delivery_mode text,
+  pending_update_count integer,
+  failure_count integer,
+  last_error_code text,
+  diagnostics_refreshed_at timestamptz
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+declare
+  v_bot public.bots%rowtype;
+  v_role text;
+  v_token private.bot_tokens%rowtype;
+  v_webhook private.bot_webhooks%rowtype;
+  v_webhook_found boolean := false;
+begin
+  if p_actor_id is null or p_bot_id is null then
+    raise exception 'bot_management_input_invalid' using errcode = '22023';
+  end if;
+
+  select bot.* into v_bot
+  from public.bots bot
+  where bot.id = p_bot_id;
+  if not found then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+
+  select owner_row.role into v_role
+  from public.bot_owners owner_row
+  where owner_row.bot_id = p_bot_id
+    and owner_row.user_id = p_actor_id
+    and owner_row.role in ('owner','developer');
+  if not found then
+    raise exception 'bot_management_forbidden' using errcode = '42501';
+  end if;
+
+  select stored_token.* into v_token
+  from private.bot_tokens stored_token
+  where stored_token.bot_id = p_bot_id
+    and stored_token.revoked_at is null
+  order by stored_token.created_at desc
+  limit 1;
+
+  select webhook.* into v_webhook
+  from private.bot_webhooks webhook
+  where webhook.bot_id = p_bot_id;
+  v_webhook_found := found;
+
+  return query select
+    v_bot.id,
+    v_bot.username,
+    v_bot.display_name,
+    v_bot.description,
+    v_bot.avatar_url,
+    v_bot.state,
+    v_bot.delete_after,
+    v_role,
+    v_token.token_prefix,
+    v_token.created_at,
+    v_token.last_used_at,
+    v_bot.created_at,
+    v_bot.updated_at,
+    coalesce((
+      select pg_catalog.jsonb_agg(
+        pg_catalog.jsonb_build_object(
+          'command', command_row.command,
+          'description', command_row.description
+        ) order by command_row.sort_order, command_row.command
+      )
+      from public.bot_commands command_row
+      where command_row.bot_id = p_bot_id
+    ), '[]'::jsonb),
+    coalesce((
+      select pg_catalog.jsonb_agg(
+        pg_catalog.jsonb_build_object(
+          'user_id', owner_row.user_id,
+          'display_name', coalesce(profile.full_name, 'Пользователь'),
+          'username', profile.username,
+          'created_at', owner_row.created_at
+        ) order by owner_row.created_at, owner_row.user_id
+      )
+      from public.bot_owners owner_row
+      join public.profiles profile on profile.id = owner_row.user_id
+      where owner_row.bot_id = p_bot_id
+        and owner_row.role = 'developer'
+    ), '[]'::jsonb),
+    coalesce((
+      select pg_catalog.jsonb_agg(
+        pg_catalog.jsonb_build_object(
+          'chat_id', bot_member.chat_id,
+          'chat_name', coalesce(chat.name, 'Чат'),
+          'privacy_mode', bot_member.privacy_mode,
+          'full_visibility_requested_at', bot_member.full_visibility_requested_at,
+          'full_visibility_approved', bot_member.full_visibility_approved_by is not null
+        ) order by bot_member.joined_at, bot_member.chat_id
+      )
+      from public.chat_bot_members bot_member
+      join public.chats chat on chat.id = bot_member.chat_id
+      where bot_member.bot_id = p_bot_id
+        and bot_member.removed_at is null
+    ), '[]'::jsonb),
+    v_webhook_found and v_webhook.state = 'enabled',
+    case
+      when v_webhook_found and v_webhook.state = 'enabled'
+        then v_webhook.target_url
+      else null
+    end,
+    case
+      when v_webhook_found and v_webhook.state = 'enabled' then 'webhook'
+      when exists (
+        select 1 from private.bot_delivery_leases lease
+        where lease.bot_id = p_bot_id
+          and lease.delivery_mode = 'polling'
+          and lease.expires_at > pg_catalog.now()
+      ) then 'polling'
+      else null
+    end,
+    (
+      select least(pg_catalog.count(*), 1000000)::integer
+      from (
+        select 1
+        from private.bot_updates queued
+        where queued.bot_id = p_bot_id
+          and queued.acknowledged_at is null
+          and queued.expires_at > pg_catalog.now()
+        limit 1000001
+      ) bounded_pending
+    ),
+    case when v_webhook_found then v_webhook.failure_count else 0 end,
+    case when v_webhook_found then v_webhook.last_error_code else null end,
+    pg_catalog.now();
+end
+$function$;
+
+revoke all on function public.bot_management_detail_internal(uuid,uuid)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_management_detail_internal(uuid,uuid)
+  to service_role;
+
+create or replace function public.bot_management_diagnostics_internal(
+  p_actor_id uuid,
+  p_bot_id uuid
+)
+returns table(
+  delivery_mode text,
+  webhook_configured boolean,
+  pending_update_count integer,
+  failure_count integer,
+  last_error_code text,
+  diagnostics_refreshed_at timestamptz
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+declare
+  v_webhook private.bot_webhooks%rowtype;
+  v_webhook_found boolean := false;
+begin
+  if p_actor_id is null or p_bot_id is null then
+    raise exception 'bot_management_input_invalid' using errcode = '22023';
+  end if;
+  if not exists (
+    select 1
+    from public.bot_owners owner_row
+    where owner_row.bot_id = p_bot_id
+      and owner_row.user_id = p_actor_id
+      and owner_row.role in ('owner','developer')
+  ) then
+    raise exception 'bot_management_forbidden' using errcode = '42501';
+  end if;
+  select webhook.* into v_webhook
+  from private.bot_webhooks webhook
+  where webhook.bot_id = p_bot_id;
+  v_webhook_found := found;
+
+  return query select
+    case
+      when v_webhook_found and v_webhook.state = 'enabled' then 'webhook'
+      when exists (
+        select 1 from private.bot_delivery_leases lease
+        where lease.bot_id = p_bot_id
+          and lease.delivery_mode = 'polling'
+          and lease.expires_at > pg_catalog.now()
+      ) then 'polling'
+      else null
+    end,
+    v_webhook_found and v_webhook.state = 'enabled',
+    (
+      select least(pg_catalog.count(*), 1000000)::integer
+      from (
+        select 1
+        from private.bot_updates queued
+        where queued.bot_id = p_bot_id
+          and queued.acknowledged_at is null
+          and queued.expires_at > pg_catalog.now()
+        limit 1000001
+      ) bounded_pending
+    ),
+    case when v_webhook_found then v_webhook.failure_count else 0 end,
+    case when v_webhook_found then v_webhook.last_error_code else null end,
+    pg_catalog.now();
+end
+$function$;
+
+revoke all on function public.bot_management_diagnostics_internal(uuid,uuid)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_management_diagnostics_internal(uuid,uuid)
+  to service_role;
+
 create or replace function public.bot_rotate_token_internal(
   p_actor_id uuid,
   p_bot_id uuid,
   p_token_prefix text,
-  p_token_hash text
+  p_token_hash text,
+  p_expected_token_prefix text default null,
+  p_request_id text default null
 )
 returns table(token_id uuid, token_prefix text, created_at timestamptz)
 language plpgsql
@@ -830,25 +1191,51 @@ security definer
 set search_path = ''
 as $function$
 declare
+  v_bot public.bots%rowtype;
   v_token private.bot_tokens%rowtype;
+  v_current_token_prefix text;
+  v_request_id text := coalesce(p_request_id, 'unknown');
 begin
   if p_actor_id is null or p_bot_id is null
      or p_token_prefix is null
      or p_token_hash is null
      or p_token_prefix !~ '^[A-Za-z0-9_-]{8,24}$'
-     or p_token_hash !~ '^[0-9a-f]{64}$' then
+     or p_token_hash !~ '^[0-9a-f]{64}$'
+     or (p_expected_token_prefix is not null
+       and p_expected_token_prefix !~ '^[A-Za-z0-9_-]{8,24}$')
+     or (p_request_id is not null
+       and p_request_id !~ '^[A-Za-z0-9._:-]{1,128}$') then
     raise exception 'bot_token_input_invalid' using errcode = '22023';
   end if;
-  perform 1
-    from public.bots bot
-    join public.bot_owners owner_row on owner_row.bot_id = bot.id
-    where bot.id = p_bot_id
+
+  select bot.* into v_bot
+  from public.bots bot
+  where bot.id = p_bot_id
+  for update of bot;
+  if not found then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+  if not exists (
+    select 1
+    from public.bot_owners owner_row
+    where owner_row.bot_id = p_bot_id
       and owner_row.user_id = p_actor_id
       and owner_row.role = 'owner'
-      and bot.state not in ('pending_delete','deleted')
-    for update of bot;
-  if not found then
+  ) then
     raise exception 'bot_owner_required' using errcode = '42501';
+  end if;
+  if v_bot.state not in ('active','paused') then
+    raise exception 'bot_state_conflict' using errcode = '55000';
+  end if;
+
+  select stored_token.token_prefix into v_current_token_prefix
+  from private.bot_tokens stored_token
+  where stored_token.bot_id = p_bot_id
+    and stored_token.revoked_at is null
+  order by stored_token.created_at desc
+  limit 1;
+  if v_current_token_prefix is distinct from p_expected_token_prefix then
+    raise exception 'bot_token_precondition_failed' using errcode = '55000';
   end if;
 
   update private.bot_tokens stored_token
@@ -860,6 +1247,17 @@ begin
   values (p_bot_id, p_token_prefix, p_token_hash)
   returning * into v_token;
 
+  insert into private.bot_audit_events(bot_id, action, metadata)
+  values (
+    p_bot_id,
+    'bot_token_rotated',
+    pg_catalog.jsonb_build_object(
+      'actor_id', p_actor_id,
+      'request_id', v_request_id,
+      'result', 'success'
+    )
+  );
+
   return query select v_token.id, v_token.token_prefix, v_token.created_at;
 exception
   when unique_violation then
@@ -867,9 +1265,1032 @@ exception
 end
 $function$;
 
-revoke all on function public.bot_rotate_token_internal(uuid,uuid,text,text)
+revoke all on function public.bot_rotate_token_internal(uuid,uuid,text,text,text,text)
   from public, anon, authenticated, service_role;
-grant execute on function public.bot_rotate_token_internal(uuid,uuid,text,text)
+grant execute on function public.bot_rotate_token_internal(uuid,uuid,text,text,text,text)
+  to service_role;
+
+create or replace function public.bot_update_profile_internal(
+  p_actor_id uuid,
+  p_bot_id uuid,
+  p_display_name text,
+  p_description text,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_bot public.bots%rowtype;
+  v_display_name text := pg_catalog.btrim(p_display_name);
+begin
+  if p_actor_id is null or p_bot_id is null
+     or p_display_name is null or p_description is null
+     or pg_catalog.length(v_display_name) not between 2 and 64
+     or pg_catalog.length(p_description) > 512
+     or p_request_id is null
+     or p_request_id !~ '^[A-Za-z0-9._:-]{1,128}$' then
+    raise exception 'bot_profile_input_invalid' using errcode = '22023';
+  end if;
+  select bot.* into v_bot
+  from public.bots bot
+  where bot.id = p_bot_id
+  for update of bot;
+  if not found then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+  if not exists (
+    select 1 from public.bot_owners owner_row
+    where owner_row.bot_id = p_bot_id
+      and owner_row.user_id = p_actor_id
+      and owner_row.role = 'owner'
+  ) then
+    raise exception 'bot_owner_required' using errcode = '42501';
+  end if;
+  if v_bot.state not in ('active','paused') then
+    raise exception 'bot_state_conflict' using errcode = '55000';
+  end if;
+  update public.bots bot
+  set display_name = v_display_name,
+      description = p_description,
+      updated_at = pg_catalog.now()
+  where bot.id = p_bot_id;
+  insert into private.bot_audit_events(bot_id, action, metadata)
+  values (
+    p_bot_id,
+    'bot_profile_updated',
+    pg_catalog.jsonb_build_object(
+      'actor_id', p_actor_id,
+      'request_id', p_request_id,
+      'result', 'success'
+    )
+  );
+  return pg_catalog.jsonb_build_object('success', true);
+end
+$function$;
+
+revoke all on function public.bot_update_profile_internal(uuid,uuid,text,text,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_update_profile_internal(uuid,uuid,text,text,text)
+  to service_role;
+
+create or replace function public.bot_management_commands_replace_internal(
+  p_actor_id uuid,
+  p_bot_id uuid,
+  p_commands jsonb,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_bot public.bots%rowtype;
+begin
+  if p_actor_id is null or p_bot_id is null
+     or p_commands is null
+     or pg_catalog.jsonb_typeof(p_commands) <> 'array'
+     or pg_catalog.jsonb_array_length(p_commands) > 100
+     or pg_catalog.octet_length(p_commands::text) > 32768
+     or p_request_id is null
+     or p_request_id !~ '^[A-Za-z0-9._:-]{1,128}$'
+     or exists (
+       select 1
+       from pg_catalog.jsonb_array_elements(p_commands) command_element(value)
+       where pg_catalog.jsonb_typeof(command_element.value) <> 'object'
+          or (select pg_catalog.count(*) from pg_catalog.jsonb_object_keys(command_element.value)) <> 2
+          or not (command_element.value ? 'command')
+          or not (command_element.value ? 'description')
+          or pg_catalog.jsonb_typeof(command_element.value->'command') <> 'string'
+          or pg_catalog.jsonb_typeof(command_element.value->'description') <> 'string'
+          or (command_element.value->>'command') !~ '^[a-z][a-z0-9_]{0,31}$'
+          or command_element.value->>'description' <> pg_catalog.btrim(command_element.value->>'description')
+          or pg_catalog.length(command_element.value->>'description') not between 1 and 256
+     )
+     or (
+       select pg_catalog.count(*) <> pg_catalog.count(distinct command_element.value->>'command')
+       from pg_catalog.jsonb_array_elements(p_commands) command_element(value)
+     ) then
+    raise exception 'bot_commands_input_invalid' using errcode = '22023';
+  end if;
+  select bot.* into v_bot
+  from public.bots bot
+  where bot.id = p_bot_id
+  for update of bot;
+  if not found then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+  if not exists (
+    select 1 from public.bot_owners owner_row
+    where owner_row.bot_id = p_bot_id
+      and owner_row.user_id = p_actor_id
+      and owner_row.role in ('owner','developer')
+  ) then
+    raise exception 'bot_management_forbidden' using errcode = '42501';
+  end if;
+  if v_bot.state not in ('active','paused') then
+    raise exception 'bot_state_conflict' using errcode = '55000';
+  end if;
+  delete from public.bot_commands command_row
+  where command_row.bot_id = p_bot_id;
+  insert into public.bot_commands(bot_id, command, description, sort_order)
+  select
+    p_bot_id,
+    command_element.value->>'command',
+    command_element.value->>'description',
+    (command_element.ordinality - 1)::integer
+  from pg_catalog.jsonb_array_elements(p_commands)
+    with ordinality command_element(value, ordinality);
+  insert into private.bot_audit_events(bot_id, action, metadata)
+  values (
+    p_bot_id,
+    'bot_commands_updated',
+    pg_catalog.jsonb_build_object(
+      'actor_id', p_actor_id,
+      'request_id', p_request_id,
+      'result', 'success',
+      'command_count', pg_catalog.jsonb_array_length(p_commands)
+    )
+  );
+  return pg_catalog.jsonb_build_object('success', true);
+end
+$function$;
+
+revoke all on function public.bot_management_commands_replace_internal(uuid,uuid,jsonb,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_management_commands_replace_internal(uuid,uuid,jsonb,text)
+  to service_role;
+
+create or replace function public.bot_pause_internal(
+  p_actor_id uuid,
+  p_bot_id uuid,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_bot public.bots%rowtype;
+begin
+  if p_actor_id is null or p_bot_id is null or p_request_id is null
+     or p_request_id !~ '^[A-Za-z0-9._:-]{1,128}$' then
+    raise exception 'bot_lifecycle_input_invalid' using errcode = '22023';
+  end if;
+  select bot.* into v_bot from public.bots bot
+  where bot.id = p_bot_id for update of bot;
+  if not found then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+  if not exists (
+    select 1 from public.bot_owners owner_row
+    where owner_row.bot_id = p_bot_id
+      and owner_row.user_id = p_actor_id
+      and owner_row.role = 'owner'
+  ) then
+    raise exception 'bot_owner_required' using errcode = '42501';
+  end if;
+  if v_bot.state <> 'active' then
+    raise exception 'bot_state_conflict' using errcode = '55000';
+  end if;
+  update public.bots bot set state = 'paused', updated_at = pg_catalog.now()
+  where bot.id = p_bot_id;
+  insert into private.bot_audit_events(bot_id, action, metadata)
+  values (
+    p_bot_id,
+    'bot_paused',
+    pg_catalog.jsonb_build_object(
+      'actor_id', p_actor_id,
+      'request_id', p_request_id,
+      'result', 'success'
+    )
+  );
+  return pg_catalog.jsonb_build_object('success', true);
+end
+$function$;
+
+revoke all on function public.bot_pause_internal(uuid,uuid,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_pause_internal(uuid,uuid,text)
+  to service_role;
+
+create or replace function public.bot_resume_internal(
+  p_actor_id uuid,
+  p_bot_id uuid,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_bot public.bots%rowtype;
+begin
+  if p_actor_id is null or p_bot_id is null or p_request_id is null
+     or p_request_id !~ '^[A-Za-z0-9._:-]{1,128}$' then
+    raise exception 'bot_lifecycle_input_invalid' using errcode = '22023';
+  end if;
+  select bot.* into v_bot from public.bots bot
+  where bot.id = p_bot_id for update of bot;
+  if not found then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+  if not exists (
+    select 1 from public.bot_owners owner_row
+    where owner_row.bot_id = p_bot_id
+      and owner_row.user_id = p_actor_id
+      and owner_row.role = 'owner'
+  ) then
+    raise exception 'bot_owner_required' using errcode = '42501';
+  end if;
+  if v_bot.state <> 'paused' then
+    raise exception 'bot_state_conflict' using errcode = '55000';
+  end if;
+  if not exists (
+    select 1 from private.bot_tokens stored_token
+    where stored_token.bot_id = p_bot_id
+      and stored_token.revoked_at is null
+  ) then
+    raise exception 'bot_active_token_required' using errcode = '55000';
+  end if;
+  update public.bots bot set state = 'active', updated_at = pg_catalog.now()
+  where bot.id = p_bot_id;
+  insert into private.bot_audit_events(bot_id, action, metadata)
+  values (
+    p_bot_id,
+    'bot_resumed',
+    pg_catalog.jsonb_build_object(
+      'actor_id', p_actor_id,
+      'request_id', p_request_id,
+      'result', 'success'
+    )
+  );
+  return pg_catalog.jsonb_build_object('success', true);
+end
+$function$;
+
+revoke all on function public.bot_resume_internal(uuid,uuid,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_resume_internal(uuid,uuid,text)
+  to service_role;
+
+create or replace function public.bot_developer_add_internal(
+  p_actor_id uuid,
+  p_bot_id uuid,
+  p_username text,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_bot public.bots%rowtype;
+  v_developer_id uuid;
+  v_username text := pg_catalog.lower(pg_catalog.btrim(p_username));
+begin
+  if p_actor_id is null or p_bot_id is null or p_username is null
+     or v_username !~ '^[a-z0-9_.-]{2,64}$'
+     or p_request_id is null
+     or p_request_id !~ '^[A-Za-z0-9._:-]{1,128}$' then
+    raise exception 'bot_developer_input_invalid' using errcode = '22023';
+  end if;
+  select bot.* into v_bot from public.bots bot
+  where bot.id = p_bot_id for update of bot;
+  if not found then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+  if not exists (
+    select 1 from public.bot_owners owner_row
+    where owner_row.bot_id = p_bot_id
+      and owner_row.user_id = p_actor_id
+      and owner_row.role = 'owner'
+  ) then
+    raise exception 'bot_owner_required' using errcode = '42501';
+  end if;
+  if v_bot.state not in ('active','paused') then
+    raise exception 'bot_state_conflict' using errcode = '55000';
+  end if;
+  select profile.id into v_developer_id
+  from public.profiles profile
+  where pg_catalog.lower(profile.username) = v_username;
+  if not found then
+    raise exception 'bot_developer_not_found' using errcode = 'P0002';
+  end if;
+  if v_developer_id = p_actor_id then
+    raise exception 'bot_developer_conflict' using errcode = '23505';
+  end if;
+  insert into public.bot_owners(bot_id, user_id, role)
+  values (p_bot_id, v_developer_id, 'developer');
+  insert into private.bot_audit_events(bot_id, action, metadata)
+  values (
+    p_bot_id,
+    'bot_developer_added',
+    pg_catalog.jsonb_build_object(
+      'actor_id', p_actor_id,
+      'request_id', p_request_id,
+      'result', 'success',
+      'developer_id', v_developer_id
+    )
+  );
+  return pg_catalog.jsonb_build_object('success', true);
+exception
+  when unique_violation then
+    raise exception 'bot_developer_conflict' using errcode = '23505';
+end
+$function$;
+
+revoke all on function public.bot_developer_add_internal(uuid,uuid,text,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_developer_add_internal(uuid,uuid,text,text)
+  to service_role;
+
+create or replace function public.bot_developer_remove_internal(
+  p_actor_id uuid,
+  p_bot_id uuid,
+  p_developer_id uuid,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_bot public.bots%rowtype;
+begin
+  if p_actor_id is null or p_bot_id is null or p_developer_id is null
+     or p_request_id is null
+     or p_request_id !~ '^[A-Za-z0-9._:-]{1,128}$' then
+    raise exception 'bot_developer_input_invalid' using errcode = '22023';
+  end if;
+  select bot.* into v_bot from public.bots bot
+  where bot.id = p_bot_id for update of bot;
+  if not found then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+  if not exists (
+    select 1 from public.bot_owners owner_row
+    where owner_row.bot_id = p_bot_id
+      and owner_row.user_id = p_actor_id
+      and owner_row.role = 'owner'
+  ) then
+    raise exception 'bot_owner_required' using errcode = '42501';
+  end if;
+  if v_bot.state not in ('active','paused') then
+    raise exception 'bot_state_conflict' using errcode = '55000';
+  end if;
+  delete from public.bot_owners owner_row
+  where owner_row.bot_id = p_bot_id
+    and owner_row.user_id = p_developer_id
+    and owner_row.role = 'developer';
+  if not found then
+    raise exception 'bot_developer_not_found' using errcode = 'P0002';
+  end if;
+  insert into private.bot_audit_events(bot_id, action, metadata)
+  values (
+    p_bot_id,
+    'bot_developer_removed',
+    pg_catalog.jsonb_build_object(
+      'actor_id', p_actor_id,
+      'request_id', p_request_id,
+      'result', 'success',
+      'developer_id', p_developer_id
+    )
+  );
+  return pg_catalog.jsonb_build_object('success', true);
+end
+$function$;
+
+revoke all on function public.bot_developer_remove_internal(uuid,uuid,uuid,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_developer_remove_internal(uuid,uuid,uuid,text)
+  to service_role;
+
+create or replace function public.bot_revoke_token_internal(
+  p_actor_id uuid,
+  p_bot_id uuid,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_bot public.bots%rowtype;
+begin
+  if p_actor_id is null or p_bot_id is null or p_request_id is null
+     or p_request_id !~ '^[A-Za-z0-9._:-]{1,128}$' then
+    raise exception 'bot_token_input_invalid' using errcode = '22023';
+  end if;
+  select bot.* into v_bot from public.bots bot
+  where bot.id = p_bot_id for update of bot;
+  if not found then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+  if not exists (
+    select 1 from public.bot_owners owner_row
+    where owner_row.bot_id = p_bot_id
+      and owner_row.user_id = p_actor_id
+      and owner_row.role = 'owner'
+  ) then
+    raise exception 'bot_owner_required' using errcode = '42501';
+  end if;
+  if v_bot.state not in ('active','paused') then
+    raise exception 'bot_state_conflict' using errcode = '55000';
+  end if;
+  update private.bot_tokens stored_token
+  set revoked_at = pg_catalog.now()
+  where stored_token.bot_id = p_bot_id
+    and stored_token.revoked_at is null;
+  if not found then
+    raise exception 'bot_active_token_not_found' using errcode = 'P0002';
+  end if;
+  insert into private.bot_audit_events(bot_id, action, metadata)
+  values (
+    p_bot_id,
+    'bot_token_revoked',
+    pg_catalog.jsonb_build_object(
+      'actor_id', p_actor_id,
+      'request_id', p_request_id,
+      'result', 'success'
+    )
+  );
+  return pg_catalog.jsonb_build_object('success', true);
+end
+$function$;
+
+revoke all on function public.bot_revoke_token_internal(uuid,uuid,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_revoke_token_internal(uuid,uuid,text)
+  to service_role;
+
+create or replace function public.bot_request_deletion_internal(
+  p_actor_id uuid,
+  p_bot_id uuid,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_bot public.bots%rowtype;
+begin
+  if p_actor_id is null or p_bot_id is null or p_request_id is null
+     or p_request_id !~ '^[A-Za-z0-9._:-]{1,128}$' then
+    raise exception 'bot_lifecycle_input_invalid' using errcode = '22023';
+  end if;
+  select bot.* into v_bot from public.bots bot
+  where bot.id = p_bot_id for update of bot;
+  if not found then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+  if not exists (
+    select 1 from public.bot_owners owner_row
+    where owner_row.bot_id = p_bot_id
+      and owner_row.user_id = p_actor_id
+      and owner_row.role = 'owner'
+  ) then
+    raise exception 'bot_owner_required' using errcode = '42501';
+  end if;
+  if v_bot.state not in ('active','paused') then
+    raise exception 'bot_state_conflict' using errcode = '55000';
+  end if;
+  update public.bots bot
+  set state = 'pending_delete',
+      delete_after = pg_catalog.now() + interval '7 days',
+      updated_at = pg_catalog.now()
+  where bot.id = p_bot_id;
+  update private.bot_tokens stored_token
+  set revoked_at = pg_catalog.now()
+  where stored_token.bot_id = p_bot_id
+    and stored_token.revoked_at is null;
+  update private.bot_webhooks webhook
+  set state = 'disabled',
+      webhook_epoch = webhook.webhook_epoch + 1,
+      updated_at = pg_catalog.now()
+  where webhook.bot_id = p_bot_id;
+  delete from private.bot_delivery_leases lease
+  where lease.bot_id = p_bot_id;
+  insert into private.bot_audit_events(bot_id, action, metadata)
+  values (
+    p_bot_id,
+    'bot_deletion_requested',
+    pg_catalog.jsonb_build_object(
+      'actor_id', p_actor_id,
+      'request_id', p_request_id,
+      'result', 'success'
+    )
+  );
+  return pg_catalog.jsonb_build_object('success', true);
+end
+$function$;
+
+revoke all on function public.bot_request_deletion_internal(uuid,uuid,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_request_deletion_internal(uuid,uuid,text)
+  to service_role;
+
+create or replace function public.bot_cancel_deletion_internal(
+  p_actor_id uuid,
+  p_bot_id uuid,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_bot public.bots%rowtype;
+begin
+  if p_actor_id is null or p_bot_id is null or p_request_id is null
+     or p_request_id !~ '^[A-Za-z0-9._:-]{1,128}$' then
+    raise exception 'bot_lifecycle_input_invalid' using errcode = '22023';
+  end if;
+  select bot.* into v_bot from public.bots bot
+  where bot.id = p_bot_id for update of bot;
+  if not found then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+  if not exists (
+    select 1 from public.bot_owners owner_row
+    where owner_row.bot_id = p_bot_id
+      and owner_row.user_id = p_actor_id
+      and owner_row.role = 'owner'
+  ) then
+    raise exception 'bot_owner_required' using errcode = '42501';
+  end if;
+  if v_bot.state <> 'pending_delete'
+     or v_bot.delete_after is null
+     or v_bot.delete_after <= pg_catalog.now() then
+    raise exception 'bot_state_conflict' using errcode = '55000';
+  end if;
+  update public.bots bot
+  set state = 'paused', delete_after = null, updated_at = pg_catalog.now()
+  where bot.id = p_bot_id;
+  insert into private.bot_audit_events(bot_id, action, metadata)
+  values (
+    p_bot_id,
+    'bot_deletion_cancelled',
+    pg_catalog.jsonb_build_object(
+      'actor_id', p_actor_id,
+      'request_id', p_request_id,
+      'result', 'success'
+    )
+  );
+  return pg_catalog.jsonb_build_object('success', true);
+end
+$function$;
+
+revoke all on function public.bot_cancel_deletion_internal(uuid,uuid,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_cancel_deletion_internal(uuid,uuid,text)
+  to service_role;
+
+create or replace function public.bot_privacy_request_internal(
+  p_actor_id uuid,
+  p_bot_id uuid,
+  p_chat_id uuid,
+  p_request_full_visibility boolean,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_bot public.bots%rowtype;
+  v_member public.chat_bot_members%rowtype;
+begin
+  if p_actor_id is null or p_bot_id is null or p_chat_id is null
+     or p_request_full_visibility is null or p_request_id is null
+     or p_request_id !~ '^[A-Za-z0-9._:-]{1,128}$' then
+    raise exception 'bot_privacy_input_invalid' using errcode = '22023';
+  end if;
+  select bot.* into v_bot from public.bots bot
+  where bot.id = p_bot_id for update of bot;
+  if not found then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+  if not exists (
+    select 1 from public.bot_owners owner_row
+    where owner_row.bot_id = p_bot_id
+      and owner_row.user_id = p_actor_id
+      and owner_row.role in ('owner','developer')
+  ) then
+    raise exception 'bot_management_forbidden' using errcode = '42501';
+  end if;
+  if v_bot.state not in ('active','paused') then
+    raise exception 'bot_state_conflict' using errcode = '55000';
+  end if;
+  select bot_member.* into v_member
+  from public.chat_bot_members bot_member
+  where bot_member.bot_id = p_bot_id
+    and bot_member.chat_id = p_chat_id
+    and bot_member.removed_at is null
+  for update of bot_member;
+  if not found then
+    raise exception 'bot_membership_not_found' using errcode = 'P0002';
+  end if;
+  if v_member.privacy_mode <> 'restricted' then
+    raise exception 'bot_privacy_state_conflict' using errcode = '55000';
+  end if;
+  update public.chat_bot_members bot_member
+  set full_visibility_requested_at = case
+        when p_request_full_visibility then pg_catalog.now()
+        else null
+      end,
+      updated_at = pg_catalog.now()
+  where bot_member.bot_id = p_bot_id
+    and bot_member.chat_id = p_chat_id;
+  insert into private.bot_audit_events(bot_id, action, metadata)
+  values (
+    p_bot_id,
+    case when p_request_full_visibility
+      then 'bot_privacy_requested'
+      else 'bot_privacy_cancelled'
+    end,
+    pg_catalog.jsonb_build_object(
+      'actor_id', p_actor_id,
+      'request_id', p_request_id,
+      'result', 'success',
+      'chat_id', p_chat_id
+    )
+  );
+  return pg_catalog.jsonb_build_object('success', true);
+end
+$function$;
+
+revoke all on function public.bot_privacy_request_internal(uuid,uuid,uuid,boolean,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_privacy_request_internal(uuid,uuid,uuid,boolean,text)
+  to service_role;
+
+create or replace function public.bot_management_webhook_set_internal(
+  p_actor_id uuid,
+  p_bot_id uuid,
+  p_url text,
+  p_secret_ciphertext text,
+  p_secret_fingerprint text,
+  p_drop_pending_updates boolean,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_bot public.bots%rowtype;
+  v_lease_token uuid := pg_catalog.gen_random_uuid();
+begin
+  if p_actor_id is null or p_bot_id is null or p_url is null
+     or p_secret_ciphertext is null or p_secret_fingerprint is null
+     or p_drop_pending_updates is null or p_request_id is null
+     or p_request_id !~ '^[A-Za-z0-9._:-]{1,128}$'
+     or pg_catalog.octet_length(p_url) not between 10 and 2048
+     or p_url !~ '^https://[^/@[:space:]]+(?::[0-9]{1,5})?(/|$)'
+     or p_url ~ '^https://[^/]*@'
+     or pg_catalog.octet_length(p_secret_ciphertext) not between 55 and 4103
+     or p_secret_ciphertext !~ '^enc:v1:[A-Za-z0-9_-]+$'
+     or p_secret_fingerprint !~ '^[0-9a-f]{16,64}$' then
+    raise exception 'bot_webhook_input_invalid' using errcode = '22023';
+  end if;
+  select bot.* into v_bot from public.bots bot
+  where bot.id = p_bot_id for update of bot;
+  if not found then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+  if not exists (
+    select 1 from public.bot_owners owner_row
+    where owner_row.bot_id = p_bot_id
+      and owner_row.user_id = p_actor_id
+      and owner_row.role in ('owner','developer')
+  ) then
+    raise exception 'bot_management_forbidden' using errcode = '42501';
+  end if;
+  if v_bot.state not in ('active','paused') then
+    raise exception 'bot_state_conflict' using errcode = '55000';
+  end if;
+
+  update private.bot_delivery_attempts attempt
+  set status = case when attempt.attempt_count >= 12 then 'dead_letter' else 'retry' end,
+      available_at = case when attempt.attempt_count >= 12
+        then attempt.available_at else pg_catalog.now() end,
+      claim_token = null,
+      claimed_at = null,
+      webhook_epoch = null,
+      error_code = 'worker_claim_timeout',
+      updated_at = pg_catalog.now(),
+      completed_at = case when attempt.attempt_count >= 12
+        then pg_catalog.now() else null end
+  where attempt.bot_id = p_bot_id
+    and attempt.status in ('claimed','dispatching')
+    and attempt.claimed_at <= pg_catalog.now() - interval '2 minutes';
+  if exists (
+    select 1 from private.bot_delivery_attempts attempt
+    where attempt.bot_id = p_bot_id
+      and attempt.status = 'dispatching'
+  ) then
+    raise exception 'bot_delivery_in_flight' using errcode = '55000';
+  end if;
+
+  insert into private.bot_delivery_leases(
+    bot_id, delivery_mode, lease_token, expires_at, updated_at
+  ) values (
+    p_bot_id, 'webhook', v_lease_token, 'infinity'::timestamptz, pg_catalog.now()
+  )
+  on conflict (bot_id) do update
+  set delivery_mode = 'webhook',
+      lease_token = excluded.lease_token,
+      expires_at = excluded.expires_at,
+      updated_at = excluded.updated_at
+  where private.bot_delivery_leases.expires_at <= pg_catalog.now()
+     or private.bot_delivery_leases.delivery_mode = 'webhook';
+  if not found then
+    raise exception 'bot_polling_active' using errcode = '55000';
+  end if;
+
+  insert into private.bot_webhooks(
+    bot_id, target_url, secret_ciphertext, secret_fingerprint,
+    webhook_epoch, state, failure_count, last_error_code, updated_at
+  ) values (
+    p_bot_id, p_url, p_secret_ciphertext, p_secret_fingerprint,
+    1, 'enabled', 0, null, pg_catalog.now()
+  )
+  on conflict (bot_id) do update
+  set target_url = excluded.target_url,
+      secret_ciphertext = excluded.secret_ciphertext,
+      secret_fingerprint = excluded.secret_fingerprint,
+      webhook_epoch = private.bot_webhooks.webhook_epoch + 1,
+      state = 'enabled',
+      failure_count = 0,
+      last_error_code = null,
+      updated_at = pg_catalog.now();
+
+  update private.bot_delivery_attempts attempt
+  set status = 'retry',
+      attempt_count = greatest(attempt.attempt_count - 1, 0),
+      available_at = pg_catalog.now(),
+      claim_token = null,
+      claimed_at = null,
+      webhook_epoch = null,
+      error_code = 'webhook_reconfigured',
+      updated_at = pg_catalog.now(),
+      completed_at = null
+  where attempt.bot_id = p_bot_id
+    and attempt.status = 'claimed';
+
+  if p_drop_pending_updates then
+    delete from private.bot_delivery_attempts attempt
+    using private.bot_updates queued
+    where queued.bot_id = p_bot_id
+      and queued.acknowledged_at is null
+      and attempt.bot_id = queued.bot_id
+      and attempt.update_id = queued.update_id;
+    delete from private.bot_updates queued
+    where queued.bot_id = p_bot_id
+      and queued.acknowledged_at is null;
+  end if;
+
+  insert into private.bot_delivery_attempts(bot_id, update_id)
+  select queued.bot_id, queued.update_id
+  from private.bot_updates queued
+  where queued.bot_id = p_bot_id
+    and queued.acknowledged_at is null
+    and queued.expires_at > pg_catalog.now()
+  on conflict (bot_id, update_id) do nothing;
+
+  insert into private.bot_audit_events(bot_id, action, metadata)
+  values (
+    p_bot_id,
+    'bot_management_webhook_set',
+    pg_catalog.jsonb_build_object(
+      'actor_id', p_actor_id,
+      'request_id', p_request_id,
+      'result', 'success',
+      'drop_pending_updates', p_drop_pending_updates
+    )
+  );
+  return pg_catalog.jsonb_build_object('success', true);
+end
+$function$;
+
+revoke all on function public.bot_management_webhook_set_internal(uuid,uuid,text,text,text,boolean,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_management_webhook_set_internal(uuid,uuid,text,text,text,boolean,text)
+  to service_role;
+
+create or replace function public.bot_management_webhook_delete_internal(
+  p_actor_id uuid,
+  p_bot_id uuid,
+  p_drop_pending_updates boolean,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_bot public.bots%rowtype;
+begin
+  if p_actor_id is null or p_bot_id is null
+     or p_drop_pending_updates is null or p_request_id is null
+     or p_request_id !~ '^[A-Za-z0-9._:-]{1,128}$' then
+    raise exception 'bot_webhook_input_invalid' using errcode = '22023';
+  end if;
+  select bot.* into v_bot from public.bots bot
+  where bot.id = p_bot_id for update of bot;
+  if not found then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+  if not exists (
+    select 1 from public.bot_owners owner_row
+    where owner_row.bot_id = p_bot_id
+      and owner_row.user_id = p_actor_id
+      and owner_row.role in ('owner','developer')
+  ) then
+    raise exception 'bot_management_forbidden' using errcode = '42501';
+  end if;
+  if v_bot.state not in ('active','paused') then
+    raise exception 'bot_state_conflict' using errcode = '55000';
+  end if;
+
+  if exists (
+    select 1 from private.bot_delivery_attempts attempt
+    where attempt.bot_id = p_bot_id
+      and attempt.status = 'dispatching'
+      and attempt.claimed_at > pg_catalog.now() - interval '2 minutes'
+  ) then
+    raise exception 'bot_delivery_in_flight' using errcode = '55000';
+  end if;
+  update private.bot_webhooks webhook
+  set state = 'disabled',
+      webhook_epoch = webhook.webhook_epoch + 1,
+      updated_at = pg_catalog.now()
+  where webhook.bot_id = p_bot_id;
+  update private.bot_delivery_attempts attempt
+  set status = 'retry',
+      available_at = pg_catalog.now(),
+      claim_token = null,
+      claimed_at = null,
+      webhook_epoch = null,
+      error_code = 'webhook_disabled',
+      updated_at = pg_catalog.now(),
+      completed_at = null
+  where attempt.bot_id = p_bot_id
+    and attempt.status = 'claimed';
+  if p_drop_pending_updates then
+    delete from private.bot_delivery_attempts attempt
+    using private.bot_updates queued
+    where queued.bot_id = p_bot_id
+      and queued.acknowledged_at is null
+      and attempt.bot_id = queued.bot_id
+      and attempt.update_id = queued.update_id;
+    delete from private.bot_updates queued
+    where queued.bot_id = p_bot_id
+      and queued.acknowledged_at is null;
+  end if;
+  delete from private.bot_delivery_leases lease
+  where lease.bot_id = p_bot_id
+    and lease.delivery_mode = 'webhook';
+  insert into private.bot_audit_events(bot_id, action, metadata)
+  values (
+    p_bot_id,
+    'bot_management_webhook_deleted',
+    pg_catalog.jsonb_build_object(
+      'actor_id', p_actor_id,
+      'request_id', p_request_id,
+      'result', 'success',
+      'drop_pending_updates', p_drop_pending_updates
+    )
+  );
+  return pg_catalog.jsonb_build_object('success', true);
+end
+$function$;
+
+revoke all on function public.bot_management_webhook_delete_internal(uuid,uuid,boolean,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_management_webhook_delete_internal(uuid,uuid,boolean,text)
+  to service_role;
+
+create or replace function public.bot_admin_list_internal(
+  p_actor_id uuid
+)
+returns table(
+  bot_id uuid,
+  username text,
+  display_name text,
+  state text,
+  owner_count integer,
+  developer_count integer,
+  created_at timestamptz,
+  updated_at timestamptz
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+begin
+  if p_actor_id is null
+     or not public.has_permission(p_actor_id, 'bots.suspend') then
+    raise exception 'bot_admin_forbidden' using errcode = '42501';
+  end if;
+  return query
+  select
+    bot.id,
+    bot.username,
+    bot.display_name,
+    bot.state,
+    pg_catalog.count(*) filter (where owner_row.role = 'owner')::integer,
+    pg_catalog.count(*) filter (where owner_row.role = 'developer')::integer,
+    bot.created_at,
+    bot.updated_at
+  from public.bots bot
+  join public.bot_owners owner_row on owner_row.bot_id = bot.id
+  group by bot.id
+  order by bot.updated_at desc, bot.id
+  limit 200;
+end
+$function$;
+
+revoke all on function public.bot_admin_list_internal(uuid)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_admin_list_internal(uuid)
+  to service_role;
+
+create or replace function public.bot_suspend_internal(
+  p_actor_id uuid,
+  p_bot_id uuid,
+  p_suspend boolean,
+  p_request_id text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_bot public.bots%rowtype;
+begin
+  if p_actor_id is null or p_bot_id is null or p_suspend is null
+     or p_request_id is null
+     or p_request_id !~ '^[A-Za-z0-9._:-]{1,128}$' then
+    raise exception 'bot_suspend_input_invalid' using errcode = '22023';
+  end if;
+  select bot.* into v_bot from public.bots bot
+  where bot.id = p_bot_id for update of bot;
+  if not found then
+    raise exception 'bot_identity_not_found' using errcode = 'P0002';
+  end if;
+  if not public.has_permission(p_actor_id, 'bots.suspend') then
+    raise exception 'bot_admin_forbidden' using errcode = '42501';
+  end if;
+  if p_suspend then
+    if v_bot.state not in ('active','paused','suspended') then
+      raise exception 'bot_state_conflict' using errcode = '55000';
+    end if;
+    update public.bots bot
+    set state = 'suspended', delete_after = null, updated_at = pg_catalog.now()
+    where bot.id = p_bot_id;
+  elsif not p_suspend then
+    if v_bot.state <> 'suspended' then
+      raise exception 'bot_state_conflict' using errcode = '55000';
+    end if;
+    update public.bots bot
+    set state = 'paused', delete_after = null, updated_at = pg_catalog.now()
+    where bot.id = p_bot_id;
+  end if;
+  insert into private.bot_audit_events(bot_id, action, metadata)
+  values (
+    p_bot_id,
+    case when p_suspend then 'bot_suspended' else 'bot_unsuspended' end,
+    pg_catalog.jsonb_build_object(
+      'actor_id', p_actor_id,
+      'request_id', p_request_id,
+      'result', 'success'
+    )
+  );
+  return pg_catalog.jsonb_build_object('success', true);
+end
+$function$;
+
+revoke all on function public.bot_suspend_internal(uuid,uuid,boolean,text)
+  from public, anon, authenticated, service_role;
+grant execute on function public.bot_suspend_internal(uuid,uuid,boolean,text)
   to service_role;
 
 create or replace function public.bot_token_lookup_internal(

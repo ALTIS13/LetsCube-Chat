@@ -10,6 +10,10 @@ import {
   type BotMethodHandlers,
 } from "#bot/methodRouter";
 import type { BotTokenRepository } from "#bot/repository";
+import {
+  createBotManagementRouter,
+  type BotManagementDependencies,
+} from "#bot/managementRoutes";
 
 const SAFE_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 
@@ -17,6 +21,9 @@ function safeLogPath(value: unknown): string {
   if (typeof value !== "string") return "unmatched";
   const pathname = value.split("?", 1)[0];
   if (pathname === "/healthz") return "/healthz";
+  if (pathname?.startsWith("/bot/manage/v1/")) {
+    return "/bot/manage/v1/:resource";
+  }
   if (pathname?.startsWith("/bot/v1/")) return "/bot/v1/:method";
   return "unmatched";
 }
@@ -25,6 +32,7 @@ export function createBotGatewayApp(input: {
   logger: Logger;
   handlers: BotMethodHandlers;
   tokenRepository: BotTokenRepository;
+  management?: BotManagementDependencies;
   requestId?: () => string;
 }): Express {
   const app = express();
@@ -66,6 +74,12 @@ export function createBotGatewayApp(input: {
   app.get("/healthz", (_request, response) => {
     response.json({ ok: true, service: "letscube-bot-gateway" });
   });
+  if (input.management) {
+    app.use(
+      "/bot/manage/v1",
+      createBotManagementRouter(input.management),
+    );
+  }
   app.post(
     "/bot/v1/:method",
     createBotMethodRouter({

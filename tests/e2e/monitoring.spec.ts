@@ -16,6 +16,7 @@ test.describe("KUB monitoring foundation", () => {
           refresh_token: "refresh-token-value",
           authorization: "Bearer token-value",
           messageContent: "private chat text",
+          safeNote: "request failed for lc_bot_0123456789.abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
           mediaUrl: "https://project.supabase.co/storage/v1/object/sign/media/file.png?token=secret",
           nested: {
             supabaseKey: "sb_publishable_test_value",
@@ -32,6 +33,7 @@ test.describe("KUB monitoring foundation", () => {
     expect(JSON.stringify(result.redacted)).not.toContain("refresh-token-value");
     expect(JSON.stringify(result.redacted)).not.toContain("Bearer token-value");
     expect(JSON.stringify(result.redacted)).not.toContain("private chat text");
+    expect(JSON.stringify(result.redacted)).not.toContain("lc_bot_0123456789");
     expect(JSON.stringify(result.redacted)).not.toContain("token=secret");
     expect(JSON.stringify(result.redacted)).not.toContain("sb_publishable_test_value");
     expect(result.redacted.nested.safeCategory).toBe("send_message");
