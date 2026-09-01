@@ -37,6 +37,14 @@ Run from the worktree, in PowerShell 7 or with `MSYS2_ENV_CONV_EXCL=BASE_PATH`
 under Git Bash. Git Bash otherwise rewrites `BASE_PATH=/` into the Git
 installation path and every route answers `302`.
 
+MSYS has two separate conversions and they need different switches, which is
+easy to get wrong in the middle of an incident:
+
+| What is being converted | Switch | Example that fails without it |
+| --- | --- | --- |
+| An environment **value** | `MSYS2_ENV_CONV_EXCL=BASE_PATH` | `BASE_PATH=/` becomes the Git install path |
+| A command **argument** | `MSYS_NO_PATHCONV=1` | `taskkill /PID <n> /T /F` reads `/PID` as a path |
+
 ```powershell
 git diff --check
 pnpm.cmd typecheck
