@@ -67,15 +67,15 @@ const REQUIRED_FONT = "16px Inter";
 const WEBP_QUALITY = 88;
 
 /**
- * Every target renders the same interface at its own geometry, so no two
- * published assets are byte-identical. Desktop shots are captured at
+ * One asset per released platform and theme. Everything is captured at
  * deviceScaleFactor 2 and downsampled by width, which keeps text crisp and
- * keeps the aspect ratio self-correcting. Phone viewports are narrower than the
- * published minimum width, so they are composed onto a canvas.
+ * keeps the aspect ratio self-correcting. Every viewport is chosen so its
+ * doubled pixels already satisfy the published bounds, so no asset needs a mat
+ * around it.
  *
- * The Apple entries are named `*-preview-placeholder` and make no availability
- * claim of any kind; the public UI is what labels those platforms as in
- * development.
+ * Platforms without a published build are deliberately not illustrated: a
+ * single image cannot be theme matched, and reusing another platform's render
+ * under an unreleased heading would suggest a product that does not exist.
  */
 const TARGETS = [
   {
@@ -91,30 +91,20 @@ const TARGETS = [
     output: { width: 1440 },
   },
   {
-    file: "macos-preview-placeholder.webp",
-    theme: "light",
-    // A MacBook-proportioned window, so this is a genuinely different render
-    // rather than a copy of the Windows asset.
-    viewport: { width: 1512, height: 945 },
-    output: { width: 1512 },
-  },
-  {
     file: "android-messenger-dark.webp",
     theme: "dark",
-    viewport: { width: 390, height: 780 },
-    canvas: { width: 760, height: 1140, deviceHeight: 1040 },
+    // 390x596 at deviceScaleFactor 2 is 780x1192, which clears the published
+    // minimum width without a surrounding mat. Framing the phone on a canvas
+    // published mostly empty background and read as a strange aspect ratio on
+    // the page.
+    viewport: { width: 390, height: 596 },
+    output: { width: 780 },
   },
   {
     file: "android-messenger-light.webp",
     theme: "light",
-    viewport: { width: 390, height: 780 },
-    canvas: { width: 760, height: 1140, deviceHeight: 1040 },
-  },
-  {
-    file: "ios-preview-placeholder.webp",
-    theme: "dark",
-    viewport: { width: 393, height: 852 },
-    canvas: { width: 780, height: 1180, deviceHeight: 1080 },
+    viewport: { width: 390, height: 596 },
+    output: { width: 780 },
   },
 ];
 
@@ -300,35 +290,10 @@ async function capture(browser, fixture, target) {
   const screenshot = await page.screenshot({ type: "png", animations: "disabled" });
   await context.close();
 
-  return target.canvas
-    ? frameOnCanvas(screenshot, target.canvas, background)
-    : sharp(screenshot).resize({ width: target.output.width });
+  void background;
+  return sharp(screenshot).resize({ width: target.output.width });
 }
 
-async function frameOnCanvas(screenshot, canvas, background) {
-  const device = await sharp(screenshot)
-    .resize({ height: canvas.deviceHeight, fit: "inside" })
-    .png()
-    .toBuffer();
-  const { width } = await sharp(device).metadata();
-
-  return sharp({
-    create: {
-      width: canvas.width,
-      height: canvas.height,
-      channels: 4,
-      // Taken from the page's own theme, so a light capture is never framed in
-      // near-black.
-      background,
-    },
-  }).composite([
-    {
-      input: device,
-      left: Math.round((canvas.width - width) / 2),
-      top: Math.round((canvas.height - canvas.deviceHeight) / 2),
-    },
-  ]);
-}
 
 function pruneOutputDirectory() {
   mkdirSync(OUTPUT_DIRECTORY, { recursive: true });

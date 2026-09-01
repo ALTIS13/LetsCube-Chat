@@ -1,84 +1,118 @@
+import { useMemo } from "react";
 import { Link } from "wouter";
-import { useReleaseCatalog, type ReleaseCatalogUiState } from "@/hooks/useReleaseCatalog";
+
+import { PlatformShowcase } from "@/components/public/PlatformShowcase";
+import { ReleaseChangelog } from "@/components/public/ReleaseChangelog";
+import { ReleaseDownloadAction } from "@/components/public/ReleaseDownloadAction";
+import { usePublicReleaseCatalog } from "@/hooks/usePublicReleaseCatalog";
+import { useTheme } from "@/hooks/useTheme";
+import { getCurrentDistributionTarget } from "@/lib/platform/capabilities";
 import { PublicPageShell } from "./PublicPageShell";
 
-const RELEASE_STATE_LABELS: Record<ReleaseCatalogUiState, string> = {
-  checking: "Проверяем версию",
-  preparing: "Готовится к выпуску",
-  available: "Stable доступна",
-  current: "Установлена актуальная версия",
-  update_available: "Доступно обновление",
-  offline_cached: "Показаны сохранённые данные",
-  unavailable: "Временно недоступно",
-};
-
+/**
+ * The public LETSCUBE home.
+ *
+ * The product itself is the illustration: the band under the heading is a
+ * screenshot of the shipping interface, matched to the reader's theme. Every
+ * availability statement on this page comes from the release catalog through
+ * `usePublicReleaseCatalog`, so the page cannot promise a build that does not
+ * exist.
+ */
 export function PublicHomePage() {
-  const windowsRelease = useReleaseCatalog("windows_download");
-  const androidRelease = useReleaseCatalog("android_download");
+  const { platforms, changelog } = usePublicReleaseCatalog();
+  const { resolvedTheme } = useTheme();
+
+  // The visitor's own platform is offered first; everyone else gets the web
+  // client, which needs no download at all.
+  const preferred = useMemo(() => {
+    const target = getCurrentDistributionTarget();
+    if (target === "android_download" || target === "android_native") return "android";
+    if (target === "windows_download" || target === "windows_native") return "windows";
+    return null;
+  }, []);
+
+  const preferredPlatform = preferred
+    ? platforms.find((platform) => platform.platform === preferred) ?? null
+    : null;
+
+  const heroImage = resolvedTheme === "light"
+    ? "/product/windows-messenger-light.webp"
+    : "/product/windows-messenger-dark.webp";
 
   return (
     <PublicPageShell>
       <main>
         <section
           aria-labelledby="public-home-title"
-          className="mx-auto flex min-h-[58vh] w-full max-w-7xl flex-col justify-center gap-6 px-4 py-16 sm:px-6 lg:px-8"
+          className="mx-auto w-full max-w-7xl px-4 pt-12 sm:px-6 sm:pt-16 lg:px-8"
         >
-          <div className="max-w-3xl">
-            <p className="text-sm font-semibold uppercase text-[color:var(--kub-cyan)]">LETSCUBE</p>
-            <h1 id="public-home-title" className="mt-3 text-4xl font-bold text-[color:var(--kub-text)] sm:text-5xl">
-              Мессенджер для общения и совместной работы
-            </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-[color:var(--kub-muted)] sm:text-lg">
-              Переписка, звонки, файлы и задачи доступны в браузере и приложениях LETSCUBE.
-            </p>
-          </div>
+          <p className="text-sm font-semibold uppercase tracking-wide text-[color:var(--kub-cyan)]">LETSCUBE</p>
+          <h1
+            id="public-home-title"
+            className="mt-3 max-w-3xl text-4xl font-bold leading-tight text-[color:var(--kub-text)] sm:text-5xl"
+          >
+            Мессенджер для общения и совместной работы
+          </h1>
+          <p className="mt-4 max-w-2xl text-base leading-7 text-[color:var(--kub-muted)] sm:text-lg">
+            Переписка, файлы, задачи и уведомления в браузере, на Windows и на Android. Один аккаунт
+            и одна история сообщений на всех устройствах.
+          </p>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="mt-7 flex flex-wrap items-center gap-3">
+            {preferredPlatform && <ReleaseDownloadAction platform={preferredPlatform} />}
             <Link
               href="/login"
-              className="inline-flex min-h-11 items-center justify-center rounded-md bg-[var(--kub-cyan)] px-5 text-sm font-semibold text-[var(--kub-bg)]"
+              className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[color:var(--kub-border-color)] px-5 text-sm font-semibold text-[color:var(--kub-text)] transition-colors hover:bg-[var(--kub-surface-2)]"
             >
               Открыть веб-версию
             </Link>
             <Link
-              href="/download?platform=windows"
-              className="inline-flex min-h-11 items-center justify-center rounded-md border border-[color:var(--kub-border-color)] px-5 text-sm font-semibold text-[color:var(--kub-text)]"
+              href="/download"
+              className="inline-flex min-h-11 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-cyan)]"
             >
-              Скачать для Windows
+              Все платформы
             </Link>
-            <Link
-              href="/download?platform=android"
-              className="inline-flex min-h-11 items-center justify-center rounded-md border border-[color:var(--kub-border-color)] px-5 text-sm font-semibold text-[color:var(--kub-text)]"
-            >
-              Скачать для Android
-            </Link>
+          </div>
+
+          {/* The interface is the illustration. The band is deliberately clipped
+              at the bottom so the platform sections are visible from here. */}
+          <div className="mt-10 max-h-[42vh] overflow-hidden rounded-t-2xl border border-b-0 border-[color:var(--kub-border-color)]">
+            <img
+              src={heroImage}
+              alt="Окно LETSCUBE с открытым групповым чатом"
+              width={1440}
+              height={900}
+              decoding="async"
+              // Anchored to the top and clipped, so the platform sections below
+              // are already visible from the first viewport.
+              className="block h-auto w-full object-top"
+            />
           </div>
         </section>
 
         <section
           aria-labelledby="public-platforms-title"
-          className="border-t border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]"
+          className="mx-auto w-full max-w-7xl px-4 pt-12 sm:px-6 lg:px-8"
         >
-          <div className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-            <h2 id="public-platforms-title" className="text-2xl font-bold text-[color:var(--kub-text)]">
-              Приложения LETSCUBE
-            </h2>
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <ReleasePlaceholder title="Windows" state={windowsRelease.state} />
-              <ReleasePlaceholder title="Android" state={androidRelease.state} />
-            </div>
+          <h2 id="public-platforms-title" className="text-3xl font-bold text-[color:var(--kub-text)]">
+            Приложения LETSCUBE
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm text-[color:var(--kub-muted)]">
+            Windows и Android доступны для загрузки. Приложения для macOS и iPhone в разработке —
+            до их выпуска используйте веб-версию.
+          </p>
+
+          <div className="mt-4">
+            {platforms.map((platform) => (
+              <PlatformShowcase key={platform.platform} platform={platform} />
+            ))}
           </div>
         </section>
+
+        <div className="mx-auto w-full max-w-7xl px-4 pb-16 sm:px-6 lg:px-8">
+          <ReleaseChangelog entry={changelog} />
+        </div>
       </main>
     </PublicPageShell>
-  );
-}
-
-function ReleasePlaceholder({ title, state }: { title: string; state: ReleaseCatalogUiState }) {
-  return (
-    <article className="border-t border-[color:var(--kub-border-color)] py-5">
-      <h3 className="text-lg font-semibold text-[color:var(--kub-text)]">{title}</h3>
-      <p className="mt-1 text-sm text-[color:var(--kub-muted)]">{RELEASE_STATE_LABELS[state]}</p>
-    </article>
   );
 }

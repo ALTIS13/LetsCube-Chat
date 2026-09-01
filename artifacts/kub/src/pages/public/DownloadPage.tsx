@@ -1,83 +1,60 @@
 import { Link } from "wouter";
-import { useReleaseCatalog, type ReleaseCatalogUiState } from "@/hooks/useReleaseCatalog";
+
+import { PlatformShowcase } from "@/components/public/PlatformShowcase";
+import { ReleaseChangelog } from "@/components/public/ReleaseChangelog";
+import { usePublicReleaseCatalog } from "@/hooks/usePublicReleaseCatalog";
 import { PublicPageShell } from "./PublicPageShell";
 
-const RELEASE_STATE_LABELS: Record<ReleaseCatalogUiState, string> = {
-  checking: "Проверяем доступность",
-  preparing: "Версия готовится к выпуску",
-  available: "Stable-версия доступна",
-  current: "Установлена актуальная версия",
-  update_available: "Доступно обновление",
-  offline_cached: "Показаны сохранённые данные",
-  unavailable: "Загрузка временно недоступна",
-};
-
+/**
+ * The full downloads surface.
+ *
+ * Same platform sections as the home page, with every platform present rather
+ * than the visitor's own first. Availability comes only from the release
+ * catalog.
+ */
 export function DownloadPage() {
-  const windowsRelease = useReleaseCatalog("windows_download");
-  const androidRelease = useReleaseCatalog("android_download");
+  const { platforms, changelog } = usePublicReleaseCatalog();
 
   return (
     <PublicPageShell>
       <main className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <header className="max-w-2xl">
-          <p className="text-sm font-semibold uppercase text-[color:var(--kub-cyan)]">Загрузки</p>
-          <h1 className="mt-2 text-3xl font-bold text-[color:var(--kub-text)]">Приложения LETSCUBE</h1>
+          <p className="text-sm font-semibold uppercase tracking-wide text-[color:var(--kub-cyan)]">Загрузки</p>
+          <h1 className="mt-2 text-3xl font-bold text-[color:var(--kub-text)] sm:text-4xl">
+            Приложения LETSCUBE
+          </h1>
           <p className="mt-3 text-base leading-7 text-[color:var(--kub-muted)]">
-            Выберите платформу. Прямая загрузка Stable-версий появится после проверки каталога релизов.
+            Файлы загружаются напрямую из каталога релизов LETSCUBE и не требуют входа. Версия и
+            дата берутся из того же каталога, что и обновления в самих приложениях.
           </p>
         </header>
 
-        <section aria-label="Доступные платформы" className="mt-10 grid gap-6 md:grid-cols-2">
-          <DownloadPlaceholder
-            title="Windows"
-            action="Скачать для Windows"
-            state={windowsRelease.state}
-          />
-          <DownloadPlaceholder
-            title="Android"
-            action="Скачать для Android"
-            state={androidRelease.state}
-          />
-        </section>
+        <div className="mt-8">
+          {platforms.map((platform) => (
+            <PlatformShowcase key={platform.platform} platform={platform} />
+          ))}
+        </div>
 
-        <section aria-labelledby="web-version-title" className="mt-12 border-t border-[color:var(--kub-border-color)] pt-8">
+        <ReleaseChangelog entry={changelog} />
+
+        <section
+          aria-labelledby="web-version-title"
+          className="border-t border-[color:var(--kub-border-color)] pt-10"
+        >
           <h2 id="web-version-title" className="text-xl font-semibold text-[color:var(--kub-text)]">
             Веб-версия
           </h2>
-          <p className="mt-2 text-sm text-[color:var(--kub-muted)]">Работает без установки в современном браузере.</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--kub-muted)]">
+            Работает без установки в современном браузере на любой системе, включая macOS и iPhone.
+          </p>
           <Link
             href="/login"
-            className="mt-4 inline-flex min-h-11 items-center justify-center rounded-md bg-[var(--kub-cyan)] px-5 text-sm font-semibold text-[var(--kub-bg)]"
+            className="mt-5 inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--kub-action-primary-background)] px-5 text-sm font-semibold text-[color:var(--kub-action-primary-foreground)] transition-colors hover:bg-[var(--kub-action-primary-hover)]"
           >
             Открыть веб-версию
           </Link>
         </section>
       </main>
     </PublicPageShell>
-  );
-}
-
-function DownloadPlaceholder({
-  title,
-  action,
-  state,
-}: {
-  title: string;
-  action: string;
-  state: ReleaseCatalogUiState;
-}) {
-  return (
-    <article className="border-t border-[color:var(--kub-border-color)] py-5">
-      <h2 className="text-xl font-semibold text-[color:var(--kub-text)]">{title}</h2>
-      <p className="mt-2 text-sm text-[color:var(--kub-muted)]">{RELEASE_STATE_LABELS[state]}</p>
-      <button
-        type="button"
-        disabled
-        aria-disabled="true"
-        className="mt-5 inline-flex min-h-11 cursor-not-allowed items-center justify-center rounded-md border border-[color:var(--kub-border-color)] px-5 text-sm font-semibold text-[color:var(--kub-muted)] opacity-70"
-      >
-        {action}
-      </button>
-    </article>
   );
 }

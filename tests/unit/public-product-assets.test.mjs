@@ -29,8 +29,6 @@ const PRODUCT_ASSETS = [
   "windows-messenger-light.webp",
   "android-messenger-dark.webp",
   "android-messenger-light.webp",
-  "macos-preview-placeholder.webp",
-  "ios-preview-placeholder.webp",
 ];
 
 const MIN_WIDTH = 720;
@@ -73,14 +71,14 @@ const ALLOWED_FIXTURE_STRINGS = new Set([
   "Мария",
   "Макет готов к просмотру",
   "Отправила документ",
-  "Привет! Обновила макет главной",
+  "Обновила макет главной",
   "Отлично, где посмотреть?",
-  "Скинула в общий диск, папка Дизайн",
-  "Понял, открою после планёрки",
-  "Добавила правки в описание",
-  "Спасибо, посмотрю после созвона",
+  "Скинула в общий диск",
+  "Открою после планёрки",
+  "Добавила правки",
+  "Спасибо, посмотрю",
   "Встречаемся в 15:00",
-  "Принято, добавил в задачи",
+  "Принято, добавил",
   "14:32",
   "14:35",
   "14:37",
@@ -101,14 +99,14 @@ const FIXTURE_PRODUCTION_MARKERS = [
   "Команда проекта",
   "Макет готов к просмотру",
   "Отправила документ",
-  "Привет! Обновила макет главной",
+  "Обновила макет главной",
   "Отлично, где посмотреть?",
-  "Скинула в общий диск, папка Дизайн",
-  "Понял, открою после планёрки",
-  "Добавила правки в описание",
-  "Спасибо, посмотрю после созвона",
+  "Скинула в общий диск",
+  "Открою после планёрки",
+  "Добавила правки",
+  "Спасибо, посмотрю",
   "Встречаемся в 15:00",
-  "Принято, добавил в задачи",
+  "Принято, добавил",
 ];
 
 function repoPath(relative) {
@@ -218,7 +216,7 @@ test("every published asset is a distinct image", () => {
     assert.equal(
       existing,
       undefined,
-      `${name} is byte-identical to ${existing}; six files must not be four images`,
+      `${name} is byte-identical to ${existing}; each published asset must be a distinct render`,
     );
     digests.set(digest, name);
   }

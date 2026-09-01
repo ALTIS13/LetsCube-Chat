@@ -798,7 +798,10 @@ export function MessageBubble({
       {message.edited_at && (
         <span className="max-w-8 shrink truncate text-[10px] text-[color:var(--kub-muted)]" title="изменено">изм.</span>
       )}
-      <span className="inline-flex min-w-[2.75rem] shrink-0 justify-end tabular-nums text-right text-[10px] leading-none text-[color:var(--kub-muted)]">
+      {/* `tabular-nums` already makes HH:MM a fixed width, so an extra minimum
+          reserved 16px of dead space in every bubble and pushed the meta onto
+          its own line far more often than it needed to. */}
+      <span className="inline-flex shrink-0 justify-end tabular-nums text-right text-[10px] leading-none text-[color:var(--kub-muted)]">
         {formatFullTime(message.created_at)}
       </span>
       {deliveryState?.isOwnMessage && !showGroupReadIndicator && (

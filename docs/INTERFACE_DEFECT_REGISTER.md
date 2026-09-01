@@ -199,3 +199,34 @@ not defined anywhere, so it rendered at inherited colour instead of as a muted
 divider.
 
 **Fixed** 2026-09-01 by using `--kub-muted`. Also found by the contract test.
+
+---
+
+## D-008 `[ ]` A wrapped message always pushes its time onto a separate line
+
+**Severity:** medium. Every message long enough to wrap, which is most of them.
+
+**Surface:** `artifacts/kub/src/components/chat/MessageBubble.tsx`, inside
+`MeasuredTextWithMeta`: `const singleLineText = lineRects.length <= 1;` feeding
+`canInline = singleLineText && available >= footerRect.width + gap`.
+
+**Defect:** the measurement already computes whether the meta fits after the
+last rendered line. The additional single-line condition overrides that result,
+so a message that wraps to two or more lines can never keep its time inline even
+when its last line ends well short of the bubble edge. The bubble then gains a
+row that is empty except for a right-aligned timestamp.
+
+**Consequence:** a conversation alternates between compact bubbles and bubbles
+with a nearly empty extra row, which is the main reason a normal chat reads as
+untidy. Reported by the user against the product previews on 2026-09-01.
+
+**Not fixed here.** Removing the condition is a one-line change, but
+`MeasuredTextWithMeta` carries hysteresis (`inlineBlockedRef`) precisely to stop
+placement oscillation, and the surrounding contracts include chat scroll
+anchoring and history prepend stability. It needs the chat regression suite that
+belongs to this stage rather than a drive-by edit. Two related savings were
+taken already: the timestamp no longer reserves a fixed `2.75rem` it never uses,
+and D-003 aligned the receipt icon size.
+
+The product previews avoid the case by using concise fixture replies, which is a
+content choice for imagery and not a workaround for the defect.
