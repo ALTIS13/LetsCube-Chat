@@ -1,6 +1,6 @@
 import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { RegisterForm } from "@/components/auth/RegisterForm";
@@ -22,6 +22,7 @@ import { BannedScreen } from "@/components/BannedScreen";
 import { AdminLayout } from "@/pages/admin/AdminLayout";
 import { TasksPage } from "@/pages/tasks/TasksPage";
 import { BotsPage } from "@/pages/bots/BotsPage";
+import { isPublicPreviewCaptureEnabled } from "@/lib/publicPreviewFixture";
 import { BotDocsPage } from "@/pages/public/BotDocsPage";
 import { DownloadPage } from "@/pages/public/DownloadPage";
 import { PrivacyPage } from "@/pages/public/PrivacyPage";
@@ -412,8 +413,26 @@ function AppRoutes() {
   );
 }
 
+/**
+ * DEV-only capture surface for the public product previews.
+ *
+ * Both halves of the gate are required: `import.meta.env.DEV` and an explicit
+ * `VITE_PUBLIC_PREVIEW_FIXTURE=1`. A query flag can never reach it, and a
+ * production build removes the branch and its lazy chunk entirely.
+ */
+const PUBLIC_PREVIEW_CAPTURE_PATH = "/__qa/public-preview";
+const PublicPreviewCapturePage = lazy(() => import("@/pages/public/PublicPreviewCapturePage"));
+
 function RootRoutes() {
   const [location] = useLocation();
+
+  if (isPublicPreviewCaptureEnabled() && location === PUBLIC_PREVIEW_CAPTURE_PATH) {
+    return (
+      <Suspense fallback={null}>
+        <PublicPreviewCapturePage />
+      </Suspense>
+    );
+  }
 
   if (isPublicRoute(location)) {
     return (
