@@ -11,19 +11,26 @@ code, infrastructure, database objects, release metadata, or product copy.
 The user explicitly paused implementation so the current context could be written
 down. Do not silently skip ahead or repeat already completed work.
 
-**Task 2 status (2026-09-01): the test gap is closed and the task is
-implementation-complete.** The mounted matrix now covers the unconfigured
-Supabase precedence and the fixed-route near matches, both proven by mutation.
-Validation passed: mounted matrix 15/15, routing unit suites 15/15 with no
-skips, typecheck, production build and `git diff --check` all clean. Evidence is
-in `.superpowers/sdd/2026-08-30-public-home-downloads-changelog/`
-(`task-2-implementer-report.md`, fix round).
+**Task 2 is complete and independently approved (2026-09-01).** Two independent
+reviews of `3990715..0e406a3` both returned APPROVED with no P0/P1. Every
+required contract was mutation-tested: moving the configuration gate ahead of
+the public routes, widening `isPublicRoute` to prefix matching, dropping a route
+from the public set and forcing `isSupabaseConfigured()` to `true` all turn the
+suite red. Their ten robustness findings and two wrong documentation statements
+are resolved in `f4ab801`. Evidence:
+`.superpowers/sdd/2026-08-30-public-home-downloads-changelog/task-2-review-report.md`.
 
-Only an **independent review** of `3990715..0e406a3` remains before Task 2 is
-marked done; a scoped self-review was performed and its two findings are already
-fixed in `0e406a3`. Once that gate passes, continue with Task 3 (sanitized
-product assets), then Task 4 (final UI), then Task 5 (validation and deploy).
-No production file changed in the whole range.
+**Current task: Task 3 — sanitized real-interface product assets.** See section
+4 and `task-3-brief.md`. Then Task 4 (final UI), then Task 5 (validation and
+deploy).
+
+One follow-up was deliberately left outside Task 2 and must not be forgotten:
+`isSupabaseConfigured()` in `artifacts/kub/src/lib/supabase/client.ts` has no
+direct coverage, so mutating its `&&` to `||` keeps the whole suite green while
+a half-configured build (URL present, key missing — a realistic Coolify
+misconfiguration) would enter `AppRoutes` and throw at `createClient()` instead
+of rendering the configuration screen. Closing it needs a third dev-server
+variant, so it belongs to a hardening task or Task 5.
 
 The bot track is not the current work. Bot Platform v1 is implemented, migrated,
 deployed and production-canary verified; see section 6 and
@@ -32,22 +39,6 @@ admission beyond the single pinned internal owner, which is a separate product
 decision requiring its own review and is explicitly outside this plan. The
 public home/downloads/changelog stage is the correct next step, exactly as
 sequenced in the approved design.
-
-Test changes that were required, all now implemented:
-
-1. Mount the real app with Supabase public configuration intentionally absent and
-   assert that `/` renders `RuntimeConfigurationScreen`. Done.
-2. In that same unconfigured matrix, prove that exact public routes `/download`,
-   `/privacy`, `/support`, and `/bots/docs` remain reachable before the runtime
-   configuration gate. Done.
-3. In the configured matrix, prove that near matches `/download/preview` and
-   `/bots/docs/nested` are protected and redirect a guest to `/login`. Done, in
-   both the mounted matrix and the unit negatives.
-4. The test must be deterministic, use a dedicated alternate port, have no
-   optional-environment skip, and contain no secret values. Done: the
-   unconfigured describe owns port `5188`, starts and stops its own Vite server,
-   refuses the port when something already answers on it, and carries no
-   credential.
 
 ## 2. Authoritative Checkout And Git State
 
@@ -73,6 +64,8 @@ validated. Never push directly to `main` without complete validation.
 
 Latest local commits:
 
+- `f4ab801 test(public): harden the unconfigured routing fixture`
+- `591ad1c docs(handoff): record Task 2 test closure`
 - `0e406a3 test(public): address scoped review of the routing coverage`
 - `a455610 test(public): cover unconfigured routing and near matches`
 - `3990715 docs(handoff): correct validation commands and record environment`
@@ -124,7 +117,7 @@ Do not reintroduce those user-facing terms or old domains.
   outside the repository at `C:\Users\maksi\.local\bin\jq-1.7.1\jq.exe`.
   Re-verified on 2026-09-01: 34/34 passed with 0 skipped.
 
-### Task 2: public routing foundation - implemented, independent review pending
+### Task 2: public routing foundation - complete and independently approved
 
 Implemented:
 
@@ -150,9 +143,13 @@ Current behavior contract:
 - `isDesktopShell()` detects native shell generally; existing Windows-only
   `isDesktopApp()` and `getDesktopBridge()` semantics remain Windows-only.
 
-Independent reviewer found no production defect. The two P2 test gaps it raised
-are closed; see section 1. Both closures were proven by mutation, so neither is
-a source scan that can stay green while the contract regresses.
+No production defect was ever found in this task. The two P2 test gaps raised by
+the first review are closed and were proven by mutation, so neither is a source
+scan that can stay green while the contract regresses. The unconfigured matrix
+refuses a busy port, refuses to run when an env file under `artifacts/kub` could
+re-supply configuration, requires the child to announce the port itself before
+being trusted, and fails loudly rather than skipping when a prerequisite is
+absent.
 
 ### Task 3: sanitized real-interface product assets - pending
 
@@ -462,13 +459,14 @@ git rev-list --left-right --count origin/codex/bot-platform...HEAD
 Then:
 
 1. Read the three current plan/spec/tracker files in section 3.
-2. Inspect the latest Task 2 review report under `.superpowers\sdd`.
-3. Add only the missing deterministic mounted-routing cases.
-4. Run the validations in section 5.
-5. Review the diff and commit the focused test completion.
-6. Mark Task 2 complete only after the scoped review approves it.
-7. Continue with Task 3 sanitized product assets, then Task 4 UI, then Task 5
-   validation/deploy.
+2. Read `task-3-brief.md` and the Task 3 section of the plan.
+3. Implement Task 3: the checked-in fictional fixture, the DEV-only capture
+   route behind both `import.meta.env.DEV` and `VITE_PUBLIC_PREVIEW_FIXTURE=1`,
+   the capture script, the bounded WebP assets and the asset contract test.
+4. Never capture production chats, user data, phone numbers, emails, tokens or
+   private media. Compressed-byte string scans are not accepted as proof of
+   image privacy; look at the generated pixels and record the sign-off.
+5. Run the asset validation, review the diff, then commit.
+6. Continue with Task 4 UI, then Task 5 validation and deploy.
 
-Do not start a different roadmap item until the current Task 2 gate is closed or
-the user explicitly redirects the work.
+Do not start a different roadmap item unless the user redirects the work.

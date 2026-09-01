@@ -167,7 +167,7 @@ git commit -m "feat(release): add compact Stable changelog metadata"
 - `nativeShell` is sourced only from `isNativeApp() || isDesktopShell()`; user-agent
   distribution classification is not an authority for root routing.
 
-- [ ] **Step 1: Write failing root-decision tests**
+- [x] **Step 1: Write failing root-decision tests**
 
 ```ts
 import assert from "node:assert/strict";
@@ -192,13 +192,13 @@ protected deep links, Capacitor Android, future Capacitor iOS, Tauri Windows and
 future Tauri macOS. iPhone/iPad browser sessions remain browsers and therefore
 keep their externally owned `ios_pwa` behavior.
 
-- [ ] **Step 2: Run tests and verify they fail**
+- [x] **Step 2: Run tests and verify they fail**
 
 Run: `node --test tests/unit/public-home-routing.test.mts tests/unit/public-routes.test.mjs`
 
 Expected: FAIL because the root-decision module and `/download` public route are absent.
 
-- [ ] **Step 3: Implement the pure route decision**
+- [x] **Step 3: Implement the pure route decision**
 
 ```ts
 export function decideRootExperience(input: {
@@ -220,15 +220,15 @@ and Windows capability calls, so a future macOS bridge does not inherit Windows
 privileges. Do not rely on user-agent strings or download-target classification
 for native shells.
 
-- [ ] **Step 4: Restructure routing without weakening protected routes**
+- [x] **Step 4: Restructure routing without weakening protected routes**
 
 `RootRoutes` handles public fixed routes first. `AppRoutes` uses the pure root decision only for `/`. Any other unauthenticated protected route still redirects to `/login`. Auth callback remains first so it can establish a session.
 
-- [ ] **Step 5: Add minimal page shells**
+- [x] **Step 5: Add minimal page shells**
 
 Create semantic `main`, header, hero and platform sections with visible `Открыть веб-версию`, `Скачать для Windows` and `Скачать для Android` entry points. At this step the buttons use release state placeholders from the hook; no static artifact URLs.
 
-- [ ] **Step 6: Run route tests and commit**
+- [x] **Step 6: Run route tests and commit**
 
 ```powershell
 node --test tests/unit/public-home-routing.test.mts tests/unit/public-routes.test.mjs tests/unit/distribution-platform.test.mts
@@ -238,6 +238,34 @@ git commit -m "feat(public): route guests to LETSCUBE home"
 ```
 
 ---
+
+**Task 2 closed on 2026-09-01.** Implemented across `fdd8933` (routing),
+`aeaaace` (mounted coverage), `a455610` (unconfigured matrix and near matches),
+`0e406a3` (scoped review fixes) and `f4ab801` (independent review hardening).
+
+Two independent reviews of `3990715..0e406a3` both returned APPROVED with no
+P0/P1. Every required contract was mutation-tested: moving the configuration
+gate ahead of the public routes, widening `isPublicRoute` to prefix matching,
+dropping a route from the public set and forcing `isSupabaseConfigured()` to
+`true` all turn the suite red.
+
+Coverage is split across two matrices. The configured one runs against the
+shared dev server; the unconfigured one owns port `5188` and starts its own Vite
+with every public Supabase name stripped from the inherited environment, which
+is what makes the missing-configuration precedence observable at all. It refuses
+a busy port, refuses to run when an env file under `artifacts/kub` could
+re-supply configuration, requires the child to announce the port itself before
+being trusted, and fails loudly rather than skipping when its prerequisites are
+absent.
+
+Final validation: mounted matrix 15/15, routing unit suites 15/15 with no skips,
+typecheck, production build and `git diff --check` clean, both dev-server ports
+released afterwards.
+
+Deferred follow-up, deliberately outside this task: `isSupabaseConfigured()` has
+no direct coverage, so mutating its `&&` to `||` keeps the suite green while a
+half-configured build would enter `AppRoutes` and throw instead of rendering the
+configuration screen. Closing it needs a third dev-server variant.
 
 ### Task 3: Produce sanitized real-interface product assets
 
