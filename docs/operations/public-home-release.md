@@ -100,6 +100,33 @@ live Stable manifest currently points at. The live manifest and its bytes agree
 with each other, so the surface is safe; the tracker figure refers to an earlier
 or different artifact and should not be treated as the current one.
 
+## Which branch each application actually builds from
+
+Verified on 2026-09-02 by checking whether each deployed commit is an ancestor
+of `origin/main`:
+
+| Application | Deployed commit on record | On `origin/main` | On `origin/codex/bot-platform` |
+| --- | --- | --- | --- |
+| `letscube-web` | `aff77ab` | yes | yes |
+| `letscube-worker` | `8d20b89` | yes | yes |
+| `letscube-bot-gateway` | `01d26a9` | **no** | yes |
+
+So the Bot Gateway is deployed from the feature branch, while the web
+application and the worker are deployed from `main`. `main` is therefore behind
+production for the bot code, and a merge is what would bring them level.
+
+That has a consequence the public home plan never scoped: merging
+`codex/bot-platform` into `main` carries 18 `artifacts/api-server` files with
+it, which is inside `letscube-worker`'s `watch_paths`, so the merge redeploys
+the worker as well as the web application. The bot code itself is already
+running in production through the gateway, so this aligns the worker with what
+is already live rather than introducing anything new — but it is a second
+service restart and must be planned as one, not discovered afterwards.
+
+Pushing the branch alone is safe: the commits that carry this surface touch only
+`artifacts/kub`, tests, scripts and documentation, none of which are in the
+worker or gateway watch paths.
+
 ## Deploying
 
 1. Push `codex/bot-platform` to its own remote branch first. Never straight to
