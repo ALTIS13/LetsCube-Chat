@@ -2419,3 +2419,43 @@ Recurring tasks roadmap note:
 - No SQL/schema/RLS, iOS/PWA or Windows change was made. Remaining external gates
   are an encrypted off-device signing backup and Play Console/listing/screenshot
   preparation.
+
+## 2026-09-02 — public home rollout to production
+
+- `main` fast-forwarded `7a99f52..5da93e0` (63 commits) so it stops diverging
+  from `codex/bot-platform`, which is the branch the production Bot Gateway
+  canary was cut from. The push touched `artifacts/kub` (65 files) and
+  `artifacts/api-server` (18 files), so both the `letscube-web` and
+  `letscube-worker` webhooks were in scope.
+- Pre-deploy state recorded first: `app.letscube.ru/` 200, `api.letscube.ru
+  /healthz` 200, both Stable manifests 200, guest `/` and `/download` still
+  redirecting to `/login`, bundle `index-Do_cSPEY.js`.
+- Post-deploy: bundle `index-DY4jgnIu.js` after roughly 150 seconds; all four
+  endpoints still 200; `api.letscube.ru/healthz` returns `ok`.
+- The deployed revision was verified rather than assumed. The live page shows
+  macOS and iPhone/iPad as `В разработке` and the summary reads "Windows и
+  Android доступны для загрузки; macOS и iOS в разработке" — the label fix and
+  the conjunction join exist only in `5da93e0`. The Coolify deployment id and
+  healthcheck were not read in this session, so they are not claimed.
+- Production verification passed on `1440x900` and `390x844` in both themes:
+  guest `/` stays on the public home, the hero renders, nothing scrolls
+  sideways, three product images decode and match the requested theme, the
+  catalog settles, and the console is clean. `/download`, `/privacy` and
+  `/support` render; `/tasks` still gates to `/login`.
+- The verification also checks the availability sentence against the sections
+  beneath it: every platform must appear in exactly one clause, a platform with
+  a download link must be inside the "available" clause, and one without must
+  not be. All four platforms passed in every state observed.
+- Release artifact bytes and SHA-256 were verified against the manifests before
+  this rollout: Windows `0.2.10` 2 321 755 bytes and Android `0.1.2` 6 513 250
+  bytes both matched. macOS and iOS remain unpublished.
+- One intermittent observation, not a production defect: from this workstation
+  the catalog fetch sometimes stalled until the client's 5-second timeout and
+  was aborted. All external traffic here is tunnelled through a local HTTP
+  proxy, direct requests to the same URL answer in about 70 ms, and repeated
+  runs without the proxy pressure succeeded in 55-79 ms. The page behaved
+  correctly in both outcomes — offering downloads when the catalog resolved, and
+  saying the catalog was unreachable with a retry when it did not. Whether the
+  5-second timeout is right for a slow mobile network is a question for the
+  queued interface stage; there is no evidence of a defect here.
+- No SQL, schema, RLS, iOS/PWA or Android change was made in this rollout.

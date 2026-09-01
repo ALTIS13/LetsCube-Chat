@@ -80,7 +80,20 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 
 ## Last Confirmed Deploy Baseline
 
-- Production web code baseline: `aff77ab82c9af30deea25781caa742b558dbecbb` (single-scroll folder editor and grouped emoji pickers over the privacy-safe verified-phone search, Windows notification routing and chat-history anchoring baseline).
+- Production web code baseline: `5da93e0` (public home with downloads and the
+  compact Stable changelog, over the previous single-scroll folder editor,
+  grouped emoji pickers, privacy-safe verified-phone search, Windows
+  notification routing and chat-history anchoring baseline). `main` was
+  fast-forwarded from `7a99f52` to `5da93e0` on 2026-09-02, taking 63 commits, so
+  it no longer diverges from the branch the Bot Gateway canary was cut from.
+- Deployed revision verified by behaviour, not by assumption: the live page
+  renders the macOS and iPhone/iPad status as `В разработке` and joins the
+  summary with `и` ("Windows и Android доступны для загрузки; macOS и iOS в
+  разработке"). Both strings exist only in `5da93e0`. The served bundle changed
+  from `index-Do_cSPEY.js` to `index-DY4jgnIu.js` roughly 150 seconds after the
+  push. The Coolify deployment id, its healthcheck result and the replica
+  replacement were not read from Coolify in this session and are therefore not
+  recorded here.
 - Coolify app: `letscube-web`.
 - Public app: `https://app.letscube.ru`.
 - Auto deploy: GitHub webhook to Coolify is active for `letscube-web`. The latest UI code container completed exact commit `aff77ab82c9af30deea25781caa742b558dbecbb`, passed its healthcheck and replaced the previous rolling replica. The chat-summary and access-snapshot RPC build flags remain enabled.
