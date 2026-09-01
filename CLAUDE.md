@@ -58,8 +58,9 @@ Test changes that were required, all now implemented:
 - Implementation baseline before this handoff commit:
   `aeaaace9efd0c5dfed5542d2ffca8a3a681e0152`
 - Working tree: clean
-- Branch: 11 commits ahead of `origin/codex/bot-platform` as of 2026-09-01, all
-  intentionally unpushed
+- Branch: ahead of `origin/codex/bot-platform`, all commits intentionally
+  unpushed. Read the live count rather than trusting a number written here:
+  `git rev-list --left-right --count origin/codex/bot-platform...HEAD`
 
 The task environment may still display the removed/stale desktop path
 `C:\Users\maksi\Desktop\kub-messenger-clean`. Do not use it as the authoritative
@@ -184,9 +185,15 @@ a source scan that can stay green while the contract regresses.
 
 Use PowerShell 7 and `pnpm.cmd`, never `pnpm.ps1`.
 
-Do not start these servers from Git Bash. MSYS rewrites `BASE_PATH=/` into the
-Git installation path, Vite then serves under `/Program Files/Git/`, and every
-route answers `302`. Use PowerShell as shown, or set `MSYS_NO_PATHCONV=1`.
+Do not start these servers from Git Bash. MSYS rewrites the value of
+`BASE_PATH=/` into the Git installation path, Vite then serves under
+`/Program Files/Git/`, and every route answers `302`.
+
+Use PowerShell as shown. If a Git Bash invocation is unavoidable, the correct
+switch is `MSYS2_ENV_CONV_EXCL=BASE_PATH`, which governs environment-value
+conversion. `MSYS_NO_PATHCONV=1` does **not** help here: it governs
+command-line argument conversion, and measured on this workstation it left
+`BASE_PATH` converted while additionally mangling the script path argument.
 
 For the configured mounted-routing matrix, start Vite explicitly on a dedicated
 port with safe fixture values (these are not production credentials):

@@ -31,7 +31,21 @@ const PUBLIC_HOME_HEADING = "Мессенджер для общения и со�
 const UNCONFIGURED_PORT = 5188;
 const UNCONFIGURED_ORIGIN = `http://127.0.0.1:${UNCONFIGURED_PORT}`;
 const UNCONFIGURED_STARTUP_TIMEOUT_MS = 180_000;
+// The readiness probe only proves the socket answers. The first navigation is
+// what pays for Vite's dependency pre-bundling on a cold cache, which is well
+// past the project-wide navigation timeout.
+const UNCONFIGURED_NAVIGATION_TIMEOUT_MS = 60_000;
+const STOP_GRACE_MS = 10_000;
 const TRANSCRIPT_CHUNK_LIMIT = 200;
+const ANSI_PATTERN = /\u001B\[[0-9;]*m/g;
+
+// Every env file Vite loads for its default development mode.
+const VITE_ENV_FILE_NAMES = [
+  ".env",
+  ".env.local",
+  ".env.development",
+  ".env.development.local",
+] as const;
 
 // Every public Supabase name the client accepts, so none of them can leak in
 // from the shell that starts the configured server.
@@ -46,6 +60,7 @@ type ProfileMode = "ready" | "pending" | "missing";
 
 test.describe("public home routing integration", () => {
   test.beforeEach(async ({ page }, testInfo) => {
+    assertRoutingProjectExists(testInfo.config);
     test.skip(testInfo.project.name !== ROUTING_PROJECT, ROUTING_PROJECT_REASON);
     await installReleaseCatalogFixture(page);
   });
@@ -225,10 +240,14 @@ test.describe("public routing without Supabase configuration", () => {
   let unconfiguredServer: UnconfiguredDevServer | null = null;
 
   test.beforeAll(async ({}, testInfo) => {
+    assertRoutingProjectExists(testInfo.config);
     if (testInfo.project.name !== ROUTING_PROJECT) return;
 
     test.setTimeout(UNCONFIGURED_STARTUP_TIMEOUT_MS + 60_000);
-    unconfiguredServer = await startUnconfiguredDevServer(repositoryRoot(testInfo.config.configFile));
+    await assertUnconfiguredPortIsFree();
+    // Bound before the wait so an aborted hook still has a handle to stop.
+    unconfiguredServer = spawnUnconfiguredDevServer(repositoryRoot(testInfo.config.configFile));
+    await unconfiguredServer.ready;
   });
 
   test.afterAll(async () => {
@@ -238,9 +257,11 @@ test.describe("public routing without Supabase configuration", () => {
   });
 
   test.beforeEach(async ({ page }, testInfo) => {
+    assertRoutingProjectExists(testInfo.config);
     test.skip(testInfo.project.name !== ROUTING_PROJECT, ROUTING_PROJECT_REASON);
 
     test.setTimeout(90_000);
+    page.setDefaultNavigationTimeout(UNCONFIGURED_NAVIGATION_TIMEOUT_MS);
     await installReleaseCatalogFixture(page);
     await installRuntime(page, "browser");
   });
@@ -254,6 +275,11 @@ test.describe("public routing without Supabase configuration", () => {
   });
 
   test("fixed public routes stay reachable before the configuration gate", async ({ page }) => {
+    // Public pages render the same either way, so this case proves its own
+    // premise instead of relying on the case above as an out-of-band canary.
+    await page.goto(`${UNCONFIGURED_ORIGIN}/`);
+    await expect(page.getByRole("heading", { level: 1, name: RUNTIME_CONFIGURATION_HEADING })).toBeVisible();
+
     for (const [route, heading] of PUBLIC_ROUTE_HEADINGS) {
       await page.goto(`${UNCONFIGURED_ORIGIN}${route}`);
 
@@ -434,10 +460,24 @@ async function json(route: Route, body: unknown, status = 200) {
   });
 }
 
-type UnconfiguredDevServer = { stop: () => Promise<void> };
+type UnconfiguredDevServer = {
+  ready: Promise<void>;
+  stop: () => Promise<void>;
+};
 
 function repositoryRoot(configFile: string | undefined): string {
   return configFile ? path.dirname(configFile) : process.cwd();
+}
+
+// A renamed or resharded project would make every routing case skip and still
+// report exit 0, which would silently drop this file's whole contract.
+function assertRoutingProjectExists(config: { projects: readonly { name: string }[] }) {
+  const names = config.projects.map((project) => project.name);
+  if (names.includes(ROUTING_PROJECT)) return;
+  throw new Error(
+    `Playwright project "${ROUTING_PROJECT}" is not configured (found: ${names.join(", ")}). ` +
+      "The routing matrices would skip silently instead of running.",
+  );
 }
 
 // Copies the current environment without any public Supabase name. Windows
@@ -463,23 +503,38 @@ async function servesUnconfiguredOrigin(): Promise<boolean> {
   }
 }
 
-async function startUnconfiguredDevServer(cwd: string): Promise<UnconfiguredDevServer> {
-  // `strictPort` already prevents Vite from silently drifting to another port,
-  // but a server left running by an earlier attempt would still be answering
-  // with the wrong configuration, so refuse the port instead of testing it.
-  if (await servesUnconfiguredOrigin()) {
+// `strictPort` already prevents Vite from silently drifting to another port, but
+// a server left behind by an aborted run would answer with the wrong
+// configuration, so the port is refused rather than reused.
+async function assertUnconfiguredPortIsFree(): Promise<void> {
+  if (!(await servesUnconfiguredOrigin())) return;
+  throw new Error(
+    `Port ${UNCONFIGURED_PORT} is already serving. This matrix owns that port; stop the other server first ` +
+      `(Windows: netstat -ano | findstr :${UNCONFIGURED_PORT}, then taskkill /PID <pid> /T /F).`,
+  );
+}
+
+// Spawns the server and returns its handle synchronously, so a caller aborted
+// while awaiting `ready` still holds something it can stop.
+function spawnUnconfiguredDevServer(cwd: string): UnconfiguredDevServer {
+  const workspace = path.join(cwd, "artifacts", "kub");
+
+  // Vite reads env files from its own root, which would put back the
+  // configuration this matrix removes from the process environment.
+  const strayEnvFile = VITE_ENV_FILE_NAMES.find((name) => existsSync(path.join(workspace, name)));
+  if (strayEnvFile) {
     throw new Error(
-      `Port ${UNCONFIGURED_PORT} is already serving. The unconfigured matrix owns this port; stop that server first.`,
+      `${path.join(workspace, strayEnvFile)} would re-supply Supabase configuration to the unconfigured ` +
+        "matrix. Remove it before running this suite.",
     );
   }
 
-  // The `dev` script of `@workspace/kub` is `vite --config vite.config.ts`, so
-  // running that binary directly reproduces it exactly. Going through `pnpm.cmd`
-  // would need a Windows shell, which Node deprecates when arguments are passed
-  // and which adds a process layer between this test and Vite. Unlike the
-  // shared configured server this one binds loopback only: nothing outside this
-  // machine should reach a build that has no server configuration.
-  const workspace = path.join(cwd, "artifacts", "kub");
+  // The `dev` script of `@workspace/kub` is `vite --config vite.config.ts --host
+  // 0.0.0.0`, so this runs the same binary against the same config. Going
+  // through `pnpm.cmd` would need a Windows shell, which Node deprecates when
+  // arguments are passed and which adds a process layer between this test and
+  // Vite. The one deliberate difference is the bind address: an unconfigured
+  // build should not be reachable off this machine.
   const viteBin = path.join(workspace, "node_modules", "vite", "bin", "vite.js");
   if (!existsSync(viteBin)) {
     throw new Error(`Vite is not installed for @workspace/kub at ${viteBin}. Run the workspace install first.`);
@@ -496,61 +551,119 @@ async function startUnconfiguredDevServer(cwd: string): Promise<UnconfiguredDevS
     },
   );
 
-  const state = { exited: false, code: null as number | null };
+  const state = {
+    settled: false,
+    code: null as number | null,
+    failure: null as Error | null,
+    announcedPort: false,
+  };
+
   // Only read when the server fails to start, so the buffer keeps the most
   // recent output instead of growing for as long as the server lives.
   const transcript: string[] = [];
   const record = (chunk: unknown) => {
-    transcript.push(String(chunk));
+    const plain = String(chunk).replace(ANSI_PATTERN, "");
+    // Vite prints the bound origin only from the process that actually owns the
+    // port, so this separates our child from a server leaked by an earlier run
+    // that happens to be finishing its own boot.
+    if (plain.includes(`:${UNCONFIGURED_PORT}`)) state.announcedPort = true;
+    transcript.push(plain);
     if (transcript.length > TRANSCRIPT_CHUNK_LIMIT) transcript.shift();
   };
   child.stdout?.on("data", record);
   child.stderr?.on("data", record);
+
+  // Without this listener a spawn failure would be an unhandled `error` event,
+  // which takes the whole Playwright worker down.
+  child.once("error", (failure) => {
+    state.settled = true;
+    state.failure = failure;
+  });
   child.once("exit", (code) => {
-    state.exited = true;
+    state.settled = true;
     state.code = code;
   });
 
-  const deadline = Date.now() + UNCONFIGURED_STARTUP_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    if (state.exited) {
-      throw new Error(
-        `The unconfigured Vite server exited with code ${state.code}.\n${transcript.join("")}`,
-      );
-    }
-    if (await servesUnconfiguredOrigin()) {
-      return { stop: () => stopDevServer(child) };
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
+  const killOnProcessExit = () => {
+    if (child.exitCode === null && child.signalCode === null) killDevServerTree(child);
+  };
+  process.once("exit", killOnProcessExit);
 
-  await stopDevServer(child);
-  throw new Error(
-    `The unconfigured Vite server did not answer on ${UNCONFIGURED_ORIGIN} within ` +
-      `${UNCONFIGURED_STARTUP_TIMEOUT_MS} ms.\n${transcript.join("")}`,
-  );
+  const stop = async () => {
+    process.off("exit", killOnProcessExit);
+    await stopDevServer(child);
+  };
+
+  const ready = (async () => {
+    const deadline = Date.now() + UNCONFIGURED_STARTUP_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      if (state.settled) {
+        const cause = state.failure
+          ? `failed to spawn: ${state.failure.message}`
+          : `exited with code ${state.code}`;
+        throw new Error(`The unconfigured Vite server ${cause}.\n${transcript.join("")}`);
+      }
+      if (state.announcedPort && (await servesUnconfiguredOrigin())) return;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+
+    await stop();
+    throw new Error(
+      `The unconfigured Vite server did not answer on ${UNCONFIGURED_ORIGIN} within ` +
+        `${UNCONFIGURED_STARTUP_TIMEOUT_MS} ms.\n${transcript.join("")}`,
+    );
+  })();
+
+  return { ready, stop };
+}
+
+// Windows has no process groups to signal, so the tree is killed by PID.
+function killDevServerTree(child: ChildProcess): { ok: boolean; detail: string } {
+  if (process.platform !== "win32" || child.pid === undefined) {
+    return { ok: child.kill("SIGTERM"), detail: "SIGTERM was refused" };
+  }
+  const killed = spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], { encoding: "utf8" });
+  return {
+    ok: killed.status === 0,
+    detail: `taskkill exited ${killed.status}: ${(killed.stderr ?? "").trim() || "no stderr"}`,
+  };
 }
 
 async function stopDevServer(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
 
   const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+  const problems: string[] = [];
 
-  if (process.platform === "win32" && child.pid !== undefined) {
-    // Windows has no process groups to signal, so the tree is killed by PID.
-    spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-  } else {
-    child.kill("SIGTERM");
+  const killed = killDevServerTree(child);
+  if (!killed.ok) problems.push(killed.detail);
+
+  if (!(await settlesWithin(exited, STOP_GRACE_MS))) {
+    problems.push(`the tree was still alive after ${STOP_GRACE_MS} ms`);
+    child.kill("SIGKILL");
+    if (!(await settlesWithin(exited, STOP_GRACE_MS))) problems.push("SIGKILL did not reap it either");
   }
 
-  const timedOut = Symbol("timed-out");
-  const settled = await Promise.race([
-    exited.then(() => "exited" as const),
-    new Promise<typeof timedOut>((resolve) => setTimeout(() => resolve(timedOut), 10_000)),
-  ]);
+  // A surviving server would only surface on the next run, as the busy-port
+  // guard, so it is reported here where the cause is still visible.
+  if (problems.length > 0) {
+    throw new Error(
+      `The unconfigured Vite server (PID ${child.pid}) on port ${UNCONFIGURED_PORT} may still be running: ` +
+        `${problems.join("; ")}.`,
+    );
+  }
+}
 
-  if (settled === timedOut) {
-    child.kill("SIGKILL");
-    await exited;
+async function settlesWithin(settled: Promise<void>, timeoutMs: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      settled.then(() => true),
+      new Promise<false>((resolve) => {
+        timer = setTimeout(() => resolve(false), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
