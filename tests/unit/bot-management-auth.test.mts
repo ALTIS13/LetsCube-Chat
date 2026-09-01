@@ -162,7 +162,7 @@ function createManagementApp(input: {
   } as Parameters<typeof createBotGatewayApp>[0]);
 }
 
-test("bot creation rollout is disabled by default and bounded to an explicit canary cohort", () => {
+test("bot creation is open unless the kill switch is set, and a retired cohort cannot close it", () => {
   const resolveBotCreationAdmission = (
     managementRoutes as typeof managementRoutes & {
       resolveBotCreationAdmission?: (
@@ -172,71 +172,45 @@ test("bot creation rollout is disabled by default and bounded to an explicit can
   ).resolveBotCreationAdmission;
 
   assert.equal(typeof resolveBotCreationAdmission, "function");
-  assert.equal(resolveBotCreationAdmission?.({})(USER_ID), false);
-  assert.equal(
-    resolveBotCreationAdmission?.({
-      BOT_CREATION_ENABLED: "true",
-      BOT_CREATION_CANARY_USER_IDS: USER_ID,
-    })(USER_ID),
-    true,
-  );
-  assert.equal(
-    resolveBotCreationAdmission?.({
-      BOT_CREATION_ENABLED: "true",
-      BOT_CREATION_CANARY_USER_IDS: USER_ID,
-    })(DEVELOPER_ID),
-    false,
-  );
-  assert.equal(
-    resolveBotCreationAdmission?.({
-      BOT_CREATION_ENABLED: "false",
-      BOT_CREATION_CANARY_USER_IDS: USER_ID,
-    })(USER_ID),
-    false,
-  );
 
-  assert.throws(
-    () =>
+  // Generally available: no configuration required to let an eligible account
+  // through. The account requirements are enforced separately in the database.
+  assert.equal(resolveBotCreationAdmission?.({})(USER_ID), true);
+  assert.equal(resolveBotCreationAdmission?.({ BOT_CREATION_ENABLED: "" })(USER_ID), true);
+  assert.equal(resolveBotCreationAdmission?.({ BOT_CREATION_ENABLED: "true" })(USER_ID), true);
+  assert.equal(resolveBotCreationAdmission?.({})(DEVELOPER_ID), true);
+
+  // The kill switch still closes it for everyone.
+  assert.equal(resolveBotCreationAdmission?.({ BOT_CREATION_ENABLED: "false" })(USER_ID), false);
+  assert.equal(resolveBotCreationAdmission?.({ BOT_CREATION_ENABLED: "false" })(DEVELOPER_ID), false);
+
+  // The canary cohort is retired. A value left behind in a deployment
+  // environment must not narrow admission again, which is how the feature
+  // stayed closed to everyone outside the cohort after the canary finished.
+  for (const leftover of [USER_ID, `${USER_ID},${DEVELOPER_ID}`, "not-a-user-id", ""]) {
+    assert.equal(
+      resolveBotCreationAdmission?.({ BOT_CREATION_CANARY_USER_IDS: leftover })(DEVELOPER_ID),
+      true,
+      `a leftover cohort value (${leftover || "empty"}) must not block creation`,
+    );
+    assert.equal(
       resolveBotCreationAdmission?.({
         BOT_CREATION_ENABLED: "true",
-      }),
-    /bot_gateway_config_invalid/,
-  );
-  assert.throws(
-    () =>
-      resolveBotCreationAdmission?.({
-        BOT_CREATION_ENABLED: "TRUE",
-        BOT_CREATION_CANARY_USER_IDS: USER_ID,
-      }),
-    /bot_gateway_config_invalid/,
-  );
-  assert.throws(
-    () =>
-      resolveBotCreationAdmission?.({
-        BOT_CREATION_ENABLED: "true",
-        BOT_CREATION_CANARY_USER_IDS: `${USER_ID},${USER_ID}`,
-      }),
-    /bot_gateway_config_invalid/,
-  );
-  assert.throws(
-    () =>
-      resolveBotCreationAdmission?.({
-        BOT_CREATION_ENABLED: "true",
-        BOT_CREATION_CANARY_USER_IDS: "not-a-user-id",
-      }),
-    /bot_gateway_config_invalid/,
-  );
-  assert.throws(
-    () =>
-      resolveBotCreationAdmission?.({
-        BOT_CREATION_ENABLED: "true",
-        BOT_CREATION_CANARY_USER_IDS: Array.from(
-          { length: 26 },
-          (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
-        ).join(","),
-      }),
-    /bot_gateway_config_invalid/,
-  );
+        BOT_CREATION_CANARY_USER_IDS: leftover,
+      })(DEVELOPER_ID),
+      true,
+    );
+  }
+
+  // An unrecognised switch value fails loudly rather than being read as "on",
+  // so a typo cannot quietly open the feature.
+  for (const invalid of ["TRUE", "False", "1", "yes", " true"]) {
+    assert.throws(
+      () => resolveBotCreationAdmission?.({ BOT_CREATION_ENABLED: invalid }),
+      /bot_gateway_config_invalid/,
+      `${invalid} must be rejected`,
+    );
+  }
 });
 
 test("management rate limits by verified user and normalized operation before mutation", async (t) => {

@@ -65,8 +65,7 @@ runtime settings.
 | `BOT_TOKEN_PEPPER` | Required server-only pepper: 32–1024 UTF-8 bytes with at least eight distinct characters. |
 | `BOT_WEBHOOK_ENCRYPTION_KEY` | Required 32-byte key encoded as exactly 43 base64url characters. Runtime secret. |
 | `BOT_MANAGEMENT_ALLOWED_ORIGINS` | Optional comma-separated exact HTTPS origins. `https://app.letscube.ru` is always allowed by the runtime. |
-| `BOT_CREATION_ENABLED` | Exact `true` enables canary admission evaluation. Missing, empty or `false` keeps creation disabled. Runtime only. |
-| `BOT_CREATION_CANARY_USER_IDS` | Required only when creation is enabled: 1–25 unique authenticated user UUIDs, comma-separated. Runtime only. |
+| `BOT_CREATION_ENABLED` | Kill switch. Exact `false` disables creation; missing, empty or `true` allows it. Any other value fails startup. Runtime only. |
 
 Never print these values, copy them into a ticket, include them in a Compose
 render, or inspect a running container's environment. Rotate the bot-token
@@ -82,14 +81,36 @@ its value. The existing worker alias remains unchanged; do not rename or remove
 it as part of Task 7. If the canonical binding is absent, Compose validation
 must fail instead of silently substituting a public or empty key.
 
-Bot creation requires both `BOT_CREATION_ENABLED=true` and membership of the
-authenticated user ID in the bounded cohort. The default denies every create
-request with generic `403 bot_creation_not_allowed`; list and detail management
-remain available and list eligibility reports `can_create=false`. Invalid
-enabled configuration fails gateway startup with the generic configuration
-error. Never add either rollout variable to Docker build args, `VITE_*`, SPA
-configuration, logs or a committed environment file. Expansion beyond 25
-users requires a separately reviewed rollout mechanism, not a larger string.
+Bot creation is generally available. The gateway allows it unless
+`BOT_CREATION_ENABLED` is exactly `false`, which is now a kill switch rather
+than an enable switch; the compose default is `true`. An unrecognised value
+still fails gateway startup with the generic configuration error, so a typo
+cannot quietly open or close the feature.
+
+`BOT_CREATION_CANARY_USER_IDS` is **retired**. The gateway does not read it and
+compose no longer passes it. Removing it was the fix for a real failure, not
+tidying: after the canary finished, the variable was still set, so every account
+outside that one cohort received `403 bot_creation_not_allowed` while meeting
+every account requirement — including the product owner. Leaving the variable in
+place would have let the same value close the feature again. Delete it from the
+Coolify environment when convenient; a leftover value is inert, and a unit test
+holds that it cannot narrow admission.
+
+Admission is not the same as eligibility, and abuse control has not moved.
+`bot_creation_eligibility_internal` still requires a confirmed email, a verified
+phone, an account older than 24 hours, no active ban, and fewer than three live
+bots. Because phone verification is currently restricted to administrators, an
+ordinary user still cannot satisfy the phone requirement; opening bot creation
+to everyone therefore also needs a separate decision on phone verification.
+
+When creation is refused, list and detail management remain available and list
+eligibility reports `can_create=false`. The client names the reason: the unmet
+requirements when there are any, and otherwise that the feature is switched off
+on the server. It previously joined an empty list and rendered
+"Создание недоступно: ." with no reason at all.
+
+Never add the rollout variable to Docker build args, `VITE_*`, SPA
+configuration, logs or a committed environment file.
 
 ## Local Packaging Checks
 

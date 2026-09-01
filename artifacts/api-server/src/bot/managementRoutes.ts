@@ -41,7 +41,6 @@ const CORS_HEADERS = "Authorization,Content-Type";
 const ALLOWED_METHODS = new Set(CORS_METHODS.split(","));
 const ALLOWED_HEADERS = new Set(["authorization", "content-type"]);
 const uuidSchema = z.string().uuid();
-const MAX_BOT_CREATION_CANARY_USERS = 25;
 const timestampSchema = z.string().datetime({ offset: true });
 const botStateSchema = z.enum([
   "active",
@@ -52,29 +51,35 @@ const botStateSchema = z.enum([
 ]);
 const tokenPrefixSchema = z.string().regex(/^lc_bot_[0-9a-f]{10}$/);
 
+/**
+ * Who may create a bot, on top of the account requirements the database
+ * enforces separately.
+ *
+ * Bot creation is now generally available, so this is a kill switch rather than
+ * an allow list. The canary cohort it used to carry is retired: it had served
+ * its purpose, and while it existed a leftover value in the deployment
+ * environment silently kept creation closed for everyone outside it — which is
+ * exactly how the feature stayed unusable after the canary finished.
+ * `BOT_CREATION_CANARY_USER_IDS` is therefore ignored, deliberately and not by
+ * omission, so that an old value cannot narrow admission again.
+ *
+ * Abuse control has not moved: `bot_creation_eligibility_internal` still
+ * requires a confirmed email, a verified phone, an account older than 24 hours,
+ * no active ban, and fewer than three live bots. This function only decides
+ * whether the feature is open at all.
+ *
+ * An unrecognised value fails loudly instead of being read as "on", so a typo
+ * cannot quietly open the feature.
+ */
 export function resolveBotCreationAdmission(
   environment: NodeJS.ProcessEnv,
 ): BotCreationAdmission {
   const enabled = environment.BOT_CREATION_ENABLED;
-  if (enabled === undefined || enabled === "" || enabled === "false") {
-    return () => false;
-  }
-  if (enabled !== "true") throw new Error("bot_gateway_config_invalid");
-
-  const entries = (environment.BOT_CREATION_CANARY_USER_IDS ?? "")
-    .split(",")
-    .map((value) => value.trim().toLowerCase());
-  if (
-    entries.length === 0 ||
-    entries.length > MAX_BOT_CREATION_CANARY_USERS ||
-    entries.some((value) => !uuidSchema.safeParse(value).success) ||
-    new Set(entries).size !== entries.length
-  ) {
+  if (enabled === "false") return () => false;
+  if (enabled !== undefined && enabled !== "" && enabled !== "true") {
     throw new Error("bot_gateway_config_invalid");
   }
-
-  const cohort = new Set(entries);
-  return (actorId) => cohort.has(actorId.toLowerCase());
+  return () => true;
 }
 const botSummaryRowSchema = z
   .object({

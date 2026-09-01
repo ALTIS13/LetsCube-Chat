@@ -8,6 +8,7 @@ import { BotTokenDialog, type BotTokenDialogHandle } from "@/components/bots/Bot
 import { KubBadge, KubButton, KubEmptyState, KubHeader, KubIcon } from "@/components/kub";
 import { useBotDetail, useBots } from "@/hooks/useBots";
 import type { BotSummary } from "@/lib/botManagement";
+import { describeCreationBlock } from "@/lib/botCreationBlock";
 import { cn } from "@/lib/utils";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -101,8 +102,13 @@ function BotRow({ bot, selected, onSelect }: { bot: BotSummary; selected: boolea
 }
 
 function EligibilityNotice({ eligibility }: { eligibility: NonNullable<ReturnType<typeof useBots>["data"]>["eligibility"] }) {
-  const unmet = [!eligibility.email_verified && "подтвердите email", !eligibility.phone_verified && "подтвердите телефон", !eligibility.account_age_met && "дождитесь 24 часов после регистрации", !eligibility.not_banned && "снимите активную блокировку", !eligibility.under_limit && `достигнут лимит ${eligibility.max_bots}`].filter(Boolean).join("; ");
-  return <div className="border-b border-[color:var(--kub-border-color)] px-4 py-3 text-xs leading-5 text-[color:var(--kub-muted)]">Создание недоступно: {unmet}.</div>;
+  const message = describeCreationBlock(eligibility);
+  if (!message) return null;
+  return (
+    <div className="border-b border-[color:var(--kub-border-color)] px-4 py-3 text-xs leading-5 text-[color:var(--kub-muted)]">
+      {message}
+    </div>
+  );
 }
 
 function BotListSkeleton() {

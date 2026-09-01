@@ -111,14 +111,16 @@ test("Coolify service keeps gateway secrets runtime-only and fails closed when r
     gateway,
     /BOT_WEBHOOK_ENCRYPTION_KEY:\s*\$\{BOT_WEBHOOK_ENCRYPTION_KEY:\?/,
   );
+  // Bot creation is generally available, so the deployment default is open and
+  // the variable is only a kill switch.
   assert.match(
     gateway,
-    /BOT_CREATION_ENABLED:\s*\$\{BOT_CREATION_ENABLED:-false\}/,
+    /BOT_CREATION_ENABLED:\s*\$\{BOT_CREATION_ENABLED:-true\}/,
   );
-  assert.match(
-    gateway,
-    /BOT_CREATION_CANARY_USER_IDS:\s*\$\{BOT_CREATION_CANARY_USER_IDS:-\}/,
-  );
+  // The retired cohort must not be passed through: while it was, a value left
+  // in the deployment environment silently kept creation closed for everyone
+  // outside it.
+  assert.doesNotMatch(gateway, /BOT_CREATION_CANARY_USER_IDS/);
   assert.match(gateway, /expose:\s*\r?\n\s+-\s+"8098"/);
   assert.match(gateway, /http:\/\/127\.0\.0\.1:8098\/healthz/);
   assert.doesNotMatch(gateway, /^\s+ports:\s*$/m);

@@ -89,8 +89,10 @@ services:
       BOT_TOKEN_PEPPER: ${BOT_TOKEN_PEPPER:?Configure BOT_TOKEN_PEPPER in Coolify}
       BOT_WEBHOOK_ENCRYPTION_KEY: ${BOT_WEBHOOK_ENCRYPTION_KEY:?Configure BOT_WEBHOOK_ENCRYPTION_KEY in Coolify}
       BOT_MANAGEMENT_ALLOWED_ORIGINS: ${BOT_MANAGEMENT_ALLOWED_ORIGINS:-}
-      BOT_CREATION_ENABLED: ${BOT_CREATION_ENABLED:-false}
-      BOT_CREATION_CANARY_USER_IDS: ${BOT_CREATION_CANARY_USER_IDS:-}
+      # Bot creation is generally available; this stays only as a kill switch.
+      # The retired canary cohort variable is deliberately not passed through,
+      # so a value left in the deployment environment cannot narrow admission.
+      BOT_CREATION_ENABLED: ${BOT_CREATION_ENABLED:-true}
     expose:
       - "8098"
     read_only: true
