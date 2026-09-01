@@ -44,21 +44,21 @@ export function PublicHomePage() {
       <main>
         <section
           aria-labelledby="public-home-title"
-          className="mx-auto w-full max-w-7xl px-4 pt-12 sm:px-6 sm:pt-16 lg:px-8"
+          className="mx-auto w-full max-w-7xl px-4 pt-8 sm:px-6 sm:pt-16 lg:px-8"
         >
           <p className="text-sm font-semibold uppercase tracking-wide text-[color:var(--kub-cyan)]">LETSCUBE</p>
           <h1
             id="public-home-title"
-            className="mt-3 max-w-3xl text-4xl font-bold leading-tight text-[color:var(--kub-text)] sm:text-5xl"
+            className="mt-3 max-w-3xl text-3xl font-bold leading-tight text-[color:var(--kub-text)] sm:text-4xl lg:text-5xl"
           >
             Мессенджер для общения и совместной работы
           </h1>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-[color:var(--kub-muted)] sm:text-lg">
+          <p className="mt-3 max-w-2xl text-base leading-6 text-[color:var(--kub-muted)] sm:mt-4 sm:leading-7 sm:text-lg">
             Переписка, файлы, задачи и уведомления в браузере, на Windows и на Android. Один аккаунт
             и одна история сообщений на всех устройствах.
           </p>
 
-          <div className="mt-7 flex flex-wrap items-center gap-3">
+          <div className="mt-5 flex flex-wrap items-center gap-2 sm:mt-7 sm:gap-3">
             {preferredPlatform && <ReleaseDownloadAction platform={preferredPlatform} />}
             <Link
               href="/login"
@@ -76,7 +76,7 @@ export function PublicHomePage() {
 
           {/* The interface is the illustration. The band is deliberately clipped
               at the bottom so the platform sections are visible from here. */}
-          <div className="mt-10 max-h-[42vh] overflow-hidden rounded-t-2xl border border-b-0 border-[color:var(--kub-border-color)]">
+          <div className="mt-6 max-h-[26vh] overflow-hidden rounded-t-2xl border border-b-0 border-[color:var(--kub-border-color)] sm:mt-10 sm:max-h-[42vh]">
             <img
               src={heroImage}
               alt="Окно LETSCUBE с открытым групповым чатом"
@@ -92,7 +92,7 @@ export function PublicHomePage() {
 
         <section
           aria-labelledby="public-platforms-title"
-          className="mx-auto w-full max-w-7xl px-4 pt-12 sm:px-6 lg:px-8"
+          className="mx-auto w-full max-w-7xl px-4 pt-8 sm:px-6 sm:pt-12 lg:px-8"
         >
           <h2 id="public-platforms-title" className="text-3xl font-bold text-[color:var(--kub-text)]">
             Приложения LETSCUBE

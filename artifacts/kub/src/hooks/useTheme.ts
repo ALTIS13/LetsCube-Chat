@@ -32,12 +32,29 @@ function getSystemTheme(): ResolvedTheme {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+/**
+ * The page background per theme, as literal values.
+ *
+ * The pre-paint bootstrap runs before any stylesheet is applied, so it cannot
+ * read `--kub-bg`. `tests/unit/theme-bootstrap-parity.test.mjs` asserts these
+ * stay equal to the stylesheet's own values.
+ */
+export const THEME_SURFACE_COLORS: Record<ResolvedTheme, string> = {
+  dark: "#050B18",
+  light: "#F4F8FC",
+};
+
 function applyResolvedTheme(resolved: ResolvedTheme) {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
   root.classList.toggle("dark", resolved === "dark");
   root.classList.toggle("light", resolved === "light");
   root.dataset.theme = resolved;
+  // Tells the user agent which palette its own controls, scrollbars and form
+  // widgets should use, so they stop rendering dark-on-dark.
+  root.style.colorScheme = resolved;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", THEME_SURFACE_COLORS[resolved]);
 }
 
 let currentTheme: Theme = readStoredTheme();
@@ -118,22 +135,28 @@ export function ThemeSync(): null {
 export const THEME_INIT_SCRIPT = `
 (function(){
   try {
-    var saved = localStorage.getItem("${STORAGE_KEY}");
+    var saved = localStorage.getItem("kub-theme");
     if (saved !== "system" && saved !== "dark" && saved !== "light") {
-      var legacy = localStorage.getItem("${LEGACY_KEY}");
+      var legacy = localStorage.getItem("kub:theme");
       saved = (legacy === "dark" || legacy === "light") ? legacy : "system";
     }
     var resolved = saved;
     if (saved === "system") {
       resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
     }
-    var c = document.documentElement.classList;
-    c.remove("dark"); c.remove("light");
-    c.add(resolved);
-    document.documentElement.setAttribute("data-theme", resolved);
+    apply(resolved);
   } catch (e) {
-    document.documentElement.classList.add("dark");
-    document.documentElement.setAttribute("data-theme", "dark");
+    apply("dark");
+  }
+  function apply(resolved) {
+    var root = document.documentElement;
+    root.classList.remove("dark");
+    root.classList.remove("light");
+    root.classList.add(resolved);
+    root.setAttribute("data-theme", resolved);
+    root.style.colorScheme = resolved;
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", resolved === "light" ? "#F4F8FC" : "#050B18");
   }
 })();
 `.trim();

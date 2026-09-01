@@ -62,9 +62,9 @@ export function PlatformShowcase({ platform, onRetry }: Props) {
   return (
     <section
       aria-labelledby={`platform-${platform.platform}`}
-      className="border-t border-[color:var(--kub-border-color)] py-10 first:border-t-0 sm:py-14"
+      className="border-t border-[color:var(--kub-border-color)] py-8 first:border-t-0 sm:py-12"
     >
-      <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:gap-14">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:gap-12">
         <div className="min-w-0 lg:w-[38%]">
           <div className="flex items-center gap-2 text-[color:var(--kub-muted)]">
             <FormFactorGlyph kind={formFactor} />

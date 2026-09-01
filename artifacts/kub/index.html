@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no"
     />
-    <meta name="theme-color" content="#17212b" />
+    <meta name="theme-color" content="#050B18" />
     <title>LETSCUBE</title>
     <meta name="description" content="LETSCUBE - защищённый мессенджер для общения, задач и совместной работы." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -35,28 +35,33 @@
       rel="stylesheet"
     />
     <script>
-      // Pre-hydration theme apply — keep in sync with THEME_INIT_SCRIPT in src/hooks/useTheme.ts.
-      (function () {
-        try {
-          var saved = localStorage.getItem("kub-theme");
-          if (saved !== "system" && saved !== "dark" && saved !== "light") {
-            var legacy = localStorage.getItem("kub:theme");
-            saved = (legacy === "dark" || legacy === "light") ? legacy : "system";
-          }
-          var resolved = saved;
-          if (saved === "system") {
-            resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches)
-              ? "dark"
-              : "light";
-          }
-          var c = document.documentElement.classList;
-          c.remove("dark"); c.remove("light");
-          c.add(resolved);
-          document.documentElement.setAttribute("data-theme", resolved);
-        } catch (e) {
-          document.documentElement.classList.add("dark");
-          document.documentElement.setAttribute("data-theme", "dark");
-        }
+      // Pre-hydration theme apply. Kept byte-identical in meaning to
+      // THEME_INIT_SCRIPT in src/hooks/useTheme.ts; a parity test enforces it.
+      (function(){
+    try {
+      var saved = localStorage.getItem("kub-theme");
+      if (saved !== "system" && saved !== "dark" && saved !== "light") {
+        var legacy = localStorage.getItem("kub:theme");
+        saved = (legacy === "dark" || legacy === "light") ? legacy : "system";
+      }
+      var resolved = saved;
+      if (saved === "system") {
+        resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+      }
+      apply(resolved);
+    } catch (e) {
+      apply("dark");
+    }
+    function apply(resolved) {
+      var root = document.documentElement;
+      root.classList.remove("dark");
+      root.classList.remove("light");
+      root.classList.add(resolved);
+      root.setAttribute("data-theme", resolved);
+      root.style.colorScheme = resolved;
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute("content", resolved === "light" ? "#F4F8FC" : "#050B18");
+    }
       })();
     </script>
   </head>
