@@ -77,10 +77,9 @@ export function PlatformShowcase({ platform, onRetry }: Props) {
             {platform.title}
           </h3>
 
-          <p className="mt-2 text-sm text-[color:var(--kub-muted)]">
-            {STATUS_LABELS[platform.state]}
-            {platform.stale && " · показаны сохранённые данные"}
-          </p>
+          {/* The stale disclosure travels with the action, which the hero
+              renders on its own, so printing it here too would duplicate it. */}
+          <p className="mt-2 text-sm text-[color:var(--kub-muted)]">{STATUS_LABELS[platform.state]}</p>
 
           <div className="mt-6">
             <ReleaseDownloadAction platform={platform} onRetry={onRetry} />

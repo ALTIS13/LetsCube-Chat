@@ -5,7 +5,7 @@ import { PlatformShowcase } from "@/components/public/PlatformShowcase";
 import { ReleaseChangelog } from "@/components/public/ReleaseChangelog";
 import { ReleaseDownloadAction } from "@/components/public/ReleaseDownloadAction";
 import { usePublicReleaseCatalog } from "@/hooks/usePublicReleaseCatalog";
-import type { PublicPlatformState } from "@/lib/publicReleaseModel";
+import { describePublicAvailability } from "@/lib/publicReleaseModel";
 import { useTheme } from "@/hooks/useTheme";
 import { getCurrentDistributionTarget } from "@/lib/platform/capabilities";
 import { PublicPageShell } from "./PublicPageShell";
@@ -101,7 +101,7 @@ export function PublicHomePage() {
           {/* Derived, never asserted. A static sentence here would keep saying a
               platform is downloadable after the catalog stopped saying so. */}
           <p className="mt-2 max-w-2xl text-sm text-[color:var(--kub-muted)]">
-            {availabilitySummary(platforms)}
+            {describePublicAvailability(platforms)}
           </p>
 
           <div className="mt-4">
@@ -117,26 +117,4 @@ export function PublicHomePage() {
       </main>
     </PublicPageShell>
   );
-}
-
-/**
- * Names only the platforms the catalog currently says are downloadable, and
- * only names the rest as planned. While the catalog is still being read it says
- * nothing at all rather than guessing.
- */
-function availabilitySummary(platforms: PublicPlatformState[]): string {
-  const ready = platforms.filter((platform) => platform.state === "available");
-  const planned = platforms.filter((platform) => platform.state === "unavailable");
-
-  if (ready.length === 0) {
-    return planned.length > 0
-      ? "Приложения готовятся к выпуску — используйте веб-версию."
-      : "Проверяем каталог релизов.";
-  }
-
-  const readyNames = ready.map((platform) => platform.title).join(" и ");
-  if (planned.length === 0) return `${readyNames} доступны для загрузки.`;
-
-  const plannedNames = planned.map((platform) => platform.title).join(" и ");
-  return `${readyNames} доступны для загрузки. ${plannedNames} — в разработке, до выпуска используйте веб-версию.`;
 }

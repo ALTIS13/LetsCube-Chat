@@ -213,10 +213,14 @@ test.describe("public home presentation", () => {
         .map((href) => new URL(href).hostname),
     );
 
+    // Internal links resolve against whatever base URL the run uses, so the
+    // allowed set is derived rather than hardcoded to the local fixture host.
+    const ownHost = new URL(page.url()).hostname;
     for (const host of hosts) {
-      expect(host, `${host} is an external destination this page must not offer`).toMatch(
-        /^(api\.letscube\.ru|127\.0\.0\.1|localhost)$/,
-      );
+      expect(
+        [ownHost, "api.letscube.ru"],
+        `${host} is an external destination this page must not offer`,
+      ).toContain(host);
     }
   });
 
@@ -323,6 +327,13 @@ test.describe("public home presentation", () => {
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
+    // Wait for the settled render. Every assertion below also holds while the
+    // catalog is still being read, so without this the test would pass without
+    // ever reaching the state it is named for.
+    await expect(
+      page.locator('section[aria-labelledby="platform-windows"]').getByText("Готовим выпуск"),
+    ).toBeVisible();
+
     // The strongest availability sentence on the page is derived, so it must
     // not keep claiming a download the catalog no longer offers.
     const intro = await page.getByRole("heading", { name: "Приложения LETSCUBE" })
@@ -341,6 +352,8 @@ test.describe("public home presentation", () => {
 
     const retry = page.getByRole("button", { name: "Повторить проверку" }).first();
     await expect(retry).toBeVisible();
+    // The summary must report the catalog, not invent a release schedule.
+    await expect(page.getByText("Каталог релизов сейчас недоступен — используйте веб-версию.")).toBeVisible();
     await expect(page.locator('main a[href^="https://api.letscube.ru/releases/files/"]')).toHaveCount(0);
 
     // Serve the catalog before retrying: a control that does nothing would
@@ -350,5 +363,27 @@ test.describe("public home presentation", () => {
     await retry.click();
 
     await expect(page.locator('main a[href^="https://api.letscube.ru/releases/files/"]').first()).toBeVisible();
+  });
+
+  test("a cached catalog that can no longer be reached says so on the action", async ({ page }) => {
+    // Staleness is what the client reports when an expired cache survives a
+    // refresh that failed, so the cache is seeded expired rather than waiting
+    // out the six-hour TTL. A fresh cache would be reused silently and would
+    // never exercise the disclosure at all.
+    await page.addInitScript((manifests) => {
+      for (const [platform, value] of Object.entries(manifests)) {
+        localStorage.setItem(
+          `letscube:release-catalog:v1:${platform}:stable`,
+          JSON.stringify({ manifest: value, fetchedAt: 0 }),
+        );
+      }
+    }, { windows: manifest("windows", true), android: manifest("android", true) });
+
+    await installCatalog(page, "unreachable");
+    await page.goto("/");
+
+    // The download still works from cache, and the page says where it came from.
+    await expect(page.locator('main a[href^="https://api.letscube.ru/releases/files/"]').first()).toBeVisible();
+    await expect(page.getByText("Показаны сохранённые данные каталога").first()).toBeVisible();
   });
 });

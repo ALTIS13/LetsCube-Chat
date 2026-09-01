@@ -9,7 +9,6 @@ import {
   type ResolvedTheme,
 } from "@/lib/themeRuntime";
 
-export { THEME_INIT_SCRIPT, THEME_SURFACE_COLORS } from "@/lib/themeRuntime";
 export type { ResolvedTheme } from "@/lib/themeRuntime";
 
 export type Theme = "system" | "dark" | "light";

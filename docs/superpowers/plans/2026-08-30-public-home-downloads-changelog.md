@@ -426,10 +426,13 @@ a single image cannot be theme matched and reusing another platform's render
 under an unreleased heading would suggest a product that does not exist; that
 also removed two byte-identical assets from the public payload, leaving four.
 
-Validation: `tests/e2e/public-home.spec.ts` and the mounted routing matrix pass
-55/55 across `chromium-desktop-1920`, `chromium-desktop-1440`,
-`chromium-mobile-390` and `chromium-mobile-412`; unit suites 66/66 with no
-skips; typecheck and production build clean.
+Validation is recorded against the head it was run at rather than as a bare
+count, because the suite grew afterwards and a fixed number silently stops
+matching the tree it sits in. At `c28d3bf` the mounted suites passed 55/55
+across `chromium-desktop-1920`, `chromium-desktop-1440`, `chromium-mobile-390`
+and `chromium-mobile-412`. The review fixes that followed added tests; see the
+final validation recorded in `.superpowers/sdd/.../progress.md` for the current
+counts.
 
 ### Task 5: Validate and deploy public downloads independently
 

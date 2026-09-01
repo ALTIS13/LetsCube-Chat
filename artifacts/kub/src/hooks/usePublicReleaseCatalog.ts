@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 
 import { useReleaseCatalog } from "@/hooks/useReleaseCatalog";
 import {
@@ -44,13 +44,15 @@ export function usePublicReleaseCatalog(): PublicReleaseCatalog {
   const androidSnapshot = android.snapshot;
   const windowsChecking = windows.checking;
   const androidChecking = android.checking;
-  const windowsRefresh = windows.refresh;
-  const androidRefresh = android.refresh;
+  // `useReleaseCatalog` returns a fresh closure each render, so holding it in a
+  // ref is what keeps this callback — and the memo that depends on it — stable.
+  const refreshers = useRef({ windows: windows.refresh, android: android.refresh });
+  refreshers.current = { windows: windows.refresh, android: android.refresh };
 
   const refresh = useCallback(() => {
-    windowsRefresh();
-    androidRefresh();
-  }, [androidRefresh, windowsRefresh]);
+    refreshers.current.windows();
+    refreshers.current.android();
+  }, []);
 
   return useMemo(() => {
     // The hook reports `checking` while a request is in flight; a settled
@@ -89,7 +91,7 @@ export function usePublicReleaseCatalog(): PublicReleaseCatalog {
       ]),
       refresh,
     };
-    // The hook returns a fresh object each render, so the memo depends on the
-    // values it actually reads rather than on those objects.
+    // The underlying hook returns a fresh object each render, so this depends
+    // on the values actually read plus a refresh whose identity is stable.
   }, [androidChecking, androidSnapshot, refresh, windowsChecking, windowsSnapshot]);
 }

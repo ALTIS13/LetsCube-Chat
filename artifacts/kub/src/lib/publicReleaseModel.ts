@@ -16,6 +16,14 @@ export type PublicPlatformState = {
   platform: ReleasePlatform;
   title: string;
   state: PublicPlatformStatus;
+  /**
+   * Whether a Stable manifest is published for this platform at all.
+   *
+   * "unavailable" means two different things without it: a release being
+   * prepared, and a platform nobody has started publishing. A summary that
+   * cannot tell them apart says the wrong thing about both.
+   */
+  catalogPublished: boolean;
   version: string | null;
   href: string | null;
   highlights: string[];
@@ -56,6 +64,7 @@ export function describePublicPlatform(input: PublicPlatformInput): PublicPlatfo
   const base = {
     platform: input.platform,
     title: input.title,
+    catalogPublished: input.catalogPublished,
     version: null as string | null,
     href: null as string | null,
     highlights: [] as string[],
@@ -123,4 +132,42 @@ export function selectPublicChangelog(sources: PublicChangelogSource[]): PublicC
   }
 
   return newest;
+}
+
+/**
+ * One sentence describing the whole platform list.
+ *
+ * It is derived rather than written down because a fixed sentence keeps making
+ * its claim after the catalog stops supporting it. Every branch below is
+ * reachable, and each is covered: an earlier version had an unreachable
+ * "checking" branch and therefore announced that everything was being prepared
+ * while the sections underneath reported the catalog was unreachable.
+ */
+export function describePublicAvailability(platforms: PublicPlatformState[]): string {
+  const published = platforms.filter((platform) => platform.catalogPublished);
+  const planned = platforms.filter((platform) => !platform.catalogPublished);
+  const ready = published.filter((platform) => platform.state === "available");
+  const preparing = published.filter((platform) => platform.state === "unavailable");
+
+  if (published.some((platform) => platform.state === "loading")) {
+    return "Проверяем каталог релизов.";
+  }
+
+  const inDevelopment = [...preparing, ...planned].map((platform) => platform.title);
+
+  if (ready.length === 0) {
+    if (published.some((platform) => platform.state === "error")) {
+      return "Каталог релизов сейчас недоступен — используйте веб-версию.";
+    }
+    return "Приложения готовятся к выпуску — используйте веб-версию.";
+  }
+
+  const readyNames = joinTitles(ready.map((platform) => platform.title));
+  if (inDevelopment.length === 0) return `${readyNames} доступны для загрузки.`;
+  return `${readyNames} доступны для загрузки. ${joinTitles(inDevelopment)} — в разработке.`;
+}
+
+function joinTitles(titles: string[]): string {
+  if (titles.length <= 1) return titles[0] ?? "";
+  return `${titles.slice(0, -1).join(", ")} и ${titles[titles.length - 1]}`;
 }

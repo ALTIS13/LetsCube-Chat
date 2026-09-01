@@ -3,6 +3,7 @@ import test from "node:test";
 
 import type { ReleaseCatalogSnapshot, ReleaseManifest } from "../../artifacts/kub/src/lib/releaseCatalog.ts";
 import {
+  describePublicAvailability,
   describePublicPlatform,
   selectPublicChangelog,
   PUBLIC_CHANGELOG_HIGHLIGHT_LIMIT,
@@ -226,4 +227,79 @@ test("the changelog caps highlights and falls back to notes when there are none"
 test("the changelog is absent when nothing is published", () => {
   assert.equal(selectPublicChangelog([]), null);
   assert.equal(selectPublicChangelog([{ title: "Windows", snapshot: null }]), null);
+});
+
+function platformState(overrides: Partial<ReturnType<typeof describePublicPlatform>> = {}) {
+  return {
+    platform: "windows" as const,
+    title: "Windows",
+    catalogPublished: true,
+    state: "available" as const,
+    version: "0.2.10",
+    href: "https://api.letscube.ru/releases/files/windows/0.2.10/setup.exe",
+    highlights: [],
+    stale: false,
+    ...overrides,
+  };
+}
+
+const PLANNED = [
+  platformState({ platform: "macos", title: "macOS", catalogPublished: false, state: "unavailable", version: null, href: null }),
+  platformState({ platform: "ios", title: "iPhone и iPad", catalogPublished: false, state: "unavailable", version: null, href: null }),
+];
+
+test("the summary names only what the catalog says is downloadable", () => {
+  const summary = describePublicAvailability([
+    platformState(),
+    platformState({ platform: "android", title: "Android" }),
+    ...PLANNED,
+  ]);
+
+  assert.match(summary, /^Windows и Android доступны для загрузки\./);
+  assert.match(summary, /macOS и iPhone и iPad — в разработке\./);
+});
+
+test("the summary reports checking while a published catalog is still being read", () => {
+  // Apple platforms are always unavailable, so a summary that only looked at
+  // "is anything available" would announce that everything is being prepared
+  // while the sections below still said they were loading.
+  const summary = describePublicAvailability([
+    platformState({ state: "loading", version: null, href: null }),
+    platformState({ platform: "android", title: "Android" }),
+    ...PLANNED,
+  ]);
+
+  assert.equal(summary, "Проверяем каталог релизов.");
+});
+
+test("the summary says the catalog is unreachable rather than that a release is coming", () => {
+  const summary = describePublicAvailability([
+    platformState({ state: "error", version: null, href: null }),
+    platformState({ platform: "android", title: "Android", state: "error", version: null, href: null }),
+    ...PLANNED,
+  ]);
+
+  assert.equal(summary, "Каталог релизов сейчас недоступен — используйте веб-версию.");
+  assert.doesNotMatch(summary, /готовятся к выпуску/);
+});
+
+test("the summary says a release is being prepared only when that is what the catalog says", () => {
+  const summary = describePublicAvailability([
+    platformState({ state: "unavailable", version: "0.2.11", href: null }),
+    platformState({ platform: "android", title: "Android", state: "unavailable", version: "0.1.4", href: null }),
+    ...PLANNED,
+  ]);
+
+  assert.equal(summary, "Приложения готовятся к выпуску — используйте веб-версию.");
+});
+
+test("the summary never claims availability when nothing is available", () => {
+  for (const state of ["loading", "unavailable", "error"] as const) {
+    const summary = describePublicAvailability([
+      platformState({ state, version: null, href: null }),
+      platformState({ platform: "android", title: "Android", state, version: null, href: null }),
+      ...PLANNED,
+    ]);
+    assert.doesNotMatch(summary, /доступны для загрузки/, state);
+  }
 });

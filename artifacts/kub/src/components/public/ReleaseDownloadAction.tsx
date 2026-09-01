@@ -69,7 +69,7 @@ export function ReleaseDownloadAction({ platform, onRetry, className }: Props) {
           "bg-[var(--kub-action-primary-background)] text-[color:var(--kub-action-primary-foreground)] hover:bg-[var(--kub-action-primary-hover)]",
           className,
         )}
-    >
+      >
         <KubIcon name="cloud" size={16} tone="currentColor" />
         {label}
         {platform.version && <span className="font-normal opacity-80">{platform.version}</span>}
