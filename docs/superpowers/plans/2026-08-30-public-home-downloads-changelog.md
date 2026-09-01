@@ -396,7 +396,7 @@ Show the newest available Stable release, platform, version, date and up to six 
 - [x] **Step 6: Preserve pre-paint theme behavior**
 
 Keep the inline bootstrap in `index.html` synchronized with `THEME_INIT_SCRIPT`
-in `useTheme.ts` through a parity test. Add `color-scheme: light dark` and
+in `artifacts/kub/src/lib/themeRuntime.ts` through a parity test. Add `color-scheme: light dark` and
 theme-correct `theme-color` handling before React paint and on resolved-theme
 changes. The existing iPhone/iPad-only PWA manifest injection block remains
 behaviorally unchanged and is covered by its current distribution regression.
@@ -426,13 +426,21 @@ a single image cannot be theme matched and reusing another platform's render
 under an unreleased heading would suggest a product that does not exist; that
 also removed two byte-identical assets from the public payload, leaving four.
 
-Validation is recorded against the head it was run at rather than as a bare
-count, because the suite grew afterwards and a fixed number silently stops
-matching the tree it sits in. At `c28d3bf` the mounted suites passed 55/55
-across `chromium-desktop-1920`, `chromium-desktop-1440`, `chromium-mobile-390`
-and `chromium-mobile-412`. The review fixes that followed added tests; see the
-final validation recorded in `.superpowers/sdd/.../progress.md` for the current
-counts.
+Validation is recorded against the head it was run at, because the suite grew
+during review and a bare count silently stops matching the tree it sits in.
+`docs/operations/public-home-release.md` carries the commands; the numbers below
+are the runs, each against the head named.
+
+| Head | Mounted suites, four release viewports | Unit suites |
+| --- | --- | --- |
+| `c28d3bf` | 55/55 | 66/66 |
+| `a169033` | 71/71 | 84/84 |
+| `ed51bb9` | 75/75 | 89/89 |
+
+The mounted figure counts `tests/e2e/public-home.spec.ts` plus
+`tests/e2e/public-home-routing.spec.ts` across `chromium-desktop-1920`,
+`chromium-desktop-1440`, `chromium-mobile-390` and `chromium-mobile-412`; the
+routing spec deliberately runs once, so its other-project runs are skips.
 
 ### Task 5: Validate and deploy public downloads independently
 

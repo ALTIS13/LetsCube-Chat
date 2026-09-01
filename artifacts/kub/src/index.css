@@ -99,7 +99,7 @@
  * Theme-agnostic root: typography, radius, shadow scale, spacing.
  * Per-theme color tokens live in `.dark` and `.light` blocks below.
  * The HTML element ALWAYS has either a `.dark` or `.light` class — the inline
- * script in `index.html` (mirrored by `THEME_INIT_SCRIPT` in `useTheme.ts`)
+ * script in `index.html` (mirrored by `THEME_INIT_SCRIPT` in `src/lib/themeRuntime.ts`)
  * resolves "system" preference before React hydrates so there's no flash.
  * ─────────────────────────────────────────────────────────────────────────── */
 :root {

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { useReleaseCatalog } from "@/hooks/useReleaseCatalog";
 import {
@@ -27,6 +27,11 @@ export const PUBLIC_PLATFORM_TITLES: Record<PublicPlatformKey, string> = {
   ios: "iPhone и iPad",
 };
 
+/** Headings may carry a conjunction; list sentences may not. */
+export const PUBLIC_PLATFORM_LIST_NAMES: Partial<Record<PublicPlatformKey, string>> = {
+  ios: "iOS",
+};
+
 const UNPUBLISHED_PLATFORMS: ReleasePlatform[] = ["macos", "ios"];
 
 export type PublicReleaseCatalog = {
@@ -46,8 +51,11 @@ export function usePublicReleaseCatalog(): PublicReleaseCatalog {
   const androidChecking = android.checking;
   // `useReleaseCatalog` returns a fresh closure each render, so holding it in a
   // ref is what keeps this callback — and the memo that depends on it — stable.
+  // The write happens in an effect: React forbids mutating a ref during render.
   const refreshers = useRef({ windows: windows.refresh, android: android.refresh });
-  refreshers.current = { windows: windows.refresh, android: android.refresh };
+  useEffect(() => {
+    refreshers.current = { windows: windows.refresh, android: android.refresh };
+  }, [android.refresh, windows.refresh]);
 
   const refresh = useCallback(() => {
     refreshers.current.windows();
@@ -65,6 +73,7 @@ export function usePublicReleaseCatalog(): PublicReleaseCatalog {
       describePublicPlatform({
         platform: key,
         title: PUBLIC_PLATFORM_TITLES[key],
+        listTitle: PUBLIC_PLATFORM_LIST_NAMES[key],
         catalogPublished: true,
         loading: checking,
         failed: !checking && !snapshot,
@@ -76,6 +85,7 @@ export function usePublicReleaseCatalog(): PublicReleaseCatalog {
       describePublicPlatform({
         platform,
         title: PUBLIC_PLATFORM_TITLES[platform as PublicPlatformKey],
+        listTitle: PUBLIC_PLATFORM_LIST_NAMES[platform as PublicPlatformKey],
         catalogPublished: false,
         loading: false,
         failed: false,

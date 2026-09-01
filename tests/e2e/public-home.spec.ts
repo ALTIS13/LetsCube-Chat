@@ -352,8 +352,14 @@ test.describe("public home presentation", () => {
 
     const retry = page.getByRole("button", { name: "Повторить проверку" }).first();
     await expect(retry).toBeVisible();
-    // The summary must report the catalog, not invent a release schedule.
-    await expect(page.getByText("Каталог релизов сейчас недоступен — используйте веб-версию.")).toBeVisible();
+    // The summary must report the catalog rather than invent a release
+    // schedule, and it must name the platforms whose catalog actually failed.
+    const summary = page.getByRole("heading", { name: "Приложения LETSCUBE" })
+      .locator("xpath=following-sibling::p[1]");
+    await expect(summary).toContainText("сейчас недоступен");
+    await expect(summary).toContainText("Windows");
+    await expect(summary).toContainText("Android");
+    await expect(summary).not.toContainText("готовим к выпуску");
     await expect(page.locator('main a[href^="https://api.letscube.ru/releases/files/"]')).toHaveCount(0);
 
     // Serve the catalog before retrying: a control that does nothing would
@@ -384,6 +390,15 @@ test.describe("public home presentation", () => {
 
     // The download still works from cache, and the page says where it came from.
     await expect(page.locator('main a[href^="https://api.letscube.ru/releases/files/"]').first()).toBeVisible();
-    await expect(page.getByText("Показаны сохранённые данные каталога").first()).toBeVisible();
+
+    // Exactly once inside a section. It used to be printed both by the section
+    // and by the action, and nothing objected. The hero renders its own action
+    // and therefore its own disclosure, which is why this is scoped.
+    for (const platform of ["windows", "android"]) {
+      await expect(
+        page.locator(`section[aria-labelledby="platform-${platform}"]`)
+          .getByText("Показаны сохранённые данные каталога"),
+      ).toHaveCount(1);
+    }
   });
 });

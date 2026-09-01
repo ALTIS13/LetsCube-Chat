@@ -24,6 +24,13 @@ export type PublicPlatformState = {
    * cannot tell them apart says the wrong thing about both.
    */
   catalogPublished: boolean;
+  /**
+   * The platform's name inside a list sentence.
+   *
+   * Separate from `title` because a heading may read "iPhone и iPad" while a
+   * comma-joined list needs a name that does not contain a conjunction.
+   */
+  listTitle: string;
   version: string | null;
   href: string | null;
   highlights: string[];
@@ -33,6 +40,8 @@ export type PublicPlatformState = {
 export type PublicPlatformInput = {
   platform: ReleasePlatform;
   title: string;
+  /** Defaults to `title` when the heading is already list-safe. */
+  listTitle?: string;
   /**
    * Whether a Stable manifest is published for this platform at all. Android
    * and Windows are; macOS and iOS are not, and their absence is the expected
@@ -65,6 +74,7 @@ export function describePublicPlatform(input: PublicPlatformInput): PublicPlatfo
     platform: input.platform,
     title: input.title,
     catalogPublished: input.catalogPublished,
+    listTitle: input.listTitle ?? input.title,
     version: null as string | null,
     href: null as string | null,
     highlights: [] as string[],
@@ -138,36 +148,42 @@ export function selectPublicChangelog(sources: PublicChangelogSource[]): PublicC
  * One sentence describing the whole platform list.
  *
  * It is derived rather than written down because a fixed sentence keeps making
- * its claim after the catalog stops supporting it. Every branch below is
- * reachable, and each is covered: an earlier version had an unreachable
- * "checking" branch and therefore announced that everything was being prepared
- * while the sections underneath reported the catalog was unreachable.
+ * its claim after the catalog stops supporting it. It is also **total**: every
+ * platform appears in exactly one clause, so the sentence can never quietly
+ * omit one whose catalog failed while describing the others.
+ *
+ * The one deliberate simplification is that any platform still being read
+ * collapses the whole sentence to "checking". That understates rather than
+ * misstates, and it is transient.
  */
 export function describePublicAvailability(platforms: PublicPlatformState[]): string {
   const published = platforms.filter((platform) => platform.catalogPublished);
-  const planned = platforms.filter((platform) => !platform.catalogPublished);
-  const ready = published.filter((platform) => platform.state === "available");
-  const preparing = published.filter((platform) => platform.state === "unavailable");
-
   if (published.some((platform) => platform.state === "loading")) {
     return "Проверяем каталог релизов.";
   }
 
-  const inDevelopment = [...preparing, ...planned].map((platform) => platform.title);
+  const named = (group: PublicPlatformState[]) => joinTitles(group.map((platform) => platform.listTitle));
+  const ready = published.filter((platform) => platform.state === "available");
+  const preparing = published.filter((platform) => platform.state === "unavailable");
+  const unreachable = published.filter((platform) => platform.state === "error");
+  const planned = platforms.filter((platform) => !platform.catalogPublished);
 
-  if (ready.length === 0) {
-    if (published.some((platform) => platform.state === "error")) {
-      return "Каталог релизов сейчас недоступен — используйте веб-версию.";
-    }
-    return "Приложения готовятся к выпуску — используйте веб-версию.";
+  const clauses: string[] = [];
+  if (ready.length > 0) {
+    clauses.push(`${named(ready)} ${ready.length === 1 ? "доступен" : "доступны"} для загрузки`);
   }
+  if (preparing.length > 0) clauses.push(`${named(preparing)} готовим к выпуску`);
+  if (unreachable.length > 0) clauses.push(`каталог для ${named(unreachable)} сейчас недоступен`);
+  if (planned.length > 0) clauses.push(`${named(planned)} в разработке`);
 
-  const readyNames = joinTitles(ready.map((platform) => platform.title));
-  if (inDevelopment.length === 0) return `${readyNames} доступны для загрузки.`;
-  return `${readyNames} доступны для загрузки. ${joinTitles(inDevelopment)} — в разработке.`;
+  if (clauses.length === 0) return "Проверяем каталог релизов.";
+  const sentence = `${clauses.join("; ")}.`;
+  return sentence.charAt(0).toUpperCase() + sentence.slice(1);
 }
 
 function joinTitles(titles: string[]): string {
   if (titles.length <= 1) return titles[0] ?? "";
-  return `${titles.slice(0, -1).join(", ")} и ${titles[titles.length - 1]}`;
+  // Comma-only. A title may itself contain "и" (iPhone и iPad), which turns a
+  // conjunction-joined list into an ambiguous one.
+  return titles.join(", ");
 }

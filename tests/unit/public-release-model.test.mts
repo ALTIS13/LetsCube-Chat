@@ -229,77 +229,126 @@ test("the changelog is absent when nothing is published", () => {
   assert.equal(selectPublicChangelog([{ title: "Windows", snapshot: null }]), null);
 });
 
-function platformState(overrides: Partial<ReturnType<typeof describePublicPlatform>> = {}) {
-  return {
-    platform: "windows" as const,
-    title: "Windows",
+const PUBLISHED_STATES = ["loading", "available", "unavailable", "error"] as const;
+
+function publishedState(platform: "windows" | "android", state: (typeof PUBLISHED_STATES)[number]) {
+  return describePublicPlatform({
+    platform,
+    title: platform === "windows" ? "Windows" : "Android",
     catalogPublished: true,
-    state: "available" as const,
-    version: "0.2.10",
-    href: "https://api.letscube.ru/releases/files/windows/0.2.10/setup.exe",
-    highlights: [],
-    stale: false,
-    ...overrides,
-  };
+    loading: state === "loading",
+    failed: state === "error",
+    snapshot: state === "available" || state === "unavailable"
+      ? snapshot({
+        manifest: manifest(
+          // `manifest` spreads overrides wholesale, so passing `artifact:
+          // undefined` would erase the default rather than keep it.
+          state === "available"
+            ? { platform, available: true }
+            : { platform, available: false, artifact: null },
+        ),
+      })
+      : null,
+  });
 }
 
-const PLANNED = [
-  platformState({ platform: "macos", title: "macOS", catalogPublished: false, state: "unavailable", version: null, href: null }),
-  platformState({ platform: "ios", title: "iPhone и iPad", catalogPublished: false, state: "unavailable", version: null, href: null }),
-];
+const PLANNED = (["macos", "ios"] as const).map((platform) =>
+  describePublicPlatform({
+    platform,
+    title: platform === "macos" ? "macOS" : "iPhone и iPad",
+    listTitle: platform === "macos" ? undefined : "iOS",
+    catalogPublished: false,
+    loading: false,
+    failed: false,
+    snapshot: null,
+  }),
+);
 
-test("the summary names only what the catalog says is downloadable", () => {
-  const summary = describePublicAvailability([
-    platformState(),
-    platformState({ platform: "android", title: "Android" }),
-    ...PLANNED,
-  ]);
+/**
+ * The whole reachable input space, not a few chosen shapes.
+ *
+ * A previous version of these tests only covered configurations where both
+ * published platforms were in the same state, and a mutation that dropped the
+ * mixed cases restored the exact sentence this function exists to prevent while
+ * every test stayed green.
+ */
+test("the summary is total over every reachable combination", () => {
+  for (const windowsState of PUBLISHED_STATES) {
+    for (const androidState of PUBLISHED_STATES) {
+      const published = [publishedState("windows", windowsState), publishedState("android", androidState)];
+      const summary = describePublicAvailability([...published, ...PLANNED]);
+      const where = `${windowsState}/${androidState}`;
 
-  assert.match(summary, /^Windows и Android доступны для загрузки\./);
-  assert.match(summary, /macOS и iPhone и iPad — в разработке\./);
-});
+      assert.match(summary, /\.$/, `${where}: not a sentence`);
 
-test("the summary reports checking while a published catalog is still being read", () => {
-  // Apple platforms are always unavailable, so a summary that only looked at
-  // "is anything available" would announce that everything is being prepared
-  // while the sections below still said they were loading.
-  const summary = describePublicAvailability([
-    platformState({ state: "loading", version: null, href: null }),
-    platformState({ platform: "android", title: "Android" }),
-    ...PLANNED,
-  ]);
+      if (windowsState === "loading" || androidState === "loading") {
+        assert.equal(summary, "Проверяем каталог релизов.", where);
+        continue;
+      }
 
-  assert.equal(summary, "Проверяем каталог релизов.");
-});
+      // Every platform is accounted for, so the sentence can never quietly drop
+      // one whose catalog failed while describing the others.
+      for (const platform of [...published, ...PLANNED]) {
+        assert.ok(
+          summary.includes(platform.listTitle),
+          `${where}: ${platform.listTitle} is missing from "${summary}"`,
+        );
+      }
 
-test("the summary says the catalog is unreachable rather than that a release is coming", () => {
-  const summary = describePublicAvailability([
-    platformState({ state: "error", version: null, href: null }),
-    platformState({ platform: "android", title: "Android", state: "error", version: null, href: null }),
-    ...PLANNED,
-  ]);
+      const anyAvailable = published.some((platform) => platform.state === "available");
+      assert.equal(
+        /доступ(ен|ны) для загрузки/.test(summary),
+        anyAvailable,
+        `${where}: availability claim disagrees with the states in "${summary}"`,
+      );
 
-  assert.equal(summary, "Каталог релизов сейчас недоступен — используйте веб-версию.");
-  assert.doesNotMatch(summary, /готовятся к выпуску/);
-});
+      assert.equal(
+        summary.includes("сейчас недоступен"),
+        published.some((platform) => platform.state === "error"),
+        `${where}: catalog-failure clause disagrees with the states in "${summary}"`,
+      );
 
-test("the summary says a release is being prepared only when that is what the catalog says", () => {
-  const summary = describePublicAvailability([
-    platformState({ state: "unavailable", version: "0.2.11", href: null }),
-    platformState({ platform: "android", title: "Android", state: "unavailable", version: "0.1.4", href: null }),
-    ...PLANNED,
-  ]);
-
-  assert.equal(summary, "Приложения готовятся к выпуску — используйте веб-версию.");
-});
-
-test("the summary never claims availability when nothing is available", () => {
-  for (const state of ["loading", "unavailable", "error"] as const) {
-    const summary = describePublicAvailability([
-      platformState({ state, version: null, href: null }),
-      platformState({ platform: "android", title: "Android", state, version: null, href: null }),
-      ...PLANNED,
-    ]);
-    assert.doesNotMatch(summary, /доступны для загрузки/, state);
+      assert.equal(
+        summary.includes("готовим к выпуску"),
+        published.some((platform) => platform.state === "unavailable"),
+        `${where}: preparing clause disagrees with the states in "${summary}"`,
+      );
+    }
   }
+});
+
+test("the summary reads correctly in the states a visitor is most likely to meet", () => {
+  const both = describePublicAvailability([
+    publishedState("windows", "available"),
+    publishedState("android", "available"),
+    ...PLANNED,
+  ]);
+  assert.equal(both, "Windows, Android доступны для загрузки; macOS, iOS в разработке.");
+
+  const one = describePublicAvailability([
+    publishedState("windows", "available"),
+    publishedState("android", "unavailable"),
+    ...PLANNED,
+  ]);
+  // Singular agreement, and the preparing platform is named rather than lumped
+  // in with the ones nobody has started.
+  assert.equal(one, "Windows доступен для загрузки; Android готовим к выпуску; macOS, iOS в разработке.");
+
+  const outage = describePublicAvailability([
+    publishedState("windows", "error"),
+    publishedState("android", "error"),
+    ...PLANNED,
+  ]);
+  assert.equal(outage, "Каталог для Windows, Android сейчас недоступен; macOS, iOS в разработке.");
+  assert.doesNotMatch(outage, /готовим к выпуску/);
+});
+
+test("no platform name is rendered with a conjunction inside a list", () => {
+  const summary = describePublicAvailability([
+    publishedState("windows", "available"),
+    publishedState("android", "available"),
+    ...PLANNED,
+  ]);
+  // "iPhone и iPad" as a list item would read as two separate entries.
+  assert.doesNotMatch(summary, /iPhone и iPad/);
 });
