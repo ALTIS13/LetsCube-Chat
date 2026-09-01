@@ -24,6 +24,23 @@ are resolved in `f4ab801`. Evidence:
 4 and `task-3-brief.md`. Then Task 4 (final UI), then Task 5 (validation and
 deploy).
 
+**Queued next, after Task 5 closes: the interface audit and polish stage.** The
+user requested it on 2026-09-01 and explicitly scheduled it after the current
+plan, so do not interleave it. Its approved scope and ordering are queue item 18
+of `docs/PRODUCTION_PRIORITY_TRACKER.md`. Two halves, kept separate on purpose:
+
+1. Audit first, then fix. Enumerate the accumulated visual defects with a
+   reproduction, screenshot and severity across the five release viewports, both
+   themes and all three shells, then fix in scoped batches with regression tests.
+   A change without a recorded defect or an explicit design decision is out of
+   scope; do not polish by eye.
+2. Execute the already approved
+   `docs/superpowers/plans/2026-08-30-shared-motion-feedback.md` for the response
+   and action animations. It is 5 tasks and 33 steps, none started. Do not build
+   a second animation system beside it.
+
+Write that stage's detailed task-by-task plan when it starts, not before.
+
 One follow-up was deliberately left outside Task 2 and must not be forgotten:
 `isSupabaseConfigured()` in `artifacts/kub/src/lib/supabase/client.ts` has no
 direct coverage, so mutating its `&&` to `||` keeps the whole suite green while
@@ -468,5 +485,7 @@ Then:
    image privacy; look at the generated pixels and record the sign-off.
 5. Run the asset validation, review the diff, then commit.
 6. Continue with Task 4 UI, then Task 5 validation and deploy.
+7. Only after Task 5 closes, open the interface audit and polish stage from
+   queue item 18 of the tracker, and write its plan then.
 
 Do not start a different roadmap item unless the user redirects the work.
