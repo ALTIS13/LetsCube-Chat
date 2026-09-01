@@ -189,11 +189,17 @@ test.describe("public home presentation", () => {
       await expect(section).toHaveCount(1);
       await expect(section.getByRole("heading", { name: heading })).toBeVisible();
 
-      await expect(section.getByText("В разработке")).toBeVisible();
+      // The status line and the action both say it, so this is scoped to the
+      // first rather than asserted as a single match.
+      await expect(section.getByText("В разработке").first()).toBeVisible();
       await expect(section.locator('a[href*="/releases/files/"]')).toHaveCount(0);
       await expect(section.locator("a, button")).toHaveCount(0);
 
       const text = (await section.innerText()).toLowerCase();
+      // "Готовим выпуск" is the status of a published platform between releases.
+      // A platform with no catalog at all has no build and no schedule, so
+      // saying it here would announce progress that does not exist.
+      expect(text, `${heading} announces release progress it does not have`).not.toContain("готовим выпуск");
       for (const claim of STORE_CLAIMS) {
         expect(text, `${heading} makes a store availability claim`).not.toMatch(claim);
       }

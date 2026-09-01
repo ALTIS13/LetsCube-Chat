@@ -436,11 +436,23 @@ are the runs, each against the head named.
 | `c28d3bf` | 55/55 | 66/66 |
 | `a169033` | 71/71 | 84/84 |
 | `ed51bb9` | 75/75 | 89/89 |
+| `19eac6a` | 75/75 | 87/87 |
+| this head | 75/75 | 604/605 |
 
 The mounted figure counts `tests/e2e/public-home.spec.ts` plus
 `tests/e2e/public-home-routing.spec.ts` across `chromium-desktop-1920`,
 `chromium-desktop-1440`, `chromium-mobile-390` and `chromium-mobile-412`; the
 routing spec deliberately runs once, so its other-project runs are skips.
+
+The unit figure changes shape on the last row on purpose. Earlier rows counted
+only the suites this plan touches, which is why a review round that added tests
+could raise the number without anything else being run. The final row is the
+whole `tests/unit` directory, so it also states what this branch leaves behind:
+one failure, `android-release-signing`, which fails on this workstation because
+its temporary fixture never receives a Gradle wrapper and the assertion reads a
+shell "command not found" instead of the signing guard. Neither that test nor
+the scripts it exercises is modified on this branch, so it is equally red on
+`main`; it is tracked separately and is not an Android signing regression.
 
 ### Task 5: Validate and deploy public downloads independently
 

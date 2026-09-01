@@ -230,3 +230,31 @@ and D-003 aligned the receipt icon size.
 
 The product previews avoid the case by using concise fixture replies, which is a
 content choice for imagery and not a workaround for the defect.
+
+## D-009 — an unreleased platform announced release progress it did not have
+
+**Where:** `artifacts/kub/src/components/public/PlatformShowcase.tsx`, the status
+line under each platform heading. Every viewport, both themes, all catalog
+states.
+
+**Defect:** the status line was keyed on the platform state alone, and
+`unavailable` was labelled `Готовим выпуск`. That state covers two different
+situations: a published platform between releases, and a platform with no
+published catalog at all. macOS and iOS are the second kind — no manifest, no
+build, no schedule — and were told to a logged-out visitor as a release being
+prepared.
+
+**Consequence:** one screen carried three statements about macOS at once — the
+heading status `Готовим выпуск`, the button `В разработке`, and the summary
+`macOS и iOS в разработке`. The first contradicts the other two and invents
+progress, which the product rules for this surface forbid.
+
+**Fixed.** `statusLabel()` returns `В разработке` whenever `catalogPublished` is
+false, before consulting the state. `tests/e2e/public-home.spec.ts` now asserts
+that neither unreleased section contains `готовим выпуск`; reverting the guard
+turns that test red.
+
+**Found by review, not by eye.** The component file is untouched by the change
+that reported it — splitting `готовим к выпуску` from `в разработке` in the
+summary is what turned a long-standing conflation into a visible contradiction.
+

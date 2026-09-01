@@ -20,7 +20,6 @@ import type { PublicPlatformState } from "@/lib/publicReleaseModel";
 type Props = {
   platform: PublicPlatformState;
   onRetry?: () => void;
-  className?: string;
 };
 
 const ACTION_BOX =
@@ -28,10 +27,10 @@ const ACTION_BOX =
 
 const OUTLINE = "border border-[color:var(--kub-border-color)]";
 
-export function ReleaseDownloadAction({ platform, onRetry, className }: Props) {
+export function ReleaseDownloadAction({ platform, onRetry }: Props) {
   return (
     <span className="inline-flex flex-col items-start gap-1">
-      {renderControl(platform, onRetry, className)}
+      {renderControl(platform, onRetry)}
       {platform.stale && (
         <span className="text-xs text-[color:var(--kub-muted)]">Показаны сохранённые данные каталога</span>
       )}
@@ -39,11 +38,11 @@ export function ReleaseDownloadAction({ platform, onRetry, className }: Props) {
   );
 }
 
-function renderControl(platform: PublicPlatformState, onRetry?: () => void, className?: string): ReactNode {
+function renderControl(platform: PublicPlatformState, onRetry?: () => void): ReactNode {
   if (platform.state === "loading") {
     return (
       <span
-        className={cn(ACTION_BOX, OUTLINE, "text-[color:var(--kub-muted)]", className)}
+        className={cn(ACTION_BOX, OUTLINE, "text-[color:var(--kub-muted)]")}
         aria-live="polite"
       >
         <KubIcon name="spinner" size={16} tone="muted" spin />
@@ -57,7 +56,7 @@ function renderControl(platform: PublicPlatformState, onRetry?: () => void, clas
       <button
         type="button"
         onClick={onRetry}
-        className={cn(ACTION_BOX, OUTLINE, "text-[color:var(--kub-text)]", className)}
+        className={cn(ACTION_BOX, OUTLINE, "text-[color:var(--kub-text)]")}
       >
         <KubIcon name="rotate" size={16} tone="muted" />
         Повторить проверку
@@ -67,7 +66,7 @@ function renderControl(platform: PublicPlatformState, onRetry?: () => void, clas
 
   if (platform.state === "unavailable" || !platform.href) {
     return (
-      <span className={cn(ACTION_BOX, OUTLINE, "text-[color:var(--kub-muted)]", className)}>
+      <span className={cn(ACTION_BOX, OUTLINE, "text-[color:var(--kub-muted)]")}>
         <KubIcon name="clock" size={16} tone="muted" />
         В разработке
       </span>
@@ -81,7 +80,6 @@ function renderControl(platform: PublicPlatformState, onRetry?: () => void, clas
       className={cn(
         ACTION_BOX,
         "bg-[var(--kub-action-primary-background)] text-[color:var(--kub-action-primary-foreground)] hover:bg-[var(--kub-action-primary-hover)]",
-        className,
       )}
     >
       <KubIcon name="cloud" size={16} tone="currentColor" />

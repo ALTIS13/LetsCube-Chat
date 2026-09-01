@@ -265,55 +265,99 @@ const PLANNED = (["macos", "ios"] as const).map((platform) =>
 );
 
 /**
- * The whole reachable input space, not a few chosen shapes.
+ * The whole reachable input space, and where each platform lands inside it.
  *
- * A previous version of these tests only covered configurations where both
- * published platforms were in the same state, and a mutation that dropped the
- * mixed cases restored the exact sentence this function exists to prevent while
- * every test stayed green.
+ * Two earlier versions of these tests were too weak in the same way. The first
+ * only covered configurations where both published platforms shared a state, so
+ * a mutation dropping the mixed cases restored the exact sentence this function
+ * exists to prevent. The second checked that every platform was named somewhere
+ * and that each clause appeared when its group was non-empty — which a mutation
+ * putting a platform in the *wrong* clause satisfies perfectly. Rewriting
+ * `named(unreachable)` as `named(published)` then produced "Windows доступен
+ * для загрузки; каталог для Windows, Android сейчас недоступен" with the suite
+ * fully green.
+ *
+ * So membership is what is asserted here: each platform must appear inside the
+ * clause its own state maps to, and inside no other.
  */
-test("the summary is total over every reachable combination", () => {
+
+/** The phrase that identifies a clause, chosen so no two of them overlap. */
+const CLAUSE_MARKERS = {
+  available: "для загрузки",
+  unavailable: "готовим к выпуску",
+  error: "недоступен",
+  loading: "проверяем каталог для",
+  planned: "в разработке",
+} as const;
+
+function clauseOf(summary: string, group: keyof typeof CLAUSE_MARKERS): string | null {
+  const clauses = summary.replace(/\.$/, "").split("; ");
+  // Markers are matched case-insensitively because the first clause of the
+  // sentence is capitalized wherever it happens to land.
+  const found = clauses.filter((clause) => clause.toLowerCase().includes(CLAUSE_MARKERS[group]));
+  assert.ok(found.length <= 1, `more than one "${group}" clause in "${summary}"`);
+  return found[0] ?? null;
+}
+
+test("every platform appears in the clause its own state maps to, and in no other", () => {
   for (const windowsState of PUBLISHED_STATES) {
     for (const androidState of PUBLISHED_STATES) {
       const published = [publishedState("windows", windowsState), publishedState("android", androidState)];
-      const summary = describePublicAvailability([...published, ...PLANNED]);
+      const platforms = [...published, ...PLANNED];
+      const summary = describePublicAvailability(platforms);
       const where = `${windowsState}/${androidState}`;
 
       assert.match(summary, /\.$/, `${where}: not a sentence`);
 
-      if (windowsState === "loading" || androidState === "loading") {
-        assert.equal(summary, "Проверяем каталог релизов.", where);
-        continue;
+      const groups = Object.keys(CLAUSE_MARKERS) as (keyof typeof CLAUSE_MARKERS)[];
+      for (const platform of platforms) {
+        const own: keyof typeof CLAUSE_MARKERS = platform.catalogPublished ? platform.state : "planned";
+
+        const ownClause = clauseOf(summary, own);
+        assert.ok(ownClause !== null, `${where}: no "${own}" clause in "${summary}"`);
+        assert.ok(
+          ownClause.includes(platform.listTitle),
+          `${where}: ${platform.listTitle} is not inside the "${own}" clause of "${summary}"`,
+        );
+
+        for (const other of groups) {
+          if (other === own) continue;
+          const clause = clauseOf(summary, other);
+          if (clause === null) continue;
+          assert.ok(
+            !clause.includes(platform.listTitle),
+            `${where}: ${platform.listTitle} also appears in the "${other}" clause of "${summary}"`,
+          );
+        }
       }
 
-      // Every platform is accounted for, so the sentence can never quietly drop
-      // one whose catalog failed while describing the others.
-      for (const platform of [...published, ...PLANNED]) {
-        assert.ok(
-          summary.includes(platform.listTitle),
-          `${where}: ${platform.listTitle} is missing from "${summary}"`,
+      // A clause exists exactly when some platform is in that state, so the
+      // sentence cannot invent a group either.
+      for (const group of groups) {
+        const occupied =
+          group === "planned"
+            ? platforms.some((platform) => !platform.catalogPublished)
+            : published.some((platform) => platform.state === group);
+        assert.equal(
+          clauseOf(summary, group) !== null,
+          occupied,
+          `${where}: the "${group}" clause disagrees with the states in "${summary}"`,
         );
       }
-
-      const anyAvailable = published.some((platform) => platform.state === "available");
-      assert.equal(
-        /доступ(ен|ны) для загрузки/.test(summary),
-        anyAvailable,
-        `${where}: availability claim disagrees with the states in "${summary}"`,
-      );
-
-      assert.equal(
-        summary.includes("сейчас недоступен"),
-        published.some((platform) => platform.state === "error"),
-        `${where}: catalog-failure clause disagrees with the states in "${summary}"`,
-      );
-
-      assert.equal(
-        summary.includes("готовим к выпуску"),
-        published.some((platform) => platform.state === "unavailable"),
-        `${where}: preparing clause disagrees with the states in "${summary}"`,
-      );
     }
+  }
+});
+
+/**
+ * The comma/"и" list is only unambiguous while no name carries a conjunction of
+ * its own, which is why `listTitle` exists. Nothing else enforces that.
+ */
+test("no list name carries a conjunction that would lengthen the list", () => {
+  for (const platform of [...PUBLISHED_STATES.map((state) => publishedState("windows", state)), ...PLANNED]) {
+    assert.ok(
+      !/\sи\s/.test(platform.listTitle),
+      `${platform.platform}: list name "${platform.listTitle}" contains a conjunction`,
+    );
   }
 });
 
@@ -323,7 +367,7 @@ test("the summary reads correctly in the states a visitor is most likely to meet
     publishedState("android", "available"),
     ...PLANNED,
   ]);
-  assert.equal(both, "Windows, Android доступны для загрузки; macOS, iOS в разработке.");
+  assert.equal(both, "Windows и Android доступны для загрузки; macOS и iOS в разработке.");
 
   const one = describePublicAvailability([
     publishedState("windows", "available"),
@@ -332,14 +376,14 @@ test("the summary reads correctly in the states a visitor is most likely to meet
   ]);
   // Singular agreement, and the preparing platform is named rather than lumped
   // in with the ones nobody has started.
-  assert.equal(one, "Windows доступен для загрузки; Android готовим к выпуску; macOS, iOS в разработке.");
+  assert.equal(one, "Windows доступен для загрузки; Android готовим к выпуску; macOS и iOS в разработке.");
 
   const outage = describePublicAvailability([
     publishedState("windows", "error"),
     publishedState("android", "error"),
     ...PLANNED,
   ]);
-  assert.equal(outage, "Каталог для Windows, Android сейчас недоступен; macOS, iOS в разработке.");
+  assert.equal(outage, "Каталог для Windows и Android сейчас недоступен; macOS и iOS в разработке.");
   assert.doesNotMatch(outage, /готовим к выпуску/);
 });
 

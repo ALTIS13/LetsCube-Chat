@@ -552,15 +552,29 @@ test("post-apply grant audit enumerates every private bot table and bot routine"
   assert.match(postApply, /expected_service_role_execute/i);
 });
 
-test("Task 7 keeps Step 5 pending until RLS smoke runs on the isolated restored stack", () => {
+test("Task 7 may only call Step 5 complete once the external RLS gate is recorded", () => {
+  // This gate used to be spelled as "the box must stay unchecked". That held
+  // only until the gate actually passed, after which the assertion demanded a
+  // false statement in the plan. What matters is the evidence, so the box may
+  // close — but only alongside a record of the isolated restored stack.
   const source = plan();
   const task7 = source.slice(source.indexOf("### Task 7:"));
 
-  assert.match(task7, /- \[ \] \*\*Step 5: Run full local validation\*\*/);
-  assert.match(task7, /local validation[^\n]*complete/i);
-  assert.match(task7, /external-env security gate pending/i);
-  assert.match(task7, /isolated restored/i);
-  assert.match(task7, /rls:smoke/i);
+  const step5 = task7.match(/- \[( |x)\] \*\*Step 5: Run full local validation\*\*([\s\S]*?)(?=\n- \[)/);
+  assert.ok(step5, "Task 7 has no Step 5");
+  const [, mark, evidence] = step5;
+
+  assert.match(task7, /rls:smoke/i, "Step 5 must still name the RLS smoke command");
+
+  if (mark === "x") {
+    assert.match(evidence, /isolated restored/i, "a complete Step 5 must name the isolated restored stack");
+    assert.match(evidence, /rls/i, "a complete Step 5 must name the RLS gate");
+    assert.match(evidence, /passed/i, "a complete Step 5 must say the gate passed");
+    return;
+  }
+
+  assert.match(evidence, /local validation[^\n]*complete/i);
+  assert.match(evidence, /external-env security gate pending/i);
 });
 
 test("examples are paste-safe and do not expose credentials or destructive cleanup", () => {

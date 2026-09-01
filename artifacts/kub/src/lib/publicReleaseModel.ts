@@ -148,24 +148,24 @@ export function selectPublicChangelog(sources: PublicChangelogSource[]): PublicC
  * One sentence describing the whole platform list.
  *
  * It is derived rather than written down because a fixed sentence keeps making
- * its claim after the catalog stops supporting it. It is also **total**: every
- * platform appears in exactly one clause, so the sentence can never quietly
- * omit one whose catalog failed while describing the others.
+ * its claim after the catalog stops supporting it. It is **total**: every
+ * platform lands in exactly one clause, so the sentence can never quietly omit
+ * one whose catalog failed while describing the others, and never generalises
+ * one platform's state to another.
  *
- * The one deliberate simplification is that any platform still being read
- * collapses the whole sentence to "checking". That understates rather than
- * misstates, and it is transient.
+ * A platform still being read gets its own clause rather than collapsing the
+ * whole sentence. Retrying refreshes every platform at once, so collapsing
+ * would drop a working download from the sentence while its section still
+ * offers it.
  */
 export function describePublicAvailability(platforms: PublicPlatformState[]): string {
   const published = platforms.filter((platform) => platform.catalogPublished);
-  if (published.some((platform) => platform.state === "loading")) {
-    return "Проверяем каталог релизов.";
-  }
-
   const named = (group: PublicPlatformState[]) => joinTitles(group.map((platform) => platform.listTitle));
+
   const ready = published.filter((platform) => platform.state === "available");
   const preparing = published.filter((platform) => platform.state === "unavailable");
   const unreachable = published.filter((platform) => platform.state === "error");
+  const checking = published.filter((platform) => platform.state === "loading");
   const planned = platforms.filter((platform) => !platform.catalogPublished);
 
   const clauses: string[] = [];
@@ -174,6 +174,7 @@ export function describePublicAvailability(platforms: PublicPlatformState[]): st
   }
   if (preparing.length > 0) clauses.push(`${named(preparing)} готовим к выпуску`);
   if (unreachable.length > 0) clauses.push(`каталог для ${named(unreachable)} сейчас недоступен`);
+  if (checking.length > 0) clauses.push(`проверяем каталог для ${named(checking)}`);
   if (planned.length > 0) clauses.push(`${named(planned)} в разработке`);
 
   if (clauses.length === 0) return "Проверяем каталог релизов.";
@@ -183,7 +184,9 @@ export function describePublicAvailability(platforms: PublicPlatformState[]): st
 
 function joinTitles(titles: string[]): string {
   if (titles.length <= 1) return titles[0] ?? "";
-  // Comma-only. A title may itself contain "и" (iPhone и iPad), which turns a
-  // conjunction-joined list into an ambiguous one.
-  return titles.join(", ");
+  // Joined with "и", which is what the sentence needs to read as Russian. This
+  // is only unambiguous because `listTitle` carries no conjunction of its own —
+  // a heading like "iPhone и iPad" would turn the list into a longer one. A
+  // unit test holds that guarantee on the names the app actually supplies.
+  return `${titles.slice(0, -1).join(", ")} и ${titles[titles.length - 1]}`;
 }

@@ -53,6 +53,20 @@ const STATUS_LABELS: Record<PublicPlatformState["state"], string> = {
   error: "Каталог сейчас недоступен",
 };
 
+/**
+ * The status line under a platform heading.
+ *
+ * "unavailable" covers two different situations and only one of them is a
+ * release being prepared. A platform with no published catalog at all has no
+ * build and no schedule, so labelling it "Готовим выпуск" would announce
+ * progress that does not exist — the same claim the button and the summary
+ * already refuse to make.
+ */
+function statusLabel(platform: PublicPlatformState): string {
+  if (!platform.catalogPublished) return "В разработке";
+  return STATUS_LABELS[platform.state];
+}
+
 export function PlatformShowcase({ platform, onRetry }: Props) {
   const { resolvedTheme } = useTheme();
   const preview = PREVIEWS[platform.platform];
@@ -79,7 +93,7 @@ export function PlatformShowcase({ platform, onRetry }: Props) {
 
           {/* The stale disclosure travels with the action, which the hero
               renders on its own, so printing it here too would duplicate it. */}
-          <p className="mt-2 text-sm text-[color:var(--kub-muted)]">{STATUS_LABELS[platform.state]}</p>
+          <p className="mt-2 text-sm text-[color:var(--kub-muted)]">{statusLabel(platform)}</p>
 
           <div className="mt-6">
             <ReleaseDownloadAction platform={platform} onRetry={onRetry} />
