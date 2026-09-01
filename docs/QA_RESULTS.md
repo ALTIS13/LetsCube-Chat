@@ -1,5 +1,28 @@
 # QA Results
 
+## 2026-09-01 - Public release artifact byte verification
+
+Ran `node scripts/verify-public-release-artifact.mjs windows android macos ios`
+against the live catalog. The verifier streams the real artifact, bounds the
+stream, hashes what arrives and requires both the byte count and the SHA-256 to
+equal the manifest before a public download is considered eligible.
+
+```
+windows 0.2.10: verified 2321755 bytes, sha256 31ed5a8749a85802ce67581e92a9518f67b9c5930fb7463072ab7bcfd737d760
+android 0.1.2: verified 6513250 bytes, sha256 d414fb7a818beb86a5bfbd06dc9cdc657e8aa82fa07acc32927b15ab2748af99
+macos: unpublished, nothing to verify
+ios: unpublished, nothing to verify
+```
+
+Exit code 0. Missing Apple manifests are the expected unavailable state, not a
+failure.
+
+Discrepancy worth recording: the tracker's Windows entry names a `2,322,508`
+byte installer with SHA-256 `697f345b…`, which is not what the live Stable
+manifest points at today. The live manifest and its bytes agree with each other,
+so the download surface is safe; the tracker figure refers to a different or
+earlier artifact and must not be quoted as the current one.
+
 ## 2026-09-01 - Public product preview privacy sign-off
 
 The plan for these assets states that scanning compressed image bytes is not

@@ -359,11 +359,11 @@ git commit -m "feat(public): add sanitized LETSCUBE product previews"
 - Download anchors use only validated manifest artifact URLs.
 - Changelog uses at most six current Stable highlights.
 
-- [ ] **Step 1: Write failing release-view-model tests**
+- [x] **Step 1: Write failing release-view-model tests**
 
 Test these exact mappings: valid available manifest -> download; valid unavailable -> `В разработке`; no manifest -> unavailable, not error button; stale valid manifest -> enabled with quiet stale note; malformed artifact -> no link.
 
-- [ ] **Step 2: Implement the release model**
+- [x] **Step 2: Implement the release model**
 
 ```ts
 export type PublicPlatformState = {
@@ -381,19 +381,19 @@ Only Android and Windows are requested as active download manifests. macOS and i
 For macOS and iOS, tests require `href: null`, no download control and no App
 Store availability claim. Preview imagery never implies release availability.
 
-- [ ] **Step 3: Build an immersive first viewport**
+- [x] **Step 3: Build an immersive first viewport**
 
 Use a full-width product band with LETSCUBE name, concise messenger description, primary platform-aware action and a visible preview of the next section. Do not place the hero in a card, use a split card layout, gradient illustration or decorative orb. The actual messenger interface is the primary visual.
 
-- [ ] **Step 4: Build platform sections and downloads**
+- [x] **Step 4: Build platform sections and downloads**
 
 Each platform section has a stable responsive aspect ratio, theme-matched screenshot, platform icon, status and one clear action. Avoid nested cards. Buttons use icons and preserve their dimensions while loading. Windows/Android actions download directly without auth.
 
-- [ ] **Step 5: Build the compact `Что нового` module**
+- [x] **Step 5: Build the compact `Что нового` module**
 
 Show the newest available Stable release, platform, version, date and up to six highlights. If highlights are empty, show the bounded `notes` string. Additional details expand in place; no `/news` route or CMS is introduced.
 
-- [ ] **Step 6: Preserve pre-paint theme behavior**
+- [x] **Step 6: Preserve pre-paint theme behavior**
 
 Keep the inline bootstrap in `index.html` synchronized with `THEME_INIT_SCRIPT`
 in `useTheme.ts` through a parity test. Add `color-scheme: light dark` and
@@ -401,11 +401,11 @@ theme-correct `theme-color` handling before React paint and on resolved-theme
 changes. The existing iPhone/iPad-only PWA manifest injection block remains
 behaviorally unchanged and is covered by its current distribution regression.
 
-- [ ] **Step 7: Add responsive and accessibility tests**
+- [x] **Step 7: Add responsive and accessibility tests**
 
 At `1920x1080`, `1440x900`, `390x844` and `412x915`, assert no horizontal scroll, no clipped buttons, actual images loaded, next section visible from hero, correct light/dark screenshots, keyboard navigation and reduced-motion support. Assert no visible computer-club terminology. For macOS/iOS cards assert no artifact `href`, no download action and no store-availability claim.
 
-- [ ] **Step 8: Run tests and commit**
+- [x] **Step 8: Run tests and commit**
 
 ```powershell
 node --test tests/unit/public-release-model.test.mts tests/unit/release-catalog.test.mts
@@ -416,6 +416,20 @@ git commit -m "feat(public): add LETSCUBE app showcase"
 ```
 
 ---
+
+**Task 4 closed on 2026-09-01.** Implemented in `a31d7ac` and `c28d3bf`.
+
+Two deviations from the file list, both deliberate. `PublicHeader.tsx` was not
+created: `PublicPageShell` already renders the public header and footer, so a
+second one would be duplication. And macOS and iOS carry no screenshot, because
+a single image cannot be theme matched and reusing another platform's render
+under an unreleased heading would suggest a product that does not exist; that
+also removed two byte-identical assets from the public payload, leaving four.
+
+Validation: `tests/e2e/public-home.spec.ts` and the mounted routing matrix pass
+55/55 across `chromium-desktop-1920`, `chromium-desktop-1440`,
+`chromium-mobile-390` and `chromium-mobile-412`; unit suites 66/66 with no
+skips; typecheck and production build clean.
 
 ### Task 5: Validate and deploy public downloads independently
 
