@@ -31,6 +31,7 @@ const PUBLIC_HOME_HEADING = "Мессенджер для общения и со�
 const UNCONFIGURED_PORT = 5188;
 const UNCONFIGURED_ORIGIN = `http://127.0.0.1:${UNCONFIGURED_PORT}`;
 const UNCONFIGURED_STARTUP_TIMEOUT_MS = 180_000;
+const TRANSCRIPT_CHUNK_LIMIT = 200;
 
 // Every public Supabase name the client accepts, so none of them can leak in
 // from the shell that starts the configured server.
@@ -207,8 +208,10 @@ test.describe("public home routing integration", () => {
 
       await expect(page).toHaveURL(/\/login$/);
       await expect(page.getByTestId("auth-form-shell")).toBeVisible();
-      await expect(page.getByRole("heading", { level: 1, name: PUBLIC_ROUTE_HEADINGS[0][1] })).toHaveCount(0);
-      await expect(page.getByRole("heading", { level: 1, name: PUBLIC_ROUTE_HEADINGS[3][1] })).toHaveCount(0);
+
+      for (const [, heading] of PUBLIC_ROUTE_HEADINGS) {
+        await expect(page.getByRole("heading", { level: 1, name: heading })).toHaveCount(0);
+      }
     }
   });
 });
@@ -494,9 +497,15 @@ async function startUnconfiguredDevServer(cwd: string): Promise<UnconfiguredDevS
   );
 
   const state = { exited: false, code: null as number | null };
+  // Only read when the server fails to start, so the buffer keeps the most
+  // recent output instead of growing for as long as the server lives.
   const transcript: string[] = [];
-  child.stdout?.on("data", (chunk) => transcript.push(String(chunk)));
-  child.stderr?.on("data", (chunk) => transcript.push(String(chunk)));
+  const record = (chunk: unknown) => {
+    transcript.push(String(chunk));
+    if (transcript.length > TRANSCRIPT_CHUNK_LIMIT) transcript.shift();
+  };
+  child.stdout?.on("data", record);
+  child.stderr?.on("data", record);
   child.once("exit", (code) => {
     state.exited = true;
     state.code = code;
