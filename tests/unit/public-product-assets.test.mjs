@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
@@ -69,14 +70,21 @@ const ALLOWED_FIXTURE_STRINGS = new Set([
   "Алекс",
   "alex_demo",
   "Команда проекта",
-  "4 участника",
-  "Макет готов к просмотру",
   "Мария",
+  "Макет готов к просмотру",
   "Отправила документ",
+  "Привет! Обновила макет главной",
+  "Отлично, где посмотреть?",
+  "Скинула в общий диск, папка Дизайн",
+  "Понял, открою после планёрки",
   "Добавила правки в описание",
   "Спасибо, посмотрю после созвона",
   "Встречаемся в 15:00",
   "Принято, добавил в задачи",
+  "14:32",
+  "14:35",
+  "14:37",
+  "14:41",
   "14:47",
   "14:51",
   "14:54",
@@ -93,6 +101,10 @@ const FIXTURE_PRODUCTION_MARKERS = [
   "Команда проекта",
   "Макет готов к просмотру",
   "Отправила документ",
+  "Привет! Обновила макет главной",
+  "Отлично, где посмотреть?",
+  "Скинула в общий диск, папка Дизайн",
+  "Понял, открою после планёрки",
   "Добавила правки в описание",
   "Спасибо, посмотрю после созвона",
   "Встречаемся в 15:00",
@@ -103,18 +115,32 @@ function repoPath(relative) {
   return path.join(rootPath, relative);
 }
 
-function collectStrings(value, found = []) {
+// Collects rendered values only. Object keys are structure, not content, and
+// are validated by the fixture's own parser. An earlier version collected keys
+// too and then skipped anything matching a lowercase-ASCII shape, which silently
+// exempted real display values such as a genuine account handle.
+function collectValues(value, found = []) {
   if (typeof value === "string") {
     found.push(value);
   } else if (Array.isArray(value)) {
-    for (const item of value) collectStrings(item, found);
+    for (const item of value) collectValues(item, found);
   } else if (value && typeof value === "object") {
-    for (const [key, item] of Object.entries(value)) {
-      found.push(key);
-      collectStrings(item, found);
-    }
+    for (const item of Object.values(value)) collectValues(item, found);
   }
   return found;
+}
+
+// Sources whose output the bundle scan is asserting about. A build produced
+// before these were last edited would pass the scan trivially.
+const BUNDLE_RELEVANT_SOURCES = [
+  "artifacts/kub/src/App.tsx",
+  "artifacts/kub/src/lib/publicPreviewFixture.ts",
+  "artifacts/kub/src/pages/public/PublicPreviewCapturePage.tsx",
+  FIXTURE_PATH,
+];
+
+function newestModification(files) {
+  return Math.max(...files.map((file) => statSync(file).mtimeMs));
 }
 
 function buildOutputFiles() {
@@ -165,8 +191,8 @@ for (const name of PRODUCT_ASSETS) {
     const { size } = await stat(file);
     assert.ok(size > 0, `${name} is empty`);
     assert.ok(
-      size <= MAX_BYTES,
-      `${name} is ${size} bytes, above the ${MAX_BYTES} byte public budget`,
+      size < MAX_BYTES,
+      `${name} is ${size} bytes, at or above the ${MAX_BYTES} byte public budget`,
     );
 
     const metadata = await sharp(file).metadata();
@@ -182,6 +208,22 @@ for (const name of PRODUCT_ASSETS) {
   });
 }
 
+test("every published asset is a distinct image", () => {
+  const digests = new Map();
+  for (const name of PRODUCT_ASSETS) {
+    const digest = createHash("sha256")
+      .update(readFileSync(repoPath(path.join(PRODUCT_DIRECTORY, name))))
+      .digest("hex");
+    const existing = digests.get(digest);
+    assert.equal(
+      existing,
+      undefined,
+      `${name} is byte-identical to ${existing}; six files must not be four images`,
+    );
+    digests.set(digest, name);
+  }
+});
+
 test("the demo fixture carries only checked-in fictional content", async () => {
   const raw = await readFile(repoPath(FIXTURE_PATH), "utf8");
   const fixture = JSON.parse(raw);
@@ -190,10 +232,9 @@ test("the demo fixture carries only checked-in fictional content", async () => {
   assert.doesNotMatch(raw, PHONE_PATTERN, "the fixture contains a phone-shaped value");
   assert.doesNotMatch(raw, TOKEN_PATTERN, "the fixture contains a credential-shaped value");
 
-  for (const value of collectStrings(fixture)) {
-    // Structural keys are not display content and are checked by the schema
-    // consumer instead; only rendered strings are constrained here.
-    if (/^[a-z][A-Za-z]*$/.test(value)) continue;
+  const values = collectValues(fixture);
+  assert.ok(values.length > 0, "the fixture carries no rendered strings at all");
+  for (const value of values) {
     assert.ok(
       ALLOWED_FIXTURE_STRINGS.has(value),
       `"${value}" is not in the approved fictional fixture vocabulary`,
@@ -213,6 +254,18 @@ test("every production marker really occurs in the fixture", async () => {
       `"${marker}" is scanned for but is not approved fixture vocabulary`,
     );
   }
+});
+
+test("the production build is newer than the sources it is asserted about", () => {
+  const outputs = buildOutputFiles();
+  const newestSource = newestModification(BUNDLE_RELEVANT_SOURCES.map((file) => repoPath(file)));
+  const newestOutput = newestModification(outputs);
+
+  assert.ok(
+    newestOutput >= newestSource,
+    `${BUILD_DIRECTORY} is older than its sources, so the bundle assertions below would pass trivially. ` +
+      "Rebuild before running this test.",
+  );
 });
 
 test("the production bundle emits no capture chunk", () => {

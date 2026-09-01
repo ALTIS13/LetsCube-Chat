@@ -2,26 +2,36 @@
 /**
  * Captures the sanitized LETSCUBE product previews used by the public home.
  *
- * The images are taken from the shipping `ChatListItem` and `MessageBubble`
- * components, so they show the genuine interface rather than a redrawing of it.
- * Only the data is fictional: the checked-in fixture is injected into a clean
- * browser context, never imported by the application, so no demo content can
- * reach a production bundle.
+ * The images are taken from the shipping application components, so they show
+ * the genuine interface rather than a redrawing of it. Only the data is
+ * fictional: the checked-in fixture is injected into a clean browser context,
+ * never imported by the application, so no demo content can reach a production
+ * bundle.
  *
- * The run is deterministic. The clock and the timezone are pinned, the browser
- * context carries no storage state, and the page signals readiness with an
- * attribute instead of the script waiting on a timeout.
+ * The run is deterministic. The clock, timezone and locale are pinned, every
+ * request outside the capture origin and the font host is blocked, the web font
+ * is verified to have actually loaded, the browser context carries no storage
+ * state, and the page signals readiness with an attribute rather than the
+ * script waiting on a timeout.
  *
  * Usage: node scripts/capture-public-home-previews.mjs
  */
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { chromium } from "@playwright/test";
 import sharp from "sharp";
+
+// Imported rather than copied: renaming any of these must break the run at the
+// source, not silently after a 60 second selector timeout.
+import {
+  PUBLIC_PREVIEW_CAPTURE_PATH,
+  PUBLIC_PREVIEW_READY_ATTRIBUTE,
+  PUBLIC_PREVIEW_WINDOW_KEY,
+} from "../artifacts/kub/src/lib/publicPreviewFixture.ts";
 
 const ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const WORKSPACE = path.join(ROOT, "artifacts", "kub");
@@ -30,42 +40,82 @@ const OUTPUT_DIRECTORY = path.join(WORKSPACE, "public", "product");
 
 const PORT = 5189;
 const ORIGIN = `http://127.0.0.1:${PORT}`;
-const CAPTURE_PATH = "/__qa/public-preview";
-const READY_SELECTOR = "[data-public-preview-ready]";
+const READY_SELECTOR = `[${PUBLIC_PREVIEW_READY_ATTRIBUTE}]`;
 
 const STARTUP_TIMEOUT_MS = 180_000;
 const STOP_GRACE_MS = 10_000;
 const ANSI_PATTERN = /\u001B\[[0-9;]*m/g;
 
 // Pinned so `formatTime` renders the fixture's display times rather than
-// whatever the wall clock happens to say. It must be later than every fixture
-// time, otherwise the same helper would render a weekday instead.
+// whatever the wall clock says. `todayAt` throws if a fixture time is later
+// than this, which would otherwise render a weekday name instead.
 const PINNED_TIME = new Date("2026-08-31T15:10:00.000Z");
 
+// The application refuses to start without public Supabase configuration, and
+// the shipping chat and sidebar components construct a client while rendering.
+// These are obviously fake loopback values, they are not credentials, and every
+// request they could produce is blocked below.
+const FIXTURE_SUPABASE_URL = "http://127.0.0.1:54321";
+const FIXTURE_SUPABASE_KEY = "public-preview-fixture";
+
+// The only hosts a capture may talk to. Everything else is aborted, so a
+// component reaching for a backend cannot make the run non-deterministic and
+// cannot contact anything real.
+const ALLOWED_HOSTS = ["127.0.0.1", "localhost", "fonts.googleapis.com", "fonts.gstatic.com"];
+
+const REQUIRED_FONT = "16px Inter";
 const WEBP_QUALITY = 88;
 
-const DESKTOP_VIEWPORT = { width: 1280, height: 800 };
-const MOBILE_VIEWPORT = { width: 390, height: 780 };
-
-// Captured at deviceScaleFactor 2 and downsampled, which keeps text crisp while
-// staying inside the published dimension budget.
-const DESKTOP_OUTPUT = { width: 1440, height: 900 };
-
-// Canvas geometry for the framed mobile shots. The bounds are the same ones
-// tests/unit/public-product-assets.test.mjs enforces.
-const MOBILE_CANVAS = { width: 760, height: 1140 };
-const MOBILE_DEVICE_HEIGHT = 1040;
-
+/**
+ * Every target renders the same interface at its own geometry, so no two
+ * published assets are byte-identical. Desktop shots are captured at
+ * deviceScaleFactor 2 and downsampled by width, which keeps text crisp and
+ * keeps the aspect ratio self-correcting. Phone viewports are narrower than the
+ * published minimum width, so they are composed onto a canvas.
+ *
+ * The Apple entries are named `*-preview-placeholder` and make no availability
+ * claim of any kind; the public UI is what labels those platforms as in
+ * development.
+ */
 const TARGETS = [
-  { file: "windows-messenger-dark.webp", surface: "desktop", theme: "dark" },
-  { file: "windows-messenger-light.webp", surface: "desktop", theme: "light" },
-  { file: "android-messenger-dark.webp", surface: "mobile", theme: "dark" },
-  { file: "android-messenger-light.webp", surface: "mobile", theme: "light" },
-  // Apple surfaces are shown as in development by the public UI. The images
-  // carry the same sanitized conversation and no store, availability or
-  // certification claim of any kind.
-  { file: "macos-preview-placeholder.webp", surface: "desktop", theme: "light" },
-  { file: "ios-preview-placeholder.webp", surface: "mobile", theme: "dark" },
+  {
+    file: "windows-messenger-dark.webp",
+    theme: "dark",
+    viewport: { width: 1280, height: 800 },
+    output: { width: 1440 },
+  },
+  {
+    file: "windows-messenger-light.webp",
+    theme: "light",
+    viewport: { width: 1280, height: 800 },
+    output: { width: 1440 },
+  },
+  {
+    file: "macos-preview-placeholder.webp",
+    theme: "light",
+    // A MacBook-proportioned window, so this is a genuinely different render
+    // rather than a copy of the Windows asset.
+    viewport: { width: 1512, height: 945 },
+    output: { width: 1512 },
+  },
+  {
+    file: "android-messenger-dark.webp",
+    theme: "dark",
+    viewport: { width: 390, height: 780 },
+    canvas: { width: 760, height: 1140, deviceHeight: 1040 },
+  },
+  {
+    file: "android-messenger-light.webp",
+    theme: "light",
+    viewport: { width: 390, height: 780 },
+    canvas: { width: 760, height: 1140, deviceHeight: 1040 },
+  },
+  {
+    file: "ios-preview-placeholder.webp",
+    theme: "dark",
+    viewport: { width: 393, height: 852 },
+    canvas: { width: 780, height: 1180, deviceHeight: 1080 },
+  },
 ];
 
 function log(message) {
@@ -73,13 +123,10 @@ function log(message) {
 }
 
 function readFixture() {
-  if (!existsSync(FIXTURE_FILE)) {
-    throw new Error(`Missing fixture: ${FIXTURE_FILE}`);
-  }
-  const raw = readFileSync(FIXTURE_FILE, "utf8");
-  const fixture = JSON.parse(raw);
-  // The page validates the payload again at runtime; this is the early, local
-  // check so a malformed fixture fails before a browser is launched.
+  if (!existsSync(FIXTURE_FILE)) throw new Error(`Missing fixture: ${FIXTURE_FILE}`);
+  const fixture = JSON.parse(readFileSync(FIXTURE_FILE, "utf8"));
+  // The page validates the payload again at runtime; this is the early check so
+  // a malformed fixture fails before a browser is launched.
   for (const key of ["currentUser", "activeChat", "chats", "messages"]) {
     if (!(key in fixture)) throw new Error(`Fixture is missing "${key}"`);
   }
@@ -125,9 +172,7 @@ async function startCaptureServer() {
   }
 
   const viteBin = path.join(WORKSPACE, "node_modules", "vite", "bin", "vite.js");
-  if (!existsSync(viteBin)) {
-    throw new Error(`Vite is not installed for @workspace/kub at ${viteBin}.`);
-  }
+  if (!existsSync(viteBin)) throw new Error(`Vite is not installed for @workspace/kub at ${viteBin}.`);
 
   const child = spawn(
     process.execPath,
@@ -138,6 +183,8 @@ async function startCaptureServer() {
         ...process.env,
         PORT: String(PORT),
         BASE_PATH: "/",
+        VITE_SUPABASE_URL: FIXTURE_SUPABASE_URL,
+        VITE_SUPABASE_ANON_KEY: FIXTURE_SUPABASE_KEY,
         // The other half of the capture gate. Without it the route does not
         // exist even in a development build.
         VITE_PUBLIC_PREVIEW_FIXTURE: "1",
@@ -176,15 +223,23 @@ async function startCaptureServer() {
     }
   };
 
+  // An external kill of this process would otherwise orphan the server.
+  const onSignal = () => {
+    killTree(child);
+    process.exit(130);
+  };
+  process.once("SIGINT", onSignal);
+  process.once("SIGTERM", onSignal);
+
   const deadline = Date.now() + STARTUP_TIMEOUT_MS;
   while (Date.now() < deadline) {
     if (state.settled) {
-      const cause = state.failure ? `failed to spawn: ${state.failure.message}` : `exited with code ${state.code}`;
+      const cause = state.failure
+        ? `failed to spawn: ${state.failure.message}`
+        : `exited with code ${state.code}`;
       throw new Error(`The capture server ${cause}.\n${transcript.join("")}`);
     }
-    if (state.announced && (await answersOnOrigin())) {
-      return { stop };
-    }
+    if (state.announced && (await answersOnOrigin())) return { stop };
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
 
@@ -193,17 +248,23 @@ async function startCaptureServer() {
 }
 
 async function capture(browser, fixture, target) {
-  const isMobile = target.surface === "mobile";
   const context = await browser.newContext({
-    viewport: isMobile ? MOBILE_VIEWPORT : DESKTOP_VIEWPORT,
+    viewport: target.viewport,
     deviceScaleFactor: 2,
-    // Pinned so the real `formatTime` path renders the fixture's own times.
     timezoneId: "UTC",
     locale: "ru-RU",
     colorScheme: target.theme,
     reducedMotion: "reduce",
     // No storage state: the context starts with nothing carried over.
     storageState: undefined,
+  });
+
+  // Nothing outside the capture origin and the font host may be contacted. A
+  // component reaching for a backend is aborted rather than left to time out.
+  await context.route("**/*", (route) => {
+    const host = new URL(route.request().url()).hostname;
+    if (ALLOWED_HOSTS.includes(host)) return route.continue();
+    return route.abort();
   });
 
   const page = await context.newPage();
@@ -213,55 +274,77 @@ async function capture(browser, fixture, target) {
       window[key] = payload;
       localStorage.setItem("kub-theme", theme);
     },
-    { key: "__letscubePublicPreviewFixture", payload: fixture, theme: target.theme },
+    { key: PUBLIC_PREVIEW_WINDOW_KEY, payload: fixture, theme: target.theme },
   );
 
-  await page.goto(`${ORIGIN}${CAPTURE_PATH}`, { waitUntil: "load", timeout: 60_000 });
+  await page.goto(`${ORIGIN}${PUBLIC_PREVIEW_CAPTURE_PATH}`, {
+    waitUntil: "load",
+    timeout: 60_000,
+  });
   await page.waitForSelector(READY_SELECTOR, { state: "visible", timeout: 60_000 });
-  // Web fonts change metrics; capturing before they settle produces a different
-  // image on every run.
-  await page.evaluate(() => document.fonts.ready);
 
+  // `document.fonts.ready` resolves even when the stylesheet request failed, so
+  // it proves nothing on its own. Without this check an offline or blocked run
+  // would silently fall back to the system stack and produce different pixels.
+  await page.evaluate(() => document.fonts.ready);
+  const fontLoaded = await page.evaluate((font) => document.fonts.check(font), REQUIRED_FONT);
+  if (!fontLoaded) {
+    throw new Error(
+      `The web font (${REQUIRED_FONT}) did not load, so this capture would not match a normal run.`,
+    );
+  }
+
+  const background = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue("--kub-bg").trim(),
+  );
   const screenshot = await page.screenshot({ type: "png", animations: "disabled" });
   await context.close();
 
-  return isMobile ? frameMobile(screenshot) : frameDesktop(screenshot);
+  return target.canvas
+    ? frameOnCanvas(screenshot, target.canvas, background)
+    : sharp(screenshot).resize({ width: target.output.width });
 }
 
-function frameDesktop(screenshot) {
-  return sharp(screenshot).resize({
-    width: DESKTOP_OUTPUT.width,
-    height: DESKTOP_OUTPUT.height,
-    fit: "fill",
-  });
-}
-
-async function frameMobile(screenshot) {
+async function frameOnCanvas(screenshot, canvas, background) {
   const device = await sharp(screenshot)
-    .resize({ height: MOBILE_DEVICE_HEIGHT, fit: "inside" })
+    .resize({ height: canvas.deviceHeight, fit: "inside" })
     .png()
     .toBuffer();
   const { width } = await sharp(device).metadata();
 
   return sharp({
     create: {
-      width: MOBILE_CANVAS.width,
-      height: MOBILE_CANVAS.height,
+      width: canvas.width,
+      height: canvas.height,
       channels: 4,
-      background: { r: 12, g: 18, b: 26, alpha: 1 },
+      // Taken from the page's own theme, so a light capture is never framed in
+      // near-black.
+      background,
     },
   }).composite([
     {
       input: device,
-      left: Math.round((MOBILE_CANVAS.width - width) / 2),
-      top: Math.round((MOBILE_CANVAS.height - MOBILE_DEVICE_HEIGHT) / 2),
+      left: Math.round((canvas.width - width) / 2),
+      top: Math.round((canvas.height - canvas.deviceHeight) / 2),
     },
   ]);
 }
 
+function pruneOutputDirectory() {
+  mkdirSync(OUTPUT_DIRECTORY, { recursive: true });
+  const expected = new Set(TARGETS.map((target) => target.file));
+  for (const name of readdirSync(OUTPUT_DIRECTORY)) {
+    if (expected.has(name)) continue;
+    // A renamed target would otherwise leave an orphan that only surfaces later
+    // as a confusing directory-listing failure.
+    rmSync(path.join(OUTPUT_DIRECTORY, name), { force: true });
+    log(`  removed stale asset ${name}`);
+  }
+}
+
 async function main() {
   const fixture = readFixture();
-  mkdirSync(OUTPUT_DIRECTORY, { recursive: true });
+  pruneOutputDirectory();
 
   log(`Starting the capture server on ${ORIGIN}`);
   const server = await startCaptureServer();
@@ -271,9 +354,8 @@ async function main() {
     browser = await chromium.launch();
     for (const target of TARGETS) {
       const image = await capture(browser, fixture, target);
-      const output = path.join(OUTPUT_DIRECTORY, target.file);
       const buffer = await image.webp({ quality: WEBP_QUALITY, effort: 6 }).toBuffer();
-      writeFileSync(output, buffer);
+      writeFileSync(path.join(OUTPUT_DIRECTORY, target.file), buffer);
 
       const { width, height } = await sharp(buffer).metadata();
       log(`  ${target.file}: ${width}x${height}, ${buffer.length} bytes`);

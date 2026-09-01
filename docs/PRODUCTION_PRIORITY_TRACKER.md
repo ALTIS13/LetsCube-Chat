@@ -74,6 +74,8 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 
     Binding constraints for both halves: preserve every contract in the critical regression list, especially chat entry anchoring, search and notification jumps, history prepend, fast upward scrolling, notification grouping and read sync. Never animate layout dimensions for decorative feedback and never let an essential action wait on an animation. Honour `prefers-reduced-motion: reduce` by removing movement while keeping text, icon and colour feedback. Keep loading placeholders dimensionally stable. iPhone/iPad PWA behaviour remains externally owned; provide shared tokens and handoff notes instead of editing it.
 
+    The defect register is open at `docs/INTERFACE_DEFECT_REGISTER.md`; entries D-001 to D-005 were recorded on 2026-09-01 while capturing the product previews from the shipping components.
+
     Deliverables: a defect register with evidence, scoped fix commits with tests, the motion plan closed task by task, and a visual QA record across the viewport and shell matrix. Write the detailed task-by-task plan when this stage actually starts; this entry is the approved scope and ordering only.
 
 ## Last Confirmed Deploy Baseline
