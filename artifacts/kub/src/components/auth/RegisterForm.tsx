@@ -430,7 +430,7 @@ export function RegisterForm() {
           >
             Войти
           </Link>
-          <span className="mx-2 text-[color:var(--kub-border-strong)]">/</span>
+          <span className="mx-2 text-[color:var(--kub-muted)]">/</span>
           <Link
             href="/login?reset=1"
             className="font-semibold text-[color:var(--kub-cyan)] hover:text-[color:var(--kub-cyan-hover)] transition-colors"

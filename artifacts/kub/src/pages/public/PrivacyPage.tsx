@@ -93,7 +93,7 @@ export function PrivacyPage() {
                 <h2 className="text-xl font-bold leading-snug text-[color:var(--kub-text)] sm:text-2xl">
                   {section.title}
                 </h2>
-                <div className="mt-4 space-y-4 text-sm leading-7 text-[color:var(--kub-text-muted)] sm:text-[15px]">
+                <div className="mt-4 space-y-4 text-sm leading-7 text-[color:var(--kub-muted)] sm:text-[15px]">
                   {section.blocks.map((block, index) => (
                     <PolicyBlock key={`${section.id}-${index}`} block={block} />
                   ))}

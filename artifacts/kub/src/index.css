@@ -146,6 +146,10 @@
   --kub-warn: #F5B50A;
   --kub-chat-bg: var(--kub-bg);
   --kub-message-out: #0E2C44;
+  /* Incoming bubbles share the surface token, which is what the bubble tail
+     already resolved to. Without this definition every incoming bubble had no
+     background at all and showed the chat wallpaper through its border. */
+  --kub-message-in: var(--kub-surface);
   --kub-message-meta: rgba(245, 247, 251, 0.55);
 
   --background: 221 65.52% 5.69%;        /* #050B18 */
@@ -213,8 +217,6 @@
   --tg-chat-bg: var(--kub-bg);
   --tg-header: var(--kub-surface);
   --tg-input: var(--kub-surface-2);
-  --tg-message-out: var(--kub-message-out);
-  --tg-message-in: var(--kub-surface);
   --tg-message-meta: var(--kub-message-meta);
   --tg-accent: var(--kub-cyan);
   --tg-accent-hover: var(--kub-cyan-hover);
@@ -279,6 +281,7 @@
   --kub-warn: #C2870A;
   --kub-chat-bg: var(--kub-bg);
   --kub-message-out: #DCEBF7;
+  --kub-message-in: var(--kub-surface);
   --kub-message-meta: rgba(7, 17, 31, 0.55);
 
   --background: 210 57.14% 97.25%;       /* #F4F8FC */
@@ -346,8 +349,6 @@
   --tg-chat-bg: var(--kub-bg);
   --tg-header: var(--kub-surface);
   --tg-input: var(--kub-surface-2);
-  --tg-message-out: var(--kub-message-out);
-  --tg-message-in: var(--kub-surface);
   --tg-message-meta: var(--kub-message-meta);
   --tg-accent: var(--kub-cyan);
   --tg-accent-hover: var(--kub-cyan-hover);
@@ -427,31 +428,6 @@ body {
     radial-gradient(var(--tg-pattern) 1px, transparent 1px);
   background-size: 40px 40px;
   background-position: 0 0, 20px 20px;
-}
-
-/* Message bubble tails */
-.bubble-out::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  right: -8px;
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-width: 0 0 10px 9px;
-  border-color: transparent transparent var(--tg-message-out) transparent;
-}
-
-.bubble-in::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: -8px;
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-width: 0 9px 10px 0;
-  border-color: transparent var(--tg-message-in) transparent transparent;
 }
 
 .context-menu {

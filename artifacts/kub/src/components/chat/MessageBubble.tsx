@@ -825,7 +825,7 @@ export function MessageBubble({
             onOpenGroupReadReceipts?.();
           }}
         >
-          <KubIcon name={groupReadInfo.allRead ? "doubleCheck" : "check"} size={11} tone={groupReadInfo.allRead ? "accent" : "muted"} />
+          <KubIcon name={groupReadInfo.allRead ? "doubleCheck" : "check"} size={13} tone={groupReadInfo.allRead ? "accent" : "muted"} />
           <span className="tabular-nums">{groupReadLabel}</span>
         </button>
       )}
@@ -1127,8 +1127,11 @@ export function MessageBubble({
               widthClasses.bubble,
               bubbleClass,
               isMe ? "rounded-br-sm" : "rounded-bl-sm",
-              isMe && isLastInGroup ? "bubble-out" : "",
-              !isMe && isLastInGroup ? "bubble-in" : "",
+              // The last bubble of a group squares its corner on the sender's
+              // side. This replaces the old triangular tail, which was drawn
+              // outside the bubble and overlapped the avatar.
+              isMe && isLastInGroup ? "rounded-br-none" : "",
+              !isMe && isLastInGroup ? "rounded-bl-none" : "",
               message.pending && "opacity-70",
               message.failed && "opacity-60",
               selected && "ring-2 ring-[color:var(--kub-cyan)]/55 bg-[color-mix(in_srgb,var(--kub-cyan)_10%,var(--kub-message-in))]",

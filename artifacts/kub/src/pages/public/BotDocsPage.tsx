@@ -57,7 +57,7 @@ export function BotDocsPage() {
             <EndpointMeta label="Авторизация" value={BOT_API_AUTHORIZATION} />
           </dl>
 
-          <div className="mt-5 flex gap-3 rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-4 text-sm leading-6 text-[color:var(--kub-text-muted)]">
+          <div className="mt-5 flex gap-3 rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-4 text-sm leading-6 text-[color:var(--kub-muted)]">
             <KubIcon name="info" size={18} className="mt-0.5 shrink-0 text-[color:var(--kub-cyan)]" />
             <p>
               Концепции знакомы разработчикам Telegram-ботов, но LETSCUBE не заявляет
@@ -107,7 +107,7 @@ export function BotDocsPage() {
                 <CodeBlock title="Успешный ответ" code={BOT_SUCCESS_EXAMPLE} />
                 <CodeBlock title="Ошибка и лимит" code={BOT_ERROR_EXAMPLE} />
               </div>
-              <p className="mt-4 text-sm leading-7 text-[color:var(--kub-text-muted)]">
+              <p className="mt-4 text-sm leading-7 text-[color:var(--kub-muted)]">
                 При ротации новый токен показывается один раз, а прежний сразу перестает
                 действовать. Отзыв токена не удаляет бота или историю чатов. Никогда не
                 передавайте токен в query string и не сохраняйте его в localStorage.
@@ -125,7 +125,7 @@ export function BotDocsPage() {
             </DocSection>
 
             <DocSection id="methods" title="Методы">
-              <p className="text-sm leading-7 text-[color:var(--kub-text-muted)]">
+              <p className="text-sm leading-7 text-[color:var(--kub-muted)]">
                 Неизвестные поля отклоняются. Идентификаторы чатов, сообщений и callback-запросов
                 имеют формат UUID. Изменяющие состояние методы требуют idempotency_key длиной
                 8–128 символов.
@@ -165,7 +165,7 @@ export function BotDocsPage() {
             </DocSection>
 
             <DocSection id="commands-buttons" title="Команды и кнопки">
-              <p className="text-sm leading-7 text-[color:var(--kub-text-muted)]">
+              <p className="text-sm leading-7 text-[color:var(--kub-muted)]">
                 Команды состоят из строчных латинских букв, цифр и подчеркивания, начинаются с
                 буквы и содержат до 32 символов. Callback-кнопка возвращает callback_query;
                 подтвердите обработку методом answerCallbackQuery.
@@ -177,7 +177,7 @@ export function BotDocsPage() {
             </DocSection>
 
             <DocSection id="updates-webhooks" title="Обновления и webhooks">
-              <div className="space-y-4 text-sm leading-7 text-[color:var(--kub-text-muted)]">
+              <div className="space-y-4 text-sm leading-7 text-[color:var(--kub-muted)]">
                 <p>
                   Webhook и getUpdates взаимоисключающие. Long polling ограничен 30 секундами и
                   возвращает message, edited_message, callback_query и membership. Неполученные
@@ -204,7 +204,7 @@ export function BotDocsPage() {
 
               <div className="mt-6 border-l-2 border-[color:var(--kub-pink)] pl-4">
                 <h3 className="font-bold text-[color:var(--kub-text)]">Групповая приватность</h3>
-                <p className="mt-2 text-sm leading-7 text-[color:var(--kub-text-muted)]">
+                <p className="mt-2 text-sm leading-7 text-[color:var(--kub-muted)]">
                   По умолчанию включена групповая приватность: бот получает адресованные ему
                   команды, упоминания, ответы на его сообщения, callback-события и собственные
                   события членства. Полный поток новых сообщений требует запроса владельца бота
@@ -303,7 +303,7 @@ function CodeBlock({ title, code }: { title: string; code: string }) {
       <h3 className="border-b border-[color:var(--kub-border-color)] px-4 py-2.5 text-xs font-bold text-[color:var(--kub-text)]">
         {title}
       </h3>
-      <pre className="max-w-full overflow-x-auto bg-[var(--kub-surface-2)] p-4 text-xs leading-6 text-[color:var(--kub-text-muted)]">
+      <pre className="max-w-full overflow-x-auto bg-[var(--kub-surface-2)] p-4 text-xs leading-6 text-[color:var(--kub-muted)]">
         <code>{code}</code>
       </pre>
     </section>
@@ -314,7 +314,7 @@ function GuidanceRow({ term, description }: { term: string; description: string 
   return (
     <div className="grid gap-1 py-4 sm:grid-cols-[160px_minmax(0,1fr)] sm:gap-5">
       <dt className="font-semibold text-[color:var(--kub-text)]">{term}</dt>
-      <dd className="leading-6 text-[color:var(--kub-text-muted)]">{description}</dd>
+      <dd className="leading-6 text-[color:var(--kub-muted)]">{description}</dd>
     </div>
   );
 }
