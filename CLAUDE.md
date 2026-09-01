@@ -1,6 +1,7 @@
 # LETSCUBE Project Handoff For Claude
 
-Last updated: 2026-09-01 (Europe/Moscow)
+Last updated: 2026-09-01 (Europe/Moscow), revised the same day after an
+independent verification pass against the live checkout.
 
 This file is the current operational handoff for Claude. Read it before changing
 code, infrastructure, database objects, release metadata, or product copy.
@@ -13,6 +14,14 @@ down. Do not silently skip ahead or repeat already completed work.
 Current unfinished task: finish **Task 2** of the approved public home/downloads/
 changelog plan by closing a small mounted-routing test gap. Production routing is
 already implemented and no production defect is currently known.
+
+The bot track is not the current work. Bot Platform v1 is implemented, migrated,
+deployed and production-canary verified; see section 6 and
+`docs/operations/bot-gateway.md`. The only bot item left is widening creation
+admission beyond the single pinned internal owner, which is a separate product
+decision requiring its own review and is explicitly outside this plan. The
+public home/downloads/changelog stage is the correct next step, exactly as
+sequenced in the approved design.
 
 Required remaining test changes:
 
@@ -92,8 +101,13 @@ Do not reintroduce those user-facing terms or old domains.
   publisher remains Android/Windows only.
 - Legacy release CLI behavior is preserved.
 - Production jq/Python parity tests exist and passed with jq 1.7.1.
-- `pnpm.cmd release:catalog:test` passed 33/33 with no skips when real jq was
-  available. Do not modify global PATH; use a process-scoped path or `KUB_JQ_BIN`.
+- `pnpm.cmd release:catalog:test` needs a real jq 1.7.1 for the parity case;
+  without one that single test skips and the suite still reports success. Do not
+  modify global PATH; point `KUB_JQ_BIN` at a pinned binary instead. A pinned
+  `jq-1.7.1` (SHA-256
+  `7451fbbf37feffb9bf262bd97c54f0da558c63f0748e64152dd87b0a07b6d6ab`) is kept
+  outside the repository at `C:\Users\maksi\.local\bin\jq-1.7.1\jq.exe`.
+  Re-verified on 2026-09-01: 34/34 passed with 0 skipped.
 
 ### Task 2: public routing foundation - production complete, test approval pending
 
@@ -167,15 +181,26 @@ In another shell:
 ```powershell
 $env:KUB_BASE_URL = 'http://127.0.0.1:5187'
 pnpm.cmd exec playwright test tests/e2e/public-home-routing.spec.ts --project=chromium-desktop-1440 --workers=1
-pnpm.cmd exec vitest run artifacts/kub/src/lib/publicHomeRouting.test.ts artifacts/kub/src/lib/platform/desktop.test.ts
+node --test tests/unit/public-home-routing.test.mts tests/unit/public-routes.test.mjs tests/unit/distribution-platform.test.mts
 pnpm.cmd --filter @workspace/kub run typecheck
 cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"
 git diff --check
 ```
 
+The routing unit suite runs on the Node test runner. This repository has no
+Vitest dependency and no `artifacts/kub/src/**/*.test.ts` files; an earlier
+revision of this section named a Vitest command that cannot execute. Use the
+`node --test` command above.
+
 The current configured mounted test previously passed 12/12. A run without a Vite
 server produced connection-refused failures; that was test setup, not an app defect.
 Stop the temporary server after the test.
+
+For the unconfigured matrix the same Vite command is used on the dedicated port
+`5188` with `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` and
+`VITE_SUPABASE_PUBLISHABLE_KEY` explicitly absent from the environment. No
+`.env` file exists under `artifacts/kub`, so the process environment is the only
+configuration source and the unconfigured state is reproducible.
 
 Existing build warnings about Vite sourcemaps, mixed Supabase imports, and chunk
 size are known warnings, not automatic permission to ignore new errors.
@@ -342,7 +367,58 @@ before claiming a Stable version or publishing an update.
   external changes. Preserve and coordinate with those changes instead of reverting
   them.
 
-## 15. Immediate Resume Checklist
+## 15. Production Deployment Path
+
+Deployment is Coolify-webhook driven. GitHub Actions are intentionally disabled
+and workflow files were removed; do not reintroduce them.
+
+- Push to GitHub triggers the per-application Coolify webhook.
+- `letscube-web` builds the browser application from `artifacts/kub`. Public-home
+  work in this plan deploys through this application and no other.
+- `letscube-worker` builds `artifacts/api-server`; its `watch_paths` are limited
+  to worker/build/runtime paths and shared manifests, so docs-only commits do
+  not redeploy it.
+- `letscube-bot-gateway` (`twezs89u2m6d6ln6c0rpaqxe`) runs the isolated Bot
+  Gateway runtime.
+- `letscube-support-mail` runs the non-public support mail bridge.
+
+Ordered rollout for the current track:
+
+1. Finish and review the task in its worktree; keep commits unpushed until the
+   scoped review approves them.
+2. Push `codex/bot-platform` to its own remote branch first, never straight to
+   `main`.
+3. Merge to `main` only after typecheck, unit tests, the mounted Playwright
+   matrix and the production build have all passed.
+4. Pushing `main` triggers the `letscube-web` webhook. Verify the deployment
+   reached the exact intended commit, passed its healthcheck and replaced the
+   previous replica; auto-deploy behavior must be checked, never assumed.
+5. Perform production visual QA on desktop and mobile viewports, then record the
+   deployment baseline, commit and evidence in
+   `docs/PRODUCTION_PRIORITY_TRACKER.md` and `docs/QA_RESULTS.md`.
+
+Task 5 of the public-home plan additionally requires verifying live release
+artifact bytes and SHA values, not only the JSON manifest, before any download
+surface is announced as available.
+
+## 16. Local Workstation Environment
+
+Verified on 2026-09-01 on the Windows 11 workstation:
+
+- Node 24.15.0, pnpm 10.33.2, Git 2.54.0, PowerShell 7.6.5, ripgrep 15.1.0,
+  cargo 1.97.0, Playwright 1.59.1 with Chromium already installed.
+- Pinned `jq-1.7.1` outside the repository; see section 4 for the path and
+  `KUB_JQ_BIN`.
+- Claude Code session settings live in the ignored worktree file
+  `.claude/settings.local.json`. `.claude/` is excluded through
+  `.git/info/exclude`, so it never appears in `git status` and does not affect
+  the Codex workflow.
+- Three stale worktree registrations pointing at removed
+  `C:\Users\maksi\Desktop\...` paths were pruned. Branches
+  `codex/resumable-media-task-1`, `codex/video-transcode-720p` and
+  `codex/video-transcode-frontend` are untouched and still exist.
+
+## 17. Immediate Resume Checklist
 
 ```powershell
 Set-Location 'D:\CodexProjects\LetsCube-Chat\.worktrees\bot-platform'
