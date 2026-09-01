@@ -229,3 +229,42 @@ test("release client aborts a request after the configured timeout", async () =>
 
   await assert.rejects(() => client.load("android", "stable"), /network/);
 });
+
+test("artifact URLs must sit inside their own platform and version directory", () => {
+  // The public download surface cites this guard as the reason it cannot point
+  // anywhere unexpected, so the guard itself needs coverage rather than only
+  // the origin check beside it.
+  const refused = [
+    "https://api.letscube.ru/anything.apk",
+    "https://api.letscube.ru/releases/files/windows/0.1.0/letscube-0.1.0.apk",
+    "https://api.letscube.ru/releases/files/android/0.0.9/letscube-0.1.0.apk",
+    "https://api.letscube.ru/releases/files/android/0.1.0/",
+    "https://api.letscube.ru/releases/files/android/0.1.0/app.apk?token=leak",
+    "https://api.letscube.ru/releases/files/android/0.1.0/app.apk#fragment",
+    "https://user:secret@api.letscube.ru/releases/files/android/0.1.0/app.apk",
+  ];
+
+  for (const url of refused) {
+    assert.throws(
+      () => parseReleaseManifest(androidManifest({ artifact: { url, size: 10, sha256: "a".repeat(64) } }), "android", "stable"),
+      (error: unknown) => error instanceof Error,
+      `${url} should be refused`,
+    );
+  }
+
+  const accepted = parseReleaseManifest(
+    androidManifest({
+      artifact: {
+        url: "https://api.letscube.ru/releases/files/android/0.1.0/letscube-0.1.0.apk",
+        size: 10,
+        sha256: "a".repeat(64),
+      },
+    }),
+    "android",
+    "stable",
+  );
+  assert.equal(
+    accepted.artifact?.url,
+    "https://api.letscube.ru/releases/files/android/0.1.0/letscube-0.1.0.apk",
+  );
+});

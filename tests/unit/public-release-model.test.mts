@@ -89,6 +89,34 @@ test("a platform without a published catalog is unavailable rather than broken",
   }
 });
 
+test("a platform nobody publishes never shows an error, even when the network failed", () => {
+  // Both halves of the guard matter. A shared network-failure flag reaching the
+  // Apple entries would otherwise render "Каталог сейчас недоступен" plus a
+  // retry for a platform that simply has no manifest.
+  for (const platform of ["macos", "ios"] as const) {
+    const state = describePublicPlatform(
+      input({ platform, title: platform, catalogPublished: false, failed: true, snapshot: null }),
+    );
+
+    assert.equal(state.state, "unavailable", platform);
+    assert.equal(state.href, null, platform);
+  }
+});
+
+test("an unavailable manifest reports the version it is preparing, not the released one", () => {
+  const state = describePublicPlatform(
+    input({ snapshot: snapshot({ manifest: manifest({ available: false, artifact: null }) }) }),
+  );
+  assert.equal(state.version, "0.2.10");
+
+  // An available manifest without an artifact is a broken shape, so it must not
+  // present a version a reader could take as released.
+  const broken = describePublicPlatform(
+    input({ snapshot: snapshot({ manifest: manifest({ artifact: null }) }) }),
+  );
+  assert.equal(broken.version, null);
+});
+
 test("a published catalog that cannot be reached is an error, not a silent absence", () => {
   const state = describePublicPlatform(input({ failed: true, snapshot: null }));
 

@@ -5,6 +5,7 @@ import { PlatformShowcase } from "@/components/public/PlatformShowcase";
 import { ReleaseChangelog } from "@/components/public/ReleaseChangelog";
 import { ReleaseDownloadAction } from "@/components/public/ReleaseDownloadAction";
 import { usePublicReleaseCatalog } from "@/hooks/usePublicReleaseCatalog";
+import type { PublicPlatformState } from "@/lib/publicReleaseModel";
 import { useTheme } from "@/hooks/useTheme";
 import { getCurrentDistributionTarget } from "@/lib/platform/capabilities";
 import { PublicPageShell } from "./PublicPageShell";
@@ -19,7 +20,7 @@ import { PublicPageShell } from "./PublicPageShell";
  * exist.
  */
 export function PublicHomePage() {
-  const { platforms, changelog } = usePublicReleaseCatalog();
+  const { platforms, changelog, refresh } = usePublicReleaseCatalog();
   const { resolvedTheme } = useTheme();
 
   // The visitor's own platform is offered first; everyone else gets the web
@@ -59,7 +60,7 @@ export function PublicHomePage() {
           </p>
 
           <div className="mt-5 flex flex-wrap items-center gap-2 sm:mt-7 sm:gap-3">
-            {preferredPlatform && <ReleaseDownloadAction platform={preferredPlatform} />}
+            {preferredPlatform && <ReleaseDownloadAction platform={preferredPlatform} onRetry={refresh} />}
             <Link
               href="/login"
               className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[color:var(--kub-border-color)] px-5 text-sm font-semibold text-[color:var(--kub-text)] transition-colors hover:bg-[var(--kub-surface-2)]"
@@ -83,9 +84,9 @@ export function PublicHomePage() {
               width={1440}
               height={900}
               decoding="async"
-              // Anchored to the top and clipped, so the platform sections below
-              // are already visible from the first viewport.
-              className="block h-auto w-full object-top"
+              // The parent's max-height and overflow do the clipping, so the
+              // platform sections below are visible from the first viewport.
+              className="block h-auto w-full"
             />
           </div>
         </section>
@@ -97,14 +98,15 @@ export function PublicHomePage() {
           <h2 id="public-platforms-title" className="text-3xl font-bold text-[color:var(--kub-text)]">
             Приложения LETSCUBE
           </h2>
+          {/* Derived, never asserted. A static sentence here would keep saying a
+              platform is downloadable after the catalog stopped saying so. */}
           <p className="mt-2 max-w-2xl text-sm text-[color:var(--kub-muted)]">
-            Windows и Android доступны для загрузки. Приложения для macOS и iPhone в разработке —
-            до их выпуска используйте веб-версию.
+            {availabilitySummary(platforms)}
           </p>
 
           <div className="mt-4">
             {platforms.map((platform) => (
-              <PlatformShowcase key={platform.platform} platform={platform} />
+              <PlatformShowcase key={platform.platform} platform={platform} onRetry={refresh} />
             ))}
           </div>
         </section>
@@ -115,4 +117,26 @@ export function PublicHomePage() {
       </main>
     </PublicPageShell>
   );
+}
+
+/**
+ * Names only the platforms the catalog currently says are downloadable, and
+ * only names the rest as planned. While the catalog is still being read it says
+ * nothing at all rather than guessing.
+ */
+function availabilitySummary(platforms: PublicPlatformState[]): string {
+  const ready = platforms.filter((platform) => platform.state === "available");
+  const planned = platforms.filter((platform) => platform.state === "unavailable");
+
+  if (ready.length === 0) {
+    return planned.length > 0
+      ? "Приложения готовятся к выпуску — используйте веб-версию."
+      : "Проверяем каталог релизов.";
+  }
+
+  const readyNames = ready.map((platform) => platform.title).join(" и ");
+  if (planned.length === 0) return `${readyNames} доступны для загрузки.`;
+
+  const plannedNames = planned.map((platform) => platform.title).join(" и ");
+  return `${readyNames} доступны для загрузки. ${plannedNames} — в разработке, до выпуска используйте веб-версию.`;
 }

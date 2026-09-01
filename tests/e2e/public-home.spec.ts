@@ -40,7 +40,13 @@ function manifest(platform: string, available: boolean) {
     minimumSupportedVersion: null,
     mandatory: false,
     notes: "Плановое обновление.",
-    highlights: ["Быстрее открывается чат", "Уведомления группируются по чату"],
+    // More than ReleaseChangelog shows at once, so the expander is exercised.
+    highlights: [
+      "Быстрее открывается чат",
+      "Уведомления группируются по чату",
+      "Меньше расход батареи в фоне",
+      "Ускорен поиск по сообщениям",
+    ],
     artifact: available
       ? {
         url: `https://api.letscube.ru/releases/files/${platform}/${platform === "android" ? "0.1.3" : "0.2.10"}/build.bin`,
@@ -51,19 +57,37 @@ function manifest(platform: string, available: boolean) {
   };
 }
 
-async function installCatalog(page: Page) {
+type CatalogMode = "available" | "unavailable" | "unreachable";
+
+async function installCatalog(page: Page, mode: CatalogMode = "available") {
   await page.route(CATALOG, async (route: Route) => {
+    if (mode === "unreachable") {
+      await route.abort("connectionfailed");
+      return;
+    }
     const platform = new URL(route.request().url()).pathname.split("/")[3] ?? "windows";
+    const published = platform === "windows" || platform === "android";
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(manifest(platform, platform === "windows" || platform === "android")),
+      body: JSON.stringify(manifest(platform, published && mode === "available")),
     });
   });
 }
 
 test.describe("public home presentation", () => {
   test.beforeEach(async ({ page }, testInfo) => {
+    // An all-skipped run exits 0, so a rename in either file would turn this
+    // whole availability contract into a green no-op. Fail instead.
+    const configured = testInfo.config.projects.map((project) => project.name);
+    const missing = COVERED_PROJECTS.filter((name) => !configured.includes(name));
+    if (missing.length > 0) {
+      throw new Error(
+        `These viewports are named by this contract but are not configured: ${missing.join(", ")}. `
+          + `Configured projects: ${configured.join(", ")}.`,
+      );
+    }
+
     test.skip(
       !COVERED_PROJECTS.includes(testInfo.project.name),
       "This contract covers the four release viewports named by the plan.",
@@ -176,6 +200,26 @@ test.describe("public home presentation", () => {
     }
   });
 
+  test("no store or vendor download link appears anywhere on the page", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+    // The section-scoped check cannot see a link rendered outside it, and a
+    // store link would not point at the catalog origin either.
+    const hosts = await page.locator("main a[href]").evaluateAll((nodes) =>
+      nodes
+        .map((node) => (node as HTMLAnchorElement).href)
+        .filter((href) => /^https?:/i.test(href))
+        .map((href) => new URL(href).hostname),
+    );
+
+    for (const host of hosts) {
+      expect(host, `${host} is an external destination this page must not offer`).toMatch(
+        /^(api\.letscube\.ru|127\.0\.0\.1|localhost)$/,
+      );
+    }
+  });
+
   test("released platforms link only at the validated catalog artifact", async ({ page }) => {
     await page.goto("/");
 
@@ -195,6 +239,9 @@ test.describe("public home presentation", () => {
 
   test("the retired club positioning is absent", async ({ page }) => {
     await page.goto("/");
+    // Without this the assertion would also pass on a blank page.
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Приложения LETSCUBE" })).toBeVisible();
     await page.evaluate((selector) => {
       const root = document.querySelector(selector);
       if (root) root.scrollTop = root.scrollHeight;
@@ -204,6 +251,19 @@ test.describe("public home presentation", () => {
     for (const pattern of RETIRED_POSITIONING) {
       expect(text, `the page still carries ${pattern}`).not.toMatch(pattern);
     }
+  });
+
+  test("the changelog expands in place", async ({ page }) => {
+    await page.goto("/");
+    const expander = page.getByRole("button", { name: /^Ещё/ });
+    await expect(expander).toBeVisible();
+
+    const before = await page.getByRole("listitem").count();
+    await expander.click();
+    await expect(page.getByRole("button", { name: "Свернуть" })).toBeVisible();
+    expect(await page.getByRole("listitem").count()).toBeGreaterThan(before);
+    // No route was added for this.
+    await expect(page).toHaveURL(/\/$/);
   });
 
   test("the primary actions are reachable and visible from the keyboard", async ({ page }) => {
@@ -257,5 +317,38 @@ test.describe("public home presentation", () => {
       }).length,
     );
     expect(animated, "an endless animation runs while reduced motion is requested").toBe(0);
+  });
+  test("an unavailable catalog offers nothing and says so everywhere", async ({ page }) => {
+    await installCatalog(page, "unavailable");
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+    // The strongest availability sentence on the page is derived, so it must
+    // not keep claiming a download the catalog no longer offers.
+    const intro = await page.getByRole("heading", { name: "Приложения LETSCUBE" })
+      .locator("xpath=following-sibling::p[1]")
+      .innerText();
+    expect(intro).not.toMatch(/доступны для загрузки/i);
+
+    await expect(page.locator('main a[href^="https://api.letscube.ru/releases/files/"]')).toHaveCount(0);
+    await expect(page.getByText("В разработке").first()).toBeVisible();
+  });
+
+  test("an unreachable catalog offers a retry that actually re-reads it", async ({ page }) => {
+    await installCatalog(page, "unreachable");
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+    const retry = page.getByRole("button", { name: "Повторить проверку" }).first();
+    await expect(retry).toBeVisible();
+    await expect(page.locator('main a[href^="https://api.letscube.ru/releases/files/"]')).toHaveCount(0);
+
+    // Serve the catalog before retrying: a control that does nothing would
+    // leave the page in the same state forever.
+    await page.unroute(CATALOG);
+    await installCatalog(page, "available");
+    await retry.click();
+
+    await expect(page.locator('main a[href^="https://api.letscube.ru/releases/files/"]').first()).toBeVisible();
   });
 });

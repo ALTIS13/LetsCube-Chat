@@ -13,7 +13,7 @@ import { PublicPageShell } from "./PublicPageShell";
  * catalog.
  */
 export function DownloadPage() {
-  const { platforms, changelog } = usePublicReleaseCatalog();
+  const { platforms, changelog, refresh } = usePublicReleaseCatalog();
 
   return (
     <PublicPageShell>
@@ -31,7 +31,7 @@ export function DownloadPage() {
 
         <div className="mt-8">
           {platforms.map((platform) => (
-            <PlatformShowcase key={platform.platform} platform={platform} />
+            <PlatformShowcase key={platform.platform} platform={platform} onRetry={refresh} />
           ))}
         </div>
 

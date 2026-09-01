@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 import { useReleaseCatalog } from "@/hooks/useReleaseCatalog";
 import {
@@ -32,27 +32,41 @@ const UNPUBLISHED_PLATFORMS: ReleasePlatform[] = ["macos", "ios"];
 export type PublicReleaseCatalog = {
   platforms: PublicPlatformState[];
   changelog: PublicChangelogEntry | null;
+  /** Re-reads both published manifests. The public retry control needs this. */
+  refresh: () => void;
 };
 
 export function usePublicReleaseCatalog(): PublicReleaseCatalog {
   const windows = useReleaseCatalog("windows_download");
   const android = useReleaseCatalog("android_download");
 
+  const windowsSnapshot = windows.snapshot;
+  const androidSnapshot = android.snapshot;
+  const windowsChecking = windows.checking;
+  const androidChecking = android.checking;
+  const windowsRefresh = windows.refresh;
+  const androidRefresh = android.refresh;
+
+  const refresh = useCallback(() => {
+    windowsRefresh();
+    androidRefresh();
+  }, [androidRefresh, windowsRefresh]);
+
   return useMemo(() => {
     // The hook reports `checking` while a request is in flight; a settled
     // request that produced no snapshot is a failure for a platform whose
     // manifest is supposed to exist.
     const published = [
-      { key: "windows" as const, source: windows },
-      { key: "android" as const, source: android },
-    ].map(({ key, source }) =>
+      { key: "windows" as const, checking: windowsChecking, snapshot: windowsSnapshot },
+      { key: "android" as const, checking: androidChecking, snapshot: androidSnapshot },
+    ].map(({ key, checking, snapshot }) =>
       describePublicPlatform({
         platform: key,
         title: PUBLIC_PLATFORM_TITLES[key],
         catalogPublished: true,
-        loading: source.checking,
-        failed: !source.checking && !source.snapshot,
-        snapshot: source.snapshot,
+        loading: checking,
+        failed: !checking && !snapshot,
+        snapshot,
       }),
     );
 
@@ -70,9 +84,12 @@ export function usePublicReleaseCatalog(): PublicReleaseCatalog {
     return {
       platforms: [...published, ...planned],
       changelog: selectPublicChangelog([
-        { title: PUBLIC_PLATFORM_TITLES.windows, snapshot: windows.snapshot },
-        { title: PUBLIC_PLATFORM_TITLES.android, snapshot: android.snapshot },
+        { title: PUBLIC_PLATFORM_TITLES.windows, snapshot: windowsSnapshot },
+        { title: PUBLIC_PLATFORM_TITLES.android, snapshot: androidSnapshot },
       ]),
+      refresh,
     };
-  }, [android, windows]);
+    // The hook returns a fresh object each render, so the memo depends on the
+    // values it actually reads rather than on those objects.
+  }, [androidChecking, androidSnapshot, refresh, windowsChecking, windowsSnapshot]);
 }

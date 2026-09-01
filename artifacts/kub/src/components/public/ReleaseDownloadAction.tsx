@@ -60,19 +60,26 @@ export function ReleaseDownloadAction({ platform, onRetry, className }: Props) {
   }
 
   return (
-    <a
-      href={platform.href}
-      // A direct catalog artifact, so no interception and no authentication.
-      className={cn(
-        ACTION_BOX,
-        "bg-[var(--kub-action-primary-background)] text-[color:var(--kub-action-primary-foreground)] hover:bg-[var(--kub-action-primary-hover)]",
-        className,
-      )}
+    <span className="inline-flex flex-col items-start gap-1">
+      <a
+        href={platform.href}
+        // A direct catalog artifact, so no interception and no authentication.
+        className={cn(
+          ACTION_BOX,
+          "bg-[var(--kub-action-primary-background)] text-[color:var(--kub-action-primary-foreground)] hover:bg-[var(--kub-action-primary-hover)]",
+          className,
+        )}
     >
-      <KubIcon name="cloud" size={16} tone="currentColor" />
-      {label}
-      {platform.version && <span className="font-normal opacity-80">{platform.version}</span>}
-    </a>
+        <KubIcon name="cloud" size={16} tone="currentColor" />
+        {label}
+        {platform.version && <span className="font-normal opacity-80">{platform.version}</span>}
+      </a>
+      {/* The hero renders this control on its own, so the disclosure has to
+          travel with it rather than living only in the platform section. */}
+      {platform.stale && (
+        <span className="text-xs text-[color:var(--kub-muted)]">Показаны сохранённые данные каталога</span>
+      )}
+    </span>
   );
 }
 
