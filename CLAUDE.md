@@ -11,9 +11,19 @@ code, infrastructure, database objects, release metadata, or product copy.
 The user explicitly paused implementation so the current context could be written
 down. Do not silently skip ahead or repeat already completed work.
 
-Current unfinished task: finish **Task 2** of the approved public home/downloads/
-changelog plan by closing a small mounted-routing test gap. Production routing is
-already implemented and no production defect is currently known.
+**Task 2 status (2026-09-01): the test gap is closed and the task is
+implementation-complete.** The mounted matrix now covers the unconfigured
+Supabase precedence and the fixed-route near matches, both proven by mutation.
+Validation passed: mounted matrix 15/15, routing unit suites 15/15 with no
+skips, typecheck, production build and `git diff --check` all clean. Evidence is
+in `.superpowers/sdd/2026-08-30-public-home-downloads-changelog/`
+(`task-2-implementer-report.md`, fix round).
+
+Only an **independent review** of `3990715..0e406a3` remains before Task 2 is
+marked done; a scoped self-review was performed and its two findings are already
+fixed in `0e406a3`. Once that gate passes, continue with Task 3 (sanitized
+product assets), then Task 4 (final UI), then Task 5 (validation and deploy).
+No production file changed in the whole range.
 
 The bot track is not the current work. Bot Platform v1 is implemented, migrated,
 deployed and production-canary verified; see section 6 and
@@ -23,21 +33,21 @@ decision requiring its own review and is explicitly outside this plan. The
 public home/downloads/changelog stage is the correct next step, exactly as
 sequenced in the approved design.
 
-Required remaining test changes:
+Test changes that were required, all now implemented:
 
 1. Mount the real app with Supabase public configuration intentionally absent and
-   assert that `/` renders `RuntimeConfigurationScreen`.
+   assert that `/` renders `RuntimeConfigurationScreen`. Done.
 2. In that same unconfigured matrix, prove that exact public routes `/download`,
    `/privacy`, `/support`, and `/bots/docs` remain reachable before the runtime
-   configuration gate.
+   configuration gate. Done.
 3. In the configured matrix, prove that near matches `/download/preview` and
-   `/bots/docs/nested` are protected and redirect a guest to `/login`.
+   `/bots/docs/nested` are protected and redirect a guest to `/login`. Done, in
+   both the mounted matrix and the unit negatives.
 4. The test must be deterministic, use a dedicated alternate port, have no
-   optional-environment skip, and contain no secret values.
-
-After the patch, run the mounted Playwright test, routing unit tests, typecheck,
-production build, and `git diff --check`. Then perform a scoped review before
-marking Task 2 complete.
+   optional-environment skip, and contain no secret values. Done: the
+   unconfigured describe owns port `5188`, starts and stops its own Vite server,
+   refuses the port when something already answers on it, and carries no
+   credential.
 
 ## 2. Authoritative Checkout And Git State
 
@@ -47,9 +57,9 @@ marking Task 2 complete.
 - Remote: `https://github.com/ALTIS13/LetsCube-Chat.git`
 - Implementation baseline before this handoff commit:
   `aeaaace9efd0c5dfed5542d2ffca8a3a681e0152`
-- Working tree before creating this handoff: clean
-- Branch before this handoff commit: 7 commits ahead of
-  `origin/codex/bot-platform`
+- Working tree: clean
+- Branch: 11 commits ahead of `origin/codex/bot-platform` as of 2026-09-01, all
+  intentionally unpushed
 
 The task environment may still display the removed/stale desktop path
 `C:\Users\maksi\Desktop\kub-messenger-clean`. Do not use it as the authoritative
@@ -62,6 +72,10 @@ validated. Never push directly to `main` without complete validation.
 
 Latest local commits:
 
+- `0e406a3 test(public): address scoped review of the routing coverage`
+- `a455610 test(public): cover unconfigured routing and near matches`
+- `3990715 docs(handoff): correct validation commands and record environment`
+- `000259e docs(handoff): record LETSCUBE context for Claude`
 - `aeaaace test(public): cover mounted root routing`
 - `fdd8933 feat(public): route guests to LETSCUBE home`
 - `c035431 docs(plan): close release highlights task`
@@ -109,7 +123,7 @@ Do not reintroduce those user-facing terms or old domains.
   outside the repository at `C:\Users\maksi\.local\bin\jq-1.7.1\jq.exe`.
   Re-verified on 2026-09-01: 34/34 passed with 0 skipped.
 
-### Task 2: public routing foundation - production complete, test approval pending
+### Task 2: public routing foundation - implemented, independent review pending
 
 Implemented:
 
@@ -118,7 +132,11 @@ Implemented:
 - `artifacts/kub/src/lib/publicRoutes.ts`
 - routing integration in `artifacts/kub/src/App.tsx`
 - minimal `PublicHomePage.tsx` and `DownloadPage.tsx`
-- mounted routing coverage in `tests/e2e/public-home-routing.spec.ts`
+- mounted routing coverage in `tests/e2e/public-home-routing.spec.ts`, in two
+  matrices: the configured one against the shared server, and an unconfigured
+  one that owns port `5188` and starts its own Vite server with every public
+  Supabase name stripped from the inherited environment
+- near-match negatives in `tests/unit/public-routes.test.mjs`
 
 Current behavior contract:
 
@@ -131,8 +149,9 @@ Current behavior contract:
 - `isDesktopShell()` detects native shell generally; existing Windows-only
   `isDesktopApp()` and `getDesktopBridge()` semantics remain Windows-only.
 
-Independent reviewer found no production defect. Remaining P2 is only the test gap
-listed in section 1.
+Independent reviewer found no production defect. The two P2 test gaps it raised
+are closed; see section 1. Both closures were proven by mutation, so neither is
+a source scan that can stay green while the contract regresses.
 
 ### Task 3: sanitized real-interface product assets - pending
 
@@ -164,6 +183,10 @@ listed in section 1.
 ## 5. Validation Commands For The Current Task
 
 Use PowerShell 7 and `pnpm.cmd`, never `pnpm.ps1`.
+
+Do not start these servers from Git Bash. MSYS rewrites `BASE_PATH=/` into the
+Git installation path, Vite then serves under `/Program Files/Git/`, and every
+route answers `302`. Use PowerShell as shown, or set `MSYS_NO_PATHCONV=1`.
 
 For the configured mounted-routing matrix, start Vite explicitly on a dedicated
 port with safe fixture values (these are not production credentials):
