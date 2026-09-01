@@ -6,6 +6,7 @@ import { MessageBubble } from "@/components/chat/MessageBubble";
 import { KubIcon, KubLogo } from "@/components/kub";
 import { useAppStore } from "@/store/app.store";
 import {
+  isPublicPreviewCaptureEnabled,
   PUBLIC_PREVIEW_READY_ATTRIBUTE,
   previewChats,
   previewCurrentUser,
@@ -31,6 +32,13 @@ export default function PublicPreviewCapturePage() {
   const currentUserId = useAppStore((state) => state.currentUser?.id ?? null);
 
   useEffect(() => {
+    // Defence in depth. The binding in App.tsx already folds away in a
+    // production build; this makes the page inert even if some future path
+    // manages to mount it.
+    if (!isPublicPreviewCaptureEnabled()) {
+      setError("The preview capture surface is disabled in this build.");
+      return;
+    }
     try {
       const injected = readPublicPreviewFixture();
       if (!injected) {

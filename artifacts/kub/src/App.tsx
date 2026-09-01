@@ -22,7 +22,7 @@ import { BannedScreen } from "@/components/BannedScreen";
 import { AdminLayout } from "@/pages/admin/AdminLayout";
 import { TasksPage } from "@/pages/tasks/TasksPage";
 import { BotsPage } from "@/pages/bots/BotsPage";
-import { isPublicPreviewCaptureEnabled } from "@/lib/publicPreviewFixture";
+import { PUBLIC_PREVIEW_CAPTURE_PATH } from "@/lib/publicPreviewFixture";
 import { BotDocsPage } from "@/pages/public/BotDocsPage";
 import { DownloadPage } from "@/pages/public/DownloadPage";
 import { PrivacyPage } from "@/pages/public/PrivacyPage";
@@ -417,16 +417,25 @@ function AppRoutes() {
  * DEV-only capture surface for the public product previews.
  *
  * Both halves of the gate are required: `import.meta.env.DEV` and an explicit
- * `VITE_PUBLIC_PREVIEW_FIXTURE=1`. A query flag can never reach it, and a
- * production build removes the branch and its lazy chunk entirely.
+ * `VITE_PUBLIC_PREVIEW_FIXTURE=1`. A query flag can never reach it.
+ *
+ * The gate is spelled out here rather than called as a function on purpose.
+ * `lazy()` is not annotated as pure, so calling it at module scope keeps its
+ * dynamic import alive: an earlier revision guarded only the branch, and the
+ * chunk was still emitted and published. Vite replaces these `import.meta.env`
+ * reads before bundling, so the binding folds to `null` in production and the
+ * chunk is never created. `isPublicPreviewCaptureEnabled()` remains the runtime
+ * rule and the page itself re-checks it.
  */
-const PUBLIC_PREVIEW_CAPTURE_PATH = "/__qa/public-preview";
-const PublicPreviewCapturePage = lazy(() => import("@/pages/public/PublicPreviewCapturePage"));
+const PublicPreviewCapturePage =
+  import.meta.env.DEV && import.meta.env.VITE_PUBLIC_PREVIEW_FIXTURE === "1"
+    ? lazy(() => import("@/pages/public/PublicPreviewCapturePage"))
+    : null;
 
 function RootRoutes() {
   const [location] = useLocation();
 
-  if (isPublicPreviewCaptureEnabled() && location === PUBLIC_PREVIEW_CAPTURE_PATH) {
+  if (PublicPreviewCapturePage && location === PUBLIC_PREVIEW_CAPTURE_PATH) {
     return (
       <Suspense fallback={null}>
         <PublicPreviewCapturePage />

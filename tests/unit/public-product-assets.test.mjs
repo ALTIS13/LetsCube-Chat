@@ -7,6 +7,12 @@ import { fileURLToPath } from "node:url";
 
 import sharp from "sharp";
 
+import {
+  PUBLIC_PREVIEW_CAPTURE_PATH,
+  PUBLIC_PREVIEW_READY_ATTRIBUTE,
+  PUBLIC_PREVIEW_WINDOW_KEY,
+} from "../../artifacts/kub/src/lib/publicPreviewFixture.ts";
+
 const root = new URL("../../", import.meta.url);
 const rootPath = fileURLToPath(root);
 
@@ -32,10 +38,24 @@ const MIN_HEIGHT = 450;
 const MAX_HEIGHT = 1200;
 const MAX_BYTES = 350 * 1024;
 
-// The capture route and its payload are DEV-only. These markers must never
-// appear in a production bundle.
-const CAPTURE_ROUTE_MARKER = "/__qa/public-preview";
-const FIXTURE_ENV_MARKER = "VITE_PUBLIC_PREVIEW_FIXTURE";
+// The capture surface is DEV-only. None of this may appear in a production
+// bundle. The markers are imported from the source of truth rather than copied,
+// so renaming any of them cannot leave the scan silently proving nothing.
+//
+// The route string alone is not enough: a `lazy()` call evaluated at module
+// scope keeps its dynamic import alive even when the branch that uses it is
+// removed, so the emitted chunk and the runtime identifiers must be checked
+// too. That is exactly how the first implementation shipped the capture page.
+const CAPTURE_CONTENT_MARKERS = [
+  PUBLIC_PREVIEW_CAPTURE_PATH,
+  PUBLIC_PREVIEW_WINDOW_KEY,
+  PUBLIC_PREVIEW_READY_ATTRIBUTE,
+  "VITE_PUBLIC_PREVIEW_FIXTURE",
+];
+
+// The lazy chunk is emitted under a name derived from the module, so an emitted
+// file carrying it is itself the defect regardless of the file's content.
+const CAPTURE_CHUNK_NAME = "PublicPreviewCapturePage";
 
 // Personal-data shapes that must never reach a public asset name or the fixture.
 const EMAIL_PATTERN = /[\w.+-]+@[\w-]+\.[\w.-]+/;
@@ -195,14 +215,23 @@ test("every production marker really occurs in the fixture", async () => {
   }
 });
 
+test("the production bundle emits no capture chunk", () => {
+  const offenders = buildOutputFiles()
+    .filter((file) => path.basename(file).includes(CAPTURE_CHUNK_NAME))
+    .map((file) => path.relative(rootPath, file));
+
+  assert.deepEqual(offenders, [], "the DEV capture page must not be emitted as a production chunk");
+});
+
 test("the production bundle omits the capture route and its fixture", () => {
   const offenders = [];
   for (const file of buildOutputFiles()) {
     if (!/\.(js|css|html|json|map)$/i.test(file)) continue;
     const contents = readFileSync(file);
     const text = contents.toString("utf8");
-    if (text.includes(CAPTURE_ROUTE_MARKER)) offenders.push(`${file}: capture route marker`);
-    if (text.includes(FIXTURE_ENV_MARKER)) offenders.push(`${file}: fixture environment marker`);
+    for (const marker of CAPTURE_CONTENT_MARKERS) {
+      if (text.includes(marker)) offenders.push(`${file}: capture marker "${marker}"`);
+    }
     for (const marker of FIXTURE_PRODUCTION_MARKERS) {
       if (text.includes(marker)) offenders.push(`${file}: fixture string "${marker}"`);
     }

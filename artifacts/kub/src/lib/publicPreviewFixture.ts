@@ -9,6 +9,7 @@ import type { ChatWithLastMessage, MessageWithSender, Profile } from "@/types/da
  * behind a two-part gate and touches neither Supabase nor authentication.
  */
 
+export const PUBLIC_PREVIEW_CAPTURE_PATH = "/__qa/public-preview";
 export const PUBLIC_PREVIEW_WINDOW_KEY = "__letscubePublicPreviewFixture";
 export const PUBLIC_PREVIEW_READY_ATTRIBUTE = "data-public-preview-ready";
 
@@ -25,13 +26,31 @@ declare global {
   }
 }
 
+export type PublicPreviewGateEnv = {
+  DEV?: unknown;
+  VITE_PUBLIC_PREVIEW_FIXTURE?: unknown;
+};
+
 /**
- * Both halves are required. `import.meta.env.DEV` is statically false in a
- * production build, so every caller of this gate — and the lazy chunk behind
- * it — is dropped at build time. A query flag alone can never enable capture.
+ * The capture gate as a pure function, so the rule itself can be tested.
+ *
+ * Both halves are required and neither reads the query string, the hash or
+ * storage, so a flag in a URL can never enable capture.
+ */
+export function resolveCaptureGate(env: PublicPreviewGateEnv): boolean {
+  return env.DEV === true && env.VITE_PUBLIC_PREVIEW_FIXTURE === "1";
+}
+
+/**
+ * Runtime form of the same rule.
+ *
+ * `App.tsx` deliberately spells the gate out inline instead of calling this,
+ * because only a literal `import.meta.env` read is folded away at build time;
+ * a function call would keep the lazy chunk alive. This function is the rule
+ * used at runtime and by the page's own defensive check.
  */
 export function isPublicPreviewCaptureEnabled(): boolean {
-  return Boolean(import.meta.env.DEV) && import.meta.env.VITE_PUBLIC_PREVIEW_FIXTURE === "1";
+  return resolveCaptureGate(import.meta.env as PublicPreviewGateEnv);
 }
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
