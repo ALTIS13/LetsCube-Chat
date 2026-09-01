@@ -1,18 +1,51 @@
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
+import path from "node:path";
+
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const SUPABASE_ORIGIN = "http://127.0.0.1:54321";
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const NOW = "2026-08-31T12:00:00.000Z";
 
+// The routing state matrix is viewport-independent, so both matrices run once
+// under the same project instead of repeating across every viewport.
+const ROUTING_PROJECT = "chromium-desktop-1440";
+const ROUTING_PROJECT_REASON = "The routing state matrix is viewport-independent and runs once.";
+
+const PUBLIC_ROUTE_HEADINGS = [
+  ["/download", "Приложения LETSCUBE"],
+  ["/privacy", "Политика конфиденциальности LETSCUBE"],
+  ["/support", "Поддержка LETSCUBE"],
+  ["/bots/docs", "LETSCUBE Bot API"],
+] as const;
+
+// Paths that only look like the fixed public routes. They must stay protected.
+const PUBLIC_ROUTE_NEAR_MATCHES = ["/download/preview", "/bots/docs/nested"] as const;
+
+const RUNTIME_CONFIGURATION_HEADING = "Подключение к серверу не настроено";
+const PUBLIC_HOME_HEADING = "Мессенджер для общения и совместной работы";
+
+// The unconfigured matrix owns its own port so it can never collide with the
+// configured server the rest of this suite runs against.
+const UNCONFIGURED_PORT = 5188;
+const UNCONFIGURED_ORIGIN = `http://127.0.0.1:${UNCONFIGURED_PORT}`;
+const UNCONFIGURED_STARTUP_TIMEOUT_MS = 180_000;
+
+// Every public Supabase name the client accepts, so none of them can leak in
+// from the shell that starts the configured server.
+const SUPABASE_PUBLIC_ENV_KEYS = new Set([
+  "VITE_SUPABASE_URL",
+  "VITE_SUPABASE_ANON_KEY",
+  "VITE_SUPABASE_PUBLISHABLE_KEY",
+]);
+
 type RuntimeKind = "browser" | "capacitor_android" | "capacitor_ios" | "tauri_windows" | "tauri_macos";
 type ProfileMode = "ready" | "pending" | "missing";
 
 test.describe("public home routing integration", () => {
   test.beforeEach(async ({ page }, testInfo) => {
-    test.skip(
-      testInfo.project.name !== "chromium-desktop-1440",
-      "The routing state matrix is viewport-independent and runs once.",
-    );
+    test.skip(testInfo.project.name !== ROUTING_PROJECT, ROUTING_PROJECT_REASON);
     await installReleaseCatalogFixture(page);
   });
 
@@ -22,7 +55,7 @@ test.describe("public home routing integration", () => {
 
     await page.goto("/");
 
-    await expect(page.getByRole("heading", { name: "Мессенджер для общения и совместной работы" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: PUBLIC_HOME_HEADING })).toBeVisible();
     await expect(page.getByRole("link", { name: "Открыть веб-версию" }).first()).toBeVisible();
     await expect(page).toHaveURL(/\/$/);
   });
@@ -36,7 +69,7 @@ test.describe("public home routing integration", () => {
 
       await expect(page).toHaveURL(/\/login$/);
       await expect(page.getByTestId("auth-form-shell")).toBeVisible();
-      await expect(page.getByRole("heading", { name: "Мессенджер для общения и совместной работы" })).toHaveCount(0);
+      await expect(page.getByRole("heading", { name: PUBLIC_HOME_HEADING })).toHaveCount(0);
     });
   }
 
@@ -124,7 +157,7 @@ test.describe("public home routing integration", () => {
     await page.goto("/");
 
     await expect(page.getByText("Загрузка", { exact: true })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Мессенджер для общения и совместной работы" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: PUBLIC_HOME_HEADING })).toHaveCount(0);
 
     profileGate.open();
     await expect(page.getByTestId("desktop-app-shell")).toBeVisible();
@@ -139,7 +172,7 @@ test.describe("public home routing integration", () => {
 
     await expect(page.getByText("Не удалось загрузить профиль", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Повторить" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Мессенджер для общения и совместной работы" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: PUBLIC_HOME_HEADING })).toHaveCount(0);
   });
 
   test("banned authenticated root renders the ban screen", async ({ page }) => {
@@ -158,16 +191,71 @@ test.describe("public home routing integration", () => {
     await installRuntime(page, "browser");
     await installSupabaseFixture(page);
 
-    const routes = [
-      ["/download", "Приложения LETSCUBE"],
-      ["/privacy", "Политика конфиденциальности LETSCUBE"],
-      ["/support", "Поддержка LETSCUBE"],
-      ["/bots/docs", "LETSCUBE Bot API"],
-    ] as const;
-
-    for (const [route, heading] of routes) {
+    for (const [route, heading] of PUBLIC_ROUTE_HEADINGS) {
       await page.goto(route);
       await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+      await expect(page.getByTestId("auth-form-shell")).toHaveCount(0);
+    }
+  });
+
+  test("public-route near matches stay protected for guests", async ({ page }) => {
+    await installRuntime(page, "browser");
+    await installSupabaseFixture(page);
+
+    for (const route of PUBLIC_ROUTE_NEAR_MATCHES) {
+      await page.goto(route);
+
+      await expect(page).toHaveURL(/\/login$/);
+      await expect(page.getByTestId("auth-form-shell")).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1, name: PUBLIC_ROUTE_HEADINGS[0][1] })).toHaveCount(0);
+      await expect(page.getByRole("heading", { level: 1, name: PUBLIC_ROUTE_HEADINGS[3][1] })).toHaveCount(0);
+    }
+  });
+});
+
+// The gate under test lives in `RootRoutes`: fixed public routes resolve before
+// the runtime configuration screen, and every other path stops at that screen
+// while public Supabase configuration is absent. A build that carries fixture
+// configuration cannot observe either half, so this matrix owns a second Vite
+// server started with those variables removed.
+test.describe("public routing without Supabase configuration", () => {
+  let unconfiguredServer: UnconfiguredDevServer | null = null;
+
+  test.beforeAll(async ({}, testInfo) => {
+    if (testInfo.project.name !== ROUTING_PROJECT) return;
+
+    test.setTimeout(UNCONFIGURED_STARTUP_TIMEOUT_MS + 60_000);
+    unconfiguredServer = await startUnconfiguredDevServer(repositoryRoot(testInfo.config.configFile));
+  });
+
+  test.afterAll(async () => {
+    const server = unconfiguredServer;
+    unconfiguredServer = null;
+    await server?.stop();
+  });
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== ROUTING_PROJECT, ROUTING_PROJECT_REASON);
+
+    test.setTimeout(90_000);
+    await installReleaseCatalogFixture(page);
+    await installRuntime(page, "browser");
+  });
+
+  test("root renders the runtime configuration screen", async ({ page }) => {
+    await page.goto(`${UNCONFIGURED_ORIGIN}/`);
+
+    await expect(page.getByRole("heading", { level: 1, name: RUNTIME_CONFIGURATION_HEADING })).toBeVisible();
+    await expect(page.getByRole("heading", { name: PUBLIC_HOME_HEADING })).toHaveCount(0);
+    await expect(page.getByTestId("auth-form-shell")).toHaveCount(0);
+  });
+
+  test("fixed public routes stay reachable before the configuration gate", async ({ page }) => {
+    for (const [route, heading] of PUBLIC_ROUTE_HEADINGS) {
+      await page.goto(`${UNCONFIGURED_ORIGIN}${route}`);
+
+      await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1, name: RUNTIME_CONFIGURATION_HEADING })).toHaveCount(0);
       await expect(page.getByTestId("auth-form-shell")).toHaveCount(0);
     }
   });
@@ -341,4 +429,119 @@ async function json(route: Route, body: unknown, status = 200) {
     contentType: "application/json",
     body: JSON.stringify(body),
   });
+}
+
+type UnconfiguredDevServer = { stop: () => Promise<void> };
+
+function repositoryRoot(configFile: string | undefined): string {
+  return configFile ? path.dirname(configFile) : process.cwd();
+}
+
+// Copies the current environment without any public Supabase name. Windows
+// environment names are case-insensitive, so the comparison is uppercased to
+// keep a differently cased variable from surviving the copy.
+function unconfiguredEnvironment(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (SUPABASE_PUBLIC_ENV_KEYS.has(key.toUpperCase())) continue;
+    env[key] = value;
+  }
+  env.PORT = String(UNCONFIGURED_PORT);
+  env.BASE_PATH = "/";
+  return env;
+}
+
+async function servesUnconfiguredOrigin(): Promise<boolean> {
+  try {
+    const response = await fetch(`${UNCONFIGURED_ORIGIN}/`, { signal: AbortSignal.timeout(2_000) });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function startUnconfiguredDevServer(cwd: string): Promise<UnconfiguredDevServer> {
+  // `strictPort` already prevents Vite from silently drifting to another port,
+  // but a server left running by an earlier attempt would still be answering
+  // with the wrong configuration, so refuse the port instead of testing it.
+  if (await servesUnconfiguredOrigin()) {
+    throw new Error(
+      `Port ${UNCONFIGURED_PORT} is already serving. The unconfigured matrix owns this port; stop that server first.`,
+    );
+  }
+
+  // The `dev` script of `@workspace/kub` is `vite --config vite.config.ts`, so
+  // running that binary directly reproduces it exactly. Going through `pnpm.cmd`
+  // would need a Windows shell, which Node deprecates when arguments are passed
+  // and which adds a process layer between this test and Vite. Unlike the
+  // shared configured server this one binds loopback only: nothing outside this
+  // machine should reach a build that has no server configuration.
+  const workspace = path.join(cwd, "artifacts", "kub");
+  const viteBin = path.join(workspace, "node_modules", "vite", "bin", "vite.js");
+  if (!existsSync(viteBin)) {
+    throw new Error(`Vite is not installed for @workspace/kub at ${viteBin}. Run the workspace install first.`);
+  }
+
+  const child = spawn(
+    process.execPath,
+    [viteBin, "--config", "vite.config.ts", "--host", "127.0.0.1"],
+    {
+      cwd: workspace,
+      env: unconfiguredEnvironment(),
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    },
+  );
+
+  const state = { exited: false, code: null as number | null };
+  const transcript: string[] = [];
+  child.stdout?.on("data", (chunk) => transcript.push(String(chunk)));
+  child.stderr?.on("data", (chunk) => transcript.push(String(chunk)));
+  child.once("exit", (code) => {
+    state.exited = true;
+    state.code = code;
+  });
+
+  const deadline = Date.now() + UNCONFIGURED_STARTUP_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (state.exited) {
+      throw new Error(
+        `The unconfigured Vite server exited with code ${state.code}.\n${transcript.join("")}`,
+      );
+    }
+    if (await servesUnconfiguredOrigin()) {
+      return { stop: () => stopDevServer(child) };
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  await stopDevServer(child);
+  throw new Error(
+    `The unconfigured Vite server did not answer on ${UNCONFIGURED_ORIGIN} within ` +
+      `${UNCONFIGURED_STARTUP_TIMEOUT_MS} ms.\n${transcript.join("")}`,
+  );
+}
+
+async function stopDevServer(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+
+  const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+
+  if (process.platform === "win32" && child.pid !== undefined) {
+    // Windows has no process groups to signal, so the tree is killed by PID.
+    spawnSync("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+  } else {
+    child.kill("SIGTERM");
+  }
+
+  const timedOut = Symbol("timed-out");
+  const settled = await Promise.race([
+    exited.then(() => "exited" as const),
+    new Promise<typeof timedOut>((resolve) => setTimeout(() => resolve(timedOut), 10_000)),
+  ]);
+
+  if (settled === timedOut) {
+    child.kill("SIGKILL");
+    await exited;
+  }
 }

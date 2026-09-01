@@ -22,6 +22,21 @@ test("privacy and support routes are public without widening protected routes", 
   assert.equal(isPublicRoute("/chats/direct-message"), false);
 });
 
+test("download and bot documentation routes are exact and never widen by prefix", () => {
+  assert.equal(isPublicRoute("/bots/docs"), true);
+  assert.equal(isPublicRoute("/bots/docs/"), true);
+  assert.equal(isPublicRoute("/bots/docs?section=methods"), true);
+
+  // A prefix widening on either developer-facing route would expose protected
+  // application paths, so every near match must stay outside the public set.
+  assert.equal(isPublicRoute("/download/preview"), false);
+  assert.equal(isPublicRoute("/download/preview/"), false);
+  assert.equal(isPublicRoute("/downloads"), false);
+  assert.equal(isPublicRoute("/bots"), false);
+  assert.equal(isPublicRoute("/bots/docs/nested"), false);
+  assert.equal(isPublicRoute("/bots/docs-internal"), false);
+});
+
 test("auth route matching preserves callback and recovery paths", () => {
   assert.equal(isAuthRoute("/login"), true);
   assert.equal(isAuthRoute("/login?reset=1"), true);
