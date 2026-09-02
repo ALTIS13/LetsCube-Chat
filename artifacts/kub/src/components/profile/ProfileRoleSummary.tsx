@@ -4,24 +4,35 @@ import { useMemo, useState } from "react";
 import { KubBadge, KubIcon, KubStableSkeleton } from "@/components/kub";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
 import { useRoleAccess } from "@/hooks/useRole";
-import { useTaskRouting } from "@/hooks/useTaskRouting";
+import { useTaskRouting, type TaskRoutingState } from "@/hooks/useTaskRouting";
 import { LOCATION_ROLE_LABEL } from "@/lib/locationRouting";
 import { getRoleLabel, LEGACY_APP_ROLE_LABEL } from "@/lib/rolePermissions";
 import type { DynamicRole, LocationRole, Profile } from "@/types/database";
 
 interface ProfileRoleSummaryProps {
+  /** Supplied by a parent that already has it loaded; otherwise fetched here. */
+  routing?: TaskRoutingState;
   user: Profile;
   compact?: boolean;
 }
 
-export function ProfileRoleSummary({ user, compact = false }: ProfileRoleSummaryProps) {
+export function ProfileRoleSummary({ user, compact = false, routing: routingProp }: ProfileRoleSummaryProps) {
   const [showAllClubs, setShowAllClubs] = useState(false);
   const access = useRoleAccess();
   const [dynamicRolesEnabled] = useDynamicRolesEnabledPreference();
   const canReadDynamicRoles = dynamicRolesEnabled && access.isAdmin;
   const canReadLocationSummaries = access.isStaff;
   const dynamicRoles = useDynamicRoles({ enabled: canReadDynamicRoles, includeAssignments: true });
-  const routing = useTaskRouting({ enabled: canReadLocationSummaries, includeMembers: true });
+  // When the parent already has this loaded, take it. Fetching again meant a
+  // duplicate query on every dialog open, and — because the section renders a
+  // placeholder while it waits — the dialog grew by about 56px each time it was
+  // opened. The hook still runs when nothing is passed, so the other call sites
+  // are unchanged.
+  const ownRouting = useTaskRouting({
+    enabled: canReadLocationSummaries && !routingProp,
+    includeMembers: true,
+  });
+  const routing = routingProp ?? ownRouting;
 
   const roleById = useMemo(() => new Map(dynamicRoles.roles.map((role) => [role.id, role])), [dynamicRoles.roles]);
   const locationById = useMemo(() => new Map(routing.locations.map((location) => [location.id, location])), [routing.locations]);

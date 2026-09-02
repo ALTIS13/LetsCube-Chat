@@ -29,7 +29,7 @@ type LoadOptions = {
   background?: boolean;
 };
 
-interface TaskRoutingState {
+export interface TaskRoutingState {
   available: boolean;
   checked: boolean;
   loading: boolean;

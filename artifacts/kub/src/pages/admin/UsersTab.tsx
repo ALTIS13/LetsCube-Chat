@@ -28,7 +28,7 @@ import { ProfileRoleSummary } from "@/components/profile/ProfileRoleSummary";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
 import { LOCATION_ROLE_LABEL, mapLocationRoutingError } from "@/lib/locationRouting";
 import { getRoleLabel, isCriticalRoleKey, mapRolesPermissionsError } from "@/lib/rolePermissions";
-import type { LocationMemberWithProfile } from "@/hooks/useTaskRouting";
+import type { LocationMemberWithProfile, TaskRoutingState } from "@/hooks/useTaskRouting";
 import { registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
 
 const PAGE_SIZE = 50;
@@ -949,6 +949,7 @@ export function UsersTab() {
           email={emails[profileTarget.id]}
           contact={contacts[profileTarget.id]}
           state={stateById[profileTarget.id]}
+          routing={routing}
           canManageAvatar={isAdmin || profileTarget.id === currentUser?.id}
           canManagePhone={!phoneAccess.checking && phoneAccess.hasPermission("system.manage")}
           onAvatarUpdated={(avatarUrl) => {
@@ -969,12 +970,15 @@ export function UsersTab() {
 }
 
 function ProfilePreviewModal({
-  user, email, contact, state, canManageAvatar, canManagePhone, onAvatarUpdated, onPhoneRemoved, onClose,
+  user, email, contact, state, routing, canManageAvatar, canManagePhone, onAvatarUpdated, onPhoneRemoved, onClose,
 }: {
   user: Profile;
   email?: string;
   contact?: ContactRow;
   state?: RowState;
+  /** Already loaded by the screen behind the dialog; passed so the dialog does
+      not re-query it and grow once the answer arrives. */
+  routing: TaskRoutingState;
   canManageAvatar?: boolean;
   canManagePhone?: boolean;
   onAvatarUpdated?: (avatarUrl: string | null) => void;
@@ -1188,7 +1192,7 @@ function ProfilePreviewModal({
           warn={!state?.banned && state?.muted}
         />
       </div>
-      <ProfileRoleSummary user={user} />
+      <ProfileRoleSummary user={user} routing={routing} />
       {user.bio && (
         <div>
           <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-cyan)]">

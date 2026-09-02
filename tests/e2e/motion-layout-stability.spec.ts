@@ -62,24 +62,16 @@ test.describe("LETSCUBE motion layout stability", () => {
     await page.goto("/admin/users", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("admin-user-row").first()).toBeVisible();
 
-    const openProfile = async () => {
-      await page.getByTestId("admin-user-row").first().getByRole("button").last().click();
-      const item = page.getByRole("menuitem").first();
-      if ((await item.count()) > 0) await item.click();
-      await expect(page.locator('[role="dialog"]').first()).toBeVisible();
-    };
-
-    // Open once and let everything the dialog loads arrive, then close. The
-    // second opening starts from warm data, which is what isolates the entry
-    // animation from content that is still on its way — those are two different
-    // problems and only one of them is this test's.
-    await openProfile();
-    await page.waitForTimeout(2500);
-    await page.getByRole("button", { name: "Закрыть" }).first().click();
-    await expect(page.locator('[role="dialog"]')).toHaveCount(0);
-
-    await openProfile();
+    // One opening, from cold. This used to need two: the dialog fetched its own
+    // routing data on mount and grew about 56px when the answer arrived, so the
+    // first opening could never be measured. It takes that data from the screen
+    // behind it now, so the very first open is already its final size — and
+    // measuring the first one is what makes this catch a regression.
+    await page.getByTestId("admin-user-row").first().getByRole("button").last().click();
+    const item = page.getByRole("menuitem").first();
+    if ((await item.count()) > 0) await item.click();
     const dialog = page.locator('[role="dialog"]').first();
+    await expect(dialog).toBeVisible();
 
     // The LAYOUT box, not the visual one: `boundingBox` reports the transformed
     // rectangle, so the entry's `scale(.99)` legitimately appears there. A
