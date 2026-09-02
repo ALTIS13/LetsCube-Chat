@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { KubBadge, KubButton, KubIcon, KubNotice, KubPanel } from "@/components/kub";
+import { KubBadge, KubButton, KubFilterButton, KubFilterSummary, KubIcon, KubNotice, KubPanel, type ActiveFilter } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useAuditLogs, type AuditFilters } from "@/hooks/useAuditLogs";
 import { useIsAdmin } from "@/hooks/useRole";
@@ -203,6 +203,10 @@ export function AuditTab() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // Four filters used to sit open above the log at all times, taking the top
+  // third of a phone screen before a single entry was visible. They collapse
+  // now, and what is on shows as chips.
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -281,6 +285,33 @@ export function AuditTab() {
 
   const hasActiveFilters = !!actorPicked || actionsSel.length > 0 || !!fromDate || !!toDate;
 
+  const activeFilters: ActiveFilter[] = (() => {
+    const active: ActiveFilter[] = [];
+    if (actorPicked) {
+      const name = actorPicked.full_name ?? actorPicked.username ?? actorPicked.id.slice(0, 8);
+      active.push({
+        id: "actor",
+        label: `Кто: ${name}`,
+        onRemove: () => { setActorPicked(null); setActorQueryRaw(""); },
+      });
+    }
+    // Event types are one chip, not one per type: a person picking eight of
+    // them wants the log, not eight chips pushing it off the screen.
+    if (actionsSel.length > 0) {
+      active.push({
+        id: "actions",
+        label:
+          actionsSel.length === 1
+            ? `Событие: ${ACTION_LABEL[actionsSel[0]]}`
+            : `Событий выбрано: ${actionsSel.length}`,
+        onRemove: () => setActionsSel([]),
+      });
+    }
+    if (fromDate) active.push({ id: "from", label: `С ${fromDate}`, onRemove: () => setFromDate("") });
+    if (toDate) active.push({ id: "to", label: `По ${toDate}`, onRemove: () => setToDate("") });
+    return active;
+  })();
+
   return (
     <div>
       <div className="flex items-center justify-between gap-3 mb-4">
@@ -288,15 +319,35 @@ export function AuditTab() {
           Журнал действий{" "}
           <span className="text-sm font-normal text-[color:var(--kub-muted)]">· {total}</span>
         </h2>
-        <button
-          onClick={refresh}
-          className="kub-button kub-interactive flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-xs font-semibold hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]"
-          aria-label="Обновить"
-        >
-          <KubIcon name="rotate" size={13} /> Обновить
-        </button>
+        <div className="flex items-center gap-2">
+          <KubFilterButton
+            count={activeFilters.length}
+            open={filtersOpen}
+            onToggle={() => setFiltersOpen((open) => !open)}
+            className="h-9"
+          />
+          <button
+            onClick={refresh}
+            className="kub-button kub-interactive flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-xs font-semibold hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]"
+            aria-label="Обновить"
+          >
+            <KubIcon name="rotate" size={13} /> Обновить
+          </button>
+        </div>
       </div>
 
+      {/* Every filter here is applied by the server, so the count is exact and
+          the line needs no scope note. */}
+      <KubFilterSummary
+        matched={total}
+        total={total}
+        filters={activeFilters}
+        onReset={resetFilters}
+        noun="записей"
+        className="mb-3"
+      />
+
+      {filtersOpen && (
       <KubPanel className="p-3 mb-3 space-y-2.5">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
           <div className="relative">
@@ -427,6 +478,7 @@ export function AuditTab() {
           </div>
         </div>
       </KubPanel>
+      )}
 
       {error && (
         <KubNotice tone="danger" className="text-xs mb-3">
