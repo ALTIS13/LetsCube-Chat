@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, type CSSProperties, type ReactNode } from "react";
+import { copyWithFeedback } from "@/lib/actionFeedback";
 import { createPortal } from "react-dom";
 import type { MessageWithSender } from "@/types/database";
 import { formatFullTime } from "@/lib/format";
@@ -715,7 +716,7 @@ export function MessageBubble({
     ...(groupReadInfo && onOpenGroupReadReceipts ? [
       { icon: "eye" as KubIconName, label: "Кто прочитал", action: () => { onOpenGroupReadReceipts(); closeContext(); } },
     ] : []),
-    { icon: "copy",  label: "Копировать", action: () => { navigator.clipboard.writeText(message.content ?? ""); closeContext(); } },
+    { icon: "copy",  label: "Копировать", action: () => { void copyWithFeedback(message.content ?? "", { success: "Сообщение скопировано", error: "Не удалось скопировать сообщение", key: "message" }); closeContext(); } },
     ...(isMe && message.type === "text" && onEdit ? [
       { icon: "edit" as KubIconName, label: "Изменить", action: () => { onEdit(); closeContext(); } },
     ] : []),
@@ -771,7 +772,7 @@ export function MessageBubble({
     ...(message.type === "text" && onEditFailedSend ? [
       { icon: "edit" as KubIconName, label: "Изменить", action: () => { onEditFailedSend(); closeContext(); } },
     ] : []),
-    { icon: "copy", label: "Копировать", action: () => { navigator.clipboard.writeText(message.content ?? ""); closeContext(); } },
+    { icon: "copy", label: "Копировать", action: () => { void copyWithFeedback(message.content ?? "", { success: "Сообщение скопировано", error: "Не удалось скопировать сообщение", key: "message" }); closeContext(); } },
     ...(onDiscardLocalMessage ? [
       { icon: "delete" as KubIconName, label: "Удалить", danger: true, action: () => { onDiscardLocalMessage(); closeContext(); } },
     ] : []),

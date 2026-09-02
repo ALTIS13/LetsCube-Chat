@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { copyWithFeedback } from "@/lib/actionFeedback";
 import { KubBadge, KubButton, KubCreateSection, KubIcon, KubInput, KubNotice, KubPanel, KubSkeletonRows, KubSwitch } from "@/components/kub";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
 import { usePermissionAccess } from "@/hooks/useRole";
@@ -186,8 +187,11 @@ export function InvitesTab() {
   const copyInviteLink = async (invite: RegistrationInviteListRow) => {
     const origin = typeof window === "undefined" ? "" : window.location.origin;
     const link = buildRegistrationInviteLink(origin, invite.code);
-    await navigator.clipboard.writeText(link);
-    setNotice("Ссылка приглашения скопирована.");
+    await copyWithFeedback(link, {
+      success: "Ссылка приглашения скопирована",
+      error: "Не удалось скопировать ссылку",
+      key: "invite-link",
+    });
   };
 
   return (

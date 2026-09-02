@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react";
+import { copyWithFeedback } from "@/lib/actionFeedback";
 import { ChatListItem } from "./ChatListItem";
 import { useAppStore } from "@/store/app.store";
 import { KubEmptyState, KubIcon, KubModal, type KubIconName } from "@/components/kub";
@@ -598,11 +599,15 @@ function ChatProfilePreviewModal({
   const copyUsername = async () => {
     if (!otherUser?.username) return;
     try {
-      await navigator.clipboard.writeText(`@${otherUser.username}`);
+      await copyWithFeedback(`@${otherUser.username}`, {
+        success: "Никнейм скопирован",
+        error: "Не удалось скопировать никнейм",
+        key: "username",
+      });
       setCopiedUsername(true);
       window.setTimeout(() => setCopiedUsername(false), 1600);
     } catch {
-      showAppAlert("Не удалось скопировать никнейм.", "Копирование недоступно");
+      // copyWithFeedback reports its own failure; nothing is left to say here.
     }
   };
 

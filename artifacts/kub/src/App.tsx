@@ -30,7 +30,7 @@ import { PublicHomePage } from "@/pages/public/PublicHomePage";
 import { SupportPage } from "@/pages/public/SupportPage";
 import NotFound from "@/pages/not-found";
 import { ThemeSync } from "@/hooks/useTheme";
-import { KubBrandLogo, KubButton, KubIcon, KubInput, KubLogo, KubPanel } from "@/components/kub";
+import { KubBrandLogo, KubButton, KubFeedbackViewport, KubIcon, KubInput, KubLogo, KubPanel } from "@/components/kub";
 import { kubBrandAsset } from "@/components/kub/brandAssets";
 import { clearMonitoringUser, reportError, setMonitoringUser } from "@/lib/monitoring";
 import { getAuthCallbackErrorMessage, getAuthCallbackExceptionMessage } from "@/lib/authRedirect";
@@ -532,6 +532,10 @@ function App() {
         <IframeAuthBanner />
         <AppUpdateBanner />
         <AppDialogs />
+        {/* One viewport for the whole application. Mounted above the router so a
+            confirmation survives a route change — the action that produced it
+            often navigates. */}
+        <KubFeedbackViewport />
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <AndroidAppLinkListener />
           <RootRoutes />

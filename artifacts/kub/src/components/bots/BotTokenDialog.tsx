@@ -1,4 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
+import { showActionFeedback } from "@/lib/actionFeedback";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 
 import { KubButton, KubIcon } from "@/components/kub";
@@ -33,8 +34,15 @@ export const BotTokenDialog = forwardRef<BotTokenDialogHandle>(function BotToken
     try {
       await navigator.clipboard.writeText(token);
       setCopyState("copied");
+      showActionFeedback({ kind: "success", title: "Токен скопирован", key: "bot-token" });
     } catch {
       setCopyState("failed");
+      showActionFeedback({
+        kind: "error",
+        title: "Не удалось скопировать токен",
+        detail: "Скопируйте его вручную — он больше не будет показан.",
+        key: "bot-token",
+      });
     }
   };
 
