@@ -237,7 +237,7 @@ function SanctionsHistory({ audit }: { audit: ReturnType<typeof useAuditLogs> })
             <button
               disabled={audit.page === 0}
               onClick={() => audit.setPage(Math.max(0, audit.page - 1))}
-              className="p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
+              className="kub-icon-action p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
               aria-label="Предыдущая страница"
             >
               <KubIcon name="chevronLeft" size={16} />
@@ -245,7 +245,7 @@ function SanctionsHistory({ audit }: { audit: ReturnType<typeof useAuditLogs> })
             <button
               disabled={audit.page + 1 >= totalPages}
               onClick={() => audit.setPage(audit.page + 1)}
-              className="p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
+              className="kub-icon-action p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
               aria-label="Следующая страница"
             >
               <KubIcon name="chevronRight" size={16} />

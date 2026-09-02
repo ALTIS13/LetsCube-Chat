@@ -569,12 +569,28 @@ textarea::placeholder, input::placeholder {
    pseudo-element. An overlay would have kept the layout identical, but two
    adjacent 32px controls would then have overlapping 44px hit areas and one
    would start stealing the other's taps, which is worse than the defect. */
+/* Icon-only actions — back arrows, row menus, clear buttons — are 32px so the
+   toolbars stay dense on a pointer device. That is under the touch target, so a
+   coarse pointer gets the full 44px, the same bargain as .kub-button above.
+   Padding alone gave 28-32px targets across the staff area. */
+.kub-icon-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+}
+
 @media (pointer: coarse) {
   .kub-button {
     min-height: 44px;
   }
   .kub-button.h-9.w-9 {
     min-width: 44px;
+  }
+  .kub-icon-action {
+    min-width: 44px;
+    min-height: 44px;
   }
 }
 

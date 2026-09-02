@@ -505,13 +505,13 @@ export function UsersTab() {
         )}
       </div>
 
-      <div className="flex items-center gap-2 rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
+      <div className="flex items-center gap-2 rounded-xl px-3 h-11 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
         <KubIcon name="search" size={14} tone="muted" />
         <input
           value={queryRaw}
           onChange={(e) => setQueryRaw(e.target.value)}
           placeholder="Поиск по имени, @никнейму или ID"
-          className="flex-1 bg-transparent text-sm outline-none text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]"
+          className="h-full flex-1 bg-transparent text-sm outline-none text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]"
         />
         {queryRaw && (
           <button
@@ -830,7 +830,7 @@ export function UsersTab() {
             <button
               disabled={page === 0}
               onClick={() => setPage((p) => Math.max(0, p - 1))}
-              className="p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
+              className="kub-icon-action p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
               aria-label="Предыдущая страница"
             >
               <KubIcon name="chevronLeft" size={16} />
@@ -838,7 +838,7 @@ export function UsersTab() {
             <button
               disabled={page + 1 >= totalPages}
               onClick={() => setPage((p) => p + 1)}
-              className="p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
+              className="kub-icon-action p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
               aria-label="Следующая страница"
             >
               <KubIcon name="chevronRight" size={16} />

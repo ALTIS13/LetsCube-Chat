@@ -302,7 +302,7 @@ export function AuditTab() {
           <div className="relative">
             <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-cyan)]">Действующее лицо</div>
             {actorPicked ? (
-              <div className="flex items-center gap-2 rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-cyan)]/40">
+              <div className="flex items-center gap-2 rounded-xl px-3 h-11 bg-[var(--kub-surface-2)] border border-[color:var(--kub-cyan)]/40">
                 <UserAvatar user={actorPicked} size="sm" />
                 <span className="flex-1 text-sm truncate text-[color:var(--kub-text)]">
                   {actorPicked.full_name ?? actorPicked.username ?? actorPicked.id.slice(0, 8)}
@@ -316,13 +316,13 @@ export function AuditTab() {
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-2 rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)]">
+              <div className="flex items-center gap-2 rounded-xl px-3 h-11 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)]">
                 <KubIcon name="search" size={13} tone="muted" />
                 <input
                   value={actorQueryRaw}
                   onChange={(e) => setActorQueryRaw(e.target.value)}
                   placeholder="Имя или @никнейм"
-                  className="flex-1 bg-transparent text-sm outline-none text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]"
+                  className="h-full flex-1 bg-transparent text-sm outline-none text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]"
                 />
               </div>
             )}
@@ -354,7 +354,7 @@ export function AuditTab() {
             <button
               onClick={() => setActionsOpen((v) => !v)}
               aria-expanded={actionsOpen}
-              className="w-full flex items-center gap-2 rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] hover:border-[color:var(--kub-cyan)]/60 text-left"
+              className="w-full flex items-center gap-2 rounded-xl px-3 h-11 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] hover:border-[color:var(--kub-cyan)]/60 text-left"
             >
               <span className="flex-1 text-sm truncate text-[color:var(--kub-text)]">
                 {actionsSel.length === 0
@@ -401,7 +401,7 @@ export function AuditTab() {
               type="date"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
-              className="w-full rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] text-sm text-[color:var(--kub-text)] focus:outline-none focus:border-[color:var(--kub-cyan)]"
+              className="w-full rounded-xl px-3 h-11 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] text-sm text-[color:var(--kub-text)] focus:outline-none focus:border-[color:var(--kub-cyan)]"
             />
           </div>
           <div>
@@ -410,7 +410,7 @@ export function AuditTab() {
               type="date"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
-              className="w-full rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] text-sm text-[color:var(--kub-text)] focus:outline-none focus:border-[color:var(--kub-cyan)]"
+              className="w-full rounded-xl px-3 h-11 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] text-sm text-[color:var(--kub-text)] focus:outline-none focus:border-[color:var(--kub-cyan)]"
             />
           </div>
           <div className="flex items-end">
@@ -529,7 +529,7 @@ export function AuditTab() {
             <button
               disabled={page === 0}
               onClick={() => setPage(Math.max(0, page - 1))}
-              className="p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
+              className="kub-icon-action p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
               aria-label="Предыдущая страница"
             >
               <KubIcon name="chevronLeft" size={16} />
@@ -537,7 +537,7 @@ export function AuditTab() {
             <button
               disabled={page + 1 >= totalPages}
               onClick={() => setPage(page + 1)}
-              className="p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
+              className="kub-icon-action p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
               aria-label="Следующая страница"
             >
               <KubIcon name="chevronRight" size={16} />

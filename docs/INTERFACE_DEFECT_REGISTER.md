@@ -825,3 +825,28 @@ list out of the component and the colours out of `index.css`, so a new tone or a
 changed token is covered without editing the test. Five mutations fail it:
 painting the label in the tone, restoring the tint, dropping the default dot,
 and reverting either light-theme tone.
+
+# Fix batch 8, 2026-09-02 — the staff area's targets
+
+The same two defects the public surfaces had, in the area the owner asked to be
+reviewed, fixed as shared rules rather than per screen.
+
+**Icon-only actions** — back arrows, row menus, clear buttons — were 28-32px
+across `AdminLayout`, `AuditTab`, `BansMutesTab` and `UsersTab`. They now carry
+`.kub-icon-action`, which keeps the dense 32px on a pointer device and gives a
+coarse pointer the full 44px. Same bargain as D-015: the scale the design chose
+is untouched where it shows, and a finger gets a real target.
+
+**Search fields** repeated the D-013 shape: a 20px input floating inside a 40px
+box, so the visible field answered only in its middle. The box is now 44px and
+the input fills it.
+
+**A test correction, recorded because it reported a fix as missing.** The first
+version of the contract located the search field by the placeholder word
+"Поиск" and did not find `AuditTab`'s, which is labelled "Имя или @никнейм" — so
+it failed on a field that was already fixed. It now locates fields by what they
+are, an input stretched inside a styled box, and checks every one it finds.
+
+Pinned by `tests/unit/touch-target-system.test.mjs`; four mutations fail it,
+including inflating the resting size for every pointer, which is the change
+deliberately not made.
