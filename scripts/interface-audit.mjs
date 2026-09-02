@@ -380,14 +380,33 @@ export async function checkFocusVisibility(page, maxStops = 40) {
   return findings;
 }
 
+/**
+ * Signs in, with one retry.
+ *
+ * Measured against production, two or three cells out of sixty-four were lost
+ * per run to a sign-in that timed out and then worked immediately on a second
+ * attempt — a network window rather than a defect, but reported as unreachable
+ * it looked like one. Two attempts and no more: a genuine failure, a wrong
+ * password or a broken build still fails twice and says so.
+ */
 async function signIn(page, credentials) {
-  const form = await openLoginForm(page);
-  if (form === "already-signed-in") return;
-  await page.locator('input[type="email"]').first().fill(credentials.email);
-  await page.locator('input[type="password"]').first().fill(credentials.password);
-  await page.locator('button[type="submit"]').first().click();
-  const ok = await page.locator('button[aria-label="Меню"]').first().waitFor({ state: "visible", timeout: 20_000 }).then(() => true).catch(() => false);
-  if (!ok) throw new Error("sign-in did not reach the authenticated shell");
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (attempt > 0) await page.waitForTimeout(2_000);
+    const form = await openLoginForm(page).catch((error) => {
+      lastError = error;
+      return null;
+    });
+    if (form === null) continue;
+    if (form === "already-signed-in") return;
+    await page.locator('input[type="email"]').first().fill(credentials.email);
+    await page.locator('input[type="password"]').first().fill(credentials.password);
+    await page.locator('button[type="submit"]').first().click();
+    const ok = await page.locator('button[aria-label="Меню"]').first().waitFor({ state: "visible", timeout: 20_000 }).then(() => true).catch(() => false);
+    if (ok) return;
+    lastError = new Error("sign-in did not reach the authenticated shell");
+  }
+  throw lastError ?? new Error("sign-in did not reach the authenticated shell");
 }
 
 /**
