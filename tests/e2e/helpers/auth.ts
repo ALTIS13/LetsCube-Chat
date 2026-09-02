@@ -119,7 +119,7 @@ export async function loginIfNeeded(
   // helper gets torn down mid-sign-in and reports a closed page instead of a
   // failed login. The happy path costs a couple of seconds; these ceilings only
   // apply when something is actually wrong.
-  if (await waitForAuthenticatedShell(page, 5_000)) {
+  if (await waitForAuthenticatedShell(page, 6_000)) {
     await saveAuthState(page, authStateName);
     return;
   }
@@ -130,7 +130,24 @@ export async function loginIfNeeded(
   await page.goto("/login", { waitUntil: "domcontentloaded" });
 
   const emailInput = page.locator('input[type="email"]').first();
-  await emailInput.waitFor({ state: "visible", timeout: 8_000 });
+  const formVisible = await emailInput
+    .waitFor({ state: "visible", timeout: 8_000 })
+    .then(() => true)
+    .catch(() => false);
+
+  if (!formVisible) {
+    // A live session bounces /login straight back into the app, so a missing
+    // form is success rather than a fault. Slower viewports reach the shell
+    // after the first check above has already given up on it.
+    const restored = await waitForAuthenticatedShell(page, 6_000);
+    expect(
+      restored,
+      "neither the login form nor the authenticated shell appeared at /login",
+    ).toBe(true);
+    await saveAuthState(page, authStateName);
+    return;
+  }
+
   const passwordInput = page.locator('input[type="password"]').first();
   const submit = page.locator('button[type="submit"]').first();
 
@@ -142,7 +159,7 @@ export async function loginIfNeeded(
     await passwordInput.fill(credentials.password);
     await expect(submit).toBeEnabled();
     await submit.click();
-    authenticated = await waitForAuthenticatedShell(page, 12_000);
+    authenticated = await waitForAuthenticatedShell(page, 11_000);
   }
 
   expect(

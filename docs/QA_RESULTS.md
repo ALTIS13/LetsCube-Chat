@@ -2621,3 +2621,44 @@ the product.
 - Also run and passing while closing step 1: `release:catalog:test` 35/35 with no
   skips against the pinned jq 1.7.1, `public-release-artifact-verification`
   12/12, and the full workspace typecheck across all four projects.
+
+## 2026-09-02 - QA owner credentials reset, authenticated suite unblocked
+
+- Diagnosed before changing anything. All four configured QA accounts were
+  healthy in `auth.users`: email confirmed, not banned, not deleted, a bcrypt
+  hash present, and last signed in on 2026-08-31, with `updated_at` equal to
+  that sign-in, so no password had been changed since. The login form's captcha
+  was ruled out too: it guards the password-reset flow, not sign-in.
+- Asking the Auth API directly, rather than through the interface, isolated the
+  fault: `location_admin`, `location_staff` and `client` all signed in with a
+  200, and only `owner` returned `400 invalid_credentials`. `tech_admin` has a
+  password configured but no email, so it cannot be used at all.
+- Only that one password was reset, with the owner's authorisation and only
+  because `findFirstAvailableQaRole` puts `owner` first, so a wrong password
+  there pins every authenticated spec to a broken account. Done in one
+  transaction with pgcrypto: guarded on exactly one matching account, updated,
+  then verified inside the same transaction that the new hash validates and that
+  the account is still confirmed, unbanned and not deleted. No schema object was
+  added or altered. An earlier draft kept the previous hash in a helper table
+  under `public`; that was dropped before running, because a table of password
+  hashes there is reachable through PostgREST, and there was nothing to roll
+  back to - the previous password is the one production already rejects.
+- Verified end to end afterwards: all four usable roles return 200 from the Auth
+  API, and the QA env file kept all twelve keys.
+- `e2e:smoke` now passes 5/5 against production **serially**. Run in parallel it
+  fails intermittently, because all five viewports sign in as the same account
+  at the same moment; the same run passes when the workers are serialised.
+  Authenticated suites should be run with `--workers=1` until the roles have
+  separate accounts.
+- `visual-style-layout.spec.ts` and `release-distribution-settings.spec.ts` went
+  from 5 passed / 25 failed to 31 passed / 4 failed / 18 skipped once sign-in
+  actually happened.
+- The remaining failures are not treated as defects, and not dismissed either.
+  They are confined to the two mobile viewports, and a second run produced a
+  *different* set of failing tests, which is the signature of instability rather
+  than a defect. The screenshot of one shows the application stuck on its
+  retryable loading screen with "Загрузка длится дольше обычного", consistent
+  with the proxied network on this workstation that was already measured
+  stalling requests until an abort. Desktop projects were clean in both runs.
+  A device or network without that proxy is needed to judge the mobile
+  viewports, so they are recorded as unverified rather than as passing.
