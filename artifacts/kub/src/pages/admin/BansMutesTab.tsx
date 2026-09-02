@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { KubIcon, KubPanel, type KubIconName } from "@/components/kub";
+import { KubIcon, KubPanel, KubSkeletonRows, type KubIconName } from "@/components/kub";
 import type { AuditAction, AuditLogWithActor, Ban, Mute, Profile, Chat } from "@/types/database";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { prefixError } from "@/lib/errors";
@@ -217,9 +217,7 @@ function SanctionsHistory({ audit }: { audit: ReturnType<typeof useAuditLogs> })
       </div>
 
       {audit.loading ? (
-        <div className="flex items-center justify-center py-10">
-          <KubIcon name="spinner" size={18} tone="accent" label="Загрузка" />
-        </div>
+        <KubSkeletonRows count={4} label="Загрузка истории санкций" />
       ) : audit.rows.length === 0 ? (
         <Empty text="История санкций пока пуста" />
       ) : (

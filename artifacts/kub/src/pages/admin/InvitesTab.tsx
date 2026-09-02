@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { KubBadge, KubButton, KubIcon, KubInput, KubNotice, KubPanel, KubSwitch } from "@/components/kub";
+import { KubBadge, KubButton, KubIcon, KubInput, KubNotice, KubPanel, KubSkeletonRows, KubSwitch } from "@/components/kub";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
 import { usePermissionAccess } from "@/hooks/useRole";
 import { useTaskRouting, useTaskRoutingEnabledPreference } from "@/hooks/useTaskRouting";
@@ -414,9 +414,11 @@ export function InvitesTab() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <KubIcon name="spinner" size={22} tone="accent" label="Загрузка" />
-          </div>
+          <KubSkeletonRows
+            count={5}
+            label="Загрузка инвайтов"
+            rowClassName="border-b border-[color:var(--kub-border-color)] last:border-b-0"
+          />
         ) : invites.length === 0 ? (
           <div className="px-4 py-10 text-center text-sm text-[color:var(--kub-muted)]">
             Инвайтов пока нет.

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { KubBadge, KubButton, KubFilterButton, KubFilterSummary, KubIcon, KubNotice, KubPanel, type ActiveFilter } from "@/components/kub";
+import { KubBadge, KubButton, KubFilterButton, KubFilterSummary, KubIcon, KubNoResults, KubNotice, KubPanel, KubSkeletonRows, type ActiveFilter } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useAuditLogs, type AuditFilters } from "@/hooks/useAuditLogs";
 import { useIsAdmin } from "@/hooks/useRole";
@@ -488,19 +488,18 @@ export function AuditTab() {
 
       <KubPanel className="overflow-hidden p-0">
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <KubIcon name="spinner" size={20} tone="accent" label="Загрузка" />
-          </div>
+          <KubSkeletonRows
+            count={8}
+            label="Загрузка журнала действий"
+            rowClassName="border-b border-[color:var(--kub-border-color)] last:border-b-0"
+          />
         ) : rows.length === 0 ? (
-          <div className="text-center py-16 px-6">
-            <div className="w-12 h-12 mx-auto rounded-2xl flex items-center justify-center mb-3 bg-[color-mix(in_srgb,var(--kub-cyan)_12%,transparent)] border border-[color:var(--kub-cyan)]/30">
-              <KubIcon name="audit" size={22} tone="accent" />
-            </div>
-            <div className="text-sm font-semibold text-[color:var(--kub-text)]">Записей не найдено</div>
-            <div className="text-xs mt-1 text-[color:var(--kub-muted)]">
-              {hasActiveFilters ? "Попробуйте сбросить фильтры" : "Здесь появятся действия администраторов"}
-            </div>
-          </div>
+          <KubNoResults
+            filters={activeFilters}
+            onReset={resetFilters}
+            emptyTitle="Записей пока нет"
+            emptyDescription="Здесь появятся действия администраторов."
+          />
         ) : (
           <div>
             {rows.map((r, i) => {
