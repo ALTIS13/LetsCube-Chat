@@ -1039,3 +1039,93 @@ offers the named one when there is one filter, and the reset otherwise.
 - The audit's own sweep does not reach a control that only exists while a field
   has text; measuring the filtered state directly found two 18px clear buttons
   that the resting sweep could not see.
+
+# Stage 2, batch 3, 2026-09-02 — the rest of the staff screens, and a real defect underneath
+
+## The list goes first
+
+Locations, invites and roles each kept a creation form permanently expanded in a
+left column, and in all three the list a person had come to read began below the
+fold. Creating is occasional; reading is constant. `KubCreateSection` closes the
+form and moves focus to its first field on open — without that the fields appear
+somewhere below the button and a keyboard user has to hunt for them, which is
+the usual reason a disclosure ends up worse than what it replaced.
+
+The roles screen also carried three explainer cards across its top on every
+visit, about 130px before the list. Deleting them would cost a first-time
+administrator real help, so `KubHelpNotes` opens them by default and remembers
+once someone closes them — per browser and per person, which is the right scope
+for a statement about what one reader already knows.
+
+## Copy removed for saying nothing
+
+- "Административная роль" on every administrator row in locations, repeating
+  what the badge beside it said — and it was the string being truncated.
+- "Глобальная: нет · Локация: нет · Роль в локации: нет", three columns of an
+  invite row to say what one phrase now says once.
+- The metric cards' ordinals, 01 to 08, in tabular numerals beside the one
+  figure on each card that means something.
+
+## Clipping and a chart that overstated
+
+Locations' assignment row went to four columns from 768px inside a panel about
+590px wide, so a name got roughly 155px and came out as "Maxim Ko…", while a
+role badge held a fixed 180px it never needed. Three selects and a button never
+fitted one row at any width the panel reaches; they are two per row now.
+
+The support queue's filters were sliced mid-word at the 350px column edge, and a
+scroller with its bar hidden gives no sign anything is off to the right. They
+wrap.
+
+**A day with no registrations was drawn as a 3% bar.** On a 200px chart that is
+a visible stub reading as a small number rather than as none, which is the one
+thing a chart must not do. It draws nothing now. The 10% floor for non-zero
+values stays: that makes a real value visible rather than inventing one.
+
+## D-023 — a stalled session load locked people out of signing in
+
+Found while chasing an intermittent e2e failure, whose page snapshot on
+production showed the app sitting on its own "Загрузка длится дольше обычного"
+panel.
+
+`supabase.auth.getSession()` refreshes a stale token internally, and that
+request can fail to come back. `loading` then stays true — and because the boot
+gate covered **every** route, `/login` rendered the loading screen too. The one
+route that can rescue the situation was unreachable; the only way through was
+the "Выйти" button on the loading screen, which is a poor thing to require of
+someone who just wants to sign in.
+
+An auth route now renders on its own once the boot has been stuck for four
+seconds. Measured on production in exactly this state, the form arrives in 4.6
+to 4.9 seconds; a healthy `getSession()` settles in a few hundred milliseconds,
+so nobody with a working session sees a form flash.
+
+**Two wrong turns are recorded because they cost time and could be repeated.**
+
+1. The first diagnosis of the flake blamed an expired saved auth state. The
+   measurement behind it compared a state saved for `127.0.0.1:5191` against
+   production and read the resulting public home as proof of expiry, when the
+   helper had simply — and correctly — declined to restore a state from another
+   origin. The expiry check written for that wrong reason is kept, but on its
+   own merits: restoring a dead session costs a six-second timeout per test.
+2. An earlier version of the recovery test stubbed **both** token grants, so the
+   password grant the helper falls back to was stubbed too and the test passed
+   for the wrong reason. Only the refresh grant is held open now.
+
+## Evidence
+
+- `tests/e2e/auth-boot-recovery.spec.ts` and `auth-helper-recovery.spec.ts`
+  reproduce the stall deliberately. Three mutations turn the first red,
+  including restoring the old all-routes gate and setting the grace to zero,
+  which would flash the form on every healthy boot.
+- `tests/e2e/admin-create-sections.spec.ts`, four behaviours; five mutations
+  turn it red, including a form that opens without moving focus and an explainer
+  that forgets it was closed.
+- `tests/unit/e2e-auth-state.test.mts` pins the session-expiry rule including
+  its margin: a session with five seconds left dies mid-test and counts as dead.
+- Interface audit, full matrix on the deployed build: 64 cells, 0 findings, 0
+  unreachable.
+- One test was relocated rather than fixed: the auth-callback ordering contract
+  matched the literal `if (loading || loadingError)` and went red when that
+  condition was rewritten, reporting a regression in a contract that had not
+  moved. It now asserts what it means.
