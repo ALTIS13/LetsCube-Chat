@@ -55,8 +55,14 @@ export function KubFilterSummary({
   return (
     <div className={cn("flex flex-wrap items-center gap-2 text-xs", className)}>
       <span className="text-[color:var(--kub-muted)]">
-        Найдено {numbers.format(matched)} из {numbers.format(total)}
-        {noun ? ` ${noun}` : ""}
+        {/* "Найдено 0 из 0" is true and useless, and "5 из 5" invites the reader
+            to look for a difference that is not there. Each branch says only
+            what it actually knows. */}
+        {total === 0
+          ? "Ничего не найдено"
+          : matched === total
+            ? `Найдено ${numbers.format(matched)}${noun ? ` ${noun}` : ""}`
+            : `Найдено ${numbers.format(matched)} из ${numbers.format(total)}${noun ? ` ${noun}` : ""}`}
         {scopedToPage ? " · фильтры применены к загруженной странице" : ""}
       </span>
       {filters.map((filter) => (

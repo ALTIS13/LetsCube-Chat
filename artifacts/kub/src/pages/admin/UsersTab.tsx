@@ -17,7 +17,7 @@ import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { BulkSelectControl } from "@/components/ui/BulkSelectControl";
 import { clearRoleAccessCache, useIsAdmin, usePermissionAccess } from "@/hooks/useRole";
 import { useTaskRouting } from "@/hooks/useTaskRouting";
-import { KubBadge, KubButton, KubFilterButton, KubFilterSummary, KubIcon, KubModal, KubNotice, KubPanel, type ActiveFilter } from "@/components/kub";
+import { KubBadge, KubButton, KubFilterButton, KubFilterSummary, KubIcon, KubModal, KubNoResults, KubNotice, KubPanel, KubSkeletonRows, type ActiveFilter } from "@/components/kub";
 import { BanModal } from "./BanModal";
 import { MuteModal } from "./MuteModal";
 import { cn } from "@/lib/utils";
@@ -733,13 +733,19 @@ export function UsersTab() {
 
       <KubPanel className="overflow-hidden p-0">
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <KubIcon name="spinner" size={20} tone="accent" label="Загрузка" />
-          </div>
+          <KubSkeletonRows
+            count={8}
+            label="Загрузка списка пользователей"
+            rowClassName="border-b border-[color:var(--kub-border-color)] last:border-b-0"
+          />
         ) : filteredRows.length === 0 ? (
-          <div className="text-center py-12 text-sm text-[color:var(--kub-muted)]">
-            Никого не найдено
-          </div>
+          <KubNoResults
+            filters={activeFilters}
+            onReset={clearFilters}
+            noun="пользователей"
+            emptyTitle="Пользователей пока нет"
+            emptyDescription="Как только кто-то зарегистрируется, он появится здесь."
+          />
         ) : (
           <div>
             {filteredRows.map((u, i) => {

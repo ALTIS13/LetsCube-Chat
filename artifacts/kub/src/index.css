@@ -113,6 +113,8 @@
   --kub-motion-standard: 220ms;
   --kub-motion-emphasis: 320ms;
   --kub-motion-feedback: 2400ms;
+  /* Ambient, not an interaction timing; see .kub-skeleton. */
+  --kub-motion-shimmer: 1200ms;
   --kub-ease-standard: cubic-bezier(.2, .8, .2, 1);
   --kub-ease-emphasis: cubic-bezier(.16, 1, .3, 1);
   --app-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -616,6 +618,31 @@ textarea::placeholder, input::placeholder {
   min-height: 24px;
 }
 
+/* A loading placeholder. The shimmer is an ambient loop rather than a reaction
+   to anything a person did, so it is not one of the five interaction timings —
+   it gets its own token instead of being folded into a contract it does not
+   belong to. Under reduced motion the movement goes and the block stays: the
+   placeholder is still doing its job, which is holding the final size. */
+.kub-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--kub-surface-2) 0%,
+    var(--kub-surface-3) 50%,
+    var(--kub-surface-2) 100%
+  );
+  background-size: 280px 100%;
+  animation: kub-shimmer var(--kub-motion-shimmer) linear infinite;
+}
+
+@keyframes kub-shimmer {
+  0% {
+    background-position: -280px 0;
+  }
+  100% {
+    background-position: 280px 0;
+  }
+}
+
 /* A tooltip bubble is laid out only while it is being shown. Kept in the flow
    at zero opacity it still counted towards the page's scroll width: measured,
    the invisible bubble on the sidebar's right-most button made the messenger
@@ -1076,6 +1103,11 @@ textarea::placeholder, input::placeholder {
   }
 
   .kub-interactive:active:not(:disabled) { transform: none; }
+
+  .kub-skeleton {
+    animation: none;
+    background: var(--kub-surface-2);
+  }
 
   .release-status-enter,
   .release-status-pulse,
