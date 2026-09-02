@@ -203,3 +203,25 @@ test("a small control inside a large wrapper it does not fill is still reported"
   assert.ok(target, JSON.stringify(findings));
   assert.equal(target.height, 16);
 });
+
+/**
+ * A checkbox wrapped in a label is toggled by the whole label; that is native
+ * behaviour. Measuring the box alone reported the support form's 16px consent
+ * checkbox as undersized while its padded row was the real target.
+ */
+test("a control wrapped in a padded label is measured by the label", async () => {
+  const findings = await findingsFor(`
+    <label style="display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid #ccc">
+      <input type="checkbox" style="width:16px;height:16px" />
+      <span style="color:#111">Я ознакомился с условиями</span>
+    </label>
+  `);
+  const targets = findings.filter((finding) => finding.kind === "touch-target");
+  assert.equal(targets.length, 0, `a label-wrapped checkbox must not be a finding: ${JSON.stringify(targets)}`);
+});
+
+test("a bare checkbox with no label is still reported", async () => {
+  const findings = await findingsFor(`<input type="checkbox" style="width:16px;height:16px" />`);
+  const target = findings.find((finding) => finding.kind === "touch-target");
+  assert.ok(target, JSON.stringify(findings));
+});

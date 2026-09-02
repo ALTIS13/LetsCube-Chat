@@ -23,7 +23,9 @@ export function PublicPageShell({ children, scrollRootRef }: PublicPageShellProp
           <Link
             href="/"
             aria-label="Открыть LETSCUBE"
-            className="inline-flex min-w-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)]"
+            // `min-h-11` makes the header controls real targets on a phone; the marks
+            // and labels keep their size. See D-013.
+            className="inline-flex min-h-11 min-w-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)]"
           >
             <KubBrandLogo variant="mark" imgClassName="h-7 w-7 sm:hidden" />
             <KubBrandLogo
@@ -39,19 +41,19 @@ export function PublicPageShell({ children, scrollRootRef }: PublicPageShellProp
           >
             <Link
               href="/privacy"
-              className="rounded-md px-2 py-2 text-[color:var(--kub-text)] transition-colors hover:bg-[var(--kub-surface-2)]"
+              className="inline-flex min-h-11 items-center rounded-md px-2 py-2 text-[color:var(--kub-text)] transition-colors hover:bg-[var(--kub-surface-2)]"
             >
               Конфиденциальность
             </Link>
             <Link
               href="/support"
-              className="hidden rounded-md px-2 py-2 text-[color:var(--kub-text)] transition-colors hover:bg-[var(--kub-surface-2)] sm:inline-flex"
+              className="hidden min-h-11 items-center rounded-md px-2 py-2 text-[color:var(--kub-text)] transition-colors hover:bg-[var(--kub-surface-2)] sm:inline-flex"
             >
               Поддержка
             </Link>
             <Link
               href="/login"
-              className="inline-flex items-center gap-1.5 rounded-md bg-[var(--kub-cyan)] px-3 py-2 text-[color:var(--kub-bg)] transition-colors hover:bg-[var(--kub-cyan-hover)]"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-[var(--kub-cyan)] px-3 py-2 text-[color:var(--kub-bg)] transition-colors hover:bg-[var(--kub-cyan-hover)]"
             >
               <KubIcon name="lock" size={14} />
               Войти
@@ -68,13 +70,17 @@ export function PublicPageShell({ children, scrollRootRef }: PublicPageShellProp
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <a
               href="mailto:privacy@app.letscube.ru"
-              className="hover:text-[color:var(--kub-cyan)]"
+              // Standalone footer contacts, not links inside a sentence, so they
+              // are held to the target size. See D-013.
+              className="inline-flex min-h-11 items-center hover:text-[color:var(--kub-cyan)]"
             >
               privacy@app.letscube.ru
             </a>
             <a
               href="mailto:support@app.letscube.ru"
-              className="hover:text-[color:var(--kub-cyan)]"
+              // Standalone footer contacts, not links inside a sentence, so they
+              // are held to the target size. See D-013.
+              className="inline-flex min-h-11 items-center hover:text-[color:var(--kub-cyan)]"
             >
               support@app.letscube.ru
             </a>

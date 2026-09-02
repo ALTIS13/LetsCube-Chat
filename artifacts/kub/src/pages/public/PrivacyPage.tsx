@@ -47,7 +47,7 @@ export function PrivacyPage() {
               </KubButton>
               <Link
                 href="/support"
-                className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-[var(--kub-cyan)] px-3 text-xs font-semibold text-[color:var(--kub-bg)] hover:bg-[var(--kub-cyan-hover)]"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-[var(--kub-cyan)] px-3 text-xs font-semibold text-[color:var(--kub-bg)] hover:bg-[var(--kub-cyan-hover)]"
               >
                 <KubIcon name="chats" size={15} />
                 Задать вопрос
@@ -73,7 +73,10 @@ export function PrivacyPage() {
                   <li key={section.id}>
                     <a
                       href={`#${section.id}`}
-                      className="block border-l-2 border-transparent py-1.5 pl-3 text-xs leading-5 text-[color:var(--kub-muted)] transition-colors hover:border-[color:var(--kub-cyan)] hover:text-[color:var(--kub-text)]"
+                      // Table-of-contents entries are standalone navigation, not links inside a
+                      // sentence, so they are held to the target size. The type size is
+                      // unchanged; only the row height grows. See D-013.
+                      className="flex min-h-11 items-center border-l-2 border-transparent py-1.5 pl-3 text-xs leading-5 text-[color:var(--kub-muted)] transition-colors hover:border-[color:var(--kub-cyan)] hover:text-[color:var(--kub-text)]"
                     >
                       {section.title.replace(/^\d+\.\s*/, "")}
                     </a>

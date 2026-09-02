@@ -490,3 +490,63 @@ and 0 on desktop, and the 2 that remain are the exempt prose links.
 **Still open:** the header links and the logo link at 28-32px on the public
 surfaces, the support form's checkbox at 16px, and the tasks view switch at
 30px, plus D-004, D-005 and D-008 from the earlier pass.
+
+## D-015 — the shared button size scale is below the touch target
+
+**Severity:** P2, but the widest entry in this register: it is one component,
+used everywhere.
+
+**Where:** `sizeClass` in `artifacts/kub/src/components/kub/KubButton.tsx`.
+
+| size | height | meets 44px |
+| --- | --- | --- |
+| `sm` | 32px | no |
+| `md` | 40px | no |
+| `lg` | 48px | yes |
+| `icon` | 36px | no |
+
+Three of the four sizes are under the target, and `size="sm"` alone appears 118
+times across 41 files. Every one of those is an undersized target on a phone.
+
+**Deliberately not fixed in the touch-target batch.** Raising the scale changes
+the height of most buttons in the product, which is a visible design change and
+would have turned a scoped batch into a restyling. It needs its own decision and
+its own before/after review.
+
+**The option worth reviewing first** is to keep every size exactly as it looks
+and grow only the hit area on coarse pointers, so desktop layout is untouched
+and a phone gets a real target. That keeps the visual scale, which is the part
+the owner chose, and fixes the part that is measurably wrong.
+
+**Local consequences accepted for now.** The privacy page's `Версия для печати`
+is a `KubButton size="sm"` and stays 32px until this is decided; its neighbour
+`Задать вопрос` is a plain link and was raised to 44px in fix batch 2.
+
+# Fix batch 3, 2026-09-02 — the rest of D-013 on the public surfaces
+
+**Shared public header**, which serves the home, privacy and support pages: the
+logo link was a 28px target and the navigation links and the sign-in action were
+32px. All now carry a 44px box; the marks and labels keep their size.
+
+**Privacy table of contents**: 22 entries at 32px. These are standalone
+navigation rather than links inside a sentence, so they are held to the target
+size; the type size is unchanged and only the row height grows. That one change
+accounts for most of the page's cluster.
+
+**Footer contacts** on every public page: two `mailto:` links at 16px, again
+standalone rather than inline in prose.
+
+**Two more harness corrections, both found by re-auditing rather than by
+reading.** A control that fills a bordered wrapper now counts as that wrapper —
+the fields were still being reported at 42px because the missing two pixels are
+the wrapper's border. And a control wrapped in a `<label>` is now measured by
+the label, because a label toggles its control natively: the support form's 16px
+consent checkbox sits inside a padded row that is the real target, and calling
+it undersized would have led to inflating a checkbox that was already fine. Both
+directions are tested, including a bare checkbox with no label, which is still
+reported.
+
+**Result on the public surfaces at 390x844**, findings before and after this
+stage: home 5 → 0, privacy 22 → 1, support 12 → 1, login 6 → 2. Everything that
+remains is either an exempt link inside a sentence or the `KubButton size="sm"`
+deferred to D-015.

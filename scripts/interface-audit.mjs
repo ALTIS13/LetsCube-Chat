@@ -175,11 +175,25 @@ export const PAGE_CHECKS = () => {
     const parent = node.parentElement;
     const parentBox = parent ? parent.getBoundingClientRect() : null;
     const fillsParent = parentBox !== null && parentBox.height - box.height <= 4 && box.height > 0;
-    const effective = fillsParent ? Math.max(box.height, parentBox.height) : box.height;
+    let effective = fillsParent ? Math.max(box.height, parentBox.height) : box.height;
+    let effectiveWidth = box.width;
 
-    if (effective < 44 || box.width < 24) {
-      add("touch-target", `interactive control is ${Math.round(box.width)}x${Math.round(effective)}px`, node, {
-        width: Math.round(box.width),
+    // A form control wrapped in a label is activated by the whole label — that
+    // is native behaviour, not something the page has to build. Measuring the
+    // control alone called a 16px checkbox inside a padded consent row an
+    // undersized target when the entire row toggles it.
+    const label = node.closest("label") ?? (node.id ? document.querySelector(`label[for="${CSS.escape(node.id)}"]`) : null);
+    if (label && label !== node) {
+      const labelBox = label.getBoundingClientRect();
+      if (labelBox.height > 0) {
+        effective = Math.max(effective, labelBox.height);
+        effectiveWidth = Math.max(effectiveWidth, labelBox.width);
+      }
+    }
+
+    if (effective < 44 || effectiveWidth < 24) {
+      add("touch-target", `interactive control is ${Math.round(effectiveWidth)}x${Math.round(effective)}px`, node, {
+        width: Math.round(effectiveWidth),
         height: Math.round(effective),
       });
     }
