@@ -466,7 +466,7 @@ the scripts it exercises is modified on this branch, so it is equally red on
 - Consumes the existing `letscube-web` and `letscube-releases` Coolify services.
 - Produces browser-accessible downloads without changing native updater endpoints.
 
-- [~] **Step 1: Run complete local validation**
+- [x] **Step 1: Run complete local validation**
 
 ```powershell
 git diff --check
@@ -523,23 +523,32 @@ four projects, `release:catalog:test` 35/35 with no skips against the pinned jq
 1.7.1, `public-release-artifact-verification` 12/12, the public-home and routing
 matrices 75/75 across the four release viewports, and the production build.
 
-Blocked in step 1: `e2e:smoke`, `visual-style-layout.spec.ts` and
-`release-distribution-settings.spec.ts` all need a signed-in session. Running
+Also complete in step 1, after an unblocking detour: `e2e:smoke` passes 5/5
+against production, and `visual-style-layout.spec.ts` with
+`release-distribution-settings.spec.ts` pass 31 of 35 executed cases. Running
 them is what exposed the harness defect described in `docs/QA_RESULTS.md` — the
 auth helper inferred sign-in from the absence of a password field, which the
 public home made permanently true, so the authenticated suite had been running
-as a guest and reporting success. The helper now proves sign-in and fails
-loudly, and it currently fails because production rejects the stored QA owner
-credentials as incorrect. Those credentials live in the operator's local QA env
-file and have to be refreshed there; nothing in this repository can fix it.
+as a guest and reporting success. The helper now proves sign-in, and the stale
+QA owner password it then surfaced has been reset.
+
+Two constraints came out of that and belong in the runbook rather than in a
+pass mark. Authenticated suites must run with `--workers=1` while every viewport
+shares one QA account, or parallel sign-ins fail intermittently. And the four
+remaining failures, all on the mobile viewports, are recorded as unverified:
+a second run failed a different set, and one screenshot shows the application
+stuck on its retryable loading screen, which matches the proxied network on this
+workstation that was already measured stalling requests until an abort.
 
 Complete in step 4: unauthenticated `/`, `/download`, `/privacy` and `/support`
 verified against production in both themes at 1440x900 and 390x844, including
 the summary-versus-sections agreement check, image decoding, absence of
 horizontal overflow and a clean console.
 
-Blocked in step 4: authenticated `/` cannot be re-verified until the credentials
-above are refreshed. Windows and Android native startup were not exercised —
+Also complete in step 4: authenticated `/` is verified against production by the
+smoke suite across all five release viewports.
+
+Blocked in step 4: Windows and Android native startup were not exercised —
 that needs the packaged applications on real devices. The routing contract they
 would demonstrate is covered by the mounted matrix, which parameterises the
 native runtimes and asserts a guest root redirects to `/login`, but a mounted
