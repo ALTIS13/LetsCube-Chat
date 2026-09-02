@@ -966,3 +966,76 @@ exception to swallow it turns
 - Unit suite 686/687. The one failure is the pre-existing
   `android-release-signing` fixture, unrelated to the interface and already
   tracked separately.
+
+# Stage 2, 2026-09-02 — bringing the staff screens to the approved design
+
+The measured half is closed; this is the half the owner actually asked for:
+"привести всё приложение" to the standard of the approved canvas. It is not
+defect-driven, so each change below names the decision it implements rather
+than a finding.
+
+## Filters that say what they are doing
+
+The users tab kept five selects open above the list at all times, and the
+journal four. They cost the list the space it needed — on a phone the journal's
+took the top third of the screen before a single entry was visible — and, worse,
+an inactive select looks like an active one, so a filtered list read exactly
+like the full one.
+
+Filters now collapse behind a button carrying their count, and what is on shows
+as chips that each remove themselves. New shared primitives: `KubFilterButton`,
+`KubFilterChip`, `KubFilterSummary`. The remove control is a real button with
+its own accessible name, so a filter can be dropped by keyboard and a screen
+reader hears which one.
+
+**Three counts were removed for being untrue, not added.**
+
+1. `Условия отсеяли 0 пользователей`. After a server-side search the number in
+   memory is the count of what matched, not of what was removed, and the
+   unfiltered total is not there at all.
+2. `Найдено 0 из 0` is true and useless; `5 из 5` invites the reader to look
+   for a difference that is not there. Each branch now says only what it knows.
+3. `Найдено 1 из 340` would be a lie on the users tab, where the search runs on
+   the server and the other five filters run in the browser over one loaded
+   page — 339 of those were never examined. When there is more than one page the
+   line says so.
+
+## States the screens did not have
+
+A spinner in an empty panel says something is happening and nothing about what
+is coming, and the layout jumps by the full height of the list when data lands.
+`KubSkeletonRows` holds the final dimensions instead, with `aria-busy` and a
+label because a shimmer is silent to a screen reader. Applied to the users tab,
+the journal, invites and the sanction history.
+
+`KubNoResults` replaces "Никого не найдено", which left a person to work out
+that they were looking at a filtered list, which condition was responsible, and
+how to undo it. It names the condition and offers to drop it.
+
+The shimmer takes its own token rather than joining `MOTION_MS`: it is an
+ambient loop, not a reaction to anything a person did, and the approved
+interaction contract should not be widened to hold it. Under reduced motion the
+movement goes and the block stays.
+
+## One ambiguity the tests caught on production
+
+With a single filter on, "Снять «X»" and "Сбросить всё" are the identical
+action, and the empty state put them side by side under the summary line's own
+reset. The production e2e run could not decide which button it meant — the test
+reporting a real ambiguity rather than a test problem. The empty state now
+offers the named one when there is one filter, and the reset otherwise.
+
+## Evidence
+
+- `tests/e2e/admin-user-filters.spec.ts`, four behaviours, green on the local
+  build and on production.
+- Ten mutations checked across the two batches; all turn the suite red,
+  including a chip that hides itself without widening the list, a reset that
+  forgets the search field, a skeleton that collapses to nothing, a skeleton
+  silent to a screen reader, and either invented count coming back.
+- Interface audit after the rebuild: users, journal, invites and bans measure
+  0 findings at both viewports and both themes, including the filtered and
+  empty states measured directly rather than at rest.
+- The audit's own sweep does not reach a control that only exists while a field
+  has text; measuring the filtered state directly found two 18px clear buttons
+  that the resting sweep could not see.
