@@ -332,7 +332,7 @@ git commit -m "feat(ui): stabilize async and modal feedback"
 - Produces shared web/Windows/Android evidence and a macOS/iOS handoff table.
 - Does not modify iPhone/iPad PWA implementation code.
 
-- [ ] **Step 1: Run complete browser validation**
+- [x] **Step 1: Run complete browser validation**
 
 ```powershell
 git diff --check
@@ -342,7 +342,7 @@ pnpm.cmd exec playwright test tests/e2e/action-feedback.spec.ts tests/e2e/motion
 cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"
 ```
 
-- [ ] **Step 2: Run visual QA across themes and motion preferences**
+- [x] **Step 2: Run visual QA across themes and motion preferences**
 
 Capture desktop `1920x1080`, desktop `1440x900`, mobile `390x844` and mobile `412x915` in light/dark and normal/reduced motion. Check no feedback overlaps notification bell, future call-control region, Tauri controls, Android keyboard or bottom navigation.
 
@@ -350,7 +350,7 @@ Capture desktop `1920x1080`, desktop `1440x900`, mobile `390x844` and mobile `41
 
 Run `pnpm.cmd windows:tauri:test`, focused Tauri shell/startup QA, `pnpm.cmd android:sync` and `pnpm.cmd android:build:debug`. Physically verify one copy action and one settings save on available devices without modifying release signing.
 
-- [ ] **Step 4: Record Apple handoff**
+- [x] **Step 4: Record Apple handoff**
 
 Document the CSS token names, semantic states, reduced-motion mapping, feedback safe-area rules and native substitutions expected for macOS/iOS. Record that Apple agents consume the contract after pulling `main` and must not fork a second feedback protocol.
 
@@ -358,7 +358,7 @@ Document the CSS token names, semantic states, reduced-motion mapping, feedback 
 
 Push the validated commit, verify exact-commit Coolify deployment, then test copy, settings, invite and error feedback on `https://app.letscube.ru`. Confirm no raw error payload appears and no feedback blocks chat use.
 
-- [ ] **Step 6: Commit the QA record**
+- [x] **Step 6: Commit the QA record**
 
 ```powershell
 git add docs/operations/shared-motion-feedback.md docs/PRODUCTION_PRIORITY_TRACKER.md docs/superpowers/specs/2026-08-30-registration-lifecycle-bot-platform-public-home-design.md
@@ -467,3 +467,34 @@ than worked around: it measures the FIRST opening, from cold, instead of opening
 twice to get past the growth.
 
 Ten mutations fail these contracts across the unit and e2e suites.
+
+## Task 5 status
+
+Browser validation, visual QA, the Apple handoff and the operations record are
+done; the shipped contract is `docs/operations/shared-motion-feedback.md`.
+
+Step 3 — the Windows Tauri and Android device runs — is **not** done, and is not
+claimed. It needs the physical devices and a signing-free debug build, and it is
+the one part of this plan that cannot be verified from the web harness.
+
+Two things found during this task that were not in its scope and mattered more
+than what was:
+
+**Session restore hung for a returning user.** Six restores out of ten never
+reached the app. The profile was fetched three times concurrently while a stored
+session was recovering — mount effect plus one per auth event — and `loading`
+only clears in a `finally`, so a request that never settles holds the screen
+forever. Nothing was slow: the query executes in 0.55ms and every backend probe
+was normal. Deduplicating took a local reproduction from 7/10 hung to 0/10.
+Fixed in `1310d5b`.
+
+A residual remains and is recorded as an open question rather than a result: 2
+of 6 returns still hung against production afterwards, while the local
+browser-to-production path was itself failing during long runs (`page.goto` to
+static assets timing out at 30s against a 97ms curl). It needs a measurement
+from another network.
+
+**Two critical scroll contracts had been skipping on every run.** The helper
+called `count()` on the chat list immediately after sign-in; `count()` is a
+snapshot, not a wait, so it read zero rows and skipped rather than failing. A
+skipped contract protects nothing. They run now.
