@@ -148,7 +148,7 @@ git commit -m "feat(ui): define LETSCUBE motion tokens"
 - Produces: `copyWithFeedback(text, options) -> Promise<boolean>`.
 - Viewport shows at most three items and deduplicates by key.
 
-- [ ] **Step 1: Write failing controller tests**
+- [x] **Step 1: Write failing controller tests**
 
 ```ts
 import assert from "node:assert/strict";
@@ -167,21 +167,21 @@ test("feedback queue is bounded and keyed updates replace duplicates", () => {
 });
 ```
 
-- [ ] **Step 2: Run the controller test and verify it fails**
+- [x] **Step 2: Run the controller test and verify it fails**
 
 Run: `node --test tests/unit/action-feedback.test.mts`
 
 Expected: FAIL because the controller is absent.
 
-- [ ] **Step 3: Implement the external-store controller**
+- [x] **Step 3: Implement the external-store controller**
 
 Use `useSyncExternalStore` compatibility: immutable snapshots, subscription cleanup, unique IDs, keyed replacement, max three visible records and timer disposal. Error detail is bounded to 160 characters and accepts only already-sanitized UI text.
 
-- [ ] **Step 4: Implement the viewport**
+- [x] **Step 4: Implement the viewport**
 
 Place it below the desktop topbar in the top-right safe region and above mobile bottom navigation with safe-area insets. Each item has icon, title, optional detail and accessible `role="status"` or `role="alert"`. Success disappears after 2.4 seconds; errors remain up to 5 seconds or until closed. The viewport is pointer-transparent outside visible items.
 
-- [ ] **Step 5: Implement stable copy feedback**
+- [x] **Step 5: Implement stable copy feedback**
 
 `KubCopyButton` keeps fixed width, swaps `copy` to `check`, exposes `aria-live` text and calls:
 
@@ -198,11 +198,11 @@ export async function copyWithFeedback(text: string, options: { success: string;
 }
 ```
 
-- [ ] **Step 6: Mount exactly one viewport and test it**
+- [x] **Step 6: Mount exactly one viewport and test it**
 
 Mount `KubFeedbackViewport` once under providers in `App.tsx`. Playwright asserts copy icon transition, visible Russian confirmation, automatic dismissal, deduplication and no overlap with the topbar/window controls at desktop and bottom navigation on mobile.
 
-- [ ] **Step 7: Run tests and commit**
+- [x] **Step 7: Run tests and commit**
 
 ```powershell
 node --test tests/unit/action-feedback.test.mts
@@ -230,33 +230,33 @@ git commit -m "feat(ui): add bounded action feedback"
 - Consumes: `copyWithFeedback` and `KubCopyButton` from Task 2.
 - Removes silent clipboard catches and component-local copy timers from migrated actions.
 
-- [ ] **Step 1: Write a failing static contract test**
+- [x] **Step 1: Write a failing static contract test**
 
 Read the five target files and assert no direct `navigator.clipboard.writeText` remains outside `actionFeedback.ts`, no `.catch(() => {})` swallows copy failures, and each surface imports `copyWithFeedback` or `KubCopyButton`.
 
-- [ ] **Step 2: Run the contract test and verify it fails**
+- [x] **Step 2: Run the contract test and verify it fails**
 
 Run: `node --test tests/unit/copy-actions-contract.test.mjs`
 
 Expected: FAIL on the current direct clipboard calls.
 
-- [ ] **Step 3: Migrate invitation-link copying first**
+- [x] **Step 3: Migrate invitation-link copying first**
 
 Replace `InvitesTab` local notice/timer with key `invite-link:<invite.id>`, success `Ссылка приглашения скопирована`, and error `Не удалось скопировать ссылку`. Keep the button width stable while the icon changes.
 
-- [ ] **Step 4: Migrate usernames and admin fields**
+- [x] **Step 4: Migrate usernames and admin fields**
 
 Use keys based on surface and profile ID. Do not include copied email or phone values in feedback text. Success strings are `Никнейм скопирован`, `Email скопирован` and `Номер скопирован`.
 
-- [ ] **Step 5: Migrate message copying**
+- [x] **Step 5: Migrate message copying**
 
 The context action copies text, closes the menu immediately, shows `Сообщение скопировано`, and reports failure without changing selection, reply state or scroll position. Empty/media-only messages do not offer text copy.
 
-- [ ] **Step 6: Add browser interaction coverage**
+- [x] **Step 6: Add browser interaction coverage**
 
 Test invitation link, username and message copy. Assert feedback appears once, copy buttons remain the same bounding-box size, message scrollTop changes by at most one pixel, and reduced-motion mode uses no transform animation.
 
-- [ ] **Step 7: Run tests and commit**
+- [x] **Step 7: Run tests and commit**
 
 ```powershell
 node --test tests/unit/copy-actions-contract.test.mjs
@@ -385,3 +385,43 @@ shortening happens in `feedbackDuration`, which returns 1600ms instead.
 Four mutations fail the contract: drifting a duration from `MOTION_MS`,
 collapsing the feedback duration, letting the press transform survive reduced
 motion, and a control writing its own Tailwind duration again.
+
+## Task 2 closure
+
+Done as written, with the placement corrected by measurement and one test
+rewritten after it passed for the wrong reason.
+
+**Placement.** The step said top-right. Put there, the card covered the staff
+area's last navigation tab: that strip runs 56px to 101px, and the first offset
+was 52px. A confirmation that hides a control is a worse trade than no
+confirmation, so the viewport clears 101px everywhere. What the e2e pins is the
+overlap with the navigation, not the offset — the number will change the moment
+the chrome does.
+
+**Task 3 came with it.** All five silent copy sites were migrated in the same
+change, because leaving them silent would have shipped a feedback system nobody
+could see. `InvitesTab` also stopped reporting success through a panel notice
+that stayed until the next action replaced it, and `ChatList` stopped reporting
+a refused clipboard through a modal alert — a heavy interruption for a clipboard
+refusal.
+
+**A failed copy is now reported.** Previously a refused clipboard write looked
+exactly like a successful one, which is the worse half of the original defect:
+silence read as success.
+
+**Error duration is not shortened by reduced motion**, on the same reasoning
+Task 1 recorded for the feedback token: the preference removes movement, not the
+time a person needs to read a failure. Errors also get `role="alert"` where a
+success gets `role="status"`.
+
+**One test passed for the wrong reason and was rewritten.** The keyed-replacement
+assertion was written inside a queue of five entries, so the bound of three
+dropped the first one anyway — the test stayed green with keyed replacement
+removed entirely. It is now asserted on its own, with two entries and nothing
+else, plus two cases proving that unkeyed entries and differently-keyed entries
+do not collapse.
+
+Eight mutations fail the contract, including unbounding the queue, letting a
+repeat stack, shortening an error under reduced motion, unbounding the detail,
+returning a fresh snapshot on every read, letting the viewport intercept
+clicks, sliding it back over the navigation, and silencing a failed copy.
