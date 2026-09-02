@@ -579,3 +579,33 @@ size requirement does not cover.
 
 **Still open:** D-004, D-005 and D-008 from the earlier pass, and the
 shell-specific audit of Windows and Android.
+
+# Shell audit, 2026-09-02 — Android
+
+Run inside the real Android WebView rather than against an emulated viewport.
+A debug build of the branch was installed under a suffixed applicationId, the
+WebView's DevTools socket was forwarded over adb, and the same checks the
+browser audit uses were evaluated in the shell itself.
+
+**The device confirms the D-015 fix on real hardware.** `(pointer: coarse)`
+matches and `(any-hover: hover)` does not, so the touch rule is active rather
+than merely emulated, and the primary action measures 48px in the shell.
+
+**Findings: two**, both the links inside sentences that the target size
+requirement does not cover. Everything else on the login surface is clean in the
+shell.
+
+**Keyboard insets behave.** Focusing a field takes the viewport from 748 to 482
+and the layout resizes with it, so the form is not left behind the keyboard: the
+primary action moves from a bottom edge of 483 to 402 and stays fully visible.
+No defect.
+
+**Capture stopped on the second phone.** Its first screenshot caught an unrelated
+video call in a floating window. The image was deleted rather than kept or
+described, and the audit continued on the other device and through the DevTools
+bridge, which reads the page rather than the screen. Nothing personal from either
+device is recorded anywhere.
+
+**Cleanup:** the debug package is uninstalled from both phones, both still report
+`com.kub.messenger 0.1.2`, the port forward is removed and `build.gradle` is
+reverted.
