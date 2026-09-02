@@ -645,3 +645,44 @@ area rather than over a control. No finding.
 
 The window is `resizable: true`, so edge resizing worked throughout, which is why
 the missing chrome was a loss of control rather than a trap.
+
+## D-017 — the entry document has no cache policy, so clients keep running an old build
+
+**Severity:** P1, and not an interface defect at all — it was found by trying to
+verify one. It can leave every client on an old build indefinitely.
+
+**How it surfaced.** After deploying the D-016 fix, the Windows shell still
+would not let the window be dragged. The fix was live: fetching the deployed
+bundle and rendering it with a stubbed desktop bridge showed
+`desktop-window-chrome` present, 32px tall, with three buttons. The shell was
+simply running an older `index.html`.
+
+**Measured:**
+
+| resource | Cache-Control |
+| --- | --- |
+| `/` (index.html) | *absent* |
+| `/assets/index-*.js` | `public, immutable, max-age=31536000` |
+| `/sw.js` | `no-cache, no-store, must-revalidate` |
+
+`index.html` names the hashed asset filenames, so it is the document that
+decides which build a client runs. With no directive its freshness falls to a
+browser heuristic, typically a fraction of the time since `Last-Modified`, and a
+client can keep loading the previous bundle long after a deploy.
+
+**The configuration already reasons this way one block further down**, where
+`/sw.js` carries the comment "must NEVER be cached, otherwise updates stick".
+The entry document needed the same treatment and had been missed.
+
+**Fixed** with an explicit `Cache-Control: no-cache` on `index.html`, which
+costs nothing in traffic because the assets it names stay immutable. Pinned by
+`tests/unit/web-cache-policy.test.mjs`, including a check that the SPA fallback
+does not reintroduce a long cache for the documents it serves; deleting the
+block fails it.
+
+**Observed in passing during the same deploy:** for a short window the served
+`index.html` referenced an asset that returned 404, and it resolved by itself on
+the next poll. That is the rolling replacement briefly serving a new document
+with the previous replica's assets. Recorded rather than acted on — it is
+transient and self-correcting, but worth knowing before reading a 404 as an
+outage.
