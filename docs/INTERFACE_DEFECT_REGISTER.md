@@ -720,3 +720,34 @@ meaningful.
 
 **Chat contracts re-checked:** scroll anchoring, history anchoring, footer
 stability and read synchronisation all pass.
+
+# Fix batch 6, 2026-09-02 — D-004 and D-005
+
+Both were recorded as design decisions rather than defects with a single correct
+answer, so both changes are deliberately restrained and the before and after
+were put in front of the owner rather than asserted.
+
+**D-004 — fixed.** The read count was a `<button>` that opened the receipt list
+and looked like more text: a bare `3/3` after a timestamp. Its accessible name
+was already correct, so the information existed for assistive technology and for
+nobody else. It now sits in a faint chip with its check icon and carries a focus
+outline, so it reads as one pressable unit. No word was added to a row that is
+already crowded.
+
+**D-005 — addressed by grouping, not by resizing.** Reading the row properly
+first showed the premise needed correcting: the sizes already form a coherent
+scale — 12px flags, 13px status, 20px actions, one type size throughout — so
+three icon sizes is a hierarchy rather than an accident. What was missing was
+separation. A single step of extra space now divides the flags that can precede
+the time, the pin and `изм.`, from the status cluster of time and delivery,
+which belong together. Nothing is resized, moved or removed.
+
+**Verified by regenerating the previews and looking at the pixels**, as this
+register requires of anything that changes how messages render, not by reading
+the diff.
+
+**A test correction this exposed.** The footer-width contract matched a literal
+`className="…"` on the time element. Composing that class with `cn()` — which
+the conditional spacing needs — made it fail on a change that kept every
+property it exists to protect. It now reads the element and checks
+`tabular-nums` and `shrink-0` within it; removing either still fails it.

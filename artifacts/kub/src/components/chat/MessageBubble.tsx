@@ -807,7 +807,19 @@ export function MessageBubble({
       {/* `tabular-nums` already makes HH:MM a fixed width, so an extra minimum
           reserved 16px of dead space in every bubble and pushed the meta onto
           its own line far more often than it needed to. */}
-      <span className="inline-flex shrink-0 justify-end tabular-nums text-right text-[10px] leading-none text-[color:var(--kub-muted)]">
+      {/* D-005: the row can carry six things at one flat gap, and the eye lands
+          on it straight after the message text. The sizes already form a
+          coherent scale — 12px flags, 13px status, 20px actions, one type size
+          — so what was missing was grouping, not resizing. A single step of
+          extra space here separates the flags that precede it, pin and "изм.",
+          from the status cluster of time and delivery, which belong together.
+          Nothing is resized, moved or removed. */}
+      <span
+        className={cn(
+          "inline-flex shrink-0 justify-end tabular-nums text-right text-[10px] leading-none text-[color:var(--kub-muted)]",
+          (message.pinned || message.edited_at) && "ml-1",
+        )}
+      >
         {formatFullTime(message.created_at)}
       </span>
       {deliveryState?.isOwnMessage && !showGroupReadIndicator && (
@@ -826,7 +838,13 @@ export function MessageBubble({
       {groupReadInfo && showGroupReadIndicator && (
         <button
           type="button"
-          className="inline-flex h-4 items-center gap-0.5 rounded-full px-0.5 text-[10px] leading-none text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)]"
+          // D-004: this is a button that opens the receipt list, but a bare
+          // "3/3" after a timestamp looks like more text. The accessible name
+          // was already right, so the information existed for assistive
+          // technology and for nobody else. A faint chip and a focus outline
+          // make it legible as something to press without adding a word to an
+          // already crowded row.
+          className="inline-flex h-4 items-center gap-0.5 rounded-full bg-[var(--kub-surface-3)] px-1 text-[10px] leading-none text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-cyan)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--kub-cyan)]"
           title={groupReadAriaLabel}
           aria-label={groupReadAriaLabel}
           onClick={(event) => {

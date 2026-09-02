@@ -24,11 +24,14 @@ test("message time and private delivery icon reserve stable footer width", () =>
   // actually constant for two reasons, and both are asserted here instead of
   // that magic number: the formatter always emits five glyphs, and
   // `tabular-nums` gives every digit the same advance.
-  const timeSlot = source.match(
-    /<span className="([^"]*tabular-nums[^"]*)">\s*{formatFullTime\(/,
-  );
-  assert.ok(timeSlot, "the message time is not rendered through formatFullTime");
-  assert.match(timeSlot[1], /\bshrink-0\b/, "the time may not be compressed by its neighbours");
+  // The class list is read from the whole element rather than from a literal
+  // `className="..."`, because it is composed with `cn()` once the row needs a
+  // conditional class. Pinning the literal form made this fail on a change
+  // that kept every property it is supposed to protect.
+  const timeElement = source.match(/<span\s+className={?[\s\S]{0,600}?formatFullTime\(/);
+  assert.ok(timeElement, "the message time is not rendered through formatFullTime");
+  assert.match(timeElement[0], /tabular-nums/, "the time must use tabular figures for a constant width");
+  assert.match(timeElement[0], /\bshrink-0\b/, "the time may not be compressed by its neighbours");
 
   // Bounded to this function's own body: the same options appear in other
   // formatters, and an unbounded search happily matched one of those while
