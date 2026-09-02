@@ -16,13 +16,7 @@ import {
 } from "@/hooks/useTaskAccess";
 import { useTasks, type TasksFilter } from "@/hooks/useTasks";
 import { useTaskSoftDelete } from "@/hooks/useTaskSoftDelete";
-import {
-  KubButton,
-  KubEmptyState,
-  KubHeader,
-  KubIcon,
-  KubInput,
-} from "@/components/kub";
+import { KubButton, KubEmptyState, KubFilterButton, KubFilterSummary, KubHeader, KubIcon, KubInput, type ActiveFilter } from "@/components/kub";
 import { BulkSelectControl } from "@/components/ui/BulkSelectControl";
 import { TaskCard } from "./TaskCard";
 import { TaskListRow } from "./TaskListRow";
@@ -90,6 +84,9 @@ export function TasksPage() {
   const [locationFilter, setLocationFilter] = useState<LocationFilter>("all");
   const [recipientFilter, setRecipientFilter] = useState<RecipientFilter>("all");
   const [showDeleted, setShowDeleted] = useState(false);
+  // Three selects and a checkbox sat open above the list at all times. The view
+  // toggle stays out — it is not a filter, it changes how the same set is drawn.
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(() => new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
@@ -276,6 +273,44 @@ export function TasksPage() {
     );
   }, [tasks]);
 
+  const activeTaskFilters = useMemo<ActiveFilter[]>(() => {
+    const active: ActiveFilter[] = [];
+    if (search.trim()) {
+      active.push({ id: "search", label: `Поиск: ${search.trim()}`, onRemove: () => setSearch("") });
+    }
+    if (assigneeFilter !== "all") {
+      const named = assigneeOptions.find((option) => option.id === assigneeFilter);
+      const label =
+        assigneeFilter === "me"
+          ? "Я"
+          : assigneeFilter === "unassigned"
+            ? "Без исполнителя"
+            : (named?.label ?? assigneeFilter);
+      active.push({ id: "assignee", label: `Исполнитель: ${label}`, onRemove: () => setAssigneeFilter("all") });
+    }
+    if (locationFilter !== "all") {
+      const named = routing.locations.find((location) => location.id === locationFilter);
+      const label = locationFilter === "my" ? "Мои локации" : (named?.name ?? locationFilter);
+      active.push({ id: "location", label: `Локация: ${label}`, onRemove: () => setLocationFilter("all") });
+    }
+    if (recipientFilter !== "all") {
+      const label = recipientFilter === "staff" ? "Для работников" : "Для админов";
+      active.push({ id: "recipient", label: `Получатель: ${label}`, onRemove: () => setRecipientFilter("all") });
+    }
+    if (showDeleted) {
+      active.push({ id: "deleted", label: "Показаны удалённые", onRemove: () => setShowDeleted(false) });
+    }
+    return active;
+  }, [assigneeFilter, assigneeOptions, locationFilter, recipientFilter, routing.locations, search, showDeleted]);
+
+  const resetTaskFilters = () => {
+    setSearch("");
+    setAssigneeFilter("all");
+    setLocationFilter("all");
+    setRecipientFilter("all");
+    setShowDeleted(false);
+  };
+
   const visibleLocationOptions = useMemo(() => {
     if (!routing.available) return [];
     if (canViewAllLocations) return routing.locations;
@@ -457,6 +492,14 @@ export function TasksPage() {
           />
 
           <div className="flex min-w-0 w-full flex-wrap items-center gap-2 lg:w-auto">
+            <KubFilterButton
+              count={activeTaskFilters.length}
+              open={filtersOpen}
+              onToggle={() => setFiltersOpen((open) => !open)}
+              className="h-9"
+            />
+
+            <div className={cn("flex min-w-0 flex-wrap items-center gap-2", !filtersOpen && "hidden")}>
             <label className="sr-only" htmlFor="task-assignee-filter">Исполнитель</label>
             <select
               id="task-assignee-filter"
@@ -516,6 +559,7 @@ export function TasksPage() {
                 <span className="truncate">Показать удалённые</span>
               </label>
             )}
+            </div>
 
             <div className="inline-flex h-9 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-0.5">
               <button
@@ -549,6 +593,18 @@ export function TasksPage() {
             </div>
           </div>
         </div>
+
+        {/* Every filter here runs on the loaded set, so the count is exact and
+            the line needs no note about pages. */}
+        <KubFilterSummary
+          matched={visibleTasks.length}
+          total={tasks.length}
+          filters={activeTaskFilters}
+          onReset={resetTaskFilters}
+          noun="задач"
+          className="mt-2"
+        />
+
         {canBulkDeleteTasks && visibleDeletableTaskIds.length > 0 && (
           <div className="mt-3 rounded-2xl border border-[color:var(--kub-border-color)] bg-[color-mix(in_srgb,var(--kub-surface)_92%,var(--kub-cyan)_8%)] px-3 py-2.5 text-xs shadow-sm">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
