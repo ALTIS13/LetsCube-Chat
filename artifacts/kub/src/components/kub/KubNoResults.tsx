@@ -67,22 +67,25 @@ export function KubNoResults({
           : "Снимите одно из условий или сбросьте всё."
       }
       action={
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          {only ? (
-            <KubButton
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={only.onRemove}
-              leftIcon={<KubIcon name="close" size={13} />}
-            >
-              Снять «{only.label}»
-            </KubButton>
-          ) : null}
-          <KubButton type="button" variant={only ? "ghost" : "secondary"} size="sm" onClick={onReset}>
+        // With one filter on, "снять его" and "сбросить всё" are the same
+        // action, so only the named one is offered: two adjacent buttons that
+        // do the same thing make a person stop and work out the difference,
+        // and there isn't one.
+        only ? (
+          <KubButton
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={only.onRemove}
+            leftIcon={<KubIcon name="close" size={13} />}
+          >
+            Снять «{only.label}»
+          </KubButton>
+        ) : (
+          <KubButton type="button" variant="secondary" size="sm" onClick={onReset}>
             Сбросить всё
           </KubButton>
-        </div>
+        )
       }
     />
   );

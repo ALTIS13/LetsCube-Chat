@@ -139,7 +139,12 @@ test.describe("LETSCUBE admin user filters", () => {
 
     // "Сбросить всё" has to clear the search too. It sits outside the panel, so
     // it would be easy to wire it to the panel's selects only.
-    await page.getByRole("button", { name: "Сбросить всё" }).click();
+    // Exactly one reset control is on screen at a time. An earlier version of
+    // the empty state added a second one directly under the summary's, doing
+    // the identical thing — this asserts that duplicate does not come back.
+    const reset = page.getByRole("button", { name: "Сбросить всё" });
+    await expect(reset).toHaveCount(1);
+    await reset.click();
     await expect(search).toHaveValue("");
     await expect(page.getByText(/Найдено \d/)).toHaveCount(0);
   });
