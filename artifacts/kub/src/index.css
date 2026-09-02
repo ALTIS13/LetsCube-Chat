@@ -311,9 +311,14 @@
      the smallest step that clears both the background and a white surface.
      The dark theme keeps the brand magenta. */
   --kub-pink: #c03068;
-  --kub-online: #4FAE4E;
+  /* Darkened along the same hue: at #4FAE4E the status dot measured 2.80:1 on
+     white and 2.62:1 on the page, under the 3:1 a non-text indicator needs.
+     Found by the badge contract, not by eye. */
+  --kub-online: #3C8B3C;
   --kub-danger: #DC2626;
-  --kub-warn: #C2870A;
+  /* Darkened along the same hue: at #C2870A the warning dot measured 2.55:1 on
+     --kub-surface-3, under the 3:1 an indicator needs. */
+  --kub-warn: #A8760A;
   --kub-chat-bg: var(--kub-bg);
   --kub-message-out: #DCEBF7;
   --kub-message-in: var(--kub-surface);

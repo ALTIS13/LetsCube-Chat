@@ -791,3 +791,37 @@ still scrolls far enough to reach the sign-in button. Returning either layer to
 absolute positioning fails it. Removing the scroll entirely would be the obvious
 over-correction and would strand the button on a short window, which is why the
 second half exists.
+
+# Fix batch 7, 2026-09-02 — the status chip, and two tones it exposed
+
+The chip is `KubBadge`: 69 uses across 16 files, so one component carries every
+status in the product. That leverage is why it came first when converting the
+interface to the approved design.
+
+**The pairing that failed.** The label was painted in the tone over an 18% tint
+of the same tone. Measured across the three surfaces a badge sits on, that
+ranged 3.17:1 to 5.55:1, and the audit caught `Активна` at 2.62:1.
+
+**Removing the tint alone was not enough**, which is worth recording because it
+was the obvious fix. On `--kub-surface-3` the tone as a label still measures
+4.05:1 (cyan), 4.18:1 (pink) and 3.82:1 (danger) — all under 4.5:1. So the label
+takes the interface text colour, which passes on every surface, and the tone
+moves to the dot and border, where the requirement is 3:1 and every tone clears
+it.
+
+**That makes the dot load-bearing.** With a neutral label, a thin border would be
+the only carrier of meaning, so the dot is on by default for coloured tones. It
+also means status is never signalled by colour alone: there is a dot, a border
+and a word.
+
+**Two tones the contract then caught, neither noticed by eye.** In the light
+theme `--kub-online` `#4FAE4E` measured 2.80:1 on white and 2.62:1 on the page,
+and `--kub-warn` `#C2870A` measured 2.55:1 on `--kub-surface-3` — both under the
+3:1 an indicator needs. Darkened along their own hues to `#3C8B3C` and
+`#A8760A`. The dark theme's tones all pass unchanged.
+
+**Pinned** by `tests/unit/status-badge-contrast.test.mjs`, which reads the tone
+list out of the component and the colours out of `index.css`, so a new tone or a
+changed token is covered without editing the test. Five mutations fail it:
+painting the label in the tone, restoring the tint, dropping the default dot,
+and reverting either light-theme tone.
