@@ -850,3 +850,119 @@ are, an input stretched inside a styled box, and checks every one it finds.
 Pinned by `tests/unit/touch-target-system.test.mjs`; four mutations fail it,
 including inflating the resting size for every pointer, which is the change
 deliberately not made.
+
+# Fix batch 9, 2026-09-02 — the last measured findings, everywhere
+
+The batch that takes the whole matrix to zero. Before it: 52 findings on the
+staff area, 44 on the client surfaces. After it, measured on the deployed build
+at `abca555`: **160 cells — five viewports, both themes, sixteen surfaces —
+0 findings, 0 unreachable.**
+
+## D-019 — a sentence painted in the tone it is tinted behind
+
+The inline notice set its text in `--kub-warn` on a wash of `--kub-warn`.
+Measured on the live staff area, 3.74:1 for a warning and 3.98:1 for a success
+figure, both under the 4.5:1 a sentence needs. A source scan found **76
+instances** of the pairing across the product, so this was never one screen's
+mistake — it was the house style.
+
+`KubNotice` applies the rule D-011 settled for the badge: the sentence takes
+`--kub-text`, which passes on every surface, and the tone moves to a 4px rail
+and the border, where 3:1 applies and every tone clears it. The rail is what
+keeps a notice reading as a warning once its sentence is neutral.
+
+The staff area is converted here; the client surfaces are a later batch. The
+trend percentage lost its green for the same reason — the bar directly beneath
+it already carries that meaning at 3:1.
+
+**Deliberately not converted:** the icon chip in `RecentActivity`. It holds an
+icon, not a sentence, so 3:1 applies, and it measures 3.74:1 to 4.71:1 across
+the three surfaces in both themes. The live harness, which applies the right
+threshold per element, never flagged it either.
+
+**Pinned** by `tests/unit/notice-contrast.test.mjs`. Four mutations fail it,
+including hand-rolling the pairing back into a staff screen and removing the
+rail — a tone nobody can see is a deletion, not a fix.
+
+## D-020 — native controls nobody had tagged
+
+Selects were 40px, and a 16px tick box inside a `flex items-center` label made
+a 20px-tall row. Both are now covered **by element** rather than by an opt-in
+class, so a select or tick box added tomorrow is correct without anyone
+remembering. The reach is deliberately narrow — two element types whose intent
+is universal — and the rule is touch-only, so the pointer scale is untouched.
+
+The same sweep tagged the controls that had been missed by class: the sidebar
+and folder actions, the tasks tab strip, the support filters, and the last
+`p-2 rounded-lg` icon buttons in `ChatHeader` and `TasksPage`.
+
+**The switch needed a structural change, not a class.** It was a 44x24 target
+because the button *was* the track. The two are now separate: the track keeps
+its designed 24px, and `.kub-switch` gives the control around it a full-height
+target on a coarse pointer.
+
+**Pinned** by `tests/unit/touch-target-system.test.mjs`, each rule in both
+directions — a test that only checked the coarse half would pass equally well if
+the whole scale had been inflated, which is the change deliberately not made.
+
+## D-021 — a destructive button's label at 3.76:1
+
+White on `--kub-danger`, measured on the live invites screen. It could not be
+fixed by darkening the tone: the same token is the dot on a badge and the rail
+on a notice, where a light red is what clears 3:1 against a dark surface. One
+value cannot be both, so the fill became its own token —
+`--kub-action-danger-background`, mirroring what `--kub-action-primary-*`
+already did.
+
+**Found beside it, same class:** the accent button was white on `--kub-pink`
+at 3.43:1 in the dark theme. Its label now takes `--kub-bg`, which is exactly
+how the primary action already makes a bright fill work, so the brand magenta is
+unchanged.
+
+Both dropped `hover:brightness-110`. Brightening a fill that only just passes
+walks straight back into the failure; hover is now a declared colour.
+
+**Pinned** by `tests/unit/action-button-contrast.test.mjs`, which reads the
+filled actions out of the stylesheet rather than listing them, and checks the
+hover value as well as the resting one.
+
+## D-022 — an invisible tooltip made the messenger wider than the phone
+
+The bubble was laid out permanently at `opacity: 0`. At 390px the one on the
+sidebar's right-most button pushed the page to 393px, which the harness reported
+as clipped content — the visible symptom of something nobody could see.
+
+It now leaves the flow entirely until shown. `display` is what changes, so the
+fade survives through `transition-behavior: allow-discrete` and
+`@starting-style`. Two things came free: on a touch device, where hover does
+not exist, the bubble is never laid out at all; and `:focus-within` means the
+keyboard reaches it, which hover alone never did.
+
+**Pinned** by `tests/unit/motion-contract.test.mts`, which now also refuses a
+shared class that hard-codes a duration beside its tokens — the earlier version
+accepted a rule with one token and one literal.
+
+## A harness correction, not a product fix
+
+Three reported links on `login` and `support` were **not defects**. Both WCAG
+target-size criteria exempt a link inside a sentence: its height is set by the
+line box of the surrounding text, and padding it to 44px would break the
+paragraph. All three were of exactly that kind.
+
+The exception's *limit* is what the test pins: a link alone in its container is a
+button in all but name, gets no exemption, and is still reported. Widening the
+exception to swallow it turns
+`tests/unit/interface-audit-harness.test.mjs` red.
+
+## Evidence
+
+- Local dev server, full release matrix: 160 cells, 0 findings, 0 unreachable.
+- Deployed production `https://app.letscube.ru` at `abca555`, two viewports
+  and both themes: 64 cells, 0 findings, 0 unreachable.
+- The deployed stylesheet hashes identically to the locally verified build
+  (`index-Dme-bWla.css`), so the CSS measured here is byte-for-byte the CSS
+  that shipped.
+- Nine mutations checked across the four defects; all turn the suite red.
+- Unit suite 686/687. The one failure is the pre-existing
+  `android-release-signing` fixture, unrelated to the interface and already
+  tracked separately.
