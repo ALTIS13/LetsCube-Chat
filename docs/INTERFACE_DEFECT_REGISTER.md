@@ -448,3 +448,45 @@ leaves 0 contrast and 0 focus findings where there were 4 to 6 per light cell
 and 1 per surface respectively. 631/632 unit tests, typecheck and production
 build clean; the single failure is the pre-existing `android-release-signing`
 fixture, untouched by this branch.
+
+# Fix batch 2, 2026-09-02 — D-013 touch targets
+
+**The field that looked tappable and was not.** `KubInput` paints a 44px field
+and the `<input>` sat inside it at its intrinsic 20px, vertically centred. Proved
+by tapping rather than by measuring: a click 4px below the field's visible top
+edge left focus on `body`, while a click in the middle focused the input. The
+control looked like a 44px target and answered only in its middle 20px, so a
+mobile user missing it low or high hit nothing at all.
+
+**Fixed** with `h-full` on the input. Pinned by a test in
+`tests/e2e/interface-focus-visibility.spec.ts` that taps the top and bottom
+edges and asserts the input takes focus; removing `h-full` makes it fail. The
+test taps rather than measures on purpose — a min-height would satisfy a
+measurement while leaving the dead zone.
+
+**Password reveal toggle**, login and register: a 16x16 button inside a 44px
+field, the hardest thing on the form to hit. The icon stays 16px; the button now
+carries a 44px box with a negative margin so the field's height is unchanged.
+
+**`Забыли пароль?`**: a standalone action 16px tall. It is not a link inside a
+sentence, so it is held to the target size; padding grows the hit area without
+changing the type size.
+
+**Deliberately not changed.** `Зарегистрироваться` and
+`Политикой конфиденциальности` sit inside running sentences, where the target
+size requirement does not apply. Enlarging them would mean restyling prose, and
+the batch was scoped to keep that out.
+
+**Harness correction found by this batch.** The first re-audit still reported
+the fields at 42px, because the missing two pixels are the wrapper's own border.
+The check now measures the effective tappable box — a control that fills a
+bordered wrapper counts as that wrapper — with tests in both directions: a
+filled 44px field is not a finding, and a small control inside a large wrapper it
+does not fill still is.
+
+**Result.** The login surface went from 6 touch-target findings to 2 on mobile
+and 0 on desktop, and the 2 that remain are the exempt prose links.
+
+**Still open:** the header links and the logo link at 28-32px on the public
+surfaces, the support form's checkbox at 16px, and the tasks view switch at
+30px, plus D-004, D-005 and D-008 from the earlier pass.

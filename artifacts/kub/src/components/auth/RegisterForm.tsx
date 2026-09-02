@@ -384,7 +384,9 @@ export function RegisterForm() {
                 <button
                   type="button"
                   onClick={() => setShowPass(!showPass)}
-                  className="text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)] transition-colors"
+                  // Same 16x16 target as the login form's reveal toggle; the
+                  // icon size is unchanged and only the hit area grows.
+                  className="-my-3 flex h-11 w-11 shrink-0 items-center justify-center text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)] transition-colors"
                   aria-label={showPass ? "Скрыть пароль" : "Показать пароль"}
                 >
                   <KubIcon name={showPass ? "eyeOff" : "eye"} size={16} />

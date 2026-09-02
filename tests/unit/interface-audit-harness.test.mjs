@@ -177,3 +177,29 @@ test("screen-reader-only text is not reported as clipped", async () => {
   const clipped = findings.filter((finding) => finding.kind === "text-clipped" || finding.kind === "clipped-horizontally");
   assert.equal(clipped.length, 0, `sr-only text must not be a finding: ${JSON.stringify(clipped)}`);
 });
+
+/**
+ * A control that fills a bordered wrapper is as tappable as that wrapper. The
+ * first run after the D-013 fix still reported 42px fields, because the missing
+ * two pixels were the wrapper's own border.
+ */
+test("a control filling a 44px bordered wrapper is not an undersized target", async () => {
+  const findings = await findingsFor(`
+    <div style="display:flex;align-items:center;height:44px;border:1px solid #ccc;box-sizing:border-box;width:240px">
+      <input style="height:100%;flex:1;border:0;outline:none" />
+    </div>
+  `);
+  const targets = findings.filter((finding) => finding.kind === "touch-target");
+  assert.equal(targets.length, 0, `a filled 44px field must not be a finding: ${JSON.stringify(targets)}`);
+});
+
+test("a small control inside a large wrapper it does not fill is still reported", async () => {
+  const findings = await findingsFor(`
+    <div style="height:80px;width:240px;display:flex;align-items:center">
+      <button style="height:16px">x</button>
+    </div>
+  `);
+  const target = findings.find((finding) => finding.kind === "touch-target");
+  assert.ok(target, JSON.stringify(findings));
+  assert.equal(target.height, 16);
+});

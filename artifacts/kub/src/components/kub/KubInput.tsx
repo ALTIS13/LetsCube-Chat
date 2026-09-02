@@ -44,7 +44,12 @@ export const KubInput = forwardRef<HTMLInputElement, KubInputProps>(
             ref={ref}
             id={inputId}
             className={cn(
-              "flex-1 bg-transparent outline-none text-sm text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]",
+              // `h-full` is what makes the whole visual field tappable. The
+              // wrapper is 44px and the input sat at its intrinsic 20px in the
+              // middle of it, so a tap 4px below the field's top edge landed on
+              // nothing at all — 24px of a control that looks tappable did not
+              // respond. See D-013.
+              "h-full flex-1 bg-transparent outline-none text-sm text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]",
               className
             )}
             {...rest}

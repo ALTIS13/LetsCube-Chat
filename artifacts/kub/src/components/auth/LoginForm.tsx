@@ -228,7 +228,11 @@ export function LoginForm() {
                     <button
                       type="button"
                       onClick={() => setShowPass(!showPass)}
-                      className="text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)] transition-colors"
+                      // The icon stays 16px; the hit area does not. It was a
+                      // 16x16 target inside a 44px field, so the reveal toggle
+                      // was the hardest thing on the form to tap. The negative
+                      // margin keeps the field's height unchanged. See D-013.
+                      className="-my-3 flex h-11 w-11 shrink-0 items-center justify-center text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)] transition-colors"
                       aria-label={showPass ? "Скрыть пароль" : "Показать пароль"}
                     >
                       <KubIcon name={showPass ? "eyeOff" : "eye"} size={16} />
@@ -266,7 +270,10 @@ export function LoginForm() {
                   setResetCaptchaToken("");
                   setResetCaptchaResetSignal((value) => value + 1);
                 }}
-                className="text-xs font-semibold text-[color:var(--kub-cyan)] hover:text-[color:var(--kub-cyan-hover)] transition-colors"
+                // A standalone action, not a link inside a sentence, so it is
+                // held to the target size. The padding grows the hit area
+                // without changing the type size. See D-013.
+                className="mx-auto inline-flex min-h-11 items-center justify-center px-3 text-xs font-semibold text-[color:var(--kub-cyan)] hover:text-[color:var(--kub-cyan-hover)] transition-colors"
               >
                 {resetMode ? "Вернуться ко входу" : "Забыли пароль?"}
               </button>

@@ -67,3 +67,41 @@ test.describe("interface focus visibility", () => {
     });
   }
 });
+
+/**
+ * D-013: a field that looks tappable must be tappable across its whole height.
+ *
+ * `KubInput` paints a 44px field and the input sat inside it at its intrinsic
+ * 20px, vertically centred. The control looked like a 44px target and answered
+ * only in the middle 20px: a tap 4px below the visible top edge landed on
+ * nothing and left focus on `body`. Measuring the input's box alone would have
+ * called this fixed as soon as a min-height was added, so the test taps.
+ */
+test.describe("interface touch targets", () => {
+  test("tapping the top edge of a text field focuses it", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
+
+    const field = page.locator('input[type="email"]').first();
+    await field.waitFor({ state: "visible" });
+
+    const geometry = await page.evaluate(() => {
+      const input = document.querySelector('input[type="email"]') as HTMLElement;
+      const wrapper = input.parentElement as HTMLElement;
+      const box = wrapper.getBoundingClientRect();
+      return { x: box.x + box.width / 2, top: box.y, bottom: box.y + box.height, height: box.height };
+    });
+
+    expect(geometry.height, "the visual field should be a 44px target").toBeGreaterThanOrEqual(44);
+
+    for (const [label, y] of [
+      ["the top edge", geometry.top + 4],
+      ["the bottom edge", geometry.bottom - 4],
+    ] as const) {
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await page.mouse.click(geometry.x, y);
+      const focused = await page.evaluate(() => document.activeElement?.getAttribute("type") ?? document.activeElement?.tagName);
+      expect(focused, `tapping ${label} of the field did not reach the input`).toBe("email");
+    }
+  });
+});

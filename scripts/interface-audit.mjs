@@ -169,10 +169,18 @@ export const PAGE_CHECKS = () => {
   );
   for (const node of interactive) {
     const box = node.getBoundingClientRect();
-    if (box.height < 44 || box.width < 24) {
-      add("touch-target", `interactive control is ${Math.round(box.width)}x${Math.round(box.height)}px`, node, {
+    // A control that fills a bordered wrapper is as tappable as that wrapper.
+    // Measuring the control alone reported 42px fields inside 44px boxes, where
+    // the missing 2px is the wrapper's own border.
+    const parent = node.parentElement;
+    const parentBox = parent ? parent.getBoundingClientRect() : null;
+    const fillsParent = parentBox !== null && parentBox.height - box.height <= 4 && box.height > 0;
+    const effective = fillsParent ? Math.max(box.height, parentBox.height) : box.height;
+
+    if (effective < 44 || box.width < 24) {
+      add("touch-target", `interactive control is ${Math.round(box.width)}x${Math.round(effective)}px`, node, {
         width: Math.round(box.width),
-        height: Math.round(box.height),
+        height: Math.round(effective),
       });
     }
   }
