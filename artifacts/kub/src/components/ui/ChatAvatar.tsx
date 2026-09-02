@@ -7,6 +7,7 @@ import type { AvatarVariantUrls } from "@/hooks/useMediaVariants";
 import { isSavedChatLikeName } from "@/lib/chatDisplay";
 import { cn } from "@/lib/utils";
 import { messageActorAvatarUrl, messageActorDisplayName, type MessageActor } from "@/lib/messageActor";
+import { avatarInkFor } from "@/lib/avatarInk";
 
 // Generate consistent color from string
 function getAvatarColor(str: string): string {
@@ -122,10 +123,10 @@ export function ChatAvatar({ chat, size = "md", className, showOnline, isSaved: 
   const fallback = (
     <div
       className={cn(
-        "rounded-full flex items-center justify-center font-medium text-white",
+        "rounded-full flex items-center justify-center font-medium",
         sizeMap[size]
       )}
-      style={{ background: bgColor }}
+      style={{ background: bgColor, color: avatarInkFor(bgColor) }}
     >
       {initials}
     </div>
@@ -185,10 +186,10 @@ export function UserAvatar({
   const fallback = (
     <div
       className={cn(
-        "rounded-full flex items-center justify-center font-medium text-white",
+        "rounded-full flex items-center justify-center font-medium",
         sizeMap[size]
       )}
-      style={{ background: bgColor }}
+      style={{ background: bgColor, color: avatarInkFor(bgColor) }}
     >
       {initials}
     </div>

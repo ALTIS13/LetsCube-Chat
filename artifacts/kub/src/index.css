@@ -134,13 +134,23 @@
   --kub-text: #F5F7FB;
   --kub-muted: #8FA9C4;
   --kub-border-color: var(--brand-border);
-  --kub-cyan: var(--brand-blue);
+  /* D-014: the brand blue passes on the dark page background at 4.73:1 but
+     only reaches 4.36:1 on --kub-surface, so accent text inside cards and
+     panels missed the 4.5:1 minimum. Found by the contrast contract, not by
+     eye: checking against the page background alone had said the dark theme
+     was fine. Lightened along the same hue, the smallest step that clears
+     every surface. */
+  --kub-cyan: #4d8bd0;
   --kub-cyan-hover: #5b96d4;
   --kub-action-primary-background: var(--kub-cyan);
   --kub-action-primary-foreground: var(--kub-bg);
   --kub-action-primary-hover: var(--kub-cyan-hover);
   --kub-blue: var(--brand-blue);
-  --kub-pink: var(--brand-magenta);
+  /* D-014, second accent: the brand magenta clears the dark page background at
+     4.75:1 but only reaches 4.38:1 on --kub-surface, the same near-miss the
+     blue had. Lightened along the same hue by the smallest step that clears
+     every surface. */
+  --kub-pink: #f04a92;
   --kub-online: #4DCD5E;
   --kub-danger: #EF4444;
   --kub-warn: #F5B50A;
@@ -269,13 +279,25 @@
   --kub-text: #07111F;
   --kub-muted: #52677D;
   --kub-border-color: var(--brand-border);
-  --kub-cyan: var(--brand-blue);
-  --kub-cyan-hover: #2d6fac;
+  /* D-011: the brand blue measures 3.90:1 on this background and 4.16:1 on
+     white, below the 4.5:1 needed for text — and it is the colour of the
+     primary button's own label, so the most important control on each surface
+     was the least legible. These are not invented shades: #2d6fac was already
+     the hover step here and measures 4.94:1, and the hover moves one step
+     darker to stay distinguishable at 6.32:1. The dark theme passes at 4.73:1
+     and is deliberately left alone. */
+  --kub-cyan: #2d6fac;
+  --kub-cyan-hover: #2b5e91;
   --kub-action-primary-background: var(--kub-cyan);
   --kub-action-primary-foreground: var(--kub-bg);
   --kub-action-primary-hover: var(--kub-cyan-hover);
   --kub-blue: var(--brand-blue);
-  --kub-pink: var(--brand-magenta);
+  /* D-011, second accent: the brand magenta measures 3.72:1 on this background
+     and is used for section eyebrows on the privacy and support pages, so it
+     failed the same 4.5:1 minimum as the blue. Darkened along the same hue to
+     the smallest step that clears both the background and a white surface.
+     The dark theme keeps the brand magenta. */
+  --kub-pink: #c03068;
   --kub-online: #4FAE4E;
   --kub-danger: #DC2626;
   --kub-warn: #C2870A;

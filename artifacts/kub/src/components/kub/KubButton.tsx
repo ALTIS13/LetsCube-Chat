@@ -56,7 +56,15 @@ export const KubButton = forwardRef<HTMLButtonElement, KubButtonProps>(
         disabled={disabled || loading}
         className={cn(
           "inline-flex items-center justify-center rounded-xl transition-all duration-150 select-none",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--kub-bg)]",
+          // The focus indicator is an outline, not a ring, on purpose. Tailwind
+          // implements `ring` as a box-shadow, and the primary and accent
+          // variants below carry `kub-glow-*`, plain classes that set
+          // box-shadow outright at the same specificity. Source order decided,
+          // the glow won, and the ring was composed and then overwritten: the
+          // computed style of a focused button was byte-identical to an
+          // unfocused one. An outline is a separate property that a box-shadow
+          // cannot overwrite. See D-010.
+          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
           "disabled:cursor-not-allowed",
           sizeClass[size],
           variantClass[variant],
