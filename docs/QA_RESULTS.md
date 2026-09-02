@@ -2662,3 +2662,46 @@ the product.
   stalling requests until an abort. Desktop projects were clean in both runs.
   A device or network without that proxy is needed to judge the mobile
   viewports, so they are recorded as unverified rather than as passing.
+
+## 2026-09-02 - native startup verified on real devices
+
+The last open item in Task 5 step 4 was native startup: the shells must not show
+the public home, not even as a flash. Two Android phones and this Windows
+machine were used.
+
+- The two shells load their web code differently, and that decides what a device
+  run can prove. `capacitor.config.ts` sets no `server.url`, so Android bundles
+  the web assets at build time; the installed release 0.1.2 therefore carries
+  code from before the public home and could not exercise the contract at all.
+  The Windows shell is the opposite: `windows-tauri/src-tauri/src/lib.rs` pins
+  `PRODUCTION_ORIGIN` to `https://app.letscube.ru`, so the installed 0.2.10
+  already runs today's deployed web code.
+- Android therefore needed a build. A debug APK was produced from the current
+  branch with `android:build:production:debug`, 8 520 418 bytes. It was
+  installed under `com.kub.messenger.debug` so it could sit beside the tester's
+  release build instead of forcing an uninstall that would have dropped their
+  session; the suffix was added to `android/app/build.gradle` only for the run
+  and reverted afterwards, and the release applicationId was never touched.
+  Firebase config was deliberately left out of the worktree, so this build has
+  no push - irrelevant to a routing check, and it kept the file out of a tree it
+  does not belong in.
+- Verified on both phones, each after `pm clear` so the app started as a guest,
+  with frames captured concurrently with the launch rather than after it:
+  Realme RMX3830 on Android 15 and Nothing A063 on Android 15. Both go splash to
+  the application's own loading screen to the login form. The public home appears
+  in no frame on either device. The first attempt captured only black frames
+  because the phone's display was off; that was a capture fault, not a result,
+  and was redone.
+- Windows: the installed 0.2.10 was launched and opened straight into the
+  messenger, with no public-home frame at any point. This machine holds a
+  session, so what it exercises is the authenticated path. The guest path on
+  Windows was not exercised directly and is not recorded as if it were; the
+  mechanism behind it is that `initialization_script` is registered on the
+  webview builder, so `window.letscubeDesktop` is defined before any page
+  script, which is why no flash is structurally possible. Android exercised the
+  same `nativeShell` branch on real hardware.
+- Cleanup: the debug package was uninstalled from both phones, both still report
+  `com.kub.messenger 0.1.2`, `android/app/build.gradle` is reverted and the
+  worktree is clean.
+- No chat content, contact name or personal media from the connected devices or
+  the desktop session is reproduced in this record or anywhere else.

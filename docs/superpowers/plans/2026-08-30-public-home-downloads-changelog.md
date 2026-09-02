@@ -497,7 +497,7 @@ state.
 
 Push the validated commit, verify Coolify auto-deploy uses the exact commit and wait for a healthy replacement. A docs-only release-catalog change must not redeploy unrelated workers.
 
-- [~] **Step 4: Run production visual QA**
+- [x] **Step 4: Run production visual QA**
 
 Verify unauthenticated `/`, `/download`, `/privacy`, `/support`, authenticated
 `/`, Windows native startup and Android native startup. Native startup must show
@@ -548,9 +548,16 @@ horizontal overflow and a clean console.
 Also complete in step 4: authenticated `/` is verified against production by the
 smoke suite across all five release viewports.
 
-Blocked in step 4: Windows and Android native startup were not exercised —
-that needs the packaged applications on real devices. The routing contract they
-would demonstrate is covered by the mounted matrix, which parameterises the
-native runtimes and asserts a guest root redirects to `/login`, but a mounted
-test is not the same as a packaged application starting up, and is not recorded
-as one.
+Native startup is now exercised on real hardware, recorded in
+`docs/QA_RESULTS.md`. Two Android 15 phones, each started as a guest from a
+cleared state with a build of the current branch, go splash to loading to the
+login form with the public home in no frame. The Windows shell loads the live
+production origin rather than bundled assets, so the installed release already
+runs today's web code; it opened straight into the messenger with no public-home
+frame.
+
+The one part still not exercised directly is the Windows *guest* path, because
+this machine holds a session. It is left recorded as unexercised rather than
+inferred. What supports it is that the Tauri webview registers an
+initialization script, so `window.letscubeDesktop` exists before any page script
+runs, and that Android exercised the same `nativeShell` branch on hardware.
