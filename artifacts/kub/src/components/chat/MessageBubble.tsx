@@ -332,12 +332,18 @@ function MeasuredTextWithMeta({
       return;
     }
 
+    // Whether the meta fits is a measurement, and the measurement already
+    // answers it: `available` is the room left after the *last* rendered line,
+    // however many lines there are. A separate single-line condition used to
+    // sit on top of this and refuse every wrapped message, so a bubble whose
+    // last line ended well short of the edge still grew a row containing
+    // nothing but a right-aligned timestamp. See D-008.
+    //
+    // Removing it cannot oscillate: the guard above flips to anchored and sets
+    // `inlineBlockedRef` the first time an inline footer fails to sit on the
+    // last text line, so a given message can change its mind at most once.
     const available = rightLimit - lastLine.right;
-    const singleLineText = lineRects.length <= 1;
-    const canInline =
-      singleLineText &&
-      available >= footerRect.width + gap &&
-      !inlineBlockedRef.current;
+    const canInline = available >= footerRect.width + gap && !inlineBlockedRef.current;
     const next: MetaPlacement = canInline ? "inline" : "anchored";
 
     setPlacement((previous) => (previous === next ? previous : next));

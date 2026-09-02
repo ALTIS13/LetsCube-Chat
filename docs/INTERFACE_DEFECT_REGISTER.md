@@ -686,3 +686,37 @@ the next poll. That is the rolling replacement briefly serving a new document
 with the previous replica's assets. Recorded rather than acted on — it is
 transient and self-correcting, but worth knowing before reading a 404 as an
 outage.
+
+# Fix batch 5, 2026-09-02 — D-008 closed
+
+**Fixed.** The single-line condition is gone from `canInline`. Whether the meta
+fits was already a measurement — `available` is the room left after the *last*
+rendered line, however many lines there are — and the extra condition sat on top
+of it refusing every wrapped message. A bubble whose last line ended well short
+of the edge still grew a row containing nothing but a right-aligned timestamp.
+
+**Why the register held it back, and why that is now settled.** The concern was
+oscillation, since `MeasuredTextWithMeta` carries `inlineBlockedRef` to stop
+placement flapping. It cannot loop: the guard above the calculation flips to
+anchored and sets that ref the first time an inline footer fails to land on the
+last text line, so a given message changes its mind at most once. A test asserts
+placement is unchanged across two further settling periods.
+
+**Tested against the DEV preview capture route** with an injected fixture, so
+the messages are deterministic and no production conversation is involved.
+Passes at `1440x900` and `390x844`. Restoring the single-line condition fails it
+with the D-008 message.
+
+**One limitation, recorded rather than papered over.** The anchored branch is
+asserted as an invariant instead of by constructing a message that must take it.
+Bubbles are `w-fit`, so with normal wrapping the last line is never the widest
+and a wrapped message essentially always has room — the anchored case cannot be
+built reliably from text. What is asserted instead is the property that matters
+either way: an inline time never overlaps the words it sits beside. An earlier
+draft of this test measured room against the bubble's outer edge rather than the
+text's right limit inside it, which is a different quantity from the one the
+component decides on; that assertion was removed rather than left in looking
+meaningful.
+
+**Chat contracts re-checked:** scroll anchoring, history anchoring, footer
+stability and read synchronisation all pass.
