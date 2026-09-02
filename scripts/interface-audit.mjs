@@ -381,19 +381,40 @@ export async function checkFocusVisibility(page, maxStops = 40) {
 }
 
 async function signIn(page, credentials) {
-  await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-  const email = page.locator('input[type="email"]').first();
-  const visible = await email.waitFor({ state: "visible", timeout: 10_000 }).then(() => true).catch(() => false);
-  if (!visible) {
-    const shell = await page.locator('button[aria-label="Меню"]').first().waitFor({ state: "visible", timeout: 8_000 }).then(() => true).catch(() => false);
-    if (shell) return;
-    throw new Error("neither the login form nor the authenticated shell appeared at /login");
-  }
-  await email.fill(credentials.email);
+  const form = await openLoginForm(page);
+  if (form === "already-signed-in") return;
+  await page.locator('input[type="email"]').first().fill(credentials.email);
   await page.locator('input[type="password"]').first().fill(credentials.password);
   await page.locator('button[type="submit"]').first().click();
   const ok = await page.locator('button[aria-label="Меню"]').first().waitFor({ state: "visible", timeout: 20_000 }).then(() => true).catch(() => false);
   if (!ok) throw new Error("sign-in did not reach the authenticated shell");
+}
+
+/**
+ * Gets to a usable login form, including from a boot that has stalled.
+ *
+ * A session restore whose token refresh never returns leaves the app on its own
+ * "Загрузка длится дольше обычного" panel, and this harness then lost whole
+ * cells to a sign-in that could not have succeeded. The panel offers "Выйти",
+ * which drops the stuck session and gives the form back — the same escape the
+ * e2e helper takes. Reported as unreachable it looked like a defect in the
+ * surface being audited, which it never was.
+ */
+async function openLoginForm(page) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
+    const email = page.locator('input[type="email"]').first();
+    if (await email.waitFor({ state: "visible", timeout: 12_000 }).then(() => true).catch(() => false)) {
+      return "form";
+    }
+    const shell = await page.locator('button[aria-label="Меню"]').first().waitFor({ state: "visible", timeout: 8_000 }).then(() => true).catch(() => false);
+    if (shell) return "already-signed-in";
+
+    const signOut = page.getByRole("button", { name: "Выйти" }).first();
+    if (!(await signOut.isVisible().catch(() => false))) break;
+    await signOut.click().catch(() => {});
+  }
+  throw new Error("neither the login form nor the authenticated shell appeared at /login");
 }
 
 async function main() {
