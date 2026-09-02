@@ -17,7 +17,7 @@ import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { BulkSelectControl } from "@/components/ui/BulkSelectControl";
 import { clearRoleAccessCache, useIsAdmin, usePermissionAccess } from "@/hooks/useRole";
 import { useTaskRouting } from "@/hooks/useTaskRouting";
-import { KubBadge, KubButton, KubIcon, KubModal, KubNotice, KubPanel } from "@/components/kub";
+import { KubBadge, KubButton, KubFilterButton, KubFilterSummary, KubIcon, KubModal, KubNotice, KubPanel, type ActiveFilter } from "@/components/kub";
 import { BanModal } from "./BanModal";
 import { MuteModal } from "./MuteModal";
 import { cn } from "@/lib/utils";
@@ -78,6 +78,10 @@ export function UsersTab() {
   const [locationRoleFilter, setLocationRoleFilter] = useState("");
   const [primaryAdminFilter, setPrimaryAdminFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  // The filter panel is collapsed by default. Five selects across the top cost
+  // the list the space it needs, and an inactive select looks like an active
+  // one — what is actually narrowing the list now lives in the chips below.
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkGlobalRoleId, setBulkGlobalRoleId] = useState("");
   const [bulkLocationId, setBulkLocationId] = useState("");
@@ -369,6 +373,45 @@ export function UsersTab() {
     });
   };
 
+  const activeFilters = useMemo<ActiveFilter[]>(() => {
+    const active: ActiveFilter[] = [];
+    const push = (id: string, label: string, clear: () => void) =>
+      active.push({ id, label, onRemove: () => { clear(); setPage(0); } });
+
+    if (queryRaw.trim()) push("query", `Поиск: ${queryRaw.trim()}`, () => setQueryRaw(""));
+    if (globalRoleFilter) {
+      const role = globalRoleOptions.find((item) => item.id === globalRoleFilter);
+      push("globalRole", `Роль: ${role ? getRoleLabel(role) : globalRoleFilter}`, () => setGlobalRoleFilter(""));
+    }
+    if (locationFilter) {
+      push("location", `Локация: ${locationById.get(locationFilter)?.name ?? locationFilter}`, () => setLocationFilter(""));
+    }
+    if (locationRoleFilter) {
+      const role = locationRoleOptions.find((item) => item.id === locationRoleFilter);
+      push("locationRole", `Роль в локации: ${role ? getRoleLabel(role) : locationRoleFilter}`, () => setLocationRoleFilter(""));
+    }
+    if (primaryAdminFilter) {
+      const member = locationAdmins.find((item) => item.user_id === primaryAdminFilter);
+      const name = member?.profile?.full_name ?? member?.profile?.username ?? "Администратор";
+      push("primaryAdmin", `Основной админ: ${name}`, () => setPrimaryAdminFilter(""));
+    }
+    if (statusFilter) {
+      push("status", `Статус: ${STATUS_FILTER_LABELS[statusFilter] ?? statusFilter}`, () => setStatusFilter(""));
+    }
+    return active;
+  }, [
+    globalRoleFilter,
+    globalRoleOptions,
+    locationAdmins,
+    locationById,
+    locationFilter,
+    locationRoleFilter,
+    locationRoleOptions,
+    primaryAdminFilter,
+    queryRaw,
+    statusFilter,
+  ]);
+
   const clearFilters = () => {
     setQueryRaw("");
     setGlobalRoleFilter("");
@@ -505,7 +548,8 @@ export function UsersTab() {
         )}
       </div>
 
-      <div className="flex items-center gap-2 rounded-xl px-3 h-11 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
+      <div className="flex flex-wrap items-center gap-2">
+      <div className="kub-field min-w-[220px] flex-1 gap-2 rounded-xl px-3 h-11 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
         <KubIcon name="search" size={14} tone="muted" />
         <input
           value={queryRaw}
@@ -523,8 +567,30 @@ export function UsersTab() {
           </button>
         )}
       </div>
+        {isAdmin && (
+          <KubFilterButton
+            count={activeFilters.length}
+            open={filtersOpen}
+            onToggle={() => setFiltersOpen((open) => !open)}
+            className="h-11"
+          />
+        )}
+      </div>
 
-      {isAdmin && (
+      {/* The search runs on the server and narrows the whole set; the other
+          filters run here and can only see the loaded page. When there is more
+          than one page, the line says so rather than implying a search across
+          every user. */}
+      <KubFilterSummary
+        matched={filteredRows.length}
+        total={total}
+        filters={activeFilters}
+        onReset={clearFilters}
+        noun="пользователей"
+        scopedToPage={total > rows.length}
+      />
+
+      {isAdmin && filtersOpen && (
         <KubPanel className="space-y-3">
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
             <SelectField label="Глобальная роль" value={globalRoleFilter} onChange={setGlobalRoleFilter}>
@@ -567,6 +633,9 @@ export function UsersTab() {
           <div className="flex flex-wrap items-center gap-2">
             <KubButton type="button" variant="ghost" size="sm" onClick={clearFilters} leftIcon={<KubIcon name="close" size={13} />}>
               Очистить фильтры
+            </KubButton>
+            <KubButton type="button" variant="ghost" size="sm" onClick={() => setFiltersOpen(false)} leftIcon={<KubIcon name="chevronUp" size={13} />}>
+              Свернуть
             </KubButton>
             {!routing.available && (
               <span className="text-xs text-[color:var(--kub-muted)]">Локации недоступны или требуют обновления базы данных.</span>
@@ -716,6 +785,7 @@ export function UsersTab() {
               return (
                 <div
                   key={u.id}
+                  data-testid="admin-user-row"
                   className={cn(
                     "flex items-start sm:items-center gap-3 px-3 py-3 transition-colors",
                     "rounded-xl bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] mb-2",
@@ -1249,6 +1319,18 @@ function PhoneField({
     </div>
   );
 }
+
+// The same words the status options use, so a chip never invents a name for a
+// filter the panel spells differently.
+const STATUS_FILTER_LABELS: Record<string, string> = {
+  client: "Клиент / пользователь",
+  worker: "Работники",
+  location_admin: "Администраторы локаций",
+  admin: "Администраторы",
+  tech_admin: "Тех. администратор",
+  no_location: "Без локации",
+  no_dynamic_role: "Без динамической роли",
+};
 
 function SelectField({
   label,

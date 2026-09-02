@@ -35,6 +35,7 @@ import {
   FileText,
   Folder,
   FolderOpen,
+  FunnelSimple,
   FolderPlus,
   GearSix,
   Hash,
@@ -127,6 +128,7 @@ export type KubIconName =
   | "eye"
   | "eyeOff"
   | "file"
+  | "filter"
   | "folder"
   | "folderAdd"
   | "folderOpen"
@@ -231,6 +233,7 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   eye: { Icon: Eye },
   eyeOff: { Icon: EyeSlash },
   file: { Icon: FileText },
+  filter: { Icon: FunnelSimple },
   folder: { Icon: Folder },
   folderAdd: { Icon: FolderPlus },
   folderOpen: { Icon: FolderOpen },
