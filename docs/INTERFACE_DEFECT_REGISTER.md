@@ -751,3 +751,43 @@ the diff.
 the conditional spacing needs — made it fail on a change that kept every
 property it exists to protect. It now reads the element and checks
 `tabular-nums` and `shrink-0` within it; removing either still fails it.
+
+## D-018 — the auth screen offered a scrollbar with nothing to scroll to
+
+**Severity:** P2, reported by the owner, who saw it in the browser and in both
+native shells.
+
+**Where:** `.kub-auth-shell::after` and `.kub-auth-mascot` in
+`artifacts/kub/src/index.css`.
+
+**Measured.** `.kub-auth-shell` scrolls on purpose so the form stays reachable on
+a short window or with a keyboard up. Two decorative layers were absolutely
+positioned inside it and hung past its bottom edge, so that overhang counted as
+scrollable area:
+
+| viewport | scrollable | 18% of the height |
+| --- | --- | --- |
+| 1440x900 | 162px | 162px |
+| 1440x700 | 126px | 126px |
+| 390x844 | 152px | 152px |
+
+The match is exact, which identified `inset: auto -12% -18% 40%` on the glow.
+The remaining 24px on a desktop and 48px on a phone were the mascot's
+`bottom: -1.5rem` / `-3rem`.
+
+**Two wrong guesses, recorded because they cost time and might be repeated.**
+The first was that `overflow-x: hidden` was forcing `overflow-y` to `auto`; the
+shell sets `overflow-y: auto` explicitly and deliberately. The second was that
+the mascot alone was responsible — hiding it changed nothing, because the glow
+was four times larger. The arithmetic, not the reasoning, found it.
+
+**Fixed** by taking both decorative layers out of the shell's scroll area with
+fixed positioning. Neither is interactive and neither needs to scroll with the
+form, and their painted position is unchanged.
+
+**Both directions are pinned** in `tests/e2e/interface-focus-visibility.spec.ts`:
+nothing scrolls at three viewports where the form fits, and a 400px-tall window
+still scrolls far enough to reach the sign-in button. Returning either layer to
+absolute positioning fails it. Removing the scroll entirely would be the obvious
+over-correction and would strand the button on a short window, which is why the
+second half exists.

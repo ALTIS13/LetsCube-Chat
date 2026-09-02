@@ -637,7 +637,14 @@ textarea::placeholder, input::placeholder {
 
 .kub-auth-shell::after {
   content: "";
-  position: absolute;
+  /* D-018: this decorative glow hung 18% below the shell, and because the shell
+     scrolls so the form stays reachable on short screens, that overhang became
+     scrollable area. The auth screen therefore offered a scrollbar and 18% of
+     the viewport in nothing to scroll to — 162px at 900px tall, 126px at 700px,
+     152px at 844px, matching exactly. Fixed positioning keeps the glow where it
+     was drawn without adding it to the scroll area; it is decorative and
+     `pointer-events: none`, so nothing depends on it scrolling with the form. */
+  position: fixed;
   inset: auto -12% -18% 40%;
   z-index: 0;
   height: min(44rem, 70vh);
@@ -648,7 +655,11 @@ textarea::placeholder, input::placeholder {
 
 .kub-auth-mascot {
   pointer-events: none;
-  position: absolute;
+  /* Same reason as the glow below: the mascot bleeds past the bottom edge on
+     purpose, and while it was absolutely positioned inside the scrolling shell
+     that bleed was scrollable area — the last 24px on a desktop and 48px on a
+     phone. See D-018. */
+  position: fixed;
   z-index: 0;
   right: max(1rem, 3vw);
   bottom: -1.5rem;

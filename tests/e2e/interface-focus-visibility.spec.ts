@@ -147,3 +147,71 @@ test.describe("interface button targets on a pointer", () => {
     ).toBeLessThan(44);
   });
 });
+
+/**
+ * D-018: the auth screen must not offer a scrollbar with nothing to scroll to.
+ *
+ * `.kub-auth-shell` scrolls on purpose so the form stays reachable on a short
+ * window or with a keyboard up. Two decorative layers were absolutely
+ * positioned inside it and hung past its bottom edge — a glow at `-18%` and the
+ * mascot at `-1.5rem` — so that overhang counted as scrollable area. On a
+ * 900px-tall window the 555px form fit with room to spare and the screen still
+ * scrolled 162px, which is exactly 18% of 900.
+ *
+ * Both directions are asserted. Removing the scroll entirely would be the
+ * obvious over-correction and would strand the sign-in button on a short window.
+ */
+test.describe("auth shell scrolling", () => {
+  const scrollRange = async (page: import("@playwright/test").Page) =>
+    await page.evaluate(() => {
+      const shell = document.querySelector(".kub-auth-shell") as HTMLElement | null;
+      if (!shell) return null;
+      const before = shell.scrollTop;
+      shell.scrollTop = 9999;
+      const moved = shell.scrollTop;
+      shell.scrollTop = before;
+      return moved;
+    });
+
+  for (const [width, height] of [
+    [1440, 900],
+    [1280, 800],
+    [390, 844],
+  ] as const) {
+    test(`there is nothing to scroll at ${width}x${height}, where the form fits`, async ({ page }) => {
+      await page.setViewportSize({ width, height });
+      await page.goto("/login", { waitUntil: "domcontentloaded" });
+      await page.locator('input[type="email"]').first().waitFor({ state: "visible" });
+      await page.waitForTimeout(600);
+
+      const form = await page
+        .locator('[data-testid="auth-form-shell"]')
+        .first()
+        .evaluate((node) => node.getBoundingClientRect().height);
+      expect(form, "this viewport is meant to be taller than the form").toBeLessThan(height);
+
+      expect(
+        await scrollRange(page),
+        "the auth screen scrolled although the form fits; a decorative layer is hanging past the shell",
+      ).toBe(0);
+    });
+  }
+
+  test("a window too short for the form still scrolls to the sign-in button", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 400 });
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
+    await page.locator('input[type="email"]').first().waitFor({ state: "visible" });
+    await page.waitForTimeout(600);
+
+    expect(await scrollRange(page), "a short window must still scroll").toBeGreaterThan(0);
+
+    const reachable = await page.evaluate(() => {
+      const shell = document.querySelector(".kub-auth-shell") as HTMLElement;
+      shell.scrollTop = 9999;
+      const submit = document.querySelector('button[type="submit"]') as HTMLElement;
+      const box = submit.getBoundingClientRect();
+      return box.top >= 0 && box.bottom <= window.innerHeight + 1;
+    });
+    expect(reachable, "the sign-in button must be reachable by scrolling on a short window").toBe(true);
+  });
+});
