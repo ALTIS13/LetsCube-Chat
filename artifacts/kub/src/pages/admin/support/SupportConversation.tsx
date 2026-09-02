@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { KubButton, KubIcon } from "@/components/kub";
+import { KubButton, KubIcon, KubNotice } from "@/components/kub";
 import type { SupportTicketMessage } from "@/lib/support/operatorApi";
 import { useConversationScroll } from "@/lib/support/useConversationScroll";
 import { cn } from "@/lib/utils";
@@ -111,9 +111,9 @@ export function SupportConversation({
             Для ответа требуется право «Ответы поддержки».
           </p>
         ) : !replyAvailable ? (
-          <p className="rounded-lg border border-[color:var(--kub-warn)]/30 bg-[color-mix(in_srgb,var(--kub-warn)_10%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-warn)]">
+          <KubNotice tone="warn" className="text-xs">
             Сначала примите обращение или откройте назначенное вам обращение.
-          </p>
+          </KubNotice>
         ) : (
           <div className="flex items-end gap-2">
             <label className="min-w-0 flex-1">

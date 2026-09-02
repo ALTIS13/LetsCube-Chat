@@ -17,7 +17,7 @@ import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { BulkSelectControl } from "@/components/ui/BulkSelectControl";
 import { clearRoleAccessCache, useIsAdmin, usePermissionAccess } from "@/hooks/useRole";
 import { useTaskRouting } from "@/hooks/useTaskRouting";
-import { KubBadge, KubButton, KubIcon, KubModal, KubPanel } from "@/components/kub";
+import { KubBadge, KubButton, KubIcon, KubModal, KubNotice, KubPanel } from "@/components/kub";
 import { BanModal } from "./BanModal";
 import { MuteModal } from "./MuteModal";
 import { cn } from "@/lib/utils";
@@ -643,23 +643,23 @@ export function UsersTab() {
             </KubButton>
           </div>
           {bulkError && (
-            <div className="rounded-lg border border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-danger)]">
+            <KubNotice tone="danger" className="text-xs">
               {bulkError}
-            </div>
+            </KubNotice>
           )}
         </KubPanel>
       )}
 
       {notice && (
-        <div className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-cyan)_12%,transparent)] text-[color:var(--kub-cyan)] border border-[color:var(--kub-cyan)]/30">
+        <KubNotice tone="info" className="text-xs">
           {notice}
-        </div>
+        </KubNotice>
       )}
 
       {error && (
-        <div className="rounded-xl px-3 py-2 text-xs mb-3 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger)] border border-[color:var(--kub-danger)]/30">
+        <KubNotice tone="danger" className="text-xs mb-3">
           {error}
-        </div>
+        </KubNotice>
       )}
 
       <KubPanel className="overflow-hidden p-0">
@@ -742,9 +742,9 @@ export function UsersTab() {
                         {u.full_name ?? "Без имени"}
                       </span>
                       {isSelf && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-[color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] text-[color:var(--kub-cyan)]">
+                        <KubBadge tone="cyan" dot={false} className="text-[10px]">
                           вы
-                        </span>
+                        </KubBadge>
                       )}
                     </div>
                     <div className="text-xs flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[color:var(--kub-muted)]">
@@ -780,7 +780,7 @@ export function UsersTab() {
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
-                        className="p-2 rounded-lg hover:bg-[var(--kub-surface-3)] transition-colors text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
+                        className="kub-icon-action kub-interactive rounded-lg hover:bg-[var(--kub-surface-3)] transition-colors text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
                         aria-label="Действия"
                       >
                         <KubIcon name="more" size={16} />

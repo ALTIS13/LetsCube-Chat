@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { KubBadge, KubButton, KubIcon, KubInput, KubPanel, KubSwitch } from "@/components/kub";
+import { KubBadge, KubButton, KubIcon, KubInput, KubNotice, KubPanel, KubSwitch } from "@/components/kub";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
 import { usePermissionAccess } from "@/hooks/useRole";
 import { useTaskRouting, useTaskRoutingEnabledPreference } from "@/hooks/useTaskRouting";
@@ -224,9 +224,9 @@ export function InvitesTab() {
           </div>
         </div>
         {modeError && (
-          <div className="rounded-xl border border-[color:var(--kub-warn)]/30 bg-[color-mix(in_srgb,var(--kub-warn)_12%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-warn)]">
+          <KubNotice tone="warn" className="text-sm">
             {modeError}
-          </div>
+          </KubNotice>
         )}
         {!systemAccess.checking && !systemAccess.hasPermission("system.manage") && (
           <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/70 px-3 py-2 text-xs text-[color:var(--kub-muted)]">
@@ -263,14 +263,14 @@ export function InvitesTab() {
         </div>
 
         {notice && (
-          <div className="rounded-xl border border-[color:var(--kub-online)]/30 bg-[color-mix(in_srgb,var(--kub-online)_12%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-online)]">
+          <KubNotice tone="success" className="text-sm">
             {notice}
-          </div>
+          </KubNotice>
         )}
         {error && (
-          <div className="rounded-xl border border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-danger)]">
+          <KubNotice tone="danger" className="text-sm">
             {error}
-          </div>
+          </KubNotice>
         )}
 
         <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">

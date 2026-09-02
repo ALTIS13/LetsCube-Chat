@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { KubBadge, KubButton, KubIcon, KubInput, KubPanel } from "@/components/kub";
+import { KubBadge, KubButton, KubIcon, KubInput, KubNotice, KubPanel } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
 import { clearRoleAccessCache } from "@/hooks/useRole";
@@ -434,17 +434,17 @@ export function RolesPermissionsTab() {
         <div className={cn(
           "rounded-xl border px-3 py-2 text-xs",
           error
-            ? "border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger)]"
-            : "border-[color:var(--kub-online)]/30 bg-[color-mix(in_srgb,var(--kub-online)_12%,transparent)] text-[color:var(--kub-online)]",
+            ? "border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-text)]"
+            : "border-[color:var(--kub-online)]/30 bg-[color-mix(in_srgb,var(--kub-online)_12%,transparent)] text-[color:var(--kub-text)]",
         )}>
           {error ?? notice}
         </div>
       )}
 
       {!canManageRoles && (
-        <div className="rounded-xl border border-[color:var(--kub-warn)]/30 bg-[color-mix(in_srgb,var(--kub-warn)_10%,transparent)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-warn)]">
+        <KubNotice tone="warn" className="text-xs">
           Режим просмотра: текущая роль позволяет видеть роли и права, но не менять их. Создание ролей, изменение прав и назначение ролей доступны владельцу, тех. администратору или роли с правом управления ролями.
-        </div>
+        </KubNotice>
       )}
 
       <div className="grid gap-3 md:grid-cols-3">
@@ -585,14 +585,14 @@ export function RolesPermissionsTab() {
                   {getRoleScopeDescription(selectedRole.scope)}
                 </div>
                 {selectedRole.is_system && (
-                  <div className="rounded-xl border border-[color:var(--kub-warn)]/30 bg-[color-mix(in_srgb,var(--kub-warn)_10%,transparent)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-warn)]">
+                  <KubNotice tone="warn" className="text-xs">
                     Системную роль нельзя удалить или отключить. Можно уточнить название и описание, если это не ломает смысл роли.
-                  </div>
+                  </KubNotice>
                 )}
                 {selectedRoleIsCritical && (
-                  <div className="rounded-xl border border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-danger)]">
+                  <KubNotice tone="danger" className="text-xs">
                     Это критичная роль. Последний владелец или тех. администратор не может быть снят backend-проверкой.
-                  </div>
+                  </KubNotice>
                 )}
                 {!selectedRole.is_system && (
                   <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/55 px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
@@ -657,9 +657,9 @@ export function RolesPermissionsTab() {
                   </p>
                 </div>
                 {selectedRoleIsCritical && (
-                  <div className="rounded-xl border border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-danger)]">
+                  <KubNotice tone="danger" className="text-xs">
                     Владелец и тех. администратор всегда получают полный доступ. Набор прав здесь информационный и не ограничивает эти роли.
-                  </div>
+                  </KubNotice>
                 )}
                 <div className="grid gap-3 lg:grid-cols-2">
                   {permissionGroups.map(([category, permissions]) => (

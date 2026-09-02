@@ -385,8 +385,8 @@ export function SupportTab() {
           role={actionError ? "alert" : "status"}
           className={
             actionError
-              ? "flex-shrink-0 border-b border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-4 py-2 text-sm text-[color:var(--kub-danger)]"
-              : "flex-shrink-0 border-b border-[color:var(--kub-online)]/30 bg-[color-mix(in_srgb,var(--kub-online)_10%,transparent)] px-4 py-2 text-sm text-[color:var(--kub-online)]"
+              ? "flex-shrink-0 border-b border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-4 py-2 text-sm text-[color:var(--kub-text)]"
+              : "flex-shrink-0 border-b border-[color:var(--kub-online)]/30 bg-[color-mix(in_srgb,var(--kub-online)_10%,transparent)] px-4 py-2 text-sm text-[color:var(--kub-text)]"
           }
         >
           {actionError ?? notice}

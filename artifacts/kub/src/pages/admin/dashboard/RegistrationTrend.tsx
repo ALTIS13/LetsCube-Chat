@@ -25,7 +25,7 @@ export function RegistrationTrend({ series, metrics, error }: {
         <div className="min-w-[210px] border-t border-[color:var(--kub-border-color)] px-4 py-3 sm:border-l sm:border-t-0">
           <div className="flex items-center justify-between text-xs">
             <span className="text-[color:var(--kub-muted)]">Пользователи онлайн</span>
-            <strong className="tabular-nums text-[color:var(--kub-online)]">{onlinePercent}%</strong>
+            <strong className="tabular-nums text-[color:var(--kub-text)]">{onlinePercent}%</strong>
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--kub-surface-3)]">
             <div className="h-full rounded-full bg-[var(--kub-online)] transition-[width] duration-500" style={{ width: `${onlinePercent}%` }} />

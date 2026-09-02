@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import type { Profile } from "@/types/database";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
-import { KubButton, KubIcon, KubModal } from "@/components/kub";
+import { KubButton, KubIcon, KubModal, KubNotice } from "@/components/kub";
 import { cn } from "@/lib/utils";
 import { mapPgError } from "@/lib/errors";
 
@@ -142,9 +142,9 @@ export function BanModal({ target, onClose, onSuccess }: Props) {
       </div>
 
       {error && (
-        <div className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger)] border border-[color:var(--kub-danger)]/30">
+        <KubNotice tone="danger" className="text-xs">
           {error}
-        </div>
+        </KubNotice>
       )}
     </KubModal>
   );

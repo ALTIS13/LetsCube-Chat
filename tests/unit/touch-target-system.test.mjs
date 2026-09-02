@@ -47,6 +47,52 @@ test("buttons keep the same bargain, and only on a coarse pointer", () => {
   );
 });
 
+/**
+ * Native controls are covered by element rather than by an opt-in class, so a
+ * select or a tick box added tomorrow is correct without anyone remembering to
+ * tag it. Measured before the rule: selects came out 40px tall, and a 16px tick
+ * box inside a `flex items-center` label made a 20px-tall row.
+ *
+ * Each is asserted in both directions for the reason D-015 established: a test
+ * that only checked the coarse half would pass equally well if the whole scale
+ * had been inflated for every pointer, which is the change deliberately not
+ * made.
+ */
+const nativeControls = [
+  { name: "select", selector: "select", property: "min-height", value: "44px" },
+  {
+    name: "tick and radio boxes",
+    selector: 'input\\[type="checkbox"\\],\\s*\\n\\s*input\\[type="radio"\\]',
+    property: "min-width",
+    value: "24px",
+  },
+  {
+    name: "the row a tick box sits in",
+    selector: 'label:has\\(input\\[type="checkbox"\\]\\),\\s*\\n\\s*label:has\\(input\\[type="radio"\\]\\)',
+    property: "min-height",
+    value: "44px",
+  },
+];
+
+for (const { name, selector, property, value } of nativeControls) {
+  test(`${name} reach the touch target on a coarse pointer`, () => {
+    assert.match(
+      coarseBlocks(),
+      new RegExp(`${selector}\\s*\\{[\\s\\S]*?${property}:\\s*${value}`),
+      `${name}: no coarse-pointer ${property} of ${value} was found`,
+    );
+  });
+
+  test(`${name} keep the design's size on a pointer device`, () => {
+    const withoutCoarse = css.replace(/@media\s*\(pointer:\s*coarse\)\s*\{[\s\S]*?\n\}/g, "");
+    assert.doesNotMatch(
+      withoutCoarse,
+      new RegExp(`${selector}\\s*\\{[\\s\\S]*?${property}:\\s*${value}`),
+      `${name}: growing the control for every pointer is the change that was not made`,
+    );
+  });
+}
+
 const staffSearches = [
   "artifacts/kub/src/pages/admin/UsersTab.tsx",
   "artifacts/kub/src/pages/admin/AuditTab.tsx",

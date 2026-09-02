@@ -3,6 +3,7 @@ export { KubInput } from "./KubInput";
 export { KubPanel } from "./KubPanel";
 export { KubCard } from "./KubCard";
 export { KubBadge } from "./KubBadge";
+export { KubNotice } from "./KubNotice";
 export { KubModal } from "./KubModal";
 export { KubHeader } from "./KubHeader";
 export { KubEmptyState } from "./KubEmptyState";

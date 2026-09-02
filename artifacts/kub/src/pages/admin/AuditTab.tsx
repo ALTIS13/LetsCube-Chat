@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { KubBadge, KubButton, KubIcon, KubPanel } from "@/components/kub";
+import { KubBadge, KubButton, KubIcon, KubNotice, KubPanel } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useAuditLogs, type AuditFilters } from "@/hooks/useAuditLogs";
 import { useIsAdmin } from "@/hooks/useRole";
@@ -290,7 +290,7 @@ export function AuditTab() {
         </h2>
         <button
           onClick={refresh}
-          className="flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-xs font-semibold hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]"
+          className="kub-button kub-interactive flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-xs font-semibold hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]"
           aria-label="Обновить"
         >
           <KubIcon name="rotate" size={13} /> Обновить
@@ -429,9 +429,9 @@ export function AuditTab() {
       </KubPanel>
 
       {error && (
-        <div className="rounded-xl px-3 py-2 text-xs mb-3 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger)] border border-[color:var(--kub-danger)]/30">
+        <KubNotice tone="danger" className="text-xs mb-3">
           {error}
-        </div>
+        </KubNotice>
       )}
 
       <KubPanel className="overflow-hidden p-0">

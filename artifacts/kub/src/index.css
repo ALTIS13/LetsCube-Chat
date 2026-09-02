@@ -592,6 +592,27 @@ textarea::placeholder, input::placeholder {
     min-width: 44px;
     min-height: 44px;
   }
+
+  /* Native controls are covered by element, not by an opt-in class: a select or
+     a checkbox added tomorrow is then correct without anyone remembering to tag
+     it. The reach is deliberately narrow -- two element types whose intent is
+     universal -- and it is a touch-only rule, so the pointer scale is untouched. */
+  select {
+    min-height: 44px;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-width: 24px;
+    min-height: 24px;
+  }
+
+  /* The box grows to 24px, but the tappable thing is the whole row: a label with
+     a tick in it is one target, and it is the row a finger aims at. */
+  label:has(input[type="checkbox"]),
+  label:has(input[type="radio"]) {
+    min-height: 44px;
+  }
 }
 
 /* Neon focus ring for inputs and triggers. */
