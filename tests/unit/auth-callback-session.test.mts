@@ -119,9 +119,18 @@ test("auth callback treats a non-recovery PKCE exchange as a normal session", as
 
 test("auth callback stays mounted while the global user state reloads", () => {
   const callbackGate = appSource.indexOf('if (location.startsWith("/auth/callback"))');
-  const loadingGate = appSource.indexOf("if (loading || loadingError)");
+  assert.notEqual(callbackGate, -1, "the callback route was not found");
 
-  assert.notEqual(callbackGate, -1);
-  assert.notEqual(loadingGate, -1);
-  assert.ok(callbackGate < loadingGate, "the callback route must render before the loading gate");
+  // Located by what the gate does rather than by the exact condition it is
+  // written with. An earlier version matched the literal
+  // `if (loading || loadingError)` and went red when that condition was
+  // rewritten — reporting a regression in a contract that had not moved.
+  const loadingScreens = [...appSource.matchAll(/<LoadingScreen\b/g)].map((match) => match.index ?? -1);
+  assert.ok(loadingScreens.length > 0, "no loading screen is rendered anywhere");
+  for (const at of loadingScreens) {
+    assert.ok(
+      callbackGate < at,
+      "the callback route must render before anything that can show a loading screen instead",
+    );
+  }
 });

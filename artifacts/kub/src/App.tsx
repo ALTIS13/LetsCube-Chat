@@ -320,6 +320,36 @@ function RuntimeConfigurationScreen() {
   );
 }
 
+/**
+ * How long the boot gate may hold an auth route before giving up on it.
+ *
+ * `supabase.auth.getSession()` refreshes a stale token internally, and that
+ * request can fail to come back at all. When it does, `loading` stays true —
+ * and because the boot gate covers every route, `/login` renders the loading
+ * screen too. That is the one route a person in this state needs, so the app
+ * locks them out of its own recovery path: the only way through is the "Выйти"
+ * button on the loading screen, which not everyone will read as the way out.
+ *
+ * A healthy `getSession()` settles in a few hundred milliseconds, so this
+ * grace never shows a form to someone whose session is fine. It only matters
+ * when the boot is already broken.
+ */
+const AUTH_ROUTE_BOOT_GRACE_MS = 4000;
+
+/** True once `active` has stayed true for `delay`, false as soon as it clears. */
+function useElapsedWhile(active: boolean, delay: number): boolean {
+  const [elapsed, setElapsed] = useState(false);
+  useEffect(() => {
+    if (!active) {
+      setElapsed(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setElapsed(true), delay);
+    return () => window.clearTimeout(timer);
+  }, [active, delay]);
+  return elapsed;
+}
+
 function AppRoutes() {
   const { user, loading, loadingError, retry, signOut } = useUser();
   const userId = user?.id ?? null;
@@ -333,6 +363,9 @@ function AppRoutes() {
       nativeShell: isNativeApp() || isDesktopShell(),
     })
     : null;
+
+  const bootBlocked = loading || Boolean(loadingError);
+  const authRouteReleased = useElapsedWhile(bootBlocked && authRoute, AUTH_ROUTE_BOOT_GRACE_MS);
 
   // Keep the user's online_at fresh while a session exists.
   useHeartbeat();
@@ -383,7 +416,10 @@ function AppRoutes() {
     }
   }
 
-  if (loading || loadingError) {
+  // The gate covers every route except the one a stalled boot needs. Once the
+  // grace has passed, an auth route renders on its own; if the session does
+  // arrive afterwards, the redirect below still carries the person into the app.
+  if (bootBlocked && !(authRoute && authRouteReleased)) {
     return (
       <>
         <DesktopWindowChrome />
