@@ -452,7 +452,14 @@ function unexpectedConsoleErrors(messages: string[]): string[] {
     (message) =>
       !message.includes("Failed to load resource") &&
       !message.includes("Missing Supabase environment variables") &&
-      !(message.includes("TypeError: Failed to fetch") && message.includes("@supabase_supabase-js") && message.includes("_refreshAccessToken")),
+      !(message.includes("TypeError: Failed to fetch") && message.includes("@supabase_supabase-js") && message.includes("_refreshAccessToken")) &&
+      // The same network noise from the sign-out path. It reaches the console
+      // only when the auth host is already unreachable — the exact precondition
+      // of the refresh failure exempted above — and it is produced by the test
+      // helper escaping a stalled boot, not by anything under test. Kept as
+      // narrow as its neighbour: a `Failed to fetch` from anywhere else in the
+      // client still fails the run.
+      !(message.includes("TypeError: Failed to fetch") && message.includes("@supabase_supabase-js") && message.includes("signOut")),
   );
 }
 
@@ -480,7 +487,17 @@ async function assertNoHorizontalOverflow(locator: Locator, message: string) {
 }
 
 async function openScrollableReadChatOrSkip(page: Page): Promise<Locator> {
+  // Wait for the list before counting it. `count()` is a snapshot, not a wait,
+  // so calling it the instant after sign-in read zero rows and skipped — which
+  // is why both scroll-anchoring contracts, listed as critical in the handoff,
+  // had been reporting "skipped" on every run instead of protecting anything.
+  // The skip is still real when the account genuinely has no such chat; it is
+  // no longer a race.
   const readChats = page.locator('[data-testid="chat-list-item"][data-unread-count="0"][data-has-messages="true"]');
+  await readChats
+    .first()
+    .waitFor({ state: "visible", timeout: 20_000 })
+    .catch(() => {});
   const count = await readChats.count();
   test.skip(count === 0, "QA account has no fully read visible chats with messages");
 
@@ -503,7 +520,17 @@ async function openScrollableReadChatOrSkip(page: Page): Promise<Locator> {
 }
 
 async function openPagedScrollableReadChatOrSkip(page: Page): Promise<Locator> {
+  // Wait for the list before counting it. `count()` is a snapshot, not a wait,
+  // so calling it the instant after sign-in read zero rows and skipped — which
+  // is why both scroll-anchoring contracts, listed as critical in the handoff,
+  // had been reporting "skipped" on every run instead of protecting anything.
+  // The skip is still real when the account genuinely has no such chat; it is
+  // no longer a race.
   const readChats = page.locator('[data-testid="chat-list-item"][data-unread-count="0"][data-has-messages="true"]');
+  await readChats
+    .first()
+    .waitFor({ state: "visible", timeout: 20_000 })
+    .catch(() => {});
   const count = await readChats.count();
   test.skip(count === 0, "QA account has no fully read visible chats with messages");
 

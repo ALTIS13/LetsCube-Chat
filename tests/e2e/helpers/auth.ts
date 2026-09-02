@@ -148,12 +148,21 @@ export async function loginIfNeeded(
       // That panel offers "Выйти", which drops the stuck session and gives back
       // the login form — so use the escape hatch the product already provides
       // rather than waiting longer for something that is not coming.
+      //
+      // The button is WAITED for rather than probed once. The app shows a plain
+      // "Загрузка" first and only offers the escape after its own patience runs
+      // out, so a single visibility check a moment too early found nothing and
+      // the run lost the test to a condition that was about to be recoverable.
       const signOut = page.getByRole("button", { name: "Выйти" }).first();
-      if (await signOut.isVisible().catch(() => false)) {
+      const escapeOffered = await signOut
+        .waitFor({ state: "visible", timeout: 12_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (escapeOffered) {
         await signOut.click();
         await page.goto("/login", { waitUntil: "domcontentloaded" });
         const recovered = await emailInput
-          .waitFor({ state: "visible", timeout: 8_000 })
+          .waitFor({ state: "visible", timeout: 10_000 })
           .then(() => true)
           .catch(() => false);
         if (recovered) return await signInWithForm(page, credentials, authStateName);

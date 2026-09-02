@@ -256,7 +256,12 @@ function LoadingScreen({
       setSlow(true);
       return;
     }
-    const timer = window.setTimeout(() => setSlow(true), 12000);
+    // Six seconds, not twelve. A session restore that has not finished by then
+    // is already anomalous, and the panel appears BELOW the spinner without
+    // interrupting the load — so the only thing the longer wait bought was more
+    // time staring at an unexplained spinner with no way out. Both options it
+    // offers ("Повторить", "Выйти") are useful exactly when the wait is long.
+    const timer = window.setTimeout(() => setSlow(true), 6000);
     return () => window.clearTimeout(timer);
   }, [error]);
   return (
