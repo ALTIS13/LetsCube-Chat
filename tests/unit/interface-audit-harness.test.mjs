@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { chromium } from "@playwright/test";
 
-import { PAGE_CHECKS, checkFocusVisibility } from "../../scripts/interface-audit.mjs";
+import { PAGE_CHECKS, assertStyled, checkFocusVisibility } from "../../scripts/interface-audit.mjs";
 
 /**
  * The harness is only worth its output if it can find a defect that is
@@ -225,3 +225,36 @@ test("a bare checkbox with no label is still reported", async () => {
   const target = findings.find((finding) => finding.kind === "touch-target");
   assert.ok(target, JSON.stringify(findings));
 });
+
+/**
+ * The most expensive harness fault so far: a run where the stylesheet had not
+ * loaded reported 549 findings across the staff area, all invented. Contrast
+ * came out at exactly 1.00:1 and every element reported the default 16px,
+ * because raw HTML was being measured. The guard must refuse that page.
+ */
+test("an unstyled page is refused rather than measured", async () => {
+  const browser = await chromium.launch();
+  try {
+    const page = await (await browser.newContext()).newPage();
+    await page.setContent("<body><h1>Без стилей</h1></body>", { waitUntil: "domcontentloaded" });
+    await assert.rejects(() => assertStyled(page), /rendered unstyled/);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("a page carrying the design tokens is accepted", async () => {
+  const browser = await chromium.launch();
+  try {
+    const page = await (await browser.newContext()).newPage();
+    await page.setContent(
+      "<style>:root{--kub-bg:#050B18}body{background:#050B18}</style><body><h1>Со стилями</h1></body>",
+      { waitUntil: "domcontentloaded" },
+    );
+    const state = await assertStyled(page);
+    assert.equal(state.token, "#050B18");
+  } finally {
+    await browser.close();
+  }
+});
+

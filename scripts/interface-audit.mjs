@@ -47,6 +47,18 @@ const ALL_SURFACES = [
   // The tasks page renders its own header rather than the shell chrome, so it
   // is anchored on that heading instead of on `main`.
   { id: "tasks", path: "/tasks", auth: true, settle: "text=Задачи" },
+
+  // The staff-only area. Each tab is its own surface: they share a shell but
+  // not a layout, and auditing only the first would say nothing about the rest.
+  { id: "admin-dashboard", path: "/admin", auth: true, settle: "text=Сводка" },
+  { id: "admin-users", path: "/admin/users", auth: true, settle: "text=Пользователи" },
+  { id: "admin-locations", path: "/admin/locations", auth: true, settle: "text=Локации" },
+  { id: "admin-invites", path: "/admin/invites", auth: true, settle: "text=Инвайты" },
+  { id: "admin-roles", path: "/admin/roles", auth: true, settle: "text=Роли и права" },
+  { id: "admin-bans", path: "/admin/bans", auth: true, settle: "text=Блокировки" },
+  { id: "admin-ops", path: "/admin/ops", auth: true, settle: "text=Операции" },
+  { id: "admin-support", path: "/admin/support", auth: true, settle: "text=Поддержка" },
+  { id: "admin-audit", path: "/admin/audit", auth: true, settle: "text=Журнал" },
 ];
 
 const viewports = args.has("viewports")
@@ -261,6 +273,29 @@ export const PAGE_CHECKS = () => {
  * A harness that cannot tell a real defect from its own method would have put
  * three invented findings into the register on its first run.
  */
+/**
+ * Refuse to measure an unstyled page.
+ *
+ * A run where the stylesheet did not load produced 549 findings across the
+ * staff area, every one of them meaningless: contrast came out at exactly
+ * 1.00:1 and every element reported the browser's default 16px, because what
+ * was being measured was raw HTML. Hundreds of invented findings are far worse
+ * than none, so this throws rather than warns.
+ */
+export async function assertStyled(page) {
+  const state = await page.evaluate(() => ({
+    token: getComputedStyle(document.documentElement).getPropertyValue("--kub-bg").trim(),
+    sheets: document.styleSheets.length,
+    bodyBackground: getComputedStyle(document.body).backgroundColor,
+  }));
+  if (!state.token || state.sheets === 0) {
+    throw new Error(
+      `the page rendered unstyled (--kub-bg="${state.token}", ${state.sheets} stylesheets, body ${state.bodyBackground}); measuring it would invent findings`,
+    );
+  }
+  return state;
+}
+
 export async function checkFocusVisibility(page, maxStops = 40) {
   await page.evaluate(() => {
     const tabbable = Array.from(
@@ -389,6 +424,14 @@ async function main() {
           await page.goto(`${BASE}${surface.path}`, { waitUntil: "domcontentloaded", timeout: 45_000 });
           await page.locator(surface.settle).first().waitFor({ state: "visible", timeout: 25_000 });
           await page.waitForTimeout(1200);
+
+          // Refuse to measure an unstyled page. A run where the stylesheet did
+          // not load produced 549 findings across the staff area, every one of
+          // them meaningless: contrast came out at exactly 1.00:1 and every
+          // element reported the default 16px, because the measurements were of
+          // raw HTML. Hundreds of invented findings are far worse than none, so
+          // this is a loud failure rather than a warning.
+          await assertStyled(page);
 
           const findings = await page.evaluate(PAGE_CHECKS);
           const focus = await checkFocusVisibility(page);
