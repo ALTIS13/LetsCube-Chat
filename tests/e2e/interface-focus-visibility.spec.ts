@@ -105,3 +105,45 @@ test.describe("interface touch targets", () => {
     }
   });
 });
+
+/**
+ * D-015: the shared button scale is below the touch target, and the fix must
+ * not cost the design its scale.
+ *
+ * Three of the four sizes are under 44px and `size="sm"` alone is used 118
+ * times, so raising the scale outright would have changed the height of most
+ * buttons in the product. The rule is scoped to `(pointer: coarse)` instead:
+ * a finger gets a real target, a cursor sees exactly what it saw before.
+ *
+ * Both halves are asserted. Testing only the touch half would pass just as well
+ * if the scale had been raised for everyone, which is the change that was
+ * deliberately not made.
+ */
+test.describe("interface button targets on touch", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+  test("a small button reaches the touch target on a coarse pointer", async ({ page }) => {
+    await page.goto("/privacy", { waitUntil: "domcontentloaded" });
+    const print = page.getByTestId("privacy-print");
+    await print.waitFor({ state: "visible" });
+
+    const height = await print.evaluate((node) => node.getBoundingClientRect().height);
+    expect(height, "a small button must be a real target under a finger").toBeGreaterThanOrEqual(44);
+  });
+});
+
+test.describe("interface button targets on a pointer", () => {
+  test.use({ hasTouch: false, isMobile: false, viewport: { width: 1440, height: 900 } });
+
+  test("the same button keeps its designed height on a fine pointer", async ({ page }) => {
+    await page.goto("/privacy", { waitUntil: "domcontentloaded" });
+    const print = page.getByTestId("privacy-print");
+    await print.waitFor({ state: "visible" });
+
+    const height = await print.evaluate((node) => node.getBoundingClientRect().height);
+    expect(
+      height,
+      "the size scale must be untouched with a cursor; raising it for everyone is the change that was not made",
+    ).toBeLessThan(44);
+  });
+});

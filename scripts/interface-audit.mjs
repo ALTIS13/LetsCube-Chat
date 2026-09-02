@@ -369,6 +369,12 @@ async function main() {
         colorScheme: theme,
         locale: "ru-RU",
         deviceScaleFactor: 1,
+        // A phone viewport with a mouse is not a phone. Without this the media
+        // query `(pointer: coarse)` never matches, so touch-target rules meant
+        // for a finger are measured as if a cursor were being used — the
+        // harness would have reported the D-015 fix as having changed nothing.
+        hasTouch: viewport.mobile,
+        isMobile: viewport.mobile,
       });
       const page = await context.newPage();
       let signedIn = false;

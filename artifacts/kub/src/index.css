@@ -534,6 +534,24 @@ textarea::placeholder, input::placeholder {
 .kub-glow-pink { box-shadow: 0 0 0 1px color-mix(in srgb, var(--kub-pink) 40%, transparent), 0 8px 32px -8px color-mix(in srgb, var(--kub-pink) 55%, transparent); }
 .kub-glow-soft { box-shadow: 0 4px 24px -8px color-mix(in srgb, var(--kub-cyan) 35%, transparent); }
 
+/* D-015: three of the four button sizes are below the 44px touch target —
+   `sm` at 32px, `md` at 40px and `icon` at 36px — and `sm` alone is used 118
+   times. The size scale is a design choice and is left exactly as it looks on a
+   pointer device; only a coarse pointer, which is a finger, gets a real target.
+
+   This raises the real height rather than stretching the hit area with a
+   pseudo-element. An overlay would have kept the layout identical, but two
+   adjacent 32px controls would then have overlapping 44px hit areas and one
+   would start stealing the other's taps, which is worse than the defect. */
+@media (pointer: coarse) {
+  .kub-button {
+    min-height: 44px;
+  }
+  .kub-button.h-9.w-9 {
+    min-width: 44px;
+  }
+}
+
 /* Neon focus ring for inputs and triggers. */
 .kub-neon-ring {
   outline: none;

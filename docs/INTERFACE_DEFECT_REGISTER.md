@@ -550,3 +550,32 @@ reported.
 stage: home 5 → 0, privacy 22 → 1, support 12 → 1, login 6 → 2. Everything that
 remains is either an exempt link inside a sentence or the `KubButton size="sm"`
 deferred to D-015.
+
+# Fix batch 4, 2026-09-02 — D-015 closed for touch, scale untouched for pointers
+
+**Fixed**, and with a correction to what this register proposed. The entry
+suggested growing the hit area with an overlay so the layout would not move at
+all. Thinking it through further, two adjacent 32px controls would then have
+overlapping 44px hit areas and one would start stealing the other's taps —
+worse than the defect. The rule raises the real height instead, and is scoped to
+`@media (pointer: coarse)`: a finger gets a real target, a cursor sees exactly
+what it saw before. The size scale, which is the part that was chosen, is
+untouched on a pointer device.
+
+**Both halves are pinned**, in `tests/e2e/interface-focus-visibility.spec.ts`.
+One test asserts a small button reaches 44px under `hasTouch`, the other asserts
+the same button stays under 44px with a fine pointer. Testing only the first
+would pass equally well if the scale had been raised for everyone, which is the
+change that was deliberately not made. Both mutations fail: removing the rule
+breaks the touch half, applying it to every pointer breaks the other.
+
+**A harness correction this exposed.** The audit measured phone viewports with a
+mouse, so `(pointer: coarse)` never matched and it would have reported this fix
+as having changed nothing. Mobile viewports now emulate touch.
+
+**Result at 390x844 with touch**: privacy 1 → 0, home 0, and the only findings
+left anywhere on the public surfaces are links inside sentences, which the target
+size requirement does not cover.
+
+**Still open:** D-004, D-005 and D-008 from the earlier pass, and the
+shell-specific audit of Windows and Android.

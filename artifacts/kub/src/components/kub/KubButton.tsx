@@ -55,7 +55,9 @@ export const KubButton = forwardRef<HTMLButtonElement, KubButtonProps>(
         ref={ref}
         disabled={disabled || loading}
         className={cn(
-          "inline-flex items-center justify-center rounded-xl transition-all duration-150 select-none",
+          // `kub-button` carries the coarse-pointer target rule in index.css.
+          // See D-015.
+          "kub-button inline-flex items-center justify-center rounded-xl transition-all duration-150 select-none",
           // The focus indicator is an outline, not a ring, on purpose. Tailwind
           // implements `ring` as a box-shadow, and the primary and accent
           // variants below carry `kub-glow-*`, plain classes that set
