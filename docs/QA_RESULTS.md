@@ -2511,9 +2511,39 @@ Recurring tasks roadmap note:
   back. Exactly one commit and one file separate the pinned revision from HEAD
   within those paths, so the deployment gap is small. It needs a manual deploy.
 - Open operational finding, unrelated to this work: three bot-rollout rehearsal
-  stacks from 2026-08-31 are still running (12 containers, 3 volumes) alongside
-  7.4 GB of reclaimable build cache and 3.8 GB of reclaimable images. The root
-  filesystem is at 61 percent with 45 GB free.
+  stacks from 2026-08-31 are still running (12 containers, 3 volumes). The root
+  filesystem was at 61 percent with 45 GB free.
+- Correction to the line above as first written: it also counted "3.8 GB of
+  reclaimable images" as waste. That is wrong. There are zero dangling images;
+  `docker system df` counts every image not attached to a running container as
+  reclaimable, and here those are the tagged Coolify release images that serve
+  as rollback targets. Only the build cache was actually disposable.
 - Validation: 608/609 unit tests, web typecheck and production build clean,
   `git diff --check` clean. The single failure is the pre-existing
   `android-release-signing` fixture, unmodified on this branch.
+
+## 2026-09-02 - server cleanup and the bot gateway pin
+
+- Pruned the Docker build cache only: `docker builder prune -f` freed 7.43 GB
+  and left one 35.76 MB entry. Disk went from 68 GB used / 45 GB free / 61 per
+  cent to 62 GB used / 51 GB free / 55 per cent. Every container stayed healthy,
+  and the public surfaces returned 200 / 200 / 200 / 200 with the two
+  authenticated APIs returning 401 as they should.
+- Images were deliberately not pruned. There were no dangling images at all, and
+  `docker image prune -a` would have removed the tagged Coolify release images,
+  which are the rollback targets for each application.
+- The three rehearsal stacks were left alone. They hold roughly 158 MB of memory
+  in total across 12 containers, so they cost little; they may still hold
+  evidence from the bot rollout, and removing them is a decision for the owner.
+- `letscube-bot-gateway` still runs `01d26a9`, so bot creation remains closed and
+  the bots page correctly reports that the feature is switched off on the server.
+  That message is the client fix working: the same state used to render
+  "Создание недоступно: ." with no reason at all.
+- Both `BOT_CREATION_ENABLED` and `BOT_CREATION_CANARY_USER_IDS` are set for that
+  application. Coolify stores environment values encrypted at rest, so the values
+  were not read and are not recorded here. The deploy is nonetheless safe to run:
+  the previous code threw at startup for any value other than empty, `false`, or
+  `true` with a valid cohort, and the container has been healthy for 32 hours, so
+  the stored value must be one of those three - and the current code accepts all
+  three. If the page still reports the feature switched off after the deploy, the
+  value is `false` and needs changing or removing.
