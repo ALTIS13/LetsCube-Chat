@@ -85,6 +85,28 @@ export async function gotoOrSkip(page: Page, pathName: string) {
   test.skip(!response, `KUB_BASE_URL is not reachable: ${test.info().project.use.baseURL}`);
 }
 
+/**
+ * Positive proof that the browser is inside the authenticated shell.
+ *
+ * Everything here used to be inferred from the *absence* of a password field,
+ * which stopped meaning anything the moment a guest at "/" was given the public
+ * home instead of the login form: there is no password field on a marketing
+ * page either. Every authenticated spec then ran as a guest, and the
+ * "authenticated smoke" suite passed without ever signing in.
+ *
+ * The sidebar menu button only exists once a session is loaded, so it is the
+ * marker. A helper that can only say "I did not see a login form" cannot tell
+ * signed-in from signed-out, and must not be trusted to.
+ */
+async function waitForAuthenticatedShell(page: Page, timeout = 15_000): Promise<boolean> {
+  return await page
+    .getByRole("button", { name: "Меню" })
+    .first()
+    .waitFor({ state: "visible", timeout })
+    .then(() => true)
+    .catch(() => false);
+}
+
 export async function loginIfNeeded(
   page: Page,
   credentials: QaCredentials,
@@ -93,31 +115,44 @@ export async function loginIfNeeded(
   const authStateName = options.authStateName ?? "default";
   await restoreAuthState(page, authStateName);
 
-  const emailInput = page.locator('input[type="email"]').first();
-  await emailInput.waitFor({ state: "visible", timeout: 5_000 }).catch(() => null);
-  if (await emailInput.isVisible().catch(() => false)) {
-    const passwordInput = page.locator('input[type="password"]').first();
-    const submit = page.locator('button[type="submit"]').first();
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      if ((await page.locator('input[type="password"]').count()) === 0) break;
-      await expect(emailInput).toBeEditable();
-      await emailInput.fill(credentials.email);
-      await expect(passwordInput).toBeEditable();
-      await passwordInput.fill(credentials.password);
-      await expect(submit).toBeEnabled();
-      await submit.click();
-      try {
-        await expect(page.locator('input[type="password"]')).toHaveCount(0, { timeout: 10_000 });
-        await page.waitForTimeout(1_000);
-        if ((await page.locator('input[type="password"]').count()) === 0) break;
-      } catch (error) {
-        if (attempt === 2) throw error;
-      }
-    }
+  // Timings are budgeted against the 45s per-test timeout: an over-generous
+  // helper gets torn down mid-sign-in and reports a closed page instead of a
+  // failed login. The happy path costs a couple of seconds; these ceilings only
+  // apply when something is actually wrong.
+  if (await waitForAuthenticatedShell(page, 5_000)) {
+    await saveAuthState(page, authStateName);
+    return;
   }
 
-  await expect(page.locator("body")).toBeVisible();
-  await expect(page.locator('input[type="password"]')).toHaveCount(0, { timeout: 20_000 });
+  // The form lives at /login and nowhere else. Callers all start at "/", which
+  // no longer shows it, so getting there is this helper's job rather than a
+  // side effect of a redirect that no longer happens.
+  await page.goto("/login", { waitUntil: "domcontentloaded" });
+
+  const emailInput = page.locator('input[type="email"]').first();
+  await emailInput.waitFor({ state: "visible", timeout: 8_000 });
+  const passwordInput = page.locator('input[type="password"]').first();
+  const submit = page.locator('button[type="submit"]').first();
+
+  let authenticated = false;
+  for (let attempt = 0; attempt < 2 && !authenticated; attempt += 1) {
+    await expect(emailInput).toBeEditable();
+    await emailInput.fill(credentials.email);
+    await expect(passwordInput).toBeEditable();
+    await passwordInput.fill(credentials.password);
+    await expect(submit).toBeEnabled();
+    await submit.click();
+    authenticated = await waitForAuthenticatedShell(page, 12_000);
+  }
+
+  expect(
+    authenticated,
+    "sign-in did not reach the authenticated shell; the suite would otherwise have run as a guest",
+  ).toBe(true);
+
+  // Only ever persist a state that is actually signed in. Saving unconditionally
+  // is how a guest visit overwrote a role's stored session with nothing but the
+  // release-catalog cache.
   await saveAuthState(page, authStateName);
 }
 
@@ -135,13 +170,11 @@ export async function loginAsRoleOrSkip(page: Page, role: QaAuthStateName) {
   }
 
   await restoreAuthState(page, role);
-  const emailInput = page.locator('input[type="email"]').first();
-  await emailInput.waitFor({ state: "visible", timeout: 3_000 }).catch(() => null);
+  const authenticated = await waitForAuthenticatedShell(page, 8_000);
   test.skip(
-    await emailInput.isVisible().catch(() => false),
+    !authenticated,
     `Saved auth state for '${role}' is expired and credentials are not configured`,
   );
-  await expect(page.locator('input[type="password"]')).toHaveCount(0, { timeout: 10_000 });
 }
 
 async function restoreAuthState(page: Page, name: QaAuthStateName = "default") {

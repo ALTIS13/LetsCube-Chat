@@ -2572,3 +2572,52 @@ Recurring tasks roadmap note:
   pending. The reasoning recorded there held: the stored value was one the new
   code accepts, so the deploy neither crashed the gateway nor left creation
   closed.
+
+## 2026-09-02 - the authenticated e2e suite was never signing in
+
+Closing Task 5 step 1 meant running the parts of the validation list that had
+been skipped. Those runs surfaced a defect in the test harness itself, not in
+the product.
+
+- `tests/e2e/helpers/auth.ts` decided whether a session existed by looking for a
+  password field and treating its absence as "already signed in". That inference
+  held only while a guest at `/` was redirected to `/login`. Since the public
+  home shipped, a guest at `/` gets a marketing page, which also has no password
+  field, so `loginIfNeeded` did nothing and every following assertion ran as a
+  logged-out visitor.
+- `tests/e2e/smoke.spec.ts`, named "KUB authenticated smoke", passed in that
+  state. Every assertion it makes is true of a logged-out visitor: `body` is
+  visible on any page, the notifications button is wrapped in an
+  `if (isVisible)` that silently skips when absent, and `/tasks` merely
+  redirects a guest to `/login` without an interface error. It reported 5/5
+  against production while never authenticating.
+- The helper also called `saveAuthState` unconditionally at the end, so a guest
+  visit overwrote the role's stored session. `output/playwright-auth/owner.json`
+  was found holding zero cookies and only the two release-catalog cache keys.
+- Fixed by requiring positive proof: the helper now waits for the sidebar menu
+  button, which only exists once a session is loaded, navigates to `/login`
+  itself rather than relying on a redirect that no longer happens, asserts it
+  reached the authenticated shell, and persists state only after that assertion
+  passes. Timings are budgeted against the 45-second per-test timeout, because
+  an over-generous helper is torn down mid-sign-in and reports a closed page
+  instead of a failed login.
+- The fix is demonstrated by the change in outcome rather than asserted: with
+  the old helper `e2e:smoke` reported 5/5 against production; with the new one
+  the same command fails, and the failure is the real reason.
+- That real reason is a second finding: production answers
+  `Неверная эл. почта или пароль` for the stored QA owner account, so the
+  credentials in the local QA env file are stale. The authenticated suite cannot
+  run until they are refreshed. This is the owner's to do; no attempt was made
+  to guess or reset any password.
+- Consequence for earlier records: any prior entry citing a passing
+  `e2e:smoke` against production cannot be taken as evidence that an
+  authenticated path was exercised. How long the credentials had been stale
+  cannot be determined from here, because the old helper could not tell a signed
+  out session from a signed in one.
+- Unaffected: `tests/e2e/public-home.spec.ts` and
+  `tests/e2e/public-home-routing.spec.ts` do not import the auth helper, so the
+  75/75 mounted result recorded for the public home stands. 29 spec files do
+  import it and were all affected.
+- Also run and passing while closing step 1: `release:catalog:test` 35/35 with no
+  skips against the pinned jq 1.7.1, `public-release-artifact-verification`
+  12/12, and the full workspace typecheck across all four projects.
