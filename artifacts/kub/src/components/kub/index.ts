@@ -9,6 +9,8 @@ export { KubFilterButton } from "./KubFilterButton";
 export { KubFilterSummary, type ActiveFilter } from "./KubFilterSummary";
 export { KubSkeleton, KubSkeletonRows } from "./KubSkeleton";
 export { KubNoResults } from "./KubNoResults";
+export { KubCreateSection } from "./KubCreateSection";
+export { KubHelpNotes } from "./KubHelpNotes";
 export { KubModal } from "./KubModal";
 export { KubHeader } from "./KubHeader";
 export { KubEmptyState } from "./KubEmptyState";

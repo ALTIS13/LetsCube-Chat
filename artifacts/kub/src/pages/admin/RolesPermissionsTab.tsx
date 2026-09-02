@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { KubBadge, KubButton, KubIcon, KubInput, KubNotice, KubPanel } from "@/components/kub";
+import { KubBadge, KubButton, KubCreateSection, KubHelpNotes, KubIcon, KubInput, KubNotice, KubPanel } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
 import { clearRoleAccessCache } from "@/hooks/useRole";
@@ -39,6 +39,7 @@ export function RolesPermissionsTab() {
   const [locationRoleUsage, setLocationRoleUsage] = useState<Map<string, number>>(new Map());
   const [locationRoleUsageKnown, setLocationRoleUsageKnown] = useState(false);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [createKey, setCreateKey] = useState("");
   const [createName, setCreateName] = useState("");
   const [createDescription, setCreateDescription] = useState("");
@@ -447,6 +448,7 @@ export function RolesPermissionsTab() {
         </KubNotice>
       )}
 
+      <KubHelpNotes id="roles" label="Что такое роли и права">
       <div className="grid gap-3 md:grid-cols-3">
         <KubPanel className="space-y-1.5">
           <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--kub-text)]">
@@ -476,16 +478,17 @@ export function RolesPermissionsTab() {
           </p>
         </KubPanel>
       </div>
+      </KubHelpNotes>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.4fr)]">
         <div className="space-y-3">
-          <KubPanel className="space-y-3">
-            <div>
-              <h3 className="text-sm font-semibold text-[color:var(--kub-text)]">Новая роль</h3>
-              <p className="mt-1 text-xs leading-relaxed text-[color:var(--kub-muted)]">
-                1. Назовите роль, 2. выберите где она действует, 3. после создания отметьте нужные права справа.
-              </p>
-            </div>
+          <KubCreateSection
+            label="Новая роль"
+            open={createOpen}
+            onOpenChange={setCreateOpen}
+            description="1. Назовите роль, 2. выберите где она действует, 3. после создания отметьте нужные права справа."
+            disabled={!canManageRoles}
+          >
             <KubInput label="Название роли" value={createName} onChange={(event) => setCreateName(event.target.value)} placeholder="Старший смены" disabled={!canManageRoles} />
             <KubInput
               label="Технический ключ"
@@ -528,7 +531,7 @@ export function RolesPermissionsTab() {
             >
               Создать роль
             </KubButton>
-          </KubPanel>
+          </KubCreateSection>
 
           <KubPanel padded={false} className="overflow-hidden">
             <div className="border-b border-[color:var(--kub-border-color)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">

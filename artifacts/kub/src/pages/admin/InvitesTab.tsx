@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { KubBadge, KubButton, KubIcon, KubInput, KubNotice, KubPanel, KubSkeletonRows, KubSwitch } from "@/components/kub";
+import { KubBadge, KubButton, KubCreateSection, KubIcon, KubInput, KubNotice, KubPanel, KubSkeletonRows, KubSwitch } from "@/components/kub";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
 import { usePermissionAccess } from "@/hooks/useRole";
 import { useTaskRouting, useTaskRoutingEnabledPreference } from "@/hooks/useTaskRouting";
@@ -31,6 +31,7 @@ export function InvitesTab() {
   const [modeLoading, setModeLoading] = useState(true);
   const [modeSaving, setModeSaving] = useState(false);
   const [modeError, setModeError] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [label, setLabel] = useState("");
   const [maxUses, setMaxUses] = useState(1);
   const [expiresInDays, setExpiresInDays] = useState("14");
@@ -246,8 +247,7 @@ export function InvitesTab() {
               Приглашения сотрудников
             </h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-[color:var(--kub-muted)]">
-              Создавайте коды или ссылки-приглашения с лимитом использований и заранее заданной ролью/локацией,
-              чтобы не назначать работников вручную после регистрации.
+              Коды и ссылки-приглашения, чтобы не назначать работников вручную после регистрации.
             </p>
           </div>
           <KubButton
@@ -273,6 +273,12 @@ export function InvitesTab() {
           </KubNotice>
         )}
 
+        <KubCreateSection
+          label="Создать инвайт"
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          description="Код или ссылка с лимитом использований и заранее заданной ролью и локацией."
+        >
         <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
           <KubInput
             label="Название"
@@ -400,6 +406,7 @@ export function InvitesTab() {
             Создать инвайт
           </KubButton>
         </div>
+        </KubCreateSection>
       </KubPanel>
 
       <KubPanel padded={false} className="overflow-hidden">
@@ -467,11 +474,21 @@ function InviteRow({
         </div>
         <div>
           <div className="text-sm font-semibold text-[color:var(--kub-text)]">{invite.label}</div>
+          {/* Only what this invite actually sets. Printing "Глобальная: нет ·
+              Локация: нет · Роль в локации: нет" on an invite that assigns
+              nothing filled three columns to say the same thing the one line
+              below now says once. */}
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[color:var(--kub-muted)]">
-            <span>Глобальная: {invite.global_role_name ?? "нет"}</span>
-            <span>Локация: {invite.location_name ?? "нет"}</span>
-            <span>Роль в локации: {invite.location_role_name ?? "нет"}</span>
-            {invite.primary_admin_name && <span>Админ: {invite.primary_admin_name}</span>}
+            {invite.global_role_name || invite.location_name || invite.location_role_name ? (
+              <>
+                {invite.global_role_name && <span>Глобальная: {invite.global_role_name}</span>}
+                {invite.location_name && <span>Локация: {invite.location_name}</span>}
+                {invite.location_role_name && <span>Роль в локации: {invite.location_role_name}</span>}
+                {invite.primary_admin_name && <span>Админ: {invite.primary_admin_name}</span>}
+              </>
+            ) : (
+              <span>Без роли и локации</span>
+            )}
           </div>
         </div>
         <div className="text-xs text-[color:var(--kub-muted)]">

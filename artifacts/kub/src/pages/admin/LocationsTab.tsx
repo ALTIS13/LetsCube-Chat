@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { KubBadge, KubButton, KubIcon, KubInput, KubPanel } from "@/components/kub";
+import { KubBadge, KubButton, KubCreateSection, KubEmptyState, KubIcon, KubInput, KubPanel } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useTaskRouting, useTaskRoutingEnabledPreference } from "@/hooks/useTaskRouting";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
@@ -25,6 +25,7 @@ export function LocationsTab() {
   const dynamicRoles = useDynamicRoles({ enabled: rolesEnabled, includeAssignments: false });
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createDescription, setCreateDescription] = useState("");
   const [createAddress, setCreateAddress] = useState("");
@@ -312,8 +313,12 @@ export function LocationsTab() {
 
       <div className="grid gap-4 lg:grid-cols-[minmax(240px,0.8fr)_minmax(0,1.4fr)]">
         <div className="space-y-3">
-          <KubPanel className="space-y-3">
-            <h3 className="text-sm font-semibold text-[color:var(--kub-text)]">Новая локация</h3>
+          <KubCreateSection
+            label="Новая локация"
+            open={createOpen}
+            onOpenChange={setCreateOpen}
+            description="Название и адрес видны работникам при маршрутизации задач."
+          >
             <KubInput label="Название" value={createName} onChange={(event) => setCreateName(event.target.value)} />
             <KubInput label="Адрес" value={createAddress} onChange={(event) => setCreateAddress(event.target.value)} />
             <textarea
@@ -332,7 +337,7 @@ export function LocationsTab() {
             >
               Создать
             </KubButton>
-          </KubPanel>
+          </KubCreateSection>
 
           <KubPanel padded={false} className="overflow-hidden">
             <div className="border-b border-[color:var(--kub-border-color)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
@@ -363,9 +368,11 @@ export function LocationsTab() {
                 </button>
               ))}
               {routing.locations.length === 0 && (
-                <div className="px-3 py-6 text-center text-sm text-[color:var(--kub-muted)]">
-                  Локации ещё не созданы.
-                </div>
+                <KubEmptyState
+                  icon={<KubIcon name="mapPin" size={22} />}
+                  title="Локаций пока нет"
+                  description="Создайте первую, чтобы назначать работников и маршрутизировать задачи."
+                />
               )}
             </div>
           </KubPanel>
@@ -438,7 +445,7 @@ export function LocationsTab() {
                     Работнику можно назначить основного администратора локации.
                   </p>
                 </div>
-                <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_170px_minmax(0,1fr)_auto]">
+                <div className="grid gap-2 sm:grid-cols-2">
                   <select
                     value={assignUserId}
                     onChange={(event) => setAssignUserId(event.target.value)}
@@ -503,7 +510,7 @@ export function LocationsTab() {
                     return (
                     <div
                       key={`${member.location_id}:${member.user_id}`}
-                      className="grid gap-2 border-b border-[color:var(--kub-border-color)] px-3 py-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_180px_minmax(0,1fr)_auto] md:items-center"
+                      className="grid gap-2 border-b border-[color:var(--kub-border-color)] px-3 py-3 last:border-b-0 xl:grid-cols-[minmax(0,1.6fr)_auto_minmax(0,1.1fr)_auto] xl:items-center"
                     >
                       <div className="flex min-w-0 items-center gap-2">
                         {member.profile ? (
@@ -527,12 +534,16 @@ export function LocationsTab() {
                       <KubBadge tone={member.role === "staff" ? "cyan" : "pink"} pill>
                         {dynamicRole ? getRoleLabel(dynamicRole) : LOCATION_ROLE_LABEL[member.role]}
                       </KubBadge>
+                      {/* Only says something when there is something to say: the
+                          badge beside it already gives the role, and printing
+                          "Административная роль" on every administrator row was
+                          both redundant and the string that got truncated. */}
                       <span className="min-w-0 truncate text-xs text-[color:var(--kub-muted)]">
                         {member.primary_admin
                           ? `Основной администратор: ${getProfileName(member.primary_admin)}`
                           : member.role === "staff"
                             ? "Основной администратор не назначен"
-                            : "Административная роль"}
+                            : ""}
                       </span>
                       <KubButton
                         variant="ghost"
