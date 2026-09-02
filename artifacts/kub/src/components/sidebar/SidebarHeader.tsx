@@ -236,7 +236,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
             className="h-full min-w-0 flex-1 truncate bg-transparent text-sm outline-none text-[color:var(--kub-text)]"
           />
           {searchQuery && (
-            <button className="shrink-0" onClick={() => setSearchQuery("")} aria-label="Очистить">
+            <button className="kub-icon-action kub-interactive shrink-0 rounded-md text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)]" onClick={() => setSearchQuery("")} aria-label="Очистить">
               <KubIcon name="close" size={12} className="text-[color:var(--kub-muted)]" />
             </button>
           )}

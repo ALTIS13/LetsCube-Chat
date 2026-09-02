@@ -560,7 +560,7 @@ export function UsersTab() {
         {queryRaw && (
           <button
             onClick={() => setQueryRaw("")}
-            className="p-0.5 rounded hover:bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)]"
+            className="kub-icon-action kub-interactive rounded hover:bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)]"
             aria-label="Очистить"
           >
             <KubIcon name="close" size={14} />
