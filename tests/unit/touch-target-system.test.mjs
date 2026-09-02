@@ -72,6 +72,10 @@ const nativeControls = [
     property: "min-height",
     value: "44px",
   },
+  // The switch track is 24px by design and stays that way; the control around
+  // it is what a finger aims at. Measured before the split, the switch was a
+  // 44x24 target on the invites screen.
+  { name: "the switch", selector: "\\.kub-switch", property: "min-height", value: "44px" },
 ];
 
 for (const { name, selector, property, value } of nativeControls) {
@@ -118,6 +122,23 @@ test("every field inside a styled box fills it, so the whole box is tappable", (
     }
   }
   assert.ok(checked >= 2, `expected to check at least two fields, checked ${checked}`);
+});
+
+test("the switch keeps its track separate from its target", () => {
+  const source = readFileSync(
+    new URL("../../artifacts/kub/src/components/kub/KubSwitch.tsx", import.meta.url),
+    "utf8",
+  );
+  // The button carries the class that grows; the track keeps the fixed size.
+  // Were they the same element again, the coarse rule would stretch the track
+  // into a 44px pill instead of giving the switch a bigger target.
+  assert.match(source, /kub-switch/, "the control must carry the target class");
+  assert.doesNotMatch(
+    source,
+    /kub-switch[^"]*\bh-6 w-11\b/,
+    "the track's fixed size must not sit on the element the coarse rule grows",
+  );
+  assert.match(source, /"flex h-6 w-11 items-center/, "the track keeps its designed size");
 });
 
 test("the staff search box is itself a touch target", () => {

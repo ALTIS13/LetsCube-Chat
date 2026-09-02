@@ -41,7 +41,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
   const [showNewGroup, setShowNewGroup] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const iconButtonClass =
-    "h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)] inline-flex items-center justify-center";
+    "kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)]";
 
   // Search commands use `mobileSection='search'` as a one-shot focus signal.
   useEffect(() => {
@@ -145,7 +145,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
           <div className="relative shrink-0">
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              className="h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)] flex items-center justify-center p-1"
+              className="kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)] p-1"
               aria-label="Меню"
             >
               {currentUser ? (
@@ -216,7 +216,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
           </div>
         )}
 
-        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 h-9 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
+        <div className="kub-field min-w-0 flex-1 gap-2 rounded-lg px-3 h-9 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
           <KubIcon name="search" size={14} className="shrink-0 text-[color:var(--kub-muted)]" />
           <input
             ref={searchInputRef}
@@ -233,7 +233,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
                 setSearchQuery("");
               }
             }}
-            className="min-w-0 flex-1 truncate bg-transparent text-sm outline-none text-[color:var(--kub-text)]"
+            className="h-full min-w-0 flex-1 truncate bg-transparent text-sm outline-none text-[color:var(--kub-text)]"
           />
           {searchQuery && (
             <button className="shrink-0" onClick={() => setSearchQuery("")} aria-label="Очистить">

@@ -314,7 +314,7 @@ export function NotificationBell() {
             setOpen((v) => !v);
           }}
           className={cn(
-            "relative h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)]",
+            "kub-icon-action kub-interactive relative h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)]",
             "inline-flex items-center justify-center",
             unreadCount > 0 ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)]",
           )}

@@ -25,13 +25,13 @@ const variantClass: Record<Variant, string> = {
   primary:
     "text-[color:var(--kub-action-primary-foreground)] font-semibold bg-[var(--kub-action-primary-background)] hover:bg-[var(--kub-action-primary-hover)] kub-glow-soft hover:kub-glow-cyan disabled:bg-[var(--kub-surface-3)] disabled:text-[color:var(--kub-muted)] disabled:shadow-none",
   accent:
-    "text-white font-semibold bg-[var(--kub-pink)] hover:brightness-110 kub-glow-pink disabled:bg-[var(--kub-surface-3)] disabled:text-[color:var(--kub-muted)] disabled:shadow-none",
+    "font-semibold text-[color:var(--kub-action-accent-foreground)] bg-[var(--kub-action-accent-background)] hover:bg-[var(--kub-action-accent-hover)] kub-glow-pink disabled:bg-[var(--kub-surface-3)] disabled:text-[color:var(--kub-muted)] disabled:shadow-none",
   secondary:
     "text-[color:var(--kub-text)] bg-[var(--kub-surface-2)] hover:bg-[var(--kub-surface-3)] border border-[color:var(--kub-border-color)]",
   ghost:
     "text-[color:var(--kub-text)] bg-transparent hover:bg-[var(--kub-surface-2)]",
   danger:
-    "text-white font-semibold bg-[var(--kub-danger)] hover:brightness-110 disabled:opacity-50",
+    "font-semibold text-[color:var(--kub-action-danger-foreground)] bg-[var(--kub-action-danger-background)] hover:bg-[var(--kub-action-danger-hover)] disabled:opacity-50",
 };
 
 export const KubButton = forwardRef<HTMLButtonElement, KubButtonProps>(

@@ -20,23 +20,34 @@ export const KubSwitch = forwardRef<HTMLButtonElement, KubSwitchProps>(
           if (!event.defaultPrevented && !disabled) onCheckedChange?.(!checked);
         }}
         className={cn(
-          "relative inline-flex h-6 w-11 shrink-0 items-center overflow-hidden rounded-full border p-0.5 transition-colors",
+          // The button is the target, the inner span is the track. They used to
+          // be the same element, which fixed the target at the track's 24px —
+          // under the 44px a finger needs. Separating them keeps the switch
+          // looking exactly as designed while `.kub-switch` gives a coarse
+          // pointer a full-height target around it.
+          "kub-switch group/switch relative inline-flex shrink-0 items-center",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--kub-bg)]",
           "disabled:cursor-not-allowed disabled:opacity-50",
-          checked
-            ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_35%,transparent)]"
-            : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]",
           className,
         )}
         {...rest}
       >
         <span
-          data-testid="kub-switch-thumb"
           className={cn(
-            "block h-5 w-5 rounded-full bg-[var(--kub-text)] shadow-sm transition-transform",
-            checked ? "translate-x-5" : "translate-x-0",
+            "flex h-6 w-11 items-center overflow-hidden rounded-full border p-0.5 transition-colors",
+            checked
+              ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_35%,transparent)]"
+              : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]",
           )}
-        />
+        >
+          <span
+            data-testid="kub-switch-thumb"
+            className={cn(
+              "block h-5 w-5 rounded-full bg-[var(--kub-text)] shadow-sm transition-transform",
+              checked ? "translate-x-5" : "translate-x-0",
+            )}
+          />
+        </span>
       </button>
     );
   },

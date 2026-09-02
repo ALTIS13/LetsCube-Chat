@@ -103,7 +103,7 @@ export function FolderTabs({ folders, activeFolder, onFolderChange, onCreate, on
               key={folder.id ?? "all"}
               onClick={handleClick}
               className={cn(
-                "relative flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap transition-colors flex-shrink-0",
+                "kub-button kub-interactive relative flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap transition-colors flex-shrink-0",
                 isActive
                   ? "text-[color:var(--kub-cyan)]"
                   : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
@@ -135,7 +135,7 @@ export function FolderTabs({ folders, activeFolder, onFolderChange, onCreate, on
             onClick={onCreate}
             title="Новая папка"
             aria-label="Новая папка"
-            className="flex items-center justify-center px-3 py-2.5 text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-2)] transition-colors flex-shrink-0"
+            className="kub-icon-action kub-interactive px-3 py-2.5 text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-2)] transition-colors flex-shrink-0"
           >
             <KubIcon name="create" size={14} />
           </button>

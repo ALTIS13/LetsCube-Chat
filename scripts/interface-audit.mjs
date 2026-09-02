@@ -203,7 +203,18 @@ export const PAGE_CHECKS = () => {
       }
     }
 
-    if (effective < 44 || effectiveWidth < 24) {
+    // A link inside a sentence is exempt, in both WCAG 2.5.5 and 2.5.8: its
+    // height is set by the line box of the text around it, and padding it out
+    // to 44px would break the paragraph it sits in. The test is whether the
+    // parent carries text of its own beyond the link — a link alone in its
+    // container is a button in all but name and is not exempted.
+    const inlineInSentence =
+      node.tagName === "A" &&
+      node.parentElement !== null &&
+      (node.parentElement.textContent ?? "").trim().length >
+        (node.textContent ?? "").trim().length + 1;
+
+    if (!inlineInSentence && (effective < 44 || effectiveWidth < 24)) {
       add("touch-target", `interactive control is ${Math.round(effectiveWidth)}x${Math.round(effective)}px`, node, {
         width: Math.round(effectiveWidth),
         height: Math.round(effective),

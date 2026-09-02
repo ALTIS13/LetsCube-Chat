@@ -315,7 +315,7 @@ export function TasksPage() {
             <button
               type="button"
               onClick={() => setLocation("/")}
-              className="p-2 rounded-lg hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]"
+              className="kub-icon-action kub-interactive rounded-lg hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]"
               aria-label="Назад"
             >
               <KubIcon name="back" size={18} />
@@ -339,7 +339,7 @@ export function TasksPage() {
             <button
               type="button"
               onClick={() => setLocation("/")}
-              className="p-2 rounded-lg hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]"
+              className="kub-icon-action kub-interactive rounded-lg hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]"
               aria-label="Назад"
             >
               <KubIcon name="back" size={18} />
@@ -371,7 +371,7 @@ export function TasksPage() {
           <button
             type="button"
             onClick={() => setLocation("/")}
-            className="p-2 rounded-lg hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]"
+            className="kub-icon-action kub-interactive rounded-lg hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]"
             aria-label="Назад"
           >
             <KubIcon name="back" size={18} />
@@ -402,7 +402,7 @@ export function TasksPage() {
                 type="button"
                 onClick={() => setTabId(t.id)}
                 className={cn(
-                  "relative px-4 py-3 text-xs font-semibold uppercase tracking-wider whitespace-nowrap transition-colors",
+                  "kub-button kub-interactive relative px-4 py-3 text-xs font-semibold uppercase tracking-wider whitespace-nowrap transition-colors",
                   active
                     ? "text-[color:var(--kub-cyan)]"
                     : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
@@ -522,7 +522,7 @@ export function TasksPage() {
                 type="button"
                 onClick={() => setViewMode("cards")}
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-md px-2.5 text-xs font-semibold transition-colors",
+                  "kub-button kub-interactive inline-flex items-center gap-1 rounded-md px-2.5 text-xs font-semibold transition-colors",
                   viewMode === "cards"
                     ? "bg-[var(--kub-surface)] text-[color:var(--kub-cyan)]"
                     : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
@@ -536,7 +536,7 @@ export function TasksPage() {
                 type="button"
                 onClick={() => setViewMode("list")}
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-md px-2.5 text-xs font-semibold transition-colors",
+                  "kub-button kub-interactive inline-flex items-center gap-1 rounded-md px-2.5 text-xs font-semibold transition-colors",
                   viewMode === "list"
                     ? "bg-[var(--kub-surface)] text-[color:var(--kub-cyan)]"
                     : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",

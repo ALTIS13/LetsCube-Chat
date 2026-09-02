@@ -227,6 +227,37 @@ test("a bare checkbox with no label is still reported", async () => {
 });
 
 /**
+ * Both WCAG target-size criteria exempt a link inside a sentence: its height is
+ * set by the line box of the surrounding text, and padding it to 44px would
+ * break the paragraph. Measured on the live login and support pages, all three
+ * reported links were of exactly this kind.
+ *
+ * The exception is worth only as much as its limit, so the second case is the
+ * one that matters: a link alone in its container is a button in all but name,
+ * gets no exemption, and must still be reported.
+ */
+test("a link inside a sentence is not an undersized target", async () => {
+  const findings = await findingsFor(
+    `<p style="font-size:12px">Нет аккаунта? <a href="/register" style="font-weight:600">Зарегистрироваться</a></p>`,
+  );
+  assert.equal(
+    findings.find((finding) => finding.kind === "touch-target"),
+    undefined,
+    JSON.stringify(findings),
+  );
+});
+
+test("a link standing alone is still held to the target size", async () => {
+  const findings = await findingsFor(
+    `<div><a href="/register" style="font-size:12px;font-weight:600">Зарегистрироваться</a></div>`,
+  );
+  assert.ok(
+    findings.find((finding) => finding.kind === "touch-target"),
+    `a link that is the whole of its container is a button, and must not be exempted: ${JSON.stringify(findings)}`,
+  );
+});
+
+/**
  * The most expensive harness fault so far: a run where the stylesheet had not
  * loaded reported 549 findings across the staff area, all invented. Contrast
  * came out at exactly 1.00:1 and every element reported the default 16px,

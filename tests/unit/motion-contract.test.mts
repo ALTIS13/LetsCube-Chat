@@ -96,9 +96,74 @@ test("the shared controls take their timing from the system, not from a literal"
   for (const { name, source } of controls) {
     assert.doesNotMatch(
       source,
-      /duration-\d+/,
+      /\bduration-\d+\b/,
       `${name} still writes a literal Tailwind duration; it drifts from MOTION_MS silently`,
     );
-    assert.match(source, /kub-interactive/, `${name} does not carry the shared interactive timing`);
+
+    // The contract is that a shared control's timing comes from the tokens, not
+    // that it carries one particular class name. Naming `kub-interactive`
+    // directly was too narrow: the tooltip moved to `kub-tooltip`, which is
+    // equally driven by `--kub-motion-fast`, and a name check would have called
+    // that a regression. So the classes are resolved out of the stylesheet and
+    // each one that carries a transition must take a motion token. A new class
+    // that hard-codes `140ms` fails here, which is the drift this test exists
+    // to catch.
+    const timed = [...source.matchAll(/\bkub-[a-z-]+\b/g)]
+      .map((match) => match[0])
+      .filter((value, index, all) => all.indexOf(value) === index)
+      .map((className) => ({
+        className,
+        rule: css.match(new RegExp(`\\.${className}\\s*\\{([\\s\\S]*?)\\n\\}`))?.[1],
+      }))
+      .filter((entry) => entry.rule !== undefined && /transition|animation/.test(entry.rule));
+
+    assert.ok(
+      timed.length > 0,
+      `${name} carries no shared class that the stylesheet gives a transition`,
+    );
+
+    for (const { className, rule } of timed) {
+      assert.match(
+        rule!,
+        /var\(--kub-motion-[a-z]+\)/,
+        `.${className}, used by ${name}, takes no motion token at all`,
+      );
+      // Every duration must be a token, not merely one of them. Checking only
+      // that a token appears somewhere let a rule keep one token property and
+      // hard-code the other — which is exactly how drift starts.
+      const withoutTokens = rule!.replace(/var\(--[\w-]+\)/g, "");
+      assert.doesNotMatch(
+        withoutTokens,
+        /\d+m?s\b/,
+        `.${className}, used by ${name}, hard-codes a duration beside its tokens`,
+      );
+    }
   }
+});
+
+/**
+ * A tooltip bubble must leave the layout when it is not being shown. Kept in
+ * the flow at zero opacity it still counted towards the page's scroll width:
+ * measured, the invisible bubble on the sidebar's right-most button made the
+ * messenger 393px wide inside a 390px viewport, which the audit reported as
+ * clipped content.
+ *
+ * `display` is what has to change, so the fade needs `allow-discrete` and a
+ * `@starting-style` to survive it. All three are asserted together, because
+ * the first without the others is a tooltip that appears with no transition
+ * at all.
+ */
+test("a tooltip is out of the layout until it is shown", () => {
+  const rest = css.match(/\.kub-tooltip\s*\{([\s\S]*?)\n\}/);
+  assert.ok(rest, ".kub-tooltip is not defined");
+  assert.match(rest[1], /display:\s*none/, "an invisible tooltip must not occupy the layout");
+
+  const shown = css.match(/\.group:hover > \.kub-tooltip[\s\S]{0,120}?\{([\s\S]*?)\n\}/);
+  assert.ok(shown, "no rule shows the tooltip on hover");
+  assert.match(shown[1], /display:\s*block/);
+  assert.match(shown[1], /opacity:\s*1/);
+
+  assert.match(rest[1], /allow-discrete/, "the fade is cancelled by display:none without this");
+  assert.match(css, /@starting-style\s*\{[\s\S]*?\.kub-tooltip/);
+  assert.match(css, /\.group:focus-within > \.kub-tooltip/, "the keyboard must reach it too");
 });

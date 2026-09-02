@@ -158,6 +158,16 @@
   --kub-action-primary-background: var(--kub-cyan);
   --kub-action-primary-foreground: var(--kub-bg);
   --kub-action-primary-hover: var(--kub-cyan-hover);
+  /* A destructive action's fill, kept apart from --kub-danger on purpose. The
+     tone has to stay light enough to read as a dot or a rail on a dark surface;
+     the fill has to be dark enough to carry white text. One value cannot do
+     both: white on the dark theme's #EF4444 measured 3.76:1. */
+  --kub-action-danger-background: #DC2626;
+  --kub-action-danger-foreground: #FFFFFF;
+  --kub-action-danger-hover: #B91C1C;
+  --kub-action-accent-background: var(--kub-pink);
+  --kub-action-accent-foreground: var(--kub-bg);
+  --kub-action-accent-hover: #f26aa5;
   --kub-blue: var(--brand-blue);
   /* D-014, second accent: the brand magenta clears the dark page background at
      4.75:1 but only reaches 4.38:1 on --kub-surface, the same near-miss the
@@ -304,6 +314,16 @@
   --kub-action-primary-background: var(--kub-cyan);
   --kub-action-primary-foreground: var(--kub-bg);
   --kub-action-primary-hover: var(--kub-cyan-hover);
+  /* A destructive action's fill, kept apart from --kub-danger on purpose. The
+     tone has to stay light enough to read as a dot or a rail on a dark surface;
+     the fill has to be dark enough to carry white text. One value cannot do
+     both: white on the dark theme's #EF4444 measured 3.76:1. */
+  --kub-action-danger-background: #DC2626;
+  --kub-action-danger-foreground: #FFFFFF;
+  --kub-action-danger-hover: #B91C1C;
+  --kub-action-accent-background: var(--kub-pink);
+  --kub-action-accent-foreground: var(--kub-bg);
+  --kub-action-accent-hover: #a32856;
   --kub-blue: var(--brand-blue);
   /* D-011, second accent: the brand magenta measures 3.72:1 on this background
      and is used for section eyebrows on the privacy and support pages, so it
@@ -581,6 +601,48 @@ textarea::placeholder, input::placeholder {
   min-height: 32px;
 }
 
+/* A search or filter box: the border is what a person aims at, so the box is
+   the target and the field inside has to fill it. Measured before this, a 20px
+   input floated inside a 36px box with a dead strip above and below it. */
+.kub-field {
+  display: flex;
+  align-items: center;
+}
+
+/* The switch track stays 24px tall because that is the design; the control
+   around it is what a finger aims at. Measured before this, the switch was a
+   44x24 target. */
+.kub-switch {
+  min-height: 24px;
+}
+
+/* A tooltip bubble is laid out only while it is being shown. Kept in the flow
+   at zero opacity it still counted towards the page's scroll width: measured,
+   the invisible bubble on the sidebar's right-most button made the messenger
+   393px wide inside a 390px viewport. `allow-discrete` and `@starting-style`
+   keep the fade that `display: none` would otherwise cancel, and `:focus-within`
+   means the keyboard reaches it too — hover alone never did. */
+.kub-tooltip {
+  display: none;
+  opacity: 0;
+  transition:
+    opacity var(--kub-motion-fast) var(--kub-ease-standard),
+    display var(--kub-motion-fast) allow-discrete;
+}
+
+.group:hover > .kub-tooltip,
+.group:focus-within > .kub-tooltip {
+  display: block;
+  opacity: 1;
+}
+
+@starting-style {
+  .group:hover > .kub-tooltip,
+  .group:focus-within > .kub-tooltip {
+    opacity: 0;
+  }
+}
+
 @media (pointer: coarse) {
   .kub-button {
     min-height: 44px;
@@ -590,6 +652,14 @@ textarea::placeholder, input::placeholder {
   }
   .kub-icon-action {
     min-width: 44px;
+    min-height: 44px;
+  }
+
+  .kub-field {
+    min-height: 44px;
+  }
+
+  .kub-switch {
     min-height: 44px;
   }
 
