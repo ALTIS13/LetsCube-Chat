@@ -68,7 +68,10 @@ export function SupportQueue({
       aria-label="Очередь поддержки"
       className="flex min-h-0 min-w-0 flex-col border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] md:border-b-0 md:border-r"
     >
-      <div className="flex flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-[color:var(--kub-border-color)] p-2 no-scrollbar">
+      {/* Wrapping rather than scrolling sideways. In a 350px queue column the
+          last filter was sliced mid-word at the panel edge, and a scroller with
+          its bar hidden gives no sign that anything is off to the right. */}
+      <div className="flex flex-shrink-0 flex-wrap items-center gap-1 border-b border-[color:var(--kub-border-color)] p-2">
         {FILTERS.map((item) => (
           <button
             key={item.id}

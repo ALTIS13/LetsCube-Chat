@@ -41,7 +41,11 @@ export function RegistrationTrend({ series, metrics, error }: {
           }}
         >
           {series.map((point) => {
-            const height = point.value === 0 ? 3 : Math.max(10, Math.round((point.value / maximum) * 100));
+            // A day with no registrations draws nothing. The previous 3%
+            // stub read as a small number rather than as none, which is the
+            // one thing a chart must not do. The 10% floor stays: it makes a
+            // real value visible rather than inventing one.
+            const height = point.value === 0 ? 0 : Math.max(10, Math.round((point.value / maximum) * 100));
             return (
               <li
                 key={point.date}

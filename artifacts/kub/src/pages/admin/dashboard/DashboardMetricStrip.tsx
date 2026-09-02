@@ -34,19 +34,19 @@ export function DashboardMetricStrip({
   return (
     <KubPanel padded={false} data-testid="admin-dashboard-metrics" className="overflow-hidden">
       <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8">
-        {items.map(({ icon, label, value, tone }, index) => {
+        {items.map(({ icon, label, value, tone }) => {
           const color = TONE_COLOR[tone];
           return (
             <div
               key={label}
               className="min-w-0 border-b border-r border-[color:var(--kub-border-color)] p-3 [&:nth-child(2n)]:border-r-0 [&:nth-last-child(-n+2)]:border-b-0 sm:[&:nth-child(2n)]:border-r sm:[&:nth-child(4n)]:border-r-0 sm:[&:nth-last-child(-n+2)]:border-b sm:[&:nth-last-child(-n+4)]:border-b-0 xl:border-b-0 xl:[&:nth-child(4n)]:border-r xl:last:border-r-0"
             >
-              <div className="mb-2 flex items-center justify-between gap-2">
+              {/* The card used to carry an ordinal — 01 to 08 — in its corner.
+                  It encoded nothing and sat in tabular numerals beside the one
+                  figure on the card that means something. */}
+              <div className="mb-2 flex items-center gap-2">
                 <span style={{ color }}>
                   <KubIcon name={icon} size={15} tone="currentColor" />
-                </span>
-                <span className="text-[9px] font-semibold tabular-nums text-[color:var(--kub-muted)]">
-                  {String(index + 1).padStart(2, "0")}
                 </span>
               </div>
               <div className="text-xl font-bold tabular-nums text-[color:var(--kub-text)]">

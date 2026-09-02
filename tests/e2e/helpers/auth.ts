@@ -139,7 +139,28 @@ export async function loginIfNeeded(
     // A live session bounces /login straight back into the app, so a missing
     // form is success rather than a fault. Slower viewports reach the shell
     // after the first check above has already given up on it.
-    const restored = await waitForAuthenticatedShell(page, 6_000);
+    let restored = await waitForAuthenticatedShell(page, 6_000);
+
+    if (!restored) {
+      // Third possibility, and the one that produced an intermittent failure in
+      // otherwise green runs: neither, because the app is sitting on its own
+      // "Загрузка длится дольше обычного" panel with a stalled session restore.
+      // That panel offers "Выйти", which drops the stuck session and gives back
+      // the login form — so use the escape hatch the product already provides
+      // rather than waiting longer for something that is not coming.
+      const signOut = page.getByRole("button", { name: "Выйти" }).first();
+      if (await signOut.isVisible().catch(() => false)) {
+        await signOut.click();
+        await page.goto("/login", { waitUntil: "domcontentloaded" });
+        const recovered = await emailInput
+          .waitFor({ state: "visible", timeout: 8_000 })
+          .then(() => true)
+          .catch(() => false);
+        if (recovered) return await signInWithForm(page, credentials, authStateName);
+      }
+      restored = await waitForAuthenticatedShell(page, 4_000);
+    }
+
     expect(
       restored,
       "neither the login form nor the authenticated shell appeared at /login",
@@ -148,6 +169,16 @@ export async function loginIfNeeded(
     return;
   }
 
+  return await signInWithForm(page, credentials, authStateName);
+}
+
+/** Fills the form that is already on screen and proves the shell was reached. */
+async function signInWithForm(
+  page: Page,
+  credentials: QaCredentials,
+  authStateName: QaAuthStateName,
+) {
+  const emailInput = page.locator('input[type="email"]').first();
   const passwordInput = page.locator('input[type="password"]').first();
   const submit = page.locator('button[type="submit"]').first();
 
@@ -194,6 +225,45 @@ export async function loginAsRoleOrSkip(page: Page, role: QaAuthStateName) {
   );
 }
 
+/**
+ * Whether a saved state still holds a session that can be used.
+ *
+ * A saved session lasts about an hour, so any run started later than that
+ * restores a dead one: the app boots, fails to refresh the token, and lands on
+ * the public home, after which every test pays the full six-second shell
+ * timeout before falling back to the login form it could have gone to
+ * immediately.
+ *
+ * This is worth stating precisely, because a wrong version of it was written
+ * here first: an intermittent "neither the login form nor the authenticated
+ * shell appeared" failure is NOT known to be caused by this. The first attempt
+ * to measure it compared a state saved for `127.0.0.1:5191` against production
+ * and read the resulting public home as proof of expiry, when the helper had
+ * simply — and correctly — declined to restore a state from another origin.
+ * The expiry check earns its place by removing a per-run cost that is
+ * measurable on its own; the flake remains unexplained.
+ *
+ * A minute of margin, because a session that expires mid-test is no better than
+ * one that has already expired.
+ */
+export function hasLiveSession(entries: { name: string; value: string }[]): boolean {
+  const cutoff = Date.now() / 1000 + 60;
+  for (const entry of entries) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(entry.value);
+    } catch {
+      continue;
+    }
+    if (typeof parsed !== "object" || parsed === null) continue;
+    const expiresAt = (parsed as { expires_at?: unknown }).expires_at;
+    if (typeof expiresAt === "number") return expiresAt > cutoff;
+  }
+  // No entry carried an expiry, so nothing here claims to be a session. Let the
+  // caller sign in rather than guessing that some other key will work.
+  return false;
+}
+
 async function restoreAuthState(page: Page, name: QaAuthStateName = "default") {
   const statePath = getAuthStatePath(name);
   if (!fs.existsSync(statePath)) return;
@@ -203,6 +273,14 @@ async function restoreAuthState(page: Page, name: QaAuthStateName = "default") {
   };
   const state = raw.origins?.find((item) => item.origin === origin);
   if (!state?.localStorage?.length) return;
+
+  if (!hasLiveSession(state.localStorage)) {
+    // Delete it rather than leave it to be retried by the next test: a stale
+    // file that keeps being restored is a per-test tax with no upside.
+    fs.rmSync(statePath, { force: true });
+    return;
+  }
+
   await page.evaluate((entries) => {
     for (const entry of entries) {
       window.localStorage.setItem(entry.name, entry.value);
