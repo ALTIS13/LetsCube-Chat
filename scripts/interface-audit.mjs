@@ -127,7 +127,23 @@ export const PAGE_CHECKS = () => {
     if (!scrolls && over > 1 && style.overflowX === "visible") continue;
     if (scrolls && over > 1) continue; // a scroll container is allowed to scroll
     if (!scrolls && over > 1 && style.overflowX === "hidden") {
-      add("clipped-horizontally", `content exceeds its box by ${over}px and is clipped`, node, { overflow: over });
+      // Clipping a decorative image against the viewport edge is a design
+      // choice, not a defect. Only report it when something a person needs —
+      // text or a control — is what gets cut off. The login page's mascot bleed
+      // was otherwise reported as a 461px defect at every viewport.
+      const box = node.getBoundingClientRect();
+      const cutOff = Array.from(node.querySelectorAll("*")).some((child) => {
+        const rect = child.getBoundingClientRect();
+        if (rect.right <= box.right + 1 && rect.left >= box.left - 1) return false;
+        const interactive = child.matches("button, a[href], input, select, textarea, [role=button]");
+        const ownText = Array.from(child.childNodes).some(
+          (kid) => kid.nodeType === 3 && (kid.textContent ?? "").trim().length > 0,
+        );
+        return interactive || ownText;
+      });
+      if (cutOff) {
+        add("clipped-horizontally", `content a person needs exceeds its box by ${over}px and is clipped`, node, { overflow: over });
+      }
     }
   }
 

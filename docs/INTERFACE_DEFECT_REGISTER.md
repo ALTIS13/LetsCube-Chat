@@ -258,3 +258,140 @@ turns that test red.
 that reported it — splitting `готовим к выпуску` from `в разработке` in the
 summary is what turned a long-standing conflation into a visible contradiction.
 
+---
+
+# Audit pass, 2026-09-02
+
+Entries from here on come from `scripts/interface-audit.mjs`, which measured the
+five release viewports across both themes on seven surfaces: 70 cells, 426 raw
+findings, 0 unreachable. The raw report is `output/audit/browser-report.json`
+with a screenshot per cell.
+
+Raw findings are not entries. 426 collapsed to 48 distinct (defect, element)
+groups, and each group below was then confirmed by hand before being written
+down. Three candidate groups were rejected as harness faults rather than
+recorded, and the harness was fixed and pinned with a test for each: scripted
+focus not matching `:focus-visible`, screen-reader-only labels counted as
+clipped text, and a decorative image bleeding past a full-screen container.
+
+## D-010 — keyboard focus is invisible on every primary button
+
+**Severity:** P1. For a keyboard-only user this does not merely make a task
+harder; it removes the ability to know which control is about to be activated.
+
+**Where:** `artifacts/kub/src/components/kub/KubButton.tsx` with
+`artifacts/kub/src/index.css`. Observed on the primary action of four surfaces —
+`Войти` (login), `Отправить и открыть чат` (support), `Создать бота` (bots),
+`Новая` and `Создать задачу` (tasks) — at all five viewports and in both themes.
+
+**Reproduction:** open `/login`, press Tab four times to reach `Войти`, and
+compare the computed `outline` and `box-shadow` before and after. They are
+identical: `outline: none 3px rgb(5, 11, 24)` and
+`box-shadow: … 0px 4px 24px -8px` in both states, while `document.activeElement`
+is the button.
+
+**Cause.** `KubButton` asks for the ring with
+`focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)]`, which Tailwind
+v4 implements as a `box-shadow`. The `primary` and `accent` variants also carry
+`kub-glow-soft` / `kub-glow-pink`, plain classes in `index.css` that set
+`box-shadow` outright. Both are single-class specificity, so source order
+decides and the glow wins. The ring is requested, composed, and then overwritten.
+
+**Not a lint-level miss.** The classes are present and look correct in review;
+only the computed style shows the ring never renders. That is why this needed a
+measuring harness rather than a reading.
+
+## D-011 — the accent colour fails contrast in the light theme
+
+**Severity:** P1. It is the colour of the primary button's own label, so the
+most important control on each surface is the least legible.
+
+**Where:** `--brand-blue: #427fc2` in `artifacts/kub/src/index.css`, reached
+through `--kub-cyan` and `--kub-action-primary-background`. Light theme only.
+
+**Measured:**
+
+| pair | ratio | needs |
+| --- | --- | --- |
+| brand blue on `--kub-bg` `#F4F8FC` | 3.90:1 | 4.5:1 |
+| brand blue on `--kub-surface` `#FFFFFF` | 4.16:1 | 4.5:1 |
+| button label `#F4F8FC` on brand blue | 3.90:1 | 4.5:1 |
+| brand blue on the dark `--kub-bg` `#050B18` | 4.73:1 | passes |
+
+**Surfaces:** `Войти` and its label, `Забыли пароль?`, `Зарегистрироваться`
+(login), `Политикой конфиденциальности` (support and login), `Все платформы` and
+the `LETSCUBE` eyebrow (public home), `Правовые документы` (privacy). Five
+viewports, light theme.
+
+**Note for the fix.** The palette already contains a shade that passes:
+`--kub-cyan-hover: #2d6fac` measures 5.27:1 on white and 4.94:1 on `--kub-bg`.
+The dark theme passes as it is and must not be dragged along by a shared token
+change.
+
+## D-012 — avatar monograms are unreadable on every palette colour
+
+**Severity:** P1. At 1.19:1 the letter is not low-contrast, it is invisible.
+
+**Where:** `getAvatarColor` in `artifacts/kub/src/components/ui/ChatAvatar.tsx`.
+Both themes, every viewport, anywhere an avatar has no image.
+
+**Measured.** The monogram is `text-white` over a generated pastel background.
+All ten palette colours fail, and all ten pass with a dark foreground:
+
+| background | white | black |
+| --- | --- | --- |
+| `#FFEAA7` | 1.19:1 | 17.58:1 |
+| `#F7DC6F` | 1.36:1 | 15.42:1 |
+| `#98D8C8` | 1.62:1 | 12.99:1 |
+| `#96CEB4` | 1.78:1 | 11.78:1 |
+| `#4ECDC4` | 1.93:1 | 10.85:1 |
+| `#85C1E9` | 1.94:1 | 10.80:1 |
+| `#DDA0DD` | 2.07:1 | 10.15:1 |
+| `#45B7D1` | 2.35:1 | 8.95:1 |
+| `#BB8FCE` | 2.65:1 | 7.93:1 |
+| `#FF6B6B` | 2.78:1 | 7.57:1 |
+
+Ten of ten fail with white; ten of ten pass with black. The palette was chosen
+for dark text and is being drawn with light text.
+
+## D-013 — controls below the touch target on the mobile viewports
+
+**Severity:** P2, with a caveat that keeps it honest.
+
+**Where:** 30 distinct elements across `login`, `support`, `tasks`, `messenger`,
+`privacy` and `public-home`, at `390x844` and `412x915`, both themes.
+
+**Split before fixing.** Not every one of these is a defect. Inline links inside
+running prose are exempt from the target-size requirement, and several findings
+are exactly that — `Зарегистрироваться` at 14px, `Политикой конфиденциальности`
+at 15px, `privacy@app.letscube.ru` at 16px sit inside sentences. The ones that
+are real are the standalone controls:
+
+- form inputs at 20px high (`login`, `support`, `tasks`, and the messenger's
+  sidebar search)
+- checkboxes at 16px (`support`, `tasks`)
+- the password reveal toggle at 16px (`login`)
+- the `Забыли пароль?` trigger at 16px (`login`)
+- the `Карточки` view switch at 30px (`tasks`)
+
+The register records both halves so the fix batch cannot quietly widen into
+restyling prose links.
+
+## Rejected, with the harness fixed
+
+Kept here because a rejected candidate is evidence about the audit's own
+reliability, and because each one would otherwise be rediscovered.
+
+1. **Primary buttons reported as having no focus indicator.** The harness used
+   `node.focus()`; browsers deliberately do not match `:focus-visible` for
+   scripted focus. It now tabs with the keyboard. D-010 survived that fix and is
+   real; the same finding on secondary controls did not.
+2. **Screen-reader-only labels reported as clipped text**, three on the tasks
+   page. `sr-only` is clipped on purpose. Visually-hidden nodes are excluded.
+3. **The login page's mascot reported as a 461px clipping defect** at every
+   viewport. A decorative image bleeding past a full-screen container is a design
+   choice; clipping is now only reported when text or a control is what gets cut
+   off.
+
+Each fix is pinned by a test in `tests/unit/interface-audit-harness.test.mjs`.
+

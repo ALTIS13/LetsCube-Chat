@@ -58,13 +58,29 @@ test("the harness sees a page that scrolls sideways", async () => {
   assert.ok(kinds(findings).has("overflow-x-document"), JSON.stringify(findings));
 });
 
-test("the harness sees content clipped by its own box", async () => {
+test("the harness sees a control clipped by its own box", async () => {
   const findings = await findingsFor(`
     <div style="width:100px;overflow-x:hidden;white-space:nowrap">
-      <span style="display:inline-block;width:400px;background:#ddd">&nbsp;</span>
+      <button style="margin-left:180px;min-height:44px">Скрытая кнопка</button>
     </div>
   `);
   assert.ok(kinds(findings).has("clipped-horizontally"), JSON.stringify(findings));
+});
+
+/**
+ * A decorative image bleeding past a full-screen container is a design choice.
+ * The first full run called the login page's mascot a 461px clipping defect at
+ * every viewport; only content a person needs counts.
+ */
+test("a decorative image bleeding out of its container is not a defect", async () => {
+  const findings = await findingsFor(`
+    <div style="width:200px;height:120px;overflow-x:hidden;position:relative">
+      <div style="position:absolute;left:150px;top:0;width:400px;height:120px;background:linear-gradient(#eee,#ddd)"></div>
+      <p style="color:#111;position:relative">Текст на месте.</p>
+    </div>
+  `);
+  const clipped = findings.filter((finding) => finding.kind === "clipped-horizontally");
+  assert.equal(clipped.length, 0, `decorative bleed must not be a finding: ${JSON.stringify(clipped)}`);
 });
 
 test("the harness sees text cut off without an ellipsis", async () => {
