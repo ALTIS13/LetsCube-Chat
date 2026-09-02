@@ -285,31 +285,31 @@ git commit -m "refactor(ui): unify copy action feedback"
 - Produces async states `idle | loading | success | error` without changing control dimensions.
 - Modal entry/exit uses opacity/transform and remains interruptible.
 
-- [ ] **Step 1: Write failing async-state tests**
+- [x] **Step 1: Write failing async-state tests**
 
 Test that `loading -> success -> idle` schedules only the transient success timer, a second action cancels the old timer, unmount clears timers, and reduced motion changes duration but not state order.
 
-- [ ] **Step 2: Implement stable async button and skeleton**
+- [x] **Step 2: Implement stable async button and skeleton**
 
 `KubAsyncButton` reserves icon and label slots, overlays a spinner without removing label width, and exposes success/error icons. `KubStableSkeleton` requires explicit width/height or aspect ratio and never infers size from loading text.
 
-- [ ] **Step 3: Make modal transitions geometry-stable**
+- [x] **Step 3: Make modal transitions geometry-stable**
 
 Keep `KubModal` outer width, max-height and scroll owner unchanged across enter/open/exit. Animate only overlay opacity and panel `translateY(8px) scale(.99)` to identity. Do not animate height or padding.
 
-- [ ] **Step 4: Apply to high-value save flows**
+- [x] **Step 4: Apply to high-value save flows**
 
 Use stable async feedback for Settings save and invite create/update. Successful settings show `Настройки сохранены`; network failures keep input values and show a sanitized feedback item. The Bot Platform plan adopts these primitives in `BotsPage` when that independent track is implemented.
 
-- [ ] **Step 5: Stabilize route/loading screens**
+- [x] **Step 5: Stabilize route/loading screens**
 
 The profile loading screen, public release loading and bot list loading use skeletons matching final dimensions. Existing startup secure-connection screen remains separate and must not have its timing or geometry changed by generic route animations.
 
-- [ ] **Step 6: Add layout measurements**
+- [x] **Step 6: Add layout measurements**
 
 Playwright captures bounding boxes before, during and after loading/success. Assert button width/height and modal panel bounds do not change, settings remain keyboard reachable, and chat scrollTop remains stable while an unrelated feedback item appears.
 
-- [ ] **Step 7: Run tests and commit**
+- [x] **Step 7: Run tests and commit**
 
 ```powershell
 node --test tests/unit/async-feedback-state.test.mts
@@ -425,3 +425,45 @@ Eight mutations fail the contract, including unbounding the queue, letting a
 repeat stack, shortening an error under reduced motion, unbounding the detail,
 returning a fresh snapshot on every read, letting the viewport intercept
 clicks, sliding it back over the navigation, and silencing a failed copy.
+
+## Task 4 closure
+
+Done as written, and it found a defect worse than the one it was looking for.
+
+**Buttons.** `KubButton` swapped its left icon for a spinner and dropped its
+right icon while loading, so a button with no icon gained one and a button with
+a right icon lost one. Both change the width. The spinner is overlaid on the
+content now, which fixes every existing call site rather than only new ones.
+
+**Modals** had no entry at all. Opacity and transform only — `translateY(8px)`
+from `scale(.99)` — so nothing reflows, and removed entirely under reduced
+motion.
+
+**The defect underneath.** The profile dialog's locations section printed
+"Локации не назначены" while its data was still in flight. That is not a layout
+problem: it is a claim the component had no basis for, asserting that a person
+has no locations when it does not yet know. It was also a 20px line that became
+about 114px of cards, so the dialog grew while it was being read.
+
+**And the cause underneath that.** The section called `useTaskRouting` itself,
+so every dialog open started a fresh query — a duplicate of one the screen
+behind it had already made. It takes the parent's data now; the hook still runs
+at the two chat-side call sites, which pass nothing.
+
+**Two contracts, split on purpose.** The first attempt asserted the panel never
+resizes during entry and failed on content that was still arriving — a different
+problem from the animation, and one the animation cannot solve. The animation
+contract measures geometry; a separate contract holds the routing request open
+and asserts the false claim is absent.
+
+**A measurement error worth recording.** The animation contract first used
+`boundingBox`, which reports the *transformed* rectangle — so the entry's own
+`scale(.99)` showed up as a 2px failure. `offsetWidth` is the right quantity: a
+transform reflows nothing, an animated height would, and the mutation that
+animates `max-height` proves the test can still tell.
+
+Once the duplicate query was gone the animation contract was tightened rather
+than worked around: it measures the FIRST opening, from cold, instead of opening
+twice to get past the growth.
+
+Ten mutations fail these contracts across the unit and e2e suites.
