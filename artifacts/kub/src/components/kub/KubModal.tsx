@@ -62,7 +62,7 @@ export function KubModal({
   return (
     <div
       className={cn(
-        "fixed inset-0 z-50 flex bg-[color:var(--kub-bg)]/75 backdrop-blur-sm",
+        "kub-modal-overlay fixed inset-0 z-50 flex bg-[color:var(--kub-bg)]/75 backdrop-blur-sm",
         mobileSheet
           ? "items-stretch justify-stretch p-0 sm:items-center sm:justify-center sm:p-4"
           : "items-center justify-center p-4"
@@ -81,7 +81,7 @@ export function KubModal({
     >
       <div
         className={cn(
-          "w-full bg-[var(--kub-surface)] shadow-2xl flex flex-col kub-glow-soft border-[color:var(--kub-border-color)]",
+          "kub-modal-panel w-full bg-[var(--kub-surface)] shadow-2xl flex flex-col kub-glow-soft border-[color:var(--kub-border-color)]",
           mobileSheet
             ? "h-full max-h-screen rounded-none border-0 pb-safe sm:h-auto sm:max-h-[85vh] sm:rounded-2xl sm:border sm:pb-0"
             : "rounded-2xl border max-h-[85vh]",

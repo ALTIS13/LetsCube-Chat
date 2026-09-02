@@ -71,17 +71,27 @@ export const KubButton = forwardRef<HTMLButtonElement, KubButtonProps>(
           sizeClass[size],
           variantClass[variant],
           fullWidth && "w-full",
+          loading && "relative [&>*:not(:last-child)]:invisible",
           className
         )}
         {...rest}
       >
-        {loading ? (
-          <KubIcon name="spinner" size={size === "lg" ? 18 : 14} />
-        ) : (
-          leftIcon
-        )}
+        {/* The spinner is laid over the content rather than swapping into it.
+            Replacing `leftIcon` added an icon to a button that had none, and
+            dropping `rightIcon` took one away — both change the width, and
+            every control beside it moves at the moment a person is reaching
+            for one of them. Now the geometry is identical in both states. */}
+        {leftIcon}
         {children}
-        {!loading && rightIcon}
+        {rightIcon}
+        {loading && (
+          <span
+            aria-hidden="true"
+            className="absolute inset-0 flex items-center justify-center rounded-[inherit] bg-[inherit]"
+          >
+            <KubIcon name="spinner" size={size === "lg" ? 18 : 14} />
+          </span>
+        )}
       </button>
     );
   }

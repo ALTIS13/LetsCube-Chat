@@ -634,6 +634,31 @@ textarea::placeholder, input::placeholder {
   animation: kub-shimmer var(--kub-motion-shimmer) linear infinite;
 }
 
+/* A modal's entry moves nothing that has a size. The overlay fades and the
+   panel rises 8px while scaling from .99 — geometry is untouched, so the
+   dialog's own layout is settled from the first frame and a control inside it
+   never shifts under the pointer. */
+.kub-modal-overlay {
+  animation: kub-modal-overlay-in var(--kub-motion-standard) var(--kub-ease-standard);
+}
+
+.kub-modal-panel {
+  animation: kub-modal-panel-in var(--kub-motion-emphasis) var(--kub-ease-emphasis);
+}
+
+@keyframes kub-modal-overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes kub-modal-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+}
+
 @keyframes kub-shimmer {
   0% {
     background-position: -280px 0;
@@ -1107,6 +1132,11 @@ textarea::placeholder, input::placeholder {
   .kub-skeleton {
     animation: none;
     background: var(--kub-surface-2);
+  }
+
+  .kub-modal-overlay,
+  .kub-modal-panel {
+    animation: none;
   }
 
   .release-status-enter,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { KubBadge, KubIcon } from "@/components/kub";
+import { KubBadge, KubIcon, KubStableSkeleton } from "@/components/kub";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
 import { useRoleAccess } from "@/hooks/useRole";
 import { useTaskRouting } from "@/hooks/useTaskRouting";
@@ -63,6 +63,11 @@ export function ProfileRoleSummary({ user, compact = false }: ProfileRoleSummary
   const fallbackRole = LEGACY_APP_ROLE_LABEL[user.role];
   const hasDynamicContent = dynamicRoles.available && globalRoles.length > 0;
   const hasLocationContent = routing.available && memberships.length > 0;
+  // While the routing data is in flight the component knew nothing about this
+  // person's locations — and said "Локации не назначены", which is a claim
+  // rather than a gap. It was also a 20px line that became ~114px of cards a
+  // moment later, so the dialog grew while it was being read.
+  const locationsUnknown = routing.loading && memberships.length === 0;
   const visibleMemberships = showAllClubs ? memberships : memberships.slice(0, 3);
 
   if (compact) {
@@ -155,6 +160,20 @@ export function ProfileRoleSummary({ user, compact = false }: ProfileRoleSummary
                 {showAllClubs ? "Свернуть локации" : `Показать ещё ${locationCountLabel(memberships.length - 3)}`}
               </button>
             )}
+          </div>
+        ) : locationsUnknown ? (
+          // Shaped like the cards it will be replaced by, so the dialog is
+          // already close to its final height.
+          <div className="space-y-1.5" aria-busy="true" aria-label="Загрузка локаций" role="status">
+            {[0, 1].map((row) => (
+              <div
+                key={row}
+                className="flex items-center justify-between gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/55 px-3 py-2"
+              >
+                <KubStableSkeleton width="42%" height="0.875rem" />
+                <KubStableSkeleton width="5.5rem" height="1.125rem" rounded="full" />
+              </div>
+            ))}
           </div>
         ) : (
           <div className="text-sm text-[color:var(--kub-muted)]">Локации не назначены</div>
