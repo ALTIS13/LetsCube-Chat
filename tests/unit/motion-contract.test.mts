@@ -83,3 +83,22 @@ test("the interactive press state is removed under reduced motion", () => {
     "the press transform must be removed under reduced motion",
   );
 });
+
+const controls = ["KubButton", "KubModal", "KubTooltip"].map((name) => ({
+  name,
+  source: readFileSync(
+    new URL(`../../artifacts/kub/src/components/kub/${name}.tsx`, import.meta.url),
+    "utf8",
+  ),
+}));
+
+test("the shared controls take their timing from the system, not from a literal", () => {
+  for (const { name, source } of controls) {
+    assert.doesNotMatch(
+      source,
+      /duration-\d+/,
+      `${name} still writes a literal Tailwind duration; it drifts from MOTION_MS silently`,
+    );
+    assert.match(source, /kub-interactive/, `${name} does not carry the shared interactive timing`);
+  }
+});

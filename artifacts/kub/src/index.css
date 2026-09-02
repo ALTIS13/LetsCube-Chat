@@ -103,6 +103,18 @@
  * resolves "system" preference before React hydrates so there's no flash.
  * ─────────────────────────────────────────────────────────────────────────── */
 :root {
+  /* Motion. Five semantic durations and two easings, mirrored by MOTION_MS in
+     src/lib/motion.ts — a component that writes its own duration is outside the
+     system and drifts silently. Feedback is how long a transient confirmation
+     stays readable, which is why reduced motion shortens it rather than
+     collapsing it with the rest. */
+  --kub-motion-instant: 90ms;
+  --kub-motion-fast: 140ms;
+  --kub-motion-standard: 220ms;
+  --kub-motion-emphasis: 320ms;
+  --kub-motion-feedback: 2400ms;
+  --kub-ease-standard: cubic-bezier(.2, .8, .2, 1);
+  --kub-ease-emphasis: cubic-bezier(.16, 1, .3, 1);
   --app-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono: Menlo, monospace;
@@ -122,6 +134,7 @@
   --brand-surface: #07111f;
   --brand-surface-elevated: #0b1a2e;
   --brand-border: rgba(66, 127, 194, 0.32);
+
   --brand-text: #f7fbff;
   --brand-text-muted: #9ab0c8;
   --brand-danger: #ef4444;
@@ -534,6 +547,14 @@ textarea::placeholder, input::placeholder {
 .kub-glow-pink { box-shadow: 0 0 0 1px color-mix(in srgb, var(--kub-pink) 40%, transparent), 0 8px 32px -8px color-mix(in srgb, var(--kub-pink) 55%, transparent); }
 .kub-glow-soft { box-shadow: 0 4px 24px -8px color-mix(in srgb, var(--kub-cyan) 35%, transparent); }
 
+/* The shared feel of a control responding to a pointer. Colour and shadow move
+   at the fast step; the press is a transform, never a size change. */
+.kub-interactive {
+  transition-duration: var(--kub-motion-fast);
+  transition-timing-function: var(--kub-ease-standard);
+}
+.kub-interactive:active:not(:disabled) { transform: scale(.98); }
+
 /* D-015: three of the four button sizes are below the 44px touch target —
    `sm` at 32px, `md` at 40px and `icon` at 36px — and `sm` alone is used 118
    times. The size scale is a design choice and is left exactly as it looks on a
@@ -798,13 +819,6 @@ textarea::placeholder, input::placeholder {
   animation: release-status-pulse 1.1s ease-in-out infinite;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .release-status-enter,
-  .release-status-pulse {
-    animation: none;
-  }
-}
-
 @keyframes desktop-update-enter {
   from { opacity: 0; transform: translateY(-6px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -937,7 +951,22 @@ textarea::placeholder, input::placeholder {
 
 .desktop-update-channel-control__option:disabled { cursor: wait; opacity: 0.65; }
 
+/* One reduced-motion block, not three competing ones. The preference removes
+   movement; it does not remove feedback, so --kub-motion-feedback keeps its
+   full duration here and is shortened in script instead, where the message can
+   still be read. */
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --kub-motion-instant: 1ms;
+    --kub-motion-fast: 1ms;
+    --kub-motion-standard: 1ms;
+    --kub-motion-emphasis: 1ms;
+  }
+
+  .kub-interactive:active:not(:disabled) { transform: none; }
+
+  .release-status-enter,
+  .release-status-pulse,
   .desktop-update-pill,
   .desktop-update-pill__action,
   .desktop-update-pill__progress > span,

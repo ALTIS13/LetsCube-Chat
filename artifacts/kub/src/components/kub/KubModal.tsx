@@ -113,7 +113,7 @@ export function KubModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-shrink-0 p-1.5 rounded-lg text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)] hover:bg-[var(--kub-surface-2)] transition-colors"
+              className="kub-interactive flex-shrink-0 p-1.5 rounded-lg text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)] hover:bg-[var(--kub-surface-2)] transition-colors"
               aria-label="Закрыть"
             >
               <KubIcon name="close" size={16} />

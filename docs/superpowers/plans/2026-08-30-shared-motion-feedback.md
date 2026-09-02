@@ -42,7 +42,7 @@
 - Produces: `MOTION_MS`, `feedbackDuration(kind)` and `prefersReducedMotion()`.
 - Produces CSS variables `--kub-motion-instant`, `--kub-motion-fast`, `--kub-motion-standard`, `--kub-motion-emphasis`, `--kub-motion-feedback`.
 
-- [ ] **Step 1: Write failing token tests**
+- [x] **Step 1: Write failing token tests**
 
 ```ts
 import assert from "node:assert/strict";
@@ -56,13 +56,13 @@ test("motion timings match the approved semantic contract", () => {
 });
 ```
 
-- [ ] **Step 2: Run the unit test and verify it fails**
+- [x] **Step 2: Run the unit test and verify it fails**
 
 Run: `node --test tests/unit/motion-contract.test.mts`
 
 Expected: FAIL because `motion.ts` does not exist.
 
-- [ ] **Step 3: Implement the semantic timing module**
+- [x] **Step 3: Implement the semantic timing module**
 
 ```ts
 export const MOTION_MS = Object.freeze({
@@ -84,7 +84,7 @@ export function feedbackDuration(_kind: "success" | "info" | "warning" | "error"
 }
 ```
 
-- [ ] **Step 4: Add CSS variables and reusable state classes**
+- [x] **Step 4: Add CSS variables and reusable state classes**
 
 ```css
 :root {
@@ -116,11 +116,11 @@ export function feedbackDuration(_kind: "success" | "info" | "warning" | "error"
 
 Consolidate existing duplicate reduced-motion blocks rather than adding a third competing rule.
 
-- [ ] **Step 5: Apply tokens to core LETSCUBE controls**
+- [x] **Step 5: Apply tokens to core LETSCUBE controls**
 
 Replace hard-coded `duration-150`/`duration-200` in `KubButton`, `KubModal` and `KubTooltip` with semantic classes. Preserve existing dimensions, focus rings and disabled behavior. Do not migrate all generated Radix wrappers in this task.
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 ```powershell
 node --test tests/unit/motion-contract.test.mts
@@ -364,3 +364,24 @@ Push the validated commit, verify exact-commit Coolify deployment, then test cop
 git add docs/operations/shared-motion-feedback.md docs/PRODUCTION_PRIORITY_TRACKER.md docs/superpowers/specs/2026-08-30-registration-lifecycle-bot-platform-public-home-design.md
 git commit -m "docs(ui): record shared motion rollout"
 ```
+
+## Task 1 closure
+
+Done as written, with two corrections the tests forced.
+
+The tokens first landed in the `.dark` block, because the anchor they were
+placed beside turned out to live there rather than in `:root`. The theme parity
+contract caught it immediately — motion is not a themed value, and a light-theme
+user would have had none. They now sit in `:root`.
+
+The two existing reduced-motion blocks were consolidated into one, as the step
+required, rather than a third being added beside them.
+
+`--kub-motion-feedback` deliberately does NOT collapse to 1ms under reduced
+motion, and a test asserts that. The preference removes movement, not feedback:
+collapsing it would delete the message a person still needs to read. The
+shortening happens in `feedbackDuration`, which returns 1600ms instead.
+
+Four mutations fail the contract: drifting a duration from `MOTION_MS`,
+collapsing the feedback duration, letting the press transform survive reduced
+motion, and a control writing its own Tailwind duration again.
