@@ -302,12 +302,16 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         />
       </div>
 
-      {isAdmin && (
-        <div className="px-4 py-4 border-t border-[color:var(--kub-border-color)]">
-          <SectionLabel>Телефон</SectionLabel>
-          <PhoneSection />
-        </div>
-      )}
+      {/* Phone verification is open to every account. The section used to be
+          hidden behind `isAdmin` while the gateway and the database gates were
+          administrator-only; all three had to be opened together, or the
+          feature stayed unreachable. When the policy is off the gateway answers
+          `disabled` and `PhoneSection` says so, so hiding the section is not
+          what communicates that. */}
+      <div className="px-4 py-4 border-t border-[color:var(--kub-border-color)]">
+        <SectionLabel>Телефон</SectionLabel>
+        <PhoneSection />
+      </div>
         </div>
       )}
 

@@ -49,14 +49,6 @@ Deno.serve(async (request: Request) => {
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const adminAccess = await admin.rpc("phone_verification_admin_access_internal", {
-    p_user_id: authData.user.id,
-  });
-  if (adminAccess.error) return corsResponse(request, { ok: false, error: "unavailable" }, 503);
-  if (adminAccess.data !== true) {
-    return corsResponse(request, { ok: false, error: "disabled" }, 403);
-  }
-
   const action = body.action;
   if (action === "capability") {
     const result = await admin.rpc("phone_verification_policy_read");
@@ -81,6 +73,20 @@ Deno.serve(async (request: Request) => {
   }
 
   if (action === "admin_remove") {
+    // Removing someone else's number is the one action here that is still
+    // administrator-only. It used to be covered by a blanket check in front of
+    // every action, which also blocked users from verifying their own number at
+    // all; the check now guards this branch alone. `admin_profile_phone_remove_internal`
+    // repeats the permission check server-side, so this is defence in depth
+    // rather than the only barrier.
+    const adminAccess = await admin.rpc("phone_verification_admin_access_internal", {
+      p_user_id: authData.user.id,
+    });
+    if (adminAccess.error) return corsResponse(request, { ok: false, error: "unavailable" }, 503);
+    if (adminAccess.data !== true) {
+      return corsResponse(request, { ok: false, error: "disabled" }, 403);
+    }
+
     const targetUserId = readUuid(body.target_user_id);
     if (!targetUserId) {
       return corsResponse(request, { ok: false, error: "invalid_user" }, 400);

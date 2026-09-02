@@ -188,10 +188,27 @@ test("administrator user panel removes a target phone only through the trusted g
     readFile(ADMIN_USERS, "utf8"),
     readFile(ADMIN_PHONE_REMOVE_MIGRATION, "utf8"),
   ]);
-  const accessCheck = gateway.indexOf("phone_verification_admin_access_internal");
+  // The administrator check guards the admin_remove branch, and only that
+  // branch. It used to sit in front of every action, which is what stopped an
+  // ordinary user from verifying their own number at all.
+  const dispatch = gateway.indexOf("const action = body.action");
   const adminRemove = gateway.indexOf('action === "admin_remove"');
+  const accessCheck = gateway.indexOf("phone_verification_admin_access_internal");
+  // The call, not the identifier: a comment naming the function would match too.
+  const removeCall = gateway.indexOf('rpc("admin_profile_phone_remove_internal"');
 
-  assert.ok(accessCheck >= 0 && adminRemove > accessCheck);
+  assert.ok(dispatch >= 0, "the gateway no longer dispatches on an action");
+  assert.ok(adminRemove > dispatch, "admin_remove must be dispatched, not gated up front");
+  assert.ok(
+    accessCheck > adminRemove,
+    "the administrator check must live inside the admin_remove branch, not in front of every action",
+  );
+  assert.ok(removeCall > accessCheck, "the administrator check must precede the removal call");
+  assert.equal(
+    gateway.split("phone_verification_admin_access_internal").length - 1,
+    1,
+    "a second administrator check would be a blanket gate returning",
+  );
   assert.match(gateway, /target_user_id/u);
   assert.match(gateway, /admin_remove[\s\S]{0,700}admin_profile_phone_remove_internal/u);
   assert.match(users, /action:\s*"admin_remove",\s*target_user_id:\s*user\.id/u);
@@ -260,23 +277,53 @@ test("four-digit OTP schema is private, expiring and attempt-limited", async () 
   );
 });
 
-test("phone verification is restricted to administrators in UI and database", async () => {
-  const [settings, migration, gatewayMigration] = await Promise.all([
-    readFile(SETTINGS_MODAL, "utf8"),
+test("the administrator-only lockdown is recorded as history, not as current behaviour", async () => {
+  // These two migrations are immutable history: they are what closed phone
+  // verification down to administrators. The assertions describe what those
+  // files did, so they stay true. What changed is the live state, which is
+  // covered by the test below.
+  const [migration, gatewayMigration] = await Promise.all([
     readFile(ADMIN_ONLY_MIGRATION, "utf8"),
     readFile(ADMIN_GATEWAY_MIGRATION, "utf8"),
   ]);
 
-  assert.match(settings, /isAdmin\s*&&\s*\([\s\S]{0,320}<PhoneSection\s*\/>/u);
   assert.match(migration, /update public\.phone_verification_policy[\s\S]*enabled\s*=\s*false/iu);
   assert.match(migration, /has_permission\(p_user_id, 'system\.manage'\)/u);
-  assert.doesNotMatch(migration, /phone_verification_pilot_users[\s\S]{0,500}return 'created'/u);
   assert.match(migration, /grant execute on function public\.phone_verification_claim_begin_internal\(uuid, text\) to service_role/iu);
   assert.match(gatewayMigration, /phone_verification_admin_access_internal\(p_user_id uuid\)/iu);
-  assert.match(gatewayMigration, /has_permission\(p_user_id, 'system\.manage'\)/u);
-  assert.match(gatewayMigration, /phone_verification_claim_authorize_sms[\s\S]*return 'disabled'/iu);
-  assert.match(gatewayMigration, /phone_verification_claims[\s\S]*status = 'cancelled'/iu);
   assert.match(gatewayMigration, /grant execute on function public\.phone_verification_admin_access_internal\(uuid\) to service_role/iu);
+});
+
+test("phone verification is reachable by every account, in the UI and in the database", async () => {
+  const [settings, phoneSection, migration] = await Promise.all([
+    readFile(SETTINGS_MODAL, "utf8"),
+    readFile(
+      new URL("../../artifacts/kub/src/components/sidebar/PhoneSection.tsx", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL(
+        "../../.migration-backup/supabase/migrations/20260902120000_phone_verification_open_to_all_users.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ]);
+
+  // The section was hidden behind `isAdmin`, which is one of the three places
+  // that had to be opened together. Hiding it is also the wrong way to say the
+  // feature is off: the gateway answers "disabled" and the section renders it.
+  assert.doesNotMatch(
+    settings,
+    /isAdmin\s*&&\s*\([\s\S]{0,400}<PhoneSection\s*\/>/u,
+    "the phone section is hidden from ordinary users again",
+  );
+  assert.match(settings, /<PhoneSection\s*\/>/u, "the phone section is not rendered at all");
+  assert.match(phoneSection, /case "disabled":/u, "the section no longer explains a closed policy");
+
+  // And the database gate the UI depends on is the policy, not a permission.
+  assert.match(migration, /phone_verification_available_internal/u);
+  assert.match(migration, /set enabled = true/u);
 });
 
 test("schema proposal defaults rollout off and keeps internal tables private", async () => {
@@ -313,4 +360,59 @@ test("global rollout enables delivery without making phone verification mandator
   assert.match(sql, /enforce_data_access is false/iu);
   assert.doesNotMatch(sql, /enforce_data_access\s*=\s*true/iu);
   assert.doesNotMatch(sql, /required_for_created_at_or_after\s*=/iu);
+});
+
+test("phone verification is open to every user the policy allows, not only administrators", async () => {
+  const [gateway, migration] = await Promise.all([
+    readFile(GATEWAY, "utf8"),
+    readFile(
+      new URL(
+        "../../.migration-backup/supabase/migrations/20260902120000_phone_verification_open_to_all_users.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ]);
+
+  // Both delivery gates read the policy. Leaving either one on a permission
+  // check is how flipping the policy row silently stopped opening anything.
+  assert.match(
+    migration,
+    /function public\.phone_verification_claim_begin_internal[\s\S]*?phone_verification_available_internal/u,
+  );
+  assert.match(
+    migration,
+    /function public\.phone_verification_claim_authorize_sms[\s\S]*?phone_verification_available_internal/u,
+  );
+  assert.doesNotMatch(
+    migration,
+    /phone_verification_claim_(?:begin_internal|authorize_sms)[\s\S]*?has_permission\(p_user_id, 'system\.manage'\)/u,
+  );
+
+  // The predicate is the policy row or a pilot entry, exactly as before the
+  // lockdown, so a pilot cohort still works.
+  assert.match(migration, /phone_verification_policy[\s\S]*?policy\.enabled/u);
+  assert.match(migration, /phone_verification_pilot_users/u);
+  assert.match(migration, /update public\.phone_verification_policy\s*\n\s*set enabled = true/u);
+
+  // Opening delivery must not start cutting existing accounts off, and must not
+  // quietly switch on an enforcement nothing implements yet.
+  assert.doesNotMatch(migration, /set[\s\S]{0,80}enforce_data_access\s*=\s*true/u);
+  assert.doesNotMatch(migration, /set[\s\S]{0,120}required_for_created_at_or_after\s*=/u);
+  assert.match(migration, /enforce_data_access is false/u);
+
+  // Administrator-only actions stay administrator-only.
+  assert.match(migration, /admin_profile_phone_remove_internal[\s\S]*?system\.manage/u);
+  assert.match(gateway, /action === "admin_remove"[\s\S]*?phone_verification_admin_access_internal/u);
+
+  // The rate limits are the only thing bounding delivery cost once every user
+  // can ask for a code, so they must survive the rewrite.
+  for (const limit of [
+    /v_user_hour_count >= 5/u,
+    /v_user_day_count >= 10/u,
+    /v_phone_hour_count >= 5/u,
+    /interval '120 seconds'/u,
+  ]) {
+    assert.match(migration, limit, `rate limit ${limit} was dropped`);
+  }
 });
