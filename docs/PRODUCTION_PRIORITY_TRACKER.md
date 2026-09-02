@@ -103,15 +103,20 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     settles holds the screen forever. Deduplicating to a single in-flight load
     took a local reproduction from 7/10 hung to 0/10. Fixed in `1310d5b`.
 
-    Residual, and stated as an open question rather than a claim: measured
-    against production **after** the fix, with a fresh session per round, 2 of 6
-    returns still hung. The production backend answered every direct probe
-    normally throughout (app 200 in ~60-97ms, auth and REST ~65ms, all containers
-    healthy, load 1.38). The local browser-to-production path also degraded
-    during long runs — `page.goto` to static assets timed out at 30s while curl
-    fetched the same URL in 97ms — so the residual is not cleanly attributable
-    from this workstation. It needs a measurement from a second network before
-    anything is concluded.
+    The residual seen straight after the fix — 2 of 6 returns still hanging —
+    was the measurement, not the product. Those runs signed in four times in two
+    minutes, and the failures followed that rate: they clustered after the first
+    few rounds, appeared as sign-ins that could not complete at all, and
+    persisted with a fresh browser process per round, which rules out anything
+    accumulating in the browser. Spaced 45 seconds apart, as a returning visitor
+    actually behaves, production measured **0 of 6 hung**, every return in
+    466-1169ms.
+
+    The defect itself was not rate-induced, and the comparison that shows it is
+    controlled: the same account at the same measurement rate went from 7/10 hung
+    to 0/10 with only the code changed, and the instrumentation showed three
+    identical outstanding profile requests in every hung run and none in the
+    others.
 
     The second: two scroll-anchoring contracts listed as critical in the handoff
     had been reporting "skipped" on every run instead of protecting anything. The

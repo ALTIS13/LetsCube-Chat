@@ -488,11 +488,11 @@ forever. Nothing was slow: the query executes in 0.55ms and every backend probe
 was normal. Deduplicating took a local reproduction from 7/10 hung to 0/10.
 Fixed in `1310d5b`.
 
-A residual remains and is recorded as an open question rather than a result: 2
-of 6 returns still hung against production afterwards, while the local
-browser-to-production path was itself failing during long runs (`page.goto` to
-static assets timing out at 30s against a 97ms curl). It needs a measurement
-from another network.
+The residual seen straight afterwards — 2 of 6 returns still hanging — turned
+out to be the measurement. Those runs signed in four times in two minutes and
+the failures followed that rate, persisting with a fresh browser process per
+round. Spaced 45 seconds apart, as a returning visitor actually behaves,
+production measured 0 of 6 hung, every return in 466-1169ms.
 
 **Two critical scroll contracts had been skipping on every run.** The helper
 called `count()` on the chat list immediately after sign-in; `count()` is a
