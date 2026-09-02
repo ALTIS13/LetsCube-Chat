@@ -367,7 +367,17 @@ Every relevant change must preserve:
 
 ## 12. Phone Verification State
 
-- Verification is currently restricted to administrators.
+- Verification is open to every authenticated account as of 2026-09-02. It had
+  been administrator-only since 2026-08-21, closed in three places at once: the
+  `isAdmin` guard around `<PhoneSection />`, a blanket administrator check in
+  front of every action of the `phone-verification-gateway` Edge Function, and
+  `has_permission(..., 'system.manage')` inlined into both database gates.
+  Opening any one alone changed nothing, which is why the policy row and the
+  earlier "enable for all accounts" migration existed while the feature stayed
+  unreachable. Migration `20260902120000_phone_verification_open_to_all_users`
+  restored the policy predicate; the gates read
+  `phone_verification_available_internal` (policy row, or an unexpired pilot
+  entry) again.
 - Provider: P1SMS trusted backend integration.
 - Current route: Telegram first; message-scoped digital fallback after `agg_error`,
   `not_delivered`, or a terminal provider error.
@@ -376,6 +386,16 @@ Every relevant change must preserve:
 - Do not mention Telegram in user-facing success copy unless product explicitly
   changes that decision.
 - Do not alter provider account-wide templates/cascades or other LETSCUBE projects.
+- Mandatory verification at registration is **not implemented**. The policy
+  column `required_for_created_at_or_after` exists and is read by
+  `phone_verification_policy_read`, but nothing enforces it, so setting it would
+  change no behaviour. `enforce_data_access` stays `false`; turning it on would
+  cut existing unverified accounts off and needs its own rollout plan.
+- Delivery cost and abuse are bounded by rate limits, not by the audience:
+  120 seconds between sends per claim and per user/phone pair, 5 messages per
+  user per hour, 10 per user per day, 5 per phone number per hour, with
+  webhook-id idempotency. These are the controls that matter now that every
+  account can request a code.
 - Search by phone uses only verified normalized E.164 values, requires the proper
   permission, and must not return the phone number itself in search results.
 

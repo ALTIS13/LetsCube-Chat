@@ -2459,3 +2459,61 @@ Recurring tasks roadmap note:
   5-second timeout is right for a slow mobile network is a question for the
   queued interface stage; there is no evidence of a defect here.
 - No SQL, schema, RLS, iOS/PWA or Android change was made in this rollout.
+
+## 2026-09-02 - bot creation opened and phone verification reopened
+
+- Bot creation: the canary cohort had outlived the canary. `BOT_CREATION_CANARY_USER_IDS`
+  still pinned the single internal owner, so every other account was refused with
+  `403 bot_creation_not_allowed` while meeting every account requirement. The
+  variable is retired rather than widened - the gateway no longer reads it and
+  compose no longer passes it - and `BOT_CREATION_ENABLED` became a kill switch
+  defaulting to open.
+- The refusal was also silent: the client built its reason only from the five
+  account requirements, so an account meeting all five saw the literal text
+  "Создание недоступно: ." with no reason. `describeCreationBlock` now names the
+  server switch in that case; a test walks all 32 flag combinations.
+- Phone verification was closed in three places and all three are now open: the
+  `isAdmin` guard in `SettingsModal`, the blanket administrator check in the
+  `phone-verification-gateway` Edge Function, and the `system.manage` checks
+  inlined into `phone_verification_claim_begin_internal` and
+  `phone_verification_claim_authorize_sms`.
+- Database change followed the migration protocol. Target confirmed as
+  `supabase-db`, database `postgres`, PostgreSQL 17.6, with the pre-state read
+  first: policy `enabled=false`, both gates checking `system.manage`, and
+  `phone_verification_available_internal` absent. Fresh backup
+  `/srv/letscube/backups/pre-migrations/20260902-003625-before-phone-open-to-all.dump`,
+  4 662 173 bytes, verified with `pg_restore --list` (2202 TOC entries, 14
+  entries for the objects being changed). Rehearsed in full with the closing
+  `commit` replaced by `rollback`: every statement succeeded, the migration's own
+  verification block raised nothing, and the policy row read `false` again
+  afterwards. Applied once. Post-apply: policy `enabled=true`,
+  `enforce_data_access=false`, no cutoff set; both delivery gates now reference
+  the policy predicate and neither mentions `system.manage`;
+  `admin_profile_phone_remove_internal` still checks it; execute grants remain
+  `postgres` and `service_role` only, with nothing exposed to `anon` or
+  `authenticated`.
+- Edge Function deployed by hand, which is how functions reach this stack. The
+  deployed file was byte-identical to the repository baseline first (sha256
+  `98f0724d...`), so nothing out of band was overwritten; the previous version
+  was saved to `/srv/letscube/backups/edge-functions/20260902-004046-phone-verification-gateway-index.ts.bak`,
+  the new file matches the repository (`344c03eb...`), and the runtime restarted
+  healthy. An unauthenticated call to
+  `https://core.letscube.ru/functions/v1/phone-verification-gateway` returns
+  `401 unauthorized`.
+- Web deployed through the usual webhook; the served bundle went
+  `index-CuY2fyR6.js` -> `index-CtNkELR6.js`, and Coolify's container tag shows
+  the web app running commit `37f9b63`.
+- **Bot creation is not live yet.** `letscube-bot-gateway`
+  (`twezs89u2m6d6ln6c0rpaqxe`) is the only application of five with
+  `is_auto_deploy_enabled = false`, pinned during the canary and never restored,
+  so it still runs commit `01d26a9` from 32 hours earlier. Its `watch_paths` do
+  cover `artifacts/api-server/**`, so the pin, not the paths, is what held it
+  back. Exactly one commit and one file separate the pinned revision from HEAD
+  within those paths, so the deployment gap is small. It needs a manual deploy.
+- Open operational finding, unrelated to this work: three bot-rollout rehearsal
+  stacks from 2026-08-31 are still running (12 containers, 3 volumes) alongside
+  7.4 GB of reclaimable build cache and 3.8 GB of reclaimable images. The root
+  filesystem is at 61 percent with 45 GB free.
+- Validation: 608/609 unit tests, web typecheck and production build clean,
+  `git diff --check` clean. The single failure is the pre-existing
+  `android-release-signing` fixture, unmodified on this branch.
