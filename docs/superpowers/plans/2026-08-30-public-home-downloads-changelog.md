@@ -466,7 +466,7 @@ the scripts it exercises is modified on this branch, so it is equally red on
 - Consumes the existing `letscube-web` and `letscube-releases` Coolify services.
 - Produces browser-accessible downloads without changing native updater endpoints.
 
-- [ ] **Step 1: Run complete local validation**
+- [~] **Step 1: Run complete local validation**
 
 ```powershell
 git diff --check
@@ -482,7 +482,7 @@ Expected: all PASS. The shared `index.html` theme bootstrap may change, but the
 iPhone/iPad-only manifest injection and `ios_pwa` ownership contract must remain
 behaviorally unchanged and covered by regression tests.
 
-- [ ] **Step 2: Check release catalog production responses**
+- [x] **Step 2: Check release catalog production responses**
 
 Fetch Android and Windows Stable manifests without printing private values.
 Verify HTTPS, `content-type`, artifact origin, availability and optional
@@ -493,11 +493,11 @@ requires both byte count and SHA-256 to equal the manifest before a public link
 is considered eligible. Missing macOS/iOS manifests remain a valid unavailable
 state.
 
-- [ ] **Step 3: Deploy the web application**
+- [x] **Step 3: Deploy the web application**
 
 Push the validated commit, verify Coolify auto-deploy uses the exact commit and wait for a healthy replacement. A docs-only release-catalog change must not redeploy unrelated workers.
 
-- [ ] **Step 4: Run production visual QA**
+- [~] **Step 4: Run production visual QA**
 
 Verify unauthenticated `/`, `/download`, `/privacy`, `/support`, authenticated
 `/`, Windows native startup and Android native startup. Native startup must show
@@ -505,9 +505,43 @@ no public-home flash or redirect. Capture dark/light desktop and mobile
 screenshots and verify the byte-validated download artifacts begin from
 `api.letscube.ru` without login.
 
-- [ ] **Step 5: Record rollout evidence and commit**
+- [x] **Step 5: Record rollout evidence and commit**
 
 ```powershell
 git add docs/operations/public-home-release.md docs/PRODUCTION_PRIORITY_TRACKER.md
 git commit -m "docs(public): record public home rollout"
 ```
+
+## Task 5 closure
+
+Steps 2, 3 and 5 are complete. Steps 1 and 4 are marked `[~]` rather than `[x]`
+because part of each is blocked on something outside this repository, and
+marking them done would misreport what was actually verified.
+
+Complete in step 1: `git diff --check`, the full workspace typecheck across all
+four projects, `release:catalog:test` 35/35 with no skips against the pinned jq
+1.7.1, `public-release-artifact-verification` 12/12, the public-home and routing
+matrices 75/75 across the four release viewports, and the production build.
+
+Blocked in step 1: `e2e:smoke`, `visual-style-layout.spec.ts` and
+`release-distribution-settings.spec.ts` all need a signed-in session. Running
+them is what exposed the harness defect described in `docs/QA_RESULTS.md` — the
+auth helper inferred sign-in from the absence of a password field, which the
+public home made permanently true, so the authenticated suite had been running
+as a guest and reporting success. The helper now proves sign-in and fails
+loudly, and it currently fails because production rejects the stored QA owner
+credentials as incorrect. Those credentials live in the operator's local QA env
+file and have to be refreshed there; nothing in this repository can fix it.
+
+Complete in step 4: unauthenticated `/`, `/download`, `/privacy` and `/support`
+verified against production in both themes at 1440x900 and 390x844, including
+the summary-versus-sections agreement check, image decoding, absence of
+horizontal overflow and a clean console.
+
+Blocked in step 4: authenticated `/` cannot be re-verified until the credentials
+above are refreshed. Windows and Android native startup were not exercised —
+that needs the packaged applications on real devices. The routing contract they
+would demonstrate is covered by the mounted matrix, which parameterises the
+native runtimes and asserts a guest root redirects to `/login`, but a mounted
+test is not the same as a packaged application starting up, and is not recorded
+as one.
