@@ -51,9 +51,12 @@ variant, so it belongs to a hardening task or Task 5.
 
 The bot track is not the current work. Bot Platform v1 is implemented, migrated,
 deployed and production-canary verified; see section 6 and
-`docs/operations/bot-gateway.md`. The only bot item left is widening creation
-admission beyond the single pinned internal owner, which is a separate product
-decision requiring its own review and is explicitly outside this plan. The
+`docs/operations/bot-gateway.md`. Creation admission was widened to general
+availability on 2026-09-02 at the owner's instruction: the canary cohort is
+retired in code rather than enlarged, `BOT_CREATION_ENABLED` is now a kill
+switch, and `letscube-bot-gateway` runs `935a670`. Note that this application is
+the only one of five with Coolify auto-deploy disabled, so it does not follow a
+push and has to be deployed deliberately. The
 public home/downloads/changelog stage is the correct next step, exactly as
 sequenced in the approved design.
 

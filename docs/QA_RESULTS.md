@@ -2547,3 +2547,28 @@ Recurring tasks roadmap note:
   the stored value must be one of those three - and the current code accepts all
   three. If the page still reports the feature switched off after the deploy, the
   value is `false` and needs changing or removing.
+
+## 2026-09-02 - bot gateway deployed, creation live
+
+- Deployed `letscube-bot-gateway` through Coolify's own code path rather than
+  around it: `queue_application_deployment()` with `no_questions_asked` and
+  `is_api`, the same helper its REST controller calls. Deployment
+  `uzu34noqs7jugop1k7jr5ro1` finished on commit `935a670`, and the container now
+  runs `twezs89u2m6d6ln6c0rpaqxe:935a670d...` and reports healthy. The previous
+  image `01d26a92...` is still present as the rollback target.
+- Verified in the running bundle, not just in the repository:
+  `/app/artifacts/api-server/dist/botGatewayIndex.mjs` contains zero occurrences
+  of `BOT_CREATION_CANARY_USER_IDS`, so the value still stored in Coolify is now
+  inert, and one occurrence of `BOT_CREATION_ENABLED`, the kill switch.
+- `BOT_CREATION_ENABLED` was checked by verdict only, without reading or
+  recording its value: it is explicitly enabled, which under the new semantics
+  means creation is open. Under the previous semantics the same value required
+  cohort membership, which is exactly what refused every other account.
+- Gateway startup is clean: `Bot Gateway listening` on port 8098 with no
+  configuration error. Nothing on the host is unhealthy. `app.letscube.ru` and
+  `api.letscube.ru/healthz` return 200 and the management API returns 401
+  unauthenticated.
+- This supersedes the previous entry's statement that the deployment was still
+  pending. The reasoning recorded there held: the stored value was one the new
+  code accepts, so the deploy neither crashed the gateway nor left creation
+  closed.
