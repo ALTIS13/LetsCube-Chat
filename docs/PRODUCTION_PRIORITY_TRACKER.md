@@ -67,7 +67,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 15. `[x]` Expand and group emoji selection without stretching the interface. Folder icons now expose 48 choices across four task-oriented categories; the message composer exposes 80 emoji across five categories. Both use one reusable keyboard-accessible picker, render only the active category and remain overflow-free on desktop and mobile. The message picker is capped at 420px on wide chats and stays full-width on narrow screens.
 16. `[x]` Deploy and canary the LETSCUBE Bot API foundation. A fresh backup, isolated PG17 restore, transactional schema smoke and RLS checks preceded production apply. The dedicated Bot Gateway runs exact commit `01d26a9225fee1cda0b8e9676b4ab03b084dec64`; token rotation, private/restricted update privacy, webhook/polling exclusion, idempotent sends, two-message notification grouping/read-sync, log redaction and exact cleanup passed with push-free QA participants. Bot creation remains limited to one internal owner.
 17. `[~]` Build the unauthenticated public app/download home with theme-safe product previews, verified Windows/Android Stable downloads, a compact Stable changelog and shared motion feedback. Preserve native-shell routing, `/privacy`, `/support`, authentication callbacks and iPhone/iPad PWA ownership boundaries.
-18. `[ ]` Interface audit and polish stage. Requested by the user on 2026-09-01 and deliberately scheduled **after** the public home plan closes, so it does not interleave with an approved in-flight plan. The goal is a measurably better interface, not a restyling: find the accumulated visual defects, make the interface more responsive, and give actions real feedback. It has two halves that must not be merged into one undisciplined sweep.
+18. `[~]` Interface audit and polish stage. Requested by the user on 2026-09-01 and deliberately scheduled **after** the public home plan closes, so it does not interleave with an approved in-flight plan. The goal is a measurably better interface, not a restyling: find the accumulated visual defects, make the interface more responsive, and give actions real feedback. It has two halves that must not be merged into one undisciplined sweep.
 
     - **Half A - audit first, then fix.** Enumerate defects before changing anything. Sweep the five release viewports (`3840x2160`, `1920x1080`, `1440x900`, `390x844`, `412x915`), both themes, and all three shells (browser, Windows Tauri WebView2, Android APK WebView). Record every finding with a reproduction, the exact surface, a screenshot and a severity, then fix in scoped batches with a regression test proportional to the risk. Do not "polish by eye": a change without a recorded defect or an explicit design decision is out of scope. Expect findings in layout overflow and clipping, inconsistent spacing and control heights, focus and hover states, contrast in both themes, scrollbar and safe-area behaviour, keyboard insets on Android, long-content and long-name truncation, empty and error states, and loading placeholders that shift layout.
     - **Half B - execute the already approved motion plan.** `docs/superpowers/plans/2026-08-30-shared-motion-feedback.md` already specifies the response and action animations: semantic timing tokens (90/140/220/320 ms and a ~2.4 s transient success), a bounded global action-feedback controller, consistent copy/save feedback, standardized loading/modal/save transitions, and cross-platform visual QA. It is 5 tasks and 33 steps, none started. Execute that plan rather than inventing a parallel animation system.
@@ -77,6 +77,47 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     The defect register is open at `docs/INTERFACE_DEFECT_REGISTER.md`; entries D-001 to D-005 were recorded on 2026-09-01 while capturing the product previews from the shipping components.
 
     Deliverables: a defect register with evidence, scoped fix commits with tests, the motion plan closed task by task, and a visual QA record across the viewport and shell matrix. Write the detailed task-by-task plan when this stage actually starts; this entry is the approved scope and ordering only.
+
+    **Progress as of 2026-09-03.** Half A's audit harness is
+    `scripts/interface-audit.mjs`; it measures overflow, clipping, touch targets,
+    contrast and focus visibility across the surface/viewport/theme matrix and
+    refuses to measure an unstyled page — an early run produced 549 invented
+    findings from raw HTML, every contrast reading exactly 1.00:1. The register
+    at `docs/INTERFACE_DEFECT_REGISTER.md` now runs to D-019. Production
+    measures 64 cells, 0 findings, 0 unreachable.
+
+    Half B's motion plan is closed through Task 4; the shipped contract is
+    documented in `docs/operations/shared-motion-feedback.md`. Task 5's browser
+    validation is done; its Windows and Android runs remain.
+
+    **Two defects found by this stage were worse than anything it set out to
+    find, and neither was cosmetic.**
+
+    The first: the profile was fetched three times concurrently while a stored
+    session was being recovered — once by the mount effect and again for every
+    auth event Supabase emits along the way. Measured against production, six
+    restored sessions out of ten never reached the app; a person who closed the
+    tab and came back sat on a spinner. Nothing was slow — that query executes in
+    0.55ms, PostgREST was healthy and Postgres had 28 idle connections of 100 —
+    but `loading` is only cleared in a `finally`, so one request that never
+    settles holds the screen forever. Deduplicating to a single in-flight load
+    took a local reproduction from 7/10 hung to 0/10. Fixed in `1310d5b`.
+
+    Residual, and stated as an open question rather than a claim: measured
+    against production **after** the fix, with a fresh session per round, 2 of 6
+    returns still hung. The production backend answered every direct probe
+    normally throughout (app 200 in ~60-97ms, auth and REST ~65ms, all containers
+    healthy, load 1.38). The local browser-to-production path also degraded
+    during long runs — `page.goto` to static assets timed out at 30s while curl
+    fetched the same URL in 97ms — so the residual is not cleanly attributable
+    from this workstation. It needs a measurement from a second network before
+    anything is concluded.
+
+    The second: two scroll-anchoring contracts listed as critical in the handoff
+    had been reporting "skipped" on every run instead of protecting anything. The
+    helper called `count()` on the chat list immediately after sign-in, and
+    `count()` is a snapshot rather than a wait, so it read zero rows and skipped.
+    They run now.
 
 ## Last Confirmed Deploy Baseline
 
