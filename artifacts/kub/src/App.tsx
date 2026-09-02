@@ -42,6 +42,7 @@ import {
 } from "@/lib/authRecovery";
 import { isAuthRoute, isPublicRoute } from "@/lib/publicRoutes";
 import { decideRootExperience } from "@/lib/publicHomeRouting";
+import { DesktopWindowChrome } from "@/components/layout/DesktopWindowChrome";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -367,7 +368,12 @@ function AppRoutes() {
 
   if (location === "/") {
     if (rootExperience === "loading") {
-      return <LoadingScreen error={loadingError} onRetry={retry} onSignOut={user ? signOut : undefined} />;
+      return (
+        <>
+          <DesktopWindowChrome />
+          <LoadingScreen error={loadingError} onRetry={retry} onSignOut={user ? signOut : undefined} />
+        </>
+      );
     }
     if (rootExperience === "public_home") {
       return <PublicHomePage />;
@@ -378,7 +384,12 @@ function AppRoutes() {
   }
 
   if (loading || loadingError) {
-    return <LoadingScreen error={loadingError} onRetry={retry} onSignOut={user ? signOut : undefined} />;
+    return (
+      <>
+        <DesktopWindowChrome />
+        <LoadingScreen error={loadingError} onRetry={retry} onSignOut={user ? signOut : undefined} />
+      </>
+    );
   }
 
   if (!user && !authRoute) {
@@ -393,12 +404,21 @@ function AppRoutes() {
   // and nothing else.  An auto sign-out timer inside BannedScreen will then
   // bounce them back to /login.
   if (user && banState.banned && banState.ban) {
-    return <BannedScreen ban={banState.ban} />;
+    return (
+      <>
+        <DesktopWindowChrome />
+        <BannedScreen ban={banState.ban} />
+      </>
+    );
   }
 
   return (
     <>
       {user && <GlobalSearchPalette />}
+      {/* The messenger draws its own title bar in AppTopBar; every other
+          surface had none at all, which left the window unmovable and
+          unclosable outside it. See D-016. */}
+      <DesktopWindowChrome suppressed={location === "/"} />
       <Switch>
         <Route path="/login" component={LoginForm} />
         <Route path="/register" component={RegisterForm} />

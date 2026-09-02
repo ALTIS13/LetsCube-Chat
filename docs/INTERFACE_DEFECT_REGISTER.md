@@ -609,3 +609,39 @@ device is recorded anywhere.
 **Cleanup:** the debug package is uninstalled from both phones, both still report
 `com.kub.messenger 0.1.2`, the port forward is removed and `build.gradle` is
 reverted.
+
+# Shell audit, 2026-09-02 — Windows
+
+## D-016 — outside the messenger the desktop window cannot be moved or closed
+
+**Severity:** P1. It affects the login screen, which every desktop user sees
+before anything else, and it removes control of the window rather than making it
+awkward.
+
+**Where:** `windows-tauri/src-tauri/tauri.conf.json` sets `"decorations": false`,
+so the application draws its own title bar. That bar is `AppTopBar`, and
+`AppTopBar` is rendered only by `MainLayout` — the authenticated messenger.
+
+**Reproduction, confirmed by doing it rather than by reading the code.** Open the
+Windows application while signed out. The window's top edge carries no title bar
+and no minimise, maximise or close control. Dragging from the top strip does not
+move the window: it stays exactly where it was. The only ways out are Alt+F4, the
+taskbar, or the window edges for resizing.
+
+**Surfaces affected:** login, register, the loading screen, the retryable
+loading error, and the ban screen — everything the messenger shell does not
+render.
+
+**Fixed** with `DesktopWindowChrome`, which renders nothing outside the Windows
+shell and nothing where `AppTopBar` is already present, so the messenger keeps
+exactly one title bar. Its glyphs mirror `AppTopBar`'s so the two cannot drift
+apart.
+
+## The rest of the Windows shell
+
+The updater surface behaves: with an update available the pill reads
+`Доступно обновление` with `Обновить` and `Позже`, and it sits inside the content
+area rather than over a control. No finding.
+
+The window is `resizable: true`, so edge resizing worked throughout, which is why
+the missing chrome was a loss of control rather than a trap.
