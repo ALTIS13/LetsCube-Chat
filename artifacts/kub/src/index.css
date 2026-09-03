@@ -634,6 +634,20 @@ textarea::placeholder, input::placeholder {
   animation: kub-shimmer var(--kub-motion-shimmer) linear infinite;
 }
 
+/* Room beside a message for the hover action cluster.
+   Zero on a touch layout, where there is no hover and the cluster is not
+   rendered at all — reserving 104px of a 390px screen there would cost the
+   message most of its width for nothing. */
+:root {
+  --kub-action-lane: 0px;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --kub-action-lane: 6.5rem;
+  }
+}
+
 /* A modal's entry moves nothing that has a size. The overlay fades and the
    panel rises 8px while scaling from .99 — geometry is untouched, so the
    dialog's own layout is settled from the first frame and a control inside it

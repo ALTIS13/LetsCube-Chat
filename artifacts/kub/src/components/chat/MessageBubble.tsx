@@ -114,7 +114,7 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
   switch (kind) {
     case "link":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(64vw,580px)] md:max-w-[min(52vw,580px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(64vw,580px,calc(100%-var(--kub-action-lane)))] md:max-w-[min(52vw,580px,calc(100%-var(--kub-action-lane)))]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
@@ -126,39 +126,49 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
       };
     case "longToken":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(60vw,580px)] md:max-w-[min(52vw,580px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(60vw,580px,calc(100%-var(--kub-action-lane)))] md:max-w-[min(52vw,580px,calc(100%-var(--kub-action-lane)))]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
     case "regular":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(70vw,560px)] md:max-w-[min(56vw,560px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(70vw,560px,calc(100%-var(--kub-action-lane)))] md:max-w-[min(56vw,560px,calc(100%-var(--kub-action-lane)))]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:break-word] [word-break:normal]",
       };
     case "short":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px)] md:max-w-[min(65vw,680px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px,calc(100%-var(--kub-action-lane)))] md:max-w-[min(65vw,680px,calc(100%-var(--kub-action-lane)))]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:break-word] [word-break:normal]",
       };
     case "media":
     default:
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px)] md:max-w-[min(65vw,680px)]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px,calc(100%-var(--kub-action-lane)))] md:max-w-[min(65vw,680px,calc(100%-var(--kub-action-lane)))]",
         bubble: "w-fit",
         text: "[overflow-wrap:break-word] [word-break:normal]",
       };
   }
 }
 
+/**
+ * The inline cap, which beats the class one — so it carries the same reserve.
+ *
+ * `calc(100% - 6.5rem)` keeps a lane clear beside the bubble for the hover
+ * actions. The row hides its overflow, so without it a bubble at full width
+ * left the action cluster nothing: measured on a 1024px window it started at
+ * x=347 against a clip edge of x=396, with 49px cut off.
+ */
+const ACTION_LANE = "calc(100% - var(--kub-action-lane))";
+
 function getMessageStackStyle(kind: TextLayoutKind): CSSProperties | undefined {
   switch (kind) {
     case "link":
     case "longToken":
-      return { maxWidth: "min(86vw, 580px)" };
+      return { maxWidth: `min(86vw, 580px, ${ACTION_LANE})` };
     case "regular":
-      return { maxWidth: "min(86vw, 560px)" };
+      return { maxWidth: `min(86vw, 560px, ${ACTION_LANE})` };
     default:
       return undefined;
   }
@@ -1248,7 +1258,7 @@ export function MessageBubble({
                 // bubble while the group itself is about 92px wide, so it
                 // actually overlapped the message by roughly 12px — the "icons
                 // pressed against the message" in the report.
-                "absolute top-1 z-10 hidden items-center gap-0.5 rounded-full border border-[color:var(--kub-border-color)]",
+                "absolute top-1/2 z-10 hidden -translate-y-1/2 items-center gap-0.5 rounded-full border border-[color:var(--kub-border-color)]",
                 "bg-[var(--kub-surface-2)] p-0.5 opacity-0 shadow-sm transition-opacity sm:flex",
                 "group-hover:opacity-100 focus-within:opacity-100",
                 isMe ? "right-full mr-2" : "left-full ml-2",
