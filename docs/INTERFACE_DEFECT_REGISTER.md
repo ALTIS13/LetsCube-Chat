@@ -1295,3 +1295,15 @@ resizing the window. Recorded as open rather than treated as fixed by the entry
 change.
 
 The QA owner's chat `a04cccda` now holds 1368 messages for further work on this.
+
+## D-029 — media previews load the full file, not a preview-sized one
+
+Requested 2026-09-03: message media previews, and the gallery in particular,
+should load a compressed version for preview rather than the original.
+
+Not yet investigated. What to establish first, before changing anything: which
+variants the media pipeline already produces (there is variant processing in the
+product), what the message list and the gallery actually request today, and how
+much is being transferred for a preview that will be shown at a few hundred
+pixels. The answer decides whether this is a request-side fix (ask for an
+existing variant) or a pipeline one (produce the variant).
