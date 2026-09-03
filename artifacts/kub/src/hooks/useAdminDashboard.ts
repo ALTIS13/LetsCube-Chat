@@ -170,11 +170,16 @@ async function loadMetrics(
   weekIso: string,
   onlineCutoffIso: string,
 ): Promise<SectionResult<AdminDashboardMetrics>> {
+  // QA accounts are excluded from every user figure. A count that quietly
+  // includes five test logins is worse than no count: it reads as growth.
+  const realUsers = () =>
+    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("is_test_account", false);
+
   const results = await Promise.all([
-    supabase.from("profiles").select("id", { count: "exact", head: true }),
-    supabase.from("profiles").select("id", { count: "exact", head: true }).gte("online_at", onlineCutoffIso),
-    supabase.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", todayIso),
-    supabase.from("profiles").select("id", { count: "exact", head: true }).gte("created_at", weekIso),
+    realUsers(),
+    realUsers().gte("online_at", onlineCutoffIso),
+    realUsers().gte("created_at", todayIso),
+    realUsers().gte("created_at", weekIso),
     supabase.from("chats").select("id", { count: "exact", head: true }),
     supabase.from("messages").select("id", { count: "exact", head: true }).gte("created_at", todayIso),
     supabase.from("bans").select("id", { count: "exact", head: true }).or(`expires_at.is.null,expires_at.gt.${nowIso}`),
@@ -222,6 +227,7 @@ async function loadRecentUsers(supabase: SupabaseClient): Promise<SectionResult<
   const { data, error } = await supabase
     .from("profiles")
     .select("id,username,full_name,avatar_url,bio,online_at,role,created_at,updated_at")
+    .eq("is_test_account", false)
     .order("created_at", { ascending: false })
     .limit(6);
 

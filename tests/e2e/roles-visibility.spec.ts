@@ -79,6 +79,10 @@ test.describe("KUB role visibility", () => {
 
     await gotoOrSkip(page, "/tasks");
     await expect(page).toHaveURL(/\/tasks/);
+    // The task filters collapse by default (b869c07). What this asserts is the
+    // permission — that the cleanup control is there for this role at all —
+    // not that the panel happens to be open.
+    await page.getByRole("button", { name: "Фильтры" }).first().click();
     await expect(page.getByText("Показать удалённые")).toBeVisible();
   });
 });

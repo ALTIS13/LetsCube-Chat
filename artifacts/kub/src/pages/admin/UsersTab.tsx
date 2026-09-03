@@ -78,6 +78,7 @@ export function UsersTab() {
   const [locationRoleFilter, setLocationRoleFilter] = useState("");
   const [primaryAdminFilter, setPrimaryAdminFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [showTestAccounts, setShowTestAccounts] = useState(false);
   // The filter panel is collapsed by default. Five selects across the top cost
   // the list the space it needs, and an inactive select looks like an active
   // one — what is actually narrowing the list now lives in the chips below.
@@ -294,6 +295,7 @@ export function UsersTab() {
       const hasAdminLocation = locationRoleKeys.some(isAdminLikeLocationRole);
       const hasClientGlobalRole = userGlobalRoles.some((role) => role.key === "user" || role.key === "client");
       const hasAdminGlobalRole = userGlobalRoles.some((role) => ["owner", "tech_admin", "admin"].includes(role.key));
+      if (!showTestAccounts && user.is_test_account) return false;
       if (statusFilter === "no_location" && memberships.length > 0) return false;
       if (statusFilter === "no_dynamic_role" && userGlobalRoles.length > 0) return false;
       if (
@@ -306,7 +308,13 @@ export function UsersTab() {
       if (statusFilter === "tech_admin" && !userGlobalRoles.some((role) => role.key === "tech_admin")) return false;
       return true;
     });
-  }, [dynamicRoleById, dynamicRolesByUser, emails, globalRoleFilter, locationFilter, locationMembersByUser, locationRoleFilter, primaryAdminFilter, queryRaw, rows, statusFilter]);
+  }, [dynamicRoleById, dynamicRolesByUser, emails, globalRoleFilter, locationFilter, locationMembersByUser, locationRoleFilter, primaryAdminFilter, queryRaw, rows, showTestAccounts, statusFilter]);
+
+  // Hidden, not lost: the count says they are there and one click shows them.
+  const hiddenTestAccounts = useMemo(
+    () => (showTestAccounts ? 0 : rows.filter((user) => user.is_test_account).length),
+    [rows, showTestAccounts],
+  );
 
   const selectedUsers = useMemo(
     () => rows.filter((user) => selectedIds.has(user.id)),
@@ -631,6 +639,15 @@ export function UsersTab() {
             </SelectField>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <KubButton
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowTestAccounts((shown) => !shown)}
+              leftIcon={<KubIcon name={showTestAccounts ? "eyeOff" : "eye"} size={13} />}
+            >
+              {showTestAccounts ? "Скрыть тестовые" : "Показать тестовые"}
+            </KubButton>
             <KubButton type="button" variant="ghost" size="sm" onClick={clearFilters} leftIcon={<KubIcon name="close" size={13} />}>
               Очистить фильтры
             </KubButton>
@@ -820,6 +837,11 @@ export function UsersTab() {
                       {isSelf && (
                         <KubBadge tone="cyan" dot={false} className="text-[10px]">
                           вы
+                        </KubBadge>
+                      )}
+                      {u.is_test_account && (
+                        <KubBadge tone="muted" dot={false} className="text-[10px]" data-testid="test-account-badge">
+                          тест
                         </KubBadge>
                       )}
                     </div>

@@ -8,6 +8,7 @@ import { isSavedChatLikeName } from "@/lib/chatDisplay";
 import { cn } from "@/lib/utils";
 import { messageActorAvatarUrl, messageActorDisplayName, type MessageActor } from "@/lib/messageActor";
 import { avatarInkFor } from "@/lib/avatarInk";
+import { FRAME_RING_WIDTH, frameStyle } from "@/lib/profileCosmetics";
 
 // Generate consistent color from string
 function getAvatarColor(str: string): string {
@@ -167,6 +168,46 @@ export function ChatAvatar({ chat, size = "md", className, showOnline, isSaved: 
   );
 }
 
+/**
+ * An earned frame, drawn as a ring *outside* the avatar.
+ *
+ * Deliberately not a border on the avatar itself: a border eats into the
+ * picture and changes the element's size, which would shift every row the
+ * avatar sits in the moment someone earned one. The ring is painted by a
+ * wrapper that grows outward, so an undecorated avatar and a decorated one
+ * occupy the same box.
+ */
+function AvatarFrame({
+  frame,
+  size,
+  children,
+}: {
+  frame: string | null | undefined;
+  size: "sm" | "md" | "lg" | "xl";
+  children: ReactNode;
+}) {
+  const style = frameStyle(frame);
+  if (!style) return <>{children}</>;
+  const width = FRAME_RING_WIDTH[size];
+  return (
+    <span
+      data-profile-frame={frame}
+      className="pointer-events-none absolute inset-0 flex items-center justify-center"
+      style={{
+        margin: -width,
+        padding: width,
+        borderRadius: "9999px",
+        background: style.ring,
+        boxShadow: style.glow,
+      }}
+    >
+      <span className="flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-[var(--kub-bg)]">
+        {children}
+      </span>
+    </span>
+  );
+}
+
 export function UserAvatar({
   user,
   size = "md",
@@ -174,7 +215,9 @@ export function UserAvatar({
   showOnline,
   avatarVariant,
 }: {
-  user: Pick<Profile, "id" | "full_name" | "username" | "avatar_url">;
+  user: Pick<Profile, "id" | "full_name" | "username" | "avatar_url"> & {
+    profile_frame?: string | null;
+  };
   size?: "sm" | "md" | "lg" | "xl";
   className?: string;
   showOnline?: boolean;
@@ -195,18 +238,26 @@ export function UserAvatar({
     </div>
   );
 
+  const picture = user.avatar_url ? (
+    <AvatarImage
+      name={name}
+      originalUrl={user.avatar_url}
+      avatarVariant={avatarVariant}
+      size={size}
+      fallback={fallback}
+    />
+  ) : (
+    fallback
+  );
+
   return (
-    <div className={cn("relative flex-shrink-0", className)}>
-      {user.avatar_url ? (
-        <AvatarImage
-          name={name}
-          originalUrl={user.avatar_url}
-          avatarVariant={avatarVariant}
-          size={size}
-          fallback={fallback}
-        />
+    <div className={cn("relative flex-shrink-0", sizeMap[size], className)}>
+      {frameStyle(user.profile_frame) ? (
+        <AvatarFrame frame={user.profile_frame} size={size}>
+          {picture}
+        </AvatarFrame>
       ) : (
-        fallback
+        picture
       )}
       {showOnline && (
         <span

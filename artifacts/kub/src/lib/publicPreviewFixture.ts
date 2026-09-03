@@ -186,6 +186,10 @@ function previewProfile(id: string, name: string, username: string | null): Prof
     full_name: name,
     avatar_url: null,
     bio: null,
+    is_test_account: false,
+    // The preview shows the product, not anyone's earned decoration.
+    profile_frame: null,
+    profile_background: null,
     online_at: EPOCH,
     role: "user",
     created_at: EPOCH,

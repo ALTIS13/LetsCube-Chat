@@ -50,6 +50,9 @@ export interface Database {
           full_name: string | null
           avatar_url: string | null
           bio: string | null
+          is_test_account: boolean
+          profile_frame: string | null
+          profile_background: string | null
           online_at: string | null
           role: AppRole
           created_at: string
@@ -61,6 +64,9 @@ export interface Database {
           full_name?: string | null
           avatar_url?: string | null
           bio?: string | null
+          is_test_account?: boolean
+          profile_frame?: string | null
+          profile_background?: string | null
           online_at?: string | null
           role?: AppRole
           created_at?: string
@@ -72,6 +78,9 @@ export interface Database {
           full_name?: string | null
           avatar_url?: string | null
           bio?: string | null
+          is_test_account?: boolean
+          profile_frame?: string | null
+          profile_background?: string | null
           online_at?: string | null
           role?: AppRole
           created_at?: string

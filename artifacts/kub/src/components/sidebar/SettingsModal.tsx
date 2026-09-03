@@ -18,6 +18,7 @@ import { mapPgError, prefixError } from "@/lib/errors";
 import { isNativeAndroid } from "@/lib/platform/capabilities";
 import { isDesktopApp } from "@/lib/platform/desktop";
 import { ReleaseDistributionSection } from "@/components/settings/ReleaseDistributionSection";
+import { ProfileDecorationSection } from "@/components/settings/ProfileDecorationSection";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
 import {
   PROFILE_LIMITS,
@@ -318,6 +319,11 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       <div className="border-t border-[color:var(--kub-border-color)] px-4 py-4 sm:px-5">
         <SectionLabel>Телефон</SectionLabel>
         <PhoneSection />
+      </div>
+
+      <div className="border-t border-[color:var(--kub-border-color)] px-4 py-4 sm:px-5">
+        <SectionLabel>Оформление</SectionLabel>
+        <ProfileDecorationSection />
       </div>
         </div>
       )}
