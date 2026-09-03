@@ -996,6 +996,70 @@ test("actor-scoped missing and unauthorized bot ids have one response", async ()
   });
 });
 
+test("the avatar route refuses anything but this project's own public object", async () => {
+  // The database refuses a bad avatar too, but a route that forwards junk to
+  // it turns a clear rejection into a 500 and loses the reason. These are the
+  // shapes that must not reach the RPC at all.
+  const refused = [
+    { why: "a foreign host", avatar_url: "https://evil.example/a.png" },
+    {
+      why: "a signed url",
+      avatar_url: `https://core.letscube.ru/storage/v1/object/sign/media/bot-avatars/${BOT_ID}/a.webp?token=x`,
+    },
+    {
+      why: "another prefix in our own storage",
+      avatar_url: "https://core.letscube.ru/storage/v1/object/public/media/avatars/x/a.webp",
+    },
+    { why: "not a url at all", avatar_url: "bot-avatars/x/a.webp" },
+    { why: "a number", avatar_url: 7 },
+  ];
+
+  for (const current of refused) {
+    const calls: ManagementCall[] = [];
+    const server = await listen(
+      createManagementApp({
+        calls,
+        async rpc() {
+          return { data: { success: true }, error: null };
+        },
+      }),
+    );
+    const body = JSON.stringify({ avatar_url: current.avatar_url });
+    const response = await call(server, `/bot/manage/v1/bots/${BOT_ID}/avatar`, {
+      method: "PATCH",
+      headers: { authorization: `Bearer ${ACCESS_TOKEN}`, "content-type": "application/json" },
+      body,
+    });
+    await close(server);
+
+    assert.notEqual(response.status, 200, `${current.why} was accepted`);
+    assert.deepEqual(calls, [], `${current.why} reached the database`);
+  }
+});
+
+test("the avatar route accepts clearing the picture", async () => {
+  const calls: ManagementCall[] = [];
+  const server = await listen(
+    createManagementApp({
+      calls,
+      async rpc() {
+        return { data: { success: true }, error: null };
+      },
+    }),
+  );
+  const body = JSON.stringify({ avatar_url: null });
+  const response = await call(server, `/bot/manage/v1/bots/${BOT_ID}/avatar`, {
+    method: "PATCH",
+    headers: { authorization: `Bearer ${ACCESS_TOKEN}`, "content-type": "application/json" },
+    body,
+  });
+  await close(server);
+
+  assert.equal(response.status, 200, JSON.stringify(response));
+  assert.equal(calls[0]?.name, "bot_set_avatar_internal");
+  assert.equal((calls[0]?.args as { p_avatar_url?: unknown }).p_avatar_url, null);
+});
+
 test("owner and developer management verbs map to fixed RPCs", async (t) => {
   const cases = [
     {
@@ -1003,6 +1067,14 @@ test("owner and developer management verbs map to fixed RPCs", async (t) => {
       path: `/bot/manage/v1/bots/${BOT_ID}/profile`,
       body: { display_name: "Cube Helper", description: "Updated" },
       rpc: "bot_update_profile_internal",
+    },
+    {
+      method: "PATCH",
+      path: `/bot/manage/v1/bots/${BOT_ID}/avatar`,
+      body: {
+        avatar_url: `https://core.letscube.ru/storage/v1/object/public/media/bot-avatars/${BOT_ID}/avatar-1.webp`,
+      },
+      rpc: "bot_set_avatar_internal",
     },
     {
       method: "PUT",

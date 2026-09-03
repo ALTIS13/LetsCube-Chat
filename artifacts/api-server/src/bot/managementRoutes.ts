@@ -145,6 +145,19 @@ const profileInputSchema = z
     description: z.string().max(512),
   })
   .strict();
+// The picture is a public object in this project's own storage, under the
+// prefix that holds bot avatars. The database checks the rest — that it is
+// *this* bot's file — because only it knows which bot the route is for.
+const avatarInputSchema = z
+  .object({
+    avatar_url: z
+      .string()
+      .max(2048)
+      .url()
+      .startsWith("https://core.letscube.ru/storage/v1/object/public/media/bot-avatars/")
+      .nullable(),
+  })
+  .strict();
 const commandsInputSchema = z
   .object({
     commands: z
@@ -656,6 +669,12 @@ export function createBotManagementRouter(
         p_description: body.description,
       };
     }),
+  );
+  router.patch(
+    "/bots/:botId/avatar",
+    mutationRoute(input, "bot_set_avatar_internal", (request) => ({
+      p_avatar_url: avatarInputSchema.parse(request.body).avatar_url,
+    })),
   );
   router.put(
     "/bots/:botId/commands",

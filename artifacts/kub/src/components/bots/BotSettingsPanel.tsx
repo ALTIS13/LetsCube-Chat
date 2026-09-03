@@ -1,5 +1,5 @@
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { KubBadge, KubButton, KubEmptyState, KubIcon, KubInput } from "@/components/kub";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,6 +26,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
   const owner = bot.role === "owner";
   const editable = bot.state === "active" || bot.state === "paused";
   const mutations = useBotMutations(bot.id);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [confirm, setConfirm] = useState<ConfirmAction>(null);
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState({ display_name: bot.display_name, description: bot.description });
@@ -88,7 +89,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
     <div className="min-w-0">
       <div className="border-b border-[color:var(--kub-border-color)] px-4 py-4 sm:px-6">
         <div className="flex min-w-0 items-start gap-3">
-          <BotMark name={bot.display_name} />
+          <BotMark name={bot.display_name} avatarUrl={bot.avatar_url} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="break-words text-lg font-semibold text-[color:var(--kub-text)]">{bot.display_name}</h2>
@@ -124,6 +125,40 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
                 <label htmlFor={`bot-description-${bot.id}`} className="text-xs font-medium uppercase text-[color:var(--kub-muted)]">Описание</label>
                 <textarea id={`bot-description-${bot.id}`} value={profile.description} onChange={(event) => setProfile({ ...profile, description: event.target.value })} disabled={!owner || !editable} maxLength={512} rows={4} className="mt-1.5 w-full resize-none rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3 text-sm text-[color:var(--kub-text)] outline-none disabled:opacity-60" />
               </div>
+              {owner && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <BotMark name={bot.display_name} avatarUrl={bot.avatar_url} />
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null;
+                      event.target.value = "";
+                      if (file) run(() => mutations.avatar.mutateAsync(file));
+                    }}
+                  />
+                  <KubButton
+                    variant="secondary"
+                    className="min-h-11"
+                    disabled={!editable || mutations.avatar.isPending}
+                    onClick={() => avatarInputRef.current?.click()}
+                  >
+                    {bot.avatar_url ? "Заменить картинку" : "Загрузить картинку"}
+                  </KubButton>
+                  {bot.avatar_url && (
+                    <KubButton
+                      variant="ghost"
+                      className="min-h-11"
+                      disabled={!editable || mutations.avatar.isPending}
+                      onClick={() => run(() => mutations.avatar.mutateAsync(null))}
+                    >
+                      Убрать
+                    </KubButton>
+                  )}
+                </div>
+              )}
               {owner && <KubButton className="min-h-11 justify-self-start" disabled={!editable || mutations.profile.isPending} onClick={() => run(() => mutations.profile.mutateAsync(profile))}>Сохранить профиль</KubButton>}
             </div>
           </Section>
@@ -231,8 +266,16 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
   );
 }
 
-function BotMark({ name }: { name: string }) {
-  return <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]"><KubIcon name="bot" size={23} label={`${name}, бот`} /></div>;
+function BotMark({ name, avatarUrl }: { name: string; avatarUrl?: string | null }) {
+  return (
+    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]">
+      {avatarUrl ? (
+        <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <KubIcon name="bot" size={23} label={`${name}, бот`} />
+      )}
+    </div>
+  );
 }
 
 function LifecycleBadge({ state }: { state: BotDetail["bot"]["state"] }) {

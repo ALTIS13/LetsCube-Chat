@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { botManagement, type BotCommand } from "@/lib/botManagement";
+import { clearBotAvatar, uploadBotAvatar } from "@/lib/botAvatar";
 
 const listKey = ["bot-management", "list"] as const;
 const detailKey = (botId: string) => ["bot-management", "detail", botId] as const;
@@ -34,6 +35,15 @@ export function useBotMutations(botId: string) {
     cancelDeletion: useMutation({ mutationFn: () => botManagement.cancelDeletion(botId), onSuccess: refresh, retry: false }),
     profile: useMutation({
       mutationFn: (input: { display_name: string; description: string }) => botManagement.updateProfile(botId, input),
+      onSuccess: refresh,
+      retry: false,
+    }),
+    avatar: useMutation({
+      // `null` removes the picture; a file uploads and records one.
+      mutationFn: async (file: File | null) => {
+        if (file) await uploadBotAvatar(botId, file);
+        else await clearBotAvatar(botId);
+      },
       onSuccess: refresh,
       retry: false,
     }),

@@ -1,4 +1,4 @@
-import { DEFAULT_MEDIA_QUALITY, getImageUploadProfile, type MediaQuality } from "./mediaQuality";
+import { DEFAULT_MEDIA_QUALITY, getImageUploadProfile, type MediaQuality } from "./mediaQuality.ts";
 
 const MAX_AVATAR_UPLOAD_BYTES = 2 * 1024 * 1024;
 const MAX_AVATAR_SOURCE_BYTES = 15 * 1024 * 1024;
@@ -80,14 +80,25 @@ export async function readMediaDimensions(file: File): Promise<MediaDimensions |
   return null;
 }
 
-export function avatarUploadPath(kind: "user" | "chat", ownerId: string, file: File): string {
+const AVATAR_PREFIXES = {
+  user: "avatars",
+  chat: "chat-avatars",
+  bot: "bot-avatars",
+} as const;
+
+export function avatarUploadPath(
+  kind: keyof typeof AVATAR_PREFIXES,
+  ownerId: string,
+  file: File,
+): string {
   const ext = IMAGE_EXTENSIONS[file.type] ?? "bin";
   const unique =
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `${Date.now()}`;
-  const prefix = kind === "user" ? "avatars" : "chat-avatars";
-  return `${prefix}/${ownerId}/avatar-${unique}.${ext}`;
+  // The prefix is what the storage policy keys on, so it is not a detail: each
+  // one is a different question about who may write here.
+  return `${AVATAR_PREFIXES[kind]}/${ownerId}/avatar-${unique}.${ext}`;
 }
 
 function readVideoDimensions(file: File): Promise<MediaDimensions | null> {

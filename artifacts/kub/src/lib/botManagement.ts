@@ -214,6 +214,9 @@ export const botManagement = {
     request(`/bots/${botId}/token/rotate`, rotateSchema, json("POST", { expected_token_prefix: expectedTokenPrefix }), { uncertainOnAmbiguousFailure: true }),
   updateProfile: (botId: string, input: { display_name: string; description: string }) =>
     request(`/bots/${botId}/profile`, successSchema, json("PATCH", input)),
+  /** `null` removes the picture. The upload happens first; this records it. */
+  setAvatar: (botId: string, avatarUrl: string | null) =>
+    request(`/bots/${botId}/avatar`, successSchema, json("PATCH", { avatar_url: avatarUrl })),
   updateCommands: (botId: string, commands: BotCommand[]) =>
     request(`/bots/${botId}/commands`, successSchema, json("PUT", { commands })),
   pause: (botId: string) => request(`/bots/${botId}/pause`, successSchema, json("POST")),
