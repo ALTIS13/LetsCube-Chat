@@ -1214,3 +1214,56 @@ Two contributions were found and one is fixed:
   properly means stabilising those handlers, and `MessageList` carries the
   critical scroll-anchoring contracts — so it needs its own change with its own
   verification pass, not a patch appended to a batch of visual fixes.
+
+## D-027 — every message changed height a frame after it appeared
+
+Reported as "лаги и визуальные баги при перелистывании", 2026-09-03. Found by
+the critical contract `loading older messages preserves the visible history
+anchor`, which had been skipping on every run until 2026-09-02.
+
+Measured on production, on a chat of 100 messages: **304 height changes after
+mount and 1865px of total growth.** Every one was the timestamp's placement
+flipping from inline to a row of its own, adding 12-15px. The same churn broke
+the reader's place when older history was prepended: the anchor drifted 1147px
+while the content grew 6469px, against a contract that allows 3px.
+
+Four causes, all fixed, and the order they were found in matters because each
+one hid the next:
+
+1. **The measurement ran after paint.** It went through
+   `requestAnimationFrame`, so the first frame showed one layout and the second
+   another. It now measures synchronously in the layout effect.
+
+2. **The fit test read a width that depended on its own answer.**
+   `parsePixelValue` accepted anything `parseFloat` would take, so a computed
+   `max-width: 100%` came back as 100 *pixels*; `getMaxContentWidth` then fell
+   back to the bubble's CURRENT width — the one quantity that differs between
+   the two placements. Inline made the bubble narrow, the narrow bubble said the
+   meta did not fit, anchored made it wide, the wide bubble said it did. It
+   measures the row now, whose width is the same either way.
+
+3. **The initial guess was written for the old layout.** A message longer than
+   56 characters started with a meta row and dropped it a frame later — painted
+   at 81px, settled at 59px. Inline is what the measurement almost always
+   chooses now that the meta is positioned and its space reserved.
+
+4. **A bubble mounting inside a prepended page was measured against a row that
+   reported zero width**, which says the meta can never fit. Every prepended
+   message therefore appeared with a row it did not need: measured, 706px of
+   list height vanished at t=303ms and took the anchor with it. The measurement
+   now declines to answer on a width that cannot be real and waits for the next
+   pass.
+
+The anchor restore was also made to hold. It ran once, at the moment React
+committed the prepended page — the one moment the heights are guaranteed to be
+wrong. It now repeats until four consecutive frames need no correction, bounded
+by the safety timeout that already existed, and it is released by real input so
+it never drags a reader back.
+
+That release needed a distinction: the wheel that scrolls to the top of the
+history IS the gesture that asks for the older page, so releasing on any input
+cancelled the hold before it ran — the anchor still drifted exactly 445px,
+identically across runs, and that reproducibility is what gave it away.
+
+The contract passes on production. Scrolling back through a fully loaded chat
+measured 0 drifts over 24px in 18 steps and no empty frames.

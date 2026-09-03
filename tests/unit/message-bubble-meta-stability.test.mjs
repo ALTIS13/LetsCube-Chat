@@ -53,10 +53,27 @@ test("the fit test asks about the width the bubble may reach", () => {
   // 150px message with a 29px timestamp — inside a 536px allowance — onto its
   // own row.
   assert.match(source, /function getMaxContentWidth/, "the max-width helper is missing");
+  // The property, not the expression. An earlier version pinned the literal
+  // comparison and went red when the branch was restructured to add the
+  // plausibility guard below — reporting a regression in a contract that had
+  // not moved.
   assert.match(
     source,
-    /lastLine\.width \+ footerRect\.width \+ gap <= getMaxContentWidth/,
-    "the non-compound branch must compare against the allowed width",
+    /const maxContentWidth = getMaxContentWidth\(/,
+    "the non-compound branch must ask for the allowed width",
+  );
+  assert.match(
+    source,
+    /lastLine\.width \+ footerRect\.width \+ gap <= maxContentWidth/,
+    "and compare the last line and the meta against it",
+  );
+  // And it must refuse to answer on a width that cannot be real. A bubble
+  // mounting inside a prepended page is measured while its row still reports
+  // zero width, and answering then cost 706px of list height a frame later.
+  assert.match(
+    source,
+    /if \(maxContentWidth < \d+\) return;/,
+    "an implausible width must produce no decision at all",
   );
 });
 
