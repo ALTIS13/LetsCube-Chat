@@ -141,7 +141,13 @@ export function HumanVerificationCaptcha({
 
   const captchaContainerClassName =
     config.provider === "yandex-smartcaptcha"
-      ? "min-h-[104px] w-full overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/60 p-0"
+      // Yandex SmartCaptcha's checkbox renders light whatever theme it is given.
+      // Verified three ways on production: the render option reaches the iframe
+      // URL as `theme=dark`, the same iframe opened on its own ignores it, and
+      // the provider's `setTheme` accepts the value and changes nothing. A dark
+      // plate around a white widget reads as a mistake, so the plate is light
+      // and the widget looks like the embedded third-party control it is.
+      ? "min-h-[104px] w-full overflow-hidden rounded-xl border border-[color:#d7dee6] bg-[#f4f6f8] p-0"
       : "min-h-[65px] overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/60 px-1 py-2";
 
   return (
@@ -152,7 +158,7 @@ export function HumanVerificationCaptcha({
         data-provider={config.provider}
         data-theme={resolvedTheme}
         className={captchaContainerClassName}
-        style={{ colorScheme: resolvedTheme }}
+        style={{ colorScheme: config.provider === "yandex-smartcaptcha" ? "light" : resolvedTheme }}
       />
       {error && (
         <p className="px-1 text-xs text-[color:var(--kub-danger)]">{error}</p>

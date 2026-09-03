@@ -337,17 +337,13 @@ export function RegisterForm() {
             {inviteOnlyEnabled && (
               <div
                 data-testid="registration-invite-only-banner"
-                className="rounded-xl border border-[color:var(--kub-warn)]/35 bg-[color-mix(in_srgb,var(--kub-warn)_13%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-text)]"
+                className="flex items-center gap-2 rounded-full border border-[color:color-mix(in_srgb,var(--kub-warn)_45%,transparent)] bg-[color-mix(in_srgb,var(--kub-warn)_8%,transparent)] px-3 py-1.5 text-xs text-[color:var(--kub-text)]"
               >
-                <div className="flex items-start gap-2">
-                  <KubIcon name="lock" size={16} tone="warn" className="mt-0.5 shrink-0" />
-                  <div className="min-w-0">
-                    <div className="font-semibold">{REGISTRATION_INVITE_ONLY_BANNER_TITLE}</div>
-                    <div className="mt-1 text-xs leading-5 text-[color:var(--kub-muted)]">
-                      {REGISTRATION_INVITE_ONLY_BANNER_BODY}
-                    </div>
-                  </div>
-                </div>
+                <KubIcon name="lock" size={13} tone="warn" className="shrink-0" />
+                <span className="min-w-0 truncate font-semibold">Только по приглашению</span>
+                <span className="min-w-0 truncate text-[color:var(--kub-muted)]">
+                  код выдаёт администратор
+                </span>
               </div>
             )}
 
