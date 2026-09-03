@@ -70,6 +70,11 @@ test.describe("resumable media upload contracts", () => {
           bucketName: "media",
           objectName: "user-456/chat-123-attachment-789.mp4",
           contentType: "video/mp4",
+          // Deliberately the lifetime this product used to ask for. A person
+          // whose upload was interrupted before the value changed has exactly
+          // this on disk, and matching on it would restart a nearly finished
+          // file from zero — which is what happened when the identity was
+          // "every metadata field".
           cacheControl: "3600",
         },
       },
@@ -94,7 +99,9 @@ test.describe("resumable media upload contracts", () => {
         bucketName: "media",
         objectName: "user-456/chat-123-attachment-789.mp4",
         contentType: "video/mp4",
-        cacheControl: "3600",
+        // The new upload asks for the current lifetime while resuming a
+        // fingerprint that carries the old one. Both facts belong here.
+        cacheControl: "max-age=31536000, immutable",
       },
     });
     expect(harness.getSessionCalls).toBe(1);

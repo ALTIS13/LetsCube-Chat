@@ -229,11 +229,35 @@ export function isAbsoluteWindowsPath(value: string): boolean {
   return /^(?:[A-Za-z]:[\\/]|[\\/]{2}[^\\/]+[\\/][^\\/]+)/.test(trimmed);
 }
 
+/**
+ * Whether the running shell knows how to answer about storage.
+ *
+ * The web application updates the moment it is deployed; the desktop shell
+ * updates when someone installs a new one. So there is always a window in which
+ * a current page runs inside an older shell whose bridge has none of these
+ * methods. Without this check the call throws, the panel reports "не удалось" to
+ * every Windows user in that window, and the honest answer — that this build of
+ * the application cannot do it yet — is never given.
+ *
+ * Absent means absent, exactly as in a browser: the section renders nothing.
+ */
+export function isDesktopStorageAvailable(): boolean {
+  const bridge = getDesktopBridge();
+  if (!bridge) return false;
+  const candidate = bridge as unknown as Record<string, unknown>;
+  return (
+    typeof candidate.getStorageState === "function" &&
+    typeof candidate.setStorageLocation === "function" &&
+    typeof candidate.setCacheLimit === "function" &&
+    typeof candidate.clearCache === "function"
+  );
+}
+
 async function requestDesktopStorage(
   execute: (bridge: NonNullable<Window["letscubeDesktop"]>) => Promise<unknown>,
 ): Promise<DesktopStorageState | null> {
   const bridge = getDesktopBridge();
-  if (!bridge) return null;
+  if (!bridge || !isDesktopStorageAvailable()) return null;
 
   let payload: unknown;
   try {

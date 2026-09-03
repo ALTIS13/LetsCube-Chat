@@ -79,6 +79,21 @@ export interface ResumableStorageUploadHandle {
   abort(terminate?: boolean): Promise<void>;
 }
 
+/**
+ * What makes a previous upload the *same* upload.
+ *
+ * Deliberately not every metadata field. Matching on all of them once meant
+ * that changing `cacheControl` — a header preference that says nothing about
+ * which bytes these are — orphaned every half-finished upload in the world:
+ * the fingerprint on disk still held the old value, no candidate matched, and
+ * a large file that was nearly done started again from zero. Found when the
+ * cache lifetimes changed and this stopped resuming.
+ *
+ * These three are what identify a destination: which bucket, which object, and
+ * what kind of file. Anything else is how it should be served once it arrives.
+ */
+const RESUME_IDENTITY_KEYS = ["bucketName", "objectName", "contentType"] as const;
+
 export function shouldUseResumableUpload(fileSize: number): boolean {
   return fileSize > RESUMABLE_UPLOAD_THRESHOLD_BYTES;
 }
@@ -159,8 +174,8 @@ export function startResumableStorageUpload(
       const previousUploads = await upload.findPreviousUploads();
       if (aborted || settled) return;
       const previousUpload = previousUploads.find((candidate) =>
-        Object.entries(uploadOptions.metadata).every(
-          ([key, value]) => candidate.metadata?.[key] === value,
+        RESUME_IDENTITY_KEYS.every(
+          (key) => candidate.metadata?.[key] === uploadOptions.metadata[key],
         ),
       );
       if (previousUpload) {

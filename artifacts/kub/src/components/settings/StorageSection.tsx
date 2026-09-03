@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { KubButton, KubIcon, KubInput, KubNotice } from "@/components/kub";
 import { useDesktopStorage } from "@/hooks/useDesktopStorage";
 import { isDesktopApp } from "@/lib/platform/desktop";
+import { isDesktopStorageAvailable } from "@/lib/platform/desktopStorage";
 import {
   describeDesktopStorageError,
   formatStorageBytes,
@@ -29,7 +30,11 @@ export function StorageSection() {
     return () => window.clearTimeout(timeout);
   }, [cacheCleared]);
 
-  if (!isDesktopApp() || !storage) return null;
+  // An older shell has the bridge but not these methods. Rendering the section
+  // then means every Windows user sees "не удалось" between the web deploy and
+  // the day they install a new build — so it renders nothing at all, exactly as
+  // it does in a browser.
+  if (!isDesktopApp() || !storage || !isDesktopStorageAvailable()) return null;
 
   const { state, errorMessage, commandPending, cacheLimitOptions } = storage;
 

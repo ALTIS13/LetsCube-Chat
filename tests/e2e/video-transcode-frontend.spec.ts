@@ -48,7 +48,21 @@ test("wires one batched 720p variant query through persisted quality metadata", 
   expect(refreshLifecycleSource).toContain("visibilitychange");
   expect(chatWindowSource).toContain("MEDIA_QUALITY_METADATA_KEY");
   expect(chatWindowSource).not.toContain('console.warn("[attachments] upload failed:", error)');
-  expect(mediaVariantsSource).not.toContain("error.message");
+  // What this guards is that a storage error never reaches a person as raw
+  // text. A bare substring scan of the whole file stopped meaning that: the
+  // avatar store's fetcher legitimately throws `new Error(error.message)` and
+  // the store swallows it in a bare `catch`, so nothing is shown — yet the scan
+  // failed. Assert the thing itself: no console call and no state setter in
+  // this file is handed a provider's message.
+  for (const leak of [
+    /console\.(warn|error|log)\([^)]*error\.message/,
+    /set[A-Z][A-Za-z]*\([^)]*error\.message/,
+  ]) {
+    expect(
+      mediaVariantsSource,
+      `a storage error's own text must not reach a person: ${leak}`,
+    ).not.toMatch(leak);
+  }
   expect(bubbleSource).toContain("selectVideoPlaybackUrl");
   expect(inputSource).toContain("Качество видео");
   expect(inputSource).toContain("MEDIA_QUALITY_OPTIONS");
