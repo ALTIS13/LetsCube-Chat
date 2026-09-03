@@ -50,7 +50,23 @@ export function BotsPage() {
         title={<h1 className="truncate text-sm font-semibold">Мои боты</h1>}
         subtitle={eligibility ? `${eligibility.active_bot_count} из ${eligibility.max_bots}` : "Управление Bot API"}
         leading={<button type="button" onClick={() => setLocation("/")} className="flex h-11 w-11 items-center justify-center rounded-md text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)]" aria-label="Назад к чатам"><KubIcon name="back" size={18} /></button>}
-        trailing={<KubButton variant="primary" size="sm" className="min-h-11" disabled={!eligibility?.can_create} onClick={() => setCreateOpen(true)} leftIcon={<KubIcon name="bot" size={17} />}>Создать бота</KubButton>}
+        trailing={
+          <div className="flex items-center gap-2">
+            {/* The Bot API documentation has existed at /bots/docs all along and
+                nothing linked to it, so it could only be found by knowing the
+                address. */}
+            <a
+              href="/bots/docs"
+              target="_blank"
+              rel="noreferrer"
+              className="kub-button kub-interactive inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-text)]"
+            >
+              <KubIcon name="help" size={15} />
+              Документация
+            </a>
+            <KubButton variant="primary" size="sm" className="min-h-11" disabled={!eligibility?.can_create} onClick={() => setCreateOpen(true)} leftIcon={<KubIcon name="bot" size={17} />}>Создать бота</KubButton>
+          </div>
+        }
       />
 
       <div className="grid min-h-0 flex-1 md:grid-cols-[22rem_minmax(0,1fr)]">
