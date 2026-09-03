@@ -9,11 +9,55 @@ const source = readFileSync(
 
 const format = readFileSync(new URL("../../artifacts/kub/src/lib/format.ts", import.meta.url), "utf8");
 
-test("message footer keeps anchored placement after measured inline overflow", () => {
-  assert.match(source, /const inlineBlockedRef = useRef\(false\)/);
-  assert.match(source, /inlineBlockedRef\.current = true;[\s\S]*setPlacement/);
-  assert.match(source, /!inlineBlockedRef\.current/);
-  assert.doesNotMatch(source, /blockedInlineSignatureRef/);
+test("the inline placement cannot oscillate", () => {
+  // This used to assert a one-shot latch (`inlineBlockedRef`) that flipped a
+  // message to its own meta row and never let it back. The latch is gone,
+  // because the thing it guarded is gone: the meta no longer flows after the
+  // last word, so it can no longer fail to sit on it.
+  //
+  // Stability is now structural, and that is what is asserted. The spacer that
+  // reserves room for the meta sits OUTSIDE the measured span, so adding it can
+  // only shorten the last line and therefore only increase the room the
+  // decision sees. A message that chose inline cannot measure its way back out.
+  assert.doesNotMatch(source, /inlineBlockedRef/, "the removed latch must not come back by accident");
+  assert.match(
+    source,
+    /data-message-footer-reserve/,
+    "the reserved spacer is what keeps the last line clear of the meta",
+  );
+  const contentSpan = source.match(/<span ref={textContentRef}[\s\S]{0,400}?<\/span>/);
+  assert.ok(contentSpan, "the measured text span could not be found");
+  assert.doesNotMatch(
+    contentSpan[0],
+    /data-message-footer-reserve/,
+    "the spacer must sit outside the measured span, or adding it would feed back into the measurement",
+  );
+});
+
+test("the meta is pinned to the bubble's edge rather than flowing after the text", () => {
+  // The reported defect: a wrapped bubble takes its width from its longest
+  // line, so a time that flowed after a short last line sat in the middle of
+  // the bubble — 348px from the right edge of a 560px bubble, measured.
+  const footer = source.match(/data-message-footer="true"[\s\S]{0,320}?\/>|data-message-footer="true"[\s\S]{0,320}?>/g);
+  assert.ok(footer && footer.length > 0, "the message footer could not be found");
+  assert.ok(
+    footer.some((entry) => /absolute[\s\S]*right-0/.test(entry)),
+    "the inline meta must be positioned at the bubble's right edge",
+  );
+});
+
+test("the fit test asks about the width the bubble may reach", () => {
+  // Asking how much room is left to the RIGHT of the last line answers nothing
+  // for an own message: that bubble is pinned to the right edge and grows
+  // leftwards, so the space to its right is always zero. Measured, that sent a
+  // 150px message with a 29px timestamp — inside a 536px allowance — onto its
+  // own row.
+  assert.match(source, /function getMaxContentWidth/, "the max-width helper is missing");
+  assert.match(
+    source,
+    /lastLine\.width \+ footerRect\.width \+ gap <= getMaxContentWidth/,
+    "the non-compound branch must compare against the allowed width",
+  );
 });
 
 test("message time and private delivery icon reserve stable footer width", () => {
