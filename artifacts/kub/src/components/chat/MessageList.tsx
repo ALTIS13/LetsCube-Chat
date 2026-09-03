@@ -104,6 +104,18 @@ function SystemMessageNotice({ message }: { message: MessageWithSender }) {
   );
 }
 
+/** Keys that move a scroller, and therefore mean "I am reading, leave me here". */
+const SCROLLING_KEYS = new Set([
+  "PageUp",
+  "PageDown",
+  "Home",
+  "End",
+  "ArrowUp",
+  "ArrowDown",
+  " ",
+  "Spacebar",
+]);
+
 export function MessageList({
   messages,
   onReply,
@@ -640,6 +652,15 @@ export function MessageList({
         onPointerDown={releaseScrollControl}
         onTouchStart={releaseScrollControl}
         onWheel={releaseScrollControl}
+        // A reader who moves with the keyboard is asking to be left alone just
+        // as much as one who uses the wheel. Without this, PageUp, Home, the
+        // arrows and space scroll the list while the entry lock stays armed —
+        // and an armed lock makes `handleScroll` assert "at bottom" without
+        // measuring, so the next thing that settles the layout pulls them back
+        // down. Every other pointing device released it; the keyboard did not.
+        onKeyDown={(event) => {
+          if (SCROLLING_KEYS.has(event.key)) releaseScrollControl();
+        }}
         onClickCapture={(event) => {
           const target = event.target as HTMLElement | null;
           if (target?.closest("[data-reaction-menu], [data-reaction-trigger]")) return;

@@ -1405,3 +1405,65 @@ marker wins.
 
 Still to confirm on a device: the Android cold-launch run, which is where the
 symptom was reported.
+
+## D-028 continued — four more triggers ruled out, and why the earlier ones could not have found it
+
+Re-investigated 2026-09-04. Still not reproduced. What changed is that the
+earlier attempt's method was found to be blind to the most plausible mechanism,
+and that mechanism was then measured directly and found not to occur either.
+
+**The earlier attempt counted the wrong thing.** It counted moves of
+`scrollTop`. The leading hypothesis from a full reading of `MessageList.tsx`
+does not move `scrollTop` at all: browser scroll anchoring is switched off on
+both the scroller and the content (`[overflow-anchor:none]`, lines 650 and 656)
+and the custom anchoring runs only during a history prepend. So if a bubble
+above the viewport shrinks by N pixels, everything below slides up by N and the
+reader is carried *down* the history with `scrollTop` unchanged. That is
+"сверху вниз", and it would have measured as zero moves.
+
+Measured directly instead: scrolled up in a 1 367-message chat, then sampled
+four times a second for three minutes — `scrollTop`, `scrollHeight`, and the
+`data-message-id` of whatever sits under a fixed point in the middle of the
+viewport. **Zero events.** Nothing moved, nothing resized, and the message under
+the probe never changed. That also covers the 60-second media-variant refresh
+interval, which the earlier 45-second observation stopped one tick short of.
+
+Also ruled out, each by measurement:
+
+- Scrolling up with the keyboard during the entry lock and then waiting for the
+  whole ladder of settle timers: the reader stayed 3 832 px from the bottom and
+  the down-arrow was correctly showing.
+- The same with the wheel: 3 741 px, arrow showing.
+- The other participant marking the chat read while the reader is scrolled up —
+  the hypothesis being that the receipt re-keys every outgoing bubble's
+  measurement and shrinks the content above. `chat_members.last_read_at` was
+  updated for the other member mid-measurement; nothing moved. Weaker evidence
+  than the others, because it was not confirmed that the receipt produced a
+  visible change on this account.
+
+Real findings from the reading, which stand whether or not they are the
+reported symptom:
+
+- `handleScroll` (line 370) sets `isAtBottomRef.current = true` **without
+  measuring** for as long as the entry lock is armed, and nothing resets it
+  until the next scroll event after the lock expires. An assertion that outlives
+  the condition that justified it.
+- `releaseScrollControl` was wired to `onPointerDown`, `onTouchStart` and
+  `onWheel` but not to the keyboard, so PageUp, Home, the arrows and space
+  scrolled the list without telling the component the reader had taken over.
+  Fixed, as a consistency fix and labelled as one: removing the fix again does
+  not change any measurement that could be taken here, so no test claims it
+  does. Every other input device released the hold; the keyboard now does too.
+- `pendingJumpRef` in `ChatWindow.tsx` is cleared only on success, and the retry
+  effect runs on every `messages` identity change, so a jump that failed
+  minutes ago can fire when its target finally mounts. Not observed; recorded.
+
+The entry lock's duration and its ladder of eight timers were doubled in
+`07b5a0d` (2026-06-23) from 1 800 ms and five timers to 4 200 ms and eight.
+That commit most enlarged the window in which the list moves itself, and is the
+first place to look if the symptom is reported again.
+
+What would settle it: the symptom needs to be caught while it happens. The
+probe above — `scrollTop` plus the message id under a fixed point, sampled per
+frame — is the instrument, and it is drift rather than a jump that it is
+looking for.
