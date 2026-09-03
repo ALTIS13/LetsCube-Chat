@@ -339,11 +339,12 @@ export function RegisterForm() {
                 data-testid="registration-invite-only-banner"
                 className="flex items-center gap-2 rounded-full border border-[color:color-mix(in_srgb,var(--kub-warn)_45%,transparent)] bg-[color-mix(in_srgb,var(--kub-warn)_8%,transparent)] px-3 py-1.5 text-xs text-[color:var(--kub-text)]"
               >
+                {/* One label, not two. Two side by side did not fit the card and
+                    both came out truncated — worse than the banner they
+                    replaced. Where the code comes from is already said by the
+                    field's own label and hint a few rows below. */}
                 <KubIcon name="lock" size={13} tone="warn" className="shrink-0" />
-                <span className="min-w-0 truncate font-semibold">Только по приглашению</span>
-                <span className="min-w-0 truncate text-[color:var(--kub-muted)]">
-                  код выдаёт администратор
-                </span>
+                <span className="font-semibold">Регистрация только по приглашению</span>
               </div>
             )}
 
