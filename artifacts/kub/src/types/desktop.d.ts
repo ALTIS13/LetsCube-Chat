@@ -37,6 +37,16 @@ interface Window {
     setUpdateChannel(channel: LetscubeDesktopUpdateChannel): Promise<unknown>;
     checkUpdate(): Promise<unknown>;
     installUpdate(): Promise<unknown>;
+    getStorageState(): Promise<unknown>;
+    /**
+     * `null` restores the default location. The argument is the *parent*
+     * folder: the shell creates its own profile folder inside it.
+     *
+     * Rejects with one of the codes in `DESKTOP_STORAGE_ERROR_CODES`.
+     */
+    setStorageLocation(location: string | null): Promise<unknown>;
+    setCacheLimit(bytes: number): Promise<unknown>;
+    clearCache(): Promise<unknown>;
     showMain(): Promise<void>;
     isMainForeground(): Promise<boolean>;
     notify(notification: LetscubeDesktopNotification): Promise<boolean>;

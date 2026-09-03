@@ -23,6 +23,10 @@
     "allow-desktop-minimize",
     "allow-desktop-toggle-maximize",
     "allow-desktop-is-maximized",
-    "allow-desktop-close-to-tray"
+    "allow-desktop-close-to-tray",
+    "allow-desktop-get-storage-state",
+    "allow-desktop-set-storage-location",
+    "allow-desktop-set-cache-limit",
+    "allow-desktop-clear-cache"
   ]
 }

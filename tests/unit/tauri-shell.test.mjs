@@ -157,6 +157,10 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
     "desktop_toggle_maximize",
     "desktop_is_maximized",
     "desktop_close_to_tray",
+    "desktop_get_storage_state",
+    "desktop_set_storage_location",
+    "desktop_set_cache_limit",
+    "desktop_clear_cache",
     "startup_start_dragging",
     "startup_minimize",
     "startup_toggle_maximize",
@@ -193,6 +197,10 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.match(libRs, /toggleMaximize: async \(\) => call\("desktop_toggle_maximize"\)/);
   assert.match(libRs, /isMaximized: async \(\) => call\("desktop_is_maximized"\)/);
   assert.match(libRs, /closeToTray: async \(\) => call\("desktop_close_to_tray"\)/);
+  assert.match(libRs, /getStorageState: async \(\) => call\("desktop_get_storage_state"\)/);
+  assert.match(libRs, /setStorageLocation: async \(location\) => call\("desktop_set_storage_location"/);
+  assert.match(libRs, /setCacheLimit: async \(bytes\) => call\("desktop_set_cache_limit"/);
+  assert.match(libRs, /clearCache: async \(\) => call\("desktop_clear_cache"\)/);
   assert.equal(capability.permissions.includes("allow-desktop-show-main"), true);
   assert.equal(capability.permissions.includes("allow-desktop-is-main-foreground"), true);
   assert.equal(capability.permissions.includes("allow-desktop-notify"), true);
@@ -349,7 +357,9 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
     capability.permissions.filter((permission) => /^allow-desktop-/.test(permission)).sort(),
     [
       "allow-desktop-check-update",
+      "allow-desktop-clear-cache",
       "allow-desktop-close-to-tray",
+      "allow-desktop-get-storage-state",
       "allow-desktop-get-update-channel",
       "allow-desktop-get-update-state",
       "allow-desktop-install-update",
@@ -358,6 +368,8 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
       "allow-desktop-minimize",
       "allow-desktop-notify",
       "allow-desktop-remove-notification",
+      "allow-desktop-set-cache-limit",
+      "allow-desktop-set-storage-location",
       "allow-desktop-set-update-channel",
       "allow-desktop-show-main",
       "allow-desktop-start-dragging",

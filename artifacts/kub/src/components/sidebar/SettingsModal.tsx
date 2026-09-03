@@ -18,6 +18,7 @@ import { mapPgError, prefixError } from "@/lib/errors";
 import { isNativeAndroid } from "@/lib/platform/capabilities";
 import { isDesktopApp } from "@/lib/platform/desktop";
 import { ReleaseDistributionSection } from "@/components/settings/ReleaseDistributionSection";
+import { StorageSection } from "@/components/settings/StorageSection";
 import { ProfileDecorationSection } from "@/components/settings/ProfileDecorationSection";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
@@ -401,6 +402,13 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       <div role="tabpanel" aria-label="Приложение" className="px-4 py-4">
         <SectionLabel>Приложение</SectionLabel>
         <ReleaseDistributionSection />
+        {/* The section guards itself too; this keeps the spacer from being the
+            one thing the browser build still renders here. */}
+        {desktopWindows && (
+          <div className="mt-3">
+            <StorageSection />
+          </div>
+        )}
       </div>
       )}
 

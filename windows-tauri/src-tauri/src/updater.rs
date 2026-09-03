@@ -269,6 +269,11 @@ pub fn store_update_channel(path: &Path, channel: UpdateChannel) -> io::Result<(
     Ok(())
 }
 
+/// The atomic replace used for settings files, shared with `storage`.
+pub fn replace_file_public(source: &Path, destination: &Path) -> io::Result<()> {
+    replace_file(source, destination)
+}
+
 #[cfg(not(windows))]
 fn replace_file(source: &Path, destination: &Path) -> io::Result<()> {
     fs::rename(source, destination)

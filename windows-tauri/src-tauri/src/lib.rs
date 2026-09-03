@@ -1,4 +1,5 @@
 pub mod startup;
+pub mod storage;
 pub mod updater;
 
 use std::future::Future;
@@ -30,6 +31,7 @@ const PRODUCTION_URL: &str = "https://app.letscube.ru/";
 const BUNDLED_STARTUP_URL: &str = "http://tauri.localhost/startup.html";
 const PRODUCTION_PROFILE: &str = "webview-production-v1";
 const UPDATE_CHANNEL_FILE: &str = "updater-channel.json";
+const STORAGE_SETTINGS_FILE: &str = "storage-settings.json";
 const UPDATE_TIMEOUT: Duration = Duration::from_secs(8);
 const STARTUP_EVENT: &str = "letscube://startup-state";
 const DESKTOP_NOTIFICATION_ACTION_EVENT: &str = "letscube:desktop-notification-action";
@@ -128,13 +130,67 @@ fn is_safe_external_url(url: &Url) -> bool {
         && url.password().is_none()
 }
 
+fn storage_settings_path<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
+    Ok(app.path().app_local_data_dir()?.join(STORAGE_SETTINGS_FILE))
+}
+
+fn default_profile_dir<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
+    Ok(app.path().app_local_data_dir()?.join(PRODUCTION_PROFILE))
+}
+
 fn production_profile_dir<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
     #[cfg(debug_assertions)]
     if let Some(path) = std::env::var_os("LETSCUBE_WEBVIEW2_DATA_DIR") {
         return Ok(PathBuf::from(path));
     }
 
-    Ok(app.path().app_local_data_dir()?.join(PRODUCTION_PROFILE))
+    let default = default_profile_dir(app)?;
+    let settings = storage::load_settings(&storage_settings_path(app)?);
+    Ok(settings
+        .location
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .unwrap_or(default))
+}
+
+/// Carries out a recorded relocation and trims an over-budget cache.
+///
+/// Called once, before any window is built. WebView2 holds exclusive locks on
+/// a live profile, so this is the only moment either is possible.
+fn settle_storage_before_launch<R: Runtime>(app: &AppHandle<R>) {
+    let Ok(settings_path) = storage_settings_path(app) else {
+        return;
+    };
+    let mut settings = storage::load_settings(&settings_path);
+
+    if let Some(target) = settings.pending_location.clone() {
+        let target = PathBuf::from(&target);
+        let current = settings
+            .location
+            .clone()
+            .map(PathBuf::from)
+            .or_else(|| default_profile_dir(app).ok())
+            .unwrap_or_else(|| target.clone());
+        if target.is_absolute() && target != current {
+            match storage::apply_pending_move(&current, &target) {
+                Ok(()) => {
+                    settings.location = Some(target.to_string_lossy().into_owned());
+                }
+                Err(_) => {
+                    // The original is still whole; leaving the request cleared
+                    // is better than retrying a failing copy on every launch.
+                }
+            }
+        }
+        settings.pending_location = None;
+        let _ = storage::store_settings(&settings_path, &settings);
+    }
+
+    if let Ok(profile) = production_profile_dir(app) {
+        if storage::cache_size(&profile) > settings.cache_limit_bytes {
+            let _ = storage::clear_cache(&profile);
+        }
+    }
 }
 
 #[cfg(debug_assertions)]
@@ -252,7 +308,11 @@ fn desktop_bridge_script() -> String {
     minimize: async () => call("desktop_minimize"),
     toggleMaximize: async () => call("desktop_toggle_maximize"),
     isMaximized: async () => call("desktop_is_maximized"),
-    closeToTray: async () => call("desktop_close_to_tray")
+    closeToTray: async () => call("desktop_close_to_tray"),
+    getStorageState: async () => call("desktop_get_storage_state"),
+    setStorageLocation: async (location) => call("desktop_set_storage_location", {{ location }}),
+    setCacheLimit: async (bytes) => call("desktop_set_cache_limit", {{ bytes }}),
+    clearCache: async () => call("desktop_clear_cache")
   }});
   Object.defineProperty(window, "letscubeDesktop", {{
     configurable: false,
@@ -980,18 +1040,26 @@ fn build_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let navigation_handle = app.clone();
     let new_window_handle = app.clone();
 
+    let cache_limit = storage::load_settings(&storage_settings_path(app)?).cache_limit_bytes;
+    // Chromium sizes its own cache; asking the engine is the only way to bound
+    // it. The trim at launch is the backstop, not the mechanism.
+    #[allow(unused_mut)]
+    let mut browser_args = storage::disk_cache_argument(cache_limit);
+
+    // `additional_browser_args` replaces rather than appends, so the debug
+    // switches are joined onto the same string. Passing them separately dropped
+    // the cache limit from every QA run, which is the one run meant to behave
+    // like production.
+    #[cfg(debug_assertions)]
+    if let Some(args) = debug_browser_args() {
+        browser_args.push(' ');
+        browser_args.push_str(&args);
+    }
+
     let builder = WebviewWindowBuilder::from_config(app, &config)?
         .data_directory(profile_dir)
-        .initialization_script(initialization_script());
-
-    #[cfg(debug_assertions)]
-    let builder = {
-        let mut builder = builder;
-        if let Some(args) = debug_browser_args() {
-            builder = builder.additional_browser_args(&args);
-        }
-        builder
-    };
+        .initialization_script(initialization_script())
+        .additional_browser_args(&browser_args);
 
     builder
         .on_navigation(move |url| {
@@ -1106,6 +1174,122 @@ fn desktop_get_update_channel(
         .lock()
         .map(|native| native.state.channel())
         .map_err(|_| update_command_error("update_state_unavailable"))
+}
+
+/// What the settings screen shows: where the profile is, how big it is, and
+/// how much of that is cache it may drop.
+#[derive(serde::Serialize)]
+struct DesktopStorageState {
+    location: String,
+    is_default_location: bool,
+    total_bytes: u64,
+    cache_bytes: u64,
+    cache_limit_bytes: u64,
+    min_cache_limit_bytes: u64,
+    max_cache_limit_bytes: u64,
+    /// A relocation that will happen at the next launch, if one is recorded.
+    pending_location: Option<String>,
+}
+
+fn storage_state_for(app: &AppHandle) -> Result<DesktopStorageState, String> {
+    let settings_path = storage_settings_path(app).map_err(|_| "storage_unavailable".to_owned())?;
+    let settings = storage::load_settings(&settings_path);
+    let profile = production_profile_dir(app).map_err(|_| "storage_unavailable".to_owned())?;
+    let default = default_profile_dir(app).map_err(|_| "storage_unavailable".to_owned())?;
+    Ok(DesktopStorageState {
+        location: profile.to_string_lossy().into_owned(),
+        is_default_location: profile == default,
+        total_bytes: storage::directory_size(&profile),
+        cache_bytes: storage::cache_size(&profile),
+        cache_limit_bytes: settings.cache_limit_bytes,
+        min_cache_limit_bytes: storage::MIN_CACHE_LIMIT_BYTES,
+        max_cache_limit_bytes: storage::MAX_CACHE_LIMIT_BYTES,
+        pending_location: settings.pending_location,
+    })
+}
+
+#[tauri::command]
+fn desktop_get_storage_state(
+    window: WebviewWindow,
+    app: AppHandle,
+) -> Result<DesktopStorageState, String> {
+    require_production_main(&window)?;
+    storage_state_for(&app)
+}
+
+/// Records where the profile should live. The move happens at the next launch.
+///
+/// It cannot happen now: WebView2 holds exclusive locks on the profile of an
+/// open window, and the signed-in session lives in the same folder, so a
+/// half-finished move signs the person out.
+#[tauri::command]
+fn desktop_set_storage_location(
+    window: WebviewWindow,
+    app: AppHandle,
+    location: Option<String>,
+) -> Result<DesktopStorageState, String> {
+    require_production_main(&window)?;
+    let settings_path = storage_settings_path(&app).map_err(|_| "storage_unavailable".to_owned())?;
+    let mut settings = storage::load_settings(&settings_path);
+    let current = production_profile_dir(&app).map_err(|_| "storage_unavailable".to_owned())?;
+
+    match location {
+        None => {
+            // Back to the default, by the same deferred route.
+            let default = default_profile_dir(&app).map_err(|_| "storage_unavailable".to_owned())?;
+            settings.pending_location = if default == current {
+                None
+            } else {
+                Some(default.to_string_lossy().into_owned())
+            };
+        }
+        Some(raw) => {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                return Err("not_absolute".to_owned());
+            }
+            // The chosen folder gets a folder of our own inside it rather than
+            // being taken over wholesale.
+            let target = std::path::Path::new(trimmed).join(PRODUCTION_PROFILE);
+            storage::validate_location(&target, &current)
+                .map_err(|problem| problem.code().to_owned())?;
+            settings.pending_location = if target == current {
+                None
+            } else {
+                Some(target.to_string_lossy().into_owned())
+            };
+        }
+    }
+
+    storage::store_settings(&settings_path, &settings).map_err(|_| "storage_write_failed".to_owned())?;
+    storage_state_for(&app)
+}
+
+#[tauri::command]
+fn desktop_set_cache_limit(
+    window: WebviewWindow,
+    app: AppHandle,
+    bytes: u64,
+) -> Result<DesktopStorageState, String> {
+    require_production_main(&window)?;
+    let settings_path = storage_settings_path(&app).map_err(|_| "storage_unavailable".to_owned())?;
+    let settings = storage::load_settings(&settings_path).with_limit(bytes);
+    storage::store_settings(&settings_path, &settings).map_err(|_| "storage_write_failed".to_owned())?;
+    storage_state_for(&app)
+}
+
+/// Drops what can be downloaded again. Never touches the session.
+#[tauri::command]
+fn desktop_clear_cache(
+    window: WebviewWindow,
+    app: AppHandle,
+) -> Result<DesktopStorageState, String> {
+    require_production_main(&window)?;
+    let profile = production_profile_dir(&app).map_err(|_| "storage_unavailable".to_owned())?;
+    // Some of it is held open by the running engine; what cannot be removed now
+    // is removed at the next launch by the same limit check.
+    let _ = storage::clear_cache(&profile);
+    storage_state_for(&app)
 }
 
 #[tauri::command]
@@ -1339,12 +1523,17 @@ pub fn run() {
             desktop_toggle_maximize,
             desktop_is_maximized,
             desktop_close_to_tray,
+            desktop_get_storage_state,
+            desktop_set_storage_location,
+            desktop_set_cache_limit,
+            desktop_clear_cache,
             startup_start_dragging,
             startup_minimize,
             startup_toggle_maximize,
             startup_close_to_tray
         ])
         .setup(|app| {
+            settle_storage_before_launch(app.handle());
             setup_update_controller(app.handle())?;
             setup_tray(app.handle())?;
             build_main_window(app.handle())?;
