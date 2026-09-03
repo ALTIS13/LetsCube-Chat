@@ -61,13 +61,31 @@ async function openCapture(page: Page) {
     [WINDOW_KEY, FIXTURE] as const,
   );
   const response = await page.goto(CAPTURE_PATH, { waitUntil: "domcontentloaded" }).catch(() => null);
-  test.skip(!response, "the DEV preview capture route is not served by this build");
-  const ready = await page
-    .locator(`[${READY}="true"]`)
-    .waitFor({ state: "attached", timeout: 15_000 })
-    .then(() => true)
-    .catch(() => false);
-  test.skip(!ready, "the capture route did not report ready; VITE_PUBLIC_PREVIEW_FIXTURE is probably unset");
+  const ready = response
+    ? await page
+        .locator(`[${READY}="true"]`)
+        .waitFor({ state: "attached", timeout: 15_000 })
+        .then(() => true)
+        .catch(() => false)
+    : false;
+
+  // These four tests are the only thing standing behind D-008, D-024 and D-027.
+  // They used to skip themselves when the capture route was not served, and a
+  // run of the whole suite then reported success while enforcing nothing —
+  // which is how D-024 shipped in the first place, and it had come back.
+  // Absence of a prerequisite is now a failure that says what to do about it,
+  // and skipping has to be asked for.
+  if (!ready) {
+    if (process.env.KUB_ALLOW_PREVIEW_FIXTURE_SKIP === "1") {
+      test.skip(true, "preview fixture route unavailable and skipping was explicitly allowed");
+      return;
+    }
+    throw new Error(
+      response
+        ? "The preview capture route did not report ready. Start the dev server with VITE_PUBLIC_PREVIEW_FIXTURE=1, or set KUB_ALLOW_PREVIEW_FIXTURE_SKIP=1 to accept that these contracts go unchecked."
+        : "The DEV preview capture route is not served. Start the dev server with VITE_PUBLIC_PREVIEW_FIXTURE=1, or set KUB_ALLOW_PREVIEW_FIXTURE_SKIP=1 to accept that these contracts go unchecked.",
+    );
+  }
 }
 
 /** For one bubble: is the time on the same line as the last words, or below them? */

@@ -1002,7 +1002,18 @@ export function MessageBubble({
           // technology and for nobody else. A faint chip and a focus outline
           // make it legible as something to press without adding a word to an
           // already crowded row.
-          className="inline-flex h-4 items-center gap-0.5 rounded-full bg-[var(--kub-surface-3)] px-1 text-[10px] leading-none text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-cyan)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--kub-cyan)]"
+          // The boundary is what makes it a control, and it has to be visible
+          // against the surface it actually sits on. This chip only ever
+          // appears on an OWN message — `getGroupReadReceiptInfo` returns null
+          // for anyone else's — so its background is always the tinted own
+          // bubble, `--kub-cyan` 22% over `--kub-surface`. Measured against
+          // that, the faint fill alone came to 1.07:1 in dark and 1.11:1 in
+          // light: the chip was in the markup and invisible on screen, so the
+          // count still read as bare text. The accent border measures 3.78:1
+          // and 3.90:1, which clears the 3:1 WCAG asks of a UI boundary. It is
+          // the accent already used for this chip's hover and focus, so
+          // nothing new is introduced.
+          className="inline-flex h-4 items-center gap-0.5 rounded-full border border-[color:var(--kub-cyan)] bg-[var(--kub-surface-3)] px-1 text-[10px] leading-none text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-cyan)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--kub-cyan)]"
           title={groupReadAriaLabel}
           aria-label={groupReadAriaLabel}
           onClick={(event) => {

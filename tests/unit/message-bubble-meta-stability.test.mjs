@@ -9,6 +9,48 @@ const source = readFileSync(
 
 const format = readFileSync(new URL("../../artifacts/kub/src/lib/format.ts", import.meta.url), "utf8");
 
+const stylesheet = readFileSync(new URL("../../artifacts/kub/src/index.css", import.meta.url), "utf8");
+
+/**
+ * The two theme blocks of `index.css`, as token maps.
+ *
+ * The dark palette is declared first and the light one second, so the second
+ * definition of any token belongs to light. Only literal hex values are read;
+ * a token defined as an alias is skipped rather than half-resolved, and the
+ * caller asserts on what it found.
+ */
+function themePalettes() {
+  const dark = new Map();
+  const light = new Map();
+  let surfaceSeen = 0;
+  for (const line of stylesheet.split("\n")) {
+    const match = /^\s*(--kub-[a-z0-9-]+)\s*:\s*(#[0-9A-Fa-f]{6})\s*;/.exec(line);
+    if (!match) continue;
+    if (match[1] === "--kub-surface") surfaceSeen += 1;
+    (surfaceSeen <= 1 ? dark : light).set(match[1], match[2]);
+  }
+  return { dark, light };
+}
+
+const channels = (hex) => [1, 3, 5].map((index) => Number.parseInt(hex.slice(index, index + 2), 16));
+
+/** `color-mix(in srgb, a p%, b)` — the sRGB average the browser computes. */
+const mixChannels = (a, b, portion) =>
+  channels(a).map((value, index) => value * portion + channels(b)[index] * (1 - portion));
+
+function relativeLuminance(rgb) {
+  const linear = rgb.map((value) => {
+    const channel = value / 255;
+    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+
+function contrastRatio(a, b) {
+  const [lighter, darker] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 test("the inline placement cannot oscillate", () => {
   // This used to assert a one-shot latch (`inlineBlockedRef`) that flipped a
   // message to its own meta row and never let it back. The latch is gone,
@@ -106,6 +148,117 @@ test("message time and private delivery icon reserve stable footer width", () =>
   );
 
   assert.match(source, /data-message-delivery-slot="true"[\s\S]*w-\[13px\]/);
+});
+
+test("the meta's place is decided by the measurement alone, not by the line count", () => {
+  // D-008. Whether the time fits beside the last words is a measurement, and
+  // `canInline` already answers it for the *last* rendered line however many
+  // there are. A `lineRects.length <= 1` condition used to sit on top of that
+  // result and refuse every wrapped message, so a bubble whose last line ended
+  // well short of the edge still grew a row holding nothing but a timestamp.
+  //
+  // The geometric proof of this lives in `tests/e2e/message-meta-placement.spec.ts`,
+  // which is the better test — it measures pixels rather than reading source.
+  // It is also gated behind the DEV capture route and skips itself whenever
+  // `VITE_PUBLIC_PREVIEW_FIXTURE=1` is absent from the dev server, which is the
+  // usual case. Measured: against a server without that flag all four of its
+  // tests skip and report success. This scan is what keeps the contract
+  // enforced in the default `node --test` gate that always runs.
+  const branch = source.match(/const maxContentWidth = getMaxContentWidth\([\s\S]{0,900}?const next: MetaPlacement/);
+  assert.ok(branch, "the non-compound placement branch could not be found");
+  assert.doesNotMatch(
+    branch[0],
+    /lineRects\.length/,
+    "the number of lines must not gate the placement — that is the D-008 defect returning",
+  );
+});
+
+test("the read count looks like something you can press", () => {
+  // D-004. The count is a `<button>` that opens the receipt list, but it was
+  // drawn as bare text right after the timestamp: a sighted reader saw `3/3`
+  // and had no reason to think it did anything. Its accessible name was already
+  // correct, so the affordance existed for assistive technology and for nobody
+  // else.
+  //
+  // The properties are asserted rather than the class string, because the row
+  // composes its classes and pinning a literal has already failed this file
+  // once on a change that kept everything the class exists to protect.
+  const button = source.match(/showGroupReadIndicator && \([\s\S]*?<\/button>/);
+  assert.ok(button, "the group read receipt button could not be found");
+
+  // A filled chip is what separates it from the muted text beside it. Spelled
+  // as a token, never a literal colour: D-006 and D-007 were both a reference
+  // to a token that did not exist, which resolves to nothing and renders as
+  // plain text again — exactly the defect this is meant to fix.
+  // Anchored to a class boundary so a `hover:` or `focus-visible:` variant
+  // cannot satisfy it. Written without that boundary this assertion stayed
+  // green with the resting background deleted, because `hover:bg-[…]` matched
+  // it — the affordance would have been gone for everyone not already pointing
+  // at it, which is precisely the reader D-004 is about.
+  assert.match(
+    button[0],
+    /[\s"']bg-\[var\(--kub-[a-z0-9-]+\)\]/,
+    "the count needs a filled background at rest, from a theme token, to read as pressable",
+  );
+  assert.match(
+    button[0],
+    /focus-visible:outline/,
+    "and a focus ring, or it is unreachable as a control by keyboard",
+  );
+  // The accessible name is the part that was already right. Losing it while
+  // adding the visible affordance would trade one audience for another.
+  assert.match(button[0], /aria-label=/, "the accessible name must survive the visual change");
+  // The chip sits inside the footer whose width the D-008 measurement reads, so
+  // its digits must not change advance between `3/3` and `12/12`.
+  assert.match(
+    button[0],
+    /tabular-nums/,
+    "tabular figures keep the chip from resizing the measured footer as counts change",
+  );
+});
+
+test("the read count is visible against the bubble it actually sits on", () => {
+  // The teeth of D-004, and the assertion the first fix needed and did not have.
+  //
+  // That fix put the count in a chip and was signed off from the previews —
+  // but the previews contain no own group message, so the chip was never in
+  // them. On screen it measured 1.07:1 in dark and 1.11:1 in light against the
+  // bubble behind it: present in the markup, invisible to a reader, and the
+  // count still read as bare text. A class-name check passed the whole time.
+  //
+  // So this computes the contrast instead of looking for a class. The surface
+  // is not a guess: `getGroupReadReceiptInfo` returns null unless the message
+  // is the reader's own, so the chip is always on the tinted own bubble.
+  const { dark, light } = themePalettes();
+
+  const button = source.match(/showGroupReadIndicator && \([\s\S]*?<\/button>/);
+  assert.ok(button, "the group read receipt button could not be found");
+  const boundary = button[0].match(/border-\[color:var\((--kub-[a-z0-9-]+)\)\]/);
+  assert.ok(boundary, "the chip needs a border token to be distinguishable from the bubble");
+
+  // Read the own-bubble recipe from the component rather than restating it, so
+  // a change to the bubble's tint is caught here instead of quietly lowering
+  // the contrast this test believes it is protecting.
+  const ownBubble = source.match(
+    /bg-\[color-mix\(in_srgb,var\((--kub-[a-z0-9-]+)\)_(\d+)%,var\((--kub-[a-z0-9-]+)\)\)\]/,
+  );
+  assert.ok(ownBubble, "the own-message bubble background recipe could not be read");
+
+  for (const [themeName, palette] of [["dark", dark], ["light", light]]) {
+    const tint = palette.get(ownBubble[1]);
+    const base = palette.get(ownBubble[3]);
+    const edge = palette.get(boundary[1]);
+    assert.ok(tint && base && edge, `${themeName}: a token used by the chip or bubble has no hex value`);
+
+    const behind = mixChannels(tint, base, Number(ownBubble[2]) / 100);
+    const ratio = contrastRatio(channels(edge), behind);
+    // 3:1 is what WCAG 1.4.11 asks of the boundary of a control. Below it the
+    // chip stops being an affordance and becomes decoration nobody can see.
+    assert.ok(
+      ratio >= 3,
+      `${themeName}: the chip's edge is ${ratio.toFixed(2)}:1 against the own bubble, so it is not visible as a control`,
+    );
+  }
 });
 
 test("delivery state changes do not reset measured footer placement", () => {

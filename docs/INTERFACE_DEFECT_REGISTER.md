@@ -120,7 +120,11 @@ question for the stage, and D-004 covers the label beside it.
 
 ---
 
-## D-004 `[ ]` The read count reads as a bare fraction with no unit or affordance
+## D-004 `[x]` The read count reads as a bare fraction with no unit or affordance
+
+> **Closed 2026-09-04.** Batch 6 added the chip's markup on 2026-09-02 but it
+> was invisible on screen — see the closing note at the end of this file. The
+> boundary that makes it a control landed 2026-09-04.
 
 **Severity:** medium.
 
@@ -139,7 +143,10 @@ does not discover that it is clickable.
 
 ---
 
-## D-005 `[ ]` The message meta row packs up to six elements without a hierarchy
+## D-005 `[x]` The message meta row packs up to six elements without a hierarchy
+
+> **Closed in fix batch 6**, which also corrected this entry's premise: the
+> sizes already formed a scale and what was missing was grouping.
 
 **Severity:** low, but it is the general reason the bubble looks crude.
 
@@ -202,7 +209,11 @@ divider.
 
 ---
 
-## D-008 `[ ]` A wrapped message always pushes its time onto a separate line
+## D-008 `[x]` A wrapped message always pushes its time onto a separate line
+
+> **Closed in fix batch 5** (`06298ff`, 2026-09-02). The `singleLineText`
+> condition described below no longer exists. The text that follows is the
+> original report, kept as written; do not read it as current.
 
 **Severity:** medium. Every message long enough to wrap, which is most of them.
 
@@ -1519,3 +1530,73 @@ cells**. D-013 is closed.
 Noted so a later reading does not mistake it for a finding: the tasks search
 input measures 42px inside a 44px bordered wrapper, and the harness correctly
 counts 44 — the missing 2px is the border.
+
+
+## A note on how to read this register
+
+Added 2026-09-04, after it cost an assignment.
+
+This file is append-only: an entry keeps its original text forever and a fix is
+recorded in a `# Fix batch N` section at the end. That is good for history and
+bad for anyone reading top to bottom — D-008's entry still said "**Not fixed
+here**" nine hundred lines above the batch that closed it, and work was
+commissioned against three defects of which two were already done.
+
+The checkbox in an entry's heading is the answer. `[x]` means closed, with a
+pointer to where. Before acting on an entry, check its box and search the file
+for its identifier: the last mention is the current state, not the first.
+
+## D-004 closed — the chip shipped as markup and was invisible
+
+Batch 6 recorded this as fixed on 2026-09-02, "verified by regenerating the
+previews". It could not have been: the product previews contain no own group
+message, and the chip only ever renders on an own message —
+`getGroupReadReceiptInfo` returns null for anyone else's — so it was never in
+the pictures that were checked.
+
+Measured on 2026-09-04 against the surface it actually sits on, which is always
+the tinted own bubble (`--kub-cyan` at 22% over `--kub-surface`): the faint fill
+alone came to **1.07:1 in dark and 1.11:1 in light**, against the 3:1 that a
+control boundary asks for. Rendered and looked at: "3/3" read as bare text after
+the timestamp — the original defect, unchanged.
+
+Fixed with a border in the accent already used for this chip's hover and focus,
+so no new colour enters the product: **3.78:1 dark, 3.90:1 light**. The chip
+grew 40→42px wide, its height and the bubble's 173x55 are unchanged, so the
+footer measurement D-008 depends on is undisturbed.
+
+The test that now protects it computes the ratio from `index.css` rather than
+looking for a class name. That distinction is the whole point: a test that
+searched for a class would have passed against the invisible chip, exactly as
+the previews did. Removing the boundary — the state that actually shipped —
+turns it red with the measured ratio in the message.
+
+## The meta-placement contracts had gone back to skipping silently
+
+The four tests in `tests/e2e/message-meta-placement.spec.ts` are the only thing
+standing behind D-008, D-024 and D-027. They need the DEV capture route, and
+when it was not served they skipped themselves — so a run of the suite reported
+success while enforcing none of it. That is the hazard D-024 recorded ("the e2e
+had been skipping on every run"), returned in a new form, and it was live
+through this whole stage: every run of that spec against the ordinary dev server
+reported `4 skipped`.
+
+Absence of the prerequisite is now a failure that says what to set, and skipping
+must be asked for with `KUB_ALLOW_PREVIEW_FIXTURE_SKIP=1`. The dev-server recipe
+sets `VITE_PUBLIC_PREVIEW_FIXTURE=1` so the ordinary path runs them: 5/5 pass.
+
+## D-032 — a nearly-full last line still grows the bubble, 180ms after paint
+
+Found 2026-09-04 while closing D-004, and deliberately not fixed.
+
+A message whose last line is nearly full takes the inline branch anyway, because
+`getMaxContentWidth` measures the row and so over-estimates on purpose. The
+reserve spacer then wraps and the bubble grows **+22px at t≈1999ms, 180ms after
+first paint at 1820ms**. The time still ends up bottom-right and the history
+anchor contract passes on the real chat, so this is a late reflow rather than an
+anchor break.
+
+Not fixed because the fix means re-reading a declared `max-width`, which is the
+exact thing that caused D-027's feedback loop, and because D-024 calls the
+over-estimate "the safe direction". Note that the existing stability test cannot
+see this: it samples bubble index 1 only and compares a boolean.
