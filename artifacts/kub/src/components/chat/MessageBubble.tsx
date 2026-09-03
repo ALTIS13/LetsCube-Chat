@@ -431,6 +431,17 @@ function MeasuredTextWithMeta({
       schedule();
     };
 
+    // Measure once SYNCHRONOUSLY, before this frame is painted. Every pass used
+    // to go through `requestAnimationFrame`, which runs after paint — so a
+    // message appeared with the meta inline, then grew a row for it on the next
+    // frame. Measured on a chat of 100 messages: 304 height changes after mount
+    // and 1865px of total growth, every one of them an `inline -> anchored`
+    // flip. It is also what broke the history anchor when older messages were
+    // prepended, because the restored position was computed from heights that
+    // were about to change.
+    measure();
+    // The later passes stay: fonts, images and a viewport change can all move
+    // the answer after the first paint.
     schedule();
     const secondFrame = window.requestAnimationFrame(schedule);
     // Two nodes, not five. The paragraph, its content span and the bubble are
