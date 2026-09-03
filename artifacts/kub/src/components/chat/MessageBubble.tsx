@@ -214,6 +214,25 @@ function canRenderCompactReplyInline(message: MessageWithSender, kind: TextLayou
   return Boolean(text) && !/[\r\n]/.test(text) && text.length <= 24;
 }
 
+/**
+ * One shared promise for "the fonts have loaded", instead of one per message.
+ *
+ * Every bubble asked `document.fonts.ready` from its own measurement effect. It
+ * is a getter that does real work, and with a screenful of messages it showed
+ * up in a CPU profile of chat switching as 304ms of self time — the second
+ * largest non-idle entry. Reading it once is enough: the answer is the same for
+ * every bubble on the page.
+ */
+let fontsReadyPromise: Promise<unknown> | null = null;
+
+function whenFontsReady(): Promise<unknown> {
+  if (typeof document === "undefined") return Promise.resolve();
+  if (!fontsReadyPromise) {
+    fontsReadyPromise = document.fonts ? document.fonts.ready.catch(() => undefined) : Promise.resolve();
+  }
+  return fontsReadyPromise;
+}
+
 function parsePixelValue(value: string): number | null {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -404,12 +423,16 @@ function MeasuredTextWithMeta({
 
     schedule();
     const secondFrame = window.requestAnimationFrame(schedule);
+    // Two nodes, not five. The paragraph, its content span and the bubble are
+    // all nested inside the stack and resize with it, so observing them as well
+    // only multiplied the callbacks: one resize produced five measurements per
+    // message, on every message on screen.
     const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null;
-    [textFlowRef.current, textContentRef.current, footerRef.current, bubbleRef.current, stackRef.current]
+    [stackRef.current ?? bubbleRef.current, footerRef.current]
       .filter(Boolean)
       .forEach((node) => observer?.observe(node as Element));
     window.addEventListener("resize", handleViewportResize);
-    document.fonts?.ready.then(schedule).catch(() => undefined);
+    void whenFontsReady().then(schedule);
 
     return () => {
       cancelled = true;
