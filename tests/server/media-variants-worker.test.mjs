@@ -26,6 +26,25 @@ test("media variants worker stores message variants under deterministic paths", 
   );
 });
 
+test("media variants worker keeps a chat's avatar apart from a profile's", () => {
+  // The two share the variant kinds, so only the path tells them apart. If a
+  // chat and a profile ever had the same uuid the files would overwrite each
+  // other, and a group would wear somebody's face.
+  const id = "7be464a0-a510-4e09-9f70-69d17a5eab02";
+  assert.equal(
+    mediaVariantRules.buildChatAvatarVariantPath(id, "avatar_128"),
+    `variants/chats/${id}/avatar_128.webp`,
+  );
+  assert.equal(
+    mediaVariantRules.buildProfileAvatarVariantPath(id, "avatar_128"),
+    `variants/profiles/${id}/avatar_128.webp`,
+  );
+  assert.notEqual(
+    mediaVariantRules.buildChatAvatarVariantPath(id, "avatar_256"),
+    mediaVariantRules.buildProfileAvatarVariantPath(id, "avatar_256"),
+  );
+});
+
 test("media variants worker processes only video variants that are not ready", () => {
   assert.equal(typeof mediaVariantRules.getMissingMessageVariantKinds, "function");
   if (typeof mediaVariantRules.getMissingMessageVariantKinds !== "function") return;

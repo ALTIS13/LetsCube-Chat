@@ -3,11 +3,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { ChatWithLastMessage, Profile } from "@/types/database";
 import { KubIcon } from "@/components/kub";
-import { useAvatarVariant, type AvatarVariantUrls } from "@/hooks/useMediaVariants";
+import { useAvatarVariant, useChatAvatarVariant, type AvatarVariantUrls } from "@/hooks/useMediaVariants";
 import { isSavedChatLikeName } from "@/lib/chatDisplay";
 import { cn } from "@/lib/utils";
 import { messageActorAvatarUrl, messageActorDisplayName, type MessageActor } from "@/lib/messageActor";
 import { avatarInkFor } from "@/lib/avatarInk";
+import { avatarVariantSubject, pickAvatarVariant } from "@/lib/avatarVariantStore";
 import { FRAME_RING_WIDTH, frameStyle } from "@/lib/profileCosmetics";
 
 // Generate consistent color from string
@@ -80,6 +81,7 @@ function AvatarImage({
   originalUrl,
   avatarVariant,
   profileId,
+  chatId,
   size,
   fallback,
 }: {
@@ -93,13 +95,26 @@ function AvatarImage({
    * to draw a 32-pixel circle.
    */
   profileId?: string | null;
+  /**
+   * When the picture belongs to no person — a group or channel avatar — the
+   * chat it belongs to instead. Measured on this deployment before it was
+   * wired up: group avatars averaged 862 kB, the largest 2.25 MB, for a circle
+   * drawn at 48 pixels.
+   */
+  chatId?: string | null;
   size: keyof typeof pixelMap;
   fallback: ReactNode;
 }) {
-  // A caller that already batched its own lookup keeps it; the store is only
-  // asked when nobody has answered.
-  const { variant: resolved, settled } = useAvatarVariant(profileId);
-  const effectiveVariant = avatarVariant ?? resolved;
+  // A caller that already batched its own lookup keeps it; the stores are only
+  // asked when nobody has answered. At most one of the two ids is ever set, so
+  // the other resolves to "nothing to wait for" immediately.
+  const { variant: resolvedProfile, settled: profileSettled } = useAvatarVariant(profileId);
+  const { variant: resolvedChat, settled: chatSettled } = useChatAvatarVariant(chatId);
+  const settled = profileSettled && chatSettled;
+  // A store answers "asked, and there is none" with an empty object rather than
+  // `undefined`, so `??` alone would let a profile with no variant hide a chat
+  // that has one. Whichever actually produced a picture wins.
+  const effectiveVariant = avatarVariant ?? pickAvatarVariant(resolvedProfile, resolvedChat);
   const variantUrl = getAvatarVariantSrc(effectiveVariant, size);
   // Starting the original while the answer is still coming downloads both — a
   // 734 kB request that is abandoned the moment the 3 kB one arrives. The
@@ -171,7 +186,7 @@ export function ChatAvatar({ chat, size = "md", className, showOnline, isSaved: 
           name={name}
           originalUrl={chat.avatar_url}
           avatarVariant={avatarVariant}
-          profileId={profileId}
+          {...avatarVariantSubject(chat.id, profileId)}
           size={size}
           fallback={fallback}
         />

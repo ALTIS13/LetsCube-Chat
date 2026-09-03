@@ -342,25 +342,52 @@ export function useAvatarVariantUrls(profileIds: readonly string[]): Record<stri
  * not: it lets each one ask for itself, and turns a screenful of asking into a
  * single query. See `lib/avatarVariantStore`.
  */
-const avatarVariants = createAvatarVariantStore(async (profileIds) => {
+const avatarVariants = createAvatarVariantStore((profileIds) =>
+  fetchAvatarVariantsBy("profile_id", profileIds),
+);
+
+/**
+ * The same store, for a chat's own picture.
+ *
+ * A group or channel avatar is keyed by `chat_id` rather than `profile_id`, so
+ * it cannot share one query with the profiles — but it is the same job, so it
+ * gets another instance of the same store rather than a second mechanism.
+ * A private chat is not asked about here: the client shows the other person's
+ * profile picture, which the store above already answers for.
+ */
+const chatAvatarVariants = createAvatarVariantStore((chatIds) =>
+  fetchAvatarVariantsBy("chat_id", chatIds),
+);
+
+async function fetchAvatarVariantsBy(
+  column: "profile_id" | "chat_id",
+  ids: string[],
+): Promise<Record<string, AvatarVariantUrls>> {
   const supabase = createClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("media_variants")
-    .select("id,profile_id,variant_kind,variant_bucket,variant_path,width,height,status,updated_at")
+    .select(`id,${column},variant_kind,variant_bucket,variant_path,width,height,status,updated_at`)
     .eq("status", "ready")
     .in("variant_kind", [...AVATAR_VARIANT_KINDS])
-    .in("profile_id", profileIds);
+    .in(column, ids);
+  // A message variant carries the id of the chat it lives in, so `chat_id`
+  // alone would not mean "this chat's own picture". The row with no message
+  // behind it is the chat's.
+  if (column === "chat_id") query = query.is("message_id", null);
+
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
 
   const next: Record<string, AvatarVariantUrls> = {};
   for (const row of (data ?? []) as unknown as MediaVariant[]) {
-    if (!row.profile_id) continue;
-    // A profile variant keeps its path when the picture changes, so the URL
+    const ownerId = row[column];
+    if (!ownerId) continue;
+    // An avatar variant keeps its path when the picture changes, so the URL
     // carries the moment it was written. Without that token the object could
-    // not be cached for longer than it takes someone to change their avatar.
+    // not be cached for longer than it takes someone to change the picture.
     const publicUrl = withVersionToken(getVariantPublicUrl(supabase.storage, row), row.updated_at);
     if (!publicUrl) continue;
-    const current = next[row.profile_id] ?? {};
+    const current = next[ownerId] ?? {};
     if (row.variant_kind === "avatar_128") {
       current.avatar128Url = publicUrl;
       current.avatar128Width = row.width;
@@ -370,10 +397,10 @@ const avatarVariants = createAvatarVariantStore(async (profileIds) => {
       current.avatar256Width = row.width;
       current.avatar256Height = row.height;
     }
-    next[row.profile_id] = current;
+    next[ownerId] = current;
   }
   return next;
-});
+}
 
 /**
  * The small version of one profile's avatar, if there is one.
@@ -386,20 +413,40 @@ export function useAvatarVariant(profileId: string | null | undefined): {
   /** False while the answer is still coming; see `avatarVariantStore`. */
   settled: boolean;
 } {
-  const subscribe = useCallback((listener: () => void) => avatarVariants.subscribe(listener), []);
+  return useVariantFromStore(avatarVariants, profileId);
+}
+
+/**
+ * The small version of a chat's own picture, if there is one.
+ *
+ * For a group or channel. A private chat's picture is a person's, so it goes
+ * through `useAvatarVariant` with that person's id instead.
+ */
+export function useChatAvatarVariant(chatId: string | null | undefined): {
+  variant: AvatarVariantUrls | undefined;
+  settled: boolean;
+} {
+  return useVariantFromStore(chatAvatarVariants, chatId);
+}
+
+function useVariantFromStore(
+  store: typeof avatarVariants,
+  id: string | null | undefined,
+): { variant: AvatarVariantUrls | undefined; settled: boolean } {
+  const subscribe = useCallback((listener: () => void) => store.subscribe(listener), [store]);
   // Requested during render rather than in an effect: an effect runs after the
   // first paint, by which time an <img> falling back to the original has
   // already started downloading it, which is the whole thing being avoided.
-  avatarVariants.request(profileId);
+  store.request(id);
 
   const variant = useSyncExternalStore(
     subscribe,
-    () => avatarVariants.get(profileId),
+    () => store.get(id),
     () => undefined,
   );
   const settled = useSyncExternalStore(
     subscribe,
-    () => avatarVariants.isSettled(profileId),
+    () => store.isSettled(id),
     () => true,
   );
 

@@ -12,10 +12,13 @@ import {
   MESSAGE_VIDEO_VARIANTS,
   VIDEO_POSTER_VARIANT,
   buildCandidatePageRanges,
+  buildChatAvatarVariantPath,
   buildMessageVariantPath,
+  buildProfileAvatarVariantPath,
   getExpectedMessageVariantKinds,
   getMissingMessageVariantKinds,
   sanitizeVariantErrorCode,
+  type AvatarVariantKind,
   type MessageVariantKind,
 } from "./mediaVariantRules";
 import {
@@ -48,14 +51,27 @@ interface MessageCandidate {
   missingVariantKinds?: MessageVariantKind[];
 }
 
-interface ProfileCandidate {
+/**
+ * Something with a picture of its own that wants a small version of it.
+ *
+ * A person and a group are the same job: the same crop, at the same two sizes,
+ * at the same quality. All that differs is which column of `media_variants`
+ * carries the id and which prefix the files go under, so both are described
+ * here rather than written out twice.
+ */
+interface AvatarCandidate {
+  scope: "profile" | "chat";
   id: string;
   avatar_url: string | null;
 }
 
+/** Which column of `media_variants` names the owner of an avatar variant. */
+type AvatarOwnerColumn = "profile_id" | "chat_id";
+
 interface ExistingVariant {
   message_id: string | null;
   profile_id: string | null;
+  chat_id: string | null;
   variant_kind: string;
 }
 
@@ -114,9 +130,10 @@ async function loop(supabase: SupabaseClient): Promise<void> {
 }
 
 async function tick(supabase: SupabaseClient): Promise<void> {
-  const [messages, profiles] = await Promise.all([
+  const [messages, profiles, chats] = await Promise.all([
     loadMessageCandidates(supabase),
     loadProfileCandidates(supabase),
+    loadChatCandidates(supabase),
   ]);
 
   let processedMessages = 0;
@@ -129,12 +146,22 @@ async function tick(supabase: SupabaseClient): Promise<void> {
   let processedProfiles = 0;
   for (const profile of profiles) {
     if (processedProfiles >= processLimit()) break;
-    const ok = await ensureProfileVariants(supabase, profile);
+    const ok = await ensureAvatarVariants(supabase, profile);
     if (ok) processedProfiles += 1;
   }
 
-  if (processedMessages > 0 || processedProfiles > 0) {
-    logger.info({ processedMessages, processedProfiles }, "mediaVariantsWorker generated variants");
+  let processedChats = 0;
+  for (const chat of chats) {
+    if (processedChats >= processLimit()) break;
+    const ok = await ensureAvatarVariants(supabase, chat);
+    if (ok) processedChats += 1;
+  }
+
+  if (processedMessages > 0 || processedProfiles > 0 || processedChats > 0) {
+    logger.info(
+      { processedMessages, processedProfiles, processedChats },
+      "mediaVariantsWorker generated variants",
+    );
   }
 }
 
@@ -179,27 +206,52 @@ async function loadMessageCandidates(supabase: SupabaseClient): Promise<MessageC
   return candidates;
 }
 
-async function loadProfileCandidates(supabase: SupabaseClient): Promise<ProfileCandidate[]> {
-  const { data, error } = await supabase
-    .from("profiles")
+async function loadProfileCandidates(supabase: SupabaseClient): Promise<AvatarCandidate[]> {
+  return loadAvatarCandidates(supabase, "profile", "profiles");
+}
+
+/**
+ * Groups and channels whose own picture has no small version yet.
+ *
+ * A private chat is skipped on purpose: the client shows the other person's
+ * profile picture there, which already has variants of its own, so a variant of
+ * the chat row's picture would be produced and never asked for.
+ */
+async function loadChatCandidates(supabase: SupabaseClient): Promise<AvatarCandidate[]> {
+  return loadAvatarCandidates(supabase, "chat", "chats", ["group", "channel"]);
+}
+
+async function loadAvatarCandidates(
+  supabase: SupabaseClient,
+  scope: AvatarCandidate["scope"],
+  table: "profiles" | "chats",
+  types?: string[],
+): Promise<AvatarCandidate[]> {
+  let query = supabase
+    .from(table)
     .select("id, avatar_url")
     .not("avatar_url", "is", null)
     .order("updated_at", { ascending: false })
     .limit(candidateLimit());
+  if (types) query = query.in("type", types);
+  const { data, error } = await query;
 
   if (error) {
-    logger.warn({ err: safeStorageFailureDetails(error) }, "mediaVariantsWorker profile select failed");
+    logger.warn(
+      { err: safeStorageFailureDetails(error), table },
+      "mediaVariantsWorker avatar select failed",
+    );
     return [];
   }
 
-  const candidates = ((data ?? []) as ProfileCandidate[]).filter((row) =>
-    Boolean(resolveStoragePath(MEDIA_BUCKET, null, row.avatar_url)),
-  );
+  const candidates = ((data ?? []) as { id: string; avatar_url: string | null }[])
+    .filter((row) => Boolean(resolveStoragePath(MEDIA_BUCKET, null, row.avatar_url)))
+    .map((row) => ({ scope, id: row.id, avatar_url: row.avatar_url }) satisfies AvatarCandidate);
   if (candidates.length === 0) return [];
 
   const existing = await loadExistingVariants(
     supabase,
-    "profile_id",
+    avatarOwnerColumn(scope),
     candidates.map((row) => row.id),
   );
   return candidates.filter((row) => {
@@ -210,15 +262,21 @@ async function loadProfileCandidates(supabase: SupabaseClient): Promise<ProfileC
 
 async function loadExistingVariants(
   supabase: SupabaseClient,
-  column: "message_id" | "profile_id",
+  column: "message_id" | AvatarOwnerColumn,
   ids: string[],
 ): Promise<Map<string, Set<string>>> {
   if (ids.length === 0) return new Map();
-  const { data, error } = await supabase
+  let query = supabase
     .from("media_variants")
     .select(`${column}, variant_kind`)
     .in(column, ids)
     .eq("status", "ready");
+  // A message variant carries the id of the chat it lives in, so asking by
+  // `chat_id` alone would also return every picture ever sent in these chats.
+  // A chat's own avatar is the row with no message behind it.
+  if (column === "chat_id") query = query.is("message_id", null);
+
+  const { data, error } = await query;
 
   if (error) {
     logger.warn({ err: safeStorageFailureDetails(error) }, "mediaVariantsWorker variants lookup failed");
@@ -227,13 +285,23 @@ async function loadExistingVariants(
 
   const byOwner = new Map<string, Set<string>>();
   for (const row of (data ?? []) as ExistingVariant[]) {
-    const id = column === "message_id" ? row.message_id : row.profile_id;
+    const id = row[column];
     if (!id) continue;
     const set = byOwner.get(id) ?? new Set<string>();
     set.add(row.variant_kind);
     byOwner.set(id, set);
   }
   return byOwner;
+}
+
+function avatarOwnerColumn(scope: AvatarCandidate["scope"]): AvatarOwnerColumn {
+  return scope === "chat" ? "chat_id" : "profile_id";
+}
+
+function avatarVariantPath(owner: AvatarCandidate, kind: AvatarVariantKind): string {
+  return owner.scope === "chat"
+    ? buildChatAvatarVariantPath(owner.id, kind)
+    : buildProfileAvatarVariantPath(owner.id, kind);
 }
 
 async function ensureMessageVariants(supabase: SupabaseClient, message: MessageCandidate): Promise<boolean> {
@@ -420,8 +488,11 @@ async function probeVideoDimensions(outputPath: string): Promise<{ width: number
   throw Object.assign(new Error("video probe failed"), { code: "video_probe_failed" });
 }
 
-async function ensureProfileVariants(supabase: SupabaseClient, profile: ProfileCandidate): Promise<boolean> {
-  const source = resolveStoragePath(MEDIA_BUCKET, null, profile.avatar_url);
+async function ensureAvatarVariants(
+  supabase: SupabaseClient,
+  owner: AvatarCandidate,
+): Promise<boolean> {
+  const source = resolveStoragePath(MEDIA_BUCKET, null, owner.avatar_url);
   if (!source) return false;
 
   const sourceBuffer = await downloadStorageObject(supabase, source);
@@ -429,7 +500,7 @@ async function ensureProfileVariants(supabase: SupabaseClient, profile: ProfileC
 
   let generated = false;
   for (const variant of AVATAR_VARIANTS) {
-    const variantPath = `variants/profiles/${profile.id}/${variant.kind}.webp`;
+    const variantPath = avatarVariantPath(owner, variant.kind);
     try {
       const output = await sharp(sourceBuffer)
         .rotate()
@@ -437,7 +508,7 @@ async function ensureProfileVariants(supabase: SupabaseClient, profile: ProfileC
         .webp({ quality: variant.quality })
         .toBuffer({ resolveWithObject: true });
       await uploadVariant(supabase, variantPath, output.data, WEBP_MIME_TYPE);
-      await replaceProfileVariant(supabase, profile.id, source, {
+      await replaceAvatarVariant(supabase, owner, source, {
         kind: variant.kind,
         path: variantPath,
         mimeType: WEBP_MIME_TYPE,
@@ -447,7 +518,7 @@ async function ensureProfileVariants(supabase: SupabaseClient, profile: ProfileC
       });
       generated = true;
     } catch (err) {
-      await markProfileVariantFailed(supabase, profile.id, source, variant.kind, variantPath, err);
+      await markAvatarVariantFailed(supabase, owner, source, variant.kind, variantPath, err);
     }
   }
   return generated;
@@ -467,7 +538,7 @@ async function downloadStorageObject(
 
 /** See `artifacts/kub/src/lib/mediaCacheControl.ts`; kept in step by a test. */
 function variantCacheControl(path: string): string {
-  return path.startsWith("variants/profiles/")
+  return path.startsWith("variants/profiles/") || path.startsWith("variants/chats/")
     ? "max-age=2592000"
     : "max-age=31536000, immutable";
 }
@@ -505,16 +576,30 @@ async function replaceMessageVariant(
   if (error) throw error;
 }
 
-async function replaceProfileVariant(
+/**
+ * Clear the owner's existing row of one kind, so a fresh one can replace it.
+ *
+ * The `chat_id` case has to say `message_id is null` as well: without it the
+ * delete would reach the chat's message variants of the same kind. There are
+ * none today — no message variant is an `avatar_*` — but the scoping is what
+ * keeps that an accident of the current kinds rather than a dependency.
+ */
+function deleteAvatarVariantRow(supabase: SupabaseClient, owner: AvatarCandidate, kind: string) {
+  const column = avatarOwnerColumn(owner.scope);
+  const scoped = supabase.from("media_variants").delete().eq(column, owner.id).eq("variant_kind", kind);
+  return owner.scope === "chat" ? scoped.is("message_id", null) : scoped;
+}
+
+async function replaceAvatarVariant(
   supabase: SupabaseClient,
-  profileId: string,
+  owner: AvatarCandidate,
   source: StoragePointer,
   variant: GeneratedVariant,
 ): Promise<void> {
-  await supabase.from("media_variants").delete().eq("profile_id", profileId).eq("variant_kind", variant.kind);
+  await deleteAvatarVariantRow(supabase, owner, variant.kind);
 
   const { error } = await supabase.from("media_variants").insert({
-    profile_id: profileId,
+    [avatarOwnerColumn(owner.scope)]: owner.id,
     source_bucket: source.bucket,
     source_path: source.path,
     variant_kind: variant.kind,
@@ -555,17 +640,17 @@ async function markMessageVariantFailed(
     );
 }
 
-async function markProfileVariantFailed(
+async function markAvatarVariantFailed(
   supabase: SupabaseClient,
-  profileId: string,
+  owner: AvatarCandidate,
   source: StoragePointer,
   kind: string,
   path: string,
   err: unknown,
 ): Promise<void> {
-  await supabase.from("media_variants").delete().eq("profile_id", profileId).eq("variant_kind", kind);
+  await deleteAvatarVariantRow(supabase, owner, kind);
   await supabase.from("media_variants").insert({
-    profile_id: profileId,
+    [avatarOwnerColumn(owner.scope)]: owner.id,
     source_bucket: source.bucket,
     source_path: source.path,
     variant_kind: kind,

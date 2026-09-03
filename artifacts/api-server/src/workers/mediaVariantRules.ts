@@ -23,6 +23,7 @@ export const AVATAR_VARIANTS = [
   { kind: "avatar_256", size: 256, quality: 82 },
 ] as const;
 
+export type AvatarVariantKind = (typeof AVATAR_VARIANTS)[number]["kind"];
 export type MessageImageVariantKind = (typeof MESSAGE_IMAGE_VARIANTS)[number]["kind"];
 export type MessageVideoVariantKind = (typeof MESSAGE_VIDEO_VARIANTS)[number]["kind"];
 export type MessageVariantKind = MessageImageVariantKind | MessageVideoVariantKind;
@@ -73,4 +74,27 @@ export function buildMessageVariantPath(
 ): string {
   const normalizedExtension = extension.replace(/^\./, "") || "webp";
   return `variants/messages/${chatId}/${messageId}/${kind}.${normalizedExtension}`;
+}
+
+/**
+ * Where a profile's small avatar lives.
+ *
+ * Unlike a message variant this path is reused: changing your picture
+ * overwrites it rather than minting a new name. That is why it gets the
+ * shorter cache lifetime and why the client versions the URL — see
+ * `artifacts/kub/src/lib/mediaCacheControl.ts`.
+ */
+export function buildProfileAvatarVariantPath(profileId: string, kind: AvatarVariantKind): string {
+  return `variants/profiles/${profileId}/${kind}.webp`;
+}
+
+/**
+ * Where a chat's own small avatar lives.
+ *
+ * A group or channel picture, not a person's. Same geometry and quality as a
+ * profile's — and, like a profile's, overwritten in place when the picture
+ * changes, so it belongs to the same reused-path cache rule.
+ */
+export function buildChatAvatarVariantPath(chatId: string, kind: AvatarVariantKind): string {
+  return `variants/chats/${chatId}/${kind}.webp`;
 }

@@ -32,8 +32,14 @@ export const IMMUTABLE_CACHE_CONTROL = "max-age=31536000, immutable";
  */
 export const REUSED_PATH_CACHE_CONTROL = "max-age=2592000";
 
-/** Paths whose bytes are overwritten in place rather than given a new name. */
-const REUSED_PREFIXES = ["variants/profiles/"];
+/**
+ * Paths whose bytes are overwritten in place rather than given a new name.
+ *
+ * Both are avatar variants: `{owner}/{kind}.webp` has nowhere to put a version,
+ * so changing the picture reuses the address. A chat's is here for the same
+ * reason a profile's is — a renamed group photo must not show last month's.
+ */
+const REUSED_PREFIXES = ["variants/profiles/", "variants/chats/"];
 
 /**
  * The value to send when uploading to `objectPath`.

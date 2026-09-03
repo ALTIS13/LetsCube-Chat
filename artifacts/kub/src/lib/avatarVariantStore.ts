@@ -156,3 +156,47 @@ export function avatarVariantSrc(
   if (size === "xl" || size === "lg") return variant.avatar256Url ?? variant.avatar128Url;
   return variant.avatar128Url ?? variant.avatar256Url;
 }
+
+/** Which id each store should be asked about, for one picture on screen. */
+export interface AvatarVariantSubject {
+  profileId: string | null;
+  chatId: string | null;
+}
+
+/**
+ * Whose picture is this — a person's, or the chat's own?
+ *
+ * A group or channel avatar belongs to the chat and is keyed by `chat_id`. A
+ * private chat's is a person's: `useChats` replaces the row's `avatar_url` with
+ * the other member's before it ever reaches an avatar, so the variants worth
+ * asking for are that person's, and the chat's own row — if the chat happens to
+ * have one from before it was private, or from a picture no longer shown — is
+ * not what is on screen.
+ *
+ * Exactly one of the two is ever set. Asking both stores would be harmless but
+ * would put a chat id into a query about profiles, and a private chat would
+ * take whichever answer arrived first.
+ */
+export function avatarVariantSubject(
+  chatId: string | null | undefined,
+  profileId: string | null | undefined,
+): AvatarVariantSubject {
+  if (profileId) return { profileId, chatId: null };
+  return { profileId: null, chatId: chatId ?? null };
+}
+
+/**
+ * The first candidate that actually has a picture; else the first answer given.
+ *
+ * A store answers "asked, and there is none" with an empty object rather than
+ * `undefined`, so `a ?? b` would let a profile known to have no variant hide a
+ * chat that has one.
+ */
+export function pickAvatarVariant(
+  ...candidates: (AvatarVariantUrls | undefined)[]
+): AvatarVariantUrls | undefined {
+  return (
+    candidates.find((candidate) => candidate?.avatar128Url || candidate?.avatar256Url) ??
+    candidates.find((candidate) => candidate !== undefined)
+  );
+}
