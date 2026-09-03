@@ -1,4 +1,5 @@
 import { Upload } from "tus-js-client";
+import { cacheControlFor } from "@/lib/mediaCacheControl";
 
 export const RESUMABLE_UPLOAD_THRESHOLD_BYTES = 6 * 1024 * 1024;
 export const RESUMABLE_UPLOAD_CHUNK_BYTES = 6 * 1024 * 1024;
@@ -135,7 +136,7 @@ export function startResumableStorageUpload(
           bucketName: options.bucketName,
           objectName: options.objectName,
           contentType: options.contentType,
-          cacheControl: "3600",
+          cacheControl: cacheControlFor(options.objectName),
         },
         chunkSize: RESUMABLE_UPLOAD_CHUNK_BYTES,
         onError: () => {

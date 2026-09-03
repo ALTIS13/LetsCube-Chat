@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage } from "@/lib/mediaUpload";
 import { botManagement } from "@/lib/botManagement";
+import { cacheControlFor } from "@/lib/mediaCacheControl";
 
 /**
  * Giving a bot a picture.
@@ -50,7 +51,11 @@ export async function uploadBotAvatar(botId: string, file: File): Promise<BotAva
   const supabase = createClient();
   const { error } = await supabase.storage
     .from("media")
-    .upload(objectPath, prepared, { upsert: true, contentType: prepared.type });
+    .upload(objectPath, prepared, {
+      upsert: true,
+      contentType: prepared.type,
+      cacheControl: cacheControlFor(objectPath),
+    });
   if (error) throw new Error("Не удалось загрузить изображение.");
 
   const avatarUrl = publicMediaUrl(objectPath);

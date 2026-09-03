@@ -27,6 +27,7 @@ import type { GroupInviteStatus, InvitePolicy } from "@/lib/groupInvites";
 import type { ChatWithLastMessage, Profile, Message } from "@/types/database";
 import { CHAT_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
 import { useMessageMediaVariantUrls, type MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
+import { cacheControlFor } from "@/lib/mediaCacheControl";
 
 interface ChatInfoPanelProps {
   chat: ChatWithLastMessage;
@@ -313,7 +314,11 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     }
     const path = avatarUploadPath("chat", chat.id, preparedFile);
     const { data, error } = await supabase.storage.from("media")
-      .upload(path, preparedFile, { contentType: preparedFile.type, upsert: false });
+      .upload(path, preparedFile, {
+        contentType: preparedFile.type,
+        upsert: false,
+        cacheControl: cacheControlFor(path),
+      });
     if (error) {
       const message = prefixError("Не удалось загрузить аватар чата", error);
       setAvatarError(message);

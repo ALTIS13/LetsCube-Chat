@@ -14,6 +14,7 @@ import {
   type MessageVariantRefreshLifecycle,
 } from "@/lib/messageVariantRefresh";
 import { createAvatarVariantStore, type AvatarVariantUrls } from "@/lib/avatarVariantStore";
+import { withVersionToken } from "@/lib/mediaCacheControl";
 
 type MessageMediaVariantSource = Pick<MessageWithSender, "id" | "chat_id" | "type" | "media_url" | "deleted_at">;
 
@@ -290,7 +291,7 @@ export function useAvatarVariantUrls(profileIds: readonly string[]): Record<stri
     const loadVariants = async () => {
       const { data, error } = await supabase
         .from("media_variants")
-        .select("id,profile_id,variant_kind,variant_bucket,variant_path,width,height,status")
+        .select("id,profile_id,variant_kind,variant_bucket,variant_path,width,height,status,updated_at")
         .eq("status", "ready")
         .in("variant_kind", [...AVATAR_VARIANT_KINDS])
         .in("profile_id", normalizedProfileIds);
@@ -305,7 +306,7 @@ export function useAvatarVariantUrls(profileIds: readonly string[]): Record<stri
       const next: Record<string, AvatarVariantUrls> = {};
       for (const row of (data ?? []) as unknown as MediaVariant[]) {
         if (!row.profile_id) continue;
-        const publicUrl = getVariantPublicUrl(supabase.storage, row);
+        const publicUrl = withVersionToken(getVariantPublicUrl(supabase.storage, row), row.updated_at);
         if (!publicUrl) continue;
 
         const current = next[row.profile_id] ?? {};
@@ -345,7 +346,7 @@ const avatarVariants = createAvatarVariantStore(async (profileIds) => {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("media_variants")
-    .select("id,profile_id,variant_kind,variant_bucket,variant_path,width,height,status")
+    .select("id,profile_id,variant_kind,variant_bucket,variant_path,width,height,status,updated_at")
     .eq("status", "ready")
     .in("variant_kind", [...AVATAR_VARIANT_KINDS])
     .in("profile_id", profileIds);
@@ -354,7 +355,10 @@ const avatarVariants = createAvatarVariantStore(async (profileIds) => {
   const next: Record<string, AvatarVariantUrls> = {};
   for (const row of (data ?? []) as unknown as MediaVariant[]) {
     if (!row.profile_id) continue;
-    const publicUrl = getVariantPublicUrl(supabase.storage, row);
+    // A profile variant keeps its path when the picture changes, so the URL
+    // carries the moment it was written. Without that token the object could
+    // not be cached for longer than it takes someone to change their avatar.
+    const publicUrl = withVersionToken(getVariantPublicUrl(supabase.storage, row), row.updated_at);
     if (!publicUrl) continue;
     const current = next[row.profile_id] ?? {};
     if (row.variant_kind === "avatar_128") {

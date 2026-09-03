@@ -63,6 +63,7 @@ import {
   type StagedUploadScopeToken,
 } from "@/lib/stagedUploadWorkflow";
 import type { Json, MessageWithSender } from "@/types/database";
+import { cacheControlFor } from "@/lib/mediaCacheControl";
 
 interface ChatWindowProps {
   chatId: string;
@@ -435,6 +436,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         .upload(path, attachment.file, {
           contentType,
           upsert: false,
+          cacheControl: cacheControlFor(path),
         });
       if (error || !data) throw error ?? new Error("upload_failed");
       uploadedPath = data.path;

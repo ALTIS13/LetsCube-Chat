@@ -465,6 +465,13 @@ async function downloadStorageObject(
   return Buffer.from(await data.arrayBuffer());
 }
 
+/** See `artifacts/kub/src/lib/mediaCacheControl.ts`; kept in step by a test. */
+function variantCacheControl(path: string): string {
+  return path.startsWith("variants/profiles/")
+    ? "max-age=2592000"
+    : "max-age=31536000, immutable";
+}
+
 async function uploadVariant(
   supabase: SupabaseClient,
   path: string,
@@ -474,6 +481,12 @@ async function uploadVariant(
   const { error } = await supabase.storage.from(MEDIA_BUCKET).upload(path, body, {
     contentType: mimeType,
     upsert: true,
+    // Without this the service serves its own one-hour default, and every
+    // avatar and preview costs a conditional request on every visit. A message
+    // variant's path names one message and never changes; a profile variant's
+    // path is reused when the picture is, so it gets a shorter window and the
+    // client versions the URL.
+    cacheControl: variantCacheControl(path),
   });
   if (error) throw error;
 }

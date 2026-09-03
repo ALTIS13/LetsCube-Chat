@@ -20,6 +20,7 @@ import { isDesktopApp } from "@/lib/platform/desktop";
 import { ReleaseDistributionSection } from "@/components/settings/ReleaseDistributionSection";
 import { ProfileDecorationSection } from "@/components/settings/ProfileDecorationSection";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
+import { cacheControlFor } from "@/lib/mediaCacheControl";
 import {
   PROFILE_LIMITS,
   normalizeFullName,
@@ -126,7 +127,11 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     const path = avatarUploadPath("user", currentUser.id, preparedFile);
     const { data, error: upErr } = await supabase.storage
       .from("media")
-      .upload(path, preparedFile, { contentType: preparedFile.type, upsert: false });
+      .upload(path, preparedFile, {
+        contentType: preparedFile.type,
+        upsert: false,
+        cacheControl: cacheControlFor(path),
+      });
     if (upErr) { setError(mapPgError(upErr)); setUploadingAvatar(false); return; }
     const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(data.path);
     const { error: profileErr } = await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", currentUser.id);

@@ -30,6 +30,7 @@ import { LOCATION_ROLE_LABEL, mapLocationRoutingError } from "@/lib/locationRout
 import { getRoleLabel, isCriticalRoleKey, mapRolesPermissionsError } from "@/lib/rolePermissions";
 import type { LocationMemberWithProfile, TaskRoutingState } from "@/hooks/useTaskRouting";
 import { registerChannel, unregisterChannel } from "@/lib/dev/instrumentation";
+import { cacheControlFor } from "@/lib/mediaCacheControl";
 
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -1069,7 +1070,11 @@ function ProfilePreviewModal({
     try {
       const { data, error } = await supabase.storage
         .from("media")
-        .upload(path, preparedFile, { contentType: preparedFile.type, upsert: false });
+        .upload(path, preparedFile, {
+          contentType: preparedFile.type,
+          upsert: false,
+          cacheControl: cacheControlFor(path),
+        });
       if (error || !data) throw error ?? new Error("avatar_upload_failed");
       const { data: publicData } = supabase.storage.from("media").getPublicUrl(data.path);
       setAvatarSaving(false);
