@@ -426,7 +426,11 @@ export function MessageList({
       // Two consecutive frames that needed no correction mean the layout has
       // stopped moving; the safety timeout ends it either way.
       settledFrames = Math.abs(el.scrollTop - before) <= 1 ? settledFrames + 1 : 0;
-      if (settledFrames >= 2) {
+      // Four frames rather than two. Measured, the layout looked settled for two
+      // frames and then shed 706px on the next one, so a two-frame window
+      // released the hold immediately before the change it existed for. The
+      // safety timeout still bounds the whole thing.
+      if (settledFrames >= 4) {
         releaseOlderScrollPreservation();
         return;
       }

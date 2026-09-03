@@ -443,9 +443,22 @@ function MeasuredTextWithMeta({
     // for those the room to the right of the last line is the real constraint.
     // A plain text bubble sizes itself, so the question is whether the last
     // line and the meta fit inside the width it is allowed to reach.
-    const canInline = compound
-      ? rightLimit - lastLine.right >= footerRect.width + gap
-      : lastLine.width + footerRect.width + gap <= getMaxContentWidth(bubbleEl, stackRef.current);
+    let canInline: boolean;
+    if (compound) {
+      canInline = rightLimit - lastLine.right >= footerRect.width + gap;
+    } else {
+      const maxContentWidth = getMaxContentWidth(bubbleEl, stackRef.current);
+      // Refuse to answer on a width that cannot be real. A bubble mounting
+      // inside a prepended page is measured while its row is still being laid
+      // out, and the row reports a width of zero — which said the meta could
+      // never fit inline. Every prepended message therefore appeared with a row
+      // for the timestamp and dropped it a frame later: measured, 706px of the
+      // list's height vanished at t=303ms and took the reader's place with it.
+      // Keeping the current placement and waiting for the next pass costs
+      // nothing, because a later pass always comes.
+      if (maxContentWidth < 80) return;
+      canInline = lastLine.width + footerRect.width + gap <= maxContentWidth;
+    }
     const next: MetaPlacement = canInline ? "inline" : "anchored";
 
     setPlacement((previous) => (previous === next ? previous : next));

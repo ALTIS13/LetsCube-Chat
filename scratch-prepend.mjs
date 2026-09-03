@@ -95,6 +95,29 @@ if (!anchor || anchor.hasMore !== "true") {
   process.exit(0);
 }
 
+// Record scrollTop and the anchor's offset every frame across the prepend, so
+// the moment the drift appears is visible rather than inferred.
+await scroller.evaluate((el, previous) => {
+  window.__timeline = [];
+  const start = performance.now();
+  const tick = () => {
+    if (performance.now() - start > 4000) return;
+    const containerTop = el.getBoundingClientRect().top;
+    const target = [...el.querySelectorAll("[data-message-id]")].find(
+      (node) => node.dataset.messageId === previous.id,
+    );
+    window.__timeline.push({
+      t: Math.round(performance.now() - start),
+      scrollTop: Math.round(el.scrollTop),
+      offset: target ? Math.round(target.getBoundingClientRect().top - containerTop) : null,
+      height: el.scrollHeight,
+      loading: el.getAttribute("data-loading-older"),
+    });
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}, anchor);
+
 // One nudge to ask for older history.
 await page.mouse.wheel(0, -260);
 let started = false;
@@ -136,6 +159,18 @@ const after = await scroller.evaluate((el, previous) => {
   };
 }, anchor);
 
+const timeline = await scroller.evaluate(() => window.__timeline ?? []);
+const marks = [];
+let previousHeight = null;
+for (const entry of timeline) {
+  const grew = previousHeight !== null && entry.height !== previousHeight;
+  if (grew || marks.length === 0 || entry.t - marks[marks.length - 1].t > 300) marks.push(entry);
+  previousHeight = entry.height;
+}
+console.log("timeline (t, scrollTop, anchor offset, scrollHeight, loading):");
+for (const entry of marks.slice(0, 14)) {
+  console.log(`   ${String(entry.t).padStart(4)}ms  scroll ${String(entry.scrollTop).padStart(5)}  offset ${String(entry.offset).padStart(6)}  height ${entry.height}  loading ${entry.loading}`);
+}
 console.log(`loader started: ${started} · finished: ${finished}`);
 console.log("after prepend:", JSON.stringify(after));
 
