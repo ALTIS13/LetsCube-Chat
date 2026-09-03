@@ -1129,3 +1129,88 @@ so nobody with a working session sees a form flash.
   matched the literal `if (loading || loadingError)` and went red when that
   condition was rewritten, reporting a regression in a contract that had not
   moved. It now asserts what it means.
+
+## D-024 — the timestamp drifted into the middle of wrapped bubbles
+
+**Reported by the user with a screenshot**, 2026-09-03. Desktop and mobile, both
+themes, every wrapped message.
+
+A bubble takes its width from its longest line, and the time flowed inline after
+the last word. On a message whose final line is short, the time therefore landed
+in the middle of the bubble. Measured on a 560px bubble: **348px, 328px and
+157px** from the right edge, against 13px for a single-line message.
+
+Fixed by pinning the meta to the bubble's bottom right and reserving its width
+at the end of the last line with an invisible spacer. All cases now measure 13px.
+
+Two pieces of reasoning in that code had gone stale and were removed:
+
+- A guard flipped a message to a separate meta row whenever the footer was not
+  vertically on the last text line. That question was about a footer in the text
+  flow; with the footer positioned it has no meaning, and asking it anyway sent
+  every short single-line message to its own row.
+- The fit test asked how much room remained to the RIGHT of the last line. For
+  an own message that is always zero — the bubble is pinned to the right edge
+  and grows leftwards. Measured, a 150px message with a 29px timestamp inside a
+  536px allowance was refused. It now asks whether the last line and the meta
+  fit inside the width the bubble may reach.
+
+Contract: `tests/e2e/message-meta-placement.spec.ts`, and
+`tests/unit/message-bubble-meta-stability.test.mjs` rewritten around the
+property rather than the removed latch. Both mutations turn it red.
+
+**The e2e had been skipping on every run.** Its fixture stamps messages at 10:02
+and the app refuses a message stamped later than "now", so before 10am the
+capture route threw and the spec skipped itself. Its clock is pinned now.
+
+## D-025 — hover actions overlapped the message they act on
+
+**Reported by the user with a screenshot**, 2026-09-03.
+
+The action cluster used `-right-20`, putting its right edge 80px past the
+bubble while the group itself is about 92px wide — so it sat roughly 12px *over*
+the message. Anchored to the bubble's edge instead, it now measures 7px of clear
+air, and reads as one pill rather than three separately bordered circles.
+
+The reaction row in the context menu was cramped at 32px and its "more
+reactions" control showed the vertical ellipsis — the glyph that already means
+"more actions" on the button beside every message. It is 40px (44 on a coarse
+pointer) with a plus.
+
+## D-026 — every message re-renders and re-measures on any change
+
+Not user-visible as a defect in itself; it is the cost behind "the interface is
+not smooth".
+
+Measured on production against a CPU throttled 4x, standing in for a slower
+machine: **switching chats dropped 22-72 frames of 124-348, with worst frames of
+299-423ms and 786-1177ms of blocking.** Scrolling and typing measured clean at
+60fps in the same runs, and at full speed everything measures clean — so this
+bites people on modest hardware, not on this workstation.
+
+Two contributions were found and one is fixed:
+
+- **Fixed.** `document.fonts.ready` was read from every bubble's measurement
+  effect. Counted directly: 291 reads across four chat switches, against 0 with
+  the promise shared for the page; a CPU profile put it at 304ms of self time,
+  the second largest non-idle entry, and it no longer appears in the profile.
+  The ResizeObserver also watched five nested nodes per bubble, so one resize
+  produced five measurements per message; it watches the two that can change
+  independently. Contract:
+  `tests/unit/message-bubble-measurement-cost.test.mjs`.
+
+  **Stated plainly: this removed real work but did not measurably move frame
+  timing.** Repeated throttled runs vary by a factor of nine on this machine,
+  and the before/after distributions overlap.
+
+- **Open, and the structural cause.** `MessageBubble` is not memoised and
+  `MessageList` renders every message through `.map`, so any state change
+  re-renders every bubble on screen — each then re-running a layout measurement
+  that forces `getBoundingClientRect` and `getClientRects`. The profile still
+  shows 173ms in `getBoundingClientRect` alone after the fix above.
+
+  `React.memo` alone will not help: every callback prop is an inline arrow
+  created per message per render, so no comparison would ever hit. Doing this
+  properly means stabilising those handlers, and `MessageList` carries the
+  critical scroll-anchoring contracts — so it needs its own change with its own
+  verification pass, not a patch appended to a batch of visual fixes.
