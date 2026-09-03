@@ -107,6 +107,22 @@ async function waitForAuthenticatedShell(page: Page, timeout = 15_000): Promise<
     .catch(() => false);
 }
 
+/**
+ * Navigates to the login form on whatever page it is given.
+ *
+ * A relative path needs a `baseURL`, and a page attached to the native shell's
+ * WebView over the debug port has none — Chromium rejects it outright with
+ * "Cannot navigate to invalid URL". That is how the Windows startup scenario
+ * broke when this helper started navigating for itself: it works for a browser
+ * page configured with a base and fails for the shell. Resolving against the
+ * page's own origin covers both.
+ */
+async function gotoLogin(page: Page): Promise<void> {
+  const current = page.url();
+  const target = /^https?:\/\//.test(current) ? new URL("/login", current).toString() : "/login";
+  await page.goto(target, { waitUntil: "domcontentloaded" });
+}
+
 export async function loginIfNeeded(
   page: Page,
   credentials: QaCredentials,
@@ -127,7 +143,7 @@ export async function loginIfNeeded(
   // The form lives at /login and nowhere else. Callers all start at "/", which
   // no longer shows it, so getting there is this helper's job rather than a
   // side effect of a redirect that no longer happens.
-  await page.goto("/login", { waitUntil: "domcontentloaded" });
+  await gotoLogin(page);
 
   const emailInput = page.locator('input[type="email"]').first();
   const formVisible = await emailInput
@@ -160,7 +176,7 @@ export async function loginIfNeeded(
         .catch(() => false);
       if (escapeOffered) {
         await signOut.click();
-        await page.goto("/login", { waitUntil: "domcontentloaded" });
+        await gotoLogin(page);
         const recovered = await emailInput
           .waitFor({ state: "visible", timeout: 10_000 })
           .then(() => true)
