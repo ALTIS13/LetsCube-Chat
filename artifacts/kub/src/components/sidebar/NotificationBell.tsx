@@ -10,6 +10,12 @@ import { safeOpenChat } from "@/lib/safeOpenChat";
 import { requestChatMessageJump } from "@/lib/chatJumpEvents";
 import { showAppAlert } from "@/lib/appDialogs";
 import { cn } from "@/lib/utils";
+import {
+  accentBorder,
+  accentSurface,
+  notificationAccent,
+  type NotificationAccent,
+} from "@/lib/notificationPresentation";
 import { acceptGroupInvite, declineGroupInvite, parseGroupInvitePayload } from "@/lib/groupInvites";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import { usePermissionAccess } from "@/hooks/useRole";
@@ -365,7 +371,11 @@ export function NotificationBell() {
           </div>
 
           <div
-            className="no-scrollbar relative z-10 flex max-w-full shrink-0 gap-1 overflow-x-auto overflow-y-hidden border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-2"
+            // Five categories do not fit the panel's width on one line, and a
+            // horizontal scroll cut "Система" mid-word — which reads as broken
+            // rather than as more to the right. Wrapping shows every category
+            // at once, which is the point of having them.
+            className="relative z-10 flex max-w-full shrink-0 flex-wrap gap-1 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-2"
             data-testid="notification-tabs"
           >
             {tabs.map((tab) => {
@@ -463,6 +473,7 @@ function NotificationItem({
 }) {
   const unread = !item.read_at;
   const display = formatNotification(item, inviteStatus);
+  const accent = notificationAccent(item);
   const invitePayload = parseGroupInvitePayload(item.payload);
   const isPendingInvite = item.kind === "group_invite" && (inviteStatus ?? invitePayload.status ?? "pending") === "pending";
   const inviteBusy = Boolean(invitePayload.invite_id && busyInviteId === invitePayload.invite_id);
@@ -478,14 +489,34 @@ function NotificationItem({
         e.preventDefault();
         onClick();
       }}
+      data-notification-tone={accent.tone}
+      data-notification-urgent={accent.urgent ? "true" : "false"}
       className={cn(
-        "group w-full min-w-0 max-w-full overflow-hidden rounded-xl border px-3 py-3 text-left transition-colors",
-        "border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] hover:bg-[var(--kub-surface-3)]",
-        unread && "border-[color-mix(in_srgb,var(--kub-cyan)_45%,var(--kub-border-color))] bg-[color-mix(in_srgb,var(--kub-cyan)_7%,var(--kub-surface-2))]",
+        "group relative w-full min-w-0 max-w-full overflow-hidden rounded-xl border px-3 py-3 text-left transition-colors",
+        "hover:bg-[var(--kub-surface-3)]",
       )}
+      style={{
+        borderColor: accentBorder(accent, unread),
+        background: accentSurface(accent, unread),
+      }}
     >
+      {/* An urgent item carries a rail as well as a hue: colour alone is not
+          something every reader can act on. */}
+      {accent.urgent && (
+        <span
+          aria-hidden="true"
+          data-testid="notification-urgent-rail"
+          className="absolute inset-y-0 left-0 w-1 rounded-l-xl"
+          style={{ background: accent.color }}
+        />
+      )}
       <div className="flex min-w-0 items-start gap-3">
-        <NotificationSenderIcon icon={display.icon} avatarUrl={display.avatarUrl} unread={unread} />
+        <NotificationSenderIcon
+          icon={display.icon}
+          avatarUrl={display.avatarUrl}
+          unread={unread}
+          color={accent.color}
+        />
 
         <div className="min-w-0 max-w-full flex-1 overflow-hidden">
           <div className="flex min-w-0 items-start justify-between gap-2">
@@ -497,10 +528,45 @@ function NotificationItem({
                 {display.body}
               </div>
             </div>
-            {unread && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[color:var(--kub-cyan)]" />}
+            {unread && (
+              <span
+                className="mt-1 h-2 w-2 shrink-0 rounded-full"
+                style={{ background: accent.color }}
+              />
+            )}
           </div>
 
           <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[color:var(--kub-muted)]">
+            {accent.chips.map((chip) => (
+              <span
+                key={chip.key}
+                data-testid={`notification-chip-${chip.key}`}
+                className="rounded-full px-1.5 py-0.5 font-medium"
+                style={
+                  chip.emphasis === "alert"
+                    ? {
+                        color: "var(--kub-danger)",
+                        background: "color-mix(in srgb, var(--kub-danger) 16%, transparent)",
+                      }
+                    : {
+                        color: "var(--kub-muted)",
+                        background: "var(--kub-surface)",
+                      }
+                }
+              >
+                {chip.label}
+              </span>
+            ))}
+            {accent.attachment && (
+              <span
+                data-testid="notification-attachment"
+                className="inline-flex items-center gap-1 rounded-full bg-[var(--kub-surface)] px-1.5 py-0.5"
+                style={{ color: accent.color }}
+              >
+                <KubIcon name={accent.attachment.icon as KubIconName} size={11} />
+                {accent.attachment.label}
+              </span>
+            )}
             <span>{display.typeLabel}</span>
             <span aria-hidden="true">·</span>
             <span>{formatRelative(item.created_at)}</span>
@@ -567,6 +633,10 @@ function MessageGroupItem({
   const body = entry.unreadItems.length > 1
     ? `${entry.unreadItems.length} новых сообщений. ${latestLine}`
     : latestLine;
+  // A group carries a single tone by construction, but the attachment on its
+  // latest message is still worth showing — "Фото" reads very differently from
+  // a line of text when deciding whether to open a chat now.
+  const accent = notificationAccent(latest);
 
   return (
     <div
@@ -579,14 +649,23 @@ function MessageGroupItem({
         e.preventDefault();
         onClick();
       }}
+      data-notification-tone={accent.tone}
       className={cn(
         "group w-full min-w-0 max-w-full overflow-hidden rounded-xl border px-3 py-3 text-left transition-colors",
-        "border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] hover:bg-[var(--kub-surface-3)]",
-        unread && "border-[color-mix(in_srgb,var(--kub-cyan)_45%,var(--kub-border-color))] bg-[color-mix(in_srgb,var(--kub-cyan)_7%,var(--kub-surface-2))]",
+        "hover:bg-[var(--kub-surface-3)]",
       )}
+      style={{
+        borderColor: accentBorder(accent, unread),
+        background: accentSurface(accent, unread),
+      }}
     >
       <div className="flex min-w-0 items-start gap-3">
-        <NotificationSenderIcon icon={projection?.senderKind === "bot" ? "bot" : "chatBubble"} avatarUrl={projection?.senderAvatarUrl} unread={unread} />
+        <NotificationSenderIcon
+          icon={projection?.senderKind === "bot" ? "bot" : "chatBubble"}
+          avatarUrl={projection?.senderAvatarUrl}
+          unread={unread}
+          color={accent.color}
+        />
 
         <div className="min-w-0 max-w-full flex-1 overflow-hidden">
           <div className="flex min-w-0 items-start justify-between gap-2">
@@ -598,10 +677,25 @@ function MessageGroupItem({
                 {truncateText(body)}
               </div>
             </div>
-            {unread && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[color:var(--kub-cyan)]" />}
+            {unread && (
+              <span
+                className="mt-1 h-2 w-2 shrink-0 rounded-full"
+                style={{ background: accent.color }}
+              />
+            )}
           </div>
 
           <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[color:var(--kub-muted)]">
+            {accent.attachment && (
+              <span
+                data-testid="notification-attachment"
+                className="inline-flex items-center gap-1 rounded-full bg-[var(--kub-surface)] px-1.5 py-0.5"
+                style={{ color: accent.color }}
+              >
+                <KubIcon name={accent.attachment.icon as KubIconName} size={11} />
+                {accent.attachment.label}
+              </span>
+            )}
             <span>Сообщения</span>
             <span aria-hidden="true">·</span>
             <span>{formatRelative(latest.created_at)}</span>
@@ -640,18 +734,24 @@ function NotificationSenderIcon({
   icon,
   avatarUrl,
   unread,
+  color,
 }: {
   icon: KubIconName;
   avatarUrl?: string | null;
   unread: boolean;
+  /** The item's tone. Omitted where there is no single tone to carry. */
+  color?: string;
 }) {
+  const toned = color ?? "var(--kub-cyan)";
   return (
-    <div className={cn(
-      "relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl",
-      unread
-        ? "bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] text-[color:var(--kub-cyan)]"
-        : "bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)]",
-    )}>
+    <div
+      className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl"
+      style={
+        unread
+          ? { background: `color-mix(in srgb, ${toned} 18%, transparent)`, color: toned }
+          : { background: "var(--kub-surface-3)", color: "var(--kub-muted)" }
+      }
+    >
       <KubIcon name={icon} size={17} />
       {avatarUrl && (
         <img

@@ -110,6 +110,14 @@ test("the frames the database offers are all drawable by this build", () => {
 
 test("a decoration this build has never heard of renders plain instead of breaking", () => {
   assert.equal(frameStyle("frame_from_the_future"), null);
+  // The key comes from the database, so the lookup must not reach the
+  // prototype: "constructor" would otherwise resolve to a function and be
+  // handed to the renderer as a style.
+  for (const key of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+    assert.equal(frameStyle(key), null, key);
+    assert.equal(backgroundStyle(key), null, key);
+    assert.equal(canRenderCosmetic(key), false, key);
+  }
   assert.equal(backgroundStyle("bg_from_the_future"), null);
   assert.equal(canRenderCosmetic("frame_from_the_future"), false);
   assert.equal(frameStyle(null), null);

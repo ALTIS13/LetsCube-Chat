@@ -71,14 +71,18 @@ const BACKGROUNDS: Record<string, BackgroundStyle> = {
   },
 };
 
+// The key comes from the database, so every lookup is an own-property one: a
+// plain `FRAMES[key]` reaches the prototype, and a cosmetic named
+// "constructor" or "toString" would resolve to a function that is then handed
+// to the renderer as a style.
 export function frameStyle(key: string | null | undefined): FrameStyle | null {
-  if (!key) return null;
-  return FRAMES[key] ?? null;
+  if (!key || !Object.hasOwn(FRAMES, key)) return null;
+  return FRAMES[key];
 }
 
 export function backgroundStyle(key: string | null | undefined): BackgroundStyle | null {
-  if (!key) return null;
-  return BACKGROUNDS[key] ?? null;
+  if (!key || !Object.hasOwn(BACKGROUNDS, key)) return null;
+  return BACKGROUNDS[key];
 }
 
 /** Ids this build can draw. Used to hide a catalogue row it cannot render. */
@@ -87,7 +91,7 @@ export function renderableCosmeticKeys(): string[] {
 }
 
 export function canRenderCosmetic(key: string): boolean {
-  return key in FRAMES || key in BACKGROUNDS;
+  return Object.hasOwn(FRAMES, key) || Object.hasOwn(BACKGROUNDS, key);
 }
 
 /**
