@@ -2705,3 +2705,78 @@ machine were used.
   worktree is clean.
 - No chat content, contact name or personal media from the connected devices or
   the desktop session is reproduced in this record or anywhere else.
+
+## 2026-09-04 - interface stage: what was measured, and what the numbers were
+
+This records the measurements behind eleven unpushed commits. Every figure
+here was taken on this workstation against production, not estimated.
+
+### Media caching
+
+- Storage objects were served with `Cache-Control: max-age=3600` — Supabase's
+  default, because no upload path ever set one. Inside the hour a repeat visit
+  to a chat costs nothing; after it, every avatar and preview costs a
+  conditional request answered 304. Verified that revalidation works: a request
+  carrying the object's ETag returns `304 Not Modified` with no body, and a
+  wrong ETag returns the full 3 056 bytes.
+- The lifetime is honoured only when sent at upload time. Editing
+  `storage.objects.metadata->>'cacheControl'` in the database changed nothing
+  served, including after restarting `supabase-storage`; re-uploading the same
+  bytes with the header did. Both directions measured on the same object.
+- 593 existing objects were rewritten in place with the correct header
+  (`reuploaded=591 already_correct=2 failed=0`), each verified by comparing the
+  downloaded size before and after. Live headers afterwards: message variants
+  and every avatar file `max-age=31536000, immutable`; profile variants
+  `max-age=2592000`.
+- Outcome, browser, cache cleared: a first visit to a chat downloads the
+  pictures; a second produces no network traffic for media and no 304.
+
+### Avatar sizing
+
+- Avatar originals average 734 kB against 2 717 bytes for `avatar_128`.
+- Administrator user list, HTTP cache disabled: **7 originals totalling
+  6 250 kB became 7 variants totalling 20 kB**. One private chat went from
+  215 kB to 87 kB.
+- Two causes, both required: `UserAvatar` could only use a variant through an
+  optional prop that 6 of 42 call sites passed, and the RLS policy on
+  `media_variants` allowed reading only your own profile's rows, so somebody
+  else's avatar could never have resolved to a variant regardless.
+
+### Windows storage
+
+- WebView2 profile at `%LOCALAPPDATA%\ru.letscube.messenger\webview-production-v1`:
+  120,3 MB total, of which 112,7 MB is the nine cache directories and 0,2 MB is
+  the session (`Local Storage` 0,09 MB, `Network` 0,11 MB). The cache list was
+  checked against the real folder rather than assumed.
+
+### The pre-paint theme script
+
+- `https://app.letscube.ru` threw `SyntaxError: Unexpected token '.'` on every
+  page load, before any of this stage's changes. `new Function(THEME_INIT_SCRIPT)`
+  reproduces it verbatim. The pre-paint theme never ran, and the Android
+  night-mode marker branch was unreachable — the most likely explanation for the
+  open "Android cold launch is light" item. Verified fixed in a browser driven
+  with the marker in the user agent against a light system: the marker wins.
+
+### Database changes applied to production
+
+`privacy_preferences`, `achievements`, `cosmetics`, `product_milestones`,
+`profiles.is_test_account`, `profiles.profile_frame`, `profiles.profile_background`,
+`bot_set_avatar_internal`, `support_user_ticket_create`,
+`support_user_message_create`, and the avatar-variant read policy. Each was
+rehearsed inside a transaction with rollback before being applied, and each
+refusal path was exercised by name. All are additive, so the deployed code
+being older than the schema is the safe direction.
+
+### Known, recorded rather than hidden
+
+- The header rewrite left superseded version files on the storage volume. The
+  byte accounting did not reconcile (549 MB of current objects plus 762,8 MB of
+  unreferenced files exceeds the 938 MB the volume reports), so nothing was
+  deleted. 35 GB free.
+- Message media originals live in the **public** `media` bucket under
+  `{user_id}/{timestamp}.ext`. The addresses are unguessable but not
+  authorised. The private `chat-media` bucket exists and is empty.
+- Until this branch deploys, a person changing their own avatar may see the old
+  one for up to thirty days in the currently deployed build, which does not
+  send the version token. Only 7 profiles have an avatar at all.
