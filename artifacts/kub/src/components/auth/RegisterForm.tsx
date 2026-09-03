@@ -358,7 +358,11 @@ export function RegisterForm() {
               onChange={(e) => setFullName(e.target.value)}
               required
               maxLength={PROFILE_LIMITS.fullNameMax}
-              hint={`${fullName.length}/${PROFILE_LIMITS.fullNameMax}`}
+              hint={
+                fullName.length > PROFILE_LIMITS.fullNameMax - 12
+                  ? `${fullName.length}/${PROFILE_LIMITS.fullNameMax}`
+                  : undefined
+              }
               leftIcon={<KubIcon name="user" size={16} />}
               autoComplete="name"
             />
@@ -404,7 +408,7 @@ export function RegisterForm() {
                 maxLength={64}
                 leftIcon={<KubIcon name="userPlus" size={16} />}
                 autoComplete="off"
-                hint="Если у вас есть ссылка-приглашение, код заполнится автоматически."
+                hint={inviteCode ? undefined : "По ссылке-приглашению код заполняется сам."}
               />
             )}
 

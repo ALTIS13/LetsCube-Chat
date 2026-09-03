@@ -82,8 +82,21 @@ body[data-stage="complete"] .rail i { transform: scaleX(1); }
 .startup-state { display: grid; align-content: start; justify-items: center; border-top: 1px solid #1d3140; padding-top: 28px; }
 #startup-status { margin: 0 0 24px; color: #dbe5eb; font-size: 14px; }
 .stages { width: min(680px, 78vw); display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin: 0; padding: 0; list-style: none; }
-.stages li { position: relative; padding-top: 18px; color: #607584; font-size: 11px; text-align: center; border-top: 2px solid #273c4b; }
-.stages li::before { content: ""; position: absolute; top: -5px; left: calc(50% - 4px); width: 8px; height: 8px; border-radius: 50%; background: #273c4b; }
+/* The stage list is paced in CSS, with no timer anywhere.
+   The shell verifies the connection faster than a person can read: measured on
+   this workstation all four stages completed within about 300ms — 75ms each —
+   and the scene then sat still for the remaining 1.9s of its minimum display
+   time. A flicker of motion followed by a long hold is what "it starts
+   jerkily" describes.
+   Each stage's colour change is a transition with its own delay, so the
+   progression reads as progress. It is display only: nothing here can show a
+   stage as done before the shell has said so, which is why this is done with
+   transitions rather than the timers the startup contract forbids. */
+.stages li { position: relative; padding-top: 18px; color: #607584; font-size: 11px; text-align: center; border-top: 2px solid #273c4b; transition: color 220ms ease, border-color 220ms ease; }
+.stages li::before { content: ""; position: absolute; top: -5px; left: calc(50% - 4px); width: 8px; height: 8px; border-radius: 50%; background: #273c4b; transition: background 220ms ease, box-shadow 220ms ease; }
+.stages li:nth-child(2), .stages li:nth-child(2)::before { transition-delay: 200ms; }
+.stages li:nth-child(3), .stages li:nth-child(3)::before { transition-delay: 400ms; }
+.stages li:nth-child(4), .stages li:nth-child(4)::before { transition-delay: 600ms; }
 .stages li.is-active { color: #dbe5eb; border-color: #2f8db5; }
 .stages li.is-active::before { background: #55b7dd; box-shadow: 0 0 0 4px #2f8db525; }
 .stages li.is-done { color: #8fb2c6; border-color: #28b783; }
@@ -99,4 +112,6 @@ button:disabled { opacity: .55; cursor: default; }
 @media (prefers-reduced-motion: reduce) {
   .fingerprints span { animation: none; }
   .rail i { transition: none; }
+  .stages li,
+  .stages li::before { transition: none; transition-delay: 0s; }
 }

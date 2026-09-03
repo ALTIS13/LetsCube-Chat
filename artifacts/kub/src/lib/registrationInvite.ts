@@ -9,7 +9,7 @@ export const REGISTRATION_INVITE_MODE_REQUIRED_MESSAGE =
 export const REGISTRATION_INVITE_ONLY_BANNER_TITLE =
   "Регистрация сейчас доступна только по приглашению.";
 export const REGISTRATION_INVITE_ONLY_BANNER_BODY =
-  "Введите код приглашения или перейдите по ссылке-приглашению от администратора LETSCUBE.";
+  "Код выдаёт администратор LETSCUBE — введите его ниже.";
 export const REGISTRATION_INVITE_ONLY_CODE_REQUIRED_MESSAGE =
   "Введите код приглашения, чтобы создать аккаунт.";
 
