@@ -183,6 +183,7 @@ export function MessageList({
   const olderStartMessageCountRef = useRef(0);
   const olderReleaseFrameRef = useRef<number | null>(null);
   const olderSafetyTimeoutRef = useRef<number | null>(null);
+  const releaseOlderScrollPreservationRef = useRef<(() => void) | null>(null);
   const initialScrollAppliedRef = useRef<string | null>(null);
   const initialScrollPendingRef = useRef(false);
   const initialScrollPendingKeyRef = useRef<string | null>(null);
@@ -385,11 +386,44 @@ export function MessageList({
       releaseOlderScrollPreservation();
       return;
     }
-    restoreVisibleMessageAnchor(container, olderScrollAnchorRef.current);
-    olderReleaseFrameRef.current = requestAnimationFrame(() => {
-      olderReleaseFrameRef.current = requestAnimationFrame(releaseOlderScrollPreservation);
-    });
+    // Restore, then KEEP restoring until the heights stop moving.
+    //
+    // One restore was not enough. Prepended messages are measured the frame
+    // they mount and settle afterwards — text re-wraps, images arrive, the
+    // timestamp finds its place — so the position computed at commit time was
+    // computed from heights that were about to change. Measured on production,
+    // the reader's anchor drifted 1147px while the content grew 6469px, against
+    // a contract that allows 3px.
+    //
+    // The restore is idempotent: it recomputes the correction from where the
+    // anchor is now, so repeating it converges rather than accumulating.
+    const anchor = olderScrollAnchorRef.current;
+    restoreVisibleMessageAnchor(container, anchor);
+
+    let settledFrames = 0;
+    const hold = () => {
+      olderReleaseFrameRef.current = null;
+      if (!preservingOlderScrollRef.current) return;
+      const el = containerRef.current;
+      if (!el) {
+        releaseOlderScrollPreservation();
+        return;
+      }
+      const before = el.scrollTop;
+      restoreVisibleMessageAnchor(el, anchor);
+      // Two consecutive frames that needed no correction mean the layout has
+      // stopped moving; the safety timeout ends it either way.
+      settledFrames = Math.abs(el.scrollTop - before) <= 1 ? settledFrames + 1 : 0;
+      if (settledFrames >= 2) {
+        releaseOlderScrollPreservation();
+        return;
+      }
+      olderReleaseFrameRef.current = requestAnimationFrame(hold);
+    };
+    olderReleaseFrameRef.current = requestAnimationFrame(hold);
   }, [releaseOlderScrollPreservation, sortedMessages]);
+
+  releaseOlderScrollPreservationRef.current = releaseOlderScrollPreservation;
 
   useEffect(() => releaseOlderScrollPreservation, [initialScrollKey, releaseOlderScrollPreservation]);
 
@@ -450,6 +484,19 @@ export function MessageList({
     initialScrollPendingRef.current = false;
     initialScrollPendingKeyRef.current = null;
   }, []);
+
+  /**
+   * Any real input from the reader ends both holds.
+   *
+   * The older-history hold keeps correcting the scroll position for as long as
+   * the prepended messages are still settling. Without this it would also
+   * correct against the reader's own scrolling and drag them back.
+   */
+  const releaseScrollControl = useCallback(() => {
+    releaseInitialScrollControl();
+    releaseOlderScrollPreservationRef.current?.();
+  }, [releaseInitialScrollControl]);
+
 
   // Keep bottom lock for new messages and typing indicator without pulling
   // users down when they intentionally scrolled up.
@@ -574,9 +621,9 @@ export function MessageList({
         data-has-more-older={hasMoreOlder ? "true" : "false"}
         data-loading-older={loadingOlder ? "true" : "false"}
         onScroll={handleScroll}
-        onPointerDown={releaseInitialScrollControl}
-        onTouchStart={releaseInitialScrollControl}
-        onWheel={releaseInitialScrollControl}
+        onPointerDown={releaseScrollControl}
+        onTouchStart={releaseScrollControl}
+        onWheel={releaseScrollControl}
         onClickCapture={(event) => {
           const target = event.target as HTMLElement | null;
           if (target?.closest("[data-reaction-menu], [data-reaction-trigger]")) return;
