@@ -114,7 +114,7 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
   switch (kind) {
     case "link":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(64vw,580px,calc(100%-var(--kub-action-lane)))] md:max-w-[min(52vw,580px,calc(100%-var(--kub-action-lane)))]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(64vw,580px,max(16rem,calc(100%-var(--kub-action-lane))))] md:max-w-[min(52vw,580px,max(16rem,calc(100%-var(--kub-action-lane))))]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
@@ -126,26 +126,26 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
       };
     case "longToken":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(60vw,580px,calc(100%-var(--kub-action-lane)))] md:max-w-[min(52vw,580px,calc(100%-var(--kub-action-lane)))]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(60vw,580px,max(16rem,calc(100%-var(--kub-action-lane))))] md:max-w-[min(52vw,580px,max(16rem,calc(100%-var(--kub-action-lane))))]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
     case "regular":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(70vw,560px,calc(100%-var(--kub-action-lane)))] md:max-w-[min(56vw,560px,calc(100%-var(--kub-action-lane)))]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(70vw,560px,max(16rem,calc(100%-var(--kub-action-lane))))] md:max-w-[min(56vw,560px,max(16rem,calc(100%-var(--kub-action-lane))))]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:break-word] [word-break:normal]",
       };
     case "short":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px,calc(100%-var(--kub-action-lane)))] md:max-w-[min(65vw,680px,calc(100%-var(--kub-action-lane)))]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px,max(16rem,calc(100%-var(--kub-action-lane))))] md:max-w-[min(65vw,680px,max(16rem,calc(100%-var(--kub-action-lane))))]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:break-word] [word-break:normal]",
       };
     case "media":
     default:
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px,calc(100%-var(--kub-action-lane)))] md:max-w-[min(65vw,680px,calc(100%-var(--kub-action-lane)))]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px,max(16rem,calc(100%-var(--kub-action-lane))))] md:max-w-[min(65vw,680px,max(16rem,calc(100%-var(--kub-action-lane))))]",
         bubble: "w-fit",
         text: "[overflow-wrap:break-word] [word-break:normal]",
       };
@@ -160,7 +160,21 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
  * left the action cluster nothing: measured on a 1024px window it started at
  * x=347 against a clip edge of x=396, with 49px cut off.
  */
-const ACTION_LANE = "calc(100% - var(--kub-action-lane))";
+/**
+ * The lane, floored.
+ *
+ * `100%` here is the message row, and the row is not its final width for the
+ * first frames after a chat opens. Measured on a chat of 1368 messages: the row
+ * was 142px at one sample, which took the lane term to 38px, wrapped a short
+ * message into thirteen lines and made the whole list 26,366px tall — against
+ * 10,464px once it settled. The view is scrolled to the bottom against that
+ * tall version, which is the lurch on entry.
+ *
+ * The floor means a momentarily narrow row falls back to the other terms rather
+ * than collapsing the bubble to nothing. On a real layout `100% - lane` is far
+ * above the floor and still governs.
+ */
+const ACTION_LANE = "max(16rem, calc(100% - var(--kub-action-lane)))";
 
 function getMessageStackStyle(kind: TextLayoutKind): CSSProperties | undefined {
   switch (kind) {
