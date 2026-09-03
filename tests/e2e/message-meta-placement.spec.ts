@@ -48,6 +48,12 @@ const FIXTURE = {
 };
 
 async function openCapture(page: Page) {
+  // Freeze the clock. The fixture guard refuses a message stamped later than
+  // "now" — it would render a weekday instead of a time — and the fixture's
+  // times are 10:02 and 10:03. Against the wall clock this spec therefore threw
+  // before 10am and skipped itself, so it ran only during part of the day and
+  // protected nothing the rest of it.
+  await page.clock.setFixedTime(new Date("2026-09-03T18:00:00"));
   await page.addInitScript(
     ([key, fixture]) => {
       (window as unknown as Record<string, unknown>)[key as string] = fixture;
@@ -89,7 +95,11 @@ async function metaPlacement(page: Page, index: number) {
       inline: Math.abs(lineCentre - timeCentre) <= Math.max(8, lastLine.height * 0.75),
       lastLineRight: Math.round(lastLine.right),
       bubbleRight: Math.round(bubble.getBoundingClientRect().right),
+      timeRight: Math.round(timeRect.right),
       timeWidth: Math.round(timeRect.width),
+      bubblePaddingRight: Math.round(
+        Number.parseFloat(window.getComputedStyle(bubble).paddingRight) || 0,
+      ),
     };
   }, index);
 }
@@ -111,6 +121,29 @@ test.describe("message meta placement", () => {
       wrapped!.inline,
       "a wrapped message whose last line ends short must keep its time inline, not grow a row for it",
     ).toBe(true);
+  });
+
+  test("the time sits at the bubble's right edge, not against the last word", async ({ page }) => {
+    // The reported defect. A wrapped bubble takes its width from its LONGEST
+    // line, so a time that flows after a short final line lands in the middle
+    // of the bubble: measured at 348px, 328px and 157px from the right edge of
+    // a 560px bubble, against 13px for a single-line message.
+    await openCapture(page);
+    await page.waitForTimeout(700);
+
+    let checked = 0;
+    for (let index = 0; index < 6; index += 1) {
+      const meta = await metaPlacement(page, index);
+      if (!meta) continue;
+      checked += 1;
+      const gap = meta.bubbleRight - meta.timeRight;
+      expect(
+        gap,
+        `bubble ${index}: the time is ${gap}px from the right edge, so it is floating in the middle rather than sitting at it`,
+      ).toBeLessThanOrEqual(meta.bubblePaddingRight + 6);
+      expect(gap, `bubble ${index}: the time has been pushed past the bubble edge`).toBeGreaterThanOrEqual(0);
+    }
+    expect(checked, "no bubbles were measured").toBeGreaterThan(1);
   });
 
   /**

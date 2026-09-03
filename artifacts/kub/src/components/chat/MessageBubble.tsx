@@ -250,6 +250,27 @@ function getTextLineRects(contentEl: HTMLElement): DOMRect[] {
     .map((line) => new DOMRect(line.left, line.top, line.right - line.left, line.bottom - line.top));
 }
 
+/**
+ * How wide the bubble's content is allowed to become.
+ *
+ * This is the quantity the inline-meta decision actually needs. Asking instead
+ * how much room is left to the RIGHT of the last line is wrong for an own
+ * message: that bubble is pinned to the right edge and grows leftwards, so the
+ * space to its right is zero no matter how much room it really has. Measured,
+ * that sent a 150px message with a 29px timestamp — inside a 536px allowance —
+ * onto its own row.
+ */
+function getMaxContentWidth(bubbleEl: HTMLElement, stackEl: HTMLElement | null): number {
+  const bubbleStyle = getComputedStyle(bubbleEl);
+  const paddingLeft = parsePixelValue(bubbleStyle.paddingLeft) ?? 0;
+  const paddingRight = parsePixelValue(bubbleStyle.paddingRight) ?? 0;
+  const stackMaxWidth = stackEl ? parsePixelValue(getComputedStyle(stackEl).maxWidth) : null;
+  const bubbleMaxWidth = parsePixelValue(bubbleStyle.maxWidth);
+  const declared = Math.max(stackMaxWidth ?? 0, bubbleMaxWidth ?? 0);
+  if (declared > 0) return declared - paddingLeft - paddingRight;
+  return bubbleEl.getBoundingClientRect().width - paddingLeft - paddingRight;
+}
+
 function getTextRightLimit(textEl: HTMLElement, bubbleEl: HTMLElement, stackEl: HTMLElement | null): number {
   const textRect = textEl.getBoundingClientRect();
   const bubbleRect = bubbleEl.getBoundingClientRect();
@@ -257,9 +278,16 @@ function getTextRightLimit(textEl: HTMLElement, bubbleEl: HTMLElement, stackEl: 
   const paddingLeft = parsePixelValue(bubbleStyle.paddingLeft) ?? 0;
   const paddingRight = parsePixelValue(bubbleStyle.paddingRight) ?? 0;
   const currentContentRight = bubbleRect.right - paddingRight;
+  // The bubble's own max-width counts as well as the stack's. Falling back to
+  // the text's current width was safe while the meta flowed inside the
+  // paragraph — that width included it. The meta is positioned now, so the
+  // fallback measured the text alone, left no room for anything, and sent every
+  // short message to its own row.
   const stackMaxWidth = stackEl ? parsePixelValue(getComputedStyle(stackEl).maxWidth) : null;
-  const maxContentWidth = stackMaxWidth
-    ? Math.max(textRect.width, stackMaxWidth - paddingLeft - paddingRight)
+  const bubbleMaxWidth = parsePixelValue(bubbleStyle.maxWidth);
+  const declaredMaxWidth = Math.max(stackMaxWidth ?? 0, bubbleMaxWidth ?? 0);
+  const maxContentWidth = declaredMaxWidth > 0
+    ? Math.max(textRect.width, declaredMaxWidth - paddingLeft - paddingRight)
     : textRect.width;
   const maxRightFromText = textRect.left + maxContentWidth;
   const viewportRight = typeof window === "undefined" ? maxRightFromText : window.innerWidth - 8;
@@ -273,11 +301,6 @@ function getBubbleInnerRight(bubbleEl: HTMLElement): number {
   return bubbleRect.right - paddingRight;
 }
 
-function isFooterOnLastTextLine(lastLine: DOMRect, footerRect: DOMRect): boolean {
-  const lineCenter = (lastLine.top + lastLine.bottom) / 2;
-  const footerCenter = (footerRect.top + footerRect.bottom) / 2;
-  return Math.abs(lineCenter - footerCenter) <= Math.max(8, lastLine.height * 0.75);
-}
 
 function clampNumber(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -303,10 +326,12 @@ function MeasuredTextWithMeta({
   compound = false,
 }: MeasuredTextWithMetaProps) {
   const [placement, setPlacement] = useState<MetaPlacement>(() => getInitialMetaPlacement(content));
+  // The meta is taken out of the text flow and pinned to the bubble's bottom
+  // right, so this is how much room the last line has to leave for it.
+  const [footerReserve, setFooterReserve] = useState(0);
   const textFlowRef = useRef<HTMLParagraphElement | null>(null);
   const textContentRef = useRef<HTMLSpanElement | null>(null);
   const footerRef = useRef<HTMLSpanElement | null>(null);
-  const inlineBlockedRef = useRef(false);
   const hasMeta = meta !== null && meta !== undefined && meta !== false;
 
   const measure = useCallback(() => {
@@ -327,11 +352,11 @@ function MeasuredTextWithMeta({
     const bubbleInnerRight = getBubbleInnerRight(bubbleEl);
     const rightLimit = compound ? bubbleInnerRight : getTextRightLimit(textEl, bubbleEl, stackRef.current);
     const gap = 8;
-    if (placement === "inline" && !isFooterOnLastTextLine(lastLine, footerRect)) {
-      inlineBlockedRef.current = true;
-      setPlacement((previous) => (previous === "anchored" ? previous : "anchored"));
-      return;
-    }
+    // There used to be a guard here that flipped to `anchored` whenever the
+    // footer was not vertically on the last text line. It was written for a
+    // footer that flowed after the last word; the footer is positioned now, so
+    // the question it asked no longer has meaning — and asking it anyway sent
+    // every short single-line message to its own row.
 
     // Whether the meta fits is a measurement, and the measurement already
     // answers it: `available` is the room left after the *last* rendered line,
@@ -340,18 +365,27 @@ function MeasuredTextWithMeta({
     // last line ended well short of the edge still grew a row containing
     // nothing but a right-aligned timestamp. See D-008.
     //
-    // Removing it cannot oscillate: the guard above flips to anchored and sets
-    // `inlineBlockedRef` the first time an inline footer fails to sit on the
-    // last text line, so a given message can change its mind at most once.
-    const available = rightLimit - lastLine.right;
-    const canInline = available >= footerRect.width + gap && !inlineBlockedRef.current;
+    // Removing it cannot oscillate. The spacer that reserves room for the meta
+    // sits outside the measured span, so adding it can only shorten the last
+    // line and therefore only increase `available` — a message that chose
+    // inline never measures its way back out of it.
+    const reserve = Math.ceil(footerRect.width + gap);
+    setFooterReserve((current) => (Math.abs(current - reserve) <= 1 ? current : reserve));
+
+    // A compound bubble's width is fixed by whatever sits above the text, so
+    // for those the room to the right of the last line is the real constraint.
+    // A plain text bubble sizes itself, so the question is whether the last
+    // line and the meta fit inside the width it is allowed to reach.
+    const canInline = compound
+      ? rightLimit - lastLine.right >= footerRect.width + gap
+      : lastLine.width + footerRect.width + gap <= getMaxContentWidth(bubbleEl, stackRef.current);
     const next: MetaPlacement = canInline ? "inline" : "anchored";
 
     setPlacement((previous) => (previous === next ? previous : next));
   }, [bubbleRef, compound, hasMeta, placement, stackRef]);
 
   useEffect(() => {
-    inlineBlockedRef.current = false;
+    setFooterReserve(0);
     setPlacement(getInitialMetaPlacement(content));
   }, [content, measureKey]);
 
@@ -365,7 +399,6 @@ function MeasuredTextWithMeta({
       frame = window.requestAnimationFrame(measure);
     };
     const handleViewportResize = () => {
-      inlineBlockedRef.current = false;
       schedule();
     };
 
@@ -406,16 +439,31 @@ function MeasuredTextWithMeta({
         <span ref={textContentRef} data-message-text-content="true">
           <FormattedText content={content} />
         </span>
-        {hasMeta && placement === "inline" && (
+        {/* A spacer, not the meta itself. It keeps the last line from running
+            under the timestamp — and because it is the only thing left in the
+            flow, the bubble still grows for a message that needs the room. */}
+        {hasMeta && placement === "inline" && footerReserve > 0 && (
           <span
-            ref={footerRef}
-            data-message-footer="true"
-            className={cn(footerClassName, "ml-1.5 translate-y-[1px] [vertical-align:-0.12em]")}
-          >
-            {meta}
-          </span>
+            aria-hidden="true"
+            data-message-footer-reserve="true"
+            style={{ display: "inline-block", width: `${footerReserve}px` }}
+          />
         )}
       </p>
+      {/* Pinned to the bubble's bottom right rather than flowing after the last
+          word. A wrapped message takes its width from its LONGEST line, so a
+          timestamp glued to a short final line sat in the middle of the bubble
+          — measured at 348px, 328px and 157px from the right edge of a 560px
+          bubble, against 13px for a single-line message. */}
+      {hasMeta && placement === "inline" && (
+        <span
+          ref={footerRef}
+          data-message-footer="true"
+          className={cn(footerClassName, "absolute bottom-0 right-0 translate-y-[-1px]")}
+        >
+          {meta}
+        </span>
+      )}
       {hasMeta && placement === "anchored" && (
         <div
           data-message-bottom-meta="true"
@@ -990,14 +1038,14 @@ export function MessageBubble({
             onClick={(e) => e.stopPropagation()}
           >
             {canReact && (
-              <div className="mb-1 flex items-center justify-between gap-1 border-b border-[color:var(--kub-border-color)] px-3 pb-2 pt-1">
+              <div className="mb-1 flex items-center justify-between gap-1 border-b border-[color:var(--kub-border-color)] px-2 pb-2 pt-2">
                 {EMOJI_QUICK.slice(0, 6).map((emoji) => (
                   <button
                     key={emoji}
                     onClick={() => { onReaction(emoji); closeContext(); }}
                     className={cn(
-                      "flex min-w-0 flex-1 items-center justify-center rounded-full transition-all hover:bg-[var(--kub-surface-3)] active:scale-95",
-                      compactContextMenu ? "h-9 text-xl" : "h-8 text-lg",
+                      "kub-interactive flex min-w-0 flex-1 items-center justify-center rounded-full transition-colors hover:bg-[var(--kub-surface-3)]",
+                      compactContextMenu ? "h-11 text-2xl" : "h-10 text-xl",
                     )}
                     aria-label={`Поставить реакцию ${emoji}`}
                   >
@@ -1011,13 +1059,17 @@ export function MessageBubble({
                     openFullReactionCatalog({ x: rect.left + rect.width / 2, y: rect.top });
                   }}
                   className={cn(
-                    "flex min-w-0 flex-1 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-all hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)] active:scale-95",
-                    compactContextMenu ? "h-9" : "h-8",
+                    "kub-interactive flex min-w-0 flex-1 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]",
+                    compactContextMenu ? "h-11" : "h-10",
                   )}
                   aria-label="Больше реакций"
                   title="Больше реакций"
                 >
-                  <KubIcon name="more" size={16} />
+                  {/* A plus, not the vertical ellipsis this used to show. That
+                      glyph already means "more actions" on the button beside
+                      every message, so using it here said the wrong thing about
+                      what the control opens. */}
+                  <KubIcon name="create" size={15} />
                 </button>
               </div>
             )}
@@ -1168,8 +1220,15 @@ export function MessageBubble({
           >
             <div
               className={cn(
-                "absolute top-1 hidden items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 sm:flex z-10",
-                isMe ? "-left-20" : "-right-20"
+                // Anchored to the bubble's edge rather than offset by a guessed
+                // number. `-right-20` put the group's right edge 80px past the
+                // bubble while the group itself is about 92px wide, so it
+                // actually overlapped the message by roughly 12px — the "icons
+                // pressed against the message" in the report.
+                "absolute top-1 z-10 hidden items-center gap-0.5 rounded-full border border-[color:var(--kub-border-color)]",
+                "bg-[var(--kub-surface-2)] p-0.5 opacity-0 shadow-sm transition-opacity sm:flex",
+                "group-hover:opacity-100 focus-within:opacity-100",
+                isMe ? "right-full mr-2" : "left-full ml-2",
               )}
             >
               {canReact && (
@@ -1177,7 +1236,7 @@ export function MessageBubble({
                   onClick={handleToggleReactionMenu}
                   data-reaction-trigger="true"
                   aria-label="Реакция"
-                  className="w-7 h-7 rounded-full flex items-center justify-center transition-colors bg-[var(--kub-surface-2)] hover:bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]"
+                  className="kub-interactive flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]"
                 >
                   <KubIcon name="smile" size={14} />
                 </button>
@@ -1185,7 +1244,7 @@ export function MessageBubble({
               <button
                 onClick={onReply}
                 aria-label="Ответить"
-                className="w-7 h-7 rounded-full flex items-center justify-center transition-colors bg-[var(--kub-surface-2)] hover:bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]"
+                className="kub-interactive flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]"
               >
                 <KubIcon name="reply" size={14} />
               </button>
@@ -1196,7 +1255,7 @@ export function MessageBubble({
                   openContextAt(rect.left, rect.bottom + 4);
                 }}
                 aria-label="Действия сообщения"
-                className="w-7 h-7 rounded-full flex items-center justify-center transition-colors bg-[var(--kub-surface-2)] hover:bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]"
+                className="kub-interactive flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]"
               >
                 <KubIcon name="more" size={14} />
               </button>
