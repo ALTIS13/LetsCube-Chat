@@ -154,7 +154,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       title="Настройки"
       icon={<KubIcon name="settings" size={16} />}
-      size="lg"
+      size="xl"
       contentClassName="p-0"
       footer={activeTab === "profile" ? (
         <>
@@ -204,8 +204,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       </div>
       {activeTab === "profile" && (
         <div role="tabpanel" aria-label="Профиль">
-      <div className="flex flex-col items-center py-6 gap-3 bg-[var(--kub-surface)] border-b border-[color:var(--kub-border-color)] kub-grid-subtle">
-        <div className="relative">
+      <div className="flex flex-col items-center gap-4 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-4 py-4 kub-grid-subtle sm:flex-row sm:items-center sm:gap-5 sm:px-5">
+        <div className="relative shrink-0">
           {uploadingAvatar ? (
             <div className="w-24 h-24 rounded-full flex items-center justify-center bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
               <KubIcon name="spinner" size={28} className="text-[color:var(--kub-cyan)]" />
@@ -247,21 +247,22 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           />
         </div>
 
-        <div className="text-center">
-          <div className="font-semibold text-base text-[color:var(--kub-text)]">
+        <div className="min-w-0 flex-1 text-center sm:text-left">
+          <div className="truncate text-base font-semibold text-[color:var(--kub-text)]">
             {currentUser.full_name ?? "Без имени"}
           </div>
           {currentUser.username && (
-            <div className="text-sm text-[color:var(--kub-muted)]">
-              @{currentUser.username}
-            </div>
+            <div className="truncate text-sm text-[color:var(--kub-muted)]">@{currentUser.username}</div>
           )}
+          <p className="mt-1 text-xs text-[color:var(--kub-muted)]">
+            Фото и имя видят все, кому вы пишете.
+          </p>
         </div>
 
         {currentUser.avatar_url && (
           <button
             onClick={handleRemoveAvatar}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full hover:bg-[color-mix(in_srgb,var(--kub-danger)_15%,transparent)] transition-colors text-[color:var(--kub-danger)]"
+            className="kub-button kub-interactive flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-[color:var(--kub-danger)] transition-colors hover:bg-[color-mix(in_srgb,var(--kub-danger)_15%,transparent)]"
           >
             <KubIcon name="delete" size={12} />
             Удалить фото
@@ -269,8 +270,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         )}
       </div>
 
-      <div className="px-4 py-4 space-y-1">
+      <div className="px-4 py-4 sm:px-5">
         <SectionLabel>Личная информация</SectionLabel>
+        <div className="grid gap-2 sm:grid-cols-2">
         <Field
           icon={<KubIcon name="user" size={16} />}
           label="Имя"
@@ -290,16 +292,19 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           hint={`${username.length}/${PROFILE_LIMITS.usernameMax}`}
           maxLength={PROFILE_LIMITS.usernameMax}
         />
-        <Field
-          icon={<KubIcon name="info" size={16} />}
-          label="О себе"
-          value={bio}
-          onChange={setBio}
-          placeholder="Несколько слов о себе"
-          multiline
-          hint={`${bio.length}/${PROFILE_LIMITS.bioMax}`}
-          maxLength={PROFILE_LIMITS.bioMax}
-        />
+        <div className="sm:col-span-2">
+          <Field
+            icon={<KubIcon name="info" size={16} />}
+            label="О себе"
+            value={bio}
+            onChange={setBio}
+            placeholder="Несколько слов о себе"
+            multiline
+            hint={`${bio.length}/${PROFILE_LIMITS.bioMax}`}
+            maxLength={PROFILE_LIMITS.bioMax}
+          />
+        </div>
+        </div>
       </div>
 
       {/* Phone verification is open to every account. The section used to be
@@ -308,7 +313,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           feature stayed unreachable. When the policy is off the gateway answers
           `disabled` and `PhoneSection` says so, so hiding the section is not
           what communicates that. */}
-      <div className="px-4 py-4 border-t border-[color:var(--kub-border-color)]">
+      <div className="border-t border-[color:var(--kub-border-color)] px-4 py-4 sm:px-5">
         <SectionLabel>Телефон</SectionLabel>
         <PhoneSection />
       </div>
@@ -522,7 +527,7 @@ function Field({
   };
 
   return (
-    <div className="rounded-xl overflow-hidden mb-1 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
+    <div className="rounded-xl overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
       <div className="flex items-start gap-3 px-4 py-3">
         <div className="mt-0.5 flex-shrink-0 text-[color:var(--kub-cyan)]">{icon}</div>
         <div className="flex-1 min-w-0">

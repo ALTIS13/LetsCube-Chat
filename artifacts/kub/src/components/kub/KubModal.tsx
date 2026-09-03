@@ -10,7 +10,7 @@ interface KubModalProps {
   icon?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
   className?: string;
   contentClassName?: string;
   scrollBody?: boolean;
@@ -30,6 +30,10 @@ const sizeClass = {
   sm: "sm:max-w-sm",
   md: "sm:max-w-md",
   lg: "sm:max-w-2xl",
+  // For a dialog that carries a form rather than a question. Settings at `lg`
+  // squeezed a two-column form into 672px on a 1440px screen and pushed the
+  // phone section below the fold.
+  xl: "sm:max-w-4xl",
 };
 
 export function KubModal({
