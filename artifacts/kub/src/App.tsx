@@ -31,6 +31,7 @@ import { SupportPage } from "@/pages/public/SupportPage";
 import NotFound from "@/pages/not-found";
 import { ThemeSync } from "@/hooks/useTheme";
 import { KubBrandLogo, KubButton, KubFeedbackViewport, KubIcon, KubInput, KubLogo, KubPanel } from "@/components/kub";
+import { SupportWindow } from "@/components/support/SupportWindow";
 import { kubBrandAsset } from "@/components/kub/brandAssets";
 import { clearMonitoringUser, reportError, setMonitoringUser } from "@/lib/monitoring";
 import { getAuthCallbackErrorMessage, getAuthCallbackExceptionMessage } from "@/lib/authRedirect";
@@ -456,6 +457,9 @@ function AppRoutes() {
   return (
     <>
       {user && <GlobalSearchPalette />}
+      {/* The support desk travels with the person instead of sending them to a
+          route: a question is usually about what is on screen right now. */}
+      {user && <SupportWindow />}
       {/* The messenger draws its own title bar in AppTopBar; every other
           surface had none at all, which left the window unmovable and
           unclosable outside it. See D-016. */}

@@ -13,6 +13,7 @@ import { SettingsModal } from "./SettingsModal";
 import { NewGroupModal } from "./NewGroupModal";
 import { NotificationBell } from "./NotificationBell";
 import { cn } from "@/lib/utils";
+import { openSupportWindow } from "@/lib/supportWindowEvents";
 
 interface SidebarHeaderProps {
   onNewChat?: () => void;
@@ -113,7 +114,12 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
     ...(isStaff
       ? [{ icon: "shield" as const, label: "Админ-панель", accent: true, action: () => { setMenuOpen(false); setLocation("/admin"); } } satisfies MenuItem]
       : []),
-    { icon: "help",   label: "Помощь", action: () => { setMenuOpen(false); window.open("https://github.com", "_blank"); } },
+    // "Помощь" used to open github.com in a new tab — a placeholder that
+    // survived into production. The product has its own support desk, staffed
+    // through the admin support queue, and a signed-in person reaches it in a
+    // window they can move rather than by leaving the screen they are asking
+    // about. The /support route stays for guests.
+    { icon: "help",   label: "Помощь", action: () => { setMenuOpen(false); openSupportWindow(); } },
     { icon: "logout", label: "Выйти",  danger: true, action: async () => { setMenuOpen(false); await signOut(); } },
   ];
 

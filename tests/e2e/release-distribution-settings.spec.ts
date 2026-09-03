@@ -52,7 +52,8 @@ test.describe("LETSCUBE native distribution status", () => {
     const artifactUrl =
       `https://api.letscube.ru/releases/files/${platform}/0.2.0/letscube-0.2.0.${extension}`;
     let requestCount = 0;
-    await page.route(`https://api.letscube.ru/releases/v1/${platform}/stable.json`, async (route) => {
+    await clearReleaseCache(page);
+  await page.route(`https://api.letscube.ru/releases/v1/${platform}/stable.json`, async (route) => {
       requestCount += 1;
       const available = requestCount > 1;
       await route.fulfill({
@@ -85,11 +86,30 @@ test.describe("LETSCUBE native distribution status", () => {
   });
 });
 
+/**
+ * The catalog client caches a manifest in localStorage with a TTL, and the
+ * saved auth state carries that storage between runs. A cache entry written by
+ * an earlier session answers before a stub is ever reached, so the test would
+ * silently assert against whatever production last published.
+ */
+async function clearReleaseCache(page: Page) {
+  await page.addInitScript(() => {
+    try {
+      for (const key of Object.keys(globalThis.localStorage ?? {})) {
+        if (key.startsWith("letscube:release-catalog:")) localStorage.removeItem(key);
+      }
+    } catch {
+      /* a browser that blocks site data has no cache to clear */
+    }
+  });
+}
+
 async function routeManifest(
   page: Page,
   platform: "android" | "windows",
   overrides: Record<string, unknown>,
 ) {
+  await clearReleaseCache(page);
   await page.route(`https://api.letscube.ru/releases/v1/${platform}/stable.json`, async (route) => {
     await route.fulfill({
       status: 200,
