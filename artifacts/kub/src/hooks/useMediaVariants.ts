@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { MediaVariant, MessageWithSender } from "@/types/database";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -13,6 +13,7 @@ import {
   type MessageVariantRefreshState,
   type MessageVariantRefreshLifecycle,
 } from "@/lib/messageVariantRefresh";
+import { createAvatarVariantStore, type AvatarVariantUrls } from "@/lib/avatarVariantStore";
 
 type MessageMediaVariantSource = Pick<MessageWithSender, "id" | "chat_id" | "type" | "media_url" | "deleted_at">;
 
@@ -31,14 +32,8 @@ export interface MessageMediaVariantUrls {
   video720pHeight?: number | null;
 }
 
-export interface AvatarVariantUrls {
-  avatar128Url?: string;
-  avatar128Width?: number | null;
-  avatar128Height?: number | null;
-  avatar256Url?: string;
-  avatar256Width?: number | null;
-  avatar256Height?: number | null;
-}
+// Defined with the store so the two cannot drift apart.
+export type { AvatarVariantUrls } from "@/lib/avatarVariantStore";
 
 const MESSAGE_VARIANT_KINDS = ["image_preview", "image_thumb", "video_poster", "video_720p"] as const;
 const AVATAR_VARIANT_KINDS = ["avatar_128", "avatar_256"] as const;
@@ -336,4 +331,73 @@ export function useAvatarVariantUrls(profileIds: readonly string[]): Record<stri
   }, [profileIdKey]);
 
   return variantsByProfileId;
+}
+
+/**
+ * The shared avatar-variant store, wired to Supabase.
+ *
+ * `useAvatarVariantUrls` above still exists for the surfaces that already know
+ * their whole list of profiles up front. This store is for the avatars that do
+ * not: it lets each one ask for itself, and turns a screenful of asking into a
+ * single query. See `lib/avatarVariantStore`.
+ */
+const avatarVariants = createAvatarVariantStore(async (profileIds) => {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("media_variants")
+    .select("id,profile_id,variant_kind,variant_bucket,variant_path,width,height,status")
+    .eq("status", "ready")
+    .in("variant_kind", [...AVATAR_VARIANT_KINDS])
+    .in("profile_id", profileIds);
+  if (error) throw new Error(error.message);
+
+  const next: Record<string, AvatarVariantUrls> = {};
+  for (const row of (data ?? []) as unknown as MediaVariant[]) {
+    if (!row.profile_id) continue;
+    const publicUrl = getVariantPublicUrl(supabase.storage, row);
+    if (!publicUrl) continue;
+    const current = next[row.profile_id] ?? {};
+    if (row.variant_kind === "avatar_128") {
+      current.avatar128Url = publicUrl;
+      current.avatar128Width = row.width;
+      current.avatar128Height = row.height;
+    } else if (row.variant_kind === "avatar_256") {
+      current.avatar256Url = publicUrl;
+      current.avatar256Width = row.width;
+      current.avatar256Height = row.height;
+    }
+    next[row.profile_id] = current;
+  }
+  return next;
+});
+
+/**
+ * The small version of one profile's avatar, if there is one.
+ *
+ * Safe to call from every avatar on the screen: the first render queues the id
+ * and the whole frame's ids resolve in one query.
+ */
+export function useAvatarVariant(profileId: string | null | undefined): {
+  variant: AvatarVariantUrls | undefined;
+  /** False while the answer is still coming; see `avatarVariantStore`. */
+  settled: boolean;
+} {
+  const subscribe = useCallback((listener: () => void) => avatarVariants.subscribe(listener), []);
+  // Requested during render rather than in an effect: an effect runs after the
+  // first paint, by which time an <img> falling back to the original has
+  // already started downloading it, which is the whole thing being avoided.
+  avatarVariants.request(profileId);
+
+  const variant = useSyncExternalStore(
+    subscribe,
+    () => avatarVariants.get(profileId),
+    () => undefined,
+  );
+  const settled = useSyncExternalStore(
+    subscribe,
+    () => avatarVariants.isSettled(profileId),
+    () => true,
+  );
+
+  return { variant, settled };
 }

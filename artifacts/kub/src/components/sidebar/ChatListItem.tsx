@@ -200,7 +200,13 @@ export function ChatListItem({
       )}
 
       <div className="flex-shrink-0 relative">
-        <ChatAvatar chat={chat} size="md" isSaved={display.isSaved} avatarVariant={avatarVariant} />
+        <ChatAvatar
+          chat={chat}
+          size="md"
+          isSaved={display.isSaved}
+          avatarVariant={avatarVariant}
+          profileId={chat.other_user?.id ?? null}
+        />
         {isOtherOnline && (
           <span
             className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 bg-[var(--kub-online)] kub-pulse"

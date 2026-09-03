@@ -1301,12 +1301,43 @@ The QA owner's chat `a04cccda` now holds 1368 messages for further work on this.
 Requested 2026-09-03: message media previews, and the gallery in particular,
 should load a compressed version for preview rather than the original.
 
-Not yet investigated. What to establish first, before changing anything: which
-variants the media pipeline already produces (there is variant processing in the
-product), what the message list and the gallery actually request today, and how
-much is being transferred for a preview that will be shown at a few hundred
-pixels. The answer decides whether this is a request-side fix (ask for an
-existing variant) or a pipeline one (produce the variant).
+Investigated and largely fixed on 2026-09-04. The answer was neither of the two
+guesses: the pipeline already produces everything needed and the message and
+gallery paths already ask for it. The waste was in **avatars**.
+
+What was measured first. The pipeline produces `image_thumb` (360px),
+`image_preview` (1280px), `video_poster`, `video_720p`, `avatar_128` and
+`avatar_256`; coverage is 124 of 127 image messages. `MessageBubble` already
+takes `previewUrl` with a `srcSet` offering the 360px thumb, and the gallery
+already takes `thumbUrl`. So the message surfaces were fine.
+
+Avatars were not, for two compounding reasons:
+
+1. `UserAvatar` could use a variant only through an optional `avatarVariant`
+   prop, and six of forty-two call sites passed it.
+2. It would not have helped anyway: the RLS policy on `media_variants` allowed
+   reading only your **own** profile's rows, so somebody else's avatar could
+   never resolve to a variant.
+
+Measured on the administrator's user list, the densest avatar surface, with the
+HTTP cache disabled: **7 avatar originals totalling 6,250 kB became 7 variants
+totalling 20 kB**. Avatar originals average 734 kB against 2,717 bytes for
+`avatar_128`. On a single private chat the page went from 215 kB to 87 kB.
+
+Fixed in three parts. `20260904000000_avatar_variants_readable.sql` lets any
+non-banned account read the two avatar variant kinds — which exposes nothing,
+since the files are in the public `media` bucket and the profile's avatar URL
+is already world-readable; message variants stay scoped to chat membership.
+`lib/avatarVariantStore.ts` lets an avatar ask for itself, coalescing a whole
+frame's ids into one query and remembering "this profile has none". And the
+picture now waits for that answer before falling back to the original, because
+starting the original while the answer is in flight downloads both — which is
+how the first attempt still fetched 128 kB after the variant was already
+working.
+
+Still open, and smaller: `ChatAvatar` for a group chat has no profile to ask
+about, so a group's own picture is still its original. Group avatars have no
+variants in the pipeline today, so this needs the pipeline, not the client.
 
 ## D-030 — notifications read as one undifferentiated stream
 

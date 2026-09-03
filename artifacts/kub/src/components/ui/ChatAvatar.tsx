@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { ChatWithLastMessage, Profile } from "@/types/database";
 import { KubIcon } from "@/components/kub";
-import type { AvatarVariantUrls } from "@/hooks/useMediaVariants";
+import { useAvatarVariant, type AvatarVariantUrls } from "@/hooks/useMediaVariants";
 import { isSavedChatLikeName } from "@/lib/chatDisplay";
 import { cn } from "@/lib/utils";
 import { messageActorAvatarUrl, messageActorDisplayName, type MessageActor } from "@/lib/messageActor";
@@ -39,6 +39,12 @@ interface ChatAvatarProps {
   showOnline?: boolean;
   isSaved?: boolean;
   avatarVariant?: AvatarVariantUrls;
+  /**
+   * For a private chat, whose picture this is. A chat has no variants of its
+   * own — they are keyed by profile — so without this the row cannot tell
+   * whether a small version is on its way and starts the original instead.
+   */
+  profileId?: string | null;
 }
 
 const sizeMap = {
@@ -73,17 +79,33 @@ function AvatarImage({
   name,
   originalUrl,
   avatarVariant,
+  profileId,
   size,
   fallback,
 }: {
   name: string;
   originalUrl: string | null | undefined;
   avatarVariant?: AvatarVariantUrls;
+  /**
+   * Whose avatar this is. Given one, the picture finds its own small version
+   * instead of depending on the caller to pass `avatarVariant` — which only six
+   * of forty-two call sites did, leaving the rest to download a 734 kB original
+   * to draw a 32-pixel circle.
+   */
+  profileId?: string | null;
   size: keyof typeof pixelMap;
   fallback: ReactNode;
 }) {
-  const variantUrl = getAvatarVariantSrc(avatarVariant, size);
-  const primaryUrl = variantUrl ?? originalUrl ?? undefined;
+  // A caller that already batched its own lookup keeps it; the store is only
+  // asked when nobody has answered.
+  const { variant: resolved, settled } = useAvatarVariant(profileId);
+  const effectiveVariant = avatarVariant ?? resolved;
+  const variantUrl = getAvatarVariantSrc(effectiveVariant, size);
+  // Starting the original while the answer is still coming downloads both — a
+  // 734 kB request that is abandoned the moment the 3 kB one arrives. The
+  // monogram fills the same box in the meantime, so nothing moves.
+  const waiting = !settled && !variantUrl;
+  const primaryUrl = waiting ? undefined : variantUrl ?? originalUrl ?? undefined;
   const fallbackUrl = variantUrl && originalUrl && variantUrl !== originalUrl ? originalUrl : undefined;
   const [status, setStatus] = useState<"primary" | "fallback" | "failed">("primary");
 
@@ -94,7 +116,7 @@ function AvatarImage({
   if (!primaryUrl || status === "failed") return <>{fallback}</>;
 
   const src = status === "fallback" && fallbackUrl ? fallbackUrl : primaryUrl;
-  const srcSet = status === "primary" ? getAvatarVariantSrcSet(avatarVariant) : undefined;
+  const srcSet = status === "primary" ? getAvatarVariantSrcSet(effectiveVariant) : undefined;
   const px = pixelMap[size];
 
   return (
@@ -115,7 +137,7 @@ function AvatarImage({
   );
 }
 
-export function ChatAvatar({ chat, size = "md", className, showOnline, isSaved: savedOverride, avatarVariant }: ChatAvatarProps) {
+export function ChatAvatar({ chat, size = "md", className, showOnline, isSaved: savedOverride, avatarVariant, profileId }: ChatAvatarProps) {
   const name = chat.name ?? "?";
   const bgColor = getAvatarColor(chat.id);
   const initials = getInitials(name);
@@ -149,6 +171,7 @@ export function ChatAvatar({ chat, size = "md", className, showOnline, isSaved: 
           name={name}
           originalUrl={chat.avatar_url}
           avatarVariant={avatarVariant}
+          profileId={profileId}
           size={size}
           fallback={fallback}
         />
@@ -243,6 +266,7 @@ export function UserAvatar({
       name={name}
       originalUrl={user.avatar_url}
       avatarVariant={avatarVariant}
+      profileId={user.id}
       size={size}
       fallback={fallback}
     />
@@ -307,6 +331,8 @@ export function MessageActorAvatar({
           name={name}
           originalUrl={avatarUrl}
           avatarVariant={actor.kind === "user" ? avatarVariant : undefined}
+          // Only a person has an avatar variant; a bot's picture is its own.
+          profileId={actor.kind === "user" ? actorId : null}
           size={size}
           fallback={fallback}
         />

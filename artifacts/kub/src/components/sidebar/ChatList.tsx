@@ -622,7 +622,13 @@ function ChatProfilePreviewModal({
     >
       <div data-chat-profile-preview className="flex flex-col">
         <div className="flex flex-col items-center gap-3 border-b border-[color:var(--kub-border-color)] px-5 py-6 text-center">
-          <ChatAvatar chat={chat} size="lg" isSaved={display.isSaved} avatarVariant={avatarVariant} />
+          <ChatAvatar
+            chat={chat}
+            size="lg"
+            isSaved={display.isSaved}
+            avatarVariant={avatarVariant}
+            profileId={chat.other_user?.id ?? null}
+          />
           <div className="min-w-0">
             <div className="max-w-full truncate text-lg font-semibold text-[color:var(--kub-text)]">
               {display.title}

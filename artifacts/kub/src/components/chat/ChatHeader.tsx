@@ -232,6 +232,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
           showOnline={isOnline}
           isSaved={display.isSaved}
           avatarVariant={avatarVariant}
+          profileId={chat?.other_user?.id ?? null}
         />
         <div className="text-left min-w-0">
           <div className="text-sm font-semibold truncate leading-tight text-[color:var(--kub-text)]">
