@@ -7,6 +7,7 @@ import { useAppStore } from "@/store/app.store";
 import { createClient } from "@/lib/supabase/client";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useTheme } from "@/hooks/useTheme";
+import { usePrivacyPreferences } from "@/hooks/usePrivacyPreferences";
 import { usePush } from "@/hooks/usePush";
 import { useIsAdmin, useIsManagerOrAdmin } from "@/hooks/useRole";
 import { KubButton, KubIcon, KubModal, KubSwitch, type KubIconName } from "@/components/kub";
@@ -45,6 +46,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const { currentUser, setCurrentUser } = useAppStore();
   const supabase = createClient();
   const { theme, resolvedTheme, setTheme } = useTheme();
+  const privacy = usePrivacyPreferences();
   const nativeAndroid = isNativeAndroid();
   const desktopWindows = isDesktopApp();
   const {
@@ -410,6 +412,45 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             </button>
           </div>
         </div>
+      )}
+
+      {activeTab === "general" && (
+      <div className="px-4 pb-4">
+        <SectionLabel>Конфиденциальность</SectionLabel>
+        <div className="overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]">
+          <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3">
+            <KubIcon
+              name={privacy.preferences.presenceVisible ? "eye" : "eyeOff"}
+              size={16}
+              className={
+                privacy.preferences.presenceVisible
+                  ? "text-[color:var(--kub-cyan)]"
+                  : "text-[color:var(--kub-muted)]"
+              }
+            />
+            <div className="min-w-0">
+              <div className="text-sm text-[color:var(--kub-text)]">Показывать, когда я в сети</div>
+              <div className="text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                {privacy.preferences.presenceVisible
+                  ? "Собеседники видят точку «в сети» и время последнего входа"
+                  : "Время последнего входа не сохраняется. Вас по-прежнему можно найти и написать вам"}
+              </div>
+            </div>
+            <KubSwitch
+              aria-label="Показывать, когда я в сети"
+              checked={privacy.preferences.presenceVisible}
+              disabled={privacy.loading}
+              onCheckedChange={(next) => void privacy.setPresenceVisible(next)}
+              className="justify-self-end"
+            />
+          </div>
+          {privacy.error && (
+            <div className="border-t border-[color:var(--kub-border-color)] px-4 py-2 text-xs text-[color:var(--kub-danger)]">
+              Не удалось сохранить настройку. Попробуйте ещё раз.
+            </div>
+          )}
+        </div>
+      </div>
       )}
 
       {activeTab === "general" && (

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { bumpHeartbeat, setHeartbeatActive } from "@/lib/dev/instrumentation";
+import { usePrivacyPreferences } from "@/hooks/usePrivacyPreferences";
 
 const HEARTBEAT_MS = 60_000;
 const MAX_BACKOFF_MS = 5 * 60_000;
@@ -141,9 +142,22 @@ function startRunner(userId: string): HeartbeatRunner {
 
 export function useHeartbeat(): void {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
+  const { preferences, loading } = usePrivacyPreferences();
+  // Someone who has turned presence off is not published at all: the heartbeat
+  // does not run, so nothing is stored for anyone to read. Hiding the value in
+  // one interface while still writing it would not be privacy.
+  const publishing = !loading && preferences.presenceVisible;
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !publishing) {
+      // Stop an already-running heartbeat when the preference turns off.
+      if (runner) {
+        runner.cleanup();
+        runner = null;
+        setHeartbeatActive(0);
+      }
+      return;
+    }
     if (runner && runner.userId === userId) {
       runner.refCount += 1;
     } else {
@@ -163,5 +177,5 @@ export function useHeartbeat(): void {
         setHeartbeatActive(0);
       }
     };
-  }, [userId]);
+  }, [userId, publishing]);
 }

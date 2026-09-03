@@ -877,6 +877,33 @@ export interface Database {
           }
         ]
       }
+      privacy_preferences: {
+        Row: {
+          user_id: string
+          presence_visible: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          presence_visible?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          presence_visible?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "privacy_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       notification_preferences: {
         Row: {
           user_id: string
