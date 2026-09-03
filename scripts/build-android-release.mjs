@@ -138,7 +138,17 @@ async function main() {
   }
 
   run(pnpm, ["android:sync"], buildEnv);
-  run("gradlew.bat", ["assembleRelease", "bundleRelease"], releaseEnv, resolve(root, "android"));
+  // The wrapper is named by an absolute path. Passed bare, it goes through
+  // `cmd /c` with the Android directory as the working directory — and a cmd
+  // configured not to search the current directory for executables answers
+  // "gradlew.bat is not recognised", which is a confusing way for a release
+  // build to fail.
+  run(
+    resolve(root, "android", "gradlew.bat"),
+    ["assembleRelease", "bundleRelease"],
+    releaseEnv,
+    resolve(root, "android"),
+  );
 
   const apkPath = resolve(root, "android/app/build/outputs/apk/release/app-release.apk");
   const aabPath = resolve(root, "android/app/build/outputs/bundle/release/app-release.aab");

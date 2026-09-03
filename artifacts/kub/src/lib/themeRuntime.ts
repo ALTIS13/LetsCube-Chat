@@ -59,7 +59,19 @@ export const THEME_INIT_SCRIPT = `
     }
     var resolved = saved;
     if (saved === "system") {
+      // The Android shell marks the phone's night mode in the user agent,
+    // because its WebView does not pass it through to the media query:
+    // measured on two Android 15 phones with night mode on, this query said
+    // light and the app rendered light on a dark phone.
+    var recorded = null;
+    try { recorded = localStorage.getItem("letscube:night"); } catch (e) {}
+    var night = /letscube-night\/([01])/.exec(navigator.userAgent);
+    if (recorded === "1" || recorded === "0") { night = [null, recorded]; }
+    if (night) {
+      resolved = night[1] === "1" ? "dark" : "light";
+    } else {
       resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+    }
     }
     apply(resolved);
   } catch (e) {

@@ -33,10 +33,40 @@ function readStoredTheme(): Theme {
   return "system";
 }
 
+/**
+ * What "system" resolves to.
+ *
+ * On Android the media query is not trustworthy. Measured on two phones running
+ * Android 15 with night mode ON, a DayNight activity theme whose `isLightTheme`
+ * resolved to false, and algorithmic darkening allowed and confirmed applied,
+ * the WebView still reported `prefers-color-scheme: dark` as false — so the app
+ * rendered light on a dark phone. The shell knows the answer for certain, and
+ * says so on `window.__letscubeNightMode`; the media query remains the source
+ * everywhere else.
+ */
 function getSystemTheme(): ResolvedTheme {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-    return "dark";
-  }
+  if (typeof window === "undefined") return "dark";
+  // The live value first, for a change made while the app is open.
+  const shellNight = (window as unknown as { __letscubeNightMode?: unknown }).__letscubeNightMode;
+  if (typeof shellNight === "boolean") return shellNight ? "dark" : "light";
+  // Then the one the shell put in the user agent before anything loaded, which
+  // is the same answer without the race.
+  const agent = typeof navigator === "undefined" ? "" : navigator.userAgent;
+  const marked = /letscube-night\/([01])/.exec(agent);
+  if (marked) return marked[1] === "1" ? "dark" : "light";
+  // And the value the shell recorded on a previous document, which survives the
+  // navigation the other two do not.
+  const stored = (() => {
+    try {
+      return localStorage.getItem("letscube:night");
+    } catch {
+      return null;
+    }
+  })();
+  if (stored === "1") return "dark";
+  if (stored === "0") return "light";
+
+  if (typeof window.matchMedia !== "function") return "dark";
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
@@ -82,6 +112,27 @@ function ensureGlobalListeners() {
     if (typeof mq.addEventListener === "function") mq.addEventListener("change", onMq);
     else mq.addListener(onMq);
   }
+
+  // Re-resolve now. The shell publishes its answer as soon as it has a page,
+  // which can be before this code runs — and then the event below has already
+  // been and gone. Reading the flag here covers that order.
+  const shellResolved = getSystemTheme();
+  if (currentTheme === "system" && shellResolved !== currentResolved) {
+    currentResolved = shellResolved;
+    applyResolvedTheme(shellResolved);
+    emit();
+  }
+
+  // And this covers the other order, plus the phone's setting changing while
+  // the app is open.
+  window.addEventListener("letscube:night-mode", () => {
+    if (currentTheme !== "system") return;
+    const resolved = getSystemTheme();
+    if (resolved === currentResolved) return;
+    currentResolved = resolved;
+    applyResolvedTheme(resolved);
+    emit();
+  });
 
   window.addEventListener("storage", (e: StorageEvent) => {
     if (e.key !== STORAGE_KEY) return;

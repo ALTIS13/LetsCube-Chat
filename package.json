@@ -20,7 +20,7 @@
     "android:sync": "cap sync android",
     "android:open": "cap open android",
     "android:assets": "pnpm dlx @capacitor/assets@3.0.5 generate --android --assetPath assets --iconBackgroundColor \"#17212b\" --iconBackgroundColorDark \"#17212b\" --splashBackgroundColor \"#17212b\" --splashBackgroundColorDark \"#17212b\" --logoSplashScale 0.18",
-    "android:build:debug": "cd android && gradlew.bat assembleDebug",
+    "android:build:debug": "cd android && .\\gradlew.bat assembleDebug",
     "android:build:production:debug": "node scripts/build-android-production.mjs",
     "android:build:production:release": "node scripts/build-android-release.mjs",
     "android:verify:release": "node scripts/verify-android-release.mjs",

@@ -101,7 +101,11 @@ android {
       'set "LETSCUBE_ANDROID_KEY_ALIAS="',
       'set "LETSCUBE_ANDROID_STORE_PASSWORD="',
       'set "LETSCUBE_ANDROID_KEY_PASSWORD="',
-      `gradlew.bat assemble --init-script ${initScript}`,
+      // `.\` is required: this workstation's cmd does not search the current
+      // directory for an executable, so a bare `gradlew.bat` is reported as an
+      // unknown command and the test failed on the wrapper rather than on the
+      // signing guard it exists to check.
+      `.\\gradlew.bat assemble --init-script ${initScript}`,
     ].join(" && ");
     const result = spawnSync("cmd.exe", ["/d", "/s", "/c", command], {
       cwd: resolve(root, "android"),
