@@ -2780,3 +2780,46 @@ being older than the schema is the safe direction.
 - Until this branch deploys, a person changing their own avatar may see the old
   one for up to thirty days in the currently deployed build, which does not
   send the version token. Only 7 profiles have an avatar at all.
+
+## 2026-09-04 - alpha closed, dated from the move to our own server
+
+The `alpha_end` milestone was recorded. It is **write-once**: correcting it now
+needs `product_milestone_correct`, which demands a reason and lands in the audit
+log with the value it replaced.
+
+**Recorded:** `2026-06-18 16:27:47 +03`, version `0.0.0`.
+
+**Why that moment.** The owner's definition is the move of the project onto its
+own server with its own domain. Three dates bracket it, and they were checked
+rather than assumed:
+
+- `2026-06-11 00:17 MSK` — the Coolify containers were created; the machine was
+  being stood up but the project was not yet on it.
+- `2026-06-18 16:27:47 MSK` — the self-hosted Supabase containers were created
+  (`supabase-db`, `supabase-rest`, `supabase-realtime`, `supabase-storage`).
+  This is the moment the project's own backend began running on our own server,
+  and it is attested by the server itself rather than inferred from a commit.
+- `2026-06-21` — the first commit carrying `app.letscube.ru` and
+  `core.letscube.ru` (`e671a01`), i.e. the application addressed at its own
+  domain.
+
+The choice between them turned out not to matter: **12 of the 14 accounts
+registered before either date** — every one in May — and the only two later
+registrations are 2026-08-29 and 2026-08-31, well after all three. Both
+candidate boundaries therefore yield the same twelve alpha testers. The
+server-attested moment was recorded as the more defensible of two answers that
+agree.
+
+**Version `0.0.0`** because that is what the repository declared at the time;
+`package.json` and `artifacts/kub/package.json` both read `0.0.0` at the last
+commit on or before that date. Versioning began afterwards.
+
+**Verified after recording**, each inside a transaction that was rolled back:
+the oldest account (registered 2026-05-04) earns `alpha_tester`, `beta_tester`,
+`conversationalist` and `settled_in`; the newest (2026-08-31) earns
+`beta_tester` **only**. The audit log carries the `product_milestone_set` entry
+with the date and version.
+
+`v1_0` is deliberately left open. Until it has a date the product is still in
+beta and everyone who registers earns the beta badge, which is what it should
+mean today. It will be recorded when the current work is finished.
