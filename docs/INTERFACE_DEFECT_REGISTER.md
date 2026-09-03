@@ -1267,3 +1267,31 @@ identically across runs, and that reproducibility is what gave it away.
 
 The contract passes on production. Scrolling back through a fully loaded chat
 measured 0 drifts over 24px in 18 steps and no empty frames.
+
+## D-028 — a chat lurched on entry, because a narrow row collapsed every bubble
+
+Reported as "очень сильно дёргает при заходе", 2026-09-03. Reproduced on a
+seeded chat of 1368 messages — the size is what made it visible.
+
+Measured on entry: the view moved 9,734px while the content's height collapsed
+from **26,366px to 10,464px** with the same hundred messages rendered. The
+scroll is set against the tall version, so the reader is thrown.
+
+The cause was the action lane added earlier the same day. `100%` in that width
+cap is the message ROW, and the row is not its final width for the first frames
+after a chat opens: measured at 142px in one sample, which took the lane term to
+38px and wrapped a short message into **thirteen lines instead of four**.
+
+Floored, the same entry measures a 1,290px settle rather than a 15,902px
+collapse, and the first bubble renders 142x36 on one line instead of 40x281 on
+thirteen.
+
+**The second half of the report is not reproduced.** "Сверху вниз перелистывает
+в рандомные моменты" did not appear in any of: sitting still for 45s scrolled
+up (0 unrequested moves), three messages arriving from the other participant
+while scrolled up (the reader kept their place; the gap from the bottom grew
+from 4,200px to 4,403px, which is correct), leaving and returning to the tab, or
+resizing the window. Recorded as open rather than treated as fixed by the entry
+change.
+
+The QA owner's chat `a04cccda` now holds 1368 messages for further work on this.
