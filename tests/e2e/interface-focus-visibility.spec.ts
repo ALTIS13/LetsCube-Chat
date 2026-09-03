@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { findFirstAvailableQaRole, gotoOrSkip, loginAsRoleOrSkip } from "./helpers/auth";
 
 /**
  * D-010: keyboard focus must be visible on the primary action.
@@ -213,5 +214,93 @@ test.describe("auth shell scrolling", () => {
       return box.top >= 0 && box.bottom <= window.innerHeight + 1;
     });
     expect(reachable, "the sign-in button must be reachable by scrolling on a short window").toBe(true);
+  });
+});
+
+/**
+ * D-013: the tasks view switch, and what the D-015 rule did to the track it
+ * sits in.
+ *
+ * The register left this switch open at 30px. It is no longer under the target:
+ * its segments carry `kub-button`, so the coarse-pointer rule grows them to
+ * 44px on a phone without anyone touching this page. What that rule could not
+ * do was tell the track around them. The wrapper was pinned at `h-9` — 36px —
+ * so each 44px segment overhung it by 11px and the active segment's filled pill
+ * broke straight out through the rounded bottom border. Measured before the
+ * fix: segment 168..212, track 165..205.
+ *
+ * That is the mistake `KubSwitch` documents in its own comment — a fixed
+ * decorative size sitting on the element that has to grow — so the assertion is
+ * containment, not height. Height alone passes with the defect present, because
+ * the segment really is 44px; it is simply 44px in the wrong place.
+ *
+ * Both halves are asserted, for the reason D-015 established: a test that only
+ * checked the finger would pass equally well if the track had been inflated for
+ * every pointer, which is the change that was deliberately not made.
+ */
+const viewSwitchGeometry = async (page: import("@playwright/test").Page) => {
+  const segment = page.getByRole("button", { name: "Карточки" });
+  await segment.waitFor({ state: "visible" });
+  return await segment.evaluate((node) => {
+    const track = node.parentElement as HTMLElement;
+    const s = node.getBoundingClientRect();
+    const t = track.getBoundingClientRect();
+    return {
+      segment: s.height,
+      track: t.height,
+      overhangTop: t.top - s.top,
+      overhangBottom: s.bottom - t.bottom,
+    };
+  });
+};
+
+test.describe("tasks view switch under a finger", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+  test("the segment is a real target and stays inside its track", async ({ page }) => {
+    const role = findFirstAvailableQaRole(["owner", "tech_admin"], { includeDefault: false });
+    test.skip(!role, "owner/tech_admin QA auth state or credentials are not configured");
+
+    await gotoOrSkip(page, "/");
+    await loginAsRoleOrSkip(page, role);
+    await page.goto("/tasks", { waitUntil: "domcontentloaded" });
+
+    const geometry = await viewSwitchGeometry(page);
+    expect(geometry.segment, "a segment must be a real target under a finger").toBeGreaterThanOrEqual(44);
+
+    // The part a height check cannot see. A pinned track leaves the segment
+    // 44px tall and hanging out of the bottom of the control.
+    expect(
+      geometry.overhangBottom,
+      `the segment breaks out of the bottom of its track by ${Math.round(geometry.overhangBottom)}px: ${JSON.stringify(geometry)}`,
+    ).toBeLessThanOrEqual(0);
+    expect(
+      geometry.overhangTop,
+      `the segment breaks out of the top of its track: ${JSON.stringify(geometry)}`,
+    ).toBeLessThanOrEqual(0);
+  });
+});
+
+test.describe("tasks view switch under a cursor", () => {
+  test.use({ hasTouch: false, isMobile: false, viewport: { width: 1440, height: 900 } });
+
+  test("the track keeps the height it was designed with", async ({ page }) => {
+    const role = findFirstAvailableQaRole(["owner", "tech_admin"], { includeDefault: false });
+    test.skip(!role, "owner/tech_admin QA auth state or credentials are not configured");
+
+    await gotoOrSkip(page, "/");
+    await loginAsRoleOrSkip(page, role);
+    await page.goto("/tasks", { waitUntil: "domcontentloaded" });
+
+    const geometry = await viewSwitchGeometry(page);
+    expect(
+      geometry.track,
+      "the designed 36px track must be untouched with a cursor; growing it for every pointer is the change that was not made",
+    ).toBeLessThanOrEqual(36);
+    expect(
+      geometry.segment,
+      "the size scale must be untouched with a cursor",
+    ).toBeLessThan(44);
+    expect(geometry.overhangBottom, "the segment must sit inside its track").toBeLessThanOrEqual(0);
   });
 });

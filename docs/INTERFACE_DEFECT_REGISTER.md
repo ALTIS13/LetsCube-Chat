@@ -1467,3 +1467,55 @@ What would settle it: the symptom needs to be caught while it happens. The
 probe above — `scrollTop` plus the message id under a fixed point, sampled per
 frame — is the instrument, and it is drift rather than a jump that it is
 looking for.
+
+## D-013 closed — two were already fixed, and the third had been fixed into a different defect
+
+Re-measured 2026-09-04 with the register's own harness (`PAGE_CHECKS` from
+`scripts/interface-audit.mjs`, imported rather than reimplemented) at 390x844
+and 412x915, both themes, with touch emulation. The three items the earlier
+passes left as "Still open" were checked rather than assumed, and only one of
+them was still real.
+
+**Header links and the logo link — already fixed.** Measured on `/`,
+`/download`, `/privacy` and `/support`: the logo link 28x44, «Конфиденциальность»
+147x44, «Войти» 80x44. Fix batch 3 put `min-h-11` on all of them in
+`PublicPageShell.tsx`; the "still open" note predates that batch and was simply
+stale.
+
+**The support form's checkbox — already fixed.** The input measures 24x24 and
+its `<label>` row — which is the real target, because a label toggles its own
+control — measures 324x106. Closed by the coarse-pointer rules in `index.css`
+together with the harness's label correction.
+
+**The tasks view switch — the target was fixed, and the fix left a visual
+defect.** The 30px is long gone: the segments carry `kub-button`, so D-015's
+coarse-pointer rule grows them to 44px on a phone without anyone touching this
+page. What that rule could not reach was the track around them, pinned at `h-9`.
+Measured with touch: segment 168..212 (44px) inside a track 165..205 (36px) — an
+**11px overhang**, with the active segment's filled pill visibly breaking out
+through the rounded bottom border. On a cursor the same control is correctly
+nested, 30px inside 36px, which is the designed scale and why nobody saw it.
+
+This is precisely the mistake `KubSwitch` documents — a fixed decorative size
+sitting on the element that has to grow — so it takes the same fix: `h-9` became
+`min-h-9`, the designed height as a floor rather than a clamp. After: 44px
+segment inside a 50px track with a 3px inset on a finger, unchanged at 30/36 on
+a cursor.
+
+The hit area was deliberately **not** grown past the track. Fix batch 4 rejected
+overlay hit areas, and a segmented control has two targets sharing one track, so
+each segment has to be 44px itself and the track has to follow.
+
+**What the test asserts, and why it is containment rather than height.** Under
+the mutation that restores `h-9`, the `>= 44` height assertion still *passes* —
+the segment really is 44px, just in the wrong place. Overhang is the load-bearing
+assertion. Both mutations turn it red in the right direction: restoring `h-9`
+fails the touch case only, and inflating the track for every pointer fails the
+cursor case only.
+
+Harness re-measure after the fix: **0 touch-target findings across all 20
+cells**. D-013 is closed.
+
+Noted so a later reading does not mistake it for a finding: the tasks search
+input measures 42px inside a 44px bordered wrapper, and the harness correctly
+counts 44 — the missing 2px is the border.

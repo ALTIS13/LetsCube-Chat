@@ -561,7 +561,15 @@ export function TasksPage() {
             )}
             </div>
 
-            <div className="inline-flex h-9 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-0.5">
+            {/* The designed height is a floor, not a clamp. Its segments carry
+                `kub-button`, so a coarse pointer grows them to the 44px a finger
+                needs (D-015); a fixed `h-9` track could not contain that and the
+                active segment's pill broke 11px out through the bottom border.
+                Same mistake `KubSwitch` documents — a fixed decorative size
+                sitting on the element that has to grow — and the same fix: the
+                track keeps its 36px on a cursor and follows its segments on a
+                finger. See D-013. */}
+            <div className="inline-flex min-h-9 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-0.5">
               <button
                 type="button"
                 onClick={() => setViewMode("cards")}
