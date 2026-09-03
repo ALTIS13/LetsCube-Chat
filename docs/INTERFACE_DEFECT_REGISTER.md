@@ -1307,3 +1307,29 @@ product), what the message list and the gallery actually request today, and how
 much is being transferred for a preview that will be shown at a few hundred
 pixels. The answer decides whether this is a request-side fix (ask for an
 existing variant) or a pipeline one (produce the variant).
+
+## D-030 — notifications read as one undifferentiated stream
+
+Requested 2026-09-03, to be taken up after the profile decoration work: the
+notification surfaces should carry more of the meaning they already have.
+
+What the owner asked for, in their own terms: notifications that are more
+interactive and better looking; colour that distinguishes one kind from
+another; a preview when the message that triggered it carries an attachment;
+and an urgent task from an administrator standing out — red was the example —
+so that "у пользователя всё не смешивается в кашу". The stated goal is the
+micro-moments that keep one thing from reading like another, not decoration for
+its own sake.
+
+Not yet investigated. What to establish before changing anything: which
+notification kinds actually exist today and what each one already knows about
+its subject (the notification centre groups them, so the data may already be
+there); whether task priority and the administrator origin reach the client on
+the notification itself or only on the task; and what the message payload
+carries about an attachment, since a preview needs a variant URL rather than
+the original — which ties this to D-029.
+
+The colour work must stay inside the existing token palette and keep contrast
+in both themes; an urgent red that only reads on a dark background would fail
+the same audit that produced this register. Motion and feedback belong to the
+approved shared-motion plan rather than to a second system built beside it.
