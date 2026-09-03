@@ -209,12 +209,26 @@ function shouldJustifyOrdinaryText(content: string): boolean {
   return true;
 }
 
+/**
+ * What to render before anything has been measured.
+ *
+ * The 56-character rule belonged to the old layout, where the meta flowed after
+ * the last word and a long message usually did need a row of its own. The meta
+ * is positioned at the bubble's corner now, with its space reserved on the last
+ * line, so inline is almost always what the measurement goes on to choose — and
+ * guessing anchored meant the message appeared with a row it then dropped.
+ * Measured on production: a bubble painted at 81px and settled at 59px.
+ *
+ * An explicit line break still starts anchored. There the last line is the
+ * author's choice rather than the result of wrapping, so it can be full width
+ * and leave the meta nowhere to sit.
+ */
 function getInitialMetaPlacement(content: string): MetaPlacement {
   const text = content.trim();
   if (!text) return "inline";
   if (isLocationPreviewMessage(content)) return "inline";
   if (/[\r\n]/.test(content)) return "anchored";
-  return text.length <= 56 ? "inline" : "anchored";
+  return "inline";
 }
 
 function canRenderCompactReplyInline(message: MessageWithSender, kind: TextLayoutKind, hasReactions: boolean): boolean {
