@@ -52,7 +52,7 @@
     // light and the app rendered light on a dark phone.
     var recorded = null;
     try { recorded = localStorage.getItem("letscube:night"); } catch (e) {}
-    var night = /letscube-night/([01])/.exec(navigator.userAgent);
+    var night = /letscube-night\/([01])/.exec(navigator.userAgent);
     if (recorded === "1" || recorded === "0") { night = [null, recorded]; }
     if (night) {
       resolved = night[1] === "1" ? "dark" : "light";

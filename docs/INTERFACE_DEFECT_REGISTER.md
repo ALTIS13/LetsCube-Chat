@@ -1333,3 +1333,44 @@ The colour work must stay inside the existing token palette and keep contrast
 in both themes; an urgent red that only reads on a dark background would fail
 the same audit that produced this register. Motion and feedback belong to the
 approved shared-motion plan rather than to a second system built beside it.
+
+## D-031 — the pre-paint theme script never ran
+
+Found 2026-09-03 while investigating an unrelated console error in the
+notification centre's e2e run, and confirmed against production before any of
+that day's changes: `https://app.letscube.ru` threw
+`SyntaxError: Unexpected token '.'` on every page load.
+
+`THEME_INIT_SCRIPT` in `artifacts/kub/src/lib/themeRuntime.ts` is a template
+literal that emits the inline bootstrap. It contained
+`/letscube-night\/([01])/`, and inside a template literal a lone backslash is
+consumed by the string — so the emitted regex was
+`/letscube-night/([01])/`, whose inner slash closes the literal early. The
+whole script failed to parse. Measured: `new Function(THEME_INIT_SCRIPT)`
+threw the production message verbatim.
+
+Two consequences, both of which had been observed and neither explained:
+
+1. There was no pre-paint theme at all. Every load painted the default and
+   then corrected itself once the application mounted.
+2. The Android shell's night marker was never read. The WebView does not pass
+   night mode through to the media query, which is why the shell writes
+   `letscube-night/1` into the user agent — and that branch was unreachable.
+   This is the most likely explanation for the open "Android cold launch is
+   light" item; a reload has always been fine because by then the React path
+   applies the theme.
+
+Why nothing caught it: `tests/unit/theme-bootstrap-parity.test.mjs` compared
+index.html against `THEME_INIT_SCRIPT` and they matched — being identically
+broken. Parity proves the copies agree, not that either one works.
+
+Fixed by doubling the backslash in the template literal and regenerating the
+HTML copy. The parity suite now also parses both copies with `new Function`
+and asserts the emitted pattern equals the marker the shell writes; all three
+mutations of the shipped regression — both copies broken, either one alone —
+turn it red. `tests/e2e/theme-bootstrap.spec.ts` drives a browser with the
+night marker in the user agent and the system set to light, and asserts the
+marker wins.
+
+Still to confirm on a device: the Android cold-launch run, which is where the
+symptom was reported.

@@ -88,6 +88,40 @@ test("the pre-paint bootstrap matches the script it is a copy of", () => {
   );
 });
 
+test("the bootstrap is a script a browser can actually parse", () => {
+  // It shipped unparseable for weeks and nothing noticed: parity only proved
+  // the two copies were the same, and they were — identically broken. Inside a
+  // template literal a lone backslash is consumed by the string, so
+  // `/letscube-night\/([01])/` emitted an unescaped slash that closed the
+  // regex early and killed the whole bootstrap. With it dead there is no
+  // pre-paint theme at all, and the Android night-mode marker is never read.
+  for (const [name, source] of [
+    ["THEME_INIT_SCRIPT", THEME_INIT_SCRIPT],
+    ["index.html", inlineBootstrap()],
+  ]) {
+    assert.doesNotThrow(
+      () => new Function(source),
+      `${name} does not parse; the pre-paint theme never runs`,
+    );
+  }
+});
+
+test("the bootstrap recognises the night marker the Android shell sets", () => {
+  const marker = /letscube-night\/([01])/;
+  for (const [source, name] of [
+    [THEME_INIT_SCRIPT, "THEME_INIT_SCRIPT"],
+    [inlineBootstrap(), "index.html"],
+  ]) {
+    const emitted = source.match(/var night = (\/.*?\/)\.exec/);
+    assert.ok(emitted, `${name} no longer tests the user agent for a night marker`);
+    assert.equal(
+      emitted[1],
+      marker.source.replace(/^/, "/").replace(/$/, "/"),
+      `${name} emits a different pattern than the shell writes`,
+    );
+  }
+});
+
 test("the inline bootstrap reads the storage keys the application writes", () => {
   // The script interpolates these, so a rename cannot silently leave the
   // bootstrap reading a key nothing writes — but index.html carries literals,

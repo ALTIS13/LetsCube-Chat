@@ -65,7 +65,11 @@ export const THEME_INIT_SCRIPT = `
     // light and the app rendered light on a dark phone.
     var recorded = null;
     try { recorded = localStorage.getItem("letscube:night"); } catch (e) {}
-    var night = /letscube-night\/([01])/.exec(navigator.userAgent);
+    // Inside a template literal a single backslash is consumed by the
+    // string, so the emitted regex read /letscube-night/([01])/ — where the
+    // inner slash closes the literal early and the whole bootstrap failed
+    // to parse. It is doubled so the emitted script escapes the slash.
+    var night = /letscube-night\\/([01])/.exec(navigator.userAgent);
     if (recorded === "1" || recorded === "0") { night = [null, recorded]; }
     if (night) {
       resolved = night[1] === "1" ? "dark" : "light";
