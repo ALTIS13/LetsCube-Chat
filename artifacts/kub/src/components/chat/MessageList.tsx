@@ -184,6 +184,16 @@ export function MessageList({
   const olderReleaseFrameRef = useRef<number | null>(null);
   const olderSafetyTimeoutRef = useRef<number | null>(null);
   const releaseOlderScrollPreservationRef = useRef<(() => void) | null>(null);
+  /**
+   * True only while the hold loop is actually correcting the scroll position.
+   *
+   * The distinction matters: the wheel that scrolls to the top is the same
+   * gesture that ASKS for older history, so releasing on any input cancelled
+   * the hold before it ever ran — measured, the anchor still drifted exactly
+   * 445px with the hold in place. Input during the hold means the reader has
+   * taken over; input before it lands is what started the load.
+   */
+  const olderHoldActiveRef = useRef(false);
   const initialScrollAppliedRef = useRef<string | null>(null);
   const initialScrollPendingRef = useRef(false);
   const initialScrollPendingKeyRef = useRef<string | null>(null);
@@ -312,6 +322,7 @@ export function MessageList({
       window.clearTimeout(olderSafetyTimeoutRef.current);
       olderSafetyTimeoutRef.current = null;
     }
+    olderHoldActiveRef.current = false;
     olderScrollAnchorRef.current = null;
     olderStartFirstMessageIdRef.current = null;
     olderStartMessageCountRef.current = 0;
@@ -401,6 +412,7 @@ export function MessageList({
     restoreVisibleMessageAnchor(container, anchor);
 
     let settledFrames = 0;
+    olderHoldActiveRef.current = true;
     const hold = () => {
       olderReleaseFrameRef.current = null;
       if (!preservingOlderScrollRef.current) return;
@@ -494,7 +506,7 @@ export function MessageList({
    */
   const releaseScrollControl = useCallback(() => {
     releaseInitialScrollControl();
-    releaseOlderScrollPreservationRef.current?.();
+    if (olderHoldActiveRef.current) releaseOlderScrollPreservationRef.current?.();
   }, [releaseInitialScrollControl]);
 
 
