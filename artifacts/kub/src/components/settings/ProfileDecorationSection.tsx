@@ -7,6 +7,7 @@ import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { cn } from "@/lib/utils";
 import {
   EMPTY_ACHIEVEMENT_STATE,
+  describeAchievementShare,
   isCosmeticUnlocked,
   type AchievementState,
   type CosmeticDefinition,
@@ -96,11 +97,16 @@ export function ProfileDecorationSection() {
             {state.achievements.map((achievement) => {
               const held = state.earned.has(achievement.key);
               const progress = state.progress[achievement.key];
+              const share = describeAchievementShare(state.shares[achievement.key]);
               return (
                 <li
                   key={achievement.key}
+                  // The share appears on hover, and on focus so it is reachable
+                  // without a pointer. `title` carries it for a touch device,
+                  // where there is no hover to have.
+                  title={share ?? undefined}
                   className={cn(
-                    "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-xl border px-3 py-2.5",
+                    "group/achievement grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-xl border px-3 py-2.5",
                     held
                       ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_10%,transparent)]"
                       : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]",
@@ -123,6 +129,14 @@ export function ProfileDecorationSection() {
                     <div className="text-xs leading-relaxed text-[color:var(--kub-muted)]">
                       {achievement.description}
                     </div>
+                    {share && (
+                      <div
+                        data-testid={`achievement-share-${achievement.key}`}
+                        className="mt-1 text-[11px] text-[color:var(--kub-muted)] opacity-0 transition-opacity duration-[var(--kub-motion-fast)] group-hover/achievement:opacity-100 group-focus-within/achievement:opacity-100 sm:opacity-0"
+                      >
+                        {share}
+                      </div>
+                    )}
                     {!held && progress && (
                       <div className="mt-1.5">
                         <div className="h-1 overflow-hidden rounded-full bg-[var(--kub-surface)]">

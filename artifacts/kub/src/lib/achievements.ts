@@ -1,8 +1,10 @@
 import { createClient } from "@/lib/supabase/client";
 import {
   projectAchievement,
+  projectAchievementShare,
   projectCosmetic,
   projectSyncResult,
+  type AchievementShare,
   type AchievementDefinition,
   type AchievementState,
   type CosmeticDefinition,
@@ -20,12 +22,16 @@ function rpcClient(): RpcClient {
 
 export async function loadAchievementState(): Promise<AchievementState> {
   const supabase = createClient();
-  const [definitions, catalogue, sync] = await Promise.all([
+  const [definitions, catalogue, sync, stats] = await Promise.all([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     supabase.from("achievements" as any).select("key,title,description,icon,grant_kind,sort_order").order("sort_order", { ascending: true }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     supabase.from("cosmetics" as any).select("key,kind,title,required_achievement,sort_order").order("sort_order", { ascending: true }),
     rpcClient().rpc<unknown>("achievements_sync"),
+    // Aggregate only, and it excludes the test accounts on both sides of the
+    // fraction — see the view's own comment.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    supabase.from("achievement_stats" as any).select("achievement_key,holders,eligible"),
   ]);
 
   const achievements = ((definitions.data ?? []) as unknown as Record<string, unknown>[])
@@ -36,7 +42,13 @@ export async function loadAchievementState(): Promise<AchievementState> {
     .filter((item): item is CosmeticDefinition => item !== null);
   const { earned, progress } = projectSyncResult(sync.error ? null : sync.data);
 
-  return { achievements, cosmetics, earned, progress };
+  const shares: Record<string, AchievementShare> = {};
+  for (const row of (stats.data ?? []) as unknown as Record<string, unknown>[]) {
+    const projected = projectAchievementShare(row);
+    if (projected) shares[projected.key] = projected.share;
+  }
+
+  return { achievements, cosmetics, earned, progress, shares };
 }
 
 /** Save the chosen decoration. The server refuses anything unearned. */

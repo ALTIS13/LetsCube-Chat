@@ -35,6 +35,8 @@ export interface AchievementState {
   cosmetics: CosmeticDefinition[];
   earned: Set<string>;
   progress: Record<string, AchievementProgress>;
+  /** How many people hold each one. Absent while it is still being read. */
+  shares: Record<string, AchievementShare>;
 }
 
 export const EMPTY_ACHIEVEMENT_STATE: AchievementState = {
@@ -42,6 +44,7 @@ export const EMPTY_ACHIEVEMENT_STATE: AchievementState = {
   cosmetics: [],
   earned: new Set(),
   progress: {},
+  shares: {},
 };
 
 function readString(row: Record<string, unknown>, key: string): string {
@@ -106,6 +109,48 @@ export function projectSyncResult(payload: unknown): {
     }
   }
   return { earned, progress };
+}
+
+/** How many people hold an achievement, out of everyone using the messenger. */
+export interface AchievementShare {
+  holders: number;
+  eligible: number;
+}
+
+/**
+ * The share of people who have earned an achievement, as the interface says it.
+ *
+ * Returns null rather than a number wherever a percentage would mislead:
+ *
+ *   - nobody is counted yet, so there is no denominator;
+ *   - nobody holds it, where "0%" reads as a broken badge rather than a rare
+ *     one — "ещё никто" is the honest phrasing;
+ *   - a share below half a percent, which would round to "0%" and say the
+ *     opposite of what it means.
+ *
+ * Rounded to whole percent above 10 and to one decimal below it, because the
+ * difference between 3% and 4% of a small population is one person and reading
+ * it as a hard number invites arithmetic nobody should be doing.
+ */
+export function describeAchievementShare(share: AchievementShare | undefined): string | null {
+  if (!share || share.eligible <= 0) return null;
+  if (share.holders <= 0) return "Пока никто не получил";
+
+  const percent = (share.holders / share.eligible) * 100;
+  if (percent < 0.5) return "Меньше 1% пользователей";
+  if (percent >= 99.5) return "Получили почти все";
+
+  const rounded = percent >= 10 ? Math.round(percent) : Math.round(percent * 10) / 10;
+  const text = String(rounded).replace(".", ",");
+  return `Получили ${text}% пользователей`;
+}
+
+export function projectAchievementShare(row: Record<string, unknown>): { key: string; share: AchievementShare } | null {
+  const key = readString(row, "achievement_key");
+  const holders = readNumber(row.holders, -1);
+  const eligible = readNumber(row.eligible, -1);
+  if (!key || holders < 0 || eligible < 0) return null;
+  return { key, share: { holders, eligible } };
 }
 
 /** Whether a decoration may be worn, given what the person has earned. */

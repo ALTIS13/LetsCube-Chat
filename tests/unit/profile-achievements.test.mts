@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  describeAchievementShare,
   isCosmeticUnlocked,
+  projectAchievementShare,
   projectAchievement,
   projectCosmetic,
   projectSyncResult,
@@ -135,4 +137,54 @@ test("every listed key is one the build can draw", () => {
   for (const key of renderableCosmeticKeys()) {
     assert.equal(canRenderCosmetic(key), true);
   }
+});
+
+test("a share is worded, not just divided", () => {
+  // The number on its own would be read as an exact fact about a small
+  // population, so the wording carries the meaning instead.
+  assert.equal(describeAchievementShare({ holders: 3, eligible: 9 }), "Получили 33% пользователей");
+  assert.equal(describeAchievementShare({ holders: 9, eligible: 9 }), "Получили почти все");
+  assert.equal(describeAchievementShare({ holders: 1, eligible: 20 }), "Получили 5% пользователей");
+});
+
+test("a badge nobody holds says so instead of showing nought per cent", () => {
+  // "0%" reads as a broken badge; "пока никто" reads as a rare one.
+  assert.equal(describeAchievementShare({ holders: 0, eligible: 9 }), "Пока никто не получил");
+});
+
+test("a share too small to round honestly is described rather than rounded", () => {
+  // 1 in 500 is 0,2% — rounding it to "0%" would say the opposite of the truth.
+  assert.equal(describeAchievementShare({ holders: 1, eligible: 500 }), "Меньше 1% пользователей");
+});
+
+test("below ten per cent keeps one decimal, above it does not", () => {
+  // Between 3% and 4% of a small population is one person; a decimal there
+  // invites arithmetic nobody should be doing, and rounding hides it.
+  assert.equal(describeAchievementShare({ holders: 7, eligible: 100 }), "Получили 7% пользователей");
+  assert.equal(describeAchievementShare({ holders: 75, eligible: 1000 }), "Получили 7,5% пользователей");
+  assert.equal(describeAchievementShare({ holders: 125, eligible: 1000 }), "Получили 13% пользователей");
+});
+
+test("with nobody to count there is no share to show", () => {
+  assert.equal(describeAchievementShare({ holders: 0, eligible: 0 }), null);
+  assert.equal(describeAchievementShare(undefined), null);
+});
+
+test("a malformed stats row is not a share", () => {
+  assert.equal(projectAchievementShare({ holders: 3, eligible: 9 }), null, "no key");
+  assert.equal(projectAchievementShare({ achievement_key: "x", eligible: 9 }), null, "no holders");
+  assert.equal(projectAchievementShare({ achievement_key: "x", holders: "3", eligible: 9 }), null);
+  assert.deepEqual(projectAchievementShare({ achievement_key: "x", holders: 3, eligible: 9 }), {
+    key: "x",
+    share: { holders: 3, eligible: 9 },
+  });
+});
+
+test("a common badge is still given its number, not called universal", () => {
+  // "Получили почти все" is reserved for a badge essentially everyone holds.
+  // Saying it of a half or two thirds turns a real distinction into flattery.
+  assert.equal(describeAchievementShare({ holders: 5, eligible: 9 }), "Получили 56% пользователей");
+  assert.equal(describeAchievementShare({ holders: 2, eligible: 3 }), "Получили 67% пользователей");
+  assert.equal(describeAchievementShare({ holders: 98, eligible: 100 }), "Получили 98% пользователей");
+  assert.equal(describeAchievementShare({ holders: 999, eligible: 1000 }), "Получили почти все");
 });

@@ -2806,9 +2806,18 @@ rather than assumed:
 The choice between them turned out not to matter: **12 of the 14 accounts
 registered before either date** — every one in May — and the only two later
 registrations are 2026-08-29 and 2026-08-31, well after all three. Both
-candidate boundaries therefore yield the same twelve alpha testers. The
-server-attested moment was recorded as the more defensible of two answers that
-agree.
+candidate boundaries therefore name the same accounts. The server-attested
+moment was recorded as the more defensible of two answers that agree.
+
+**Of those twelve, five are test accounts. The real number of alpha testers is
+seven**, out of nine real accounts. "Twelve" was reported before that
+distinction was drawn and is corrected here rather than left standing: the five
+QA logins exist to exercise the product and will be deleted when the work is
+done, and counting them moves every figure about the product in the same
+direction. `public.achievement_recipients` and `public.achievement_stats` are
+now the canonical answer to "who holds this" and "how many", and both exclude
+test accounts on each side of the fraction. Counting straight from
+`user_achievements` is the thing to look for in review.
 
 **Version `0.0.0`** because that is what the repository declared at the time;
 `package.json` and `artifacts/kub/package.json` both read `0.0.0` at the last
