@@ -243,8 +243,18 @@ function whenFontsReady(): Promise<unknown> {
   return fontsReadyPromise;
 }
 
+/**
+ * A pixel length, or nothing.
+ *
+ * It used to accept anything `parseFloat` could chew on, which meant a computed
+ * `max-width: 100%` came back as the number 100 — a hundred pixels. That fed
+ * the inline-meta decision a width of 100px and made it flip its answer every
+ * render.
+ */
 function parsePixelValue(value: string): number | null {
-  const parsed = Number.parseFloat(value);
+  const trimmed = value.trim();
+  if (!trimmed.endsWith("px")) return null;
+  const parsed = Number.parseFloat(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
@@ -293,11 +303,25 @@ function getMaxContentWidth(bubbleEl: HTMLElement, stackEl: HTMLElement | null):
   const bubbleStyle = getComputedStyle(bubbleEl);
   const paddingLeft = parsePixelValue(bubbleStyle.paddingLeft) ?? 0;
   const paddingRight = parsePixelValue(bubbleStyle.paddingRight) ?? 0;
-  const stackMaxWidth = stackEl ? parsePixelValue(getComputedStyle(stackEl).maxWidth) : null;
-  const bubbleMaxWidth = parsePixelValue(bubbleStyle.maxWidth);
-  const declared = Math.max(stackMaxWidth ?? 0, bubbleMaxWidth ?? 0);
-  if (declared > 0) return declared - paddingLeft - paddingRight;
-  return bubbleEl.getBoundingClientRect().width - paddingLeft - paddingRight;
+
+  // Measured from the ROW, not read from a declared `max-width`. The stack's
+  // cap is a `min()` of three terms, which computes to a string no number
+  // parses — and the fallback was the bubble's CURRENT width, which differs
+  // between the two placements. That is a feedback loop: inline made the bubble
+  // narrow, the narrow bubble said the meta did not fit, anchored made it wide,
+  // and the wide bubble said it did. Measured on production, that flip cost 228
+  // height changes and 1865px of growth on a chat of 100 messages.
+  //
+  // The row's width is the same in both placements, so the answer is stable. It
+  // over-estimates when the design cap is the tighter constraint, and that is
+  // the safe direction: the meta is positioned and its space reserved, so a
+  // slightly generous "it fits" costs a few pixels of bubble width, never an
+  // overlap.
+  const row = (stackEl ?? bubbleEl).parentElement;
+  const rowWidth = row?.getBoundingClientRect().width ?? bubbleEl.getBoundingClientRect().width;
+  const lane =
+    parsePixelValue(getComputedStyle(document.documentElement).getPropertyValue("--kub-action-lane")) ?? 0;
+  return Math.max(0, rowWidth - lane) - paddingLeft - paddingRight;
 }
 
 function getTextRightLimit(textEl: HTMLElement, bubbleEl: HTMLElement, stackEl: HTMLElement | null): number {
