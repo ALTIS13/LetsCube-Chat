@@ -561,10 +561,19 @@ Status: `[~]` active. Android and Windows Tauri internal candidates are availabl
 - `[x]` Android build-environment isolation: inherited unapproved `VITE_*`,
   infra pointers and secret-shaped variables are removed before Vite/Capacitor;
   only the four dedicated signing inputs are restored for Gradle release tasks.
-- `[~]` Android verified HTTPS App Links and recovery callback are implemented
-  for the exact `https://app.letscube.ru/auth/callback` route. Tracked Asset
-  Links matches the final signer; production deployment, domain verification and
-  normal HTTPS warm/cold/killed callback rehearsal remain post-review gates.
+- `[x]` Android verified HTTPS App Links and recovery callback are implemented
+  for the exact `https://app.letscube.ru/auth/callback` route, and the three
+  gates this bullet used to list are closed: the official-GMS domain
+  verification and the warm/cold/killed callback rehearsal are recorded in
+  queue item 7, and the production deployment was re-measured on 2026-09-05.
+  `https://app.letscube.ru/.well-known/assetlinks.json` is byte-identical to
+  the tracked `artifacts/kub/public/.well-known/assetlinks.json` (SHA-256
+  `b36206f4...da879777`), carries one statement, one relation and one
+  fingerprint for `com.kub.messenger`, and that fingerprint is the certificate
+  the published `0.1.3` APK is actually signed with -- proven by running
+  `scripts/verify-android-release.mjs` over the downloaded artifact, whose
+  association check compares the two directly. Re-run that check whenever the
+  signer changes; the association, not the app, is what a signer change breaks.
 - `[x]` Retire the Electron spike after QA profile leakage and excessive package weight were confirmed. Electron source, installed package and shared QA profile were removed before publishing Tauri.
 - `[x]` Tauri 2 internal candidate: isolated WebView2 profile, 1.19 MiB NSIS installer, tray/close-to-hide, branded startup, single instance, minimum exact-origin capabilities, clean-profile login and hidden-window foreground notifications.
 - `[x]` Tauri rollout: frontend adapter deployed, clean installed-client QA repeated, and immutable Windows stable `0.2.0` build `4` published at 1,242,693 bytes with verified SHA-256.
