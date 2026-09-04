@@ -15,8 +15,10 @@ import {
   buildChatAvatarVariantPath,
   buildMessageVariantPath,
   buildProfileAvatarVariantPath,
+  classifyVariantError,
+  getAttemptableMessageVariantKinds,
   getExpectedMessageVariantKinds,
-  getMissingMessageVariantKinds,
+  getMessageVariantTarget,
   sanitizeVariantErrorCode,
   type AvatarVariantKind,
   type MessageVariantKind,
@@ -25,8 +27,11 @@ import {
   buildMessageVariantFailedRow,
   buildMessageVariantReadyRow,
   buildVideo720pFfmpegArgs,
+  isMissingStorageObjectError,
   parseVideoDimensions,
   safeStorageFailureDetails,
+  shouldAttemptVariantKind,
+  type RecordedVariantAttempt,
 } from "./mediaVariantsWorkerHelpers";
 
 const DEFAULT_TICK_MS = 60_000;
@@ -73,7 +78,16 @@ interface ExistingVariant {
   profile_id: string | null;
   chat_id: string | null;
   variant_kind: string;
+  status: string;
+  error_code: string | null;
+  source_bucket: string | null;
+  source_path: string | null;
 }
+
+/** What storage said when a download did not produce bytes. */
+type StorageDownload =
+  | { ok: true; body: Buffer }
+  | { ok: false; missing: boolean };
 
 interface StoragePointer {
   bucket: string;
@@ -127,6 +141,18 @@ async function loop(supabase: SupabaseClient): Promise<void> {
     }
     await sleep(tickMs);
   }
+}
+
+/**
+ * One pass, exported so a test can drive the real loop body.
+ *
+ * The contract that matters for D-034 is about the *second* pass — that a
+ * source proven absent is not fetched again — and no assertion on a helper in
+ * isolation can hold that, because the helper is only right if the candidate
+ * loader consults it.
+ */
+export async function runMediaVariantsTick(supabase: SupabaseClient): Promise<void> {
+  await tick(supabase);
 }
 
 async function tick(supabase: SupabaseClient): Promise<void> {
@@ -195,8 +221,13 @@ async function loadMessageCandidates(supabase: SupabaseClient): Promise<MessageC
         pageCandidates.map((row) => row.id),
       );
       for (const row of pageCandidates) {
-        const kinds = existing.get(row.id) ?? new Set<string>();
-        const missingVariantKinds = getMissingMessageVariantKinds(row, kinds);
+        const source = resolveStoragePath(row.media_bucket, row.media_path, row.media_url);
+        if (!source) continue;
+        const missingVariantKinds = getAttemptableMessageVariantKinds(
+          row,
+          existing.get(row.id),
+          source,
+        );
         if (missingVariantKinds.length > 0) candidates.push({ ...row, missingVariantKinds });
       }
     }
@@ -255,22 +286,32 @@ async function loadAvatarCandidates(
     candidates.map((row) => row.id),
   );
   return candidates.filter((row) => {
-    const kinds = existing.get(row.id) ?? new Set<string>();
-    return AVATAR_VARIANTS.some((variant) => !kinds.has(variant.kind));
+    const source = resolveStoragePath(MEDIA_BUCKET, null, row.avatar_url);
+    if (!source) return false;
+    const attempts = existing.get(row.id);
+    return AVATAR_VARIANTS.some((variant) =>
+      shouldAttemptVariantKind(attempts?.get(variant.kind), source),
+    );
   });
 }
 
+/**
+ * What is already recorded for these owners, ready and failed alike.
+ *
+ * Deliberately not filtered to `status = 'ready'` any more. A failure is the
+ * only memory this worker has — it keeps no queue and no cursor — so hiding
+ * failed rows from the candidate loader is precisely what made D-034 permanent.
+ */
 async function loadExistingVariants(
   supabase: SupabaseClient,
   column: "message_id" | AvatarOwnerColumn,
   ids: string[],
-): Promise<Map<string, Set<string>>> {
+): Promise<Map<string, Map<string, RecordedVariantAttempt>>> {
   if (ids.length === 0) return new Map();
   let query = supabase
     .from("media_variants")
-    .select(`${column}, variant_kind`)
-    .in(column, ids)
-    .eq("status", "ready");
+    .select(`${column}, variant_kind, status, error_code, source_bucket, source_path`)
+    .in(column, ids);
   // A message variant carries the id of the chat it lives in, so asking by
   // `chat_id` alone would also return every picture ever sent in these chats.
   // A chat's own avatar is the row with no message behind it.
@@ -283,13 +324,21 @@ async function loadExistingVariants(
     return new Map();
   }
 
-  const byOwner = new Map<string, Set<string>>();
+  const byOwner = new Map<string, Map<string, RecordedVariantAttempt>>();
   for (const row of (data ?? []) as ExistingVariant[]) {
     const id = row[column];
     if (!id) continue;
-    const set = byOwner.get(id) ?? new Set<string>();
-    set.add(row.variant_kind);
-    byOwner.set(id, set);
+    const kinds = byOwner.get(id) ?? new Map<string, RecordedVariantAttempt>();
+    // A ready row always wins over a failed one for the same kind: the two can
+    // only coexist through a race, and having produced the file is the truth.
+    if (kinds.get(row.variant_kind)?.status === "ready") continue;
+    kinds.set(row.variant_kind, {
+      status: row.status,
+      errorCode: row.error_code,
+      sourceBucket: row.source_bucket,
+      sourcePath: row.source_path,
+    });
+    byOwner.set(id, kinds);
   }
   return byOwner;
 }
@@ -312,8 +361,12 @@ async function ensureMessageVariants(supabase: SupabaseClient, message: MessageC
   const source = resolveStoragePath(message.media_bucket, message.media_path, message.media_url);
   if (!source) return false;
 
-  const sourceBuffer = await downloadStorageObject(supabase, source);
-  if (!sourceBuffer) return false;
+  const download = await downloadStorageObject(supabase, source);
+  if (!download.ok) {
+    if (download.missing) await recordMissingMessageSource(supabase, message, source);
+    return false;
+  }
+  const sourceBuffer = download.body;
 
   if (message.type === "video") {
     return ensureVideoMessageVariants(supabase, message, source, sourceBuffer);
@@ -351,7 +404,7 @@ async function ensureMessageVariants(supabase: SupabaseClient, message: MessageC
         variant.kind,
         variantPath,
         WEBP_MIME_TYPE,
-        err,
+        classifyVariantError(err),
       );
     }
   }
@@ -411,7 +464,7 @@ async function ensureVideoMessageVariants(
         variant.kind,
         variantPath,
         mimeType,
-        err,
+        classifyVariantError(err),
       );
     }
   }
@@ -499,8 +552,12 @@ async function ensureAvatarVariants(
   const source = resolveStoragePath(MEDIA_BUCKET, null, owner.avatar_url);
   if (!source) return false;
 
-  const sourceBuffer = await downloadStorageObject(supabase, source);
-  if (!sourceBuffer) return false;
+  const download = await downloadStorageObject(supabase, source);
+  if (!download.ok) {
+    if (download.missing) await recordMissingAvatarSource(supabase, owner, source);
+    return false;
+  }
+  const sourceBuffer = download.body;
 
   let generated = false;
   for (const variant of AVATAR_VARIANTS) {
@@ -522,22 +579,92 @@ async function ensureAvatarVariants(
       });
       generated = true;
     } catch (err) {
-      await markAvatarVariantFailed(supabase, owner, source, variant.kind, variantPath, err);
+      await markAvatarVariantFailed(
+        supabase,
+        owner,
+        source,
+        variant.kind,
+        variantPath,
+        classifyVariantError(err),
+      );
     }
   }
   return generated;
 }
 
+/**
+ * The source bytes, or why there are none.
+ *
+ * A missing object is not warned about here. It is not news every minute — it
+ * is one fact about one row — so the caller records it against the row and the
+ * candidate loader stops offering it. Anything else keeps the old warning,
+ * because anything else may well be gone by the next tick.
+ */
 async function downloadStorageObject(
   supabase: SupabaseClient,
   source: StoragePointer,
-): Promise<Buffer | null> {
+): Promise<StorageDownload> {
   const { data, error } = await supabase.storage.from(source.bucket).download(source.path);
   if (error || !data) {
+    if (isMissingStorageObjectError(error)) return { ok: false, missing: true };
     logger.warn({ err: safeStorageFailureDetails(error) }, "mediaVariantsWorker storage download failed");
-    return null;
+    return { ok: false, missing: false };
   }
-  return Buffer.from(await data.arrayBuffer());
+  return { ok: true, body: Buffer.from(await data.arrayBuffer()) };
+}
+
+/**
+ * Write down that this message's media is gone, once, and say so once.
+ *
+ * Without this the row is simply skipped, stays in tomorrow's scan, and warns
+ * again — 826 times in the seven hours before anyone noticed. The rows it
+ * writes are what `shouldAttemptVariantKind` reads to leave it alone.
+ */
+async function recordMissingMessageSource(
+  supabase: SupabaseClient,
+  message: MessageCandidate,
+  source: StoragePointer,
+): Promise<void> {
+  const kinds = message.missingVariantKinds ?? getExpectedMessageVariantKinds(message);
+  if (kinds.length === 0) return;
+  logger.warn(
+    { messageId: message.id, sourceBucket: source.bucket, kinds: kinds.length },
+    "mediaVariantsWorker source object missing; recorded and not retried",
+  );
+  for (const kind of kinds) {
+    const target = getMessageVariantTarget(message.chat_id, message.id, kind);
+    await markMessageVariantFailed(
+      supabase,
+      message,
+      source,
+      kind,
+      target.path,
+      target.mimeType,
+      "source_missing",
+    );
+  }
+}
+
+/** The same, for a person's or a group's picture. */
+async function recordMissingAvatarSource(
+  supabase: SupabaseClient,
+  owner: AvatarCandidate,
+  source: StoragePointer,
+): Promise<void> {
+  logger.warn(
+    { scope: owner.scope, ownerId: owner.id, sourceBucket: source.bucket },
+    "mediaVariantsWorker source object missing; recorded and not retried",
+  );
+  for (const variant of AVATAR_VARIANTS) {
+    await markAvatarVariantFailed(
+      supabase,
+      owner,
+      source,
+      variant.kind,
+      avatarVariantPath(owner, variant.kind, source.path),
+      "source_missing",
+    );
+  }
 }
 
 /** The delta-seconds out of a `Cache-Control` value, for callers that want only that. */
@@ -641,7 +768,7 @@ async function markMessageVariantFailed(
   kind: string,
   path: string,
   mimeType: string,
-  err: unknown,
+  errorCode: string,
 ): Promise<void> {
   await supabase.from("media_variants").delete().eq("message_id", message.id).eq("variant_kind", kind);
   await supabase
@@ -653,7 +780,7 @@ async function markMessageVariantFailed(
         kind,
         path,
         mimeType,
-        errorCode(err),
+        sanitizeVariantErrorCode(errorCode),
         new Date().toISOString(),
       ),
     );
@@ -665,7 +792,7 @@ async function markAvatarVariantFailed(
   source: StoragePointer,
   kind: string,
   path: string,
-  err: unknown,
+  errorCode: string,
 ): Promise<void> {
   await deleteAvatarVariantRow(supabase, owner, kind);
   await supabase.from("media_variants").insert({
@@ -677,7 +804,8 @@ async function markAvatarVariantFailed(
     variant_path: path,
     mime_type: WEBP_MIME_TYPE,
     status: "failed",
-    error_code: errorCode(err),
+    // One gate on what may reach the column, wherever the code came from.
+    error_code: sanitizeVariantErrorCode(errorCode),
     updated_at: new Date().toISOString(),
   });
 }
@@ -699,14 +827,6 @@ function resolveStoragePath(
   const parsedPath = decodeURIComponent(tail.slice(slash + 1).split("?")[0] ?? "");
   if (!parsedBucket || !parsedPath) return null;
   return { bucket: parsedBucket, path: parsedPath };
-}
-
-function errorCode(err: unknown): string {
-  if (err && typeof err === "object" && "code" in err) {
-    return sanitizeVariantErrorCode((err as { code?: unknown }).code);
-  }
-  if (err instanceof Error) return sanitizeVariantErrorCode(err.name);
-  return sanitizeVariantErrorCode(undefined);
 }
 
 function candidateLimit(): number {

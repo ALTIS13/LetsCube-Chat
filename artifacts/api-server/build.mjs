@@ -20,6 +20,9 @@ async function buildAll() {
       path.resolve(artifactDir, "src/botGatewayIndex.ts"),
       path.resolve(artifactDir, "src/supportMailIndex.ts"),
       path.resolve(artifactDir, "src/workers/mediaVariantRules.ts"),
+      // Built as its own module so a test can drive a real tick. The runtime
+      // still enters through src/index.ts; this entry only exposes the loop.
+      path.resolve(artifactDir, "src/workers/mediaVariantsWorker.ts"),
       path.resolve(artifactDir, "src/workers/registrationCleanupWorker.ts"),
     ],
     platform: "node",

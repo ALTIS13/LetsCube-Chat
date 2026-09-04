@@ -136,18 +136,116 @@ export function buildMessageVariantFailedRow(
   };
 }
 
+/**
+ * Failures that describe the source rather than the moment.
+ *
+ * The worker has no queue: it finds its own work by scanning `messages` every
+ * tick, so nothing ever takes a message out of the candidate set. A message it
+ * can never convert is therefore rediscovered forever — which is exactly what
+ * D-034 was, two `storage download failed` warnings a minute, indefinitely,
+ * for two rows whose objects were left behind by the move off the hosted
+ * Supabase project.
+ *
+ * These two read the same way in a minute and in a year:
+ *
+ * - `source_missing`    — storage has no object at the recorded path.
+ * - `source_unreadable` — the object is there and cannot be decoded.
+ *
+ * A kind whose recorded failure is one of these, against the same source, is
+ * not attempted again. Every other failure — a timeout, a 5xx, an upload the
+ * service refused — is about this attempt, and is retried next tick exactly as
+ * it always was.
+ */
+export const TERMINAL_VARIANT_ERROR_CODES: ReadonlySet<string> = new Set([
+  "source_missing",
+  "source_unreadable",
+]);
+
+/**
+ * Whether a storage download failed because there is no such object.
+ *
+ * Supabase's storage service answers a missing object with **HTTP 400** and a
+ * body that says 404: `{"statusCode":"404","error":"not_found",...}`. The
+ * client keeps both numbers — `status` is the transport's, `statusCode` the
+ * service's — and the worker's log printed only `status`, so a gone object was
+ * indistinguishable from a malformed request for as long as the defect ran.
+ * Both are read here, because which one carries the truth is the service's to
+ * change, not ours.
+ */
+export function isMissingStorageObjectError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const record = err as { status?: unknown; statusCode?: unknown };
+  if (record.status === 404 || record.statusCode === 404) return true;
+  return record.statusCode === "404";
+}
+
+/**
+ * libvips loader failures, which mean the bytes are not a picture.
+ *
+ * libvips reports a source it cannot read as a plain `Error` with no code, so
+ * the message is the only signal there is. Matched narrowly on purpose: a miss
+ * costs one retry per tick — today's behaviour — while a false positive would
+ * abandon a picture a later attempt could have converted.
+ */
+const UNREADABLE_SOURCE_PATTERNS = [
+  /unsupported image format/i,
+  /libpng (read )?error/i,
+  /^vips(png|jpeg|gif|webp|tiff|heif|magick)/i,
+  /corrupt header/i,
+  /premature end of/i,
+] as const;
+
+export function isUnreadableSourceError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return UNREADABLE_SOURCE_PATTERNS.some((pattern) => pattern.test(err.message));
+}
+
+/** What `media_variants` already records about one owner's one variant kind. */
+export interface RecordedVariantAttempt {
+  status: string;
+  errorCode: string | null;
+  sourceBucket: string | null;
+  sourcePath: string | null;
+}
+
+/**
+ * Whether one variant kind is worth attempting on this tick.
+ *
+ * `ready` is done. A terminal failure recorded against *this same source* is
+ * not attempted again — that is the whole of the fix for D-034. A terminal
+ * failure recorded against a different bucket or path was about different
+ * bytes, so the current ones are unproven and get their attempt.
+ */
+export function shouldAttemptVariantKind(
+  attempt: RecordedVariantAttempt | undefined,
+  source: { bucket: string; path: string },
+): boolean {
+  if (!attempt) return true;
+  if (attempt.status === "ready") return false;
+  if (attempt.status !== "failed") return true;
+  if (!attempt.errorCode || !TERMINAL_VARIANT_ERROR_CODES.has(attempt.errorCode)) return true;
+  return attempt.sourceBucket !== source.bucket || attempt.sourcePath !== source.path;
+}
+
 export function safeStorageFailureDetails(
   err: unknown,
-): { name?: string; code?: string; status?: number } | null {
+): { name?: string; code?: string; status?: number; statusCode?: string } | null {
   if (!err || typeof err !== "object") return null;
-  const record = err as { name?: unknown; code?: unknown; status?: unknown };
-  const details: { name?: string; code?: string; status?: number } = {};
+  const record = err as { name?: unknown; code?: unknown; status?: unknown; statusCode?: unknown };
+  const details: { name?: string; code?: string; status?: number; statusCode?: string } = {};
   const name = safeStorageErrorText(record.name);
   const code = safeStorageErrorText(record.code);
   const status = safeStorageStatus(record.status);
+  // The transport status and the service's own are different numbers: storage
+  // answers a missing object with 400 over 404. Logging only the first is what
+  // kept D-034 unreadable for 826 warnings, so both are carried.
+  const statusCode =
+    safeStorageErrorText(record.statusCode) ??
+    (safeStorageStatus(record.statusCode) !== undefined ? String(record.statusCode) : undefined);
   if (name) details.name = name;
   if (code) details.code = code;
   if (status !== undefined) details.status = status;
+  if (statusCode) details.statusCode = statusCode;
   return Object.keys(details).length > 0 ? details : null;
 }
 
@@ -168,4 +266,8 @@ export const mediaVariantWorkerTestSeams = {
   buildMessageVariantReadyRow,
   buildMessageVariantFailedRow,
   safeStorageFailureDetails,
+  isMissingStorageObjectError,
+  isUnreadableSourceError,
+  shouldAttemptVariantKind,
+  TERMINAL_VARIANT_ERROR_CODES,
 };

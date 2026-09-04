@@ -1634,31 +1634,105 @@ The lesson worth keeping: a policy on a metadata row is not a policy on the
 object it addresses. For anything served from a public bucket, the access check
 is the fetch, not the row.
 
-## D-034 — the media variants worker has been failing two objects per tick
+## D-034 — the media variants worker retried, forever, work that could never succeed
 
-Pre-existing, found 2026-09-04 while verifying D-033's deploy. Not mine, not
-fixed, recorded so it is not lost.
+Pre-existing, found 2026-09-04 while verifying D-033's deploy. Diagnosed and
+fixed the same day; the fix is unpushed and undeployed at the time of writing.
 
-`letscube-worker` logs `mediaVariantsWorker storage download failed`
+`letscube-worker` logged `mediaVariantsWorker storage download failed`
 (`StorageApiError`, status 400) exactly twice per 60-second tick — 826 times in
-the seven hours before it was noticed, and it resumes at the same rate after
-each redeploy. **23 image and video messages have no variants**, so those chats
-download originals where a preview was intended:
+the seven hours before it was noticed, and it resumed at the same rate after
+each redeploy.
 
-| shape | count | in storage |
+**The path shapes were a red herring.** The 115- and 128-character
+`media_path` values in the first measurement convert perfectly well: of 30 live
+image messages with a 128-character path, 27 have both variants, and every
+115-character path in the table is `ready`. `resolveStoragePath` was never
+wrong. Two entirely separate causes were hiding behind one symptom.
+
+### Cause 1 — two objects that are genuinely gone
+
+Two live video messages carry `media_bucket`/`media_path` NULL and a
+`media_url` on **`nhogbeojfnbjcfipitrh.supabase.co`** — the hosted Supabase
+project this deployment moved off. `resolveStoragePath` reads the bucket and
+key out of the URL and ignores the host, so the worker asked the self-hosted
+`media` bucket for a key that only ever existed on the old project. Proven from
+the storage service's own log:
+
+    "error":{"raw":"{\"httpStatusCode\":404,\"userStatusCode\":400,
+    \"resource\":\"…/1778030470210.mp4\",\"code\":\"NoSuchKey\"…}"
+
+Storage answers a missing object with **HTTP 400 over a 404 body**, which is why
+the log said 400 and why 400 read as a puzzle rather than as "gone". Twelve rows
+point at the old host in total; ten are already deleted, two are live. The bytes
+are not on this server and are not recoverable in code.
+
+### Cause 2 — three objects whose bytes are not a picture
+
+Three live image messages had `status='failed'` rows and **no log line at all**,
+because a generation failure is recorded and never logged. Their objects exist —
+68 bytes each, all three with the same eTag, replaced in place at
+2026-09-03T21:33Z. Parsed on disk:
+
+| chunk | length | CRC |
 |---|---|---|
-| video, 115-char path | 4 | **no** |
-| image, 54-char path | 9 | yes |
-| image, 128-char path | 6 | yes |
-| video, 54-char path | 4 | yes |
+| IHDR | 13 (1x1, 8-bit, grey+alpha) | ok |
+| IDAT | 11 | **wrong** |
+| IEND | 0 | ok |
 
-The four whose objects do not exist are orphaned rows and can never succeed;
-they are the likeliest candidates for the permanent two-per-tick failure, since
-the worker retries its batch every tick. The other nineteen exist and should
-convert. Three carry `status='failed'` rows; the rest have no variant row at all.
+libpng refuses a critical chunk whose checksum does not match, so sharp raises
+`vipspng: libpng read error` — reproduced locally against a byte-identical
+reconstruction, which converts fine once the CRC is repaired. sharp's error is a
+bare `Error` with no `code`, so it sanitized to `variant_generation_failed`,
+indistinguishable from a transient failure. Six `media_variants` rows were being
+deleted and re-inserted every 60 seconds, silently, since the objects were
+replaced.
 
-Profile and chat avatars are unaffected — all 7 profiles and all 3 groups have
-their variants.
+### Why either one lasted
+
+The worker keeps no queue. Every tick it re-scans `messages` and asks
+`media_variants` **only which kinds are `ready`** — so a row it had already
+failed on looked exactly like a row it had never seen. Nothing could ever leave
+the candidate set.
+
+### The fix
+
+A failure is now the worker's memory. Two codes describe the source rather than
+the moment — `source_missing` (storage has no such object) and
+`source_unreadable` (the bytes will not decode) — and a kind carrying one of
+them, against the same bucket and path, is not attempted again. The download
+path records a missing source instead of only warning about it, and warns once
+rather than every minute. Everything else — a timeout, a 5xx, an upload the
+service refused — is unchanged and still retried on the next tick, so the fix
+cannot strand a picture that a later attempt would have converted. Replaced
+media has a different source path, so the recorded verdict does not carry over
+to it.
+
+`safeStorageFailureDetails` now also carries the service's own `statusCode`.
+The old log printed `{name, status:400}` and nothing else, which is precisely
+why 826 warnings never said "not found".
+
+No migration: `media_variants.error_code` has no CHECK constraint, and both
+existing failure shapes re-record themselves as terminal on the first tick after
+deploy. Expected production effect: four new rows for the two orphaned videos,
+three messages' rows relabelled, two log lines, then silence.
+
+Tests are in `tests/server/media-variants-terminal-failures.test.mjs` and drive
+a real tick against a stubbed PostgREST and Storage, because the contract is
+about the *second* pass. Ten mutations were run, including restoring
+`status = 'ready'` to the candidate query and suppressing every failure rather
+than the terminal ones; each was caught.
+
+Not fixed, on purpose: the 19 objects that do exist needed no repair — 16 of
+them converted on their own between the two measurements, because a 720p
+transcode is slow, not because anything was stuck. The remaining three cannot be
+converted by any code: their stored bytes are corrupt, and those three messages
+already show nothing in the client regardless of variants. Repairing or removing
+them is a data decision for the owner.
+
+Profile and chat avatars were unaffected throughout — all 7 profiles and all 3
+groups have their variants — but the avatar loader had the identical latent
+defect and is covered by the same change.
 
 ## D-035 — every variant the worker uploaded carried a doubled max-age
 

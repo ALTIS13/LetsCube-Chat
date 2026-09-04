@@ -2,7 +2,18 @@ import { createHash } from "node:crypto";
 
 export {
   VIDEO_720P_ENCODING,
+  TERMINAL_VARIANT_ERROR_CODES,
+  isMissingStorageObjectError,
+  isUnreadableSourceError,
+  shouldAttemptVariantKind,
   mediaVariantWorkerTestSeams,
+} from "./mediaVariantsWorkerHelpers";
+export type { RecordedVariantAttempt } from "./mediaVariantsWorkerHelpers";
+
+import {
+  isUnreadableSourceError,
+  shouldAttemptVariantKind,
+  type RecordedVariantAttempt,
 } from "./mediaVariantsWorkerHelpers";
 
 export const MESSAGE_IMAGE_VARIANTS = [
@@ -18,7 +29,16 @@ export const MESSAGE_VIDEO_VARIANTS = [
   VIDEO_720P_VARIANT,
 ] as const;
 
-const VARIANT_ERROR_CODES = new Set(["enoent", "etimedout", "video_probe_failed"]);
+const VARIANT_ERROR_CODES = new Set([
+  "enoent",
+  "etimedout",
+  "video_probe_failed",
+  // Terminal: see TERMINAL_VARIANT_ERROR_CODES. Both have to survive
+  // sanitizing, or the row would record `variant_generation_failed` and the
+  // candidate loader would keep retrying the thing it just gave up on.
+  "source_missing",
+  "source_unreadable",
+]);
 
 export const AVATAR_VARIANTS = [
   { kind: "avatar_128", size: 128, quality: 78 },
@@ -61,11 +81,70 @@ export function getMissingMessageVariantKinds(
   return getExpectedMessageVariantKinds(message).filter((kind) => !readyKinds.has(kind));
 }
 
+/**
+ * The bounded code to record for a failed variant.
+ *
+ * Ahead of the existing `code`/`name` reading because libvips carries neither:
+ * a picture it cannot decode arrives as a bare `Error` whose name is `Error`,
+ * which sanitizes to `variant_generation_failed` — true, but indistinguishable
+ * from a transient failure, so the worker retried three corrupt PNGs twice a
+ * minute and rewrote six `media_variants` rows each time without logging once.
+ */
+export function classifyVariantError(err: unknown): string {
+  if (isUnreadableSourceError(err)) return "source_unreadable";
+  if (err && typeof err === "object" && "code" in err) {
+    return sanitizeVariantErrorCode((err as { code?: unknown }).code);
+  }
+  if (err instanceof Error) return sanitizeVariantErrorCode(err.name);
+  return sanitizeVariantErrorCode(undefined);
+}
+
 export function sanitizeVariantErrorCode(value: unknown): string {
   if (typeof value !== "string") return "variant_generation_failed";
   const normalized = value.toLowerCase();
   if (!/^[a-z0-9_]{1,80}$/.test(normalized)) return "variant_generation_failed";
   return VARIANT_ERROR_CODES.has(normalized) ? normalized : "variant_generation_failed";
+}
+
+/**
+ * The kinds this message still owes that are worth attempting now.
+ *
+ * `getMissingMessageVariantKinds` answers "what is not ready"; this also drops
+ * what has already been proven impossible against these exact bytes. Without
+ * the second half the worker rediscovers its own dead ends on every tick,
+ * because it has no queue — the candidate set is a fresh scan every minute.
+ */
+export function getAttemptableMessageVariantKinds(
+  message: { type?: string | null },
+  attempts: ReadonlyMap<string, RecordedVariantAttempt> | undefined,
+  source: { bucket: string; path: string },
+): MessageVariantKind[] {
+  const readyKinds = new Set<string>();
+  for (const [kind, attempt] of attempts ?? []) {
+    if (attempt.status === "ready") readyKinds.add(kind);
+  }
+  return getMissingMessageVariantKinds(message, readyKinds).filter((kind) =>
+    shouldAttemptVariantKind(attempts?.get(kind), source),
+  );
+}
+
+/** Where one message variant kind is written, and what it is written as. */
+export function getMessageVariantTarget(
+  chatId: string,
+  messageId: string,
+  kind: MessageVariantKind,
+): { path: string; mimeType: string } {
+  const video = MESSAGE_VIDEO_VARIANTS.find((variant) => variant.kind === kind);
+  const isTranscode = video !== undefined && "extension" in video;
+  return {
+    path: buildMessageVariantPath(
+      chatId,
+      messageId,
+      kind,
+      isTranscode ? (video as { extension: string }).extension : "webp",
+    ),
+    mimeType: isTranscode ? (video as { mimeType: string }).mimeType : "image/webp",
+  };
 }
 
 export function buildMessageVariantPath(
