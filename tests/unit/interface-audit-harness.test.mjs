@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { chromium } from "@playwright/test";
 
-import { PAGE_CHECKS, assertStyled, checkFocusVisibility } from "../../scripts/interface-audit.mjs";
+import {
+  LATE_SHIFT_RECORDER,
+  PAGE_CHECKS,
+  assertStyled,
+  checkFocusVisibility,
+} from "../../scripts/interface-audit.mjs";
 
 /**
  * The harness is only worth its output if it can find a defect that is
@@ -37,6 +42,21 @@ async function findingsFor(html) {
 }
 
 const kinds = (findings) => new Set(findings.map((finding) => finding.kind));
+
+/**
+ * A real navigation to a page this file wrote.
+ *
+ * `page.setContent` writes into the document that is already open, which throws
+ * away anything `addInitScript` installed into it — so a recorder that has to
+ * start before the page does cannot be tested with it. Serving the markup from
+ * a route and navigating there is what the harness itself does.
+ */
+async function gotoFixture(page, body) {
+  await page.route("**/audit-fixture", (route) =>
+    route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: `<body>${body}</body>` }),
+  );
+  await page.goto("https://audit.invalid/audit-fixture", { waitUntil: "domcontentloaded" });
+}
 
 test("a page with nothing wrong produces no findings", async () => {
   const findings = await findingsFor(`
@@ -289,3 +309,140 @@ test("a page carrying the design tokens is accepted", async () => {
   }
 });
 
+
+/**
+ * The three corrections from the 2026-09-05 sweep, each pinned in both
+ * directions. Every one of them removed findings, which is the dangerous kind
+ * of change: a filter that is slightly too eager makes the harness quiet
+ * instead of wrong, and quiet is harder to notice.
+ */
+
+test("a parked, inert sub-view is not reported as clipped content", async () => {
+  const findings = await findingsFor(`
+    <div style="position:relative;width:300px;height:100px;overflow:hidden">
+      <div style="position:absolute;inset:0">
+        <button style="min-height:44px;min-width:120px">Видимая кнопка</button>
+      </div>
+      <div inert style="position:absolute;inset:0;opacity:0;transform:translateX(12%);pointer-events:none">
+        <button style="min-height:44px;min-width:120px">Отложенная кнопка</button>
+        <p>Медиа пока нет</p>
+      </div>
+    </div>
+  `);
+  assert.ok(
+    !kinds(findings).has("clipped-horizontally"),
+    `the parked sub-view was reported as clipped: ${JSON.stringify(findings, null, 1)}`,
+  );
+});
+
+test("a visible layer pushed out of an overflow-hidden box is still reported", async () => {
+  const findings = await findingsFor(`
+    <div style="position:relative;width:300px;height:100px;overflow:hidden">
+      <div style="position:absolute;inset:0;transform:translateX(12%)">
+        <button style="min-height:44px;min-width:280px">Настоящая обрезанная кнопка</button>
+      </div>
+    </div>
+  `);
+  assert.ok(
+    kinds(findings).has("clipped-horizontally"),
+    `a layer that is on screen and cut off must still be reported: ${JSON.stringify(findings, null, 1)}`,
+  );
+});
+
+test("a control covered by an opaque panel is not reported", async () => {
+  const findings = await findingsFor(`
+    <div style="position:relative;width:400px;height:200px">
+      <button style="position:absolute;left:0;top:0;height:20px;width:20px">×</button>
+      <div style="position:absolute;inset:0;background:#ffffff">
+        <button style="min-height:44px;min-width:120px">Панель поверх</button>
+      </div>
+    </div>
+  `);
+  assert.ok(
+    !findings.some((finding) => finding.kind === "touch-target" && (finding.text ?? "").includes("×")),
+    `a control under an opaque panel was measured: ${JSON.stringify(findings, null, 1)}`,
+  );
+});
+
+test("a control pushed past the viewport edge is not reported, one below the fold still is", async () => {
+  const findings = await findingsFor(`
+    <div style="position:absolute;left:900px;top:10px">
+      <button style="height:20px;width:20px">вбок</button>
+    </div>
+    <div style="position:absolute;left:10px;top:2400px">
+      <button style="height:20px;width:20px">вниз</button>
+    </div>
+  `);
+  const targets = findings.filter((finding) => finding.kind === "touch-target");
+  assert.ok(
+    !targets.some((finding) => (finding.text ?? "").includes("вбок")),
+    `a control off the side of a document that does not scroll sideways was measured: ${JSON.stringify(targets)}`,
+  );
+  assert.ok(
+    targets.some((finding) => (finding.text ?? "").includes("вниз")),
+    `a control below the fold must still be measured — a person scrolls to it: ${JSON.stringify(targets)}`,
+  );
+});
+
+/**
+ * The recorder that answers the D-032 / D-041 / D-043 question. It has to be
+ * installed before the page's own script runs, so this drives it the way the
+ * harness does rather than evaluating it after the fact.
+ */
+test("the late-shift recorder sees a row that grows after its first frame", async () => {
+  const browser = await chromium.launch();
+  try {
+    const context = await browser.newContext({ viewport: { width: 400, height: 800 } });
+    const page = await context.newPage();
+    await page.addInitScript(LATE_SHIFT_RECORDER, "[data-message-id]");
+    // `setContent` replaces the document the init script installed its
+    // observers into, which silently loses them; the harness navigates, so this
+    // navigates too.
+    await gotoFixture(
+      page,
+      `${BASE_STYLE}
+        <div data-message-id="a" style="height:40px;background:#eee">стабильная</div>
+        <div data-message-id="b" style="height:40px;background:#ddd">растущая</div>
+        <script>
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            document.querySelector('[data-message-id="b"]').style.height = "80px";
+          }));
+        </script>`,
+    );
+    await page.waitForTimeout(300);
+    const changed = await page.evaluate(() =>
+      Array.from(window.__auditShift ?? [], ([id, record]) => ({ id, ...record })).filter((r) => r.changes > 0),
+    );
+    assert.deepEqual(changed.map((row) => row.id), ["b"], JSON.stringify(changed));
+    assert.equal(changed[0].first, 40);
+    assert.equal(changed[0].last, 80);
+    await context.close();
+  } finally {
+    await browser.close();
+  }
+});
+
+test("the late-shift recorder reports nothing when every row keeps its height", async () => {
+  const browser = await chromium.launch();
+  try {
+    const context = await browser.newContext({ viewport: { width: 400, height: 800 } });
+    const page = await context.newPage();
+    await page.addInitScript(LATE_SHIFT_RECORDER, "[data-message-id]");
+    await gotoFixture(
+      page,
+      `${BASE_STYLE}
+        <div data-message-id="a" style="height:40px;background:#eee">одна</div>
+        <div data-message-id="b" style="height:40px;background:#ddd">другая</div>`,
+    );
+    await page.waitForTimeout(300);
+    const observed = await page.evaluate(() => ({
+      seen: (window.__auditShift ?? new Map()).size,
+      changed: Array.from(window.__auditShift ?? [], ([, record]) => record).filter((r) => r.changes > 0).length,
+    }));
+    assert.equal(observed.seen, 2);
+    assert.equal(observed.changed, 0);
+    await context.close();
+  } finally {
+    await browser.close();
+  }
+});

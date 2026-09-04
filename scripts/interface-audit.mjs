@@ -59,7 +59,118 @@ const ALL_SURFACES = [
   { id: "admin-ops", path: "/admin/ops", auth: true, settle: "text=Операции" },
   { id: "admin-support", path: "/admin/support", auth: true, settle: "text=Поддержка" },
   { id: "admin-audit", path: "/admin/audit", auth: true, settle: "text=Журнал" },
+
+  // Surfaces that no URL reaches. The profile card, the settings screen and the
+  // conversation itself are all opened by pressing something, so a harness that
+  // only navigates measures the shell around them and reports a pass. Each one
+  // below says how it is opened; `SHELL_READY` is what has to exist first.
+  {
+    id: "chat",
+    path: "/",
+    auth: true,
+    settle: "[data-testid='message-scroll-container']",
+    open: openFirstChat,
+    // Rows that change height after their first painted frame — the D-032,
+    // D-041 and D-043 class. Measured from before the app boots, so the first
+    // sample is the first layout and not whatever is on screen a second later.
+    shiftSelector: "[data-message-id]",
+  },
+  {
+    id: "profile-card",
+    path: "/",
+    auth: true,
+    settle: "[data-testid='chat-info-summary']",
+    open: async (page) => {
+      await openFirstChat(page);
+      await page.getByTestId("chat-header-info-button").first().click();
+    },
+  },
+  {
+    id: "profile-media",
+    path: "/",
+    auth: true,
+    settle: "[data-testid='chat-info-gallery-view']",
+    open: async (page) => {
+      // The first chat in the list is the owner's own «Избранное» and holds no
+      // shared media, so opening it and reporting "unreachable" would have said
+      // the sub-view was broken when it was the fixture that was wrong. Walk
+      // the list until a chat that actually carries media is found.
+      const chats = page.getByTestId("chat-list-item");
+      await chats.first().waitFor({ state: "visible", timeout: 25_000 });
+      const total = Math.min(await chats.count(), 8);
+      for (let index = 0; index < total; index += 1) {
+        await chats.nth(index).click();
+        await page.getByTestId("chat-header-info-button").first().click();
+        await page.getByTestId("chat-info-panel").first().waitFor({ state: "visible", timeout: 20_000 });
+        // The placeholder going is what says the counts are known; a row read
+        // before then is a race, exactly as `media-gallery-variants.spec.ts` says.
+        await page
+          .getByTestId("chat-info-media-loading")
+          .first()
+          .waitFor({ state: "detached", timeout: 20_000 })
+          .catch(() => {});
+        const rows = page.getByTestId("chat-info-media-row");
+        if ((await rows.count()) > 0) {
+          await rows.first().click();
+          return;
+        }
+        // Below 640px the card fills the viewport, so the chat list is only
+        // reachable again once the card is closed by its own control.
+        await page
+          .getByTestId("chat-info-header")
+          .getByRole("button", { name: "Закрыть" })
+          .first()
+          .click()
+          .catch(() => {});
+        await page.getByTestId("chat-info-panel").first().waitFor({ state: "detached", timeout: 10_000 }).catch(() => {});
+        // And below 640px the chat itself is the whole screen, so the list is
+        // behind the header's back control rather than beside the chat.
+        const back = page.locator('button[aria-label="Назад"]').first();
+        if (await back.isVisible().catch(() => false)) await back.click().catch(() => {});
+      }
+      throw new Error(`none of the first ${total} QA chats hold shared media, so the sub-view cannot be opened`);
+    },
+  },
+  {
+    id: "settings",
+    path: "/",
+    auth: true,
+    settle: "[role='dialog']",
+    open: openSettings,
+  },
+  {
+    // The four expensive rows are disclosures and stay unmounted until pressed,
+    // so the closed screen says nothing about what they contain.
+    id: "settings-expanded",
+    path: "/",
+    auth: true,
+    settle: "[data-testid='settings-section-audio']",
+    open: async (page) => {
+      await openSettings(page);
+      for (const id of ["decoration", "audio", "application"]) {
+        const row = page.getByTestId(`settings-open-${id}`).first();
+        if (await row.isVisible().catch(() => false)) {
+          await row.scrollIntoViewIfNeeded().catch(() => {});
+          await row.click();
+        }
+      }
+    },
+  },
 ];
+
+/** What has to be on screen before a surface can be opened by pressing things. */
+const SHELL_READY = "button[aria-label='Меню']";
+
+async function openFirstChat(page) {
+  const chats = page.getByTestId("chat-list-item");
+  await chats.first().waitFor({ state: "visible", timeout: 25_000 });
+  await chats.first().click();
+}
+
+async function openSettings(page) {
+  await page.getByRole("button", { name: "Меню" }).first().click();
+  await page.getByText("Настройки", { exact: true }).first().click();
+}
 
 const viewports = args.has("viewports")
   ? ALL_VIEWPORTS.filter((v) => args.get("viewports").split(",").includes(v.name))
@@ -110,9 +221,78 @@ export const PAGE_CHECKS = () => {
     return parts.join("");
   }
 
+  /**
+   * A parked layer takes its children with it.
+   *
+   * `opacity` is not an inherited property, so a child of a faded-out panel
+   * reports `opacity: 1` and every check downstream treated it as on screen.
+   * The profile card keeps its media sub-view mounted beside the root view at
+   * `opacity: 0`, `pointer-events: none` and `inert`, pushed 12% to the right —
+   * and the harness reported that 45px push as content "a person needs" being
+   * clipped, at all ten cells, in a card that looks and behaves correctly.
+   *
+   * `inert` is the same statement made in markup: the subtree is out of the
+   * document's reach. Neither is measured.
+   */
+  const isHiddenByAncestor = (node) => {
+    let current = node.parentElement;
+    while (current && current !== document.documentElement) {
+      if (current.hasAttribute("inert")) return true;
+      const style = getComputedStyle(current);
+      if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) {
+        return true;
+      }
+      current = current.parentElement;
+    }
+    return false;
+  };
+
+  /**
+   * Something opaque is standing in front of it.
+   *
+   * Below 640px the profile card docks and fills the viewport, and the chat it
+   * was opened from stays laid out behind it — squeezed to twelve pixels, but
+   * still `display: block`, still non-zero, still measurable. The harness
+   * reported eighty-five undersized controls and a clipped scroller in a card
+   * that covers every one of them. A person cannot see, tap or be confused by a
+   * control nobody can reach.
+   *
+   * The test is the browser's own hit test at the element's centre. An element
+   * that hit-tests to itself, to one of its descendants, or to an ancestor
+   * whose box it sits inside, is on top; anything else is a different subtree
+   * painted over it. Elements whose centre falls outside the viewport are
+   * exempt — they are scrolled away, not covered, and `elementFromPoint`
+   * answers `null` for both.
+   */
+  const isOccluded = (node) => {
+    // A node the hit test cannot return is not a node the hit test can answer
+    // for. `pointer-events: none` is inherited, so this covers a decorative
+    // overlay and everything drawn inside it.
+    if (getComputedStyle(node).pointerEvents === "none") return false;
+    const box = node.getBoundingClientRect();
+    // Entirely past the left or right edge. The document itself does not scroll
+    // sideways — the check above reports it when it does — so there is no
+    // gesture that brings this back; it is off the screen for good. Below 640px
+    // the docked profile card takes the whole width and pushes the chat it was
+    // opened from out there, eighty controls at a time.
+    //
+    // Vertically off screen is the opposite case and is deliberately still
+    // measured: a person scrolls to it. The privacy page's twenty-two 32px
+    // entries were found below the fold.
+    if (box.right <= 0 || box.left >= innerWidth) return true;
+    const x = box.left + box.width / 2;
+    const y = box.top + box.height / 2;
+    if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false;
+    const hit = document.elementFromPoint(x, y);
+    if (hit === null) return false;
+    return !(hit === node || node.contains(hit) || hit.contains(node));
+  };
+
   const isVisible = (node) => {
     const style = getComputedStyle(node);
     if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
+    if (node.hasAttribute("inert") || isHiddenByAncestor(node)) return false;
+    if (isOccluded(node)) return false;
     const box = node.getBoundingClientRect();
     if (box.width <= 0 || box.height <= 0) return false;
     // Screen-reader-only text is clipped on purpose. Counting it as a clipping
@@ -145,6 +325,9 @@ export const PAGE_CHECKS = () => {
       // was otherwise reported as a 461px defect at every viewport.
       const box = node.getBoundingClientRect();
       const cutOff = Array.from(node.querySelectorAll("*")).some((child) => {
+        // A parked sub-view is clipped on purpose and nobody can read it; see
+        // `isHiddenByAncestor`.
+        if (!isVisible(child)) return false;
         const rect = child.getBoundingClientRect();
         if (rect.right <= box.right + 1 && rect.left >= box.left - 1) return false;
         const interactive = child.matches("button, a[href], input, select, textarea, [role=button]");
@@ -293,6 +476,73 @@ export const PAGE_CHECKS = () => {
  * was being measured was raw HTML. Hundreds of invented findings are far worse
  * than none, so this throws rather than warns.
  */
+/**
+ * Elements that change size after the frame they were first laid out in.
+ *
+ * This is the D-032 / D-041 / D-043 class, and it cannot be measured after the
+ * fact: by the time a harness has navigated, waited and settled, the movement
+ * has already happened and the element is sitting at its final height looking
+ * innocent. So the recorder is installed with `addInitScript`, before any page
+ * script runs, and a `ResizeObserver` picks each row up as it is inserted.
+ *
+ * A `ResizeObserver` callback runs at the end of the frame that laid the element
+ * out, before that frame is painted, so its first entry is the first painted
+ * box — the same definition the chat measurements in the register use.
+ *
+ * It reports geometry only. A row whose *text* changed had a reason to change
+ * height, so the caller is handed the count and the sizes and decides; nothing
+ * here is a finding on its own.
+ */
+export const LATE_SHIFT_RECORDER = (selector) => {
+  const seen = new Map();
+  const t0 = performance.now();
+  const observer = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const node = entry.target;
+      const height = entry.contentRect.height;
+      if (height <= 0) continue;
+      const key = node.getAttribute("data-message-id") ?? String(seen.size);
+      const record = seen.get(key);
+      if (!record) {
+        seen.set(key, {
+          first: height,
+          firstAt: Math.round(performance.now() - t0),
+          last: height,
+          lastAt: Math.round(performance.now() - t0),
+          changes: 0,
+          text: (node.textContent ?? "").trim().length,
+        });
+        continue;
+      }
+      if (Math.abs(height - record.last) <= 0.5) continue;
+      record.last = height;
+      record.lastAt = Math.round(performance.now() - t0);
+      record.changes += 1;
+      record.textAfter = (node.textContent ?? "").trim().length;
+    }
+  });
+
+  const attach = (root) => {
+    if (!(root instanceof Element)) return;
+    if (root.matches?.(selector)) observer.observe(root);
+    for (const node of root.querySelectorAll?.(selector) ?? []) observer.observe(node);
+  };
+
+  const mutations = new MutationObserver((records) => {
+    for (const record of records) for (const node of record.addedNodes) attach(node);
+  });
+
+  const start = () => {
+    if (!document.body) return;
+    attach(document.body);
+    mutations.observe(document.body, { childList: true, subtree: true });
+  };
+  if (document.body) start();
+  else document.addEventListener("DOMContentLoaded", start, { once: true });
+
+  window.__auditShift = seen;
+};
+
 export async function assertStyled(page) {
   const state = await page.evaluate(() => ({
     token: getComputedStyle(document.documentElement).getPropertyValue("--kub-bg").trim(),
@@ -472,7 +722,15 @@ async function main() {
             await signIn(page, credentials);
             signedIn = true;
           }
+          if (surface.shiftSelector) {
+            // Before the app boots, or the first layout is already gone.
+            await page.addInitScript(LATE_SHIFT_RECORDER, surface.shiftSelector);
+          }
           await page.goto(`${BASE}${surface.path}`, { waitUntil: "domcontentloaded", timeout: 45_000 });
+          if (surface.open) {
+            await page.locator(surface.ready ?? SHELL_READY).first().waitFor({ state: "visible", timeout: 25_000 });
+            await surface.open(page, viewport);
+          }
           await page.locator(surface.settle).first().waitFor({ state: "visible", timeout: 25_000 });
           await page.waitForTimeout(1200);
 
@@ -485,17 +743,46 @@ async function main() {
           await assertStyled(page);
 
           const findings = await page.evaluate(PAGE_CHECKS);
+
+          // The evidence image is taken here, before the keyboard walk. Tabbing
+          // forty stops scrolls each focused control into view, so every
+          // screenshot of a scrolling surface was of the page as the *harness*
+          // had left it: the settings dialog's evidence showed it opened three
+          // rows down, and nothing on the image said the harness had put it
+          // there. A screenshot that does not show the arrival state is worse
+          // than none, because it is read as one.
+          const shot = path.join(OUT, `${SHELL}-${surface.id}-${viewport.name}-${theme}.png`);
+          await page.screenshot({ path: shot, fullPage: false });
+
           const focus = await checkFocusVisibility(page);
           const collected = [...findings, ...focus].filter(
             (finding) => finding.kind !== "touch-target" || viewport.mobile,
           );
 
-          const shot = path.join(OUT, `${SHELL}-${surface.id}-${viewport.name}-${theme}.png`);
-          await page.screenshot({ path: shot, fullPage: false });
+          const shifts = surface.shiftSelector
+            ? await page.evaluate(() =>
+                Array.from(window.__auditShift ?? [], ([id, record]) => ({ id, ...record })).filter(
+                  (record) => record.changes > 0,
+                ),
+              )
+            : null;
 
-          report.push({ shell: SHELL, surface: surface.id, viewport: viewport.name, theme, screenshot: path.basename(shot), findings: collected });
+          const observed = surface.shiftSelector
+            ? await page.evaluate(() => (window.__auditShift ?? new Map()).size)
+            : null;
+
+          report.push({
+            shell: SHELL,
+            surface: surface.id,
+            viewport: viewport.name,
+            theme,
+            screenshot: path.basename(shot),
+            findings: collected,
+            ...(shifts ? { lateShift: { observed, changed: shifts.length, rows: shifts.slice(0, 12) } } : {}),
+          });
           const counts = collected.reduce((acc, f) => ({ ...acc, [f.kind]: (acc[f.kind] ?? 0) + 1 }), {});
-          console.log(`ok   ${cell}: ${collected.length} finding(s) ${JSON.stringify(counts)}`);
+          const shiftNote = shifts ? ` shift ${shifts.length}/${observed}` : "";
+          console.log(`ok   ${cell}: ${collected.length} finding(s) ${JSON.stringify(counts)}${shiftNote}`);
         } catch (error) {
           unreachable += 1;
           report.push({ shell: SHELL, surface: surface.id, viewport: viewport.name, theme, unreachable: String(error).slice(0, 200) });

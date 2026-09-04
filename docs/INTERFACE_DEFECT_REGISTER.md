@@ -2452,3 +2452,356 @@ reason and says so.
 The directions are self-hosting the face with `font-display: optional`, or
 measuring nothing until `document.fonts.ready`. Both are decisions about the
 product's first paint, not motion fixes.
+
+# Audit sweep, 2026-09-05 — the surfaces rebuilt on 3–4 September
+
+Queue item 18, half A. Four surfaces changed in two days and none had been
+swept: the profile card became a floating, draggable window with a media
+sub-view and counted rows; the settings modal became one scrolling column of
+44px rows with no tabs; the roles panel gained a ranked, coloured hierarchy; and
+message bubbles were made to paint at their final height.
+
+**Rig.** `scripts/interface-audit.mjs` against production `https://app.letscube.ru`,
+signed in as the QA owner. Production was confirmed to be running the current
+revision before anything was measured: `origin/main` is `321342f`, and the
+deployed bundle contains that commit's own new selector,
+`closest('[data-message-bubble="true"]')`, which nothing before it used.
+
+**Matrix.** 7 surfaces x 5 viewports (`3840x2160`, `1920x1080`, `1440x900`,
+`390x844`, `412x915`) x 2 themes = **70 cells**. 67 measured, 3 unreachable.
+535 raw findings collapse to **36 distinct (surface, kind, selector) groups**,
+which is the number worth reading: a defect in a message row is reported once
+per message.
+
+| surface | how it is reached |
+| --- | --- |
+| `messenger` | `/` |
+| `chat` | first chat in the list |
+| `profile-card` | chat, then `chat-header-info-button` |
+| `profile-media` | as above, then the first counted media row |
+| `settings` | Меню, then Настройки |
+| `settings-expanded` | as above, with Оформление, Звук and Обновления opened |
+| `admin-roles` | `/admin/roles` |
+
+**Cells not reached: 3 of 70**, all `profile-media` — `1920x1080 dark`,
+`412x915 dark`, `412x915 light`. The QA account holds exactly one shared-media
+item across its three chats, and in those three runs the counted row had not
+appeared before the 20s wait ran out. That is the fixture, not the surface: the
+same surface measured cleanly in the other seven cells. Nothing here is reported
+as a pass on the strength of a cell that was never measured.
+
+**Every surface in this sweep needs a signed-in session** — `messenger`, `chat`,
+`profile-card`, `profile-media`, `settings`, `settings-expanded` and
+`admin-roles` are all behind authentication, and there is no unauthenticated
+route to any of them. The two native shells are out of scope here; this is the
+browser matrix only.
+
+**The chat's late-height contract holds.** A `ResizeObserver` installed before
+the app boots recorded the first painted height of every message row and every
+later change to it: **750 row-observations across ten chat cells, 0 rows changed
+height after their first painted frame.** D-032 and D-041 are closed and stay
+closed at all five widths in both themes.
+
+## D-044 — a message's monogram is white on every colour the palette has
+
+**Severity:** high. Every message from a sender with no picture, in every chat,
+at every viewport, in both themes.
+
+**Surface:** `artifacts/kub/src/components/ui/ChatAvatar.tsx:329-338`
+(`MessageActorAvatar`). Compare `:167` (`ChatAvatar`) and `:273` (`UserAvatar`).
+
+**Reproduction:** sign in, open a chat with someone who has no avatar picture,
+look at the circle beside their messages. `chat` / `profile-media`, any viewport.
+
+**Defect:** the fallback hard-codes `font-medium text-white` at `:332` and then
+sets `style={{ background: getAvatarColor(actorId) }}` at `:335`. The two
+sibling components paint the same monogram with
+`color: avatarInkFor(bgColor)` — `artifacts/kub/src/lib/avatarInk.ts:13-24`,
+which measures the background and returns whichever of `#FFFFFF` and `#0B1220`
+scores better. `MessageActorAvatar` never calls it.
+
+**Measured in the product**, 1440x900 dark and 390x844 light, the same person on
+the same screen:
+
+| where | component | ink | background | ratio |
+| --- | --- | --- | --- | --- |
+| chat list, 48px | `ChatAvatar` | `#0B1220` | `#FFEAA7` | **15.67:1** |
+| chat header, 32px | `UserAvatar` | `#0B1220` | `#FFEAA7` | **15.67:1** |
+| message row, 32px, x8 | `MessageActorAvatar` | `#FFFFFF` | `#4ECDC4` | **1.93:1** |
+
+The reading is identical in both themes, because both colours are inline literals
+and neither is a theme token.
+
+**All ten palette entries fail**, not the unlucky ones. `getAvatarColor` at
+`:16-25` offers ten colours; white text scores 1.19:1 to 2.78:1 on them, and
+`avatarInkFor` would score 6.75:1 to 15.67:1:
+
+| colour | white | what `avatarInkFor` would pick |
+| --- | --- | --- |
+| `#FF6B6B` | 2.78:1 | `#0B1220`, 6.75:1 |
+| `#4ECDC4` | 1.93:1 | `#0B1220`, 9.68:1 |
+| `#45B7D1` | 2.35:1 | `#0B1220`, 7.98:1 |
+| `#96CEB4` | 1.78:1 | `#0B1220`, 10.51:1 |
+| `#FFEAA7` | 1.19:1 | `#0B1220`, 15.67:1 |
+| `#DDA0DD` | 2.07:1 | `#0B1220`, 9.05:1 |
+| `#98D8C8` | 1.62:1 | `#0B1220`, 11.58:1 |
+| `#F7DC6F` | 1.36:1 | `#0B1220`, 13.75:1 |
+| `#BB8FCE` | 2.65:1 | `#0B1220`, 7.07:1 |
+| `#85C1E9` | 1.94:1 | `#0B1220`, 9.63:1 |
+
+**Consequence:** the monogram is how a reader tells who wrote a message when
+there is no picture, and it is the one place in the product where it is
+illegible. 56 instances across the 7 measured `profile-media` cells; the count is
+one per avatar-less incoming message on screen.
+
+## D-045 — a history prepend fades in a hundred bubbles at once
+
+**Severity:** medium. Every load of older history, in every chat with more than
+one page of it.
+
+**Surface:** `artifacts/kub/src/lib/messageEntrance.ts:78-101`
+(`advanceMessageEntrance`), read by
+`artifacts/kub/src/components/chat/MessageList.tsx:177-185` and applied at
+`artifacts/kub/src/components/chat/MessageBubble.tsx:1370`
+(`isEntering && "msg-appear"`).
+
+**Reproduction:** open a chat with more than a page of history and scroll up
+until older messages load. Measured at 1440x900 dark.
+
+**Defect:** the module's own opening comment says why it exists — `msg-appear`
+"was applied to every bubble unconditionally, so it played on every mount ...
+Fifty bubbles fading and sliding at once is what «дёргано, без плавности» is
+describing". The guard it added is `primed`, which suppresses the animation on
+the **first** pass only. `advanceMessageEntrance` has no notion of *where* an id
+appeared: after priming, every id not in `seen` is "entering", and a prepend adds
+a hundred of them at the front.
+
+**Measured**, one prepend, sampling every animation frame for 20s at 1440x900:
+
+| | |
+|---|---|
+| rows before / after | 100 / 200 |
+| rows carrying `.msg-appear` in one frame | **100** |
+| of those, inside the viewport | **17** |
+| lowest opacity sampled | **0** |
+| frames with a faded row | 8, from t=1343ms to t=1468ms |
+
+A wheel-driven run over three consecutive prepends reached the same peak of 100
+and left 263 of 346 sampled frames with something animating.
+
+**Consequence:** 17 bubbles on screen fade and slide simultaneously each time
+older history arrives — the behaviour the entrance rule was written to remove,
+in the one case it does not cover. `prefers-reduced-motion: reduce` still removes
+the movement (`index.css:534-537`), so this is a defect for everyone else.
+
+**Not the same as D-042**, which is the 42px loading band displacing the reader.
+That entry is about the band; this one is about the rows.
+
+## D-046 — the entrance class, and its compositing hint, are never taken off
+
+**Severity:** low.
+
+**Surface:** `artifacts/kub/src/index.css:527-531`, applied from
+`artifacts/kub/src/components/chat/MessageBubble.tsx:1370`.
+
+**Defect:** the rule carries `will-change: opacity, transform` under a comment
+that reads "the hint is dropped the moment the animation ends so an idle chat is
+not holding a layer per bubble". Nothing drops it. There is no `animationend`
+listener and no `onAnimationEnd` anywhere in `MessageBubble.tsx` or
+`MessageList.tsx`; the class comes off only when some later render recomputes
+`enteringKeys`, and a chat that nothing else touches never has one.
+
+**Measured**, same run as D-045, 1440x900: 18.5 seconds after the animation
+finished, `document.querySelectorAll('.msg-appear').length` was **100**, and the
+first of them still reported `will-change: opacity, transform`.
+
+**Consequence:** up to one retained compositing layer per row of the last
+prepend. No visible defect was observed and none is claimed. What is recorded is
+that a comment in the stylesheet describes a mechanism the code does not have,
+which is how the next person reading it will be misled.
+
+## D-047 — the 44px touch rule is opt-in, and neither rebuilt surface opted in
+
+**Severity:** medium. All four coarse-pointer cells (`390x844` and `412x915`,
+both themes).
+
+**Surface:** the rule is `artifacts/kub/src/index.css:803-855`. It reaches
+`.kub-button`, `.kub-icon-action`, `.kub-field`, `.kub-switch`, `select` and
+checkbox/radio inputs — and nothing else. Every control below is plain Tailwind
+sizing carrying none of those classes.
+
+**Reproduction:** open each surface at 390x844 with touch emulation and measure
+the control's box.
+
+| control | measured | file |
+| --- | --- | --- |
+| per-message actions, phone-only | **20x20** | `MessageBubble.tsx:1113-1122` (`h-5 w-5 sm:hidden`) |
+| reaction chip | 37x22 | `MessageBubble.tsx`, reaction row |
+| profile card «Закрыть» / «Назад» / «Редактировать» | 36x36 | `ChatInfoPanel.tsx:1097`, `:1106`, `:1119`, `:1129` |
+| profile card action rows, incl. the counted media rows | 357x36 | `ChatInfoPanel.tsx:1058-1064` (`py-2`) |
+| settings «Закрыть» | 28x28 | `KubModal.tsx:118-121` (`p-1.5`) |
+| settings «Сменить фото» | 28x28 | `SettingsModal.tsx:455-471` |
+| settings Имя / Никнейм / О себе | 232x36 | `SettingsModal.tsx:660` (`h-9`) |
+| settings theme radios x3 | 36x32 | `SettingsModal.tsx:354` (`h-8 w-9`) |
+| audio processing modes x3 | 288x36 | `AudioSettingsSection.tsx:654` (`min-h-9`) |
+| «Сбросить настройки звука» | 162x**16** | `AudioSettingsSection.tsx:560` |
+| chat «Назад» | 36x36 | `ChatHeader.tsx` (`p-2`) |
+
+The settings **rows** are correct: `ROW_GRID` and `FIELD_ROW_GRID` both carry
+`min-h-11`, and every row measured 44px or more (44, 44, 55, 60). The defect is
+the controls sitting inside them, which the row's height does not give them.
+
+**The worst of these is the 20x20 one.** Below the `sm` breakpoint it is the only
+visible affordance for a message's actions, and it appears once per message —
+298 instances across the four coarse `chat` cells, 75 per screen. A long press on
+the bubble opens the same menu (`MessageBubble.tsx:935`, `:1375`), so it is not
+the only route; it is a visible control at under a fifth of the required area.
+
+**This is D-015's mechanism, not its scale.** Fix batch 4 raised the hit area for
+a finger and deliberately left the pointer scale alone, and the register recorded
+that as closed. It is closed for everything that carries the classes. Two
+surfaces rebuilt three days later carry none of them, so the rule reaches nothing
+on either. Whether the answer is more classes or a wider selector is a decision,
+not a patch.
+
+## D-048 — the required marker misses 4.5:1 in both themes
+
+**Severity:** low. All ten `settings` cells and all ten `settings-expanded` cells.
+
+**Surface:** `artifacts/kub/src/components/sidebar/SettingsModal.tsx:643` —
+`{required && <span className="text-[color:var(--kub-danger)]"> *</span>}`.
+
+**Measured:** `#ef4444` on `#0b213a` (dark `--kub-surface-2`) is **4.32:1**; the
+light pair is **4.30:1**. 14px at normal weight needs 4.5:1. Reproduced
+identically in all twenty cells and verified once by hand against the harness.
+
+**Consequence:** the only mark that says «Имя» is required is the hardest thing
+in the row to see. Small, but a WCAG 1.4.3 failure on a production form field
+that costs one token to move.
+
+## D-049 — the online colour is tuned for a dot and used as text
+
+**Severity:** low. Light theme only; 3 cells (`3840x2160`, `1920x1080`,
+`1440x900` light).
+
+**Surface:** `artifacts/kub/src/components/chat/ChatHeader.tsx:243-244`, which
+paints the subtitle `text-[color:var(--kub-online)]` when the other person is
+online. The token is `artifacts/kub/src/index.css:339`.
+
+**Measured:** «в сети» at 12px in `#3C8B3C` on the white header measures
+**4.24:1**, under the 4.5:1 normal text needs. The dark theme's `#4DCD5E` on its
+own surface passes and was not reported in any cell.
+
+**Why it happened is written above the token itself:** "Darkened along the same
+hue: at `#4FAE4E` the status dot measured 2.80:1 on white and 2.62:1 on the page,
+under the 3:1 a non-text indicator needs." It was solved for the **dot**, which
+needs 3:1, and the same value is then used for 12px **text**, which needs 4.5:1.
+`#3C8B3C` clears the first bar by a margin and misses the second by 0.26.
+
+## D-050 — opening the profile card on a phone re-lays the conversation at 24px
+
+**Severity:** low — nothing visibly wrong, and the anchor is restored exactly.
+Recorded for the work it does and the hazard it leaves.
+
+**Surface:** `artifacts/kub/src/lib/profileWindow.ts:50-52` (`DOCKED_CLASS`) with
+`artifacts/kub/src/lib/floatingWindow.ts:31` (`DOCK_BREAKPOINT = 640`).
+
+**Reproduction:** at 390x844, open a chat, press the header, close the card.
+
+**Defect:** below 640px the card docks as `w-full` **beside** the conversation in
+the same flex row rather than replacing it. The chat is not unmounted: it is
+compressed and pushed off the left edge.
+
+**Measured** at 390x844, 75 rows:
+
+| | before | card open | after closing |
+|---|---|---|---|
+| scroller width | 390 | **24** | 390 |
+| `scrollHeight` | 6586 | **114731** | 6586 |
+| `scrollTop` | 5868 | 114013 | 5868 |
+| witness row top | 79 | — | **79** |
+
+Individual rows are laid out at up to 2337px tall while the card is open, and
+every one of the 75 is measured twice more on the way back.
+
+**The section 11 contract is not violated**: scroll drift 0px, witness drift 0px,
+height drift 0px. What is recorded is that the meta-placement machinery closed by
+D-032 and D-041 — which decides a bubble's height from its measured available
+width — is re-run at 24px and again at 390px on every open, and that the card
+covers the conversation completely at that width anyway, so nothing is gained by
+keeping it laid out.
+
+## Measured, and not a defect
+
+Four things this sweep was specifically asked to look at were measured and are
+correct. They are recorded so the next pass does not spend the time again, and so
+that nobody "fixes" them by eye.
+
+**The counted media rows do not truncate.** Measured with the row's own computed
+font (`14px Inter`) against its own available width. The floating card at
+1440x900 gives the label **273px**; the docked card at 390x844 gives **284px**.
+The widest label the product can build is `12345+ голосовых сообщений` at
+**207.9px** — `voice` has the longest plural forms and the count is bounded by
+nothing narrower. `619 голосовых сообщений` measures **181.5px** and
+`1543 голосовых сообщений` **190.1px**. Nothing gets close to the edge, and the
+observed row reported `scrollWidth - clientWidth = 0`. The harness could not have
+answered this: the label carries `truncate`, and the clipping check skips
+`text-overflow: ellipsis` as deliberate, so this had to be measured directly.
+
+**The settings rows hold a long value without clipping it.** At 390x844,
+«Push-уведомления» / «Заблокировано в настройках браузера» wraps onto a second
+line — which is what `SettingsRow`'s `flex-wrap` is for — and the row grows from
+44px to 55px. Every row at every width reported `scrollWidth - clientWidth = 0`
+on its value. At 1440x900 the value stays on the label's line, 384px to the right
+of it, beside the control it describes.
+
+**No role colour lands on an unreadable text pairing, because no role colour is
+ever text.** `roleSwatchColour` reaches exactly two places, both `aria-hidden`
+dots: `RolesPermissionsTab.tsx:677-683` (12x12, bordered) and `:1065-1070` (6x6,
+inside a `KubBadge`). The label beside it is `--kub-text` and `--kub-muted` in
+every case. The 13 production roles use 6 distinct colours; measured against the
+panel surface in dark theme they run **5.55:1 to 10.77:1**, and the three roles
+with no colour get a neutral 35% muted mix. The panel reported **0 findings in
+all 10 of its cells**, and its reorder buttons measure 44x44 on a coarse pointer
+because they carry `kub-icon-action` — which is D-047's rule working where it was
+applied.
+
+**Message rows no longer change height after their first painted frame.** 750
+row-observations, 10 cells, 0 changes. See the sweep header.
+
+## Three harness corrections, and one thing it still cannot see
+
+None of these are product defects; all three would have put invented findings in
+this register, which is the failure mode the harness exists to avoid.
+
+**1. A parked sub-view was reported as clipped content, in all ten profile-card
+cells.** The card keeps its media gallery mounted beside the root view at
+`opacity: 0`, `pointer-events: none` and `inert`, translated 12% to the right
+(`index.css:762-785`). `opacity` is not inherited, so a child of that layer
+reported `opacity: 1`, and the clipping check counted its text as "content a
+person needs" being cut off by 45px. `isHiddenByAncestor` now walks the ancestors
+for `display: none`, `visibility: hidden`, zero opacity and `inert`, and the
+clipping check skips anything it hides. **10 findings removed, every one false.**
+
+**2. Every screenshot was of the harness's scroll position, not the surface's.**
+The evidence image was taken *after* `checkFocusVisibility` presses Tab forty
+times, and each stop scrolls its control into view — so the settings dialog's
+evidence showed it opened three rows down, with nothing on the image to say the
+harness had put it there. The screenshot is now taken before the keyboard walk.
+
+**3. Eighty-one controls nobody can see were reported at 390px.** With the
+profile card docked (D-050), the conversation behind it is still laid out — at
+24px, with its rows at negative x — and the harness measured all of it.
+`isOccluded` now uses the browser's own hit test at an element's centre, and
+treats an element whose box lies entirely past the left or right viewport edge as
+gone: the document does not scroll sideways, so nothing brings it back.
+Vertically off-screen is deliberately still measured — a person scrolls to it,
+and the privacy page's 22 undersized entries were found below the fold.
+`profile-card 390x844 dark` went from **87 findings to 6**, and the six are the
+card's own.
+
+**What it still cannot see:** two of the chat's controls straddle x=0 with a few
+pixels inside the viewport and survive both tests, so `profile-card` at the two
+coarse viewports still reports the reaction chip and one message-actions button
+from the conversation behind the card. Both are listed under D-047 anyway, where
+they belong to `chat`; they are not evidence about the card.
