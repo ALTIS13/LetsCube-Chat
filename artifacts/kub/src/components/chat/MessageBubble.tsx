@@ -1438,6 +1438,7 @@ export function MessageBubble({
               <MediaWithCaption caption={mediaCaption}>
                 <MediaImage
                   url={imageDisplayUrl ?? message.media_url}
+                  originalUrl={message.media_url}
                   thumbUrl={mediaVariant?.thumbUrl}
                   title={message.content ?? "Фото"}
                   dimensions={imageDimensions}
@@ -1597,29 +1598,63 @@ interface MediaDimensions {
   height: number;
 }
 
+/**
+ * A picture in a bubble, with the same two recoveries the video bubbles have.
+ *
+ * A bubble paints before its variants are known, so its first `src` is the
+ * original and `url` changes to the preview a moment later. Without the reset
+ * below, one failed request — a blip, a dropped connection, an aborted load —
+ * latched `failed` forever: the preview that arrived next was never rendered,
+ * because the error box had replaced the `<img>` that would have loaded it.
+ * Measured against production: aborting a single message image left the bubble
+ * reading "Не удалось загрузить изображение" 28 seconds later in the same chat,
+ * and only a reload cleared it. That is the "медиа не грузится, F5 помогает"
+ * report.
+ *
+ * The second recovery is the fallback: a variant that fails hands the bubble
+ * back to the original rather than giving up, which is what `MediaVideo` and
+ * `RoundVideoMessage` already do.
+ */
 function MediaImage({
   url,
+  originalUrl,
   thumbUrl,
   title,
   dimensions,
   onOpen,
 }: {
   url: string;
+  originalUrl: string;
   thumbUrl?: string;
   title: string;
   dimensions: MediaDimensions | null;
   onOpen: () => void;
 }) {
   const [failed, setFailed] = useState(false);
+  const [usingOriginal, setUsingOriginal] = useState(false);
   const aspectStyle = getMediaAspectStyle(dimensions);
   const hasReservedAspect = Boolean(aspectStyle);
+  const activeUrl = usingOriginal ? originalUrl : url;
+
+  useEffect(() => {
+    setFailed(false);
+    setUsingOriginal(false);
+  }, [originalUrl, url]);
+
+  const handleError = () => {
+    if (activeUrl !== originalUrl) {
+      setUsingOriginal(true);
+      return;
+    }
+    setFailed(true);
+  };
 
   if (failed) {
     return (
       <div className="flex max-w-[260px] items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
         <KubIcon name="warning" size={16} />
         <span className="min-w-0 flex-1">Не удалось загрузить изображение.</span>
-        <a href={url} target="_blank" rel="noreferrer" className="text-[color:var(--kub-cyan)] hover:underline">
+        <a href={originalUrl} target="_blank" rel="noreferrer" className="text-[color:var(--kub-cyan)] hover:underline">
           Открыть
         </a>
       </div>
@@ -1635,8 +1670,8 @@ function MediaImage({
       aria-label="Открыть фото"
     >
       <img
-        src={url}
-        srcSet={thumbUrl ? `${thumbUrl} 360w, ${url} 1280w` : undefined}
+        src={activeUrl}
+        srcSet={!usingOriginal && thumbUrl ? `${thumbUrl} 360w, ${url} 1280w` : undefined}
         sizes="(max-width: 640px) 86vw, 420px"
         alt={title || "Фото"}
         loading="lazy"
@@ -1645,7 +1680,7 @@ function MediaImage({
           "w-full object-cover transition-transform duration-200 group-hover:scale-[1.01]",
           hasReservedAspect ? "h-full" : "max-h-[340px] sm:max-h-[380px]"
         )}
-        onError={() => setFailed(true)}
+        onError={handleError}
       />
     </button>
   );
