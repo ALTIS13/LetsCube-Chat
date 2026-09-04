@@ -2832,3 +2832,65 @@ with the date and version.
 `v1_0` is deliberately left open. Until it has a date the product is still in
 beta and everyone who registers earns the beta badge, which is what it should
 mean today. It will be recorded when the current work is finished.
+
+## 2026-09-04 - the alpha's start dated, and the testing before it awarded
+
+The owner refined the boundaries: the alpha **began** when the first native
+applications started being built, and the stretch before that counts as testing
+done ahead of the alpha. `alpha_end` (2026-06-18, the move to our own server)
+is unchanged and was not corrected — this adds the opening bracket.
+
+**Recorded:** `alpha_start` = `2026-05-23 04:50:13 +03`, version `0.0.0`,
+through `product_milestone_set`, so it is write-once and carries a
+`product_milestone_set` audit entry.
+
+**Why that commit.** `aa3e78e` "Add Android Capacitor MVP groundwork" — 60
+files, 1680 insertions, 21 of them under `android/`; the first commit that makes
+a native application exist. Two earlier candidates were checked and rejected
+rather than assumed away:
+
+- `2aaa3de` (2026-05-05, "Add Windows local build support") changes only
+  `.gitignore`, `package.json` and the lockfile, adding
+  `@rollup/rollup-win32-x64-msvc` and `lightningcss-win32-x64-msvc` — tooling
+  for building on a Windows workstation, not a Windows application.
+- The several May commits mentioning "mobile" are responsive-layout polish in
+  the web client.
+
+The Windows shell itself is `206d1c0`, 2026-07-12, so Android is the earlier of
+the pair and therefore the boundary. Version `0.0.0` from
+`git show aa3e78e:package.json` and the same for `artifacts/kub/package.json`.
+
+**`tester` is now earned, not given.** It existed as a manual badge with
+`{"kind":"manual"}` and no rule. It now uses
+`{"kind":"registered_before_milestone","milestone":"alpha_start"}`, the same
+mechanism as `alpha_tester` and `beta_tester`, so it cannot be handed out by
+hand — which is the property the owner asked for when this machinery was built.
+
+**The ordering hazard, and the guard.** `achievements_sync` treats a criterion
+whose milestone has a null `reached_at` as qualifying *everyone* — that is how
+`beta_tester` currently works against the unrecorded `v1_0`. Pointing `tester`
+at an undated `alpha_start` would therefore have granted it to every account
+that opened the app in the gap, permanently, because the sync inserts into
+`user_achievements`. The migration separates the two steps and step 3 carries an
+`exists (... reached_at is not null)` guard; the rehearsal confirmed it refuses
+to run early (`UPDATE 0`, criteria untouched).
+
+**Who holds it: 7 real people of 9 eligible** (12 of 14 accounts; five are test
+logins, excluded on both sides of the fraction by `achievement_recipients` and
+`achievement_stats`).
+
+**Nobody registered during the alpha at all.** The twelve early accounts are
+2026-05-04 to 2026-05-17 — all before `alpha_start` — and the next two are
+2026-08-29 and 2026-08-31. So `tester` and `alpha_tester` name the same seven
+people today and will keep doing so unless someone joins a window that has
+historically been empty. They are kept separate because the claims differ:
+`alpha_tester` is "was here during the alpha", `tester` is "was here before the
+native apps existed".
+
+**Verified in both directions before applying**, in a rolled-back transaction:
+the earliest real account gains `tester` on sync (holding
+`alpha_tester, beta_tester, conversationalist, settled_in` before, and those
+plus `tester` after); the newest account (2026-08-31) earns `beta_tester` only.
+The badge was then granted by running the ordinary per-user sync for each
+qualifying account — the same function the client calls, idempotent through
+`on conflict do nothing` — rather than by inserting rows.
