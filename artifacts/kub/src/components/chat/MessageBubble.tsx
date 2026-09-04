@@ -44,6 +44,8 @@ type MetaPlacement = "inline" | "anchored";
 
 interface MessageBubbleProps {
   message: MessageWithSender;
+  /** Arrived while the list was on screen. History does not animate. */
+  isEntering?: boolean;
   isMe: boolean;
   isFirstInGroup: boolean;
   isLastInGroup: boolean;
@@ -588,7 +590,7 @@ function MeasuredTextWithMeta({
 }
 
 export function MessageBubble({
-  message, isMe, isFirstInGroup, isLastInGroup,
+  message, isEntering = false, isMe, isFirstInGroup, isLastInGroup,
   onReply, onJumpToReply, onReaction, onEdit, onDelete, onHideForMe, onStartSelection, onTogglePin, onForward, onOpenMedia,
   onRetrySend, onEditFailedSend, onDiscardLocalMessage,
   reactionMenuOpen = false, onToggleReactionMenu, onCloseReactionMenu,
@@ -1281,7 +1283,8 @@ export function MessageBubble({
 
       <div
         className={cn(
-          "flex gap-1.5 mb-0.5 group relative msg-appear",
+          "flex gap-1.5 mb-0.5 group relative",
+          isEntering && "msg-appear",
           "max-w-full min-w-0",
           isMe ? "justify-end" : "justify-start",
         )}

@@ -20,6 +20,7 @@ import { requestAppConfirm } from "@/lib/appDialogs";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { formatFullTime } from "@/lib/format";
 import { useAvatarVariantUrls, useMessageMediaVariantUrls } from "@/hooks/useMediaVariants";
+import { advanceMessageEntrance, EMPTY_ENTRANCE_STATE } from "@/lib/messageEntrance";
 import {
   captureVisibleMessageAnchor,
   restoreVisibleMessageAnchor,
@@ -165,6 +166,18 @@ export function MessageList({
     return map;
   }, [sortedMessages]);
   const messageMediaVariants = useMessageMediaVariantUrls(sortedMessages);
+  // Only a message that arrived while this list was on screen animates in.
+  // The class used to be unconditional, so every bubble played it on mount and
+  // opening a chat animated the whole history at once.
+  const entranceRef = React.useRef(EMPTY_ENTRANCE_STATE);
+  const enteringIds = React.useMemo(() => {
+    const { state, entering } = advanceMessageEntrance(
+      entranceRef.current,
+      sortedMessages.map((m) => m.id),
+    );
+    entranceRef.current = state;
+    return entering;
+  }, [sortedMessages]);
   const senderAvatarProfileIds = React.useMemo(() => {
     const ids = new Set<string>();
     for (const message of sortedMessages) {
@@ -783,6 +796,7 @@ export function MessageList({
                 >
                   <MessageBubble
                     message={msg}
+                    isEntering={enteringIds.has(msg.id)}
                     isMe={isMe}
                     isFirstInGroup={!isSameSenderAsPrev}
                     isLastInGroup={!isSameSenderAsNext}

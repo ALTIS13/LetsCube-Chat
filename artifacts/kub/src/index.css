@@ -507,12 +507,34 @@ body {
 .typing-dot:nth-child(2) { animation: typing-dot 1.2s infinite 150ms; }
 .typing-dot:nth-child(3) { animation: typing-dot 1.2s infinite 300ms; }
 
+/* A message arriving. Opacity and a small lift, nothing that has a size.
+ *
+ * The `scale(0.98)` this used to carry resized the text for 150ms, which is
+ * what read as a jerk rather than as motion — and it is the same mistake the
+ * modal entry avoids ("moves nothing that has a size"). The row's box is at its
+ * final dimensions from the first frame, so scroll anchoring never sees this.
+ *
+ * The duration is the shared fast step rather than a hand-typed 0.15s, and the
+ * easing is the standard curve, so a message settles like every other control.
+ * `backwards` so the first painted frame is already the "from" state: without
+ * it the bubble flashes at full opacity for one frame before the animation
+ * takes hold. */
 @keyframes msg-appear {
-  from { opacity: 0; transform: translateY(6px) scale(0.98); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-.msg-appear { animation: msg-appear 0.15s ease-out forwards; }
+.msg-appear {
+  animation: msg-appear var(--kub-motion-fast) var(--kub-ease-standard) backwards;
+  /* Composited, and the hint is dropped the moment the animation ends so an
+     idle chat is not holding a layer per bubble. */
+  will-change: opacity, transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Movement goes; the message still appears. */
+  .msg-appear { animation: none; will-change: auto; }
+}
 
 @keyframes ripple { to { transform: scale(2.5); opacity: 0; } }
 
