@@ -1659,3 +1659,43 @@ convert. Three carry `status='failed'` rows; the rest have no variant row at all
 
 Profile and chat avatars are unaffected — all 7 profiles and all 3 groups have
 their variants.
+
+## D-035 — every variant the worker uploaded carried a doubled max-age
+
+Mine, from the media caching stage, found 2026-09-04 while verifying D-033 and
+fixed in `43ec239`. The most useful entry here, because the source read
+correctly the whole time.
+
+`uploadVariant` passed the finished directive to the storage client's
+`cacheControl` option. That option takes **seconds**: for a Buffer body the
+client writes ``headers["cache-control"] = `max-age=${options.cacheControl}` ``
+itself. So every variant this worker produced was served with
+
+    Cache-Control: max-age=max-age=31536000, immutable
+
+an unparseable delta-seconds. That is worse than sending nothing — a client
+that cannot parse `max-age` does not cache, so the saving the whole caching
+stage was written to buy was not being collected on anything the worker made.
+
+Scope, measured on production rather than reasoned about:
+
+| uploaded by | body | header before the fix |
+|---|---|---|
+| worker variants | Buffer | **`max-age=max-age=31536000, immutable`** |
+| user / chat / bot avatars | Blob | `max-age=31536000, immutable` |
+| message media | Blob | `max-age=31536000, immutable` |
+
+Only the Buffer path was wrong: a Blob is sent as a form field the service reads
+verbatim. The existing profile and message variants read correctly **only**
+because the earlier backfill re-uploaded them through the raw API, which is
+precisely what kept this hidden — the objects a source reviewer would have
+sampled were the repaired ones.
+
+Fixed by sending seconds through `cacheControl` and the real directive through
+`headers`, which the client applies last. The six chat variants were regenerated
+and re-checked on the wire. The test drives the real client and asserts the
+header it emits, and pins the broken shape too, since a source scan is what
+missed this.
+
+Worth carrying forward: **for anything whose value a library reformats, the
+assertion belongs on the wire, not on the argument.**
