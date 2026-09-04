@@ -1800,44 +1800,48 @@ Two of the mutations were re-run independently before deploying: removing the
 memory of a terminal failure fails 3 tests, and forgetting *which* source a
 failure was about — so replaced media would never be retried — fails 1.
 
-## D-036 — the decorative grid restarts in every element that draws it
+## D-036 — the decorative lattice paints a rule on the block's own edge
 
 Reported by the owner on 2026-09-04 from a screenshot crop: near the edit
-pencil, rules that should form a corner do not converge — "не сходятся
-корректно линии, некрасиво".
+pencil, rules that should form a corner do not converge. Partly fixed the same
+day; the mechanism is now measured rather than reasoned about.
 
-**Cause, and it is structural rather than a stray pixel.** `.kub-grid-subtle`
-(`artifacts/kub/src/index.css:564`) paints a 56×56 lattice with two
-`linear-gradient` background images and `background-size: 56px 56px`, and sets
-no `background-position` anchor. A background's origin is each element's own
-padding box, so **every element carrying the class starts its lattice at its own
-top-left corner**. Two such elements can only line up by coincidence — when
-their padding-box origins happen to sit a whole 56px apart. Wherever they do
-not, the vertical rules step sideways across the boundary, which is exactly the
-"intersection that does not meet" being reported.
+**What was proven.** `.kub-grid-subtle` paints a 56px lattice with
+`linear-gradient(colour 1px, transparent 1px)`, which puts its rule at the TOP
+of every tile, and a background is anchored to the element's own padding box.
+With no `background-position` there is therefore a rule at y=0 and at x=0 —
+on the element's own edge, sharing it with whatever border sits there.
 
-Four surfaces carry it today, and three of them sit directly against another
-surface:
+Measured on a standalone reproduction of the profile panel (header with
+`border-b`, then the summary block carrying the class), read out of the live
+DOM rather than judged by eye:
 
-| surface | file |
-|---|---|
-| profile/summary block of the chat info panel | `components/chat/ChatInfoPanel.tsx:610` |
-| profile header in settings (avatar + edit pencil) | `components/sidebar/SettingsModal.tsx:216` |
-| admin content area | `pages/admin/AdminLayout.tsx:126` |
-| app background | `index.css` |
+```
+headerBottomBorderAtY   57
+summaryPaddingBoxTopY   57      gap 0
+latticeLinesAtY         57, 113
+```
 
-The settings profile header is the likeliest match for the crop — it is the one
-that puts an avatar and a pencil side by side inside a `kub-grid-subtle` block
-that then meets the rest of the modal — but which surface the owner was looking
-at is not yet confirmed, and confirming it decides how wide the fix has to be.
+A 1px cyan rule and a 1px border occupy the same edge. That is what reads as
+lines failing to meet.
 
-**The fix is to give the lattice one origin instead of one per element**, not to
-nudge a border. Either move the grid to a single common ancestor and let the
-blocks that currently draw it be transparent, or anchor it so every element
-shares a lattice. `background-attachment: fixed` would do the latter in one
-line, but it anchors to the viewport rather than the document and behaves badly
-inside scroll containers — of which three of the four surfaces are one — so the
-ancestor route is the more likely correct answer.
+**Fixed** by offsetting the lattice half a tile, so no rule lands on an edge of
+the block that draws it. Same reproduction, both offsets measured: `0` gives
+lines at 0 and 56 and hits the top edge; `28px` gives 28 and 84 and hits
+neither. Mutation-tested — restoring the zero offset fails the test.
 
-Do not "fix" this by aligning one pair of blocks: any such adjustment holds only
-at the viewport width where it was measured.
+**What is NOT fixed, deliberately.** Each element still starts its own lattice,
+so two adjacent blocks that both carry the class still cannot align with each
+other. Making them share one requires the grid to live on a single ancestor
+with the blocks transparent, which is a structural change larger than this
+defect justifies. No two of the four surfaces that carry the class are
+currently adjacent, so nothing depends on it today.
+
+`.kub-grid-bg` has the same zero offset and is left alone on purpose: it is used
+only on `min-h-screen` shells, where the edge in question is the viewport's and
+there is no border to collide with. A test records that as a decision.
+
+**Still unconfirmed:** whether this is the exact thing the owner photographed.
+The crop was too small to identify the surface, and two earlier guesses at it
+(the settings profile header, then a pair of adjacent lattices) were both
+wrong. The mechanism above is real and measured either way.

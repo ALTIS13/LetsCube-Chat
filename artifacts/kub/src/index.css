@@ -582,13 +582,31 @@ textarea::placeholder, input::placeholder {
   background-position: 0 0, 0 0, 0 0, 0 0;
 }
 
-/* Subtle cyan grid for in-app surfaces (sidebar, chat empty bg). */
+/* Subtle cyan grid for in-app surfaces (sidebar, chat empty bg).
+ *
+ * D-036. The lattice is anchored to each element's own padding box, and a
+ * `linear-gradient(colour 1px, transparent 1px)` paints its rule at the TOP of
+ * every tile — so with no offset there is a line at y=0 and x=0, exactly on the
+ * element's own edge. Measured on a reproduction of the profile panel: the
+ * header's bottom border and the summary block's first lattice rule both land
+ * on y=57. A cyan line and a border line share one edge, which is what reads as
+ * rules that do not meet.
+ *
+ * Half a cell moves every rule to the middle of a tile, so no edge of a block
+ * carrying this class collides with its own border. Measured on the same
+ * reproduction: offset 0 gives lines at 0 and 56 (hits the top edge), offset 28
+ * gives 28 and 84 (hits neither).
+ *
+ * This does NOT make two adjacent blocks share one lattice — each still starts
+ * its own. That needs the grid to live on a single ancestor, which is a bigger
+ * change than the defect warrants; see the register entry. */
 .kub-grid-subtle {
   background-color: var(--kub-bg);
   background-image:
     linear-gradient(color-mix(in srgb, var(--kub-cyan) 4%, transparent) 1px, transparent 1px),
     linear-gradient(90deg, color-mix(in srgb, var(--kub-cyan) 4%, transparent) 1px, transparent 1px);
   background-size: 56px 56px;
+  background-position: 28px 28px;
 }
 
 /* Cyan / pink glow halos used behind hero elements and primary buttons. */
