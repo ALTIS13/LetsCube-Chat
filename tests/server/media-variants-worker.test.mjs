@@ -31,19 +31,50 @@ test("media variants worker keeps a chat's avatar apart from a profile's", () =>
   // chat and a profile ever had the same uuid the files would overwrite each
   // other, and a group would wear somebody's face.
   const id = "7be464a0-a510-4e09-9f70-69d17a5eab02";
-  assert.equal(
-    mediaVariantRules.buildChatAvatarVariantPath(id, "avatar_128"),
-    `variants/chats/${id}/avatar_128.webp`,
+  const source = `chat-avatars/${id}/avatar-c457a326-c0f1-44ee-b7bf-1200e6db51f3.png`;
+  assert.ok(
+    mediaVariantRules.buildChatAvatarVariantPath(id, "avatar_128", source)
+      .startsWith(`variants/chats/${id}/`),
   );
   assert.equal(
     mediaVariantRules.buildProfileAvatarVariantPath(id, "avatar_128"),
     `variants/profiles/${id}/avatar_128.webp`,
   );
   assert.notEqual(
-    mediaVariantRules.buildChatAvatarVariantPath(id, "avatar_256"),
+    mediaVariantRules.buildChatAvatarVariantPath(id, "avatar_256", source),
     mediaVariantRules.buildProfileAvatarVariantPath(id, "avatar_256"),
   );
 });
+
+test("a chat avatar variant cannot be found by knowing the chat id", () => {
+  // The bytes are served publicly, so the database row's membership scope
+  // protects the row and not the picture. What actually keeps a group photo
+  // from a non-member is that the original's name carries a random uuid and
+  // `chats` — the only place that name is written down — is readable by
+  // members alone. A variant addressed by chat id would give that away.
+  const id = "7be464a0-a510-4e09-9f70-69d17a5eab02";
+  const source = `chat-avatars/${id}/avatar-c457a326-c0f1-44ee-b7bf-1200e6db51f3.png`;
+  const path = mediaVariantRules.buildChatAvatarVariantPath(id, "avatar_128", source);
+
+  assert.notEqual(path, `variants/chats/${id}/avatar_128.webp`);
+  // Everything an outsider could assemble from the id alone, spelled out.
+  for (const guess of [
+    `variants/chats/${id}/avatar_128.webp`,
+    `variants/chats/${id}/avatar_256.webp`,
+    `variants/chats/${id}/128.webp`,
+    `variants/chats/${id}.webp`,
+  ]) {
+    assert.notEqual(path, guess, `${guess} is reachable without the source path`);
+  }
+
+  // A second picture in the same chat must not land on the first one's address.
+  const replacement = `chat-avatars/${id}/avatar-faf64d3c-266c-47f9-8ad2-8f1634d59630.png`;
+  assert.notEqual(mediaVariantRules.buildChatAvatarVariantPath(id, "avatar_128", replacement), path);
+
+  // Deterministic, or every worker tick would orphan the last tick's upload.
+  assert.equal(mediaVariantRules.buildChatAvatarVariantPath(id, "avatar_128", source), path);
+});
+
 
 test("media variants worker processes only video variants that are not ready", () => {
   assert.equal(typeof mediaVariantRules.getMissingMessageVariantKinds, "function");

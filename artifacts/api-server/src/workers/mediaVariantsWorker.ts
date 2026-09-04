@@ -298,9 +298,13 @@ function avatarOwnerColumn(scope: AvatarCandidate["scope"]): AvatarOwnerColumn {
   return scope === "chat" ? "chat_id" : "profile_id";
 }
 
-function avatarVariantPath(owner: AvatarCandidate, kind: AvatarVariantKind): string {
+function avatarVariantPath(
+  owner: AvatarCandidate,
+  kind: AvatarVariantKind,
+  sourcePath: string,
+): string {
   return owner.scope === "chat"
-    ? buildChatAvatarVariantPath(owner.id, kind)
+    ? buildChatAvatarVariantPath(owner.id, kind, sourcePath)
     : buildProfileAvatarVariantPath(owner.id, kind);
 }
 
@@ -500,7 +504,7 @@ async function ensureAvatarVariants(
 
   let generated = false;
   for (const variant of AVATAR_VARIANTS) {
-    const variantPath = avatarVariantPath(owner, variant.kind);
+    const variantPath = avatarVariantPath(owner, variant.kind, source.path);
     try {
       const output = await sharp(sourceBuffer)
         .rotate()
@@ -538,7 +542,7 @@ async function downloadStorageObject(
 
 /** See `artifacts/kub/src/lib/mediaCacheControl.ts`; kept in step by a test. */
 function variantCacheControl(path: string): string {
-  return path.startsWith("variants/profiles/") || path.startsWith("variants/chats/")
+  return path.startsWith("variants/profiles/")
     ? "max-age=2592000"
     : "max-age=31536000, immutable";
 }

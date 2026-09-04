@@ -89,32 +89,32 @@ test("a variant found only at 256 still counts as found", () => {
   assert.deepEqual(pickAvatarVariant({}, only256), only256);
 });
 
-test("a chat's avatar variant is not cached as though it never changes", () => {
-  // `variants/chats/{chat}/{kind}.webp` has nowhere to put a version, so a new
-  // group photo overwrites the address. Calling that immutable would show last
-  // month's picture until next year.
-  const path = `variants/chats/${CHAT_ID}/avatar_128.webp`;
-  assert.equal(cacheControlFor(path), REUSED_PATH_CACHE_CONTROL);
-  assert.notEqual(cacheControlFor(path), IMMUTABLE_CACHE_CONTROL);
+test("a chat's avatar variant is cached forever, because its address is per picture", () => {
+  // Not the profile rule. A chat variant's folder comes from the source path,
+  // so a new group photo is a new address and the old one is never overwritten.
+  // The token stands in for what `avatarPathToken` produces.
+  const path = `variants/chats/${CHAT_ID}/9f2c1d7ab3e54c0891fe6a4d2b7c8e10/avatar_128.webp`;
+  assert.equal(cacheControlFor(path), IMMUTABLE_CACHE_CONTROL);
+  assert.notEqual(cacheControlFor(path), REUSED_PATH_CACHE_CONTROL);
 });
 
 test("the worker gives a chat's variant the same lifetime the client expects", () => {
   // Two deployments that cannot share a module. This is what notices when one
-  // of them learns about the new prefix and the other does not.
+  // of them keeps the old reused-path rule while the other moves on.
   assert.ok(
-    worker.includes('path.startsWith("variants/chats/")'),
-    "the worker would upload a chat variant as immutable",
+    !worker.includes('path.startsWith("variants/chats/")'),
+    "the worker still gives a chat variant the short, reused-path lifetime",
   );
   assert.ok(
-    worker.includes(`"${REUSED_PATH_CACHE_CONTROL}"`),
-    "the worker lost the reused-path value",
+    worker.includes('path.startsWith("variants/profiles/")'),
+    "the worker stopped treating profile variants as the reused path",
   );
 });
 
 test("a chat's variant path is its own, so a chat and a profile cannot collide", () => {
   assert.ok(
-    rules.includes("`variants/chats/${chatId}/${kind}.webp`"),
-    "chat avatar variants must not share the profiles prefix",
+    rules.includes("`variants/chats/${chatId}/${avatarPathToken(sourcePath)}/${kind}.webp`"),
+    "chat avatar variants must not share the profiles prefix, nor drop the source token",
   );
   assert.ok(
     rules.includes("`variants/profiles/${profileId}/${kind}.webp`"),

@@ -35,11 +35,15 @@ export const REUSED_PATH_CACHE_CONTROL = "max-age=2592000";
 /**
  * Paths whose bytes are overwritten in place rather than given a new name.
  *
- * Both are avatar variants: `{owner}/{kind}.webp` has nowhere to put a version,
- * so changing the picture reuses the address. A chat's is here for the same
- * reason a profile's is — a renamed group photo must not show last month's.
+ * A profile's variant is `variants/profiles/{owner}/{kind}.webp`, which has
+ * nowhere to put a version, so changing the picture reuses the address.
+ *
+ * A chat's is deliberately not in this list. Its folder is derived from the
+ * source path — see `avatarPathToken` in the worker's rules — which both keeps
+ * it as unguessable as the original and makes every picture a new address, so
+ * it is immutable like any other freshly named upload.
  */
-const REUSED_PREFIXES = ["variants/profiles/", "variants/chats/"];
+const REUSED_PREFIXES = ["variants/profiles/"];
 
 /**
  * The value to send when uploading to `objectPath`.

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 export {
   VIDEO_720P_ENCODING,
   mediaVariantWorkerTestSeams,
@@ -89,12 +91,40 @@ export function buildProfileAvatarVariantPath(profileId: string, kind: AvatarVar
 }
 
 /**
+ * The unguessable half of an avatar's address, carried over from the original.
+ *
+ * A chat's picture is uploaded to `chat-avatars/{chatId}/avatar-{uuid}.png`,
+ * and that random stem is the only thing keeping it private: the file is served
+ * publicly, and `chats` — the one place the address is written down — is
+ * readable through `Chat members can view chats` and nothing else. So a
+ * non-member holding a chat id cannot reach the picture.
+ *
+ * A variant addressed by chat id alone would hand exactly that back, and
+ * scoping the variant *row* to members would not help, because the row is not
+ * what serves the bytes. Deriving the folder from the source path keeps the
+ * variant precisely as hard to find as the picture it was made from.
+ *
+ * A hash rather than the original's stem: it does not assume the upload naming
+ * stays random, which is the kind of assumption that would fail silently and
+ * publicly. Deterministic, so re-running the worker reuses the same address,
+ * and a new picture — always a new source path — gets a new one.
+ */
+export function avatarPathToken(sourcePath: string): string {
+  return createHash("sha256").update(sourcePath).digest("hex").slice(0, 32);
+}
+
+/**
  * Where a chat's own small avatar lives.
  *
  * A group or channel picture, not a person's. Same geometry and quality as a
- * profile's — and, like a profile's, overwritten in place when the picture
- * changes, so it belongs to the same reused-path cache rule.
+ * profile's, but not the same addressing: see `avatarPathToken`. Because the
+ * folder changes with the picture, this path is never overwritten in place, so
+ * unlike a profile's it is immutable and needs no version token.
  */
-export function buildChatAvatarVariantPath(chatId: string, kind: AvatarVariantKind): string {
-  return `variants/chats/${chatId}/${kind}.webp`;
+export function buildChatAvatarVariantPath(
+  chatId: string,
+  kind: AvatarVariantKind,
+  sourcePath: string,
+): string {
+  return `variants/chats/${chatId}/${avatarPathToken(sourcePath)}/${kind}.webp`;
 }
