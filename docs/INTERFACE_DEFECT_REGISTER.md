@@ -1997,7 +1997,13 @@ recorded from the code and left open.
 D-032 is implicated but only as the residual: the bubble's own late growth
 measured 12–24px here, inside the window the entry correction already covers.
 
-## D-039 — a history prepend is painted 1233px out for exactly one frame
+## D-039 `[withdrawn]` — a history prepend is painted 1233px out for exactly one frame
+
+**Read the withdrawal below before acting on any of this.** Re-measured
+2026-09-05: the frame is never painted, and the fix this entry recommends was
+implemented and measured to be considerably worse than the defect it claims to
+remove. The entry is kept in full because the withdrawal is only readable
+against it.
 
 Found 2026-09-04 while proving that the D-037/D-038 fix left the older-history
 anchoring alone. Measured identical **with and without** that fix, so it is
@@ -2034,6 +2040,139 @@ mechanism in `MessageList` — this register already records 445px, 706px and
 section 11 of `CLAUDE.md`, and nothing in CI can exercise it: it needs a signed-in
 chat with real history, and the e2e suite is unauthenticated. It wants its own
 task with its own measurement, not a change made in passing.
+
+## D-039 withdrawn — the frame was never painted, and the proposed fix is worse
+
+Re-measured 2026-09-05 in the task the entry above asked for. **Nothing above
+this line survives except the caution.** No frame is painted out of place, and
+the direction the entry recommended makes a real 1252px defect where there was
+none.
+
+### The instrument was wrong
+
+The 1233px came from a `requestAnimationFrame` sampler. **rAF callbacks run
+before style and layout**, so reading `getBoundingClientRect()` there forces an
+early layout: it reports the layout the frame is *about to* have, which is not
+what the previous frame painted. The hold loop is also a rAF callback, and it
+runs later in the same phase. The sampler was reading the list between the
+growth and its correction, inside one frame, and reporting it as a painted
+frame.
+
+A second probe settles it. A `ResizeObserver` created *after* the component's
+own runs last among the observers — after layout, after every correction any
+code can still make, immediately before the paint — so what it reads is what is
+painted. A private element resized from rAF each frame gives it something to
+fire on every frame, not only when the list changes size. Both probes, one
+frame, with the intercepted writes numbered in order:
+
+| reading | seq | witness offset | drift | scrollTop | content |
+|---|---|---|---|---|---|
+| rAF sampler, t=11977 | 22 | 1195 | **+1233** | 4696 | 11817 |
+| *write #23, from `hold`* | 23 | | | 4696 → **5971** | |
+| pre-paint probe, t=11978 | 23 | -80 | **-42** | 5971 | 11817 |
+
+Same frame. The growth and its correction are both inside it, and the paint is
+the corrected one.
+
+The pre-paint probe is not blind to the real thing: with a deliberate control
+that skips the correction on the frame the content grows, it reports
+`worstPaintedDrift 1233` and one painted frame off anchor — and the control also
+leaves the reader 1233px out permanently, which is what a broken hold actually
+looks like. On the shipped code, over 13 consecutive prepends from 100 rows to
+1368, it reports **0** painted frames more than 100px off the anchor and a worst
+painted displacement of **42px**. Reproduced identically at 1440x900 and 390x844
+and under 4x and 10x CPU throttling; at 390x844 the phantom is 1828px and still
+nothing is painted.
+
+A CDP screencast was run alongside and is recorded as a limitation rather than
+evidence: it delivers about 13 frames a second even headed, so it cannot resolve
+a one-frame event. Under 6x CPU throttling it caught frames either side of the
+window and they are identical, which agrees with the probe but proves less.
+
+### The proposed fix, measured
+
+Restoring the anchor from the `ResizeObserver` while the hold is active —
+exactly what the entry above suggested — was implemented and measured against
+the same 13 prepends with the same probe:
+
+| | shipped | with the observer restoring |
+|---|---|---|
+| prepends measured | 13 | 13 |
+| prepends painting a frame >100px off anchor | **0** | **11** |
+| worst painted displacement | 42px | **1252px** |
+| painted frames displaced by the loading band | 465 (42px each) | 0 |
+| frames snapped to the bottom | 0 | 0 |
+
+The stacks say why, to the millisecond:
+
+```
+t 133640  scrollTop 4696 -> 5971   at hold (MessageList.tsx:365)
+t 133641  scrollTop 5971 -> 4696   at ResizeObserver.<anonymous> (MessageList.tsx:463)
+```
+
+The observer runs after the hold, and it restores against
+`olderScrollAnchorRef`, which `handleScroll` has meanwhile recaptured at the
+pre-growth position — the restore write fires a scroll event, and the handler
+recaptures on every scroll event while preserving. So the observer undoes the
+hold's correction one frame later, and *that* frame is painted 1252px out. It is
+the register's own warning, measured: the observer returns early there precisely
+so it does not fight the hold.
+
+Reverted. `MessageList.tsx` and `messageScrollAnchor.ts` are byte-identical to
+what they were before this task.
+
+### What was added instead
+
+Guards for the two properties the measurement showed are load-bearing, in
+`tests/unit/message-history-anchoring.test.mjs` and
+`tests/unit/message-scroll-anchor.test.mts`: the hold restores synchronously in
+its own rAF callback and releases only after four settled frames, the observer
+carries no anchor restore, and the restore itself converges rather than
+accumulates, lands an anchor exactly after the content above it has grown, and
+clamps to the last scrollable pixel. Seven mutations, each verified to have
+applied by matching the original text exactly once and confirming its absence
+afterwards; all seven caught, including both halves of the reverted change.
+
+The source guards are still source guards. The frame-level proof cannot live in
+CI for the reason the entry above gives, and the rig that produced these numbers
+is the only thing that can re-check them.
+
+## D-042 — the loading band shoves the reader 42px, with a spinner they cannot see
+
+Found 2026-09-05 while re-measuring D-039, on the same rig. Not fixed: the
+obvious fix is the one measured above, and it is worse.
+
+Asking for older history sets `loadingOlder`, which mounts the
+"Загружаем историю..." band at the top of the scrolled content — the
+`data-message-history-status` block in `MessageList.tsx`. It is **42px tall and
+inside the scroller, above every row**, so the moment it appears every message
+moves down 42px. No React commit describes that as a scroll change, and the
+prepend layout effect ignores it on purpose: it acts only once rows have
+actually arrived.
+
+Measured, painted, across 13 consecutive prepends:
+
+| | |
+|---|---|
+| painted frames displaced | 465 |
+| displacement | 42px, every time |
+| how long the reader sees it | ~250ms per prepend |
+| where it ends | back at 0 — the restore compensates when the band goes |
+
+The load triggers at `scrollTop < 160`, so the band is usually above the
+viewport when it mounts: the reader is pushed by a spinner they cannot see.
+
+Not a violation of the prepend contract — the anchor itself is restored exactly,
+final drift 0px on the anchor row — but it is 42px of painted movement the
+reader did not ask for, larger than the 24px residual that D-037 was considered
+worth fixing.
+
+Two directions, neither taken here. Taking the band out of the flow — the
+overlay pattern the bulk-error banner in the same file already uses — is a
+design change to the loading affordance and needs an explicit decision.
+Restoring the anchor on the commit that mounts the band is a change to the hold,
+and this entry's own sibling is the evidence for measuring any such change over
+many prepends before believing it.
 
 ## D-040 — a sent message twitched the whole conversation a quarter-second after it landed
 
