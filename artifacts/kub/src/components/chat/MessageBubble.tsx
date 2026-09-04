@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, type CSSProperties, type ReactNode } from "react";
 import { copyWithFeedback } from "@/lib/actionFeedback";
+import { resolveCssLength } from "@/lib/cssLength";
 import { createPortal } from "react-dom";
 import type { MessageWithSender } from "@/types/database";
 import { formatFullTime } from "@/lib/format";
@@ -320,6 +321,46 @@ function getTextLineRects(contentEl: HTMLElement): DOMRect[] {
 }
 
 /**
+ * The declared ceiling on the bubble's content, in pixels, or nothing.
+ *
+ * The stack carries the design cap — `min(86vw, 560px, max(16rem, 100% - lane))`
+ * — and it is a real ceiling: the row can want more, and the stack still stops
+ * there. Measuring the row alone therefore over-estimates whenever the design
+ * cap is the tighter constraint, which is D-032: a last line 507px wide was
+ * told it had 984px, chose inline, and the reserved spacer then wrapped and
+ * grew the bubble 22.8px, 46ms after it was painted.
+ *
+ * Only the terms that do not move are read. `getComputedStyle` has already made
+ * every unit absolute — `86vw` arrives as `1238.4px`, the lane as `104px` — and
+ * the one thing left standing is `100%`, whose basis is the row. The row is
+ * shrink-to-fit around this very bubble, so that term is not a ceiling at all:
+ * it grows with the content, and resolving it against the row's current width
+ * fed the measurement a limit that moved with the placement. Measured, that
+ * flipped two settled messages in an unrelated chat from inline to anchored and
+ * made them 15px taller. So `%` is treated as unbounded here and drops out of
+ * the `min()`, leaving the fixed design ceiling — which is the only part that
+ * can be applied without reopening a feedback loop.
+ *
+ * A cap that resolves to nothing finite returns `null`, and the caller keeps
+ * the row's answer rather than a guess.
+ */
+function getDeclaredContentCap(bubbleStyle: CSSStyleDeclaration, stackEl: HTMLElement | null): number | null {
+  if (!stackEl) return null;
+  const declared = resolveCssLength(getComputedStyle(stackEl).maxWidth, Number.POSITIVE_INFINITY);
+  if (declared === null || declared <= 0) return null;
+
+  // The stack's cap bounds the bubble's BORDER box, so the border comes off as
+  // well as the padding. The bubble's own `max-width` is deliberately not read:
+  // it is `100%` of the stack, and the stack is shrink-to-fit, so it describes
+  // the width the bubble happens to have rather than the width it may reach.
+  const paddingLeft = parsePixelValue(bubbleStyle.paddingLeft) ?? 0;
+  const paddingRight = parsePixelValue(bubbleStyle.paddingRight) ?? 0;
+  const borderLeft = parsePixelValue(bubbleStyle.borderLeftWidth) ?? 0;
+  const borderRight = parsePixelValue(bubbleStyle.borderRightWidth) ?? 0;
+  return declared - paddingLeft - paddingRight - borderLeft - borderRight;
+}
+
+/**
  * How wide the bubble's content is allowed to become.
  *
  * This is the quantity the inline-meta decision actually needs. Asking instead
@@ -347,11 +388,18 @@ function getMaxContentWidth(bubbleEl: HTMLElement, stackEl: HTMLElement | null):
   // the safe direction: the meta is positioned and its space reserved, so a
   // slightly generous "it fits" costs a few pixels of bubble width, never an
   // overlap.
+  //
+  // What it does NOT over-estimate is the design cap, so that is applied on top
+  // of it. The two together only ever tighten the answer, which is why this
+  // cannot reopen the feedback loop: a narrower answer can turn inline into
+  // anchored, and anchored removes the spacer, which narrows the row further.
   const row = (stackEl ?? bubbleEl).parentElement;
   const rowWidth = row?.getBoundingClientRect().width ?? bubbleEl.getBoundingClientRect().width;
   const lane =
     parsePixelValue(getComputedStyle(document.documentElement).getPropertyValue("--kub-action-lane")) ?? 0;
-  return Math.max(0, rowWidth - lane) - paddingLeft - paddingRight;
+  const fromRow = Math.max(0, rowWidth - lane) - paddingLeft - paddingRight;
+  const cap = getDeclaredContentCap(bubbleStyle, stackEl);
+  return cap === null ? fromRow : Math.min(fromRow, cap);
 }
 
 function getTextRightLimit(textEl: HTMLElement, bubbleEl: HTMLElement, stackEl: HTMLElement | null): number {
@@ -421,7 +469,21 @@ function MeasuredTextWithMeta({
     const textEl = textFlowRef.current;
     const contentEl = textContentRef.current;
     const footerEl = footerRef.current;
-    const bubbleEl = bubbleRef.current;
+    // The bubble and the stack are ANCESTORS of this component, and React
+    // attaches a host ref during the layout phase, which walks children before
+    // parents. On the one mount that matters both refs are therefore still
+    // null, this returned at its first guard, and the guess stood: measured on
+    // the real chat, an own message's row was painted 38.8px tall and became
+    // 50.8px one frame later (D-041).
+    //
+    // The nodes themselves are already in the document by then — React inserts
+    // the whole subtree before it runs any layout effect — so they are read
+    // from the DOM instead of waited for. The refs stay the fast path for every
+    // later pass, and they point at these same two elements.
+    const ownEl = textEl ?? contentEl;
+    const bubbleEl =
+      bubbleRef.current ?? (ownEl?.closest('[data-message-bubble="true"]') as HTMLElement | null) ?? null;
+    const stackEl = stackRef.current ?? (bubbleEl?.parentElement as HTMLElement | null) ?? null;
     if (!hasMeta || !textEl || !contentEl || !footerEl || !bubbleEl) return;
 
     const lineRects = getTextLineRects(contentEl);
@@ -433,7 +495,7 @@ function MeasuredTextWithMeta({
 
     const footerRect = footerEl.getBoundingClientRect();
     const bubbleInnerRight = getBubbleInnerRight(bubbleEl);
-    const rightLimit = compound ? bubbleInnerRight : getTextRightLimit(textEl, bubbleEl, stackRef.current);
+    const rightLimit = compound ? bubbleInnerRight : getTextRightLimit(textEl, bubbleEl, stackEl);
     const gap = 8;
     // There used to be a guard here that flipped to `anchored` whenever the
     // footer was not vertically on the last text line. It was written for a
@@ -463,7 +525,7 @@ function MeasuredTextWithMeta({
     if (compound) {
       canInline = rightLimit - lastLine.right >= footerRect.width + gap;
     } else {
-      const maxContentWidth = getMaxContentWidth(bubbleEl, stackRef.current);
+      const maxContentWidth = getMaxContentWidth(bubbleEl, stackEl);
       // Refuse to answer on a width that cannot be real. A bubble mounting
       // inside a prepended page is measured while its row is still being laid
       // out, and the row reports a width of zero — which said the meta could
@@ -480,7 +542,28 @@ function MeasuredTextWithMeta({
     setPlacement((previous) => (previous === next ? previous : next));
   }, [bubbleRef, compound, hasMeta, placement, stackRef]);
 
+  /**
+   * Back to the guess when the text CHANGES — and never on the mount itself.
+   *
+   * This is a passive effect, so React runs it after the commit that mounted
+   * the row. On that first run it set state the component already had, which
+   * looked like a no-op and was not: by then the layout effect below had
+   * already measured the row and replaced the guess with the answer, and this
+   * put the guess back. The measured value returned a frame later, through the
+   * `requestAnimationFrame` pass, and that frame is D-041 — an own message's
+   * bubble painted 36.8px tall and grown to 48.8px 16ms after it appeared.
+   *
+   * Skipping the first run restores exactly nothing, because `useState` already
+   * initialises to the same two values. What it stops doing is overwriting a
+   * decision that was made after it.
+   */
+  const resetKeyRef = useRef<string | null>(null);
   useEffect(() => {
+    const resetKey = `${measureKey} ${content}`;
+    if (resetKeyRef.current === resetKey) return;
+    const isFirstRun = resetKeyRef.current === null;
+    resetKeyRef.current = resetKey;
+    if (isFirstRun) return;
     setFooterReserve(0);
     setPlacement(getInitialMetaPlacement(content));
   }, [content, measureKey]);

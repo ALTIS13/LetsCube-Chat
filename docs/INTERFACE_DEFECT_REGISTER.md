@@ -1587,7 +1587,8 @@ sets `VITE_PUBLIC_PREVIEW_FIXTURE=1` so the ordinary path runs them: 5/5 pass.
 
 ## D-032 — a nearly-full last line still grows the bubble, 180ms after paint
 
-Found 2026-09-04 while closing D-004, and deliberately not fixed.
+Found 2026-09-04 while closing D-004, and deliberately not fixed. **Closed
+2026-09-05 — see "D-032 and D-041 closed" at the end of this file.**
 
 A message whose last line is nearly full takes the inline branch anyway, because
 `getMaxContentWidth` measures the row and so over-estimates on purpose. The
@@ -2195,7 +2196,10 @@ its server row are never in the list at once.
 
 ## D-041 — every own message is painted one row short and grows on the next frame
 
-Found 2026-09-04 while measuring D-040, and deliberately not fixed.
+Found 2026-09-04 while measuring D-040, and deliberately not fixed. **Closed
+2026-09-05 — see "D-032 and D-041 closed" at the end of this file, which also
+corrects this entry: the update from the layout effect WAS flushed before paint,
+and a passive reset then overwrote it.**
 
 `MeasuredTextWithMeta` decides whether the time fits beside the last line of text
 or needs a row of its own. The two answers differ by a whole row — 38.8px against
@@ -2276,3 +2280,175 @@ design change to the loading affordance and needs an explicit decision.
 Restoring the anchor on the commit that mounts the band is a change to the hold,
 and this entry's own sibling is the evidence for measuring any such change over
 many prepends before believing it.
+
+## D-032 and D-041 closed — one ceiling that was never applied, one effect that undid the measurement
+
+Fixed 2026-09-05. Two defects, two causes, and they meet in the same eight lines
+of `MeasuredTextWithMeta`.
+
+Measured the way D-040 was: a Vite dev server on a dedicated port against
+production Supabase, signed in as the QA owner, the geometry of the arriving
+bubble **and of a witness row already on screen** sampled every animation frame,
+plus a CDP screencast. Chat 0 is the owner's own "Избранное", so the sends this
+needed reached nobody.
+
+### D-041 — the guess was written back over the answer
+
+The measurement did run before the first paint. It could not see the bubble,
+because `bubbleRef` and `stackRef` point at ancestors and React attaches a host
+ref during the layout phase, which walks children before parents. That much the
+entry already said. What it missed is what happened next: even once the elements
+are found and the placement is measured synchronously, a **passive effect resets
+it**. The `useEffect` on `[content, measureKey]` that returns the placement to
+`getInitialMetaPlacement` also runs on mount, after the commit, and puts the
+guess back over the value the layout effect had just measured. The measured
+value then returned through the `requestAnimationFrame` pass — one frame late.
+That is why moving the measurement into `MessageBubble` looked as if React "did
+not flush before paint": it flushed, and this overwrote it.
+
+Both halves are needed and both are proven by mutation. The elements are now
+read from the DOM — `textFlow.closest('[data-message-bubble="true"]')`, which is
+populated by then because React inserts the whole subtree before it runs any
+layout effect — and the reset skips its first run, which restores nothing
+because `useState` already initialises to the same two values.
+
+### D-032 — the ceiling existed and was never asked
+
+`getMaxContentWidth` measured the row. The row is a shrink-to-fit flex item
+around this very bubble, so it can be far wider than the design cap the stack
+declares. Measured on a real own message at 1440: row 1008px, so the answer was
+984px, while the bubble could never exceed 560px — 534px of content. A last line
+of 506.7px was told it had 984px, chose inline, and the spacer that reserves
+room for the time then wrapped.
+
+The cap is now read from the stack's computed `max-width` and applied as a
+`Math.min`. That string is `min(1238.4px, 560px, max(256px, 100% - 104px))` —
+every unit already absolute, so it needs evaluating, not `parseFloat`, which
+returns 100 for `100%`. `artifacts/kub/src/lib/cssLength.ts` evaluates it.
+
+**Only the terms that do not move are used.** The `100%` term resolves against
+the row, which grows with the content, and using it made the limit move with the
+placement: measured, that flipped two already-settled messages in an unrelated
+chat from inline to anchored and made them 15px taller. Percentages are
+therefore asked as unbounded and drop out of the `min()`, leaving the fixed
+design ceiling. A ceiling can only ever tighten the answer, so this cannot
+reopen D-027's feedback loop.
+
+### Sending, measured frame by frame, three runs each
+
+| | D-041 before | D-041 after | D-032 before | D-032 after |
+|---|---|---|---|---|
+| bubble at first paint | 36.8px | **48.8px** | 59.5px | **71.5px** |
+| bubble once settled | 48.8px | 48.8px | 82.3px | **71.5px** |
+| change after it was painted | +12px | **none** | +22.8px | **none** |
+| when | +15…30ms | — | +39…46ms | — |
+| gap between the two witness steps | 28–31ms | **4–7ms** | 39–46ms | **4–5ms** |
+
+The second witness step that remains is `MessageList` catching the bottom up by
+the row's height; it is a scroll, not a resize, and it lands in the same frame
+group. The 24px step earlier in the D-032 runs is the composer growing under the
+typed text and is unrelated.
+
+### Chat entry, no sends, matched pair on one revision, two runs each
+
+| | before | after |
+|---|---|---|
+| 1440×900 — rows that change height after their first painted frame | **13 of 73** | **0** |
+| 1440×900 — total late growth | 199.2px | **0px** |
+| 1440×900 — latest correction | 111ms after the row appeared | — |
+| 390×844 — rows that change | **60 of 73** | **0** |
+| 390×844 — total late growth | 1356.7px | **0px** |
+| list-height steps after entry | 1 | **0** |
+| scroll steps after entry | 1 | **0** |
+| distance from the bottom once settled | 0px | 0px |
+
+D-032 was endemic on the phone viewport, where the cap is `86vw` and the row's
+max-content is several times it.
+
+### What it changed in the product, and what it did not
+
+Every message rendered in two real chats at three widths, compared before and
+after: **47 of 392 changed, and every one of them was a bubble whose reserved
+spacer was wrapping.** 345 are identical to the pixel.
+
+- 1440×900 — 1 of 64 in chat 0 (82.3px → 71.5px), 0 of 100 in chat 1
+- 1024×900 — 0 of 64, 0 of 100
+- 390×900 — 46 of 64 (82.3px → 81.5px, one 105px → 104.3px)
+
+`output/d032/d032-before.png` and `d032-after.png` are the same message: a blank
+third line with the time hanging off it, against the time on its own compact
+row, 10.8px shorter.
+
+**The design was not touched.** `getMaxContentWidth` still measures the
+shrink-to-fit row, so an own message's timestamp still takes its own row exactly
+as it does today — the thing that was to be reported rather than changed. A
+ceiling can only refuse a placement that was already going to overflow; it can
+never make the meta fit where it did not before.
+
+### Section 11, measured rather than argued
+
+| | before | after |
+|---|---|---|
+| entry, no unread: distance from the bottom | 0px | 0px |
+| prepend: anchor row displacement, worst frame | −80.5px | −80.5px |
+| prepend: anchor row displacement once settled | −80.5px | −80.5px |
+| fast upward scrolling: `scrollTop` range | 0…5871 | 0…5871 |
+| fast upward scrolling: downward jumps over 200px | 2 | 2 |
+
+Identical. The −80.5px prepend step is D-042's loading band and is unchanged by
+this work. `tests/e2e/chat-entry-scroll.spec.ts` (3), `message-meta-placement.spec.ts`
+(4) and `tests/unit/message-history-anchoring.test.mjs` all pass.
+
+### Tests, and the mutations that prove them
+
+`tests/unit/css-length.test.mts` and `tests/e2e/message-meta-first-paint.spec.ts`.
+The e2e calibrates its own text against the running layout — the width that
+triggers D-032 is a window about `time + 8px` wide at the very end of a line, and
+where it sits depends on the viewport and on the font the machine has — and it
+pins the font by refusing Google Fonts, for the reason in D-043.
+
+Eight mutations, each verified as applied by grepping the pattern off disk
+before running anything. All eight fail the suite:
+
+| mutation | caught by |
+|---|---|
+| the cap clamp removed | the spacer wraps onto a blank line |
+| the reset runs on mount again | a bubble painted at 36.8px becomes 54.8px 28ms later |
+| ancestors only from React refs | the same |
+| the cap keeps the bubble's padding and border | the crafted messages stop rendering at all — the two placements start arguing for each other and the bubble flips on every frame until React gives up |
+| percentages resolve to zero instead of refusing | the unit suite |
+| `min()` behaves as `max()` | the unit suite |
+| an unresolved unit is taken as pixels | the unit suite |
+| a partly parsed value is accepted | the unit suite |
+
+### Left alone deliberately
+
+`getMaxContentWidth` reads `--kub-action-lane` through `parsePixelValue`, which
+refuses anything not ending in `px`. The custom property computes to `6.5rem`,
+so **the lane has always been 0 there** and 104px is never subtracted. It is not
+fixed here because subtracting it turns every single-line *received* message
+anchored: the 32px avatar lane in the row is the only reason their time is
+inline today, and 104px erases it. That is the same design decision, reached
+from the other side.
+
+## D-043 — the first load re-flows every message when Inter arrives
+
+Found 2026-09-05 while building the regression test for D-032, and not fixed.
+
+`artifacts/kub/index.html:34` loads Inter from Google Fonts with `display=swap`.
+A cold page therefore paints in the fallback face and re-flows when the real one
+lands, and every text metric changes with it. Measured on the DEV preview
+fixture: a timestamp 23.7px wide became 28.6px, a last line 426.9px became 534px,
+and the bubbles re-measured and changed height 55ms later — well after first
+paint.
+
+This is not D-032 or D-041, and no measurement taken before the font exists could
+have predicted it: the metrics genuinely change. It is recorded because it is the
+remaining source of late height changes in a chat, and because it makes a
+frame-by-frame test of message geometry unreliable unless the face is pinned —
+`tests/e2e/message-meta-first-paint.spec.ts` blocks the font for exactly that
+reason and says so.
+
+The directions are self-hosting the face with `font-display: optional`, or
+measuring nothing until `document.fonts.ready`. Both are decisions about the
+product's first paint, not motion fixes.
