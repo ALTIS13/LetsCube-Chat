@@ -13,6 +13,9 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import type { MessageWithSender } from "@/types/database";
+
+/** The composer stops growing here and scrolls instead. */
+const MAX_COMPOSER_HEIGHT_PX = 140;
 import { cn } from "@/lib/utils";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { CameraCaptureModal } from "./CameraCaptureModal";
@@ -581,7 +584,6 @@ export function MessageInput({
       if (typeof window !== "undefined") localStorage.removeItem(draftKey(chatId));
       setShowEmoji(false);
       if (textareaRef.current) {
-        textareaRef.current.style.height = "auto";
         textareaRef.current.focus();
       }
       let result: unknown;
@@ -611,7 +613,6 @@ export function MessageInput({
     }
     setShowEmoji(false);
     if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
       textareaRef.current.focus();
     }
   }, [text, hasAttachments, onSend, isEditing, editingMessage, onEdit, setEditingMessage, chatId, composerSendScope]);
@@ -652,12 +653,29 @@ export function MessageInput({
     if (!data.getData("text/plain")) event.preventDefault();
   };
 
-  const handleInput = () => {
+  /**
+   * The composer's height follows its text, in the same commit that changes it.
+   *
+   * It used to be set imperatively: `handleSend` called `setText("")` — queued —
+   * and then wrote `style.height = "auto"` straight to the DOM, which applied at
+   * once. So on every send the composer collapsed a frame or more BEFORE the
+   * message it was sending existed: the list grew into the freed space, painted,
+   * and only then did the bubble arrive. Two staggered layout changes where the
+   * reader expects one, which is the jerk that survived the scroll placement fix
+   * — that fix corrected where the list puts itself, not the fact that its
+   * container changed size early.
+   *
+   * A layout effect runs after React writes the DOM and before the browser
+   * paints, so the height and the cleared text land in the same frame. The
+   * textarea is controlled by `text`, so this covers typing as well and there is
+   * no second place that sizes it.
+   */
+  useLayoutEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
-  };
+    el.style.height = `${Math.min(el.scrollHeight, MAX_COMPOSER_HEIGHT_PX)}px`;
+  }, [text]);
 
   const insertEmoji = (emoji: string) => {
     const el = textareaRef.current;
@@ -1007,7 +1025,6 @@ export function MessageInput({
             ref={textareaRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onInput={handleInput}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             onCompositionStart={() => setIsComposing(true)}
