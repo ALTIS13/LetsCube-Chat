@@ -5,7 +5,20 @@ import { readFileSync } from "node:fs";
 import {
   advanceMessageEntrance,
   EMPTY_ENTRANCE_STATE,
+  messageEntranceKey,
+  type MessageEntranceState,
 } from "../../artifacts/kub/src/lib/messageEntrance.ts";
+
+type Row = { id: string; client_message_id?: string | null };
+
+/** Exactly how `MessageList` calls it: entrance keys to diff, ids to cache on. */
+function advanceRows(previous: MessageEntranceState, rows: readonly Row[]) {
+  return advanceMessageEntrance(
+    previous,
+    rows.map(messageEntranceKey),
+    rows.map((row) => row.id),
+  );
+}
 
 test("opening a chat animates nothing", () => {
   // The bug: `msg-appear` was unconditional, so every bubble played it on
@@ -95,4 +108,71 @@ test("the animation moves nothing that has a size", () => {
   assert.ok(!/\bheight\b|\bwidth\b|\bmargin\b|\bpadding\b/.test(block), "msg-appear animates layout");
   assert.ok(block.includes("var(--kub-motion-fast)"), "the shared timing step was replaced by a literal");
   assert.ok(block.includes("prefers-reduced-motion"), "reduced motion is not honoured");
+});
+
+test("a message keeps one entrance identity across the optimistic swap", () => {
+  // `tmp:<client id>` and the server row are the same message. Nothing else on
+  // the two rows is equal: the id changes, and that is what React keys on.
+  assert.equal(messageEntranceKey({ id: "tmp:X", client_message_id: "X" }), "cid:X");
+  assert.equal(messageEntranceKey({ id: "server-uuid", client_message_id: "X" }), "cid:X");
+  // History predating the column, and bot messages, have no client id at all.
+  assert.equal(messageEntranceKey({ id: "plain" }), "plain");
+  assert.equal(messageEntranceKey({ id: "plain", client_message_id: null }), "plain");
+});
+
+test("a sent message does not animate a second time when the server row lands", () => {
+  // Measured on a real send before this: the bubble faded in at t=68ms, finished
+  // at t=182ms, and faded in again from opacity 0 at t=231ms — the moment the
+  // optimistic row was replaced. The React key changed, so the DOM node was
+  // replaced too, and the CSS animation played on the new one. A message you
+  // just sent blinked.
+  const history: Row[] = [{ id: "a" }, { id: "b" }];
+  const optimistic: Row[] = [...history, { id: "tmp:X", client_message_id: "X" }];
+  const settled: Row[] = [...history, { id: "server-uuid", client_message_id: "X" }];
+
+  const first = advanceRows(EMPTY_ENTRANCE_STATE, history);
+  const arrival = advanceRows(first.state, optimistic);
+  assert.deepEqual([...arrival.entering], ["cid:X"], "the message did not animate when it was sent");
+
+  const swap = advanceRows(arrival.state, settled);
+  assert.equal(swap.entering.size, 0, "the message animated a second time under its server id");
+});
+
+test("the idempotency cache still keys off what was rendered", () => {
+  // The two arguments answer different questions and must not be collapsed. If
+  // the cache keyed off the entrance keys instead, the swap above would not
+  // change the signature, the cached answer would come back — still naming the
+  // message as entering — and the remounted row would animate again.
+  const optimistic: Row[] = [{ id: "a" }, { id: "tmp:X", client_message_id: "X" }];
+  const first = advanceRows(EMPTY_ENTRANCE_STATE, [{ id: "a" }]);
+  const arrival = advanceRows(first.state, optimistic);
+  const repeat = advanceRows(arrival.state, optimistic);
+  assert.deepEqual([...repeat.entering], [...arrival.entering], "a repeated render lost the animation");
+});
+
+test("a received message still animates", () => {
+  // Every message carries a client id, including one somebody else sent. The
+  // rule is "was it on screen a moment ago", and theirs was not.
+  const first = advanceRows(EMPTY_ENTRANCE_STATE, [{ id: "a", client_message_id: "A" }]);
+  const arrival = advanceRows(first.state, [
+    { id: "a", client_message_id: "A" },
+    { id: "b", client_message_id: "B" },
+  ]);
+  assert.deepEqual([...arrival.entering], ["cid:B"]);
+});
+
+test("the list diffs entrance keys, not row ids", () => {
+  // The wiring, which no unit of `messageEntrance` can see on its own: passing
+  // `m.id` as the thing to diff puts the swap back exactly as it was.
+  const list = readFileSync("artifacts/kub/src/components/chat/MessageList.tsx", "utf8");
+  assert.match(
+    list,
+    /advanceMessageEntrance\(\s*entranceRef\.current,\s*sortedMessages\.map\(messageEntranceKey\),\s*sortedMessages\.map\(\(m\) => m\.id\),/,
+    "the entrance is diffed by row id again, so a sent message animates twice",
+  );
+  assert.match(
+    list,
+    /isEntering=\{enteringKeys\.has\(messageEntranceKey\(msg\)\)\}/,
+    "the bubble asks about its row id again, so it never matches the entrance key",
+  );
 });

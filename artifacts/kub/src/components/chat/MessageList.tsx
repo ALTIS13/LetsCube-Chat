@@ -20,7 +20,7 @@ import { requestAppConfirm } from "@/lib/appDialogs";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { formatFullTime } from "@/lib/format";
 import { useAvatarVariantUrls, useMessageMediaVariantUrls } from "@/hooks/useMediaVariants";
-import { advanceMessageEntrance, EMPTY_ENTRANCE_STATE } from "@/lib/messageEntrance";
+import { advanceMessageEntrance, EMPTY_ENTRANCE_STATE, messageEntranceKey } from "@/lib/messageEntrance";
 import {
   captureVisibleMessageAnchor,
   restoreVisibleMessageAnchor,
@@ -169,10 +169,15 @@ export function MessageList({
   // Only a message that arrived while this list was on screen animates in.
   // The class used to be unconditional, so every bubble played it on mount and
   // opening a chat animated the whole history at once.
+  // The entrance is tracked by `messageEntranceKey` rather than by the row id,
+  // so a message you sent does not animate a second time when its optimistic
+  // `tmp:` row is replaced by the server row. The ids are still passed as the
+  // render identity, which is what the idempotency cache has to key off.
   const entranceRef = React.useRef(EMPTY_ENTRANCE_STATE);
-  const enteringIds = React.useMemo(() => {
+  const enteringKeys = React.useMemo(() => {
     const { state, entering } = advanceMessageEntrance(
       entranceRef.current,
+      sortedMessages.map(messageEntranceKey),
       sortedMessages.map((m) => m.id),
     );
     entranceRef.current = state;
@@ -838,7 +843,7 @@ export function MessageList({
                 >
                   <MessageBubble
                     message={msg}
-                    isEntering={enteringIds.has(msg.id)}
+                    isEntering={enteringKeys.has(messageEntranceKey(msg))}
                     isMe={isMe}
                     isFirstInGroup={!isSameSenderAsPrev}
                     isLastInGroup={!isSameSenderAsNext}
