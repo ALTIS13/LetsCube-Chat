@@ -1886,3 +1886,151 @@ change is implicated before looking anywhere else** — 4px is far too small to
 explain "near the composer", but the interaction between the entrance and the
 scroll-to-bottom is the obvious place to start, and if the two compound the fix
 belongs in one of them rather than in both.
+
+## D-037 and D-038 closed — one mechanism, measured frame by frame
+
+Diagnosed and fixed 2026-09-04. Both reports are the same defect seen at two
+moments, and neither is about where the list ends up.
+
+**Every correction of the scroll position was scheduled with
+`requestAnimationFrame` from a passive `useEffect`, so it ran after the browser
+had painted the commit that made it necessary.** The first painted frame was
+therefore always the uncorrected one. Measured on the real chat against
+production data, a Vite dev server on a dedicated port with a QA account, every
+scroll write intercepted and the container's geometry sampled per animation
+frame:
+
+### D-037 — entry
+
+`ChatWindow` renders a spinner while a chat loads, so `MessageList` unmounts and
+remounts on every entry and its container starts at `scrollTop = 0`, which is the
+top of the loaded history.
+
+| t (ms) | scrollTop | scrollHeight | distance from bottom |
+|---|---|---|---|
+| 403.8 | 0 | 3538 | **2808** |
+| 471.4 | 0 | 3538 | **2808** |
+| 492.0 | 42 | 3562 | **2790** |
+| 495.4 | 2832 | 3562 | 0 |
+
+Three painted frames, 88ms, at the top of the history, then a snap of 2790px.
+Two screencast frames 85ms apart show it: the conversation opens on its oldest
+loaded day and the next composited frame is at the newest message.
+
+Thirteen scroll writes were issued in the first 4.6 seconds. The first was
+`behavior: "smooth"` from the message-count effect — and it never delivered
+anything, because Chromium's smooth scroll eases in: it covered 42px of 2808 in
+88ms before an instant write from another path overtook it. The remaining eight
+were the `[120, 320, 680, 1200, 1750, 2600, 3600, 4150]` settle timers, all of
+which found the position already correct.
+
+### D-038 — send
+
+| t (ms) | rows | last row top | container bottom | row bottom |
+|---|---|---|---|---|
+| 3.6 | 54 | 592.8 | 806 | 781.5 |
+| 90.6 | 55 | 681.5 | 830 | **865.8** |
+| 138.1 | 55 | 678.5 | 830 | 862.8 |
+| 141.1 | 55 | 621.5 | 830 | 805.8 |
+
+For three frames and 50ms the sent bubble was painted 36px *below* the bottom
+edge of the list — clipped, hard against the composer — and then jumped 57px up
+into the stream. That is "появляется где-то в районе модуля ввода текста и с
+пролагом попадает в чат", photographed. The composer shrinking back to one line
+in the same commit moved the container's own bottom edge 24px at the same
+moment.
+
+**The entrance animation from `c2a8d1b` is ruled out as the cause.** Measured,
+it applies correctly and its transform is 4px against a 61px displacement. It
+did, though, hide a second defect of its own: the bubble faded in at t=68ms,
+finished at t=182ms, and **faded in again from opacity 0 at t=231ms** — the
+moment the optimistic `tmp:` row was replaced by the server row. Two React keys,
+two DOM nodes, two plays of the animation. A message you had just sent blinked.
+
+### The fix
+
+The placement now happens in a layout effect — after React has written the DOM
+and before the browser paints — so the first frame is already the settled one.
+Nothing about the anchoring changed: same targets, same guards, same settle
+timers, same older-history hold. `scrollToBottom` still exists for the deferred
+passes and for the scroll-to-bottom button, where smooth is a user action.
+
+The `ResizeObserver` correction moved inside the callback too. That callback runs
+after layout and before paint, which is the only place that can catch the bubble
+reflowing 22px on its own (D-032) — no React commit describes it. Deferred by a
+frame it was painted first and corrected after, and that was the last visible
+step on entry.
+
+The entrance is now tracked by `messageEntranceKey` — `client_message_id`, the
+one value the optimistic row and the server row share — so the swap no longer
+counts as an arrival. `advanceMessageEntrance` takes the rendered ids separately,
+because its idempotency cache has to key off what React rendered while arrival
+has to key off what survives the swap; collapsing the two puts the double play
+straight back.
+
+### After
+
+Same measurements, same server, same account:
+
+| | before | after |
+|---|---|---|
+| entry: worst painted distance from bottom | 2790px | 24px, corrected inside the same frame |
+| entry: painted frames away from the bottom | 3 | 0 |
+| entry: smooth scroll writes | 1 | 0 |
+| send: first frame with the new row | 61px out, 36px clipped | 0px |
+| send: entrance animation plays | 2 | 1 |
+
+Verified at 1440x900, 1920x1080 and 390x844.
+
+### What was ruled out, and what could not be measured
+
+`getMediaAspectStyle` reserves nothing for an image whose message carries no
+width/height metadata: `MediaVideo` passes a 16/9 fallback, `MessageImage`
+passes none, so `aspectStyle` is `undefined`, `hasReservedAspect` is false, and a
+`loading="lazy"` image with `width: 100%` and no height occupies 0px until its
+bytes arrive and then jumps to as much as 340px. It is a real unreserved-height
+path and it would aggravate any of this, but it is **not** the cause: the wrong
+frame is painted before any image has been asked for. It could not be exercised
+live — none of the QA account's chats contains a media message — so it is
+recorded from the code and left open.
+
+D-032 is implicated but only as the residual: the bubble's own late growth
+measured 12–24px here, inside the window the entry correction already covers.
+
+## D-039 — a history prepend is painted 1233px out for exactly one frame
+
+Found 2026-09-04 while proving that the D-037/D-038 fix left the older-history
+anchoring alone. Measured identical **with and without** that fix, so it is
+pre-existing and is recorded rather than changed.
+
+Scrolling to the top of a chat and letting a page of older messages land, with a
+witness row sampled every animation frame:
+
+| t (ms) | witness offset | drift | scrollTop | scrollHeight | rows |
+|---|---|---|---|---|---|
+| 11509 | -38 | 0 | 100 | 6075 | 100 |
+| 11967 | -80 | -42 | 4696 | 10591 | 200 |
+| 12032 | 1195 | **+1233** | 4696 | **11866** | 200 |
+| 12049 | -80 | -42 | 5971 | 11866 | 200 |
+
+The restore does its job on the commit: 100 rows arrive and the reader keeps
+their place within 42px. Then the prepended rows finish laying out and the
+content grows another 1275px **without a React commit** — the same shape as
+D-032, at a hundred times the size — and the hold loop, which runs in
+`requestAnimationFrame`, corrects it on the *next* frame. One frame is painted
+1233px out.
+
+The settled contract holds and nothing snaps to the bottom, which is why every
+existing check passes. This is the same class as D-037 and D-038: a correction
+that is applied after the frame it belongs to. The obvious direction is the same
+one that closed the 24px residual — the `ResizeObserver` on the content already
+fires after layout and before paint, and it currently returns early while the
+older hold is active precisely so it does not fight it; restoring the anchor
+there instead of returning would land the correction a frame earlier.
+
+Deliberately not attempted here. The older-history hold is the most tuned
+mechanism in `MessageList` — this register already records 445px, 706px and
+1147px measurements behind its current shape — the contract it serves is in
+section 11 of `CLAUDE.md`, and nothing in CI can exercise it: it needs a signed-in
+chat with real history, and the e2e suite is unauthenticated. It wants its own
+task with its own measurement, not a change made in passing.
