@@ -16,6 +16,7 @@ import {
   sanitizeMessageAckError,
 } from "@/lib/messageAckError";
 import { MESSAGE_SELECT_WITH_JOINS } from "@/lib/messageProjection";
+import { attachKnownSender } from "@/lib/realtimeMessage";
 import {
   actorClientMessageKey,
   isIncomingMessage,
@@ -593,13 +594,22 @@ export function useMessages(
             !messageBelongsToTopic(payload.new, topicIdRef.current, generalTopicIdsRef.current)
           ) return;
           if (hiddenMessageIdsRef.current.has(payload.new.id)) return;
-          const provisional = buildRealtimeMessage(payload.new);
+          const user = currentUserRef.current;
+          // Realtime carries the raw row, so `sender` — a client-side join — is
+          // absent, and a message with a `user_id` but no sender resolves as an
+          // INVALID actor rather than a user. `isMe` is false for that, so your
+          // own message painted on the left and hopped right when the joined
+          // fetch landed. Fill the sender in from what is already known.
+          const provisional = attachKnownSender(
+            buildRealtimeMessage(payload.new),
+            user,
+            useAppStore.getState().messages[payload.new.chat_id] ?? [],
+          );
           // Render every realtime row immediately. The joined REST fetch below
           // can lag under rapid sends; keeping this provisional row prevents an
           // active chat from missing a message that the sidebar already saw.
           addMessage(payload.new.chat_id, provisional);
           updateChatLastMessage(payload.new.chat_id, provisional);
-          const user = currentUserRef.current;
           if (user && isIncomingMessage(payload.new, user.id)) {
             // Receipt state follows what was rendered, not the optional joined
             // enrichment below. That fetch can legitimately lag Realtime under

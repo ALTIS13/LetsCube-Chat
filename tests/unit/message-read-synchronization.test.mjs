@@ -14,7 +14,11 @@ const migrationUrl = new URL(
 
 test("a visible realtime message schedules read before optional joined enrichment", async () => {
   const source = await readFile(messagesHookUrl, "utf8");
-  const handlerStart = source.indexOf("const provisional = buildRealtimeMessage(payload.new)");
+  // Anchored on the INSERT subscription rather than on one statement inside it.
+  // The previous anchor was the literal `const provisional = buildRealtimeMessage(...)`,
+  // which broke the moment that line was wrapped to fill the sender in — a
+  // change that did not touch this contract at all.
+  const handlerStart = source.indexOf('{ event: "INSERT", schema: "public", table: "messages"');
   const joinedFetch = source.indexOf(".select(MESSAGE_SELECT_WITH_JOINS)", handlerStart);
   const readReceipt = source.indexOf(
     "scheduleMarkChatRead(supabase, payload.new.chat_id, payload.new.created_at)",
