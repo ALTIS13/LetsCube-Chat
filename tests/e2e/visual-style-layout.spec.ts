@@ -269,10 +269,19 @@ test.describe("LETSCUBE visual style and layout", () => {
 
     const infoButton = page.getByTestId("chat-header-info-button");
     await expect(infoButton).toBeVisible();
+
+    const chatHeader = page.getByTestId("chat-header-shell");
+    const viewport = testInfo.project.use.viewport;
+    const floats = Boolean(viewport && "width" in viewport && viewport.width >= 640);
+    // What the conversation measured before the profile was opened. Above the
+    // dock breakpoint the profile is a movable window, so this must not change.
+    const conversationWidthBefore = floats
+      ? (await requiredBox(chatHeader, "chat header shell")).width
+      : 0;
+
     await infoButton.click();
 
     const panel = page.getByTestId("chat-info-panel");
-    const chatHeader = page.getByTestId("chat-header-shell");
     const header = page.getByTestId("chat-info-header");
     const summary = page.getByTestId("chat-info-summary");
     await expect(panel).toBeVisible();
@@ -287,12 +296,22 @@ test.describe("LETSCUBE visual style and layout", () => {
     expect(headerBox.x + headerBox.width).toBeLessThanOrEqual(panelBox.x + panelBox.width + 1);
     expect(summaryBox.x).toBeGreaterThanOrEqual(panelBox.x - 1);
     expect(summaryBox.x + summaryBox.width).toBeLessThanOrEqual(panelBox.x + panelBox.width + 1);
-    const viewport = testInfo.project.use.viewport;
-    if (viewport && "width" in viewport && viewport.width >= 768) {
-      await expect(chatHeader).toBeVisible();
-      const chatHeaderBox = await requiredBox(chatHeader, "chat header shell");
-      expect(Math.abs(chatHeaderBox.y - headerBox.y)).toBeLessThanOrEqual(1);
-      expect(Math.abs(chatHeaderBox.y + chatHeaderBox.height - (headerBox.y + headerBox.height))).toBeLessThanOrEqual(1);
+
+    if (floats && viewport && "width" in viewport) {
+      // The complaint this window answers: the docked panel took a permanent
+      // 320px column out of the conversation for as long as it was open.
+      await expect(panel).toHaveAttribute("data-docked", "false");
+      const conversationWidthAfter = (await requiredBox(chatHeader, "chat header shell")).width;
+      expect(Math.abs(conversationWidthAfter - conversationWidthBefore)).toBeLessThanOrEqual(1);
+
+      // And it opens fully inside the viewport, whatever was remembered.
+      expect(panelBox.x).toBeGreaterThanOrEqual(-1);
+      expect(panelBox.y).toBeGreaterThanOrEqual(-1);
+      expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(viewport.width + 1);
+      expect(panelBox.y + panelBox.height).toBeLessThanOrEqual(viewport.height + 1);
+    } else {
+      // On a phone it stays the panel it always was.
+      await expect(panel).toHaveAttribute("data-docked", "true");
     }
 
     expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);

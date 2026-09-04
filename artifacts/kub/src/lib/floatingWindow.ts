@@ -37,6 +37,13 @@ export function isDocked(viewport: Viewport): boolean {
   return viewport.width < DOCK_BREAKPOINT;
 }
 
+/** The viewport as it is right now, with a desktop-shaped answer where there
+ *  is no window to ask. */
+export function currentViewport(): Viewport {
+  if (typeof window === "undefined") return { width: 1280, height: 800 };
+  return { width: window.innerWidth, height: window.innerHeight };
+}
+
 /**
  * Shrink the window to what the viewport can actually hold, never below the
  * minimum. A 560px-tall panel on a 500px-tall window would put its composer
@@ -115,14 +122,30 @@ export function resolvePlacement(
   return { position, size };
 }
 
-const STORAGE_KEY = "letscube:support-window";
+export const SUPPORT_WINDOW_STORAGE_KEY = "letscube:support-window";
 
-/** Reading and writing the stored placement never throws: a private window, a
- *  cleared store or a browser that blocks site data must not break the panel. */
-export function readStoredPlacement(): Partial<WindowPlacement> | null {
+/**
+ * A store that only has to do what a placement needs. Narrower than `Storage`
+ * so a test can hand in a plain object, and so the caller decides whether the
+ * arrangement outlives the tab.
+ */
+export interface PlacementStore {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+/**
+ * Turn whatever was written into a placement, or into nothing.
+ *
+ * Kept apart from the store it came out of: a second window needs the same
+ * "is this still a placement?" reading under a different key, and a second copy
+ * of it would be a second set of bugs.
+ */
+export function parseStoredPlacement(
+  raw: string | null | undefined,
+): Partial<WindowPlacement> | null {
+  if (!raw) return null;
   try {
-    const raw = globalThis.localStorage?.getItem(STORAGE_KEY);
-    if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return null;
     const record = parsed as Record<string, unknown>;
@@ -135,9 +158,19 @@ export function readStoredPlacement(): Partial<WindowPlacement> | null {
   }
 }
 
+/** Reading and writing the stored placement never throws: a private window, a
+ *  cleared store or a browser that blocks site data must not break the panel. */
+export function readStoredPlacement(): Partial<WindowPlacement> | null {
+  try {
+    return parseStoredPlacement(globalThis.localStorage?.getItem(SUPPORT_WINDOW_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
 export function writeStoredPlacement(placement: WindowPlacement): void {
   try {
-    globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(placement));
+    globalThis.localStorage?.setItem(SUPPORT_WINDOW_STORAGE_KEY, JSON.stringify(placement));
   } catch {
     /* a placement is a convenience, never a requirement */
   }

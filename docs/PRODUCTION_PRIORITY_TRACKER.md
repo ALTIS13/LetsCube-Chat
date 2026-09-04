@@ -160,7 +160,7 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 
     Two smaller findings left deliberately untouched: one member row whose `role='staff'` disagrees with its `role_id=location_client` — aligning it would *add* `tasks.view` and `tasks.claim`, which is a widening and needs a decision — and the two bypass-role holders whose legacy column reads `user`: these are two of the five `is_test_account` logins, given `owner` and `tech_admin` deliberately so the functionality behind them could be exercised, and they disappear when those logins are deleted. The audit first read them as privilege that had leaked, which they are not — but any count of administrators that does not exclude test accounts is wrong by two.
 
-20. `[ ]` Move the user profile out of the docked panel into a floating window. Requested by the owner on 2026-09-04: opening a user from the chat header gives a panel pinned to the right edge that "занимает чёт много места". The wanted shape is a movable window carrying the same functions, in the spirit of a desktop messenger's contact card.
+20. `[x]` Move the user profile out of the docked panel into a floating window. Requested by the owner on 2026-09-04: opening a user from the chat header gives a panel pinned to the right edge that "занимает чёт много места". The wanted shape is a movable window carrying the same functions, in the spirit of a desktop messenger's contact card.
 
     Today it is `ChatInfoPanel.tsx`, `md:w-80` with a left border, taking a permanent 320px column out of the conversation for as long as it is open. The functions it carries stay exactly as they are — «Общие медиа», mute, unpin, «Очистить историю у себя», «Удалить чат у себя», the shared-media grid, the bio and the role badges.
 
@@ -169,6 +169,29 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     Scope: reuse the primitive, keep every existing action and its confirmation, keep the shared-media grid scrollable inside the window, preserve focus handling and Escape-to-close, and keep the panel behaviour on narrow viewports. Position should be remembered per session but must never restore off-screen — `clampPosition` already returns the default for non-finite coordinates, and that path has a test.
 
     Not in scope: changing what the profile shows. The role badges visible in it are item 19's problem, and the two must not be done in one commit.
+
+    **Done on 2026-09-04.** `ChatInfoPanel.tsx` keeps every action, confirmation
+    and section it had; only its frame moved. Above `DOCK_BREAKPOINT` it is a
+    `fixed` card the person drags by its title bar, so the conversation keeps
+    its full width; below it, it is the same in-flow panel as before, class
+    string unchanged. The rules live in `artifacts/kub/src/lib/profileWindow.ts`
+    on top of the existing `floatingWindow.ts` geometry — no second window
+    system — and the placement is remembered in `sessionStorage` under its own
+    key, so moving the profile no longer moves the support window. Escape closes
+    it, but stands down for a confirmation or the media viewer above it and for
+    a field being edited; the card announces `role="dialog"`, which is what
+    makes the shell stop closing the whole chat on the same press. Focus enters
+    the card on open and returns to the info button on close.
+    `tests/unit/profile-window.test.mts` covers it, mutation-tested: 18
+    mutations applied one at a time, all 18 caught.
+
+    **Not verified: anything that needs eyes.** There is no way to render this
+    in the repo — no jsdom, no component test runner — so the drag, the docked
+    fallback, the media grid scrolling inside the window, the z-order of a
+    confirmation opened from inside it, and the card's appearance in either
+    theme have not been seen. The e2e assertion in `visual-style-layout.spec.ts`
+    that the conversation's width no longer changes when the profile opens
+    needs a live server and QA credentials, and did not run here.
 
 ## Last Confirmed Deploy Baseline
 

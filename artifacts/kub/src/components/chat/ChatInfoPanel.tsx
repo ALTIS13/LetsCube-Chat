@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
@@ -28,6 +28,16 @@ import type { ChatWithLastMessage, Profile, Message } from "@/types/database";
 import { CHAT_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
 import { useMessageMediaVariantUrls, type MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
+import { currentViewport, type Point, type WindowPlacement } from "@/lib/floatingWindow";
+import {
+  profileDragPosition,
+  profileWindowFrame,
+  readProfileWindowPlacement,
+  resolveProfileWindowPlacement,
+  shouldCloseProfileWindowOnKey,
+  shouldStartProfileDrag,
+  writeProfileWindowPlacement,
+} from "@/lib/profileWindow";
 
 interface ChatInfoPanelProps {
   chat: ChatWithLastMessage;
@@ -78,6 +88,116 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const [inviteOpen, setInviteOpen] = useState(false);
   const [destructiveError, setDestructiveError] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
+
+  // --- The card as a window ------------------------------------------------
+  // It used to be a 320px column welded to the right edge for as long as it was
+  // open. It is the same panel with the same actions; only where it sits moved.
+  // Every rule about where it may sit is in `@/lib/profileWindow`, on top of the
+  // geometry the support window already uses — what is left here is wiring.
+  const [viewport, setViewport] = useState(currentViewport);
+  const [placement, setPlacement] = useState<WindowPlacement>(() =>
+    resolveProfileWindowPlacement(readProfileWindowPlacement(), currentViewport()),
+  );
+  // The pointer-up that ends a drag must persist the position the last
+  // pointer-move produced, not the one this render happened to close over.
+  const placementRef = useRef<WindowPlacement>(placement);
+  const dragRef = useRef<{ pointerId: number; origin: Point; start: Point } | null>(null);
+  const windowRef = useRef<HTMLDivElement | null>(null);
+  const applyPlacement = useCallback((next: WindowPlacement) => {
+    placementRef.current = next;
+    setPlacement(next);
+  }, []);
+  const frame = profileWindowFrame(placement, viewport);
+  const docked = frame.docked;
+  const windowTitle = isSaved ? "Избранное" : isGroup ? "Информация о группе" : "Профиль пользователя";
+
+  // A resize or a rotation can strand the card off screen; crossing the dock
+  // breakpoint has to put it back into the column it came from.
+  useEffect(() => {
+    const onResize = () => {
+      const next = currentViewport();
+      setViewport(next);
+      applyPlacement(resolveProfileWindowPlacement(placementRef.current, next));
+    };
+    window.addEventListener("resize", onResize);
+    onResize();
+    return () => window.removeEventListener("resize", onResize);
+  }, [applyPlacement]);
+
+  // Opening the card moves focus into it, so it can be read and dismissed from
+  // the keyboard; closing it hands focus back to whatever opened it, which is
+  // normally the info button in the chat header.
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    windowRef.current?.focus({ preventScroll: true });
+    return () => {
+      if (opener && opener.isConnected) opener.focus({ preventScroll: true });
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName;
+      const close = shouldCloseProfileWindowOnKey({
+        key: event.key,
+        defaultPrevented: event.defaultPrevented,
+        editing:
+          tagName === "INPUT" || tagName === "TEXTAREA" || Boolean(target?.isContentEditable),
+        // A confirmation, the invite dialog and the media viewer are all modal
+        // and own Escape until they are gone. The card is not modal, which is
+        // also why the shell's own Escape handler stands down while it is open.
+        overlayAbove: Boolean(document.querySelector('[aria-modal="true"]')),
+      });
+      if (!close) return;
+      event.preventDefault();
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  const onHandlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (
+      !shouldStartProfileDrag({
+        docked,
+        button: event.button,
+        target: event.target as HTMLElement | null,
+      })
+    ) {
+      return;
+    }
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      origin: { x: event.clientX, y: event.clientY },
+      start: placementRef.current.position,
+    };
+  };
+
+  const onHandlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const current = placementRef.current;
+    applyPlacement({
+      ...current,
+      position: profileDragPosition(
+        drag,
+        { x: event.clientX, y: event.clientY },
+        current.size,
+        currentViewport(),
+      ),
+    });
+  };
+
+  const endHandleDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    writeProfileWindowPlacement(placementRef.current);
+  };
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [invites, setInvites] = useState<InviteWithProfiles[]>([]);
   const [inviteError, setInviteError] = useState<string | null>(null);
@@ -572,8 +692,29 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     "inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 transition-colors text-left text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:cursor-not-allowed disabled:opacity-60";
 
   return (
-    <div className="flex min-h-0 flex-col h-full w-full md:w-80 flex-shrink-0 border-l bg-[var(--kub-surface)] border-[color:var(--kub-border-color)]" data-testid="chat-info-panel">
-      <div className="sticky top-0 z-20 grid h-[var(--kub-control-row-height)] flex-shrink-0 grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3" data-testid="chat-info-header">
+    <div
+      ref={windowRef}
+      role="dialog"
+      aria-label={windowTitle}
+      tabIndex={-1}
+      className={cn(frame.className, "outline-none")}
+      style={frame.style}
+      data-testid="chat-info-panel"
+      data-docked={docked ? "true" : "false"}
+    >
+      <div
+        onPointerDown={onHandlePointerDown}
+        onPointerMove={onHandlePointerMove}
+        onPointerUp={endHandleDrag}
+        onPointerCancel={endHandleDrag}
+        className={cn(
+          "sticky top-0 z-20 grid h-[var(--kub-control-row-height)] flex-shrink-0 grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3",
+          // The title bar is the handle. `touch-none` stops a drag on a tablet
+          // from scrolling the page instead of moving the card.
+          docked ? "" : "cursor-grab touch-none select-none active:cursor-grabbing",
+        )}
+        data-testid="chat-info-header"
+      >
         <button
           onClick={onClose}
           className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)]"
@@ -582,7 +723,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
           <KubIcon name="close" size={18} />
         </button>
         <span className="min-w-0 truncate text-center text-sm font-semibold text-[color:var(--kub-text)]">
-          {isSaved ? "Избранное" : isGroup ? "Информация о группе" : "Профиль пользователя"}
+          {windowTitle}
         </span>
         <div className="flex h-9 w-9 items-center justify-center justify-self-end">
           {canEditChatProfile && !editing && (
