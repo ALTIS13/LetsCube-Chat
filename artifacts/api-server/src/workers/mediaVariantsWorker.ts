@@ -540,6 +540,11 @@ async function downloadStorageObject(
   return Buffer.from(await data.arrayBuffer());
 }
 
+/** The delta-seconds out of a `Cache-Control` value, for callers that want only that. */
+function cacheControlSeconds(value: string): string {
+  return /max-age=(\d+)/.exec(value)?.[1] ?? "3600";
+}
+
 /** See `artifacts/kub/src/lib/mediaCacheControl.ts`; kept in step by a test. */
 function variantCacheControl(path: string): string {
   return path.startsWith("variants/profiles/")
@@ -553,6 +558,7 @@ async function uploadVariant(
   body: Buffer,
   mimeType: string,
 ): Promise<void> {
+  const cacheControl = variantCacheControl(path);
   const { error } = await supabase.storage.from(MEDIA_BUCKET).upload(path, body, {
     contentType: mimeType,
     upsert: true,
@@ -561,7 +567,16 @@ async function uploadVariant(
     // variant's path names one message and never changes; a profile variant's
     // path is reused when the picture is, so it gets a shorter window and the
     // client versions the URL.
-    cacheControl: variantCacheControl(path),
+    //
+    // `cacheControl` takes SECONDS here, not a directive. For a Buffer body the
+    // client writes `max-age=${cacheControl}` itself, so passing the whole
+    // string produced `Cache-Control: max-age=max-age=31536000, immutable` on
+    // every variant this worker uploaded — a malformed max-age, which is worse
+    // than no header. The browser call sites are unaffected: a Blob goes up as
+    // a form field the service reads verbatim. `headers` is applied last and
+    // wins, so it is what actually carries `immutable`.
+    cacheControl: cacheControlSeconds(cacheControl),
+    headers: { "cache-control": cacheControl },
   });
   if (error) throw error;
 }
