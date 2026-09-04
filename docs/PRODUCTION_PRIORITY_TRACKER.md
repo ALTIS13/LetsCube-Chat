@@ -31,7 +31,7 @@ Legend:
 4. `[x]` Priority 4 - Operator security observability.
 5. `[~]` Priority 5 - Installed web/PWA production shell. iPhone/iPad-specific implementation and QA are externally owned.
 6. `[!]` Priority 6 - Monitoring and self-hosted Sentry.
-7. `[~]` Native/mobile packaging resumed: Windows Tauri secure startup and signed updater are complete; Android Stable now publishes the signed `0.1.2/3` APK with authenticated upgrade/logout/login/session restore, foreground/background/killed FCM acceptance, exact taps/read-sync, offline/reconnect, initial read/unread anchoring, fast-upward/prepend/footer stability, bounded geolocation and complete product media/capture acceptance on official-GMS Nothing. Live recovery, signer/Asset Links parity and a fresh official-GMS automatic domain verification passed. External backup and Play release remain active gates.
+7. `[~]` Native/mobile packaging resumed: Windows Tauri secure startup and signed updater are complete; Android Stable now publishes the signed `0.1.3/4` APK with authenticated upgrade/logout/login/session restore, foreground/background/killed FCM acceptance, exact taps/read-sync, offline/reconnect, initial read/unread anchoring, fast-upward/prepend/footer stability, bounded geolocation and complete product media/capture acceptance on official-GMS Nothing. Live recovery, signer/Asset Links parity and a fresh official-GMS automatic domain verification passed. Android embeds its web bundle at build time, so unlike the Windows shell it does not pick up deployed web fixes; the published `0.1.3` carries the bundle built from `920c8e8` and is behind. External backup, a rebuild for the stale bundle and Play release remain active gates.
 
 ## Next Execution Queue
 
@@ -56,7 +56,41 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 4. `[x]` Added hybrid media upload progress, retry and current-session resume. Files above 6 MiB use TUS with exact 6 MiB chunks and bounded retries; smaller files keep the standard Storage path. Cancellation terminates partial uploads, retry keeps a stable object path, and chat/composer scopes prevent delayed files, recordings, location results or failed captions from crossing into another chat. A disposable 7 MiB production object was uploaded, read back at the exact size and deleted.
 5. `[!]` Keep iPhone/iPad Home Screen as the only PWA install target. Android browsers use the APK catalog and Windows browsers use the EXE catalog. Further iPhone/iPad PWA implementation and physical QA are owned by a separate agent and are out of scope for this execution stream.
 6. `[!]` Keep monitoring/Sentry and backup restore rehearsal deferred until the user confirms the backup environment and restore-test window.
-7. `[~]` Complete the Capacitor Android release candidate. The signed and verified `0.1.2/3` APK is published in Stable; its matching AAB remains local and unpublished. Android 13/14/16 Google Play emulators passed the emulator lifecycle matrix. Separately, official-GMS Nothing passed same-key package-data and authenticated session/chat/native-registration retention, explicit logout/login plus cold session restore, warm/cold/killed callbacks, malformed/foreign rejection, signed-final foreground/background/killed FCM, exact-chat taps/read-sync, authenticated offline/reconnect, read/unread initial anchoring, fast-upward and prepend stability, footer stability, bounded geolocation, large-file product upload/progress/sent playback/cleanup and camera/photo/regular-video/video-circle/voice controls. Local Task 4, live Asset Links parity, recovery routing, fresh official-GMS automatic domain verification and Stable catalog publication are complete. External off-device backup and Play setup remain external gates.
+7. `[~]` Complete the Capacitor Android release candidate. The signed and verified `0.1.3/4` APK is published in Stable; its matching AAB remains local and unpublished. Android 13/14/16 Google Play emulators passed the emulator lifecycle matrix. Separately, official-GMS Nothing passed same-key package-data and authenticated session/chat/native-registration retention, explicit logout/login plus cold session restore, warm/cold/killed callbacks, malformed/foreign rejection, signed-final foreground/background/killed FCM, exact-chat taps/read-sync, authenticated offline/reconnect, read/unread initial anchoring, fast-upward and prepend stability, footer stability, bounded geolocation, large-file product upload/progress/sent playback/cleanup and camera/photo/regular-video/video-circle/voice controls. Local Task 4, live Asset Links parity, recovery routing, fresh official-GMS automatic domain verification and Stable catalog publication are complete. External off-device backup and Play setup remain external gates.
+
+    **Re-verified 2026-09-05 against the live bytes, not the manifest.** The
+    download at `https://api.letscube.ru/releases/files/android/0.1.3/letscube-0.1.3.apk`
+    is 6,744,616 bytes with SHA-256 `77049445...c509863`. That matches the
+    manifest's `size` and `sha256`, and matches the locally built
+    `android/app/build/outputs/apk/release/app-release.apk` byte for byte, so the
+    published artifact is the reviewed one. Those bytes pass
+    `scripts/verify-android-release.mjs`: v2 signature scheme, exactly one
+    non-debug signing certificate, `com.kub.messenger`, versionName `0.1.3`,
+    versionCode `4`, not debuggable, the exact exported-component and permission
+    contracts, and a certificate matching the tracked Digital Asset Links
+    statement, which is in turn byte-identical to the one
+    `https://app.letscube.ru/.well-known/assetlinks.json` serves. The Android
+    unit suite passes 46/46 and `android/version.properties` declares the same
+    `0.1.3`/`4`, so no unreleased version bump exists. Gradle still configures
+    the project offline, and `assembleRelease` fails closed without
+    `LETSCUBE_ANDROID_KEYSTORE_PATH` before any task runs, which is where a
+    verification pass has to stop.
+
+    **The open item is the shipped web bundle, not the packaging.**
+    `capacitor.config.ts` sets no `server.url`, so the WebView loads
+    `assets/public/` out of the APK instead of `https://app.letscube.ru`, the way
+    the Windows shell does. The published APK's `assets/public/` is
+    byte-identical to `android/app/src/main/assets/public/`, built 2026-09-03
+    20:15 from `920c8e8`; 37 commits under `artifacts/kub/` have landed since,
+    and none of them can reach an installed Android client. One matters on its
+    own: `be18439` fixed the pre-paint theme bootstrap, and the shipped bytes
+    still carry the break. Parsing the APK's own `index.html` reproduces
+    `SyntaxError: Unexpected token '.'`, so the `0.1.3` release note
+    «Тема приложения следует системной» cannot hold before React
+    mounts on the installed build, and the remaining "confirm on a device" step
+    of D-028 cannot pass against `0.1.3` at all. Browser and Windows users
+    already have the fix because both load the deployed origin; only a new APK
+    gives it to Android.
 8. `[x]` Replace the retired Electron spike with a clean-profile Tauri 2 Windows client. The one-window secure startup, tray/single-instance behavior, Stable/Test channels and signed Tauri updater are complete. Physical `0.2.0 -> 0.2.1`, `0.2.1 -> 0.2.2`, `0.2.2 -> 0.2.3`, `0.2.7 -> 0.2.8`, `0.2.8 -> 0.2.9` and `0.2.9 -> 0.2.10` production-update rehearsals passed without losing the authenticated profile. The `0.2.10/14` release keeps the hardened startup fix, restores Yandex SmartCaptcha compatibility in WebView2 and replaces the legacy venue subtitle embedded in the startup SVG with the neutral LETSCUBE wordmark. A successful version change shows a compact four-second confirmation and then frees the top-right area for future call controls.
 9. `[~]` Complete the external Windows release gates. LETSCUBE `0.2.10/14` retains the exact-origin native Windows toast/history/action contract: one stable Toast Header per chat, up to five unread message cards, exact per-message routing from fresh and historical cards, independent routing for other chats, and chat-scoped history removal after reading. Its reproducible updater wrapper reads the existing encrypted signing identity only from ignored local files and fails if the matching public key changes. Stable download plus Stable/Test updater catalogs expose the same verified immutable installer. A fail-closed Authenticode path, provider-isolated WNS sender, sanitized Windows matrix and native offline/long-session suite are prepared. A second fail-closed tool validates Microsoft package metadata, requires the exact PFN in its generated client contract, reports all missing metadata in one pass, renders matching sparse-package/executable manifests and builds a local unsigned `MakeAppx` validation artifact without changing the internal NSIS path. The live Supabase schema was audited read-only and the `windows/wns` proposal passed a production-schema transaction rehearsal with full rollback; it remains unapplied until a real identified client can acquire a WNS channel. Remaining external work is the real Microsoft package identity/publisher/PFN/Entra mapping, production signing and SmartScreen reputation, Windows 10 and alternate WebView2 device runs, Windows App SDK channel/COM registration, proposal application, server secrets and true killed-process physical delivery.
 10. `[x]` Harden direct-email support notifications. New inbound email tickets now create the same PII-free `ticket_created` event as web tickets, eligible pool operators receive one creation notification, and later requester replies notify the pool while the ticket remains unassigned. The first email message does not create a duplicate requester notification. The production migration was applied after a verified dump and passed a transactional live-DB fanout smoke.
@@ -396,12 +430,14 @@ Scope:
 - `[ ]` Verify real browser/PWA push delivery and notification click routing against a live installed client.
 - `[x]` Verify automated iOS manifest injection and confirm Android/Windows browsers are not offered PWA installation across all five Playwright viewports.
 - `[ ]` Preserve full messenger functionality: auth, chats, media, camera, voice, video-circle, tasks, search, notifications.
-- `[x]` Keep release signing material out of Git. The verified signed `0.1.2/3` APK passed release review and is published in Stable; its AAB remains under ignored local storage and was not uploaded to Play Console.
+- `[x]` Keep release signing material out of Git. The verified signed `0.1.3/4` APK passed release review and is published in Stable, superseding `0.1.2/3`; its AAB remains under ignored local storage and was not uploaded to Play Console.
 
 Current baseline:
 
-- The Android `0.1.2/3` signed APK is published in Stable. Its public manifest
-  and fresh HTTPS download match the 6,513,250-byte canonical artifact and
+- The Android `0.1.3/4` signed APK is published in Stable. Its public manifest
+  and fresh HTTPS download match the 6,744,616-byte canonical artifact and
+  SHA-256 `7704944572e7c97150e159f3326b65b936fee1d11c0b01d852132423dc509863`,
+  re-measured 2026-09-05. The superseded `0.1.2/3` was 6,513,250 bytes with
   SHA-256 `d414fb7a818beb86a5bfbd06dc9cdc657e8aa82fa07acc32927b15ab2748af99`.
   Baseline and final APKs produced byte-identical tracked Digital Asset Links
   JSON, while the old debug signature correctly failed in-place upgrade. The
