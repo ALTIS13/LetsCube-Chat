@@ -173,6 +173,14 @@ export interface Database {
           scope: RoleScope
           is_system: boolean
           is_active: boolean
+          /**
+           * Display rank only, higher first within a scope. Ties are meaningful:
+           * owner and tech_admin share 100 on purpose. Nothing in has_permission
+           * or has_location_permission reads it — see roleHierarchy.ts.
+           */
+          priority: number
+          /** #rrggbb, enforced by roles_colour_format_check. Null means neutral. */
+          colour: string | null
           created_at: string
           updated_at: string
         }
@@ -1677,6 +1685,10 @@ export interface Database {
           p_name: string
           p_description?: string | null
           p_is_active?: boolean
+          /** Null leaves the rank as it is; it is never read as "reset to 0". */
+          p_priority?: number | null
+          /** Null leaves the colour as it is, so a colour cannot be cleared here. */
+          p_colour?: string | null
         }
         Returns: void
       }

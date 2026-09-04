@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { KubBadge, KubButton, KubCreateSection, KubHelpNotes, KubIcon, KubInput, KubNotice, KubPanel } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
@@ -22,12 +22,31 @@ import {
   isCriticalRoleKey,
   mapRolesPermissionsError,
 } from "@/lib/rolePermissions";
+import {
+  ROLE_PRIORITY_MAX,
+  ROLE_PRIORITY_MIN,
+  buildRoleHierarchy,
+  normalizeRoleColour,
+  parseRolePriorityInput,
+  planPriorityMove,
+  roleFormSignature,
+  roleSwatchColour,
+  sortRolesByHierarchy,
+  type PriorityMoveDirection,
+} from "@/lib/roleHierarchy";
 import type { DynamicRole, Permission, Profile, RoleScope } from "@/types/database";
 import { cn } from "@/lib/utils";
 import { requestAppConfirm } from "@/lib/appDialogs";
 
 const ROLE_SCOPES: RoleScope[] = ["global", "location", "chat"];
 const ROLE_KEY_RE = /^[a-z][a-z0-9_]{1,48}$/;
+
+/** Where the native picker starts for a role that has no colour of its own. */
+const COLOUR_PICKER_FALLBACK = "#4d8bd0";
+
+const PRIORITY_IS_NOT_POWER =
+  "Порядок — только внешний вид списка. Он не даёт роли прав: доступ решают отмеченные ниже права, " +
+  "а у владельца и тех. администратора он всегда полный.";
 
 export function RolesPermissionsTab() {
   const supabase = createClient();
@@ -47,16 +66,25 @@ export function RolesPermissionsTab() {
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editActive, setEditActive] = useState(true);
+  const [editPriority, setEditPriority] = useState("0");
+  const [editColour, setEditColour] = useState("");
   const [selectedPermissions, setSelectedPermissions] = useState<Set<string>>(new Set());
+  const [openCategories, setOpenCategories] = useState<Set<string>>(() => new Set());
   const [assignUserId, setAssignUserId] = useState("");
   const [assignRoleId, setAssignRoleId] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // The order the panel shows, which is also the order the fallback selection
+  // and the assignment picker follow, so the same ladder is never drawn twice
+  // in two different orders.
+  const orderedRoles = useMemo(() => sortRolesByHierarchy(rolesState.roles), [rolesState.roles]);
+  const roleHierarchy = useMemo(() => buildRoleHierarchy(rolesState.roles), [rolesState.roles]);
+
   const selectedRole = useMemo(
-    () => rolesState.roles.find((role) => role.id === selectedRoleId) ?? rolesState.roles[0] ?? null,
-    [rolesState.roles, selectedRoleId],
+    () => rolesState.roles.find((role) => role.id === selectedRoleId) ?? orderedRoles[0] ?? null,
+    [orderedRoles, rolesState.roles, selectedRoleId],
   );
   const selectedRoleIsCritical = selectedRole ? isCriticalRoleKey(selectedRole.key) : false;
   const selectedRoleUsageCount = useMemo(() => {
@@ -69,8 +97,8 @@ export function RolesPermissionsTab() {
     selectedRoleUsageKnown && selectedRoleUsageCount === 0 ? "Удалить роль" : "Отключить роль";
 
   const globalRoles = useMemo(
-    () => rolesState.roles.filter((role) => role.scope === "global" && role.is_active),
-    [rolesState.roles],
+    () => orderedRoles.filter((role) => role.scope === "global" && role.is_active),
+    [orderedRoles],
   );
 
   const permissionGroups = useMemo(() => {
@@ -92,6 +120,9 @@ export function RolesPermissionsTab() {
         return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.localeCompare(b);
       });
   }, [rolesState.permissions]);
+
+  const allCategoriesOpen =
+    permissionGroups.length > 0 && permissionGroups.every(([category]) => openCategories.has(category));
 
   const roleAssignments = useMemo(() => {
     const roleMap = new Map(rolesState.roles.map((role) => [role.id, role]));
@@ -144,17 +175,28 @@ export function RolesPermissionsTab() {
     if (!rolesProbeEnabled && !hasRolesPermissionsPreference()) setRolesProbeEnabled(true);
   }, [autoProbeAttempted, rolesProbeEnabled, setRolesProbeEnabled]);
 
+  // Refilling the form is not free: it discards whatever is in the boxes. The
+  // effect below re-runs whenever any role or any role's permissions change
+  // anywhere, which used to mean a realtime event about an unrelated role threw
+  // away half-typed text. The signature narrows that to the selected role's own
+  // data, so the form is refilled after a save and when somebody else edits
+  // this very role, and left alone otherwise.
+  const formSignatureRef = useRef<string | null>(null);
   useEffect(() => {
     if (!selectedRole) return;
+    const permissionKeys = rolesState.rolePermissions
+      .filter((item) => item.role_id === selectedRole.id)
+      .map((item) => item.permission_key);
+    const signature = roleFormSignature(selectedRole, permissionKeys);
+    if (formSignatureRef.current === signature) return;
+    formSignatureRef.current = signature;
     setSelectedRoleId(selectedRole.id);
     setEditName(selectedRole.name);
     setEditDescription(selectedRole.description ?? "");
     setEditActive(selectedRole.is_active);
-    setSelectedPermissions(new Set(
-      rolesState.rolePermissions
-        .filter((item) => item.role_id === selectedRole.id)
-        .map((item) => item.permission_key),
-    ));
+    setEditPriority(String(selectedRole.priority));
+    setEditColour(selectedRole.colour ?? "");
+    setSelectedPermissions(new Set(permissionKeys));
   }, [rolesState.rolePermissions, selectedRole]);
 
   useEffect(() => {
@@ -226,6 +268,15 @@ export function RolesPermissionsTab() {
     return true;
   }, [rolesState]);
 
+  const toggleCategory = (category: string) => {
+    setOpenCategories((current) => {
+      const next = new Set(current);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  };
+
   const createRole = async () => {
     if (!canManageRoles) {
       setError("Недостаточно прав для управления ролями.");
@@ -248,7 +299,7 @@ export function RolesPermissionsTab() {
         p_description: createDescription.trim() || null,
         p_scope: createScope,
       }),
-      "Роль создана.",
+      "Роль создана. Она появилась внизу своей области — поднимите её на нужное место.",
     );
     if (ok) {
       setCreateKey("");
@@ -268,6 +319,20 @@ export function RolesPermissionsTab() {
       setError("Нужно указать название роли.");
       return;
     }
+    const priority = parseRolePriorityInput(editPriority);
+    if (priority === null) {
+      setError(`Ранг должен быть целым числом от ${ROLE_PRIORITY_MIN} до ${ROLE_PRIORITY_MAX}.`);
+      return;
+    }
+    // An empty box means "leave the colour as it is", because that is what the
+    // RPC does with a null: `colour = coalesce(p_colour, colour)`. There is no
+    // value that clears a colour, which the hint under the field says out loud.
+    const colourText = editColour.trim();
+    const colour = colourText ? normalizeRoleColour(colourText) : null;
+    if (colourText && colour === null) {
+      setError("Цвет должен быть в формате #rrggbb, например #4d8bd0.");
+      return;
+    }
     await runAction(
       "save-role",
       () => supabase.rpc("role_update", {
@@ -275,8 +340,35 @@ export function RolesPermissionsTab() {
         p_name: editName.trim(),
         p_description: editDescription.trim() || null,
         p_is_active: editActive,
+        p_priority: priority,
+        p_colour: colour,
       }),
       "Роль обновлена.",
+    );
+  };
+
+  const moveRole = async (role: DynamicRole, direction: PriorityMoveDirection) => {
+    if (!canManageRoles) {
+      setError("Недостаточно прав для управления ролями.");
+      return;
+    }
+    const target = planPriorityMove(rolesState.roles, role.id, direction);
+    if (target === null) return;
+    await runAction(
+      `move-role-${role.id}`,
+      // `role_update` rewrites the name, the description and the active flag
+      // from its arguments, and reads a null `p_is_active` as `true`. The row's
+      // own values are sent back so that reordering cannot rename a role, wipe
+      // its description, or revive one that was deliberately deactivated — and
+      // so that unsaved text in the form is not committed by an arrow press.
+      () => supabase.rpc("role_update", {
+        p_role_id: role.id,
+        p_name: role.name,
+        p_description: role.description,
+        p_is_active: role.is_active,
+        p_priority: target,
+      }),
+      "Порядок ролей обновлён. На права это не влияет.",
     );
   };
 
@@ -471,10 +563,10 @@ export function RolesPermissionsTab() {
         <KubPanel className="space-y-1.5">
           <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--kub-text)]">
             <KubIcon name="lock" size={15} tone="accent" />
-            Системные роли
+            Порядок и цвет
           </div>
           <p className="text-xs leading-relaxed text-[color:var(--kub-muted)]">
-            Их нельзя удалить. Последний владелец или тех. администратор защищены backend-проверкой.
+            Стрелки меняют место роли в списке, цвет — её метку. Ни то, ни другое не выдаёт и не отнимает права.
           </p>
         </KubPanel>
       </div>
@@ -533,36 +625,114 @@ export function RolesPermissionsTab() {
             </KubButton>
           </KubCreateSection>
 
+          {/*
+            No `max-h` and no `overflow-y-auto` here on purpose. The column used
+            to be capped at 520px with its own scrollbar inside a page that
+            already scrolls, so thirteen roles were read four at a time through
+            a letterbox and the wheel did different things depending on where
+            the pointer happened to be. The page is the scroller.
+          */}
           <KubPanel padded={false} className="overflow-hidden">
-            <div className="border-b border-[color:var(--kub-border-color)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
-              Роли
+            <div className="border-b border-[color:var(--kub-border-color)] px-3 py-2.5">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
+                Роли по старшинству
+              </div>
+              <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+                {PRIORITY_IS_NOT_POWER}
+              </p>
             </div>
-            <div className="max-h-[520px] overflow-y-auto">
-              {rolesState.roles.map((role) => (
-                <button
-                  key={role.id}
-                  type="button"
-                  onClick={() => setSelectedRoleId(role.id)}
-                  className={cn(
-                    "flex w-full min-w-0 items-center justify-between gap-2 border-b border-[color:var(--kub-border-color)] px-3 py-3 text-left last:border-b-0 hover:bg-[var(--kub-surface-2)]",
-                    selectedRole?.id === role.id && "bg-[color-mix(in_srgb,var(--kub-cyan)_10%,transparent)]",
-                  )}
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-[color:var(--kub-text)]">
-                      {getRoleLabel(role)}
-                    </span>
-                    <span className="block truncate text-xs text-[color:var(--kub-muted)]">
-                      {ROLE_SCOPE_LABEL[role.scope]} · {role.key}
-                    </span>
+            {roleHierarchy.map((group) => (
+              <div key={group.scope}>
+                <div className="flex items-center justify-between gap-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/60 px-3 py-1.5">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
+                    {ROLE_SCOPE_LABEL[group.scope] ?? group.scope}
                   </span>
-                  <span className="flex shrink-0 flex-col items-end gap-1">
-                    {role.is_system && <KubBadge tone="pink" pill>Системная</KubBadge>}
-                    {!role.is_active && <KubBadge tone="muted" pill>Отключена</KubBadge>}
+                  <span className="text-[11px] text-[color:var(--kub-muted)]">
+                    {group.entries.length}
                   </span>
-                </button>
-              ))}
-            </div>
+                </div>
+                {group.entries.map(({ role, rank, sharesRank }) => {
+                  const swatch = roleSwatchColour(role);
+                  const label = getRoleLabel(role);
+                  const upTarget = planPriorityMove(rolesState.roles, role.id, "up");
+                  const downTarget = planPriorityMove(rolesState.roles, role.id, "down");
+                  const busy = saving === `move-role-${role.id}`;
+                  return (
+                    <div
+                      key={role.id}
+                      className={cn(
+                        "flex w-full min-w-0 items-stretch border-b border-[color:var(--kub-border-color)] last:border-b-0",
+                        selectedRole?.id === role.id && "bg-[color-mix(in_srgb,var(--kub-cyan)_10%,transparent)]",
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setSelectedRoleId(role.id)}
+                        aria-current={selectedRole?.id === role.id ? "true" : undefined}
+                        className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-3 text-left hover:bg-[var(--kub-surface-2)]"
+                      >
+                        <span
+                          aria-hidden
+                          className={cn(
+                            "h-3 w-3 shrink-0 rounded-full border border-[color:var(--kub-border-color)]",
+                            !swatch && "bg-[color-mix(in_srgb,var(--kub-muted)_35%,transparent)]",
+                          )}
+                          // Only ever a value `normalizeRoleColour` accepted:
+                          // six hex digits, so nothing else can reach the style.
+                          style={swatch ? { backgroundColor: swatch } : undefined}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-[color:var(--kub-text)]">
+                            {label}
+                          </span>
+                          <span className="block truncate text-xs text-[color:var(--kub-muted)]">
+                            Ранг {rank} · {role.key}
+                          </span>
+                          {/*
+                            Its own line rather than a suffix, so truncation in a
+                            narrow column cannot swallow the one thing this list
+                            exists to show: that two roles are deliberately level.
+                          */}
+                          {sharesRank && (
+                            <span className="block truncate text-[11px] text-[color:var(--kub-muted)]">
+                              Равный ранг с другой ролью
+                            </span>
+                          )}
+                        </span>
+                        <span className="flex shrink-0 flex-col items-end gap-1">
+                          {role.is_system && <KubBadge tone="pink" pill>Системная</KubBadge>}
+                          {!role.is_active && <KubBadge tone="muted" pill>Отключена</KubBadge>}
+                        </span>
+                      </button>
+                      {canManageRoles && (
+                        <span className="flex shrink-0 flex-col items-center justify-center gap-0.5 pr-1.5">
+                          <button
+                            type="button"
+                            onClick={() => void moveRole(role, "up")}
+                            disabled={upTarget === null || saving !== null}
+                            aria-label={`Поднять роль «${label}» в списке`}
+                            title={`Поднять «${label}» выше. На права не влияет.`}
+                            className="kub-icon-action kub-interactive rounded-md text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)] disabled:opacity-35"
+                          >
+                            <KubIcon name={busy ? "spinner" : "chevronUp"} size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void moveRole(role, "down")}
+                            disabled={downTarget === null || saving !== null}
+                            aria-label={`Опустить роль «${label}» в списке`}
+                            title={`Опустить «${label}» ниже. На права не влияет.`}
+                            className="kub-icon-action kub-interactive rounded-md text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)] disabled:opacity-35"
+                          >
+                            <KubIcon name="chevronDown" size={13} />
+                          </button>
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
           </KubPanel>
         </div>
 
@@ -618,6 +788,50 @@ export function RolesPermissionsTab() {
                   placeholder="Описание"
                   className="w-full resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
                 />
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <KubInput
+                    label="Ранг в списке"
+                    type="number"
+                    inputMode="numeric"
+                    min={ROLE_PRIORITY_MIN}
+                    max={ROLE_PRIORITY_MAX}
+                    step={1}
+                    value={editPriority}
+                    onChange={(event) => setEditPriority(event.target.value)}
+                    disabled={!canManageRoles}
+                    hint="Больше — выше в своей области. Только порядок, не доступ. Одинаковые числа означают равный ранг."
+                  />
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-xs font-medium uppercase tracking-wide text-[color:var(--kub-muted)]">
+                      Цвет роли
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        aria-label="Выбрать цвет роли"
+                        value={normalizeRoleColour(editColour) ?? COLOUR_PICKER_FALLBACK}
+                        onChange={(event) => setEditColour(event.target.value)}
+                        disabled={!canManageRoles}
+                        className="h-11 w-12 shrink-0 cursor-pointer rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-1 disabled:cursor-not-allowed disabled:opacity-50"
+                      />
+                      <KubInput
+                        containerClassName="min-w-0 flex-1"
+                        aria-label="Цвет роли в формате #rrggbb"
+                        value={editColour}
+                        onChange={(event) => setEditColour(event.target.value)}
+                        placeholder="#4d8bd0"
+                        spellCheck={false}
+                        disabled={!canManageRoles}
+                        error={editColour.trim() && !normalizeRoleColour(editColour) ? "Нужен формат #rrggbb." : null}
+                      />
+                    </div>
+                    <p className="text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                      Цвет можно поменять, но не убрать: пустое поле сервер понимает как «оставить как есть».
+                    </p>
+                  </div>
+                </div>
+
                 <label className="flex items-center gap-2 text-sm text-[color:var(--kub-text)]">
                   <input
                     type="checkbox"
@@ -653,61 +867,103 @@ export function RolesPermissionsTab() {
               </KubPanel>
 
               <KubPanel className="space-y-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-[color:var(--kub-text)]">Права</h3>
-                  <p className="text-xs text-[color:var(--kub-muted)]">
-                    Отмечайте только те действия, которые нужны этой роли в работе. Технический ключ показан мелко для диагностики.
-                  </p>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-[color:var(--kub-text)]">Права</h3>
+                    <p className="text-xs text-[color:var(--kub-muted)]">
+                      Разделы свёрнуты: рядом с названием видно, сколько прав в нём включено. Откройте нужный и отметьте только те действия, которые роли нужны в работе. Технический ключ показан мелко для диагностики.
+                    </p>
+                  </div>
+                  {permissionGroups.length > 0 && (
+                    <KubButton
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setOpenCategories(
+                        allCategoriesOpen ? new Set() : new Set(permissionGroups.map(([category]) => category)),
+                      )}
+                      leftIcon={<KubIcon name={allCategoriesOpen ? "chevronUp" : "chevronDown"} size={13} />}
+                    >
+                      {allCategoriesOpen ? "Свернуть все" : "Развернуть все"}
+                    </KubButton>
+                  )}
                 </div>
                 {selectedRoleIsCritical && (
                   <KubNotice tone="danger" className="text-xs">
                     Владелец и тех. администратор всегда получают полный доступ. Набор прав здесь информационный и не ограничивает эти роли.
                   </KubNotice>
                 )}
-                <div className="grid gap-3 lg:grid-cols-2">
-                  {permissionGroups.map(([category, permissions]) => (
-                    <div key={category} className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/45 p-3">
-                      <div className="mb-2">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-cyan)]">
-                          {getPermissionCategoryLabel(category)}
-                        </div>
-                        {PERMISSION_CATEGORY_DESCRIPTION[category] && (
-                          <div className="mt-1 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
-                            {PERMISSION_CATEGORY_DESCRIPTION[category]}
+                <div className="grid items-start gap-3 lg:grid-cols-2">
+                  {permissionGroups.map(([category, permissions]) => {
+                    const enabled = permissions.filter((permission) => selectedPermissions.has(permission.key)).length;
+                    const open = openCategories.has(category);
+                    const panelId = `role-permission-category-${category}`;
+                    return (
+                      <div key={category} className="overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/45">
+                        <button
+                          type="button"
+                          onClick={() => toggleCategory(category)}
+                          aria-expanded={open}
+                          aria-controls={panelId}
+                          className="flex w-full items-center gap-2 px-3 py-2.5 text-left hover:bg-[var(--kub-surface-2)]"
+                        >
+                          <KubIcon name={open ? "chevronUp" : "chevronDown"} size={14} />
+                          <span className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-cyan)]">
+                            {getPermissionCategoryLabel(category)}
+                          </span>
+                          <span
+                            aria-hidden
+                            className={cn(
+                              "shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold text-[color:var(--kub-text)]",
+                              enabled > 0
+                                ? "border-[color:color-mix(in_srgb,var(--kub-cyan)_55%,transparent)]"
+                                : "border-[color:var(--kub-border-color)]",
+                            )}
+                          >
+                            {enabled} / {permissions.length}
+                          </span>
+                          <span className="sr-only">
+                            Включено {enabled} из {permissions.length}
+                          </span>
+                        </button>
+                        {open && (
+                          <div id={panelId} className="space-y-1.5 border-t border-[color:var(--kub-border-color)] px-3 py-3">
+                            {PERMISSION_CATEGORY_DESCRIPTION[category] && (
+                              <div className="pb-1 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+                                {PERMISSION_CATEGORY_DESCRIPTION[category]}
+                              </div>
+                            )}
+                            {permissions.map((permission) => (
+                              <label key={permission.key} className="flex items-start gap-2 text-sm text-[color:var(--kub-text)]">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedPermissions.has(permission.key)}
+                                  disabled={selectedRoleIsCritical || !canManageRoles}
+                                  onChange={(event) => {
+                                    setSelectedPermissions((current) => {
+                                      const next = new Set(current);
+                                      if (event.target.checked) next.add(permission.key);
+                                      else next.delete(permission.key);
+                                      return next;
+                                    });
+                                  }}
+                                  className="mt-0.5 h-4 w-4 accent-[var(--kub-cyan)] disabled:opacity-60"
+                                />
+                                <span className="min-w-0">
+                                  <span className="block font-medium">{getPermissionLabel(permission)}</span>
+                                  <span className="block text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                                    {getPermissionDescription(permission)}
+                                  </span>
+                                  <span className="block truncate text-[10px] font-medium text-[color:var(--kub-muted)] opacity-80">
+                                    {permission.key}
+                                  </span>
+                                </span>
+                              </label>
+                            ))}
                           </div>
                         )}
                       </div>
-                      <div className="space-y-1.5">
-                        {permissions.map((permission) => (
-                          <label key={permission.key} className="flex items-start gap-2 text-sm text-[color:var(--kub-text)]">
-                            <input
-                              type="checkbox"
-                              checked={selectedPermissions.has(permission.key)}
-                              disabled={selectedRoleIsCritical || !canManageRoles}
-                              onChange={(event) => {
-                                setSelectedPermissions((current) => {
-                                  const next = new Set(current);
-                                  if (event.target.checked) next.add(permission.key);
-                                  else next.delete(permission.key);
-                                  return next;
-                                });
-                              }}
-                              className="mt-0.5 h-4 w-4 accent-[var(--kub-cyan)] disabled:opacity-60"
-                            />
-                            <span className="min-w-0">
-                              <span className="block font-medium">{getPermissionLabel(permission)}</span>
-                              <span className="block text-xs leading-relaxed text-[color:var(--kub-muted)]">
-                                {getPermissionDescription(permission)}
-                              </span>
-                              <span className="block truncate text-[10px] font-medium text-[color:var(--kub-muted)] opacity-80">
-                                {permission.key}
-                              </span>
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <KubButton
                   variant="primary"
@@ -783,6 +1039,7 @@ export function RolesPermissionsTab() {
               {roleAssignments.map(({ assignment, profile, role }) => {
                 if (!profile || !role) return null;
                 const busyKey = `remove-role-${assignment.user_id}-${assignment.role_id}`;
+                const swatch = roleSwatchColour(role);
                 return (
                   <div
                     key={`${assignment.user_id}:${assignment.role_id}`}
@@ -799,7 +1056,18 @@ export function RolesPermissionsTab() {
                         )}
                       </span>
                     </div>
-                    <KubBadge tone={role.key === "owner" || role.key === "tech_admin" ? "pink" : "cyan"} pill>
+                    <KubBadge
+                      tone={isCriticalRoleKey(role.key) ? "pink" : "cyan"}
+                      pill
+                      dot={!swatch}
+                    >
+                      {swatch && (
+                        <span
+                          aria-hidden
+                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: swatch }}
+                        />
+                      )}
                       {getRoleLabel(role)}
                     </KubBadge>
                     <KubButton

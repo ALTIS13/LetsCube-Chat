@@ -1079,6 +1079,7 @@ export type Database = {
       }
       roles: {
         Row: {
+          colour: string | null
           created_at: string
           description: string | null
           id: string
@@ -1086,10 +1087,12 @@ export type Database = {
           is_system: boolean
           key: string
           name: string
+          priority: number
           scope: string
           updated_at: string
         }
         Insert: {
+          colour?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -1097,10 +1100,12 @@ export type Database = {
           is_system?: boolean
           key: string
           name: string
+          priority?: number
           scope: string
           updated_at?: string
         }
         Update: {
+          colour?: string | null
           created_at?: string
           description?: string | null
           id?: string
@@ -1108,6 +1113,7 @@ export type Database = {
           is_system?: boolean
           key?: string
           name?: string
+          priority?: number
           scope?: string
           updated_at?: string
         }
@@ -1982,9 +1988,11 @@ export type Database = {
       }
       role_update: {
         Args: {
+          p_colour?: string
           p_description?: string
           p_is_active?: boolean
           p_name: string
+          p_priority?: number
           p_role_id: string
         }
         Returns: undefined
