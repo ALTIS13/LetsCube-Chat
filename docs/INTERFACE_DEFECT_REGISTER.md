@@ -1600,3 +1600,62 @@ Not fixed because the fix means re-reading a declared `max-width`, which is the
 exact thing that caused D-027's feedback loop, and because D-024 calls the
 over-estimate "the safe direction". Note that the existing stability test cannot
 see this: it samples bubble index 1 only and compares a boolean.
+
+## D-033 — a chat id alone reached a group's picture, for about an hour
+
+Introduced by me in `0e6c5da`, found and closed in `64eb2cb` the same night.
+Recorded because the reasoning that produced it looked sound in review.
+
+The chat avatar variant row was scoped to chat members, with the argument that
+a public row "would newly tell any authenticated non-member that a given chat
+id has a picture, and where to get it, since the variant path is derivable from
+the chat id alone". The scope was applied to the row. The bytes are served by
+storage, and the check that would have caught this — fetching the variant as an
+anonymous client — was not run until after the deploy:
+
+    GET /storage/v1/object/public/media/variants/chats/<chat-id>/avatar_128.webp
+    -> HTTP 200, anonymous
+
+What actually holds a group photo private is that its original is written to
+`chat-avatars/{chat_id}/avatar-{uuid}.png` and `chats`, the only place that name
+appears, is readable through `Chat members can view chats` alone — so a chat id
+was **not** sufficient. The derivable variant path made it sufficient.
+
+Closed by deriving the variant folder from a hash of the source path, so it is
+as hard to find as the original. Six objects already written to derivable
+addresses were deleted first; the public URL went 200 -> 400. Their blobs remain
+on disk (~45 kB, six files under `variants/chats/<uuid>/avatar_{128,256}.webp`)
+because `storage.protect_delete()` correctly refuses direct row deletion and the
+deletion was done through the database rather than by handling a service key —
+**orphan cleanup is outstanding** and needs the Storage API with
+`SELFHOST_SERVICE_ROLE_KEY`, which the operator supplies.
+
+The lesson worth keeping: a policy on a metadata row is not a policy on the
+object it addresses. For anything served from a public bucket, the access check
+is the fetch, not the row.
+
+## D-034 — the media variants worker has been failing two objects per tick
+
+Pre-existing, found 2026-09-04 while verifying D-033's deploy. Not mine, not
+fixed, recorded so it is not lost.
+
+`letscube-worker` logs `mediaVariantsWorker storage download failed`
+(`StorageApiError`, status 400) exactly twice per 60-second tick — 826 times in
+the seven hours before it was noticed, and it resumes at the same rate after
+each redeploy. **23 image and video messages have no variants**, so those chats
+download originals where a preview was intended:
+
+| shape | count | in storage |
+|---|---|---|
+| video, 115-char path | 4 | **no** |
+| image, 54-char path | 9 | yes |
+| image, 128-char path | 6 | yes |
+| video, 54-char path | 4 | yes |
+
+The four whose objects do not exist are orphaned rows and can never succeed;
+they are the likeliest candidates for the permanent two-per-tick failure, since
+the worker retries its batch every tick. The other nineteen exist and should
+convert. Three carry `status='failed'` rows; the rest have no variant row at all.
+
+Profile and chat avatars are unaffected — all 7 profiles and all 3 groups have
+their variants.
