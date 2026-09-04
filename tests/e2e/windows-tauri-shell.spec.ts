@@ -618,7 +618,7 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
 
       await page.getByRole("button", { name: "Меню" }).click();
       await page.getByRole("button", { name: "Настройки" }).click();
-      await page.getByRole("tab", { name: "Приложение" }).click();
+      await page.getByTestId("settings-open-application").click();
       await expect(page.getByTestId("desktop-update-settings")).toBeVisible();
       await expect(page.getByTestId("release-download-button")).toHaveCount(0);
       const channelControl = page.getByTestId("desktop-update-channel-control");

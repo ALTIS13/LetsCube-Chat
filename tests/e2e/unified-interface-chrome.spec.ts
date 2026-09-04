@@ -88,19 +88,34 @@ test.describe("LETSCUBE unified interface chrome", () => {
     await page.getByRole("button", { name: "Настройки" }).click();
 
     await expect(page.getByRole("heading", { name: "Настройки" })).toBeVisible();
-    const tabs = page.getByRole("tablist", { name: "Разделы настроек" });
-    await expect(tabs).toBeVisible();
-    await expect(tabs.getByRole("tab")).toHaveCount(4);
-    expect(await tabs.getByRole("tab").locator("span").evaluateAll((labels) =>
-      labels.every((label) => label.scrollWidth <= label.clientWidth + 1),
-    )).toBe(true);
-    await expect(page.getByText("Push-уведомления")).toBeVisible();
 
-    await tabs.getByRole("tab", { name: "Звук" }).click();
+    // One scrolling column of rows, not four tabs. Every section heading and
+    // every row is present at once, so nothing is behind a guess about which
+    // tab owns it.
+    await expect(page.getByRole("tablist", { name: "Разделы настроек" })).toHaveCount(0);
+    for (const heading of ["Профиль", "Уведомления", "Конфиденциальность", "Приложение"]) {
+      await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+    }
+    await expect(page.getByText("Push-уведомления")).toBeVisible();
+    await expect(page.getByRole("switch", { name: "Push: Сообщения" })).toBeVisible();
+    await expect(page.getByRole("switch", { name: "Показывать, когда я в сети" })).toBeVisible();
+    await expect(page.getByRole("radiogroup", { name: "Выбор темы" })).toBeVisible();
+
+    // The heavy sections stay unmounted until their row is opened, and closing
+    // one unmounts it again the way leaving a tab used to.
+    const audioRow = page.getByTestId("settings-open-audio");
+    await expect(audioRow).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByTestId("settings-section-audio")).toHaveCount(0);
+    await audioRow.click();
+    await expect(audioRow).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByText("Звук и голосовые")).toBeVisible();
-    await tabs.getByRole("tab", { name: "Профиль" }).click();
-    await expect(page.getByText("Личная информация")).toBeVisible();
-    await tabs.getByRole("tab", { name: "Главное" }).click();
+    await audioRow.click();
+    await expect(page.getByTestId("settings-section-audio")).toHaveCount(0);
+
+    // Push stays on the column while a section is open — it is not a tab that
+    // something else replaces.
+    await page.getByTestId("settings-open-phone").click();
+    await expect(page.getByTestId("settings-section-phone")).toBeVisible();
     await expect(page.getByText("Push-уведомления")).toBeVisible();
   });
 
@@ -115,7 +130,7 @@ test.describe("LETSCUBE unified interface chrome", () => {
     await loginAsRoleOrSkip(page, role);
     await page.getByRole("button", { name: "Меню" }).click();
     await page.getByRole("button", { name: "Настройки" }).click();
-    await page.getByRole("tab", { name: "Звук" }).click();
+    await page.getByTestId("settings-open-audio").click();
 
     await expect(page.getByText("Звук и голосовые")).toBeVisible();
     await expect(page.getByText("Устройства", { exact: true })).toBeVisible();

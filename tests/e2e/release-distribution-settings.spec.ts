@@ -141,6 +141,6 @@ async function openSettingsOrSkip(page: Page) {
   await loginAsRoleOrSkip(page, role);
   await page.getByRole("button", { name: "Меню" }).click();
   await page.getByRole("button", { name: "Настройки" }).click();
-  await page.getByRole("tab", { name: "Приложение" }).click();
-  await expect(page.getByRole("tabpanel", { name: "Приложение" })).toBeVisible();
+  await page.getByTestId("settings-open-application").click();
+  await expect(page.getByTestId("settings-section-application")).toBeVisible();
 }

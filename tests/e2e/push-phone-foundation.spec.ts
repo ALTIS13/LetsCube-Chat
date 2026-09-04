@@ -85,8 +85,8 @@ test.describe("LETSCUBE push and phone production foundation", () => {
 
     await page.getByRole("button", { name: "Меню" }).click();
     await page.getByRole("button", { name: "Настройки" }).click();
-    await page.getByRole("tab", { name: "Профиль" }).click();
-    await expect(page.getByText("Личная информация")).toBeVisible();
+    await page.getByTestId("settings-open-phone").click();
+    await expect(page.getByTestId("settings-section-phone")).toBeVisible();
 
     const phoneInput = page.getByPlaceholder("+7 999 123 45 67");
     await phoneInput.scrollIntoViewIfNeeded();

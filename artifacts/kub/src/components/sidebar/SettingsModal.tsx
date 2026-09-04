@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { Fragment, useId, useRef, useState, type ReactNode } from "react";
 import type { Theme } from "@/hooks/useTheme";
 import { useLocation } from "wouter";
 import { useAppStore } from "@/store/app.store";
@@ -9,6 +9,7 @@ import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useTheme } from "@/hooks/useTheme";
 import { usePrivacyPreferences } from "@/hooks/usePrivacyPreferences";
 import { usePush } from "@/hooks/usePush";
+import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { useIsAdmin, useIsManagerOrAdmin } from "@/hooks/useRole";
 import { KubButton, KubIcon, KubModal, KubSwitch, type KubIconName } from "@/components/kub";
 import { PhoneSection } from "./PhoneSection";
@@ -22,6 +23,20 @@ import { StorageSection } from "@/components/settings/StorageSection";
 import { ProfileDecorationSection } from "@/components/settings/ProfileDecorationSection";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
+import { getBuildMetadata } from "@/lib/monitoring";
+import { getVisibleReleaseVersion } from "@/lib/releaseVersionLabel";
+import {
+  audioSummary,
+  decorationSummary,
+  presenceHint,
+  presenceSummary,
+  pushStatusAction,
+  pushStatusSummary,
+  shouldShowCounter,
+  themeSummary,
+  visibleSettingsSections,
+  type SettingsSectionId,
+} from "@/lib/settingsRows";
 import {
   PROFILE_LIMITS,
   normalizeFullName,
@@ -36,15 +51,25 @@ const THEME_OPTIONS: ReadonlyArray<{ value: Theme; label: string; icon: KubIconN
   { value: "light", label: "Светлая", icon: "themeLight" },
 ];
 
-type SettingsTab = "general" | "profile" | "audio" | "application";
+/** The heavy sections, which stay unmounted until their row is opened. */
+type DisclosureId = "phone" | "decoration" | "audio" | "application";
 
-const SETTINGS_TABS: ReadonlyArray<{ value: SettingsTab; label: string; icon: KubIconName }> = [
-  { value: "general", label: "Главное", icon: "settings" },
-  { value: "profile", label: "Профиль", icon: "user" },
-  { value: "audio", label: "Звук", icon: "microphone" },
-  { value: "application", label: "Приложение", icon: "cloud" },
-];
-
+/**
+ * The settings screen.
+ *
+ * It is one scrolling column of rows under quiet headings, not a set of tabs.
+ * Four tabs held twelve controls between them, so whichever one a person landed
+ * on looked almost empty while three quarters of the screen was behind a guess
+ * about which tab owned what. Every row here states what it controls and what
+ * it is currently set to on the same line.
+ *
+ * The four expensive sections — phone, decoration, audio, release — are
+ * disclosures rather than always-drawn panels. That is not only density: each
+ * of them reaches for something on mount (a query, an achievement fetch, the
+ * device list), and under tabs none of them ran until you opened their tab.
+ * Rendering the children only while a row is open keeps exactly that, and
+ * closing a row unmounts it the way leaving a tab used to.
+ */
 export function SettingsModal({ onClose }: { onClose: () => void }) {
   const { currentUser, setCurrentUser } = useAppStore();
   const supabase = createClient();
@@ -52,6 +77,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const privacy = usePrivacyPreferences();
   const nativeAndroid = isNativeAndroid();
   const desktopWindows = isDesktopApp();
+  const { settings: audioSettings } = useAudioSettings();
   const {
     status: pushStatus,
     preferences: pushPreferences,
@@ -72,9 +98,19 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
+  const [openSections, setOpenSections] = useState<ReadonlySet<DisclosureId>>(() => new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fieldPrefix = useId();
   const avatarInputId = `profile-avatar-input-${currentUser?.id ?? "self"}`;
+
+  const toggleSection = (id: DisclosureId) => {
+    setOpenSections((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const handleSave = async () => {
     if (!currentUser) return;
@@ -157,6 +193,227 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
   if (!currentUser) return null;
 
+  const pushAction = pushStatusAction(pushStatus, { nativeAndroid });
+  const buildVersionLabel = getVisibleReleaseVersion(getBuildMetadata().version);
+  const presenceExplanation = presenceHint(privacy.preferences.presenceVisible);
+
+  const sectionContent: Record<SettingsSectionId, ReactNode> = {
+    profile: (
+      <SettingsGroup title="Профиль">
+        <TextFieldRow
+          idPrefix={fieldPrefix}
+          field="name"
+          icon="user"
+          label="Имя"
+          required
+          value={fullName}
+          onChange={setFullName}
+          placeholder="Ваше имя"
+          maxLength={PROFILE_LIMITS.fullNameMax}
+        />
+        <TextFieldRow
+          idPrefix={fieldPrefix}
+          field="username"
+          icon="atSign"
+          label="Никнейм"
+          value={username}
+          onChange={(value) => setUsername(normalizeUsername(value))}
+          placeholder="буквы, цифры, точка, _"
+          maxLength={PROFILE_LIMITS.usernameMax}
+        />
+        <TextFieldRow
+          idPrefix={fieldPrefix}
+          field="bio"
+          icon="info"
+          label="О себе"
+          value={bio}
+          onChange={setBio}
+          placeholder="Несколько слов о себе"
+          maxLength={PROFILE_LIMITS.bioMax}
+        />
+        {/* Phone verification is open to every account. The section used to be
+            hidden behind `isAdmin` while the gateway and the database gates were
+            administrator-only; all three had to be opened together, or the
+            feature stayed unreachable. When the policy is off the gateway answers
+            `disabled` and `PhoneSection` says so, so hiding the section is not
+            what communicates that. */}
+        <DisclosureRow
+          id="phone"
+          icon="phone"
+          title="Телефон"
+          open={openSections.has("phone")}
+          onToggle={toggleSection}
+        >
+          <PhoneSection />
+        </DisclosureRow>
+        <DisclosureRow
+          id="decoration"
+          icon="crown"
+          title="Оформление"
+          value={decorationSummary(currentUser.profile_frame, currentUser.profile_background)}
+          open={openSections.has("decoration")}
+          onToggle={toggleSection}
+        >
+          <ProfileDecorationSection />
+        </DisclosureRow>
+      </SettingsGroup>
+    ),
+
+    notifications: (
+      <SettingsGroup title="Уведомления">
+        <SettingsRow
+          icon={pushStatus === "active" ? "notifications" : "notificationsOff"}
+          iconTone={pushStatus === "active" ? "accent" : "muted"}
+          label="Push-уведомления"
+          value={pushStatusSummary(pushStatus, { nativeAndroid, desktopWindows })}
+        >
+          {pushAction === "disable" && (
+            <KubButton size="sm" variant="secondary" onClick={disablePush}>
+              Выключить
+            </KubButton>
+          )}
+          {pushAction === "enable" && (
+            <KubButton size="sm" onClick={enablePush}>
+              Включить
+            </KubButton>
+          )}
+        </SettingsRow>
+        {pushStatus !== "native_unavailable" && (
+          <>
+            <PreferenceSwitchRow
+              label="Сообщения"
+              checked={pushPreferences.message_push_enabled}
+              disabled={loadingPreferences || pushStatus !== "active"}
+              onChange={(value) => void setPushPreference("message_push_enabled", value)}
+            />
+            <PreferenceSwitchRow
+              label="Задачи"
+              checked={pushPreferences.task_push_enabled}
+              disabled={loadingPreferences || pushStatus !== "active"}
+              onChange={(value) => void setPushPreference("task_push_enabled", value)}
+            />
+            <PreferenceSwitchRow
+              label="Приглашения"
+              checked={pushPreferences.invite_push_enabled}
+              disabled={loadingPreferences || pushStatus !== "active"}
+              onChange={(value) => void setPushPreference("invite_push_enabled", value)}
+            />
+          </>
+        )}
+        {pushMessage && <RowNote>{pushMessage}</RowNote>}
+      </SettingsGroup>
+    ),
+
+    privacy: (
+      <SettingsGroup title="Конфиденциальность">
+        <SettingsRow
+          icon={privacy.preferences.presenceVisible ? "eye" : "eyeOff"}
+          iconTone={privacy.preferences.presenceVisible ? "accent" : "muted"}
+          label="Статус «в сети»"
+          value={presenceSummary(privacy.preferences.presenceVisible)}
+          hint={presenceExplanation}
+        >
+          <KubSwitch
+            aria-label="Показывать, когда я в сети"
+            checked={privacy.preferences.presenceVisible}
+            disabled={privacy.loading}
+            onCheckedChange={(next) => void privacy.setPresenceVisible(next)}
+          />
+        </SettingsRow>
+        {privacy.error && (
+          <RowNote tone="danger">Не удалось сохранить настройку. Попробуйте ещё раз.</RowNote>
+        )}
+      </SettingsGroup>
+    ),
+
+    application: (
+      <SettingsGroup title="Приложение">
+        <SettingsRow
+          icon={resolvedTheme === "dark" ? "themeDark" : "themeLight"}
+          iconTone="accent"
+          label="Тема"
+          value={themeSummary(theme, resolvedTheme)}
+        >
+          <div
+            role="radiogroup"
+            aria-label="Выбор темы"
+            className="flex shrink-0 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] p-0.5"
+          >
+            {THEME_OPTIONS.map(({ value, label, icon }) => {
+              const selected = theme === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={label}
+                  title={label}
+                  onClick={() => setTheme(value)}
+                  className={cn(
+                    "flex h-8 w-9 items-center justify-center rounded-md transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)]",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)] focus-visible:ring-offset-1 focus-visible:ring-offset-[color:var(--kub-surface-2)]",
+                    selected
+                      ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
+                      : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
+                  )}
+                >
+                  <KubIcon name={icon} size={14} />
+                </button>
+              );
+            })}
+          </div>
+        </SettingsRow>
+        <DisclosureRow
+          id="audio"
+          icon="microphone"
+          title="Звук"
+          value={audioSummary(audioSettings)}
+          open={openSections.has("audio")}
+          onToggle={toggleSection}
+        >
+          <AudioSettingsSection />
+        </DisclosureRow>
+        <DisclosureRow
+          id="application"
+          icon="cloud"
+          title="Обновления"
+          value={buildVersionLabel}
+          open={openSections.has("application")}
+          onToggle={toggleSection}
+        >
+          <div className="space-y-3">
+            <ReleaseDistributionSection />
+            {/* The section guards itself too; this keeps the spacer from being the
+                one thing the browser build still renders here. */}
+            {desktopWindows && <StorageSection />}
+          </div>
+        </DisclosureRow>
+      </SettingsGroup>
+    ),
+
+    service: (
+      <SettingsGroup title="Сервис">
+        <button
+          type="button"
+          onClick={() => { onClose(); setLocation("/admin"); }}
+          className={cn(
+            ROW_GRID,
+            "kub-interactive text-left transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)] hover:bg-[var(--kub-surface-3)]",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--kub-cyan)]",
+          )}
+        >
+          <KubIcon name="shield" size={16} className="text-[color:var(--kub-pink)]" />
+          <span className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+            <span className="min-w-0 text-sm text-[color:var(--kub-text)]">Админ-панель</span>
+            <span className="min-w-0 text-xs text-[color:var(--kub-muted)]">Пользователи, баны, мьюты</span>
+          </span>
+          <KubIcon name="chevronRight" size={14} className="shrink-0 text-[color:var(--kub-muted)]" />
+        </button>
+      </SettingsGroup>
+    ),
+  };
+
   return (
     <KubModal
       open
@@ -165,7 +422,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       icon={<KubIcon name="settings" size={16} />}
       size="xl"
       contentClassName="p-0"
-      footer={activeTab === "profile" ? (
+      footer={
         <>
           <KubButton variant="ghost" onClick={onClose}>Закрыть</KubButton>
           <KubButton
@@ -178,49 +435,19 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             {saved ? "Сохранено" : "Сохранить"}
           </KubButton>
         </>
-      ) : (
-        <KubButton variant="secondary" onClick={onClose}>Закрыть</KubButton>
-      )}
+      }
     >
-      <div className="sticky top-0 z-10 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-3 sm:px-4">
-        <div
-          role="tablist"
-          aria-label="Разделы настроек"
-          className="grid grid-cols-2 gap-1 rounded-lg bg-[var(--kub-bg)] p-1 sm:grid-cols-4"
-        >
-          {SETTINGS_TABS.map((tab) => {
-            const active = tab.value === activeTab;
-            return (
-              <button
-                key={tab.value}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setActiveTab(tab.value)}
-                className={cn(
-                  "flex min-w-0 items-center justify-center gap-1 rounded-md px-1.5 py-2 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)] sm:gap-1.5 sm:px-2 sm:text-xs",
-                  active
-                    ? "bg-[var(--kub-surface-3)] text-[color:var(--kub-text)]"
-                    : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
-                )}
-              >
-                <KubIcon name={tab.icon} size={13} />
-                <span className="min-w-0 truncate">{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      {activeTab === "profile" && (
-        <div role="tabpanel" aria-label="Профиль">
-      <div className="flex flex-col items-center gap-4 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-4 py-4 kub-grid-subtle sm:flex-row sm:items-center sm:gap-5 sm:px-5">
+      <div className="flex items-center gap-3 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-3 kub-grid-subtle sm:px-4">
         <div className="relative shrink-0">
           {uploadingAvatar ? (
-            <div className="w-24 h-24 rounded-full flex items-center justify-center bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
-              <KubIcon name="spinner" size={28} className="text-[color:var(--kub-cyan)]" />
+            // Same 64px box as the avatar it stands in for. The old placeholder
+            // was 96px against an 80px avatar, so starting an upload nudged the
+            // whole header.
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]">
+              <KubIcon name="spinner" size={22} className="text-[color:var(--kub-cyan)]" />
             </div>
           ) : (
-            <UserAvatar user={currentUser} size="xl" />
+            <UserAvatar user={currentUser} size="lg" />
           )}
           <label
             htmlFor={avatarInputId}
@@ -234,13 +461,15 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               }
             }}
             className={cn(
-              "absolute bottom-0 right-0 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] transition-transform kub-glow-cyan hover:scale-110",
+              "absolute -bottom-0.5 -right-0.5 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan",
+              "transition-transform duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)] hover:scale-110",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--kub-surface)]",
               uploadingAvatar && "pointer-events-none opacity-60",
             )}
             aria-label="Сменить фото"
             aria-disabled={uploadingAvatar}
           >
-            <KubIcon name="camera" size={15} />
+            <KubIcon name="camera" size={13} />
           </label>
           <input
             id={avatarInputId}
@@ -256,359 +485,190 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           />
         </div>
 
-        <div className="min-w-0 flex-1 text-center sm:text-left">
-          <div className="truncate text-base font-semibold text-[color:var(--kub-text)]">
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold text-[color:var(--kub-text)]">
             {currentUser.full_name ?? "Без имени"}
           </div>
           {currentUser.username && (
-            <div className="truncate text-sm text-[color:var(--kub-muted)]">@{currentUser.username}</div>
+            <div className="truncate text-xs text-[color:var(--kub-muted)]">@{currentUser.username}</div>
           )}
-          <p className="mt-1 text-xs text-[color:var(--kub-muted)]">
-            Фото и имя видят все, кому вы пишете.
-          </p>
         </div>
 
         {currentUser.avatar_url && (
-          <button
+          <KubButton
+            variant="ghost"
+            size="sm"
             onClick={handleRemoveAvatar}
-            className="kub-button kub-interactive flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-[color:var(--kub-danger)] transition-colors hover:bg-[color-mix(in_srgb,var(--kub-danger)_15%,transparent)]"
+            leftIcon={<KubIcon name="delete" size={12} />}
+            className="shrink-0 text-[color:var(--kub-danger)]"
           >
-            <KubIcon name="delete" size={12} />
             Удалить фото
-          </button>
+          </KubButton>
         )}
       </div>
 
-      <div className="px-4 py-4 sm:px-5">
-        <SectionLabel>Личная информация</SectionLabel>
-        <div className="grid gap-2 sm:grid-cols-2">
-        <Field
-          icon={<KubIcon name="user" size={16} />}
-          label="Имя"
-          value={fullName}
-          onChange={setFullName}
-          placeholder="Ваше имя"
-          required
-          hint={`${fullName.length}/${PROFILE_LIMITS.fullNameMax}`}
-          maxLength={PROFILE_LIMITS.fullNameMax}
-        />
-        <Field
-          icon={<KubIcon name="atSign" size={16} />}
-          label="Имя пользователя"
-          value={username}
-          onChange={(v) => setUsername(normalizeUsername(v))}
-          placeholder="никнейм (буквы, цифры, ., _)"
-          hint={`${username.length}/${PROFILE_LIMITS.usernameMax}`}
-          maxLength={PROFILE_LIMITS.usernameMax}
-        />
-        <div className="sm:col-span-2">
-          <Field
-            icon={<KubIcon name="info" size={16} />}
-            label="О себе"
-            value={bio}
-            onChange={setBio}
-            placeholder="Несколько слов о себе"
-            multiline
-            hint={`${bio.length}/${PROFILE_LIMITS.bioMax}`}
-            maxLength={PROFILE_LIMITS.bioMax}
-          />
-        </div>
-        </div>
-      </div>
-
-      {/* Phone verification is open to every account. The section used to be
-          hidden behind `isAdmin` while the gateway and the database gates were
-          administrator-only; all three had to be opened together, or the
-          feature stayed unreachable. When the policy is off the gateway answers
-          `disabled` and `PhoneSection` says so, so hiding the section is not
-          what communicates that. */}
-      <div className="border-t border-[color:var(--kub-border-color)] px-4 py-4 sm:px-5">
-        <SectionLabel>Телефон</SectionLabel>
-        <PhoneSection />
-      </div>
-
-      <div className="border-t border-[color:var(--kub-border-color)] px-4 py-4 sm:px-5">
-        <SectionLabel>Оформление</SectionLabel>
-        <ProfileDecorationSection />
-      </div>
-        </div>
-      )}
-
-      {activeTab === "audio" && (
-      <div role="tabpanel" aria-label="Звук" className="px-4 py-4">
-        <AudioSettingsSection />
-      </div>
-      )}
-
-      {activeTab === "profile" && error && (
-        <div className="mx-4 px-3 py-2 rounded-xl text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger)] border border-[color:var(--kub-danger)]/30">
+      {error && (
+        <div className="mx-3 mt-3 rounded-xl border border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-danger)] sm:mx-4">
           {error}
         </div>
       )}
 
-      {activeTab === "general" && (
-      <div role="tabpanel" aria-label="Главное" className="px-4 py-4">
-        <SectionLabel>Внешний вид</SectionLabel>
-        <div className="rounded-xl overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
-          <div className="flex flex-col gap-2 px-4 py-3">
-            <div className="flex items-center gap-3">
-              <KubIcon
-                name={resolvedTheme === "dark" ? "themeDark" : "themeLight"}
-                size={16}
-                className="text-[color:var(--kub-cyan)]"
-              />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm text-[color:var(--kub-text)]">Тема</div>
-                {theme === "system" && (
-                  <div className="text-xs text-[color:var(--kub-muted)]">
-                    Сейчас как в системе: {resolvedTheme === "dark" ? "тёмная" : "светлая"}
-                  </div>
-                )}
-              </div>
-            </div>
-            <div
-              role="radiogroup"
-              aria-label="Выбор темы"
-              className="flex rounded-lg p-0.5 mt-1 bg-[var(--kub-bg)] border border-[color:var(--kub-border-color)]"
-            >
-              {THEME_OPTIONS.map(({ value, label, icon }) => {
-                const selected = theme === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    onClick={() => setTheme(value)}
-                    className={cn(
-                      "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold transition-colors",
-                      selected
-                        ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
-                        : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
-                    )}
-                  >
-                    <KubIcon name={icon} size={14} />
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+      <div className="pb-4">
+        {visibleSettingsSections({ isStaff }).map((id) => (
+          <Fragment key={id}>{sectionContent[id]}</Fragment>
+        ))}
       </div>
-      )}
-
-      {activeTab === "application" && (
-      <div role="tabpanel" aria-label="Приложение" className="px-4 py-4">
-        <SectionLabel>Приложение</SectionLabel>
-        <ReleaseDistributionSection />
-        {/* The section guards itself too; this keeps the spacer from being the
-            one thing the browser build still renders here. */}
-        {desktopWindows && (
-          <div className="mt-3">
-            <StorageSection />
-          </div>
-        )}
-      </div>
-      )}
-
-      {activeTab === "application" && isStaff && (
-        <div className="px-4 py-4 border-t border-[color:var(--kub-border-color)]">
-          <SectionLabel>Сервис</SectionLabel>
-          <div className="rounded-xl overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
-            <button
-              onClick={() => { onClose(); setLocation("/admin"); }}
-              className="flex items-center gap-3 w-full px-4 py-3 text-left hover:bg-[var(--kub-surface-3)] transition-colors"
-            >
-              <KubIcon name="shield" size={16} className="text-[color:var(--kub-pink)]" />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm text-[color:var(--kub-text)]">Админ-панель</div>
-                <div className="text-xs text-[color:var(--kub-muted)]">
-                  Управление пользователями, банами и мьютами
-                </div>
-              </div>
-              <KubIcon name="chevronRight" size={16} className="text-[color:var(--kub-muted)]" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {activeTab === "general" && (
-      <div className="px-4 pb-4">
-        <SectionLabel>Конфиденциальность</SectionLabel>
-        <div className="overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]">
-          <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3">
-            <KubIcon
-              name={privacy.preferences.presenceVisible ? "eye" : "eyeOff"}
-              size={16}
-              className={
-                privacy.preferences.presenceVisible
-                  ? "text-[color:var(--kub-cyan)]"
-                  : "text-[color:var(--kub-muted)]"
-              }
-            />
-            <div className="min-w-0">
-              <div className="text-sm text-[color:var(--kub-text)]">Показывать, когда я в сети</div>
-              <div className="text-xs leading-relaxed text-[color:var(--kub-muted)]">
-                {privacy.preferences.presenceVisible
-                  ? "Собеседники видят точку «в сети» и время последнего входа"
-                  : "Время последнего входа не сохраняется. Вас по-прежнему можно найти и написать вам"}
-              </div>
-            </div>
-            <KubSwitch
-              aria-label="Показывать, когда я в сети"
-              checked={privacy.preferences.presenceVisible}
-              disabled={privacy.loading}
-              onCheckedChange={(next) => void privacy.setPresenceVisible(next)}
-              className="justify-self-end"
-            />
-          </div>
-          {privacy.error && (
-            <div className="border-t border-[color:var(--kub-border-color)] px-4 py-2 text-xs text-[color:var(--kub-danger)]">
-              Не удалось сохранить настройку. Попробуйте ещё раз.
-            </div>
-          )}
-        </div>
-      </div>
-      )}
-
-      {activeTab === "general" && (
-      <div className="px-4 pb-4">
-        <SectionLabel>Уведомления</SectionLabel>
-        <div className="rounded-xl overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
-          <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
-            {pushStatus === "active" ? (
-              <KubIcon name="notifications" size={16} className="text-[color:var(--kub-cyan)]" />
-            ) : (
-              <KubIcon name="notificationsOff" size={16} className="text-[color:var(--kub-muted)]" />
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="text-sm text-[color:var(--kub-text)]">Push-уведомления</div>
-              <div className="text-xs text-[color:var(--kub-muted)]">
-                {pushStatus === "unsupported" && "Браузер не поддерживает"}
-                {pushStatus === "native_unavailable" && (
-                  nativeAndroid
-                    ? "Android push через Firebase/FCM"
-                    : desktopWindows
-                      ? "Системные уведомления, пока приложение запущено"
-                      : "Системные уведомления пока настроены только для Android"
-                )}
-                {pushStatus === "denied" && (
-                  nativeAndroid
-                    ? "Заблокировано в настройках приложения Android"
-                    : desktopWindows
-                      ? "Заблокировано в настройках приложения Windows"
-                      : "Заблокировано в настройках браузера"
-                )}
-                {pushStatus === "missing_vapid" && "Нужен VAPID public key в конфигурации"}
-                {pushStatus === "migration_missing" && "Нужно обновление базы данных"}
-                {pushStatus === "inactive" && "Получать уведомления, даже когда вкладка закрыта"}
-                {pushStatus === "active" && "Включены"}
-              </div>
-            </div>
-            {pushStatus === "active" ? (
-              <div className="col-span-2 min-w-0 sm:col-span-1 sm:justify-self-end">
-                <KubButton size="sm" variant="secondary" onClick={disablePush} className="w-full sm:w-auto">
-                  Выключить
-                </KubButton>
-              </div>
-            ) : pushStatus === "inactive" || (nativeAndroid && pushStatus === "native_unavailable") ? (
-              <div className="col-span-2 min-w-0 sm:col-span-1 sm:justify-self-end">
-                <KubButton size="sm" onClick={enablePush} className="w-full sm:w-auto">
-                  Включить
-                </KubButton>
-              </div>
-            ) : null}
-          </div>
-          <div className="min-w-0 border-t border-[color:var(--kub-border-color)] px-4 py-3 space-y-2">
-            {pushStatus !== "native_unavailable" && (
-              <>
-                <PreferenceSwitch
-                  label="Сообщения"
-                  checked={pushPreferences.message_push_enabled}
-                  disabled={loadingPreferences || pushStatus !== "active"}
-                  onChange={(value) => void setPushPreference("message_push_enabled", value)}
-                />
-                <PreferenceSwitch
-                  label="Задачи"
-                  checked={pushPreferences.task_push_enabled}
-                  disabled={loadingPreferences || pushStatus !== "active"}
-                  onChange={(value) => void setPushPreference("task_push_enabled", value)}
-                />
-                <PreferenceSwitch
-                  label="Приглашения"
-                  checked={pushPreferences.invite_push_enabled}
-                  disabled={loadingPreferences || pushStatus !== "active"}
-                  onChange={(value) => void setPushPreference("invite_push_enabled", value)}
-                />
-              </>
-            )}
-            {pushMessage && (
-              <div className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
-                {pushMessage}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-      )}
     </KubModal>
   );
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+/**
+ * Every row uses this grid, so the icons line up down the column and the
+ * controls line up on the right whatever a row happens to carry. `min-h-11`
+ * is the 44px a finger needs and, incidentally, the reason a scan down the
+ * list is even.
+ */
+const ROW_GRID =
+  "grid w-full min-w-0 grid-cols-[1.125rem_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 min-h-11 sm:px-4";
+
+/**
+ * Text fields keep the same icon column but fix the caption width, so the three
+ * inputs start at the same x instead of each one beginning wherever its own
+ * word ended.
+ */
+const FIELD_ROW_GRID =
+  "grid w-full min-w-0 grid-cols-[1.125rem_5.5rem_minmax(0,1fr)] items-center gap-3 px-3 py-2 min-h-11 sm:px-4";
+
+function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] px-1 mb-3 text-[color:var(--kub-cyan)]">
-      {children}
-    </p>
+    <section className="px-3 pt-4 sm:px-4">
+      <h3 className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--kub-muted)]">
+        {title}
+      </h3>
+      <div className="overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] divide-y divide-[color:var(--kub-border-color)]">
+        {children}
+      </div>
+    </section>
   );
 }
 
-function Field({
-  icon, label, value, onChange, placeholder, hint, multiline, required, type, maxLength,
+function RowIcon({ name, tone }: { name: KubIconName; tone: "accent" | "muted" }) {
+  return (
+    <KubIcon
+      name={name}
+      size={16}
+      className={tone === "accent" ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)]"}
+    />
+  );
+}
+
+/**
+ * A row: what it controls on the left, what it is set to beside it, the control
+ * on the right. `hint` is for the rare fact a person cannot read off the value —
+ * it is not a place to restate the label.
+ */
+function SettingsRow({
+  icon,
+  iconTone = "muted",
+  label,
+  value,
+  hint,
+  children,
 }: {
-  icon: React.ReactNode;
+  icon: KubIconName;
+  iconTone?: "accent" | "muted";
+  label: string;
+  value?: string | null;
+  hint?: string | null;
+  children?: ReactNode;
+}) {
+  return (
+    <div className={ROW_GRID}>
+      <RowIcon name={icon} tone={iconTone} />
+      <div className="min-w-0">
+        {/* Label and value share a line and wrap onto a second one only when the
+            value is a sentence rather than a word — which is what the push status
+            sometimes is. Nothing is truncated into meaninglessness to hold a line. */}
+        <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+          <span className="min-w-0 text-sm text-[color:var(--kub-text)]">{label}</span>
+          {value && (
+            <span className="min-w-0 text-xs text-[color:var(--kub-muted)]">{value}</span>
+          )}
+        </span>
+        {hint && (
+          <span className="mt-0.5 block text-xs leading-snug text-[color:var(--kub-muted)]">{hint}</span>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * A profile field. The input *is* the value, so there is no card, no coloured
+ * caption and no permanent counter — the counter appears only once the limit is
+ * close enough to matter.
+ */
+function TextFieldRow({
+  idPrefix,
+  field,
+  icon,
+  label,
+  value,
+  onChange,
+  placeholder,
+  maxLength,
+  required,
+}: {
+  idPrefix: string;
+  field: "name" | "username" | "bio";
+  icon: KubIconName;
   label: string;
   value: string;
-  onChange: (v: string) => void;
+  onChange: (value: string) => void;
   placeholder?: string;
-  hint?: string;
-  multiline?: boolean;
+  maxLength: number;
   required?: boolean;
-  type?: string;
-  maxLength?: number;
 }) {
-  const commonProps = {
-    value,
-    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(e.target.value),
-    placeholder,
-    maxLength,
-    className: "flex-1 bg-transparent text-sm outline-none text-[color:var(--kub-text)]",
-  };
-
+  const id = `${idPrefix}-${field}`;
+  const counterVisible = shouldShowCounter(value.length, maxLength);
   return (
-    <div className="rounded-xl overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
-      <div className="flex items-start gap-3 px-4 py-3">
-        <div className="mt-0.5 flex-shrink-0 text-[color:var(--kub-cyan)]">{icon}</div>
-        <div className="flex-1 min-w-0">
-          <div className="text-xs mb-1 flex items-center justify-between">
-            <span className="text-[color:var(--kub-cyan)] font-semibold">
-              {label}{required && <span className="text-[color:var(--kub-danger)]"> *</span>}
-            </span>
-            {hint && <span className="text-[color:var(--kub-muted)]">{hint}</span>}
-          </div>
-          {multiline ? (
-            <textarea {...commonProps} rows={3} className="flex-1 bg-transparent text-sm outline-none w-full resize-none text-[color:var(--kub-text)]" />
-          ) : (
-            <input {...commonProps} type={type ?? "text"} />
+    <div className={FIELD_ROW_GRID}>
+      <RowIcon name={icon} tone="muted" />
+      <label
+        htmlFor={id}
+        className="min-w-0 truncate text-sm text-[color:var(--kub-text)]"
+      >
+        {label}
+        {required && <span className="text-[color:var(--kub-danger)]"> *</span>}
+      </label>
+      <div className="flex min-w-0 items-center gap-2">
+        {counterVisible && (
+          <span className="shrink-0 tabular-nums text-[11px] text-[color:var(--kub-muted)]">
+            {value.length}/{maxLength}
+          </span>
+        )}
+        <input
+          id={id}
+          data-testid={`settings-field-${field}`}
+          type="text"
+          value={value}
+          maxLength={maxLength}
+          placeholder={placeholder}
+          onChange={(event) => onChange(event.target.value)}
+          className={cn(
+            "h-9 w-full min-w-0 rounded-lg border border-transparent bg-[var(--kub-surface)] px-2.5 text-sm text-[color:var(--kub-text)] outline-none",
+            "placeholder:text-[color:var(--kub-muted)]",
+            "transition-[border-color,box-shadow] duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)]",
+            "focus:border-[color:var(--kub-cyan)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)]",
           )}
-        </div>
+        />
       </div>
     </div>
   );
 }
 
-function PreferenceSwitch({
+function PreferenceSwitchRow({
   label,
   checked,
   disabled,
@@ -620,15 +680,102 @@ function PreferenceSwitch({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <div className="grid min-w-0 w-full max-w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg px-2 py-1">
-      <span className="min-w-0 truncate pr-1 text-sm text-[color:var(--kub-text)]">{label}</span>
+    <div className={ROW_GRID}>
+      <span aria-hidden="true" />
+      <span className="min-w-0 truncate text-sm text-[color:var(--kub-text)]">{label}</span>
       <KubSwitch
         aria-label={`Push: ${label}`}
         checked={checked}
         disabled={disabled}
         onCheckedChange={onChange}
-        className="justify-self-end"
       />
     </div>
+  );
+}
+
+/**
+ * A row that opens a section in place.
+ *
+ * The children are rendered only while it is open, which is what keeps the
+ * expensive sections from doing their work when the screen is merely on screen.
+ * Only `opacity` and `transform` move when the panel arrives, and both
+ * durations come from the motion tokens, so reduced motion collapses them.
+ */
+function DisclosureRow({
+  id,
+  icon,
+  title,
+  value,
+  open,
+  onToggle,
+  children,
+}: {
+  id: DisclosureId;
+  icon: KubIconName;
+  title: string;
+  value?: string | null;
+  open: boolean;
+  onToggle: (id: DisclosureId) => void;
+  children: ReactNode;
+}) {
+  const panelId = `settings-panel-${id}`;
+  const buttonId = `settings-toggle-${id}`;
+  return (
+    <div>
+      <button
+        type="button"
+        id={buttonId}
+        data-testid={`settings-open-${id}`}
+        aria-expanded={open}
+        // Only while the panel exists: `aria-controls` pointing at an id that is
+        // not in the document is a dangling reference, and the panel is not
+        // rendered until the row is opened.
+        aria-controls={open ? panelId : undefined}
+        onClick={() => onToggle(id)}
+        className={cn(
+          ROW_GRID,
+          "kub-interactive text-left transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)] hover:bg-[var(--kub-surface-3)]",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--kub-cyan)]",
+        )}
+      >
+        <RowIcon name={icon} tone={open ? "accent" : "muted"} />
+        <span className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+          <span className="min-w-0 text-sm text-[color:var(--kub-text)]">{title}</span>
+          {value && <span className="min-w-0 text-xs text-[color:var(--kub-muted)]">{value}</span>}
+        </span>
+        <KubIcon
+          name="chevronDown"
+          size={14}
+          className={cn(
+            "shrink-0 text-[color:var(--kub-muted)] transition-transform duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)]",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+      {open && (
+        <div
+          id={panelId}
+          data-testid={`settings-section-${id}`}
+          role="region"
+          aria-label={title}
+          className="kub-settings-panel border-t border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-3 sm:px-4"
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RowNote({ children, tone = "muted" }: { children: ReactNode; tone?: "muted" | "danger" }) {
+  return (
+    <p
+      className={cn(
+        "px-3 py-2 text-xs leading-snug sm:px-4",
+        tone === "danger" ? "text-[color:var(--kub-danger)]" : "text-[color:var(--kub-muted)]",
+      )}
+    >
+      {children}
+    </p>
   );
 }

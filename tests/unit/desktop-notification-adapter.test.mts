@@ -351,10 +351,17 @@ test("Windows settings copy describes tray delivery without claiming killed-proc
   assert.match(source, /пока LETSCUBE запущен/i);
   assert.match(source, /полного выхода/i);
 
-  const settingsSource = readFileSync(
-    new URL("../../artifacts/kub/src/components/sidebar/SettingsModal.tsx", import.meta.url),
-    "utf8",
-  );
+  // The settings screen's push wording moved out of the modal into
+  // `lib/settingsRows.ts` when the rows started printing their own value, so
+  // both files are read: the claim is about the copy, not about which file
+  // happens to hold it. `settings-rows.test.mts` asserts the same string
+  // through the function rather than through a scan.
+  const settingsSource = [
+    "../../artifacts/kub/src/components/sidebar/SettingsModal.tsx",
+    "../../artifacts/kub/src/lib/settingsRows.ts",
+  ]
+    .map((path) => readFileSync(new URL(path, import.meta.url), "utf8"))
+    .join("\n");
   assert.match(settingsSource, /пока приложение запущено/i);
   assert.doesNotMatch(settingsSource, /Системные уведомления Windows готовятся/i);
 });
