@@ -124,21 +124,39 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     `count()` is a snapshot rather than a wait, so it read zero rows and skipped.
     They run now.
 
-19. `[ ]` Roles and permissions: make them mean something, and make the panel usable. Requested by the owner on 2026-09-04, who reports the admin surface as "крайне неудобно" in both the interface and the roles themselves, "очень перегружена для администратора", and notes "старые fallback роли которые аналогичны обычным пользователям". Measured against production the same day, so this entry is evidence rather than a restatement of the complaint.
+19. `[~]` Roles and permissions. Requested by the owner on 2026-09-04 ("крайне неудобно", "очень перегружена для администратора", "старые fallback роли"), then on the same day: remove the excess without breaking what works, and reassign anyone on a legacy role to a proper one. **Data half done and applied 2026-09-04 (`20260904060000`); the UI half and one owner decision remain.**
 
-    - **13 roles are defined; 2 are used.** `profiles.role` holds only `user` (12 accounts) and `admin` (2). The other eleven exist in the picker and in nobody's account.
-    - **Two pairs are literally indistinguishable by permission.** `owner` and `tech_admin` grant an identical set of 40 permissions. `chat_member` and `user` grant an identical set of one (`chats.invite`). That is the "роли отличий не имеют" complaint, exactly, and it is measurable rather than a matter of taste.
-    - **`admin` is self-described legacy.** Its own description reads "Административный доступ по legacy-модели", it carries 23 permissions, and it is what both real administrators actually hold — so the legacy path is not a leftover to sweep up, it is the live one, and retiring it is a migration with real users on it.
-    - **Five roles still sell a computer club.** `location_owner` «Владелец клуба», `location_admin` «Администратор клуба», `location_manager` «Менеджер клуба», `location_staff` «Работник клуба», `location_client` «Клиент клуба». These are user-facing titles rendered in the admin panel, and they violate section 7 of `CLAUDE.md`, which requires removing `компьютерный клуб` positioning from user-facing text. The least arguable item here.
-    - **40 permissions in one flat list.** That is the overload: configuring a role means reasoning about forty checkboxes with no grouping and no statement anywhere of what a role is *for*.
+    **This entry's first version measured the wrong table, and the correction is the useful part.** It counted `role_permissions` rows and concluded that `owner` and `tech_admin` "grant an identical 40-permission set". They do — and it does not matter, because `has_permission` never reads those rows for them. Verified against production:
 
-    Scope, in this order — the data model decides the UI, not the other way round:
+    ```
+    has_permission(u, k):
+      1. has_global_role(u,'owner') or has_global_role(u,'tech_admin') -> return true   -- no table read
+      2. user_global_roles -> role_permissions, scope='global' and is_active
+      3. otherwise _legacy_role_has_permission(profiles.role, k)                        -- hardcoded in the function
+    ```
 
-    1. **Decide the role model before touching anything.** Give each surviving role a one-sentence purpose; delete or merge whatever cannot earn one. A defensible end state is small: an owner/technical tier, an operational tier, an ordinary user, and the per-chat roles — with the location tier removed outright unless the venue business is returning, which per `CLAUDE.md` it is not. Merging two identical roles is a product decision and belongs to the owner, not to a cleanup pass.
-    2. **Then fix the data**, additively and with the usual rehearsal. `roles` rows are `is_system`, and both UPDATE and DELETE are blocked by policy, so retiring one is a migration; it needs a plan for the two accounts currently on `admin`, and `has_permission` behaviour must be proven unchanged for every role that survives.
-    3. **Then the panel.** `RolesPermissionsTab.tsx` is the surface. Group the permissions, show what a role grants at a glance, and make the difference between two roles visible without opening both.
+    What follows from that, all measured rather than reasoned:
 
-    Binding constraints: never widen anyone's access as a side effect of tidying; every permission change is proven by a test that fails when reverted; RLS stays on; both live administrators keep working throughout the change.
+    - **`role_permissions` currently decides nothing for anybody.** All 14 accounts resolve to exactly two outcomes: 40 permissions (4 accounts, via tier 1) or one, `chats.invite` (10 accounts, via tier 3). Nothing lands on `admin`'s 23 rows or `manager`'s 9. Emptying those tables would change no one's access.
+    - **There are four administrators, not two.** Two hold `profiles.role='admin'` *and* a global `owner`/`tech_admin`; the other two hold `owner`/`tech_admin` while the legacy column still calls them ordinary users. Any reasoning that starts from `profiles.role` is wrong about who can do what.
+    - **The location tier is load-bearing and must not be removed.** `_task_visible_to_current_user_v3`, the SELECT policy on `tasks`, calls `has_location_permission` five times, and that function *does* read `role_permissions`. 4 locations, 15 members, 40 tasks depend on it. The first version of this entry proposed deleting the tier "unless something depends on it" — something does.
+    - **The chat tier is the genuinely dead one.** `has_permission` filters `scope='global'` and `has_location_permission` filters `scope='location'`, so a chat-scope role is read nowhere; real chat authority comes from `chat_members.role`.
+
+    **Applied on 2026-09-04** — names and descriptions only, plus two backfills; no write to `profiles.role`, no change to `role_permissions`:
+
+    - the five «клуб» titles became «Владелец / Администратор / Менеджер / Сотрудник / Участник локации», satisfying section 7 of `CLAUDE.md`. No UI change was needed: `getRoleLabel` prefers `roles.name` from the database, and the club strings lived only in the seed.
+    - the three chat-scope roles are `is_active = false` — deactivated, not deleted, because the foreign keys cascade. The admin panel already filters inactive roles out of its assignment pickers.
+    - seven pre-trigger accounts got the global `user` role they should always have had, and one `location_members.role_id` that was NULL was filled.
+
+    Verified before and after: the full cross product of every account against every permission was compared, and **not one decision changed** — 4 accounts with all 40, 10 with one, exactly as before. The migration carries that check internally and aborts on drift in either direction, widening included.
+
+    **Still open — one decision belongs to the owner.** `owner` and `tech_admin` cannot be told apart by editing data: the bypass is hardcoded in `has_permission` before any table is consulted. Merging them, or giving `tech_admin` a genuinely narrower reach, means changing that function and deciding which of the four current holders moves. Nothing here should guess at that.
+
+    **Still open — the panel.** `RolesPermissionsTab.tsx`: group the 40 permissions by the categories `rolePermissions.ts` already defines, let two roles be compared without opening both, and state plainly that `owner`, `tech_admin` and `admin` are not data-editable, because today the UI implies they are.
+
+    **A trap worth remembering.** The `20260514` seed uses `on conflict (key) do update ... is_active = true`, so re-running it silently restores the club titles and revives the chat roles. Recorded in the migration and covered by a test.
+
+    Two smaller findings left deliberately untouched: one member row whose `role='staff'` disagrees with its `role_id=location_client` — aligning it would *add* `tasks.view` and `tasks.claim`, which is a widening and needs a decision — and the two accounts that are full administrators while reading as users.
 
 20. `[ ]` Move the user profile out of the docked panel into a floating window. Requested by the owner on 2026-09-04: opening a user from the chat header gives a panel pinned to the right edge that "занимает чёт много места". The wanted shape is a movable window carrying the same functions, in the spirit of a desktop messenger's contact card.
 
