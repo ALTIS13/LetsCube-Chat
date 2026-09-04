@@ -20,6 +20,14 @@ function rpcClient(): RpcClient {
   return createClient() as unknown as RpcClient;
 }
 
+/** A postgrest error carries `message`; anything else is stringified as-is. */
+function describeReadError(error: unknown): string {
+  if (error && typeof error === "object" && "message" in error) {
+    return String((error as { message: unknown }).message);
+  }
+  return String(error);
+}
+
 export async function loadAchievementState(): Promise<AchievementState> {
   const supabase = createClient();
   const [definitions, catalogue, sync, stats] = await Promise.all([
@@ -33,6 +41,23 @@ export async function loadAchievementState(): Promise<AchievementState> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     supabase.from("achievement_stats" as any).select("achievement_key,holders,eligible"),
   ]);
+
+  // A failed read used to be indistinguishable from an empty catalogue: the
+  // picker renders nothing when it has no items, so the decoration section
+  // would simply not appear and say nothing about why. The caller already
+  // shows "Не удалось загрузить достижения." when this throws.
+  //
+  // `stats` is deliberately not in this list — it only supplies the "N% of
+  // users" line, and losing it should not take the screen down with it.
+  for (const [what, result] of [
+    ["achievements", definitions],
+    ["cosmetics", catalogue],
+    ["achievements_sync", sync],
+  ] as const) {
+    if (result.error) {
+      throw new Error(`could not read ${what}: ${describeReadError(result.error)}`);
+    }
+  }
 
   const achievements = ((definitions.data ?? []) as unknown as Record<string, unknown>[])
     .map(projectAchievement)

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/client'
 import { sortChatsForSidebar } from '@/lib/chatSort'
 import type { Profile, ChatWithLastMessage, MessageWithSender } from '@/types/database'
 import { sameActorClientMessage } from '@/lib/messageActor'
+import { isHeartbeatOnlyProfileChange } from '@/lib/profileChange'
 
 interface AppState {
   // Current user
@@ -174,26 +175,26 @@ export const useAppStore = create<AppState>((set) => ({
    * пересоздавался → useChats/useFolders/useTasks начинали N+1 рефетч
    * и переподписку realtime-каналов. Это и есть storm-петля Task #48.
    *
-   * Игнорируем изменения, где из значимых полей не изменилось ничего —
-   * меняется только `online_at`/`updated_at`. Возвращаем тот же `state`
+   * Игнорируем изменения, где не изменилось ничего, кроме
+   * `online_at`/`updated_at`. Возвращаем тот же `state`
    * (Object.is === true), zustand тогда не уведомляет подписчиков и
    * лишних рендеров не происходит.
+   *
+   * Сравниваем всё, кроме этих двух полей, а не список «значимых».
+   * Список был именно таким и молча устарел: он не знал про
+   * `profile_frame`/`profile_background`, поэтому выбор рамки проходил все
+   * сравнения, стор возвращал тот же объект — и кнопка выглядела мёртвой,
+   * хотя запись в базу проходила. Любой новый столбец профиля теперь
+   * значим по умолчанию; пульс пишет только `online_at`, так что фильтр,
+   * ради которого всё это писалось, остаётся закрытым.
    */
   setCurrentUser: (user) => set((state) => {
     if (!user || !state.currentUser) return { currentUser: user };
-    const a = state.currentUser;
-    const b = user;
-    if (
-      a.id === b.id &&
-      a.full_name === b.full_name &&
-      a.username === b.username &&
-      a.avatar_url === b.avatar_url &&
-      a.bio === b.bio &&
-      a.role === b.role
-    ) {
-      return state;
-    }
-    return { currentUser: b };
+    const unchanged = isHeartbeatOnlyProfileChange(
+      state.currentUser as unknown as Record<string, unknown>,
+      user as unknown as Record<string, unknown>,
+    );
+    return unchanged ? state : { currentUser: user };
   }),
 
   selectedChatId: null,
