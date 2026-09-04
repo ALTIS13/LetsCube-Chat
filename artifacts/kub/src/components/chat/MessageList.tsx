@@ -203,6 +203,10 @@ export function MessageList({
   const [readReceiptsMessageId, setReadReceiptsMessageId] = useState<string | null>(null);
   const isAtBottomRef = useRef(true);
   const prevMessageCountRef = useRef(sortedMessages.length);
+  /** The last message's id, so a prepend is not mistaken for a send. */
+  const prevLastMessageIdRef = useRef<string | null>(
+    sortedMessages[sortedMessages.length - 1]?.id ?? null,
+  );
   const loadingOlderRef = useRef(loadingOlder);
   useEffect(() => { loadingOlderRef.current = loadingOlder; }, [loadingOlder]);
   const hasMoreOlderRef = useRef(hasMoreOlder);
@@ -576,12 +580,45 @@ export function MessageList({
   useLayoutEffect(() => {
     const messageCountChanged = prevMessageCountRef.current !== sortedMessages.length;
     prevMessageCountRef.current = sortedMessages.length;
-    if (isAtBottomRef.current) {
+
+    // A message YOU sent always takes you to it, whatever the scroll state says.
+    //
+    // `isAtBottomRef` is written by the scroll handler, so it is a lagging view
+    // of where the list is: scroll events are asynchronous, and between two
+    // quick sends the composer resizes the container without producing one. A
+    // send that arrived while the flag was briefly stale was treated as "new
+    // content while the reader is elsewhere" — no scroll, just the counter — so
+    // the bubble was painted below the fold, under the composer, and only a
+    // later settle pass moved it up. That is why the first send looked right
+    // and the second did not.
+    //
+    // This does not weaken the contract in section 11 of CLAUDE.md. That
+    // protects a reader in the history from being yanked to the bottom by
+    // OTHER people's messages, and incoming messages still only bump the
+    // counter. Your own send is an explicit request to see it.
+    //
+    // Keyed on the last message's identity rather than the count: loading older
+    // history changes the count too, and the last message is still yours, so a
+    // count test would force a jump to the bottom in the middle of a prepend —
+    // the exact thing the prepend hold exists to prevent.
+    const lastMessage = sortedMessages[sortedMessages.length - 1];
+    const lastMessageId = lastMessage?.id ?? null;
+    const lastMessageChanged = prevLastMessageIdRef.current !== lastMessageId;
+    prevLastMessageIdRef.current = lastMessageId;
+    const lastActor = lastMessage !== undefined ? resolveMessageActor(lastMessage) : null;
+    const lastMessageIsMine = lastActor?.kind === "user" && lastActor.id === userId;
+    const iJustSent =
+      lastMessageChanged &&
+      lastMessageIsMine &&
+      !preservingOlderScrollRef.current &&
+      !loadingOlderRef.current;
+
+    if (isAtBottomRef.current || iJustSent) {
       applyBottomNow();
     } else if (messageCountChanged && !preservingOlderScrollRef.current && !loadingOlderRef.current) {
       setNewCount((n) => n + 1);
     }
-  }, [isTyping, sortedMessages.length, applyBottomNow]);
+  }, [isTyping, sortedMessages, applyBottomNow, userId]);
 
   useLayoutEffect(() => {
     if (!isAtBottomRef.current) return undefined;
