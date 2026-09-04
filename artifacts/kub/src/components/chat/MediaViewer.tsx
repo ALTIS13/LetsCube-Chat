@@ -2,6 +2,7 @@
 
 import { KubIcon } from "@/components/kub";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export interface MediaViewerItem {
   type: "image" | "video";
@@ -32,6 +33,7 @@ export function MediaViewer({ media, onClose }: MediaViewerProps) {
   }, [media, onClose]);
 
   if (!media) return null;
+  if (typeof document === "undefined") return null;
 
   const title = media.title || (media.type === "image" ? "Фото" : "Видео");
 
@@ -49,7 +51,14 @@ export function MediaViewer({ media, onClose }: MediaViewerProps) {
     }
   };
 
-  return (
+  // Rendered into the document body rather than where it was called from.
+  //
+  // `z-[90]` only means "above everything" while the viewer is a child of the
+  // page. Opened from the profile card it is a child of a `z-[60]` window,
+  // which is its own stacking context, so 90 is measured inside 60 and the
+  // support window at `z-[70]` covered a full-screen photo. A portal takes the
+  // viewer out of that context and lets its own z-index mean what it says.
+  return createPortal(
     <div
       className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 p-3 backdrop-blur-sm sm:p-6"
       role="dialog"
@@ -127,6 +136,7 @@ export function MediaViewer({ media, onClose }: MediaViewerProps) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

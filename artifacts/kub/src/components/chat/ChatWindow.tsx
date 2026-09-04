@@ -22,6 +22,10 @@ import { KUB_CHAT_MESSAGE_JUMP_EVENT, requestChatMessageJump, type ChatMessageJu
 import { isSavedChat } from "@/lib/chatDisplay";
 import { reportError } from "@/lib/monitoring";
 import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
+// One copy of "is this a voice note / a round video", shared with the profile
+// card's shared-media sections. A second copy drifts, and then playback and the
+// gallery disagree about the same row.
+import { isRoundVideoMessageContent, isVoiceMessageContent } from "@/lib/messageMediaSections";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import {
   DEFAULT_MEDIA_QUALITY,
@@ -1045,27 +1049,6 @@ function createMediaPlaybackItem(
     subtitle: senderName,
     durationMs: getMessageMediaMetadataNumber(message, "duration_ms") ?? parseMessageDurationMs(message.content),
   };
-}
-
-function isRoundVideoMessageContent(message: MessageWithSender): boolean {
-  return (
-    getMessageMediaMetadataString(message, "kind") === "video_message" ||
-    getMessageMediaMetadataString(message, "shape") === "round" ||
-    /^Видео-сообщение(?:\s|\(|$)/i.test(message.content?.trim() ?? "")
-  );
-}
-
-function isVoiceMessageContent(message: MessageWithSender): boolean {
-  const mediaUrl = message.media_url?.toLowerCase() ?? "";
-  const content = message.content?.toLowerCase() ?? "";
-  return /\.(webm|ogg|oga|mp3|wav|m4a|aac)(\?|#|$)/.test(mediaUrl) || content.includes("голосовое") || content.includes("voice");
-}
-
-function getMessageMediaMetadataString(message: MessageWithSender, key: string): string | null {
-  const metadata = message.media_metadata;
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
-  const value = (metadata as Record<string, unknown>)[key];
-  return typeof value === "string" ? value : null;
 }
 
 function getMessageMediaMetadataNumber(message: MessageWithSender, key: string): number | null {

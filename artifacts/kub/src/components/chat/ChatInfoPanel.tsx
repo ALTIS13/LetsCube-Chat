@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
-import { KubIcon, KubModal } from "@/components/kub";
+import { KubIcon, KubModal, type KubIconName } from "@/components/kub";
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
@@ -33,11 +33,19 @@ import {
   profileDragPosition,
   profileWindowFrame,
   readProfileWindowPlacement,
+  resolveProfileWindowEscape,
   resolveProfileWindowPlacement,
-  shouldCloseProfileWindowOnKey,
   shouldStartProfileDrag,
   writeProfileWindowPlacement,
 } from "@/lib/profileWindow";
+import {
+  buildMessageMediaSections,
+  extractFirstLink,
+  isGridMediaKind,
+  resolveActiveMediaSection,
+  type MessageMediaKind,
+} from "@/lib/messageMediaSections";
+import { copyWithFeedback } from "@/lib/actionFeedback";
 
 interface ChatInfoPanelProps {
   chat: ChatWithLastMessage;
@@ -45,8 +53,26 @@ interface ChatInfoPanelProps {
   onClearForMe?: () => Promise<{ ok: boolean; error: string | null }>;
 }
 
-type Tab = "info" | "members" | "media";
-const MEDIA_PAGE_SIZE = 12;
+type Tab = "info" | "members";
+
+/**
+ * The card is a stack, not a scroll.
+ *
+ * «Общие медиа» used to append the gallery underneath the actions, which is why
+ * it could be opened and never closed: there was nothing to close, only more
+ * card. It is a pushed sub-view now — one at a time, with a back control and
+ * Escape to pop it.
+ */
+type CardView = "root" | "gallery";
+
+const MEDIA_PAGE_SIZE = 24;
+
+/**
+ * Links live in ordinary text messages, so they are not part of the media page
+ * and are fetched once rather than paged. The cap keeps the request bounded on
+ * a chat that is nothing but links; the section then reads `60+`.
+ */
+const LINK_PAGE_SIZE = 60;
 
 type MemberRow = Profile & { chat_role: "owner" | "admin" | "member" };
 type InviteWithProfiles = {
@@ -63,6 +89,18 @@ type InviteWithProfiles = {
 
 const DEFAULT_INVITE_POLICY: InvitePolicy = "owner_admin_only";
 
+/** One icon per section of the shared-media sub-view. */
+const MEDIA_SECTION_ICONS: Record<MessageMediaKind, KubIconName> = {
+  photo: "image",
+  video: "video",
+  gif: "play",
+  file: "file",
+  link: "externalLink",
+  voice: "voice",
+  videoMessage: "video",
+  audio: "volume",
+};
+
 export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProps) {
   const { currentUser, setSelectedChatId, chats, setChats, setMessages, mutedChatIds, toggleMutedChat } = useAppStore();
   const supabase = createClient();
@@ -77,6 +115,8 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const isMuted = mutedChatIds.includes(chat.id);
 
   const [tab, setTab] = useState<Tab>("info");
+  const [view, setView] = useState<CardView>("root");
+  const [mediaSection, setMediaSection] = useState<MessageMediaKind | null>(null);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(chat.name ?? "");
   const [description, setDescription] = useState(chat.description ?? "");
@@ -109,7 +149,8 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   }, []);
   const frame = profileWindowFrame(placement, viewport);
   const docked = frame.docked;
-  const windowTitle = isSaved ? "Избранное" : isGroup ? "Информация о группе" : "Профиль пользователя";
+  const rootTitle = isSaved ? "Избранное" : isGroup ? "Информация о группе" : "Профиль пользователя";
+  const windowTitle = view === "gallery" ? "Общие медиа" : rootTitle;
 
   // A resize or a rotation can strand the card off screen; crossing the dock
   // breakpoint has to put it back into the column it came from.
@@ -139,7 +180,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const tagName = target?.tagName;
-      const close = shouldCloseProfileWindowOnKey({
+      const outcome = resolveProfileWindowEscape({
         key: event.key,
         defaultPrevented: event.defaultPrevented,
         editing:
@@ -148,14 +189,20 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         // and own Escape until they are gone. The card is not modal, which is
         // also why the shell's own Escape handler stands down while it is open.
         overlayAbove: Boolean(document.querySelector('[aria-modal="true"]')),
+        // Inside the gallery, Escape means «назад», the same as the arrow.
+        subview: view !== "root",
       });
-      if (!close) return;
+      if (outcome === "ignore") return;
       event.preventDefault();
+      if (outcome === "back") {
+        setView("root");
+        return;
+      }
       onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  }, [onClose, view]);
 
   const onHandlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (
@@ -203,6 +250,8 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
   const [media, setMedia] = useState<Message[]>([]);
+  const [links, setLinks] = useState<Message[]>([]);
+  const [linksHasMore, setLinksHasMore] = useState(false);
   const [loadingMedia, setLoadingMedia] = useState(false);
   const [mediaHasMore, setMediaHasMore] = useState(false);
   const [openMedia, setOpenMedia] = useState<MediaViewerItem | null>(null);
@@ -340,11 +389,14 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       .eq("chat_id", chat.id)
       .eq("user_id", currentUser.id)
       .maybeSingle();
+    // `audio` joined the list so voice notes have a section of their own; the
+    // classifier in `messageMediaSections.ts` decides which section each row
+    // lands in from `type` plus the shared voice/round-video predicates.
     let query = supabase
       .from("messages")
       .select("*")
       .eq("chat_id", chat.id)
-      .in("type", ["image", "video", "file"])
+      .in("type", ["image", "video", "file", "audio"])
       .is("deleted_at", null)
       .not("media_url", "is", null);
     if (membership?.cleared_at) {
@@ -367,19 +419,70 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     setLoadingMedia(false);
   }, [chat.id, currentUser, supabase]);
 
-  useEffect(() => {
-    if (tab === "media") {
-      setMedia([]);
-      setMediaHasMore(false);
-      setOpenMedia(null);
-      loadMedia(true);
+  /**
+   * Links are ordinary text messages, so they are outside the media page.
+   *
+   * Deliberately additive and soft-failing: if this query is rejected the
+   * «Ссылки» section simply never appears and every other section still works.
+   * It runs once, when the gallery is opened, and never on the card root.
+   */
+  const loadLinks = useCallback(async () => {
+    if (!currentUser) {
+      setLinks([]);
+      setLinksHasMore(false);
+      return;
     }
-  }, [tab, loadMedia]);
+    const { data: membership } = await supabase
+      .from("chat_members")
+      .select("cleared_at")
+      .eq("chat_id", chat.id)
+      .eq("user_id", currentUser.id)
+      .maybeSingle();
+    // A single deliberately loose `ilike`: the pattern carries no `,` `:` or
+    // `/` for a filter parser to trip over, and `extractFirstLink` does the
+    // exact match on the client, so a row containing the word "http" and no
+    // address is fetched and then dropped rather than shown.
+    let query = supabase
+      .from("messages")
+      .select("*")
+      .eq("chat_id", chat.id)
+      .eq("type", "text")
+      .is("deleted_at", null)
+      .ilike("content", "%http%");
+    if (membership?.cleared_at) {
+      query = query.gt("created_at", membership.cleared_at);
+    }
+    const { data, error } = await query
+      .order("created_at", { ascending: false })
+      .range(0, LINK_PAGE_SIZE);
+    if (error || !data) {
+      setLinks([]);
+      setLinksHasMore(false);
+      return;
+    }
+    const rows = data as Message[];
+    const hiddenIds = await fetchHiddenMessageIdSet(supabase, rows.map((item) => item.id));
+    const visible = rows.filter((item) => !hiddenIds.has(item.id) && extractFirstLink(item.content));
+    setLinks(visible.slice(0, LINK_PAGE_SIZE));
+    setLinksHasMore(rows.length > LINK_PAGE_SIZE);
+  }, [chat.id, currentUser, supabase]);
 
   useEffect(() => {
+    if (view !== "gallery") return;
     setMedia([]);
     setMediaHasMore(false);
     setOpenMedia(null);
+    loadMedia(true);
+    void loadLinks();
+  }, [view, loadMedia, loadLinks]);
+
+  useEffect(() => {
+    setMedia([]);
+    setLinks([]);
+    setLinksHasMore(false);
+    setMediaHasMore(false);
+    setOpenMedia(null);
+    setView("root");
   }, [chat.id]);
 
   useEffect(() => {
@@ -388,13 +491,17 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       if (detail?.reason !== "message-hidden" || detail.chatId !== chat.id) return;
       if (detail.messageId) {
         setMedia((current) => current.filter((item) => item.id !== detail.messageId));
+        setLinks((current) => current.filter((item) => item.id !== detail.messageId));
         return;
       }
-      if (tab === "media") void loadMedia(true);
+      if (view === "gallery") {
+        void loadMedia(true);
+        void loadLinks();
+      }
     };
     window.addEventListener(KUB_CHATS_REFRESH_EVENT, handleHiddenMessage);
     return () => window.removeEventListener(KUB_CHATS_REFRESH_EVENT, handleHiddenMessage);
-  }, [chat.id, loadMedia, tab]);
+  }, [chat.id, loadLinks, loadMedia, view]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -547,6 +654,8 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         : c
     ));
     setMedia([]);
+    setLinks([]);
+    setLinksHasMore(false);
     setMediaHasMore(false);
     setOpenMedia(null);
     dispatchChatsRefresh({ reason: "membership-change", chatId: chat.id });
@@ -569,6 +678,8 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     }
     setMessages(chat.id, []);
     setMedia([]);
+    setLinks([]);
+    setLinksHasMore(false);
     setMediaHasMore(false);
     setOpenMedia(null);
     setChats(chats.filter((c) => c.id !== chat.id));
@@ -668,24 +779,43 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     role === "owner" ? "Владелец" : role === "admin" ? "Администратор" : "";
 
   const otherUser = !isGroup ? (chat.other_user as Profile | null) : null;
+
+  // Фото, видео, GIF, файлы, ссылки, голосовые, видеосообщения, аудио — from
+  // the rows already loaded. A section holding nothing is never built, so the
+  // tab strip only ever offers what this chat actually contains.
+  const mediaSections = useMemo(
+    () => buildMessageMediaSections([...media, ...links], { hasMore: mediaHasMore || linksHasMore }),
+    [media, links, mediaHasMore, linksHasMore],
+  );
+  const activeMediaSection = resolveActiveMediaSection(mediaSections, mediaSection);
+  const activeSection = mediaSections.find((section) => section.kind === activeMediaSection) ?? null;
   const mediaGridItems = useMemo(
     () => media.filter((m) => m.type === "image" || m.type === "video"),
     [media],
   );
   const mediaVariantUrls = useMessageMediaVariantUrls(mediaGridItems);
-  const fileItems = useMemo(
-    () => media.filter((m) => m.type === "file"),
-    [media],
-  );
   const memberIdSet = useMemo(() => new Set(members.map((member) => member.id)), [members]);
   const visibleInvites = useMemo(
     () => invites.filter((invite) => !(invite.status === "accepted" && memberIdSet.has(invite.invitee_id))),
     [invites, memberIdSet],
   );
-  const visibleMediaGridItems = mediaGridItems;
   const hasMoreMedia = mediaHasMore;
 
-  const tabLabels: Record<Tab, string> = { info: "Сведения", members: "Участники", media: "Медиа" };
+  const openGallery = () => {
+    setMediaSection(null);
+    setView("gallery");
+  };
+
+  const copyUsername = async () => {
+    if (!otherUser?.username) return;
+    await copyWithFeedback(`@${otherUser.username}`, {
+      success: "Никнейм скопирован",
+      error: "Не удалось скопировать никнейм",
+      key: "username",
+    });
+  };
+
+  const tabLabels: Record<Tab, string> = { info: "Сведения", members: "Участники" };
   const actionRowClass =
     "inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 transition-colors text-left hover:bg-[var(--kub-surface-2)]";
   const dangerActionRowClass =
@@ -715,18 +845,32 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         )}
         data-testid="chat-info-header"
       >
-        <button
-          onClick={onClose}
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)]"
-          aria-label="Закрыть"
-        >
-          <KubIcon name="close" size={18} />
-        </button>
+        {/* One slot, two meanings: inside a sub-view the leading control goes
+            back to the card root rather than closing the card, which is what
+            the arrow says and what Escape does. */}
+        {view === "gallery" ? (
+          <button
+            onClick={() => setView("root")}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)]"
+            aria-label="Назад"
+            data-testid="chat-info-back"
+          >
+            <KubIcon name="chevronLeft" size={18} />
+          </button>
+        ) : (
+          <button
+            onClick={onClose}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)]"
+            aria-label="Закрыть"
+          >
+            <KubIcon name="close" size={18} />
+          </button>
+        )}
         <span className="min-w-0 truncate text-center text-sm font-semibold text-[color:var(--kub-text)]">
           {windowTitle}
         </span>
         <div className="flex h-9 w-9 items-center justify-center justify-self-end">
-          {canEditChatProfile && !editing && (
+          {canEditChatProfile && !editing && view === "root" && (
             <button
               onClick={() => setEditing(true)}
               className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-2)]"
@@ -748,6 +892,15 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         </div>
       </div>
 
+      {/* Two layers, one visible at a time. The box already has a size, so the
+          push moves them without resizing anything — see `.kub-subview`. */}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div
+        className="kub-subview absolute inset-0 overflow-y-auto"
+        data-state={view === "root" ? "current" : "behind"}
+        data-testid="chat-info-root-view"
+        inert={view !== "root"}
+      >
       <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 py-4 px-4 flex-shrink-0 border-b border-[color:var(--kub-border-color)] kub-grid-subtle" data-testid="chat-info-summary">
         <div className="relative">
           <ChatAvatar
@@ -805,9 +958,26 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               <div className="col-start-2 row-start-2 text-left text-xs text-[color:var(--kub-muted)]">
                 {members.length || chat.members?.length || 0} участников
               </div>
+            ) : otherUser?.username ? (
+              // Carried over from the chat-list mini-profile this card replaced:
+              // copying the nickname was the one affordance that surface had and
+              // this one did not.
+              <div className="col-start-2 row-start-2 inline-flex min-w-0 items-center gap-1 text-left text-xs text-[color:var(--kub-muted)]">
+                <span className="truncate">@{otherUser.username}</span>
+                <button
+                  type="button"
+                  data-testid="chat-info-copy-username"
+                  onClick={() => void copyUsername()}
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-cyan)]"
+                  aria-label="Скопировать никнейм"
+                  title="Скопировать никнейм"
+                >
+                  <KubIcon name="copy" size={12} />
+                </button>
+              </div>
             ) : (
               <div className="col-start-2 row-start-2 text-left text-xs text-[color:var(--kub-muted)]">
-                {otherUser?.username ? `@${otherUser.username}` : "Без имени пользователя"}
+                Без имени пользователя
               </div>
             )}
             {chat.description && (
@@ -819,9 +989,11 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         )}
       </div>
 
+      {/* The summary scrolls away with the content; the tabs do not, so a long
+          member list is still switchable without scrolling back up. */}
       {isGroup && (
-        <div className="flex flex-shrink-0 border-b border-[color:var(--kub-border-color)]">
-          {(["info", "members", "media"] as Tab[]).map((t) => (
+        <div className="sticky top-0 z-10 flex flex-shrink-0 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]">
+          {(["info", "members"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -832,9 +1004,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
             >
               {t === "members"
                 ? <KubIcon name="users" size={14} className="mx-auto mb-0.5" />
-                : t === "media"
-                  ? <KubIcon name="image" size={14} className="mx-auto mb-0.5" />
-                  : null}
+                : null}
               {tabLabels[t]}
               {tab === t && (
                 <span className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full bg-[var(--kub-cyan)] kub-glow-soft" />
@@ -844,7 +1014,6 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
         {(tab === "info" || !isGroup) && (
           <div>
             {!isGroup && otherUser && (
@@ -860,11 +1029,13 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
             )}
             <div className="px-4 py-3 space-y-1">
               <button
-                onClick={() => setTab("media")}
+                onClick={openGallery}
                 className={cn(actionRowClass, "text-[color:var(--kub-text)]")}
+                data-testid="chat-info-open-gallery"
               >
                 <KubIcon name="image" size={17} tone="muted" className="shrink-0" />
                 <span className="min-w-0 flex-1 truncate">Общие медиа</span>
+                <KubIcon name="chevronRight" size={16} tone="muted" className="shrink-0" />
               </button>
               <button
                 onClick={() => toggleMutedChat(chat.id)}
@@ -1238,68 +1409,140 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
           </div>
         )}
 
-        {tab === "media" && (
-          <div className="p-2">
-            {loadingMedia && media.length === 0 ? (
-              <div className="grid grid-cols-3 gap-1">
-                {Array.from({ length: 6 }).map((_, index) => (
-                  <div
-                    key={index}
-                    className="aspect-square animate-pulse rounded-lg bg-[var(--kub-surface-2)]"
-                  />
-                ))}
-              </div>
-            ) : media.length === 0 ? (
-              <div className="text-center py-8 text-sm text-[color:var(--kub-muted)]">Медиа пока нет</div>
-            ) : (
-              <>
-                <div className="grid grid-cols-3 gap-1 mb-3">
-                  {visibleMediaGridItems.map((m) => {
-                    const mediaVariant = mediaVariantUrls[m.id];
-                    return (
-                      <button
-                        type="button"
-                        key={m.id}
-                        className="relative aspect-square overflow-hidden rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-left focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)]"
-                        onClick={() => setOpenMedia({
-                          type: m.type as "image" | "video",
-                          url: m.media_url!,
-                          title: m.content ?? (m.type === "image" ? "Фото" : "Видео"),
-                        })}
-                      >
-                        <MediaGalleryTile message={m} mediaVariant={mediaVariant} />
-                      </button>
-                    );
-                  })}
-                </div>
-                {hasMoreMedia && (
-                  <button
-                    type="button"
-                    onClick={() => loadMedia(false, media.length)}
-                    disabled={loadingMedia}
-                    className="mb-3 w-full rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-sm text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-2)]"
-                  >
-                    Показать ещё
-                  </button>
+      </div>
+
+      {/* The shared-media sub-view. Its own scroll, so the section strip stays
+          put while the list under it moves. */}
+      <div
+        className="kub-subview absolute inset-0 flex min-h-0 flex-col"
+        data-state={view === "gallery" ? "current" : "ahead"}
+        data-testid="chat-info-gallery-view"
+        inert={view !== "gallery"}
+      >
+        {mediaSections.length > 0 && (
+          <div
+            className="flex flex-shrink-0 gap-1 overflow-x-auto border-b border-[color:var(--kub-border-color)] px-2 py-2"
+            role="tablist"
+            aria-label="Разделы общих медиа"
+            data-testid="chat-info-media-sections"
+          >
+            {mediaSections.map((section) => (
+              <button
+                key={section.kind}
+                type="button"
+                role="tab"
+                id={`chat-info-media-tab-${section.kind}`}
+                aria-controls="chat-info-media-panel"
+                aria-selected={section.kind === activeMediaSection}
+                onClick={() => setMediaSection(section.kind)}
+                className={cn(
+                  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors",
+                  section.kind === activeMediaSection
+                    ? "border-transparent bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
+                    : "border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-text)]",
                 )}
-                {fileItems.map((m) => (
-                  <a
-                    key={m.id}
-                    href={m.media_url!}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[var(--kub-surface-2)] transition-colors text-[color:var(--kub-text)]"
-                  >
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]">
-                      <KubIcon name="file" size={15} tone="accent" />
-                    </div>
-                    <span className="text-sm truncate">{m.content ?? "Файл"}</span>
-                  </a>
-                ))}
-              </>
-            )}
+              >
+                <KubIcon name={MEDIA_SECTION_ICONS[section.kind]} size={13} tone="currentColor" />
+                <span>{section.label}</span>
+                <span className="tabular-nums opacity-80">{section.countLabel}</span>
+              </button>
+            ))}
           </div>
         )}
+
+        <div
+          className="min-h-0 flex-1 overflow-y-auto p-2"
+          id="chat-info-media-panel"
+          role={activeSection ? "tabpanel" : undefined}
+          aria-labelledby={activeSection ? `chat-info-media-tab-${activeSection.kind}` : undefined}
+        >
+          {loadingMedia && media.length === 0 ? (
+            <div className="grid grid-cols-3 gap-1">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="aspect-square animate-pulse rounded-lg bg-[var(--kub-surface-2)]"
+                />
+              ))}
+            </div>
+          ) : !activeSection ? (
+            <div className="py-8 text-center text-sm text-[color:var(--kub-muted)]">Медиа пока нет</div>
+          ) : isGridMediaKind(activeSection.kind) ? (
+            <div className="mb-3 grid grid-cols-3 gap-1">
+              {activeSection.items.map((m) => {
+                const mediaVariant = mediaVariantUrls[m.id];
+                return (
+                  <button
+                    type="button"
+                    key={m.id}
+                    className="relative aspect-square overflow-hidden rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-left focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)]"
+                    onClick={() => setOpenMedia({
+                      type: m.type === "video" ? "video" : "image",
+                      url: m.media_url!,
+                      title: m.content ?? (m.type === "video" ? "Видео" : "Фото"),
+                    })}
+                  >
+                    <MediaGalleryTile message={m} mediaVariant={mediaVariant} />
+                  </button>
+                );
+              })}
+            </div>
+          ) : activeSection.kind === "link" ? (
+            <div className="mb-3">
+              {activeSection.items.map((m) => {
+                const href = extractFirstLink(m.content)!;
+                return (
+                  <a
+                    key={m.id}
+                    href={href}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[color:var(--kub-text)] transition-colors hover:bg-[var(--kub-surface-2)]"
+                  >
+                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]">
+                      <KubIcon name="externalLink" size={15} tone="accent" />
+                    </div>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm">{href}</span>
+                      {m.content && m.content.trim() !== href && (
+                        <span className="block truncate text-xs text-[color:var(--kub-muted)]">{m.content}</span>
+                      )}
+                    </span>
+                  </a>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="mb-3">
+              {activeSection.items.map((m) => (
+                <a
+                  key={m.id}
+                  href={m.media_url!}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[color:var(--kub-text)] transition-colors hover:bg-[var(--kub-surface-2)]"
+                >
+                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]">
+                    <KubIcon name={MEDIA_SECTION_ICONS[activeSection.kind]} size={15} tone="accent" />
+                  </div>
+                  <span className="truncate text-sm">{m.content ?? activeSection.label}</span>
+                </a>
+              ))}
+            </div>
+          )}
+
+          {activeSection && hasMoreMedia && (
+            <button
+              type="button"
+              onClick={() => loadMedia(false, media.length)}
+              disabled={loadingMedia}
+              className="mb-3 w-full rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-sm text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-2)]"
+            >
+              Показать ещё
+            </button>
+          )}
+        </div>
+      </div>
       </div>
       <KubModal
         open={leaveGroupOpen}

@@ -1,11 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react";
-import { copyWithFeedback } from "@/lib/actionFeedback";
 import { ChatListItem } from "./ChatListItem";
 import { useAppStore } from "@/store/app.store";
-import { KubEmptyState, KubIcon, KubModal, type KubIconName } from "@/components/kub";
-import { ChatAvatar } from "@/components/ui/ChatAvatar";
+import { KubEmptyState, KubIcon, type KubIconName } from "@/components/kub";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import { createClient } from "@/lib/supabase/client";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
@@ -14,10 +12,8 @@ import { comparePinnedOrder, sortChatsForSidebar } from "@/lib/chatSort";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { cn } from "@/lib/utils";
-import { ProfileRoleSummary } from "@/components/profile/ProfileRoleSummary";
-import { isUserOnline } from "@/lib/presence";
 import { usePresenceNow } from "@/hooks/usePresenceNow";
-import { useAvatarVariantUrls, type AvatarVariantUrls } from "@/hooks/useMediaVariants";
+import { useAvatarVariantUrls } from "@/hooks/useMediaVariants";
 import type { ChatWithLastMessage } from "@/types/database";
 
 interface ChatListProps {
@@ -52,7 +48,6 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
   const toggleMutedChat = useAppStore((s) => s.toggleMutedChat);
   const requestChatPanel = useAppStore((s) => s.requestChatPanel);
   const [openMenu, setOpenMenu] = useState<ChatMenuState | null>(null);
-  const [previewChatId, setPreviewChatId] = useState<string | null>(null);
   const [busyActionId, setBusyActionId] = useState<string | null>(null);
   const [draggedPinnedChatId, setDraggedPinnedChatId] = useState<string | null>(null);
   const [dragOverPinnedChatId, setDragOverPinnedChatId] = useState<string | null>(null);
@@ -79,11 +74,6 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
     if (!openMenu) return;
     if (!chats.some((chat) => chat.id === openMenu.chatId)) setOpenMenu(null);
   }, [chats, openMenu]);
-
-  useEffect(() => {
-    if (!previewChatId) return;
-    if (!chats.some((chat) => chat.id === previewChatId)) setPreviewChatId(null);
-  }, [chats, previewChatId]);
 
   const chatsWithMute = useMemo(
     () => chats.map((chat) => ({ ...chat, is_muted: mutedChatIds.includes(chat.id) })),
@@ -242,12 +232,16 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
       },
     ];
 
+    // Both of these used to open a second profile surface of their own — a
+    // modal with a different shape, different contents and its own subset of
+    // these very actions. There is one contact card now, the same one the chat
+    // header opens, so the two routes cannot drift apart again.
     if (isPrivate) {
       actions.push({
         id: "profile",
         icon: "profile",
         label: "Открыть профиль",
-        run: () => setPreviewChatId(chat.id),
+        run: () => selectAndOpenPanel("info"),
       });
     }
 
@@ -256,7 +250,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
         id: "group-info",
         icon: "info",
         label: chat.type === "channel" ? "Информация о канале" : "Информация о группе",
-        run: () => setPreviewChatId(chat.id),
+        run: () => selectAndOpenPanel("info"),
       });
     }
 
@@ -458,8 +452,6 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
 
   const openChat = openMenu ? chatsWithMute.find((chat) => chat.id === openMenu.chatId) ?? null : null;
   const openActions = openChat ? buildActions(openChat) : [];
-  const previewChat = previewChatId ? chatsWithMute.find((chat) => chat.id === previewChatId) ?? null : null;
-  const previewActions = previewChat ? buildActions(previewChat) : [];
 
   const runAction = async (action: ChatAction) => {
     if (action.disabled || busyActionId) return;
@@ -471,18 +463,6 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
       setBusyActionId(null);
     }
   };
-
-  const runPreviewAction = async (action: ChatAction) => {
-    await runAction(action);
-    if (action.id === "hide-private" || action.id === "leave-group" || action.id === "delete-group") {
-      setPreviewChatId(null);
-    }
-  };
-
-  const openPreviewChat = useCallback((chatId: string) => {
-    setPreviewChatId(null);
-    onChatSelect(chatId);
-  }, [onChatSelect]);
 
   if (chats.length === 0) {
     return (
@@ -546,198 +526,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
           onRun={runAction}
         />
       )}
-
-      {previewChat && (
-        <ChatProfilePreviewModal
-          chat={previewChat}
-          actions={previewActions}
-          busyActionId={busyActionId}
-          onClose={() => setPreviewChatId(null)}
-          onOpenChat={() => openPreviewChat(previewChat.id)}
-          onRun={runPreviewAction}
-          presenceNow={presenceNow}
-          avatarVariant={previewChat.other_user?.id ? avatarVariants[previewChat.other_user.id] : undefined}
-        />
-      )}
     </>
-  );
-}
-
-function ChatProfilePreviewModal({
-  chat,
-  actions,
-  busyActionId,
-  onClose,
-  onOpenChat,
-  onRun,
-  presenceNow,
-  avatarVariant,
-}: {
-  chat: ChatWithLastMessage;
-  actions: ChatAction[];
-  busyActionId: string | null;
-  onClose: () => void;
-  onOpenChat: () => void;
-  onRun: (action: ChatAction) => void | Promise<void>;
-  presenceNow: number;
-  avatarVariant?: AvatarVariantUrls;
-}) {
-  const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
-  const mutedChatIds = useAppStore((s) => s.mutedChatIds);
-  const display = getChatDisplayInfo(chat, currentUserId);
-  const otherUser = chat.other_user ?? chat.members?.find((member) => member.user_id !== currentUserId)?.profile ?? null;
-  const isPrivate = chat.type === "private" && !display.isSaved;
-  const isGroupLike = !display.isSaved && (chat.type === "group" || chat.type === "channel");
-  const isOnline = isPrivate && isUserOnline(otherUser, presenceNow);
-  const memberCount = chat.members?.length ?? 0;
-  const myRole = chat.members?.find((member) => member.user_id === currentUserId)?.role ?? null;
-  const isMuted = mutedChatIds.includes(chat.id);
-  const [copiedUsername, setCopiedUsername] = useState(false);
-  const previewActions = actions.filter((action) =>
-    ["pin", "mute", "clear", "hide-private", "leave-group", "delete-group"].includes(action.id),
-  );
-  const copyUsername = async () => {
-    if (!otherUser?.username) return;
-    try {
-      await copyWithFeedback(`@${otherUser.username}`, {
-        success: "Никнейм скопирован",
-        error: "Не удалось скопировать никнейм",
-        key: "username",
-      });
-      setCopiedUsername(true);
-      window.setTimeout(() => setCopiedUsername(false), 1600);
-    } catch {
-      // copyWithFeedback reports its own failure; nothing is left to say here.
-    }
-  };
-
-  return (
-    <KubModal
-      open
-      onClose={onClose}
-      title={isPrivate ? "Профиль" : display.isSaved ? "Избранное" : "Информация"}
-      icon={<KubIcon name={isPrivate ? "profile" : display.isSaved ? "bookmark" : "group"} size={18} />}
-      size="md"
-      contentClassName="px-0 py-0"
-    >
-      <div data-chat-profile-preview className="flex flex-col">
-        <div className="flex flex-col items-center gap-3 border-b border-[color:var(--kub-border-color)] px-5 py-6 text-center">
-          <ChatAvatar
-            chat={chat}
-            size="lg"
-            isSaved={display.isSaved}
-            avatarVariant={avatarVariant}
-            profileId={chat.other_user?.id ?? null}
-          />
-          <div className="min-w-0">
-            <div className="max-w-full truncate text-lg font-semibold text-[color:var(--kub-text)]">
-              {display.title}
-            </div>
-            {isPrivate && otherUser?.username ? (
-              <div className="mt-1 inline-flex max-w-full items-center justify-center gap-1.5 text-sm text-[color:var(--kub-muted)]">
-                <span className="truncate">@{otherUser.username}</span>
-                <button
-                  type="button"
-                  data-testid="mini-profile-copy-username"
-                  onClick={() => void copyUsername()}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-cyan)]"
-                  aria-label="Скопировать никнейм"
-                  title={copiedUsername ? "Никнейм скопирован" : "Скопировать никнейм"}
-                >
-                  <KubIcon name={copiedUsername ? "check" : "copy"} size={14} />
-                </button>
-              </div>
-            ) : (
-              <div className="mt-1 text-sm text-[color:var(--kub-muted)]">
-                {isPrivate
-                  ? display.typeLabel
-                  : display.isSaved
-                    ? "Личное пространство для сохранённых сообщений"
-                    : `${display.typeLabel}${memberCount > 0 ? ` · ${memberCount} участников` : ""}`}
-              </div>
-            )}
-            {isPrivate && isOnline && (
-              <div className="mt-0.5 text-xs text-[color:var(--kub-cyan)]">онлайн</div>
-            )}
-          </div>
-        </div>
-
-        <div className="grid gap-2 px-4 py-4">
-          <button
-            type="button"
-            onClick={onOpenChat}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[var(--kub-cyan)] px-4 text-sm font-semibold text-[color:var(--kub-bg)] transition-colors hover:brightness-110"
-          >
-            <KubIcon name="chatRect" size={16} />
-            Открыть чат
-          </button>
-          <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/45 px-3 py-2 text-xs text-[color:var(--kub-muted)]">
-            {isPrivate && (
-              <div className="flex items-center justify-between gap-3 py-1">
-                <span>Уведомления</span>
-                <span className="font-semibold text-[color:var(--kub-text)]">
-                  {isMuted ? "отключены" : "включены"}
-                </span>
-              </div>
-            )}
-            {isPrivate && otherUser && (
-              <div className="flex items-center justify-between gap-3 py-1">
-                <span>Роль</span>
-                <span className="flex min-w-0 justify-end">
-                  <ProfileRoleSummary user={otherUser} compact />
-                </span>
-              </div>
-            )}
-            {isGroupLike && (
-              <>
-                <div className="flex items-center justify-between gap-3 py-1">
-                  <span>Ваша роль</span>
-                  <span className="font-semibold text-[color:var(--kub-text)]">
-                    {getChatMemberRoleLabel(myRole)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-3 py-1">
-                  <span>Тип</span>
-                  <span className="font-semibold text-[color:var(--kub-text)]">
-                    {chat.type === "channel" ? "канал" : "группа"}
-                  </span>
-                </div>
-              </>
-            )}
-            {display.isSaved && (
-              <div className="py-1">Сохранённые сообщения открываются только по явному переходу.</div>
-            )}
-          </div>
-
-          {isPrivate && otherUser?.bio && (
-            <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/45 px-3 py-2">
-              <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">О себе</div>
-              <div className="mt-1 whitespace-pre-wrap break-words text-sm text-[color:var(--kub-text)]">{otherUser.bio}</div>
-            </div>
-          )}
-
-          {isGroupLike && chat.description && (
-            <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/45 px-3 py-2">
-              <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">Описание</div>
-              <div className="mt-1 whitespace-pre-wrap break-words text-sm text-[color:var(--kub-text)]">{chat.description}</div>
-            </div>
-          )}
-
-          {previewActions.length > 0 && (
-            <div className="overflow-hidden rounded-xl border border-[color:var(--kub-border-color)]">
-              {previewActions.map((action) => (
-                <ChatActionButton
-                  key={action.id}
-                  action={action}
-                  busy={busyActionId === action.id}
-                  onRun={onRun}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </KubModal>
   );
 }
 
@@ -896,15 +685,4 @@ function getOrderedPinnedChats(chats: ChatWithLastMessage[], currentUserId: stri
       if (aPinnedAt !== bPinnedAt) return bPinnedAt - aPinnedAt;
       return a.id.localeCompare(b.id);
     });
-}
-
-function getChatMemberRoleLabel(role: string | null | undefined): string {
-  switch (role) {
-    case "owner":
-      return "Владелец";
-    case "admin":
-      return "Администратор";
-    default:
-      return "Участник";
-  }
 }

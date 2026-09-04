@@ -39,9 +39,20 @@ test("chat info media tab opens in real UI without horizontal overflow", async (
 
   const panel = page.getByTestId("chat-info-panel");
   await expect(panel).toBeVisible();
-  await page.getByRole("button", { name: "Медиа" }).click();
-  await expect(page.getByText(/Медиа пока нет|Показать ещё|Фото|Видео|GIF/).first()).toBeVisible();
+
+  // The gallery is a pushed sub-view now, not a third tab: «Общие медиа» goes
+  // in, the back control in the title bar comes out again.
+  await page.getByTestId("chat-info-open-gallery").click();
+  const gallery = page.getByTestId("chat-info-gallery-view");
+  await expect(gallery).toBeVisible();
+  await expect(page.getByText(/Медиа пока нет|Показать ещё|Фото|Видео|GIF|Файлы|Ссылки|Голосовые/).first()).toBeVisible();
   await assertNoHorizontalOverflow(panel, "chat info media panel has horizontal overflow");
+
+  const back = page.getByTestId("chat-info-back");
+  await expect(back).toBeVisible();
+  await back.click();
+  await expect(page.getByTestId("chat-info-summary")).toBeVisible();
+  await expect(panel).toBeVisible();
 
   expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
 });

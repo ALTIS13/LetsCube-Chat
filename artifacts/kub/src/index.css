@@ -749,6 +749,41 @@ textarea::placeholder, input::placeholder {
   }
 }
 
+/* Pushing into a sub-view and popping back out, the way a desktop messenger
+   does it: the root slides out to the left while the child arrives from the
+   right, and the reverse on the way back.
+
+   Only `transform` and `opacity` move. The two layers are stacked with
+   `position: absolute` inside a box that already has a size, so neither the
+   card nor the layer is ever resized mid-transition -- the gallery that arrives
+   is laid out at its final size from the first frame, and the shared-media grid
+   inside it does not reflow while it is sliding. Durations come from the motion
+   tokens, so reduced motion collapses them with everything else. */
+.kub-subview {
+  transition:
+    transform var(--kub-motion-standard) var(--kub-ease-standard),
+    opacity var(--kub-motion-standard) var(--kub-ease-standard);
+}
+
+.kub-subview[data-state="current"] {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+/* The root, once the gallery is on top of it. */
+.kub-subview[data-state="behind"] {
+  transform: translateX(-12%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* The gallery, before it is pushed and after it is popped. */
+.kub-subview[data-state="ahead"] {
+  transform: translateX(12%);
+  opacity: 0;
+  pointer-events: none;
+}
+
 @media (pointer: coarse) {
   .kub-button {
     min-height: 44px;
@@ -1198,7 +1233,10 @@ textarea::placeholder, input::placeholder {
   .desktop-update-pill,
   .desktop-update-pill__action,
   .desktop-update-pill__progress > span,
-  .desktop-update-channel-control__option {
+  .desktop-update-channel-control__option,
+  /* The push into the shared-media gallery still swaps the layer -- it simply
+     stops sliding. Removing the transition, not the navigation. */
+  .kub-subview {
     animation: none;
     transition-duration: 1ms;
   }

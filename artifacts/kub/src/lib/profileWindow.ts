@@ -188,6 +188,27 @@ export function shouldCloseProfileWindowOnKey(attempt: ProfileWindowKeyAttempt):
   return true;
 }
 
+/** Nothing, back to the card root, or away entirely. */
+export type ProfileWindowEscape = "ignore" | "back" | "close";
+
+export interface ProfileWindowEscapeAttempt extends ProfileWindowKeyAttempt {
+  /** The card has pushed into a sub-view — the shared media gallery. */
+  subview?: boolean;
+}
+
+/**
+ * Escape pops the sub-view before it closes the card.
+ *
+ * The gallery is a push, not an overlay, so a person who pressed Escape inside
+ * it means "back", the same as the arrow in the title bar. Closing the whole
+ * card instead loses the chat's profile as well as the gallery, and reopening
+ * it lands on the root anyway — two keystrokes to undo one.
+ */
+export function resolveProfileWindowEscape(attempt: ProfileWindowEscapeAttempt): ProfileWindowEscape {
+  if (!shouldCloseProfileWindowOnKey(attempt)) return "ignore";
+  return attempt.subview ? "back" : "close";
+}
+
 function defaultProfileWindowStore(): PlacementStore | null {
   try {
     // Session-scoped on purpose: where the card was put is a convenience for

@@ -17,6 +17,7 @@ import {
   profileDragPosition,
   profileWindowFrame,
   readProfileWindowPlacement,
+  resolveProfileWindowEscape,
   resolveProfileWindowPlacement,
   shouldCloseProfileWindowOnKey,
   shouldStartProfileDrag,
@@ -249,4 +250,163 @@ test("the panel component takes its frame from the window rules, and announces i
     shell.includes('[role="dialog"]'),
     "the shell stopped standing down for open dialogs, so Escape would close the chat under the card",
   );
+});
+
+/**
+ * The shared-media gallery is a sub-view, not an expanding block.
+ *
+ * What the owner reported after using the card: «свернуть галерею если я открыл
+ * не могу». «Общие медиа» appended the grid underneath the actions, and for a
+ * private chat the actions were rendered unconditionally — so there was nothing
+ * to collapse, only more card. It is a push now, and both the arrow and Escape
+ * pop it.
+ */
+
+test("Escape inside the gallery goes back to the card, not away from it", () => {
+  assert.equal(resolveProfileWindowEscape({ key: "Escape", subview: true }), "back");
+  assert.equal(resolveProfileWindowEscape({ key: "Escape", subview: false }), "close");
+  assert.equal(resolveProfileWindowEscape({ key: "Escape" }), "close");
+});
+
+test("the sub-view does not take Escape away from what is standing over it", () => {
+  // A confirmation opened from inside the gallery owns Escape until it is gone;
+  // popping the gallery underneath it would move the card while it is being read.
+  assert.equal(resolveProfileWindowEscape({ key: "Escape", subview: true, overlayAbove: true }), "ignore");
+  assert.equal(resolveProfileWindowEscape({ key: "Escape", subview: true, editing: true }), "ignore");
+  assert.equal(resolveProfileWindowEscape({ key: "Escape", subview: true, defaultPrevented: true }), "ignore");
+  assert.equal(resolveProfileWindowEscape({ key: "Enter", subview: true }), "ignore");
+});
+
+const panelSource = readFileSync("artifacts/kub/src/components/chat/ChatInfoPanel.tsx", "utf8");
+
+test("the gallery is pushed and popped rather than appended to the card", () => {
+  // A source contract, like the frame one above: there is no DOM in this suite.
+  assert.ok(
+    panelSource.includes('data-testid="chat-info-gallery-view"'),
+    "the shared media no longer renders as its own view",
+  );
+  assert.ok(
+    panelSource.includes('data-testid="chat-info-back"'),
+    "there is no way back out of the gallery",
+  );
+  assert.ok(
+    panelSource.includes("resolveProfileWindowEscape("),
+    "Escape no longer distinguishes the sub-view from the card root",
+  );
+  assert.ok(
+    panelSource.includes('subview: view !== "root"'),
+    "Escape is told nothing about which view is open, so it always closes the card",
+  );
+  // The old shape: a third tab beside Сведения and Участники, whose content was
+  // appended below the info block instead of replacing it.
+  assert.doesNotMatch(
+    panelSource,
+    /tab === "media"/,
+    "the gallery is a tab again, which is the block that could not be collapsed",
+  );
+  assert.doesNotMatch(
+    panelSource,
+    /\["info", "members", "media"\]/,
+    "the media tab is back in the strip",
+  );
+});
+
+test("the gallery moves without resizing, and takes its timing from the tokens", () => {
+  assert.ok(panelSource.includes("kub-subview"), "the push uses no shared transition class");
+
+  const css = readFileSync("artifacts/kub/src/index.css", "utf8");
+  const rule = css.match(/\.kub-subview\s*\{([\s\S]*?)\n\}/);
+  assert.ok(rule, ".kub-subview is not defined");
+  assert.match(rule[1], /var\(--kub-motion-[a-z]+\)/, "the push hard-codes its duration");
+  assert.match(rule[1], /var\(--kub-ease-[a-z]+\)/, "the push hard-codes its easing");
+
+  // Height, width and padding are never animated: the card would resize while
+  // the grid inside it was being read, and the entry would be unmeasurable.
+  const transition = rule[1].match(/transition:([\s\S]*?);/);
+  assert.ok(transition, ".kub-subview declares no transition");
+  // Written as literals rather than built from names: a regex assembled out of
+  // an escaped template silently became /\bheight\b/ with a backspace in it,
+  // and passed whatever the stylesheet said.
+  const forbidden: Array<[string, RegExp]> = [
+    ["height", /\bheight\b/],
+    ["width", /\bwidth\b/],
+    ["padding", /\bpadding\b/],
+    ["margin", /\bmargin\b/],
+    ["all", /\ball\b/],
+  ];
+  for (const [name, pattern] of forbidden) {
+    assert.ok(pattern.test("x " + name), `the ${name} guard cannot match anything`);
+    assert.doesNotMatch(
+      transition[1],
+      pattern,
+      `.kub-subview animates ${name}, which has a size`,
+    );
+  }
+
+  const reduced = (css.match(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\n\}/g) ?? []).join("\n");
+  assert.match(reduced, /\.kub-subview/, "the push still slides under reduced motion");
+});
+
+test("the media viewer is drawn above the window it was opened from", () => {
+  // `z-[90]` only means "above everything" while the viewer is a child of the
+  // page. Opened from the `z-[60]` profile card it was measured inside that
+  // card's own stacking context, and the `z-[70]` support window covered a
+  // full-screen photo. Reachable only with both open at once.
+  const viewer = readFileSync("artifacts/kub/src/components/chat/MediaViewer.tsx", "utf8");
+  assert.ok(viewer.includes("createPortal("), "the viewer renders inside whatever opened it again");
+  assert.ok(viewer.includes("document.body"), "the viewer is portalled somewhere other than the body");
+  assert.ok(viewer.includes("z-[90]"), "the viewer lost the z-index the portal exists to make meaningful");
+});
+
+test("there is one profile surface, and the chat list opens it", () => {
+  const list = readFileSync("artifacts/kub/src/components/sidebar/ChatList.tsx", "utf8");
+  // Right-clicking a row used to open a second, differently shaped mini-profile
+  // with its own subset of these very actions.
+  assert.doesNotMatch(list, /ChatProfilePreviewModal/, "the second profile surface is back");
+  assert.doesNotMatch(list, /setPreviewChatId/, "the chat list owns profile state of its own again");
+  assert.doesNotMatch(list, /data-chat-profile-preview/, "the mini-profile markup is back");
+
+  // Both entries must reach the card, and by the route the chat window already
+  // listens on — the same one «Поиск в чате» uses.
+  const profileAction = list.match(/id: "profile",[\s\S]{0,220}?\n\s{6}\}\);/);
+  assert.ok(profileAction, "the chat list no longer offers «Открыть профиль»");
+  assert.match(profileAction[0], /selectAndOpenPanel\("info"\)/, "«Открыть профиль» opens something else");
+
+  const groupAction = list.match(/id: "group-info",[\s\S]{0,260}?\n\s{6}\}\);/);
+  assert.ok(groupAction, "the chat list no longer offers the group information entry");
+  assert.match(groupAction[0], /selectAndOpenPanel\("info"\)/, "the group entry opens something else");
+});
+
+test("every action and confirmation the card carried is still on it", () => {
+  // The card is the surviving surface, so nothing may be lost in the move.
+  //
+  // Each label is bound to the handler that runs it, not merely looked for in
+  // the file: «Общие медиа» also appears in the sub-view's own title, so a bare
+  // string search stayed green while the action row underneath it was renamed.
+  const rows: Array<[string, RegExp]> = [
+    ["Общие медиа", /onClick=\{openGallery\}[\s\S]{0,400}?Общие медиа/],
+    ["уведомления", /onClick=\{\(\) => toggleMutedChat\(chat\.id\)\}[\s\S]{0,600}?Включить уведомления/],
+    ["Закрепить чат", /onClick=\{handlePinToggle\}[\s\S]{0,400}?Открепить чат[\s\S]{0,40}?Закрепить чат/],
+    ["Очистить историю у себя", /onClick=\{handleClearForMe\}[\s\S]{0,500}?Очистить историю у себя/],
+    ["Удалить чат у себя", /onClick=\{handleHidePrivateChat\}[\s\S]{0,400}?Удалить чат у себя/],
+    ["Покинуть группу", /setLeaveGroupOpen\(true\)[\s\S]{0,700}?Покинуть группу/],
+    ["Удалить групповой чат", /setDeleteGroupOpen\(true\)[\s\S]{0,700}?Удалить групповой чат/],
+    ["Пригласить пользователя", /setInviteOpen\(true\)[\s\S]{0,400}?Пригласить пользователя/],
+  ];
+  for (const [label, pattern] of rows) {
+    assert.match(panelSource, pattern, `the card lost the «${label}» action`);
+  }
+
+  // The two «у себя» actions destroy something and must still ask first.
+  const clearHandler = panelSource.match(/const handleClearForMe = async \(\) => \{[\s\S]*?\n  \};/);
+  assert.ok(clearHandler, "«Очистить историю у себя» is gone from the card");
+  assert.match(clearHandler[0], /requestAppConfirm\(/, "«Очистить историю у себя» stopped asking first");
+  const hideHandler = panelSource.match(/const handleHidePrivateChat = async \(\) => \{[\s\S]*?\n  \};/);
+  assert.ok(hideHandler, "«Удалить чат у себя» is gone from the card");
+  assert.match(hideHandler[0], /requestAppConfirm\(/, "«Удалить чат у себя» stopped asking first");
+
+  // Bio and role badges belong to the card too; the badges themselves are item
+  // 19's territory and are untouched here.
+  assert.ok(panelSource.includes("<ProfileRoleSummary user={otherUser} compact />"), "the role badges are gone");
+  assert.match(panelSource, /otherUser\?\.bio[\s\S]{0,400}?otherUser\.bio/, "the bio is gone from the card");
 });
