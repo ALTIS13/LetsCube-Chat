@@ -1800,24 +1800,44 @@ Two of the mutations were re-run independently before deploying: removing the
 memory of a terminal failure fails 3 tests, and forgetting *which* source a
 failure was about — so replaced media would never be retried — fails 1.
 
-## D-036 — lines do not meet at the corner near the edit pencil
+## D-036 — the decorative grid restarts in every element that draws it
 
-Reported by the owner on 2026-09-04 with a screenshot crop: in the chat, near
-the pencil (edit) affordance, borders that should form a corner do not converge
-— "пересечение… почему-то не сходятся корректно линии, некрасиво". The crop
-shows a pencil glyph at the left of a cell and a round avatar at its right, with
-the horizontal and vertical rules meeting untidily between them.
+Reported by the owner on 2026-09-04 from a screenshot crop: near the edit
+pencil, rules that should form a corner do not converge — "не сходятся
+корректно линии, некрасиво".
 
-**Not yet reproduced, and deliberately not guessed at.** The crop is small and
-the surrounding layout is not identifiable from it with confidence, so the first
-step is to locate the surface rather than to start adjusting borders. Candidates
-to check, in order: the message row's edited indicator, the chat-list row
-divider where it meets the avatar column, and the composer's edit-in-progress
-banner.
+**Cause, and it is structural rather than a stray pixel.** `.kub-grid-subtle`
+(`artifacts/kub/src/index.css:564`) paints a 56×56 lattice with two
+`linear-gradient` background images and `background-size: 56px 56px`, and sets
+no `background-position` anchor. A background's origin is each element's own
+padding box, so **every element carrying the class starts its lattice at its own
+top-left corner**. Two such elements can only line up by coincidence — when
+their padding-box origins happen to sit a whole 56px apart. Wherever they do
+not, the vertical rules step sideways across the boundary, which is exactly the
+"intersection that does not meet" being reported.
 
-What the fix must respect once the surface is known: a divider that stops short
-of, or overshoots, an adjacent border is usually a `border-*` on one element
-fighting a `divide-*` or a background inset on its neighbour, and the right
-repair is to make one element own the rule rather than to nudge a width. Record
-the reproduction, the viewport and the theme before changing anything — this
-register exists because "polish by eye" is out of scope.
+Four surfaces carry it today, and three of them sit directly against another
+surface:
+
+| surface | file |
+|---|---|
+| profile/summary block of the chat info panel | `components/chat/ChatInfoPanel.tsx:610` |
+| profile header in settings (avatar + edit pencil) | `components/sidebar/SettingsModal.tsx:216` |
+| admin content area | `pages/admin/AdminLayout.tsx:126` |
+| app background | `index.css` |
+
+The settings profile header is the likeliest match for the crop — it is the one
+that puts an avatar and a pencil side by side inside a `kub-grid-subtle` block
+that then meets the rest of the modal — but which surface the owner was looking
+at is not yet confirmed, and confirming it decides how wide the fix has to be.
+
+**The fix is to give the lattice one origin instead of one per element**, not to
+nudge a border. Either move the grid to a single common ancestor and let the
+blocks that currently draw it be transparent, or anchor it so every element
+shares a lattice. `background-attachment: fixed` would do the latter in one
+line, but it anchors to the viewport rather than the document and behaves badly
+inside scroll containers — of which three of the four surfaces are one — so the
+ancestor route is the more likely correct answer.
+
+Do not "fix" this by aligning one pair of blocks: any such adjustment holds only
+at the viewport width where it was measured.
