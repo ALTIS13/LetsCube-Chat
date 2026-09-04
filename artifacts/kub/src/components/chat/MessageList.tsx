@@ -468,15 +468,34 @@ export function MessageList({
 
   useEffect(() => releaseOlderScrollPreservation, [initialScrollKey, releaseOlderScrollPreservation]);
 
-  const scrollToBottom = useCallback((smooth = true) => {
-    requestAnimationFrame(() => {
-      const el = containerRef.current;
-      if (!el) return;
-      el.scrollTo({ top: Math.max(0, el.scrollHeight - el.clientHeight), behavior: smooth ? "smooth" : "auto" });
-      setNewCount(0);
-      setShowScrollBtn(false);
-    });
+  /**
+   * Put the list at the bottom NOW, with no frame in between.
+   *
+   * Every correction used to be deferred by at least one `requestAnimationFrame`
+   * from a passive effect, which means the browser painted the commit that made
+   * the correction necessary before the correction ran. Measured on the real
+   * chat, that is exactly what both reports describe: entering a chat painted
+   * three frames at `scrollTop = 0` — the top of the loaded history, 2790px from
+   * the target — before snapping to the bottom (D-037), and sending a message
+   * painted three frames with the new bubble clipped against the composer, 57px
+   * below where it belongs, before it jumped into the stream (D-038).
+   *
+   * Called from a layout effect this runs after React has written the DOM and
+   * before the browser paints, so the first frame the reader sees is already the
+   * settled one. The anchoring itself is unchanged: same target, same rules, same
+   * guards — only the frame it lands on moves.
+   */
+  const applyBottomNow = useCallback((smooth = false) => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: Math.max(0, el.scrollHeight - el.clientHeight), behavior: smooth ? "smooth" : "auto" });
+    setNewCount(0);
+    setShowScrollBtn(false);
   }, []);
+
+  const scrollToBottom = useCallback((smooth = true) => {
+    requestAnimationFrame(() => applyBottomNow(smooth));
+  }, [applyBottomNow]);
 
   const scrollToBottomAfterLayout = useCallback((smooth = false) => {
     let innerFrame = 0;
@@ -489,28 +508,30 @@ export function MessageList({
     };
   }, [scrollToBottom]);
 
+  /** The unread entry, placed before paint. Same target as the deferred pass. */
+  const applyMessageTopNow = useCallback((messageId: string) => {
+    const target = messageRefs?.current[messageId];
+    if (!target) return;
+    target.scrollIntoView({ behavior: "auto", block: "start" });
+    const el = containerRef.current;
+    if (!el) return;
+    el.scrollTop = Math.max(0, el.scrollTop - 56);
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    isAtBottomRef.current = atBottom;
+    setShowScrollBtn(!atBottom);
+    if (atBottom) setNewCount(0);
+  }, [messageRefs]);
+
   const scrollToMessageAfterLayout = useCallback((messageId: string) => {
     let innerFrame = 0;
     const outerFrame = requestAnimationFrame(() => {
-      innerFrame = requestAnimationFrame(() => {
-        const target = messageRefs?.current[messageId];
-        if (!target) return;
-        target.scrollIntoView({ behavior: "auto", block: "start" });
-        const el = containerRef.current;
-        if (el) {
-          el.scrollTop = Math.max(0, el.scrollTop - 56);
-          const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-          isAtBottomRef.current = atBottom;
-          setShowScrollBtn(!atBottom);
-          if (atBottom) setNewCount(0);
-        }
-      });
+      innerFrame = requestAnimationFrame(() => applyMessageTopNow(messageId));
     });
     return () => {
       cancelAnimationFrame(outerFrame);
       if (innerFrame) cancelAnimationFrame(innerFrame);
     };
-  }, [messageRefs]);
+  }, [applyMessageTopNow]);
 
   const releaseInitialScrollGuard = useCallback((scrollKey: string, delayMs: number) => {
     window.setTimeout(() => {
@@ -541,41 +562,60 @@ export function MessageList({
 
   // Keep bottom lock for new messages and typing indicator without pulling
   // users down when they intentionally scrolled up.
-  useEffect(() => {
+  //
+  // A layout effect, and instant rather than smooth. The smooth scroll never
+  // delivered the correction: measured on a real send it covered 3px in its
+  // first 17ms and 3px more by the time an instant write from another path
+  // overtook it, so its only observable effect was that the new bubble was
+  // painted where it did not belong.
+  useLayoutEffect(() => {
     const messageCountChanged = prevMessageCountRef.current !== sortedMessages.length;
     prevMessageCountRef.current = sortedMessages.length;
     if (isAtBottomRef.current) {
-      scrollToBottom(true);
+      applyBottomNow();
     } else if (messageCountChanged && !preservingOlderScrollRef.current && !loadingOlderRef.current) {
       setNewCount((n) => n + 1);
     }
-  }, [isTyping, sortedMessages.length, scrollToBottom]);
+  }, [isTyping, sortedMessages.length, applyBottomNow]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isAtBottomRef.current) return undefined;
+    // The composer changing height changes this container's own height, so the
+    // bottom moves in the same commit. Correct it before that commit is painted,
+    // then let the deferred pass absorb whatever settles afterwards.
+    applyBottomNow();
     return scrollToBottomAfterLayout(false);
-  }, [bottomInset, layoutVersion, scrollToBottomAfterLayout]);
+  }, [applyBottomNow, bottomInset, layoutVersion, scrollToBottomAfterLayout]);
 
   useEffect(() => {
     const content = contentRef.current;
     if (!content || typeof ResizeObserver === "undefined") return undefined;
-    let frame = 0;
     const observer = new ResizeObserver(() => {
       const shouldKeepBottom = isAtBottomRef.current || isInitialBottomLocked();
       if (!shouldKeepBottom || preservingOlderScrollRef.current || loadingOlderRef.current) return;
-      if (frame) cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => scrollToBottom(false));
+      // Synchronously, inside the callback. A ResizeObserver runs after layout
+      // and before paint, so this catches the growth that no React commit can
+      // see — the bubble that reflows 24px on its own once the text has wrapped,
+      // which is D-032. Deferred by a frame it was painted first and corrected
+      // after, and that was the one visible step left on chat entry.
+      //
+      // This cannot loop: writing `scrollTop` resizes nothing, so it cannot
+      // retrigger the observer that is running.
+      applyBottomNow();
     });
     observer.observe(content);
-    return () => {
-      observer.disconnect();
-      if (frame) cancelAnimationFrame(frame);
-    };
-  }, [isInitialBottomLocked, scrollToBottom]);
+    return () => observer.disconnect();
+  }, [applyBottomNow, isInitialBottomLocked]);
 
   // Initial chat open and chat switch need to wait for composer/tray layout
   // before locking the history to the real visual bottom.
-  useEffect(() => {
+  //
+  // The wait still happens — the deferred pass and the settle timers below are
+  // unchanged — but the first placement is made here, before the browser paints
+  // the commit that mounted the list. A freshly mounted scroll container starts
+  // at `scrollTop = 0`, so without this the reader is shown the top of the
+  // loaded history first, every single time (D-037).
+  useLayoutEffect(() => {
     const hasMessages = sortedMessages.length > 0;
     if (!hasMessages) return undefined;
     if (initialScrollAppliedRef.current === initialScrollKey) return undefined;
@@ -590,10 +630,12 @@ export function MessageList({
       initialBottomLockUntilRef.current = 0;
       isAtBottomRef.current = false;
       releaseInitialScrollGuard(initialScrollKey, 520);
+      applyMessageTopNow(firstUnreadMessageId);
       const cancelUnreadFrame = scrollToMessageAfterLayout(firstUnreadMessageId);
       return () => cancelUnreadFrame();
     }
     initialBottomLockUntilRef.current = Date.now() + 4200;
+    applyBottomNow();
     const cancelFrame = scrollToBottomAfterLayout(false);
     const scheduleBottomSettle = (delay: number) => window.setTimeout(() => {
       if (initialScrollAppliedRef.current !== initialScrollKey) return;
@@ -605,7 +647,7 @@ export function MessageList({
     return () => {
       cancelFrame();
     };
-  }, [isInitialBottomLocked, initialScrollKey, firstUnreadMessageId, sortedMessages.length, scrollToBottom, scrollToBottomAfterLayout, scrollToMessageAfterLayout, releaseInitialScrollGuard]);
+  }, [applyBottomNow, applyMessageTopNow, isInitialBottomLocked, initialScrollKey, firstUnreadMessageId, sortedMessages.length, scrollToBottom, scrollToBottomAfterLayout, scrollToMessageAfterLayout, releaseInitialScrollGuard]);
 
   const resolvedBottomInset = Math.max(0, bottomInset);
 
