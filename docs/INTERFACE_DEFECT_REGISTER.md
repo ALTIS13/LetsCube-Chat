@@ -1845,3 +1845,44 @@ there is no border to collide with. A test records that as a decision.
 The crop was too small to identify the surface, and two earlier guesses at it
 (the settings profile header, then a pair of adjacent lattices) were both
 wrong. The mechanism above is real and measured either way.
+
+## D-037 — the list jerks up and down on every chat entry
+
+Reported by the owner on 2026-09-04: "пролаг при заходе в чат, каждый раз
+происходит (дёргается интерфейс вверх и вниз на мгновение)".
+
+Not yet reproduced or diagnosed. The shape — a visible settle immediately after
+paint — points at the entry anchoring in `MessageList.tsx`: the list paints,
+then scrolls to the bottom or to the first unread message, and the correction is
+visible rather than instantaneous.
+
+**Do not "fix" this by removing the scroll.** Section 11 of `CLAUDE.md` makes
+the anchoring itself a contract: no unread means the bottom, unread means the
+first unread, search and notification jumps land on the exact message, a history
+prepend preserves the anchor, and fast upward scrolling must never snap. The
+defect is that the correction is *seen*, not that it happens.
+
+Worth measuring first: how many scroll writes happen between first paint and
+settle, whether the list is scrolled before or after images and variants have
+reserved their space, and whether `getMediaAspectStyle` is reserving the right
+box for every media row. D-032 already records a bubble that grows 22px 180ms
+after paint, which would move the anchor under exactly these conditions.
+
+## D-038 — a sent message appears near the composer before it reaches the list
+
+Reported by the owner on 2026-09-04: "при отправке сообщения оно появляется
+где-то в районе модуля ввода текста и с пролагом попадает в чат".
+
+Not yet reproduced. The description is a position error rather than a timing
+one — the bubble is painted somewhere near the composer and then arrives in the
+stream — which is the signature of a row rendered before the list has scrolled
+to it, or of an entrance transform being seen against a list that is itself
+moving.
+
+The message entrance animation was changed the same day (`c2a8d1b`): it is now
+opacity plus a 4px lift on new messages only, replacing an unconditional
+`translateY(6px) scale(0.98)` that played on every mount. **Check whether that
+change is implicated before looking anywhere else** — 4px is far too small to
+explain "near the composer", but the interaction between the entrance and the
+scroll-to-bottom is the obvious place to start, and if the two compound the fix
+belongs in one of them rather than in both.
