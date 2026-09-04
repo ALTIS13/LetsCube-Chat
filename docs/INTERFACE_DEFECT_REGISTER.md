@@ -2137,43 +2137,6 @@ The source guards are still source guards. The frame-level proof cannot live in
 CI for the reason the entry above gives, and the rig that produced these numbers
 is the only thing that can re-check them.
 
-## D-042 — the loading band shoves the reader 42px, with a spinner they cannot see
-
-Found 2026-09-05 while re-measuring D-039, on the same rig. Not fixed: the
-obvious fix is the one measured above, and it is worse.
-
-Asking for older history sets `loadingOlder`, which mounts the
-"Загружаем историю..." band at the top of the scrolled content — the
-`data-message-history-status` block in `MessageList.tsx`. It is **42px tall and
-inside the scroller, above every row**, so the moment it appears every message
-moves down 42px. No React commit describes that as a scroll change, and the
-prepend layout effect ignores it on purpose: it acts only once rows have
-actually arrived.
-
-Measured, painted, across 13 consecutive prepends:
-
-| | |
-|---|---|
-| painted frames displaced | 465 |
-| displacement | 42px, every time |
-| how long the reader sees it | ~250ms per prepend |
-| where it ends | back at 0 — the restore compensates when the band goes |
-
-The load triggers at `scrollTop < 160`, so the band is usually above the
-viewport when it mounts: the reader is pushed by a spinner they cannot see.
-
-Not a violation of the prepend contract — the anchor itself is restored exactly,
-final drift 0px on the anchor row — but it is 42px of painted movement the
-reader did not ask for, larger than the 24px residual that D-037 was considered
-worth fixing.
-
-Two directions, neither taken here. Taking the band out of the flow — the
-overlay pattern the bulk-error banner in the same file already uses — is a
-design change to the loading affordance and needs an explicit decision.
-Restoring the anchor on the commit that mounts the band is a change to the hold,
-and this entry's own sibling is the evidence for measuring any such change over
-many prepends before believing it.
-
 ## D-040 — a sent message twitched the whole conversation a quarter-second after it landed
 
 Found and fixed 2026-09-04, after the D-037/D-038 fix had already removed the
@@ -2276,3 +2239,40 @@ guess that uses what the component already knows (whether the meta carries a
 delivery indicator), which trades a certain miss on every own message for an
 occasional miss in the other direction on wrapped ones, or the layout change
 above. Both want a decision, not a change made in passing.
+
+## D-042 — the loading band shoves the reader 42px, with a spinner they cannot see
+
+Found 2026-09-05 while re-measuring D-039, on the same rig. Not fixed: the
+obvious fix is the one measured above, and it is worse.
+
+Asking for older history sets `loadingOlder`, which mounts the
+"Загружаем историю..." band at the top of the scrolled content — the
+`data-message-history-status` block in `MessageList.tsx`. It is **42px tall and
+inside the scroller, above every row**, so the moment it appears every message
+moves down 42px. No React commit describes that as a scroll change, and the
+prepend layout effect ignores it on purpose: it acts only once rows have
+actually arrived.
+
+Measured, painted, across 13 consecutive prepends:
+
+| | |
+|---|---|
+| painted frames displaced | 465 |
+| displacement | 42px, every time |
+| how long the reader sees it | ~250ms per prepend |
+| where it ends | back at 0 — the restore compensates when the band goes |
+
+The load triggers at `scrollTop < 160`, so the band is usually above the
+viewport when it mounts: the reader is pushed by a spinner they cannot see.
+
+Not a violation of the prepend contract — the anchor itself is restored exactly,
+final drift 0px on the anchor row — but it is 42px of painted movement the
+reader did not ask for, larger than the 24px residual that D-037 was considered
+worth fixing.
+
+Two directions, neither taken here. Taking the band out of the flow — the
+overlay pattern the bulk-error banner in the same file already uses — is a
+design change to the loading affordance and needs an explicit decision.
+Restoring the anchor on the commit that mounts the band is a change to the hold,
+and this entry's own sibling is the evidence for measuring any such change over
+many prepends before believing it.
