@@ -91,6 +91,46 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     of D-028 cannot pass against `0.1.3` at all. Browser and Windows users
     already have the fix because both load the deployed origin; only a new APK
     gives it to Android.
+
+    **And the published `0.1.3` has no push at all.** Looking for the stale
+    bundle turned up something worse in the same artifact. `apkanalyzer
+    resources names` over the two published APKs differs by exactly six string
+    resources, all lost and none gained: `google_app_id`, `gcm_defaultSenderId`,
+    `google_api_key`, `project_id`, `google_storage_bucket` and
+    `google_crash_reporting_api_key`. Those are what the google-services Gradle
+    plugin emits from `google-services.json`, and `FirebaseInitProvider` reads
+    them at startup. `0.1.3` still carries the entire Firebase messaging stack --
+    `FirebaseInitProvider`, `FirebaseMessagingService`, the Capacitor
+    `MessagingService`, `FirebaseInstanceIdReceiver` -- with nothing for any of
+    it to initialise from, and no `FirebaseOptions` is hardcoded anywhere under
+    `android/app/src`. So `PushNotifications.register()` cannot obtain a token,
+    and every account that took the `0.1.3` update lost notifications entirely.
+
+    The cause is mechanical rather than mysterious. `android/app/build.gradle`
+    applies the plugin inside a `try/catch` that logs at `info` level when the
+    file is absent, so a release build that omits it prints nothing and
+    succeeds. `google-services.json` is local-only and ignored, and the QA
+    record of 2026-09-02 states it was deliberately left out of this worktree
+    for the routing debug build; the `0.1.3` release was then built from that
+    same worktree on 2026-09-03 and inherited the omission. `0.1.2`, built
+    where the file was present, carries all six resources.
+
+    Two gates now fail closed on it. `android/app/build.gradle` refuses a
+    release task graph without `google-services.json`, checked after the
+    existing signing gates so their message stays first, and only for release
+    tasks so a debug build without Firebase still builds.
+    `scripts/verify-android-release.mjs` rejects a release APK missing any of
+    the four resources Firebase initialises from. Both are mutation-tested, and
+    the hardened verifier was run against the real artifacts: it rejects the
+    published `0.1.3` with "Release APK has no google-services configuration"
+    and accepts the published `0.1.2` unchanged. The Android unit suite is
+    48/48.
+
+    The rebuild this entry already needed for the stale bundle is now also the
+    fix for push, and it must be built where `google-services.json` is present.
+    Note that the checkout that holds it, `D:\CodexProjects\LetsCube-Chat`, is
+    202 commits behind `origin/main` and older than the `0.1.3` bundle, so it
+    cannot simply be built from as it stands.
 8. `[x]` Replace the retired Electron spike with a clean-profile Tauri 2 Windows client. The one-window secure startup, tray/single-instance behavior, Stable/Test channels and signed Tauri updater are complete. Physical `0.2.0 -> 0.2.1`, `0.2.1 -> 0.2.2`, `0.2.2 -> 0.2.3`, `0.2.7 -> 0.2.8`, `0.2.8 -> 0.2.9` and `0.2.9 -> 0.2.10` production-update rehearsals passed without losing the authenticated profile. The `0.2.10/14` release keeps the hardened startup fix, restores Yandex SmartCaptcha compatibility in WebView2 and replaces the legacy venue subtitle embedded in the startup SVG with the neutral LETSCUBE wordmark. A successful version change shows a compact four-second confirmation and then frees the top-right area for future call controls.
 9. `[~]` Complete the external Windows release gates. LETSCUBE `0.2.10/14` retains the exact-origin native Windows toast/history/action contract: one stable Toast Header per chat, up to five unread message cards, exact per-message routing from fresh and historical cards, independent routing for other chats, and chat-scoped history removal after reading. Its reproducible updater wrapper reads the existing encrypted signing identity only from ignored local files and fails if the matching public key changes. Stable download plus Stable/Test updater catalogs expose the same verified immutable installer. A fail-closed Authenticode path, provider-isolated WNS sender, sanitized Windows matrix and native offline/long-session suite are prepared. A second fail-closed tool validates Microsoft package metadata, requires the exact PFN in its generated client contract, reports all missing metadata in one pass, renders matching sparse-package/executable manifests and builds a local unsigned `MakeAppx` validation artifact without changing the internal NSIS path. The live Supabase schema was audited read-only and the `windows/wns` proposal passed a production-schema transaction rehearsal with full rollback; it remains unapplied until a real identified client can acquire a WNS channel. Remaining external work is the real Microsoft package identity/publisher/PFN/Entra mapping, production signing and SmartScreen reputation, Windows 10 and alternate WebView2 device runs, Windows App SDK channel/COM registration, proposal application, server secrets and true killed-process physical delivery.
 10. `[x]` Harden direct-email support notifications. New inbound email tickets now create the same PII-free `ticket_created` event as web tickets, eligible pool operators receive one creation notification, and later requester replies notify the pool while the ticket remains unassigned. The first email message does not create a duplicate requester notification. The production migration was applied after a verified dump and passed a transactional live-DB fanout smoke.

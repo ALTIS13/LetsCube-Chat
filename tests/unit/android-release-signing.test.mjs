@@ -59,6 +59,36 @@ test("Android release Gradle signing requires dedicated signing inputs", () => {
   assert.doesNotMatch(gradle, /signingConfig\s+signingConfigs\.debug/);
 });
 
+test("Android release Gradle refuses a release with no Firebase configuration", () => {
+  const gradle = readFileSync(resolve(root, "android/app/build.gradle"), "utf8");
+
+  // Published 0.1.3 was built from a worktree with no `google-services.json`.
+  // The plugin is applied inside a try/catch that logs at info level, so the
+  // build said nothing and the APK shipped carrying the whole Firebase
+  // messaging stack and none of the string resources it initialises from.
+  assert.match(gradle, /def releaseFirebaseConfigFile = file\('google-services\.json'\)/);
+
+  // The gate belongs in the release branch of the task-graph hook and nowhere
+  // else: a debug build may legitimately have no Firebase configuration, and
+  // the routing build of 2026-09-02 deliberately did.
+  const releaseBranch = gradle.match(/if \(releaseTaskResolved\) \{([\s\S]*?)\n    \}/);
+  assert.ok(releaseBranch, "the release task-graph branch must exist");
+  assert.match(releaseBranch[1], /!releaseFirebaseConfigFile\.isFile\(\)/);
+  assert.match(releaseBranch[1], /google-services\.json/);
+
+  // Signing is the older contract and its message is asserted by name, so it
+  // must still be the first thing a release missing both inputs reports.
+  assert.ok(
+    releaseBranch[1].indexOf("LETSCUBE_ANDROID_KEYSTORE_PATH")
+      < releaseBranch[1].indexOf("releaseFirebaseConfigFile"),
+    "the signing gates must be checked before the Firebase gate",
+  );
+
+  // And the plugin stays conditional, so a debug build without the file still
+  // builds rather than failing on a contract that does not apply to it.
+  assert.match(gradle, /apply plugin: 'com\.google\.gms\.google-services'/);
+});
+
 test("Android aggregate assemble fails closed without release signing inputs", { timeout: 30_000 }, () => {
   const capacitorDirectory = resolve(root, "android/capacitor-cordova-android-plugins");
   const capacitorVariables = resolve(capacitorDirectory, "cordova.variables.gradle");

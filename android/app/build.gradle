@@ -18,6 +18,17 @@ def missingReleaseSigningVariable = releaseSigningEnvironmentNames.find { variab
 }
 def releaseKeystoreFile = missingReleaseSigningVariable ? null : file(releaseSigningEnvironment['LETSCUBE_ANDROID_KEYSTORE_PATH'])
 
+// The google-services plugin at the bottom of this file is applied only when
+// `google-services.json` is present, and its absence is silent: the plugin is
+// skipped, the build succeeds, and the APK ships without the google_app_id,
+// gcm_defaultSenderId, google_api_key and project_id string resources that
+// FirebaseInitProvider reads at startup. Published 0.1.3 was built that way
+// from a worktree that deliberately omitted the file, and it carries the whole
+// Firebase messaging stack with nothing for it to initialise from, so push
+// cannot register at all. A debug build may legitimately go without it; a
+// release may not, so a release says so instead of shipping quietly.
+def releaseFirebaseConfigFile = file('google-services.json')
+
 gradle.taskGraph.whenReady { taskGraph ->
     def releaseTaskResolved = taskGraph.allTasks.any { task ->
         task.project.path == releaseSigningProjectPath && task.name.toLowerCase().contains('release')
@@ -28,6 +39,9 @@ gradle.taskGraph.whenReady { taskGraph ->
         }
         if (!releaseKeystoreFile.isFile()) {
             throw new GradleException('LETSCUBE_ANDROID_KEYSTORE_PATH must reference an existing regular file.')
+        }
+        if (!releaseFirebaseConfigFile.isFile()) {
+            throw new GradleException('Android release builds require android/app/google-services.json; without it the google-services plugin is skipped and the release ships without push.')
         }
     }
 }

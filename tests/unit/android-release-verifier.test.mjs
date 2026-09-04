@@ -18,6 +18,15 @@ const approvedExportedManifest = '<manifest><application android:debuggable="fal
   + '<receiver android:name="com.google.firebase.iid.FirebaseInstanceIdReceiver" android:exported="true" android:permission="com.google.android.c2dm.permission.SEND" />'
   + '<receiver android:name="androidx.profileinstaller.ProfileInstallReceiver" android:exported="true" android:permission="android.permission.DUMP" />'
   + "</application></manifest>";
+// The four the google-services plugin emits and FirebaseInitProvider reads,
+// beside one ordinary application string so the fixture is not only Firebase.
+const approvedResourceNames = [
+  "app_name",
+  "gcm_defaultSenderId",
+  "google_api_key",
+  "google_app_id",
+  "project_id",
+];
 const approvedPermissions = [
   "android.permission.ACCESS_COARSE_LOCATION",
   "android.permission.ACCESS_FINE_LOCATION",
@@ -77,6 +86,7 @@ function createRunner(overrides = {}) {
     "manifest debuggable": "false",
     "manifest print": approvedExportedManifest,
     "manifest permissions": approvedPermissions.join("\n"),
+    "resources names --type string --config default": approvedResourceNames.join("\n"),
     ...overrides,
   };
   return {
@@ -204,6 +214,7 @@ test("Android release verifier runs signature and manifest gates before returnin
         { tool: "apkanalyzer", args: ["manifest", "debuggable"] },
         { tool: "apkanalyzer", args: ["manifest", "print"] },
         { tool: "apkanalyzer", args: ["manifest", "permissions"] },
+        { tool: "apkanalyzer", args: ["resources", "names", "--type", "string", "--config", "default"] },
       ],
     );
     assert.equal(JSON.stringify(summary).includes("Signer"), false);
@@ -449,6 +460,46 @@ test("Android release verifier requires the exact protected exported component c
         run: createRunner({ "manifest print": '<manifest><application><activity android:name="com.kub.messenger.MainActivity" android:exported="true" /><activity android:name="com.kub.messenger.MainActivity" android:exported="true" /></application></manifest>' }).run,
       }),
       /exported components do not match/,
+    );
+  } finally {
+    rmSync(fixture.directory, { force: true, recursive: true });
+  }
+});
+
+test("Android release verifier rejects a release built without google-services configuration", () => {
+  const fixture = createFixture();
+  const options = {
+    assetLinksPath: fixture.assetLinksPath,
+    expectedMetadata: { applicationId: "com.kub.messenger", versionName: "0.1.1", versionCode: 2 },
+    tools: { apksigner: "apksigner", apkanalyzer: "apkanalyzer" },
+  };
+
+  try {
+    // How 0.1.3 shipped: every Firebase class and receiver present, and not one
+    // of the resources they initialise from. Each required name is dropped on
+    // its own, because losing any single one is enough to leave push dead.
+    for (const missing of ["google_app_id", "gcm_defaultSenderId", "google_api_key", "project_id"]) {
+      assert.throws(
+        () => verifyAndroidRelease(fixture.apkPath, {
+          ...options,
+          run: createRunner({
+            "resources names --type string --config default": approvedResourceNames
+              .filter((name) => name !== missing)
+              .join("\n"),
+          }).run,
+        }),
+        /no google-services configuration/,
+        `dropping ${missing} must fail verification`,
+      );
+    }
+
+    // And the whole block gone, which is what the missing file actually causes.
+    assert.throws(
+      () => verifyAndroidRelease(fixture.apkPath, {
+        ...options,
+        run: createRunner({ "resources names --type string --config default": "app_name" }).run,
+      }),
+      /no google-services configuration/,
     );
   } finally {
     rmSync(fixture.directory, { force: true, recursive: true });

@@ -32,6 +32,17 @@ const EXPECTED_PERMISSIONS = new Set([
   "com.google.android.c2dm.permission.RECEIVE",
   "com.kub.messenger.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
 ]);
+// Emitted by the google-services Gradle plugin from `google-services.json`.
+// FirebaseInitProvider reads them at startup, so an APK that carries the
+// Firebase messaging stack without them registers no token and delivers no
+// push -- which is exactly how 0.1.3 was published, silently, because the
+// plugin is applied inside a try/catch that only logs at info level.
+const REQUIRED_FIREBASE_RESOURCES = [
+  "gcm_defaultSenderId",
+  "google_api_key",
+  "google_app_id",
+  "project_id",
+];
 const AUTHORIZING_RELATION = "delegate_permission/common.handle_all_urls";
 
 function executableNames(name) {
@@ -151,6 +162,13 @@ function verifyPermissions(output) {
   }
 }
 
+function verifyFirebaseConfiguration(output) {
+  const names = new Set(output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean));
+  if (REQUIRED_FIREBASE_RESOURCES.some((name) => !names.has(name))) {
+    throw new Error("Release APK has no google-services configuration, so push cannot initialize.");
+  }
+}
+
 function verifyCertificateAssociation(assetLinksPath, fingerprint) {
   if (!existsSync(assetLinksPath)) {
     throw new Error("Digital Asset Links association is required for release verification.");
@@ -198,6 +216,7 @@ export function verifyAndroidRelease(apkPath, options = {}) {
   const debuggable = inspection(tools.apkanalyzer, ["manifest", "debuggable"]);
   const manifest = inspection(tools.apkanalyzer, ["manifest", "print"]);
   const permissions = inspection(tools.apkanalyzer, ["manifest", "permissions"]);
+  const resources = inspection(tools.apkanalyzer, ["resources", "names", "--type", "string", "--config", "default"]);
 
   if (applicationId !== expectedMetadata.applicationId) {
     throw new Error("Release APK application ID does not match canonical metadata.");
@@ -214,6 +233,7 @@ export function verifyAndroidRelease(apkPath, options = {}) {
 
   verifyExportedComponents(manifest);
   verifyPermissions(permissions);
+  verifyFirebaseConfiguration(resources);
   verifyCertificateAssociation(
     options.assetLinksPath || resolve(options.root || root, "artifacts/kub/public/.well-known/assetlinks.json"),
     fingerprint,
