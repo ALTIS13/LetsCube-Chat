@@ -18,7 +18,7 @@ test("chat info media gallery uses generated variants instead of original image 
   expect(source).not.toContain("src={message.media_url}");
 });
 
-test("chat info media tab opens in real UI without horizontal overflow", async ({ page }) => {
+test("chat info counted media rows open in real UI without horizontal overflow", async ({ page }) => {
   const consoleErrors = collectConsoleErrors(page);
   const role = findFirstAvailableQaRole(
     ["owner", "tech_admin", "location_admin", "location_staff", "client"],
@@ -40,12 +40,32 @@ test("chat info media tab opens in real UI without horizontal overflow", async (
   const panel = page.getByTestId("chat-info-panel");
   await expect(panel).toBeVisible();
 
-  // The gallery is a pushed sub-view now, not a third tab: «Общие медиа» goes
-  // in, the back control in the title bar comes out again.
-  await page.getByTestId("chat-info-open-gallery").click();
+  // The division and the counts are rows in the card's own scroll now: one row
+  // per kind, «1543 фотографии», and no row at all for a kind this chat has
+  // never carried. So the card itself is what has to fit first.
+  await assertNoHorizontalOverflow(panel, "chat info card has horizontal overflow");
+
+  // The placeholder is what stands where the counts will be, so its going is
+  // what says the counts are known — a row count read before then is a race.
+  await expect(page.getByTestId("chat-info-media-loading")).toHaveCount(0);
+  const rows = page.getByTestId("chat-info-media-row");
+  if ((await rows.count()) === 0) {
+    // A chat with no shared media offers no rows, which is the contract, not a
+    // failure. There is nothing further to open.
+    expect(unexpectedConsoleErrors(consoleErrors)).toEqual([]);
+    return;
+  }
+
+  // A counted row is the whole label: the number and the noun agreeing with it.
+  await expect(rows.first()).toContainText(
+    /\d+\+? (фотограф|видео|GIF-анимаци|файл|ссыл|голосов|аудиозапис)/,
+  );
+
+  // Pressing one pushes the sub-view holding that kind's contents; the back
+  // control in the title bar pops it.
+  await rows.first().click();
   const gallery = page.getByTestId("chat-info-gallery-view");
   await expect(gallery).toBeVisible();
-  await expect(page.getByText(/Медиа пока нет|Показать ещё|Фото|Видео|GIF|Файлы|Ссылки|Голосовые/).first()).toBeVisible();
   await assertNoHorizontalOverflow(panel, "chat info media panel has horizontal overflow");
 
   const back = page.getByTestId("chat-info-back");

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar, UserAvatar } from "@/components/ui/ChatAvatar";
-import { KubIcon, KubModal, type KubIconName } from "@/components/kub";
+import { KubIcon, KubModal, KubStableSkeleton, type KubIconName } from "@/components/kub";
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
@@ -56,12 +56,13 @@ interface ChatInfoPanelProps {
 type Tab = "info" | "members";
 
 /**
- * The card is a stack, not a scroll.
+ * The card root, and the contents of one media kind.
  *
- * «Общие медиа» used to append the gallery underneath the actions, which is why
- * it could be opened and never closed: there was nothing to close, only more
- * card. It is a pushed sub-view now — one at a time, with a back control and
- * Escape to pop it.
+ * The division used to live behind this boundary: «Общие медиа» pushed into a
+ * sub-view whose own strip of tabs said what the chat contained. The counts are
+ * in the card's scroll now — one row per kind, «1543 фотографии» — and the
+ * sub-view is only the contents of the row that was pressed. What is left of
+ * the push is the same push: one layer at a time, a back control, Escape to pop.
  */
 type CardView = "root" | "gallery";
 
@@ -104,6 +105,11 @@ const MEDIA_SECTION_ICONS: Record<MessageMediaKind, KubIconName> = {
 export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProps) {
   const { currentUser, setSelectedChatId, chats, setChats, setMessages, mutedChatIds, toggleMutedChat } = useAppStore();
   const supabase = createClient();
+  // The identity, not the object. The store hands back a fresh `currentUser`
+  // whenever anything on the profile changes, and the media loaders are keyed
+  // on their dependencies: with the object in there, a presence update would
+  // re-run them and empty the counts the card is showing.
+  const currentUserId = currentUser?.id ?? null;
   const display = getChatDisplayInfo(chat, currentUser?.id ?? null);
   const isSaved = display.isSaved;
   const isGroup = !isSaved && (chat.type === "group" || chat.type === "channel");
@@ -150,7 +156,6 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const frame = profileWindowFrame(placement, viewport);
   const docked = frame.docked;
   const rootTitle = isSaved ? "Избранное" : isGroup ? "Информация о группе" : "Профиль пользователя";
-  const windowTitle = view === "gallery" ? "Общие медиа" : rootTitle;
 
   // A resize or a rotation can strand the card off screen; crossing the dock
   // breakpoint has to put it back into the column it came from.
@@ -376,7 +381,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   }, [chat.id, isGroup, loadInvitePolicy, loadInvites, loadMembers, supabase]);
 
   const loadMedia = useCallback(async (reset = false, offset = 0) => {
-    if (!currentUser) {
+    if (!currentUserId) {
       setMedia([]);
       setMediaHasMore(false);
       return;
@@ -387,7 +392,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       .from("chat_members")
       .select("cleared_at")
       .eq("chat_id", chat.id)
-      .eq("user_id", currentUser.id)
+      .eq("user_id", currentUserId)
       .maybeSingle();
     // `audio` joined the list so voice notes have a section of their own; the
     // classifier in `messageMediaSections.ts` decides which section each row
@@ -417,7 +422,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       setMediaHasMore(rawPage.length > MEDIA_PAGE_SIZE || visibleRows.length > MEDIA_PAGE_SIZE);
     }
     setLoadingMedia(false);
-  }, [chat.id, currentUser, supabase]);
+  }, [chat.id, currentUserId, supabase]);
 
   /**
    * Links are ordinary text messages, so they are outside the media page.
@@ -427,7 +432,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
    * It runs once, when the gallery is opened, and never on the card root.
    */
   const loadLinks = useCallback(async () => {
-    if (!currentUser) {
+    if (!currentUserId) {
       setLinks([]);
       setLinksHasMore(false);
       return;
@@ -436,7 +441,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       .from("chat_members")
       .select("cleared_at")
       .eq("chat_id", chat.id)
-      .eq("user_id", currentUser.id)
+      .eq("user_id", currentUserId)
       .maybeSingle();
     // A single deliberately loose `ilike`: the pattern carries no `,` `:` or
     // `/` for a filter parser to trip over, and `extractFirstLink` does the
@@ -465,25 +470,30 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     const visible = rows.filter((item) => !hiddenIds.has(item.id) && extractFirstLink(item.content));
     setLinks(visible.slice(0, LINK_PAGE_SIZE));
     setLinksHasMore(rows.length > LINK_PAGE_SIZE);
-  }, [chat.id, currentUser, supabase]);
+  }, [chat.id, currentUserId, supabase]);
 
-  useEffect(() => {
-    if (view !== "gallery") return;
-    setMedia([]);
-    setMediaHasMore(false);
-    setOpenMedia(null);
-    loadMedia(true);
-    void loadLinks();
-  }, [view, loadMedia, loadLinks]);
-
+  /**
+   * The counts are on the card root, so they are loaded with the card.
+   *
+   * This used to wait for «Общие медиа» to be pressed, which was affordable
+   * while the division lived behind that press. It cannot wait now: the card
+   * decides which rows exist from what came back, and a row it has not loaded
+   * yet is indistinguishable from a kind this chat has never contained.
+   *
+   * Both loaders are keyed on `chat.id` and `currentUserId` alone, so this runs
+   * once per chat rather than on every render of the card.
+   */
   useEffect(() => {
     setMedia([]);
     setLinks([]);
     setLinksHasMore(false);
     setMediaHasMore(false);
     setOpenMedia(null);
+    setMediaSection(null);
     setView("root");
-  }, [chat.id]);
+    void loadMedia(true);
+    void loadLinks();
+  }, [loadMedia, loadLinks]);
 
   useEffect(() => {
     const handleHiddenMessage = (event: Event) => {
@@ -494,14 +504,14 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         setLinks((current) => current.filter((item) => item.id !== detail.messageId));
         return;
       }
-      if (view === "gallery") {
-        void loadMedia(true);
-        void loadLinks();
-      }
+      // No longer conditional on the gallery being open: the counts are on the
+      // root, so a hidden message has to be taken off them there too.
+      void loadMedia(true);
+      void loadLinks();
     };
     window.addEventListener(KUB_CHATS_REFRESH_EVENT, handleHiddenMessage);
     return () => window.removeEventListener(KUB_CHATS_REFRESH_EVENT, handleHiddenMessage);
-  }, [chat.id, loadLinks, loadMedia, view]);
+  }, [chat.id, loadLinks, loadMedia]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -782,13 +792,17 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
 
   // Фото, видео, GIF, файлы, ссылки, голосовые, видеосообщения, аудио — from
   // the rows already loaded. A section holding nothing is never built, so the
-  // tab strip only ever offers what this chat actually contains.
+  // card only ever offers a row for what this chat actually contains.
   const mediaSections = useMemo(
     () => buildMessageMediaSections([...media, ...links], { hasMore: mediaHasMore || linksHasMore }),
     [media, links, mediaHasMore, linksHasMore],
   );
   const activeMediaSection = resolveActiveMediaSection(mediaSections, mediaSection);
   const activeSection = mediaSections.find((section) => section.kind === activeMediaSection) ?? null;
+  // The sub-view is one kind now, so the title bar names it. It falls back to
+  // the old wording only in the moment between the last row of a kind being
+  // cleared and the pop that follows it.
+  const windowTitle = view === "gallery" ? (activeSection?.label ?? "Общие медиа") : rootTitle;
   const mediaGridItems = useMemo(
     () => media.filter((m) => m.type === "image" || m.type === "video"),
     [media],
@@ -801,8 +815,9 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   );
   const hasMoreMedia = mediaHasMore;
 
-  const openGallery = () => {
-    setMediaSection(null);
+  /** Pressing a counted row opens that kind, and only that kind. */
+  const openMediaSection = (kind: MessageMediaKind) => {
+    setMediaSection(kind);
     setView("gallery");
   };
 
@@ -816,10 +831,20 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   };
 
   const tabLabels: Record<Tab, string> = { info: "Сведения", members: "Участники" };
-  const actionRowClass =
-    "inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 transition-colors text-left hover:bg-[var(--kub-surface-2)]";
-  const dangerActionRowClass =
-    "inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 transition-colors text-left text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:cursor-not-allowed disabled:opacity-60";
+  // A hover is the «immediate» step of the shared scale, and it is a colour, so
+  // nothing with a size moves. Taking the duration from the token rather than
+  // from Tailwind's built-in 150ms is also what makes reduced motion reach it:
+  // the tokens collapse to 1ms under the preference, a literal does not.
+  const rowMotionClass =
+    "transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)]";
+  const actionRowClass = cn(
+    "inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 text-left hover:bg-[var(--kub-surface-2)]",
+    rowMotionClass,
+  );
+  const dangerActionRowClass = cn(
+    "inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 text-left text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:cursor-not-allowed disabled:opacity-60",
+    rowMotionClass,
+  );
 
   return (
     <div
@@ -1029,15 +1054,6 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
             )}
             <div className="px-4 py-3 space-y-1">
               <button
-                onClick={openGallery}
-                className={cn(actionRowClass, "text-[color:var(--kub-text)]")}
-                data-testid="chat-info-open-gallery"
-              >
-                <KubIcon name="image" size={17} tone="muted" className="shrink-0" />
-                <span className="min-w-0 flex-1 truncate">Общие медиа</span>
-                <KubIcon name="chevronRight" size={16} tone="muted" className="shrink-0" />
-              </button>
-              <button
                 onClick={() => toggleMutedChat(chat.id)}
                 className={cn(actionRowClass, "text-[color:var(--kub-text)]")}
               >
@@ -1162,6 +1178,55 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                 </button>
               )}
             </div>
+            {/* What this chat holds, counted, one kind per line.
+
+                Not a strip of tabs behind «Общие медиа»: the point of the
+                division is knowing there are 96 files without going looking for
+                them, and a count is only worth having where it can be read
+                without a press. A kind with nothing in it has no row at all —
+                `buildMessageMediaSections` never builds one — so the band is
+                absent entirely in a chat that has only ever carried text. */}
+            {mediaSections.length > 0 && (
+              <div
+                className="px-4 py-3 mt-2 space-y-1 border-t border-[color:var(--kub-border-color)]"
+                data-testid="chat-info-media-rows"
+              >
+                {mediaSections.map((section) => (
+                  <button
+                    key={section.kind}
+                    type="button"
+                    onClick={() => openMediaSection(section.kind)}
+                    className={cn(actionRowClass, "text-[color:var(--kub-text)]")}
+                    data-testid="chat-info-media-row"
+                    data-media-kind={section.kind}
+                  >
+                    <KubIcon
+                      name={MEDIA_SECTION_ICONS[section.kind]}
+                      size={17}
+                      tone="muted"
+                      className="shrink-0"
+                    />
+                    <span className="min-w-0 flex-1 truncate">{section.countedLabel}</span>
+                    <KubIcon name="chevronRight" size={16} tone="muted" className="shrink-0" />
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* One row, not three: a placeholder standing in for a count the
+                card does not have yet must not imply how many rows are coming.
+                Absence would read as «this chat has no shared media», which is
+                a claim nothing has established while the query is in flight. */}
+            {mediaSections.length === 0 && loadingMedia && (
+              <div
+                className="px-4 py-3 mt-2 border-t border-[color:var(--kub-border-color)]"
+                data-testid="chat-info-media-loading"
+              >
+                <div className="flex items-center gap-3 px-2 py-2">
+                  <KubStableSkeleton width="17px" height="17px" rounded="sm" />
+                  <KubStableSkeleton width="9rem" height="0.875rem" />
+                </div>
+              </div>
+            )}
             <div className="px-4 py-3 mt-2 border-t border-[color:var(--kub-border-color)]">
               <button
                 onClick={handlePinToggle}
@@ -1411,50 +1476,22 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
 
       </div>
 
-      {/* The shared-media sub-view. Its own scroll, so the section strip stays
-          put while the list under it moves. */}
+      {/* The contents of one kind. The strip of section tabs that used to stand
+          above this list is gone: the division and the counts are rows in the
+          card's own scroll now, and repeating them here would be two places to
+          read the same thing and one of them wrong. */}
       <div
         className="kub-subview absolute inset-0 flex min-h-0 flex-col"
         data-state={view === "gallery" ? "current" : "ahead"}
         data-testid="chat-info-gallery-view"
         inert={view !== "gallery"}
       >
-        {mediaSections.length > 0 && (
-          <div
-            className="flex flex-shrink-0 gap-1 overflow-x-auto border-b border-[color:var(--kub-border-color)] px-2 py-2"
-            role="tablist"
-            aria-label="Разделы общих медиа"
-            data-testid="chat-info-media-sections"
-          >
-            {mediaSections.map((section) => (
-              <button
-                key={section.kind}
-                type="button"
-                role="tab"
-                id={`chat-info-media-tab-${section.kind}`}
-                aria-controls="chat-info-media-panel"
-                aria-selected={section.kind === activeMediaSection}
-                onClick={() => setMediaSection(section.kind)}
-                className={cn(
-                  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors",
-                  section.kind === activeMediaSection
-                    ? "border-transparent bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
-                    : "border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-text)]",
-                )}
-              >
-                <KubIcon name={MEDIA_SECTION_ICONS[section.kind]} size={13} tone="currentColor" />
-                <span>{section.label}</span>
-                <span className="tabular-nums opacity-80">{section.countLabel}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
         <div
           className="min-h-0 flex-1 overflow-y-auto p-2"
           id="chat-info-media-panel"
-          role={activeSection ? "tabpanel" : undefined}
-          aria-labelledby={activeSection ? `chat-info-media-tab-${activeSection.kind}` : undefined}
+          data-media-kind={activeSection?.kind ?? undefined}
+          role={activeSection ? "region" : undefined}
+          aria-label={activeSection?.countedLabel}
         >
           {loadingMedia && media.length === 0 ? (
             <div className="grid grid-cols-3 gap-1">

@@ -9,6 +9,11 @@
  * from rows the panel already loads — so it belongs here, apart from the
  * component, where `node --test` can reach it.
  *
+ * The division was first drawn as a strip of tabs inside a sub-view. It is a
+ * vertical list of counted rows in the card's own scroll now — «1543
+ * фотографии», one per line — which is why this module also owns the Russian
+ * numeral agreement: the count is the label, not a badge beside one.
+ *
  * Two predicates below were lifted out of `ChatWindow.tsx` rather than copied.
  * A second copy of "is this a voice message" drifts from the first one silently,
  * and then the playback layer and the gallery disagree about the same row.
@@ -150,6 +155,54 @@ function looksLikeGif(message: MessageMediaRow): boolean {
   return source.includes(".gif");
 }
 
+/**
+ * The three Russian forms a noun takes after a number, in the order the
+ * agreement rule below asks for them: «1 фотография», «2 фотографии»,
+ * «5 фотографий».
+ */
+export type RussianPluralForms = readonly [one: string, few: string, many: string];
+
+/**
+ * Which of the three forms a count takes.
+ *
+ * The rule is the standard one and its awkward part is the teens: 11 through 14
+ * take the «many» form even though they end in 1, 2, 3 and 4. Writing the
+ * `mod 10` test first — the shape this was almost written in — produces
+ * «11 фотография» and «12 фотографии», which is the mistake that makes an
+ * interface read as machine-translated.
+ */
+export function selectRussianPluralForm(count: number, forms: RussianPluralForms): string {
+  const absolute = Math.abs(Math.trunc(count));
+  const teens = absolute % 100;
+  if (teens >= 11 && teens <= 14) return forms[2];
+  const unit = absolute % 10;
+  if (unit === 1) return forms[0];
+  if (unit >= 2 && unit <= 4) return forms[1];
+  return forms[2];
+}
+
+/**
+ * The noun each section counts, for the card's own list of rows.
+ *
+ * The card names a kind by counting it — «96 файлов», not «Файлы 96» — so the
+ * short strip labels in `MESSAGE_MEDIA_SECTION_LABELS` are not enough on their
+ * own: they are nominative headings, and a heading after a numeral is wrong in
+ * Russian. Both live here so the row and the sub-view title cannot drift apart.
+ *
+ * `видео` is indeclinable and is the same word in all three slots on purpose;
+ * that is not a placeholder waiting to be filled in.
+ */
+export const MESSAGE_MEDIA_COUNT_FORMS: Readonly<Record<MessageMediaKind, RussianPluralForms>> = Object.freeze({
+  photo: ["фотография", "фотографии", "фотографий"] as const,
+  video: ["видео", "видео", "видео"] as const,
+  gif: ["GIF-анимация", "GIF-анимации", "GIF-анимаций"] as const,
+  file: ["файл", "файла", "файлов"] as const,
+  link: ["ссылка", "ссылки", "ссылок"] as const,
+  voice: ["голосовое сообщение", "голосовых сообщения", "голосовых сообщений"] as const,
+  videoMessage: ["видеосообщение", "видеосообщения", "видеосообщений"] as const,
+  audio: ["аудиозапись", "аудиозаписи", "аудиозаписей"] as const,
+});
+
 export interface MessageMediaSection<TRow extends MessageMediaRow> {
   kind: MessageMediaKind;
   label: string;
@@ -162,11 +215,31 @@ export interface MessageMediaSection<TRow extends MessageMediaRow> {
    * true either way, where a bare `12` beside 300 photos is not.
    */
   countLabel: string;
+  /**
+   * The whole row, count and noun together: «1543 фотографии». This is what the
+   * card prints — the count is not a badge beside a label, it is the label.
+   */
+  countedLabel: string;
 }
 
 /** `12`, or `12+` while the list is still incomplete. */
 export function formatMediaCount(count: number, hasMore = false): string {
   return hasMore ? `${count}+` : `${count}`;
+}
+
+/**
+ * «1543 фотографии», or «24+ фотографии» while rows are still unloaded.
+ *
+ * The noun agrees with the number that is actually printed, not with some
+ * unknown larger total: `24+` is read as «at least 24», and «24+ фотографий»
+ * would disagree with the 24 standing next to it.
+ */
+export function formatMediaCountLabel(
+  kind: MessageMediaKind,
+  count: number,
+  hasMore = false,
+): string {
+  return `${formatMediaCount(count, hasMore)} ${selectRussianPluralForm(count, MESSAGE_MEDIA_COUNT_FORMS[kind])}`;
 }
 
 export interface BuildMediaSectionsOptions {
@@ -177,9 +250,9 @@ export interface BuildMediaSectionsOptions {
 /**
  * Divide loaded rows into the sections that are actually populated.
  *
- * A section with nothing in it is never returned. Offering «Ссылки 0» in a chat
- * that has never contained a link is a tab that does nothing, and six of them
- * is the whole width of the card spent on emptiness.
+ * A section with nothing in it is never returned. Offering «0 ссылок» in a chat
+ * that has never contained a link is a row that does nothing, and eight of them
+ * is the whole card spent on emptiness.
  */
 export function buildMessageMediaSections<TRow extends MessageMediaRow>(
   rows: readonly TRow[],
@@ -204,6 +277,7 @@ export function buildMessageMediaSections<TRow extends MessageMediaRow>(
       items,
       count: items.length,
       countLabel: formatMediaCount(items.length, options.hasMore === true),
+      countedLabel: formatMediaCountLabel(kind, items.length, options.hasMore === true),
     });
   }
   return sections;
@@ -215,7 +289,8 @@ export function buildMessageMediaSections<TRow extends MessageMediaRow>(
  * The requested section can stop existing while it is open — «Очистить историю
  * у себя» empties every section, and loading a further page can only add. So a
  * request that no longer matches falls back to the first section that does
- * rather than leaving the gallery showing nothing with tabs above it.
+ * rather than leaving the sub-view showing nothing under a title naming a kind
+ * this chat no longer has.
  */
 export function resolveActiveMediaSection<TRow extends MessageMediaRow>(
   sections: readonly MessageMediaSection<TRow>[],

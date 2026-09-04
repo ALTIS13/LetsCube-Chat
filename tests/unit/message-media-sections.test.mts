@@ -2,15 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  MESSAGE_MEDIA_COUNT_FORMS,
+  MESSAGE_MEDIA_SECTION_LABELS,
   MESSAGE_MEDIA_SECTION_ORDER,
   buildMessageMediaSections,
   classifyMessageMedia,
   extractFirstLink,
   formatMediaCount,
+  formatMediaCountLabel,
   isGridMediaKind,
   isRoundVideoMessageContent,
   isVoiceMessageContent,
   resolveActiveMediaSection,
+  selectRussianPluralForm,
   type MessageMediaKind,
   type MessageMediaRow,
 } from "../../artifacts/kub/src/lib/messageMediaSections.ts";
@@ -170,4 +174,104 @@ test("every declared section has a label and a place in the order", () => {
   for (const section of built) {
     assert.ok(section.label.length > 0, `${section.kind} has no label`);
   }
+});
+
+/**
+ * The count is the label.
+ *
+ * The card names a kind by counting it — «1543 фотографии», one row per line —
+ * so the number and the noun are one string and the noun has to agree with the
+ * number. The short strip labels above are nominative headings and are wrong
+ * after a numeral; both live in the same module so they cannot drift apart.
+ */
+
+test("the noun agrees with the number in front of it", () => {
+  const photos = MESSAGE_MEDIA_COUNT_FORMS.photo;
+  assert.equal(selectRussianPluralForm(1, photos), "фотография");
+  assert.equal(selectRussianPluralForm(2, photos), "фотографии");
+  assert.equal(selectRussianPluralForm(4, photos), "фотографии");
+  assert.equal(selectRussianPluralForm(5, photos), "фотографий");
+  assert.equal(selectRussianPluralForm(20, photos), "фотографий");
+  assert.equal(selectRussianPluralForm(0, photos), "фотографий");
+});
+
+test("the teens take the many form even though they end in 1 to 4", () => {
+  // The mistake this exists to prevent: testing `% 10` first produces
+  // «11 фотография» and «12 фотографии», which is what makes an interface read
+  // as machine-translated.
+  const photos = MESSAGE_MEDIA_COUNT_FORMS.photo;
+  for (const teen of [11, 12, 13, 14, 111, 112, 113, 114, 1011]) {
+    assert.equal(selectRussianPluralForm(teen, photos), "фотографий", `${teen}`);
+  }
+  // …while the same last digits one hundred away do not.
+  assert.equal(selectRussianPluralForm(21, photos), "фотография");
+  assert.equal(selectRussianPluralForm(22, photos), "фотографии");
+  assert.equal(selectRussianPluralForm(101, photos), "фотография");
+  assert.equal(selectRussianPluralForm(1543, photos), "фотографии");
+});
+
+test("the rows read the way the owner's reference reads", () => {
+  assert.equal(formatMediaCountLabel("photo", 1543), "1543 фотографии");
+  assert.equal(formatMediaCountLabel("video", 67), "67 видео");
+  assert.equal(formatMediaCountLabel("file", 96), "96 файлов");
+  assert.equal(formatMediaCountLabel("link", 88), "88 ссылок");
+  assert.equal(formatMediaCountLabel("voice", 619), "619 голосовых сообщений");
+  // The singular of each of those is a different word, so a row of one is not
+  // «1 фотографии».
+  assert.equal(formatMediaCountLabel("photo", 1), "1 фотография");
+  assert.equal(formatMediaCountLabel("file", 1), "1 файл");
+  assert.equal(formatMediaCountLabel("link", 1), "1 ссылка");
+  assert.equal(formatMediaCountLabel("voice", 1), "1 голосовое сообщение");
+  assert.equal(formatMediaCountLabel("videoMessage", 2), "2 видеосообщения");
+  assert.equal(formatMediaCountLabel("audio", 5), "5 аудиозаписей");
+  assert.equal(formatMediaCountLabel("gif", 3), "3 GIF-анимации");
+});
+
+test("«видео» is indeclinable, and that is not an unfilled placeholder", () => {
+  for (const count of [1, 2, 5, 11, 21, 67]) {
+    assert.equal(formatMediaCountLabel("video", count), `${count} видео`);
+  }
+});
+
+test("an incomplete row agrees with the number it actually prints", () => {
+  // `24+` is read as «at least 24». The noun goes with the 24 standing beside
+  // it, not with an unknown larger total nobody can see.
+  assert.equal(formatMediaCountLabel("photo", 24, true), "24+ фотографии");
+  assert.equal(formatMediaCountLabel("photo", 1, true), "1+ фотография");
+  assert.equal(formatMediaCountLabel("file", 25, true), "25+ файлов");
+  assert.equal(formatMediaCountLabel("photo", 24, false), "24 фотографии");
+});
+
+test("every kind has all three forms, and the built section carries the label", () => {
+  for (const kind of MESSAGE_MEDIA_SECTION_ORDER) {
+    const forms = MESSAGE_MEDIA_COUNT_FORMS[kind];
+    assert.ok(forms, `${kind} has no counted forms`);
+    assert.equal(forms.length, 3, `${kind} does not declare all three forms`);
+    for (const form of forms) assert.ok(form.trim().length > 0, `${kind} has an empty form`);
+    // The heading and the counted noun are different strings on purpose; the
+    // heading is what the sub-view's title bar shows.
+    assert.ok(MESSAGE_MEDIA_SECTION_LABELS[kind].length > 0, `${kind} has no heading`);
+  }
+
+  const [photos] = buildMessageMediaSections([photo(), photo(), photo()]);
+  assert.equal(photos.countedLabel, "3 фотографии");
+  assert.equal(photos.countLabel, "3");
+  assert.equal(photos.label, "Фото");
+
+  const [partial] = buildMessageMediaSections([photo(), photo()], { hasMore: true });
+  assert.equal(partial.countedLabel, "2+ фотографии");
+
+  const [single] = buildMessageMediaSections([file()]);
+  assert.equal(single.countedLabel, "1 файл");
+});
+
+test("a counted row is built for every populated kind and for no empty one", () => {
+  // What the card renders, in the order it renders it: one row per line, and
+  // no row at all for a kind this chat has never carried.
+  const built = buildMessageMediaSections([link(), link(), file(), voice(), photo()]);
+  assert.deepEqual(
+    built.map((section) => section.countedLabel),
+    ["1 фотография", "1 файл", "2 ссылки", "1 голосовое сообщение"],
+  );
+  assert.deepEqual(buildMessageMediaSections([]).map((section) => section.countedLabel), []);
 });

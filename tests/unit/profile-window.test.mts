@@ -384,7 +384,9 @@ test("every action and confirmation the card carried is still on it", () => {
   // the file: «Общие медиа» also appears in the sub-view's own title, so a bare
   // string search stayed green while the action row underneath it was renamed.
   const rows: Array<[string, RegExp]> = [
-    ["Общие медиа", /onClick=\{openGallery\}[\s\S]{0,400}?Общие медиа/],
+    // The one «Общие медиа» entry became a row per kind; the family is checked
+    // in its own test below, and reaching the media at all is checked here.
+    ["общие медиа", /onClick=\{\(\) => openMediaSection\(section\.kind\)\}[\s\S]{0,600}?section\.countedLabel/],
     ["уведомления", /onClick=\{\(\) => toggleMutedChat\(chat\.id\)\}[\s\S]{0,600}?Включить уведомления/],
     ["Закрепить чат", /onClick=\{handlePinToggle\}[\s\S]{0,400}?Открепить чат[\s\S]{0,40}?Закрепить чат/],
     ["Очистить историю у себя", /onClick=\{handleClearForMe\}[\s\S]{0,500}?Очистить историю у себя/],
@@ -409,4 +411,153 @@ test("every action and confirmation the card carried is still on it", () => {
   // 19's territory and are untouched here.
   assert.ok(panelSource.includes("<ProfileRoleSummary user={otherUser} compact />"), "the role badges are gone");
   assert.match(panelSource, /otherUser\?\.bio[\s\S]{0,400}?otherUser\.bio/, "the bio is gone from the card");
+});
+
+/**
+ * The division and the counts live in the card's own scroll.
+ *
+ * The owner liked the divided sub-view and asked for it arranged differently:
+ * the counts belong on the card. The shape is a desktop contact card — identity,
+ * detail rows, then a vertical list of counted rows («1543 фотографии», one per
+ * line, full width), then the destructive actions. The strip of section tabs is
+ * gone; what is behind a row is only that row's contents.
+ *
+ * Source contracts, like the frame ones above: there is no DOM in this suite,
+ * so what is pinned is the wiring, not the rendering.
+ */
+
+test("the card offers a row per kind, labelled by its own count", () => {
+  const band = panelSource.match(/data-testid="chat-info-media-rows"[\s\S]*?\n {12}\)\}/);
+  assert.ok(band, "the card no longer renders the counted media rows");
+  assert.match(
+    band[0],
+    /mediaSections\.map\(\(section\) =>/,
+    "the rows are not built from the sections, so a kind could be listed twice or not at all",
+  );
+  assert.match(
+    band[0],
+    /\{section\.countedLabel\}/,
+    "a row prints something other than its own counted label",
+  );
+  assert.match(
+    band[0],
+    /onClick=\{\(\) => openMediaSection\(section\.kind\)\}[\s\S]{0,600}?\{section\.countedLabel\}/,
+    "a row does not open the kind it is labelled with",
+  );
+  // A kind holding nothing has no row: `buildMessageMediaSections` never builds
+  // one, and the band itself is absent in a chat that has only carried text.
+  assert.match(
+    panelSource,
+    /\{mediaSections\.length > 0 && \(\s*\n\s*<div\s*\n\s*className="px-4 py-3 mt-2 space-y-1 border-t/,
+    "the counted band renders even when the chat holds no media",
+  );
+});
+
+test("a row that was pressed opens that kind and not the first one", () => {
+  const opener = panelSource.match(/const openMediaSection = \(kind: MessageMediaKind\) => \{[\s\S]*?\n  \};/);
+  assert.ok(opener, "pressing a counted row no longer opens anything");
+  assert.match(opener[0], /setMediaSection\(kind\)/, "the sub-view opens on whatever was open last");
+  assert.match(opener[0], /setView\("gallery"\)/, "the sub-view is never pushed");
+  // The old entry: one «Общие медиа» button that pushed with no kind chosen,
+  // leaving the strip inside to say what the chat contained.
+  assert.doesNotMatch(panelSource, /openGallery/, "the single undivided «Общие медиа» entry is back");
+  assert.doesNotMatch(
+    panelSource,
+    /data-testid="chat-info-open-gallery"/,
+    "the single undivided «Общие медиа» entry is back",
+  );
+});
+
+test("the section tab strip is gone from the sub-view", () => {
+  // Two places to read the same counts is one place to read them wrong.
+  //
+  // The word, not the attribute: `role="tablist"` matches only the literal the
+  // strip happened to be written with, and a mutation that reintroduced the
+  // role through `role={… ? "tablist" : undefined}` walked straight past it.
+  assert.doesNotMatch(panelSource, /tablist/, "the horizontal section strip is back");
+  assert.doesNotMatch(panelSource, /aria-selected/, "the horizontal section strip is back");
+  assert.doesNotMatch(panelSource, /role="tab"/, "the horizontal section strip is back");
+  assert.doesNotMatch(
+    panelSource,
+    /data-testid="chat-info-media-sections"/,
+    "the horizontal section strip is back",
+  );
+  assert.doesNotMatch(panelSource, /overflow-x-auto/, "something in the card scrolls sideways again");
+  // The title bar names the one kind that is open instead.
+  assert.match(
+    panelSource,
+    /const windowTitle = view === "gallery" \? \(activeSection\?\.label \?\? "Общие медиа"\) : rootTitle;/,
+    "the sub-view title no longer names the kind that is open",
+  );
+});
+
+test("the counts are loaded with the card, not with the sub-view", () => {
+  // They are on the root now, and a kind the card has not loaded is
+  // indistinguishable from a kind this chat has never contained.
+  assert.doesNotMatch(
+    panelSource,
+    /if \(view !== "gallery"\) return;/,
+    "the media load waits for the gallery again, so the card would show no counts",
+  );
+  const loader = panelSource.match(
+    /useEffect\(\(\) => \{\s*\n\s*setMedia\(\[\]\);[\s\S]*?\}, \[loadMedia, loadLinks\]\);/,
+  );
+  assert.ok(loader, "nothing loads the media when the card opens");
+  assert.match(loader[0], /void loadMedia\(true\);/, "the media is never loaded");
+  assert.match(loader[0], /void loadLinks\(\);/, "the links are never loaded, so «ссылок» could not be counted");
+
+  // Both loaders must be keyed on the id, not on the user object: the store
+  // hands back a fresh `currentUser` on any profile change, and the effect
+  // above would then empty and refetch the counts underneath the reader.
+  assert.match(panelSource, /\}, \[chat\.id, currentUserId, supabase\]\);/, "a loader is keyed on the user object");
+  assert.doesNotMatch(
+    panelSource,
+    /\}, \[chat\.id, currentUser, supabase\]\);/,
+    "a loader is keyed on the user object",
+  );
+});
+
+test("the card is one scrolling column, and its rows take their timing from the tokens", () => {
+  // One scroll: the identity, the detail rows, the counted rows and the
+  // destructive actions move together. `chat-info-root-view` is the scroller,
+  // and it is the same layer below the dock breakpoint as above it.
+  assert.match(
+    panelSource,
+    /className="kub-subview absolute inset-0 overflow-y-auto"\s*\n\s*data-state=\{view === "root"/,
+    "the card root is no longer a single scrolling column",
+  );
+
+  const motion = panelSource.match(/const rowMotionClass =\s*\n\s*"([^"]*)";/);
+  assert.ok(motion, "the action rows declare no shared motion");
+  assert.match(motion[1], /duration-\[var\(--kub-motion-[a-z]+\)\]/, "a row hard-codes its duration");
+  assert.match(motion[1], /ease-\[var\(--kub-ease-[a-z]+\)\]/, "a row hard-codes its easing");
+  // Colour only. A row that transitioned a size would move every row under it,
+  // and the tokens are what makes reduced motion reach this at all.
+  assert.match(motion[1], /transition-colors/, "the rows transition something other than colour");
+  const forbidden: Array<[string, RegExp]> = [
+    ["everything", /transition-all/],
+    ["height", /\bheight\b/],
+    ["width", /\bwidth\b/],
+    ["padding", /\bpadding\b/],
+  ];
+  for (const [name, pattern] of forbidden) {
+    assert.ok(pattern.test("transition-all height width padding"), `the ${name} guard cannot match anything`);
+    assert.doesNotMatch(motion[1], pattern, `a row animates ${name}, which has a size`);
+  }
+  assert.ok(panelSource.includes("cn(actionRowClass"), "the shared row class is no longer applied");
+});
+
+test("a count the card does not have yet is a placeholder, not an absence", () => {
+  // `ProfileRoleSummary` printing «Локации не назначены» mid-flight is the
+  // recorded precedent: a section that does not yet know may not make a claim,
+  // and a missing band reads as «this chat has no shared media».
+  const loading = panelSource.match(/\{mediaSections\.length === 0 && loadingMedia && \([\s\S]*?\n {12}\)\}/);
+  assert.ok(loading, "the card asserts there is no media while it is still loading");
+  assert.match(loading[0], /KubStableSkeleton/, "the placeholder sizes itself from its content");
+  // One row's worth. Three would imply a count nothing has established.
+  assert.equal(
+    (loading[0].match(/KubStableSkeleton/g) ?? []).length,
+    2,
+    "the placeholder guesses how many kinds are coming",
+  );
 });
