@@ -2034,3 +2034,106 @@ mechanism in `MessageList` — this register already records 445px, 706px and
 section 11 of `CLAUDE.md`, and nothing in CI can exercise it: it needs a signed-in
 chat with real history, and the e2e suite is unauthenticated. It wants its own
 task with its own measurement, not a change made in passing.
+
+## D-040 — a sent message twitched the whole conversation a quarter-second after it landed
+
+Found and fixed 2026-09-04, after the D-037/D-038 fix had already removed the
+lag the owner first reported. What was left, verbatim: "только если в момент
+когда они просто появляются в чате, прям резко очень будто с дёрганием по
+горизонту" — the movement's quality, not its destination.
+
+Measured the same way as D-037 and D-038: a Vite dev server against production
+Supabase, signed in with the QA owner and, for the arrival case, a second
+context signed in as the QA client in the same chat. Every write to `scrollTop`
+and `scrollTo` intercepted with its stack, and a **witness row** — an ordinary
+message already on screen — measured every animation frame. The witness is the
+horizon; how far it moves between two consecutive frames is the whole question.
+
+### Sending, while at the bottom, before
+
+| t (ms) | witness moved | row height | meta placement | what happened |
+|---|---|---|---|---|
+| 0 | **-39px** | 38.8 | inline | the message arrives and takes its space |
+| +14…28 | **-15px** | 53.8 | anchored | the bubble finds its real height |
+| +250 | **+15px** | 38.8 | inline | the server row replaces the optimistic one |
+| +265 | **-15px** | 53.8 | anchored | and measures itself all over again |
+
+Four steps, 84px of travel for 54px of net movement, reproduced identically on
+three runs. The last two are the defect: nothing about the message had changed,
+yet the entire conversation stepped down and back up a quarter of a second after
+it had settled.
+
+The cause is the React key. `MessageList` keyed each row by `msg.id`, and a
+message you send is rendered twice under two ids — `tmp:<client id>` first, the
+server row after — so React tore the first node down and built a second one.
+Everything `MeasuredTextWithMeta` had measured about itself went with it, and the
+replacement started again from `getInitialMetaPlacement`'s guess.
+
+### After
+
+Keyed by `messageEntranceKey` — `client_message_id`, the one value both sides of
+the swap share — the row is updated instead of rebuilt. Measured over three runs
+at 1440x900, and again headed at the display's real cadence:
+
+| | before | after |
+|---|---|---|
+| separate movements per sent message | 4 | 2 |
+| witness travel | 84px | 54px |
+| movement after the message settled | 15px down, 15px up | none |
+| entrance animation | plays once, completes | unchanged |
+
+**Receiving, while at the bottom, is unchanged and was already correct**: one
+movement of 39–57px, the height of the arriving row, and nothing after it. So is
+the section 11 contract — scrolled 700px up, an arriving message left `scrollTop`
+identical to the pixel, moved the witness 0px, and only raised the counter.
+
+The key is safe to derive: `addMessage` and `replaceMessage` both collapse a row
+that is `sameActorClientMessage` with the incoming one, so the optimistic row and
+its server row are never in the list at once.
+
+## D-041 — every own message is painted one row short and grows on the next frame
+
+Found 2026-09-04 while measuring D-040, and deliberately not fixed.
+
+`MeasuredTextWithMeta` decides whether the time fits beside the last line of text
+or needs a row of its own. The two answers differ by a whole row — 38.8px against
+53.8px for the same message — and the decision needs the bubble and the stack,
+which it is handed as refs.
+
+**React attaches a host ref during the layout phase, and that phase walks
+children before parents.** Both elements are ancestors of the component doing the
+measuring, so on the one mount that matters its own layout effect runs with
+`bubbleRef.current === null`, returns at its first guard, and leaves the guess
+standing. Instrumented on the real chat: the first pass logged `bubbleEl: false`
+at t=167ms, the real one landed at t=268ms, and the row grew between them. The
+comment above that effect — "Measure once SYNCHRONOUSLY, before this frame is
+painted" — is true of every pass except the first.
+
+The guess is `inline`, and for an own message the answer is always `anchored`,
+because `getMaxContentWidth` measures `(stackEl ?? bubbleEl).parentElement`,
+which is a shrink-to-fit flex item and therefore reports the bubble's *current*
+width. Measured on a real own message: `maxContentWidth` 146, last line 144,
+footer 67 — `144 + 67 + 8 > 146`, so the meta never fits, for any single-line own
+message. A received message escapes only because that same parent includes the
+32px avatar lane, which happens to leave room for its narrower footer.
+
+Two fixes were tried and rejected, both by measurement:
+
+1. **Run the first measurement from `MessageBubble`, where the refs exist.**
+   Implemented and measured. The measurement then runs with both refs populated
+   and decides correctly — and React still does not paint it. The state update
+   scheduled from that layout effect was not flushed before the frame, in the DEV
+   preview harness *and* on the real chat: the same four steps, unchanged. Backed
+   out rather than shipped as machinery that does nothing.
+2. **Fix `getMaxContentWidth` to measure the row a message may occupy.** This
+   would make the guess right, but it moves the timestamp of every own message in
+   the product from its own row to beside the text. That is a design change, not
+   a motion fix, and it was not asked for.
+
+What is left is one 15px step, 8–14ms after the arrival step it belongs to —
+measured at 144Hz, one to two composited frames, so the reader sees the 54px
+arrival with a stutter rather than a separate event. Closing it needs either a
+guess that uses what the component already knows (whether the meta carries a
+delivery indicator), which trades a certain miss on every own message for an
+occasional miss in the other direction on wrapped ones, or the layout change
+above. Both want a decision, not a change made in passing.

@@ -811,7 +811,25 @@ export function MessageList({
 
           return (
             <div
-              key={msg.id}
+              // Keyed by what survives the optimistic swap, not by the row id.
+              //
+              // A message you send is rendered twice under two ids: first as
+              // `tmp:<client id>`, then as the server row. With the id as the
+              // key those are two different DOM nodes, so the whole row is torn
+              // down and mounted again — and the second mount re-runs the
+              // bubble's meta measurement from its initial guess. That guess is
+              // `inline`; the answer for an own message is `anchored`, one row
+              // taller. Measured on the real chat with a witness row sampled
+              // every animation frame, that replay moved the entire
+              // conversation +15px and then -15px, a quarter of a second after
+              // the message had already settled — a twitch with nothing behind
+              // it, because nothing about the message had changed.
+              //
+              // `messageEntranceKey` is `client_message_id` when there is one,
+              // which is the single value both sides of the swap share, and the
+              // id otherwise. The store dedupes by the same value, so two rows
+              // can never hold one key.
+              key={messageEntranceKey(msg)}
               data-message-id={msg.id}
               ref={(el) => { if (el && messageRefs) messageRefs.current[msg.id] = el; }}
               className={cn(

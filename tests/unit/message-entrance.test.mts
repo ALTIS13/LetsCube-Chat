@@ -161,6 +161,63 @@ test("a received message still animates", () => {
   assert.deepEqual([...arrival.entering], ["cid:B"]);
 });
 
+test("the row is keyed by what survives the swap, so it is not rebuilt", () => {
+  // The entrance identity stopped the animation replaying, but the row itself
+  // was still keyed by `msg.id` — so `tmp:<client id>` and the server row were
+  // two different DOM nodes and React tore the first one down. Everything the
+  // bubble had measured about itself went with it, and the replacement started
+  // again from `getInitialMetaPlacement`'s guess: `inline`, one row shorter
+  // than the answer an own message actually gets.
+  //
+  // Measured on the real chat against production data, a witness row sampled
+  // every animation frame through a send: the whole conversation stepped -39px
+  // as the message arrived, -15px as the bubble found its height, and then
+  // +15px and -15px again about 250ms later, when the server row landed and
+  // replayed the same two steps in reverse. The last pair is a twitch with
+  // nothing behind it — nothing about the message had changed. With the row
+  // keyed by the entrance identity it is gone, measured over three runs, and
+  // the arrival is the only movement left.
+  const list = readFileSync("artifacts/kub/src/components/chat/MessageList.tsx", "utf8");
+  assert.match(
+    list,
+    /key=\{messageEntranceKey\(msg\)\}/,
+    "the message row is keyed by its id again, so a sent message rebuilds itself when the server row lands",
+  );
+  assert.doesNotMatch(
+    list,
+    /key=\{msg\.id\}/,
+    "the message row is keyed by its id again, so a sent message rebuilds itself when the server row lands",
+  );
+  // The row still reports its own id: that is what the scroll anchors, the
+  // jump-to-message targets and the tests all address it by.
+  assert.match(list, /data-message-id=\{msg\.id\}/, "the row stopped carrying its own id");
+});
+
+test("two rows can never share one key", () => {
+  // A React key has to be unique among siblings, and this one is derived rather
+  // than being the primary key. It holds because the store dedupes on the same
+  // value: `addMessage` and `replaceMessage` both collapse a row that is
+  // `sameActorClientMessage` as the incoming one, so the optimistic row and its
+  // server row are never in the list at the same time.
+  // What enforces it in each mutator is the `findIndex` that decides between
+  // replacing a row and appending one. `replaceMessage` also filters the old
+  // row out by client id first, and dropping THAT is equivalent for this
+  // property: the row it would have removed is the one `findIndex` then finds
+  // and overwrites, so there is still only ever one.
+  const store = readFileSync("artifacts/kub/src/store/app.store.ts", "utf8");
+  for (const mutator of ["addMessage: (chatId, message) =>", "replaceMessage: (chatId, oldId, message) =>"]) {
+    // The implementation, not the interface declaration above it: the type has
+    // the same name and matching it would assert nothing.
+    const start = store.indexOf(mutator);
+    assert.notEqual(start, -1, `${mutator} could not be found in the store`);
+    assert.match(
+      store.slice(start, start + 700),
+      /findIndex\(\(m\) => m\.id === message\.id \|\| sameActorClientMessage\(m, message\)\)/,
+      `${mutator} no longer collapses the optimistic row, so both copies can be rendered under one key`,
+    );
+  }
+});
+
 test("the list diffs entrance keys, not row ids", () => {
   // The wiring, which no unit of `messageEntrance` can see on its own: passing
   // `m.id` as the thing to diff puts the swap back exactly as it was.
