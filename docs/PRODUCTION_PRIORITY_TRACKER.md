@@ -124,6 +124,22 @@ Use this queue before starting the next production-hardening turn. Do not repeat
     `count()` is a snapshot rather than a wait, so it read zero rows and skipped.
     They run now.
 
+19. `[ ]` Roles and permissions: make them mean something, and make the panel usable. Requested by the owner on 2026-09-04, who reports the admin surface as "крайне неудобно" in both the interface and the roles themselves, "очень перегружена для администратора", and notes "старые fallback роли которые аналогичны обычным пользователям". Measured against production the same day, so this entry is evidence rather than a restatement of the complaint.
+
+    - **13 roles are defined; 2 are used.** `profiles.role` holds only `user` (12 accounts) and `admin` (2). The other eleven exist in the picker and in nobody's account.
+    - **Two pairs are literally indistinguishable by permission.** `owner` and `tech_admin` grant an identical set of 40 permissions. `chat_member` and `user` grant an identical set of one (`chats.invite`). That is the "роли отличий не имеют" complaint, exactly, and it is measurable rather than a matter of taste.
+    - **`admin` is self-described legacy.** Its own description reads "Административный доступ по legacy-модели", it carries 23 permissions, and it is what both real administrators actually hold — so the legacy path is not a leftover to sweep up, it is the live one, and retiring it is a migration with real users on it.
+    - **Five roles still sell a computer club.** `location_owner` «Владелец клуба», `location_admin` «Администратор клуба», `location_manager` «Менеджер клуба», `location_staff` «Работник клуба», `location_client` «Клиент клуба». These are user-facing titles rendered in the admin panel, and they violate section 7 of `CLAUDE.md`, which requires removing `компьютерный клуб` positioning from user-facing text. The least arguable item here.
+    - **40 permissions in one flat list.** That is the overload: configuring a role means reasoning about forty checkboxes with no grouping and no statement anywhere of what a role is *for*.
+
+    Scope, in this order — the data model decides the UI, not the other way round:
+
+    1. **Decide the role model before touching anything.** Give each surviving role a one-sentence purpose; delete or merge whatever cannot earn one. A defensible end state is small: an owner/technical tier, an operational tier, an ordinary user, and the per-chat roles — with the location tier removed outright unless the venue business is returning, which per `CLAUDE.md` it is not. Merging two identical roles is a product decision and belongs to the owner, not to a cleanup pass.
+    2. **Then fix the data**, additively and with the usual rehearsal. `roles` rows are `is_system`, and both UPDATE and DELETE are blocked by policy, so retiring one is a migration; it needs a plan for the two accounts currently on `admin`, and `has_permission` behaviour must be proven unchanged for every role that survives.
+    3. **Then the panel.** `RolesPermissionsTab.tsx` is the surface. Group the permissions, show what a role grants at a glance, and make the difference between two roles visible without opening both.
+
+    Binding constraints: never widen anyone's access as a side effect of tidying; every permission change is proven by a test that fails when reverted; RLS stays on; both live administrators keep working throughout the change.
+
 ## Last Confirmed Deploy Baseline
 
 - Production web code baseline: `5da93e0` (public home with downloads and the
