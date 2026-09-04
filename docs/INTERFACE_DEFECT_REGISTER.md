@@ -1773,3 +1773,29 @@ missed this.
 
 Worth carrying forward: **for anything whose value a library reformats, the
 assertion belongs on the wire, not on the argument.**
+
+### D-034 — closed in production, 2026-09-04
+
+Deployed as `388c6be`. Verified on the running worker rather than in the test
+suite:
+
+| | before | after |
+|---|---|---|
+| `storage download failed` in the log | 20 per 10 min | **0 per 3 min** |
+| anything at all beyond healthz | two warnings a tick | nothing |
+
+The failures are now recorded instead of repeated. `media_variants` carries
+`source_missing` on 4 rows / 2 messages (the two videos whose bytes only ever
+existed on the hosted project the app moved off) and `source_unreadable` on 6
+rows / 3 messages (the 68-byte PNGs whose IDAT chunk fails its CRC — verified
+independently by walking the chunks: signature valid, IHDR ok, **IDAT
+mismatch**, IEND ok).
+
+Five messages remain without a preview and always will: those two videos have
+no bytes on this server, and those three images cannot be decoded by anything,
+so they show nothing in the client regardless. That is now a fact in the data
+with a reason attached, rather than a warning repeating every sixty seconds.
+
+Two of the mutations were re-run independently before deploying: removing the
+memory of a terminal failure fails 3 tests, and forgetting *which* source a
+failure was about — so replaced media would never be retried — fails 1.
