@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
 import { sortChatsForSidebar } from '@/lib/chatSort'
+import { sameChatList } from '@/lib/chatListChange'
 import type { Profile, ChatWithLastMessage, MessageWithSender } from '@/types/database'
 import { sameActorClientMessage } from '@/lib/messageActor'
 import { isHeartbeatOnlyProfileChange } from '@/lib/profileChange'
@@ -84,39 +85,6 @@ interface AppState {
   clearChatPanelRequest: (key: number) => void
 }
 
-function sameChatList(a: ChatWithLastMessage[], b: ChatWithLastMessage[]): boolean {
-  if (a.length !== b.length) return false;
-  return a.every((chat, index) => {
-    const next = b[index];
-    return (
-      chat.id === next.id &&
-      chat.name === next.name &&
-      chat.description === next.description &&
-      chat.avatar_url === next.avatar_url &&
-      chat.is_forum === next.is_forum &&
-      chat.invite_policy === next.invite_policy &&
-      chat.updated_at === next.updated_at &&
-      chat.unread_count === next.unread_count &&
-      chat.is_pinned === next.is_pinned &&
-      chat.pinned_at === next.pinned_at &&
-      chat.pinned_order === next.pinned_order &&
-      chat.hidden_at === next.hidden_at &&
-      chat.cleared_at === next.cleared_at &&
-      chat.last_message?.id === next.last_message?.id &&
-      chat.last_message?.created_at === next.last_message?.created_at &&
-      chat.last_message?.edited_at === next.last_message?.edited_at &&
-      chat.last_message?.deleted_at === next.last_message?.deleted_at &&
-      chatMemberReceiptSignature(chat) === chatMemberReceiptSignature(next)
-    );
-  });
-}
-
-function chatMemberReceiptSignature(chat: ChatWithLastMessage): string {
-  return (chat.members ?? [])
-    .map((member) => `${member.user_id}:${member.role ?? ""}:${member.last_read_at ?? ""}:${member.last_delivered_at ?? ""}`)
-    .sort()
-    .join("|");
-}
 
 function compareMessages(a: MessageWithSender, b: MessageWithSender): number {
   const byCreatedAt = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
