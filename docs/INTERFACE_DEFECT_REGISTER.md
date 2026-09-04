@@ -1799,3 +1799,25 @@ with a reason attached, rather than a warning repeating every sixty seconds.
 Two of the mutations were re-run independently before deploying: removing the
 memory of a terminal failure fails 3 tests, and forgetting *which* source a
 failure was about — so replaced media would never be retried — fails 1.
+
+## D-036 — lines do not meet at the corner near the edit pencil
+
+Reported by the owner on 2026-09-04 with a screenshot crop: in the chat, near
+the pencil (edit) affordance, borders that should form a corner do not converge
+— "пересечение… почему-то не сходятся корректно линии, некрасиво". The crop
+shows a pencil glyph at the left of a cell and a round avatar at its right, with
+the horizontal and vertical rules meeting untidily between them.
+
+**Not yet reproduced, and deliberately not guessed at.** The crop is small and
+the surrounding layout is not identifiable from it with confidence, so the first
+step is to locate the surface rather than to start adjusting borders. Candidates
+to check, in order: the message row's edited indicator, the chat-list row
+divider where it meets the avatar column, and the composer's edit-in-progress
+banner.
+
+What the fix must respect once the surface is known: a divider that stops short
+of, or overshoots, an adjacent border is usually a `border-*` on one element
+fighting a `divide-*` or a background inset on its neighbour, and the right
+repair is to make one element own the rule rather than to nudge a width. Record
+the reproduction, the viewport and the theme before changing anything — this
+register exists because "polish by eye" is out of scope.

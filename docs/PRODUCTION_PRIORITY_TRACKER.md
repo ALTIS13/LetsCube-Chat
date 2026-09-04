@@ -140,6 +140,16 @@ Use this queue before starting the next production-hardening turn. Do not repeat
 
     Binding constraints: never widen anyone's access as a side effect of tidying; every permission change is proven by a test that fails when reverted; RLS stays on; both live administrators keep working throughout the change.
 
+20. `[ ]` Move the user profile out of the docked panel into a floating window. Requested by the owner on 2026-09-04: opening a user from the chat header gives a panel pinned to the right edge that "занимает чёт много места". The wanted shape is a movable window carrying the same functions, in the spirit of a desktop messenger's contact card.
+
+    Today it is `ChatInfoPanel.tsx`, `md:w-80` with a left border, taking a permanent 320px column out of the conversation for as long as it is open. The functions it carries stay exactly as they are — «Общие медиа», mute, unpin, «Очистить историю у себя», «Удалить чат у себя», the shared-media grid, the bio and the role badges.
+
+    **The machinery already exists and must be reused, not rebuilt.** `artifacts/kub/src/lib/floatingWindow.ts` provides `clampPosition`, `fitSize`, `resolvePlacement`, `defaultPosition`, `MIN_VISIBLE_X/Y` and `DOCK_BREAKPOINT = 640`, and `components/support/SupportWindow.tsx` is a working draggable panel built on it — including the detail that drag is skipped when the pointer starts inside a `button`, which is what keeps the header's own controls clickable. Below `DOCK_BREAKPOINT` the support window docks rather than floats; the profile must do the same, because a floating window on a phone is worse than the panel it replaces.
+
+    Scope: reuse the primitive, keep every existing action and its confirmation, keep the shared-media grid scrollable inside the window, preserve focus handling and Escape-to-close, and keep the panel behaviour on narrow viewports. Position should be remembered per session but must never restore off-screen — `clampPosition` already returns the default for non-finite coordinates, and that path has a test.
+
+    Not in scope: changing what the profile shows. The role badges visible in it are item 19's problem, and the two must not be done in one commit.
+
 ## Last Confirmed Deploy Baseline
 
 - Production web code baseline: `5da93e0` (public home with downloads and the
