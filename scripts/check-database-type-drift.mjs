@@ -23,6 +23,7 @@ const criticalTables = [
 ];
 
 const appFacingFunctions = [
+  "chat_media_counts",
   "global_search",
   "global_search_v2",
   "search_profiles_by_phone",
