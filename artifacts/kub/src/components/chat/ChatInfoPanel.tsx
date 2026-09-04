@@ -42,7 +42,10 @@ import {
   buildMessageMediaSections,
   extractFirstLink,
   isGridMediaKind,
+  parseMessageMediaCounts,
   resolveActiveMediaSection,
+  type ChatMediaCountRow,
+  type MessageMediaCounts,
   type MessageMediaKind,
 } from "@/lib/messageMediaSections";
 import { copyWithFeedback } from "@/lib/actionFeedback";
@@ -69,11 +72,35 @@ type CardView = "root" | "gallery";
 const MEDIA_PAGE_SIZE = 24;
 
 /**
- * Links live in ordinary text messages, so they are not part of the media page
- * and are fetched once rather than paged. The cap keeps the request bounded on
- * a chat that is nothing but links; the section then reads `60+`.
+ * Links live in ordinary text messages, so they are paged by a query of their
+ * own rather than with the media.
  */
 const LINK_PAGE_SIZE = 60;
+
+/** The message types that can carry an attachment worth listing. */
+type MediaMessageType = Message["type"];
+const MEDIA_MESSAGE_TYPES: readonly MediaMessageType[] = ["image", "video", "file", "audio"];
+
+/**
+ * Which message types a kind can be built from.
+ *
+ * Opening a kind narrows the query to these, so «Файлы» is reachable in a chat
+ * whose recent pages hold nothing but photos. Several kinds share a type — a
+ * voice note and an attached track are both `audio`, a round message and a clip
+ * are both `video` — so the classifier still has the last word; this only keeps
+ * the request from spending its page on rows that cannot possibly belong.
+ * `link` is absent because links come from the text query instead.
+ */
+const MEDIA_KIND_MESSAGE_TYPES: Record<MessageMediaKind, readonly MediaMessageType[]> = {
+  photo: ["image"],
+  video: ["video"],
+  gif: ["image", "video"],
+  file: ["file"],
+  link: [],
+  voice: ["audio"],
+  videoMessage: ["video"],
+  audio: ["audio"],
+};
 
 type MemberRow = Profile & { chat_role: "owner" | "admin" | "member" };
 type InviteWithProfiles = {
@@ -258,8 +285,49 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const [links, setLinks] = useState<Message[]>([]);
   const [linksHasMore, setLinksHasMore] = useState(false);
   const [loadingMedia, setLoadingMedia] = useState(false);
+  const [loadingLinks, setLoadingLinks] = useState(false);
   const [mediaHasMore, setMediaHasMore] = useState(false);
   const [openMedia, setOpenMedia] = useState<MediaViewerItem | null>(null);
+  /**
+   * The server's totals, or null while they are unknown.
+   *
+   * Null is not «this chat has nothing»: it is «nobody has counted», which is
+   * the state on a deployment where `chat_media_counts` has not been applied
+   * yet. Everything below falls back to counting the loaded page in that case,
+   * which is what the card did before.
+   */
+  const [mediaCounts, setMediaCounts] = useState<MessageMediaCounts | null>(null);
+  /**
+   * Which kind the media query is currently restricted to, or null for the
+   * mixed page the card opens with.
+   *
+   * A kind is only worth a request of its own once its total is known, because
+   * that is the only case where the card can say the loaded rows fall short.
+   */
+  const [mediaScope, setMediaScope] = useState<MessageMediaKind | null>(null);
+  /**
+   * How many rows the server has already handed over for the current scope.
+   *
+   * Not `media.length`: hidden rows are dropped after they arrive, so the list
+   * grows more slowly than the range does. Paging from the list's length
+   * re-requests rows that were already refused and, once a whole page is
+   * hidden, stops advancing at all — which with automatic loading is a loop
+   * rather than a stuck button.
+   */
+  const mediaCursorRef = useRef(0);
+  const linkCursorRef = useRef(0);
+  /**
+   * The last automatic request came back with nothing.
+   *
+   * Only reachable when a total is stale — a row counted a moment ago and
+   * deleted since. It stops the sentinel asking again and takes the loading
+   * indicator off, so the list ends instead of spinning.
+   */
+  const [autoLoadStalled, setAutoLoadStalled] = useState(false);
+  const [sentinelVisible, setSentinelVisible] = useState(false);
+  const loadingMoreRef = useRef(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const mediaScrollerRef = useRef<HTMLDivElement | null>(null);
   const chatInvitePolicy = readChatInvitePolicy(chat);
   const [invitePolicy, setInvitePolicy] = useState<InvitePolicy>(chatInvitePolicy ?? DEFAULT_INVITE_POLICY);
   const [invitePolicySupported, setInvitePolicySupported] = useState(chatInvitePolicy !== null);
@@ -380,14 +448,25 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     };
   }, [chat.id, isGroup, loadInvitePolicy, loadInvites, loadMembers, supabase]);
 
-  const loadMedia = useCallback(async (reset = false, offset = 0) => {
+  /**
+   * One page of media, either mixed or restricted to a single kind.
+   *
+   * Returns how many rows the server handed over, which is the only honest
+   * answer to «is there any point asking again». The count of rows that reached
+   * the list is not: a page can be entirely hidden rows and still sit in front
+   * of a hundred more.
+   */
+  const loadMedia = useCallback(async (
+    reset = false,
+    kind: MessageMediaKind | null = null,
+  ): Promise<number> => {
     if (!currentUserId) {
       setMedia([]);
       setMediaHasMore(false);
-      return;
+      return 0;
     }
     setLoadingMedia(true);
-    const start = reset ? 0 : offset;
+    const start = reset ? 0 : mediaCursorRef.current;
     const { data: membership } = await supabase
       .from("chat_members")
       .select("cleared_at")
@@ -397,11 +476,15 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     // `audio` joined the list so voice notes have a section of their own; the
     // classifier in `messageMediaSections.ts` decides which section each row
     // lands in from `type` plus the shared voice/round-video predicates.
+    //
+    // A kind narrows the query to the message types it can be built from, which
+    // is how «96 файлов» can be opened in a chat whose recent pages are nothing
+    // but photos. `gif` spans two types because a GIF arrives as either.
     let query = supabase
       .from("messages")
       .select("*")
       .eq("chat_id", chat.id)
-      .in("type", ["image", "video", "file", "audio"])
+      .in("type", kind ? MEDIA_KIND_MESSAGE_TYPES[kind] : MEDIA_MESSAGE_TYPES)
       .is("deleted_at", null)
       .not("media_url", "is", null);
     if (membership?.cleared_at) {
@@ -409,34 +492,38 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     }
     const { data } = await query
       .order("created_at", { ascending: false })
-      .range(start, start + MEDIA_PAGE_SIZE + 12);
+      .range(start, start + MEDIA_PAGE_SIZE - 1);
+    let received = 0;
     if (data) {
       const rawPage = data as Message[];
+      received = rawPage.length;
+      mediaCursorRef.current = start + received;
       const hiddenIds = await fetchHiddenMessageIdSet(supabase, rawPage.map((item) => item.id));
-      const visibleRows = rawPage.filter((item) => !hiddenIds.has(item.id));
-      const page = visibleRows.slice(0, MEDIA_PAGE_SIZE);
+      const page = rawPage.filter((item) => !hiddenIds.has(item.id));
       setMedia((current) => {
         const next = reset ? page : [...current, ...page];
         return Array.from(new Map(next.map((item) => [item.id, item])).values());
       });
-      setMediaHasMore(rawPage.length > MEDIA_PAGE_SIZE || visibleRows.length > MEDIA_PAGE_SIZE);
+      setMediaHasMore(received >= MEDIA_PAGE_SIZE);
     }
     setLoadingMedia(false);
+    return received;
   }, [chat.id, currentUserId, supabase]);
 
   /**
-   * Links are ordinary text messages, so they are outside the media page.
+   * One page of links, which are ordinary text messages outside the media page.
    *
    * Deliberately additive and soft-failing: if this query is rejected the
    * «Ссылки» section simply never appears and every other section still works.
-   * It runs once, when the gallery is opened, and never on the card root.
    */
-  const loadLinks = useCallback(async () => {
+  const loadLinks = useCallback(async (reset = false): Promise<number> => {
     if (!currentUserId) {
       setLinks([]);
       setLinksHasMore(false);
-      return;
+      return 0;
     }
+    setLoadingLinks(true);
+    const start = reset ? 0 : linkCursorRef.current;
     const { data: membership } = await supabase
       .from("chat_members")
       .select("cleared_at")
@@ -459,17 +546,47 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     }
     const { data, error } = await query
       .order("created_at", { ascending: false })
-      .range(0, LINK_PAGE_SIZE);
+      .range(start, start + LINK_PAGE_SIZE - 1);
     if (error || !data) {
-      setLinks([]);
-      setLinksHasMore(false);
-      return;
+      if (reset) {
+        setLinks([]);
+        setLinksHasMore(false);
+      }
+      setLoadingLinks(false);
+      return 0;
     }
     const rows = data as Message[];
+    linkCursorRef.current = start + rows.length;
     const hiddenIds = await fetchHiddenMessageIdSet(supabase, rows.map((item) => item.id));
     const visible = rows.filter((item) => !hiddenIds.has(item.id) && extractFirstLink(item.content));
-    setLinks(visible.slice(0, LINK_PAGE_SIZE));
-    setLinksHasMore(rows.length > LINK_PAGE_SIZE);
+    setLinks((current) => {
+      const next = reset ? visible : [...current, ...visible];
+      return Array.from(new Map(next.map((item) => [item.id, item])).values());
+    });
+    setLinksHasMore(rows.length >= LINK_PAGE_SIZE);
+    setLoadingLinks(false);
+    return rows.length;
+  }, [chat.id, currentUserId, supabase]);
+
+  /**
+   * The exact totals, counted where the rows are.
+   *
+   * Soft-failing on purpose. `chat_media_counts` is applied separately from the
+   * bundle, so a deployment that has the client and not the function must show
+   * the card it showed before rather than an error: `null` counts put every
+   * section back on «what the loaded page contains».
+   */
+  const loadMediaCounts = useCallback(async () => {
+    if (!currentUserId) {
+      setMediaCounts(null);
+      return;
+    }
+    const { data, error } = await supabase.rpc("chat_media_counts", { p_chat_id: chat.id });
+    if (error || !data) {
+      setMediaCounts(null);
+      return;
+    }
+    setMediaCounts(parseMessageMediaCounts(data as ChatMediaCountRow[]));
   }, [chat.id, currentUserId, supabase]);
 
   /**
@@ -488,12 +605,18 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     setLinks([]);
     setLinksHasMore(false);
     setMediaHasMore(false);
+    setMediaCounts(null);
+    setMediaScope(null);
+    setAutoLoadStalled(false);
+    mediaCursorRef.current = 0;
+    linkCursorRef.current = 0;
     setOpenMedia(null);
     setMediaSection(null);
     setView("root");
+    void loadMediaCounts();
     void loadMedia(true);
-    void loadLinks();
-  }, [loadMedia, loadLinks]);
+    void loadLinks(true);
+  }, [loadMedia, loadLinks, loadMediaCounts]);
 
   useEffect(() => {
     const handleHiddenMessage = (event: Event) => {
@@ -502,16 +625,23 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       if (detail.messageId) {
         setMedia((current) => current.filter((item) => item.id !== detail.messageId));
         setLinks((current) => current.filter((item) => item.id !== detail.messageId));
+        // The server counted that row a moment ago, so the total has to be
+        // taken again rather than adjusted by one from here: which section the
+        // row belonged to is not known at this point.
+        void loadMediaCounts();
         return;
       }
       // No longer conditional on the gallery being open: the counts are on the
       // root, so a hidden message has to be taken off them there too.
-      void loadMedia(true);
-      void loadLinks();
+      mediaCursorRef.current = 0;
+      linkCursorRef.current = 0;
+      void loadMediaCounts();
+      void loadMedia(true, mediaScope);
+      void loadLinks(true);
     };
     window.addEventListener(KUB_CHATS_REFRESH_EVENT, handleHiddenMessage);
     return () => window.removeEventListener(KUB_CHATS_REFRESH_EVENT, handleHiddenMessage);
-  }, [chat.id, loadLinks, loadMedia]);
+  }, [chat.id, loadLinks, loadMedia, loadMediaCounts, mediaScope]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -791,11 +921,17 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const otherUser = !isGroup ? (chat.other_user as Profile | null) : null;
 
   // Фото, видео, GIF, файлы, ссылки, голосовые, видеосообщения, аудио — from
-  // the rows already loaded. A section holding nothing is never built, so the
-  // card only ever offers a row for what this chat actually contains.
+  // the server's totals where there are any, and from the loaded rows where
+  // there are not. A section holding nothing is never built, so the card only
+  // ever offers a row for what this chat actually contains — and now offers one
+  // for every kind it contains, including the kinds no loaded page reached.
   const mediaSections = useMemo(
-    () => buildMessageMediaSections([...media, ...links], { hasMore: mediaHasMore || linksHasMore }),
-    [media, links, mediaHasMore, linksHasMore],
+    () => buildMessageMediaSections([...media, ...links], {
+      hasMore: mediaHasMore,
+      hasMoreLinks: linksHasMore,
+      counts: mediaCounts,
+    }),
+    [media, links, mediaHasMore, linksHasMore, mediaCounts],
   );
   const activeMediaSection = resolveActiveMediaSection(mediaSections, mediaSection);
   const activeSection = mediaSections.find((section) => section.kind === activeMediaSection) ?? null;
@@ -813,12 +949,94 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     () => invites.filter((invite) => !(invite.status === "accepted" && memberIdSet.has(invite.invitee_id))),
     [invites, memberIdSet],
   );
-  const hasMoreMedia = mediaHasMore;
+  /**
+   * Whether the open section is worth asking the server about again.
+   *
+   * Per section, not per panel. The button this replaced asked the media page
+   * counter, so it appeared under «Ссылки» — which that counter cannot extend —
+   * and offered to fetch a section that was already complete.
+   * `section.hasMore` is `loaded < total` once the total is known, which is the
+   * reliable form of the question.
+   */
+  const sectionLoading = activeSection?.kind === "link" ? loadingLinks : loadingMedia;
+  const sectionHasMore = activeSection?.hasMore === true && !autoLoadStalled;
 
-  /** Pressing a counted row opens that kind, and only that kind. */
+  /**
+   * The next page of whatever is open.
+   *
+   * Two guards, and both are needed. `sectionLoading` keeps one request in
+   * flight; `autoLoadStalled` handles the case the first guard cannot see, a
+   * request that comes back with nothing while the total still says there is
+   * more — a stale total, a row deleted since it was counted. Without it the
+   * sentinel stays on screen, the effect fires again on every completion, and
+   * the panel spins against the server for as long as it is open.
+   */
+  const loadMoreActiveSection = useCallback(async () => {
+    if (!activeSection || activeSection.hasMore !== true) return;
+    if (autoLoadStalled) return;
+    // The state flags below are the ones a reader can see; this ref is the one
+    // that cannot be stale. A render has to happen before `loadingMedia` is
+    // visible here, and a second press does not have to wait for one.
+    if (loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    try {
+      if (activeSection.kind === "link") {
+        if (loadingLinks) return;
+        if ((await loadLinks(false)) === 0) setAutoLoadStalled(true);
+        return;
+      }
+      if (loadingMedia) return;
+      if ((await loadMedia(false, mediaScope)) === 0) setAutoLoadStalled(true);
+    } finally {
+      loadingMoreRef.current = false;
+    }
+  }, [activeSection, autoLoadStalled, loadLinks, loadMedia, loadingLinks, loadingMedia, mediaScope]);
+
+  /**
+   * Load the next page when the reader reaches the end of the list.
+   *
+   * The sentinel is watched rather than the scroll offset, and the effect below
+   * re-runs when a load finishes: a page that adds nothing visible leaves the
+   * sentinel where it was, and an observer only reports a change, so without the
+   * second look a short page would end the list early.
+   */
+  useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node || view !== "gallery" || !sectionHasMore) {
+      setSentinelVisible(false);
+      return;
+    }
+    if (typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => setSentinelVisible(entries.some((entry) => entry.isIntersecting)),
+      { root: mediaScrollerRef.current, rootMargin: "200px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [view, sectionHasMore, activeMediaSection]);
+
+  useEffect(() => {
+    if (!sentinelVisible) return;
+    void loadMoreActiveSection();
+  }, [sentinelVisible, loadMoreActiveSection]);
+
+  /**
+   * Pressing a counted row opens that kind, and only that kind.
+   *
+   * Once the totals are known the query is narrowed to the message types that
+   * kind can be built from. That is what makes «96 файлов» openable in a chat
+   * whose recent pages hold nothing but photos — the row exists because the
+   * chat holds ninety-six files, and it would open on an empty list otherwise.
+   * Without totals nothing is narrowed and the sub-view behaves as it did.
+   */
   const openMediaSection = (kind: MessageMediaKind) => {
     setMediaSection(kind);
     setView("gallery");
+    setAutoLoadStalled(false);
+    if (!mediaCounts || kind === "link" || mediaScope === kind) return;
+    setMediaScope(kind);
+    mediaCursorRef.current = 0;
+    void loadMedia(true, kind);
   };
 
   const copyUsername = async () => {
@@ -1487,13 +1705,18 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         inert={view !== "gallery"}
       >
         <div
+          ref={mediaScrollerRef}
           className="min-h-0 flex-1 overflow-y-auto p-2"
           id="chat-info-media-panel"
           data-media-kind={activeSection?.kind ?? undefined}
           role={activeSection ? "region" : undefined}
           aria-label={activeSection?.countedLabel}
         >
-          {loadingMedia && media.length === 0 ? (
+          {/* The placeholder stands for the section that is open, not for the
+              panel: with the totals known, «96 файлов» can be pressed in a chat
+              whose loaded page is all photos, and the sub-view then has a
+              section and nothing in it yet. */}
+          {sectionLoading && (activeSection?.loadedCount ?? 0) === 0 ? (
             <div className="grid grid-cols-3 gap-1">
               {Array.from({ length: 6 }).map((_, index) => (
                 <div
@@ -1568,15 +1791,35 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
             </div>
           )}
 
-          {activeSection && hasMoreMedia && (
-            <button
-              type="button"
-              onClick={() => loadMedia(false, media.length)}
-              disabled={loadingMedia}
-              className="mb-3 w-full rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-sm text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-2)]"
-            >
-              Показать ещё
-            </button>
+          {/* The end of the list, and what is at it.
+              Nothing at all once the section is complete: the button that used
+              to stand here was drawn from the media page counter, so it sat
+              under a links section it could not extend and under sections that
+              had already loaded everything. What is here now exists only while
+              `section.hasMore` — `loaded < total` once the server has counted —
+              is still true.
+
+              The sentinel is what the observer watches, and it is also the
+              control a reader who arrives by keyboard needs: nothing scrolls
+              into view when you tab, so an observer alone would leave the rest
+              of the list unreachable. It stays one element across the load
+              rather than swapping a button out for a spinner, because unmounting
+              the button somebody just pressed drops their focus to the document.
+              The animation is a skeleton, which is where this codebase already
+              answers `prefers-reduced-motion` — see `.kub-skeleton`. */}
+          {activeSection && sectionHasMore && (
+            <div ref={sentinelRef} className="mb-3">
+              <button
+                type="button"
+                onClick={() => void loadMoreActiveSection()}
+                aria-busy={sectionLoading}
+                data-testid="chat-info-media-sentinel"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-sm text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-2)]"
+              >
+                {sectionLoading && <KubStableSkeleton width="0.875rem" height="0.875rem" rounded="full" />}
+                <span>{sectionLoading ? "Загружаем ещё…" : "Загрузить ещё"}</span>
+              </button>
+            </div>
           )}
         </div>
       </div>

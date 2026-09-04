@@ -58,6 +58,7 @@
     "@capacitor/cli": "^8.3.4",
     "@capacitor/core": "^8.3.4",
     "@capacitor/geolocation": "8.2.0",
+    "@electric-sql/pglite": "^0.5.8",
     "@playwright/test": "1.59.1",
     "@rollup/rollup-win32-x64-msvc": "4.59.0",
     "@tailwindcss/oxide-win32-x64-msvc": "4.2.1",

@@ -1429,6 +1429,17 @@ export interface Database {
           unread_count: number
         }[]
       }
+      // Exact per-kind media totals for the profile card. SECURITY INVOKER, so
+      // the caller's own RLS on `messages` decides what is counted and a
+      // non-member gets an empty set — see
+      // `.migration-backup/supabase/migrations/20260904110000_chat_media_counts.sql`.
+      chat_media_counts: {
+        Args: { p_chat_id: string }
+        Returns: {
+          kind: string
+          total: number
+        }[]
+      }
       // Atomically returns the existing private chat between caller and
       // target, or creates a new one. SECURITY DEFINER — see
       // `.migration-backup/supabase/migrations/20260504_chats_membership_hardening.sql`.

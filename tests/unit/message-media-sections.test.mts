@@ -11,8 +11,10 @@ import {
   formatMediaCount,
   formatMediaCountLabel,
   isGridMediaKind,
+  isMessageMediaKind,
   isRoundVideoMessageContent,
   isVoiceMessageContent,
+  parseMessageMediaCounts,
   resolveActiveMediaSection,
   selectRussianPluralForm,
   type MessageMediaKind,
@@ -274,4 +276,137 @@ test("a counted row is built for every populated kind and for no empty one", () 
     ["1 фотография", "1 файл", "2 ссылки", "1 голосовое сообщение"],
   );
   assert.deepEqual(buildMessageMediaSections([]).map((section) => section.countedLabel), []);
+});
+
+/**
+ * The exact totals, counted where the rows are.
+ *
+ * `24+ фотографии` was the visible half of the fault. The half that mattered is
+ * that a kind held only outside the loaded page had no row at all, in a list
+ * that reads as a complete inventory.
+ */
+
+test("a kind the page never reached still gets a row when the server counted it", () => {
+  // The reported case: the twenty-four most recent messages are photos, and the
+  // chat holds ninety-six files that no loaded row can testify to.
+  const sections = buildMessageMediaSections([photo(), photo()], {
+    counts: { photo: 1543, file: 96 },
+  });
+  assert.deepEqual(
+    sections.map((section) => section.countedLabel),
+    ["1543 фотографии", "96 файлов"],
+  );
+  const files = sections.find((section) => section.kind === "file");
+  assert.equal(files?.count, 96);
+  assert.equal(files?.loadedCount, 0, "the row claims to hold rows it has not loaded");
+  assert.equal(files?.items.length, 0);
+  assert.equal(files?.hasMore, true, "a row with nothing loaded says it is complete");
+});
+
+test("an exact total is printed as itself, with no «+» to hedge with", () => {
+  const [photos] = buildMessageMediaSections([photo(), photo()], {
+    hasMore: true,
+    counts: { photo: 1543 },
+  });
+  assert.equal(photos.countLabel, "1543", "an exact total is still hedged");
+  assert.equal(photos.countedLabel, "1543 фотографии");
+  // Without a total the hedge is the honest form: «at least 2».
+  const [guessed] = buildMessageMediaSections([photo(), photo()], { hasMore: true });
+  assert.equal(guessed.countLabel, "2+");
+});
+
+test("a total that has fallen behind the list never prints below it", () => {
+  // The count comes from one request and the rows from another, so a message
+  // sent between them is on screen and not in the total. Printing «2» over
+  // three visible photos is a number the reader can disprove by counting.
+  const [photos] = buildMessageMediaSections([photo(), photo(), photo()], { counts: { photo: 2 } });
+  assert.equal(photos.count, 3);
+  assert.equal(photos.hasMore, false);
+});
+
+test("a count of zero is not a row", () => {
+  // The server names only the kinds a chat holds, but a zero must not become a
+  // row even if one arrives.
+  assert.deepEqual(buildMessageMediaSections([], { counts: { photo: 0, file: 0 } }), []);
+  assert.deepEqual(
+    buildMessageMediaSections([], { counts: { photo: 3 } }).map((section) => section.kind),
+    ["photo"],
+  );
+});
+
+test("«ещё» belongs to the section, not to the panel", () => {
+  // The button this replaced was drawn from the media page counter, so it stood
+  // under «Ссылки» — a section that counter cannot extend — and offered to
+  // fetch something already complete.
+  const sections = buildMessageMediaSections([photo(), link()], { hasMore: true, hasMoreLinks: false });
+  const byKind = Object.fromEntries(sections.map((section) => [section.kind, section]));
+  assert.equal(byKind.photo.hasMore, true);
+  assert.equal(byKind.link.hasMore, false, "a complete links section still offers more");
+
+  const withLinks = buildMessageMediaSections([photo(), link()], { hasMore: false, hasMoreLinks: true });
+  const linkSection = withLinks.find((section) => section.kind === "link");
+  assert.equal(linkSection?.hasMore, true);
+  assert.equal(withLinks.find((section) => section.kind === "photo")?.hasMore, false);
+});
+
+test("with a total, «ещё» is what is missing rather than what a page counter guessed", () => {
+  const sections = buildMessageMediaSections([photo(), photo()], {
+    hasMore: false,
+    counts: { photo: 5 },
+  });
+  assert.equal(sections[0].hasMore, true, "two of five loaded and the section says it is complete");
+
+  const complete = buildMessageMediaSections([photo(), photo()], {
+    hasMore: true,
+    counts: { photo: 2 },
+  });
+  assert.equal(complete[0].hasMore, false, "everything is loaded and the section still asks for more");
+});
+
+test("the totals the server sends are read, and anything else is not", () => {
+  assert.deepEqual(
+    parseMessageMediaCounts([
+      { kind: "photo", total: 1543 },
+      { kind: "file", total: 96 },
+    ]),
+    { photo: 1543, file: 96 },
+  );
+  // A kind this build does not know would render as a row with no label.
+  assert.deepEqual(parseMessageMediaCounts([{ kind: "hologram", total: 4 }]), {});
+  assert.deepEqual(parseMessageMediaCounts([{ kind: "photo", total: -1 }]), {});
+  assert.deepEqual(parseMessageMediaCounts([{ kind: "photo", total: null }]), {});
+  assert.deepEqual(parseMessageMediaCounts([{ kind: null, total: 4 }]), {});
+  assert.deepEqual(parseMessageMediaCounts(null), {});
+  assert.deepEqual(parseMessageMediaCounts(undefined), {});
+  // PostgREST can hand a wide integer back as a string.
+  assert.deepEqual(parseMessageMediaCounts([{ kind: "photo", total: "1543" }]), { photo: 1543 });
+  assert.equal(isMessageMediaKind("photo"), true);
+  assert.equal(isMessageMediaKind("hologram"), false);
+  assert.equal(isMessageMediaKind(7), false);
+});
+
+test("an exact total still agrees with the noun beside it, teens included", () => {
+  // The teens were unreachable while every count was capped at the page size of
+  // 24 and printed with a «+». They are ordinary totals now.
+  const cases: Array<[MessageMediaKind, number, string]> = [
+    ["photo", 1, "1 фотография"],
+    ["photo", 2, "2 фотографии"],
+    ["photo", 4, "4 фотографии"],
+    ["photo", 5, "5 фотографий"],
+    ["photo", 11, "11 фотографий"],
+    ["photo", 12, "12 фотографий"],
+    ["photo", 14, "14 фотографий"],
+    ["photo", 21, "21 фотография"],
+    ["photo", 22, "22 фотографии"],
+    ["photo", 111, "111 фотографий"],
+    ["photo", 1543, "1543 фотографии"],
+    ["video", 67, "67 видео"],
+    ["file", 96, "96 файлов"],
+    ["link", 88, "88 ссылок"],
+    ["voice", 619, "619 голосовых сообщений"],
+  ];
+  for (const [kind, total, expected] of cases) {
+    const [section] = buildMessageMediaSections([], { counts: { [kind]: total } });
+    assert.equal(section.countedLabel, expected, `${kind} ${total}`);
+  }
 });

@@ -500,11 +500,15 @@ test("the counts are loaded with the card, not with the sub-view", () => {
     "the media load waits for the gallery again, so the card would show no counts",
   );
   const loader = panelSource.match(
-    /useEffect\(\(\) => \{\s*\n\s*setMedia\(\[\]\);[\s\S]*?\}, \[loadMedia, loadLinks\]\);/,
+    /useEffect\(\(\) => \{\s*\n\s*setMedia\(\[\]\);[\s\S]*?\}, \[loadMedia, loadLinks, loadMediaCounts\]\);/,
   );
   assert.ok(loader, "nothing loads the media when the card opens");
   assert.match(loader[0], /void loadMedia\(true\);/, "the media is never loaded");
-  assert.match(loader[0], /void loadLinks\(\);/, "the links are never loaded, so «ссылок» could not be counted");
+  assert.match(loader[0], /void loadLinks\(true\);/, "the links are never loaded, so «ссылок» could not be counted");
+  // The totals are the card's real source now, and they are asked for with the
+  // card rather than when a kind is opened: the row has to exist before it can
+  // be pressed, and a kind outside the loaded page has no row without them.
+  assert.match(loader[0], /void loadMediaCounts\(\);/, "the exact totals are never fetched");
 
   // Both loaders must be keyed on the id, not on the user object: the store
   // hands back a fresh `currentUser` on any profile change, and the effect
@@ -559,5 +563,128 @@ test("a count the card does not have yet is a placeholder, not an absence", () =
     (loading[0].match(/KubStableSkeleton/g) ?? []).length,
     2,
     "the placeholder guesses how many kinds are coming",
+  );
+});
+
+/**
+ * The sub-view loads as the reader scrolls, and offers nothing when it is done.
+ *
+ * The owner's two complaints about «Показать ещё», in their order: the button
+ * appeared even when there was nothing further to load, and it should not have
+ * been a button. Both were the same cause — «is there more» was asked of the
+ * media page counter, which knows nothing about the section that is open.
+ *
+ * Source contracts again: there is no DOM in this suite, so what is pinned is
+ * the wiring.
+ */
+
+test("the sub-view has no «Показать ещё» button", () => {
+  assert.doesNotMatch(panelSource, /Показать ещё/, "the button is back");
+  // And the question it asked is gone with it: a panel-wide flag standing in
+  // for every section is how it came to be offered under «Ссылки».
+  assert.doesNotMatch(panelSource, /hasMoreMedia/, "the panel-wide «more» flag is back");
+});
+
+test("more is fetched when the end of the list comes into view, not on a scroll offset", () => {
+  const observer = panelSource.match(
+    /const observer = new IntersectionObserver\([\s\S]*?\n {2}\}, \[view, sectionHasMore, activeMediaSection\]\);/,
+  );
+  assert.ok(observer, "nothing watches the end of the list");
+  assert.match(observer[0], /observer\.observe\(node\)/, "the sentinel is never observed");
+  assert.match(observer[0], /observer\.disconnect\(\)/, "the observer outlives the sub-view");
+  assert.match(observer[0], /root: mediaScrollerRef\.current/, "the observer watches the page, not the list's scroller");
+  // Polling offsets is the thing this replaced.
+  assert.doesNotMatch(panelSource, /scrollTop/, "the list is back to reading scroll offsets");
+  assert.doesNotMatch(panelSource, /onScroll=/, "the list is back to reading scroll offsets");
+});
+
+test("the affordance exists only while the open section has more to load", () => {
+  const sentinel = panelSource.match(
+    /\{activeSection && sectionHasMore && \(\s*\n\s*<div ref=\{sentinelRef\}[\s\S]*?\n {10}\)\}/,
+  );
+  assert.ok(sentinel, "the end of the list is not gated on the section having more");
+  // Nothing is left behind when the section is complete: no empty row, no
+  // disabled control, no permanent spinner.
+  assert.match(sentinel[0], /data-testid="chat-info-media-sentinel"/);
+  assert.match(
+    panelSource,
+    /const sectionHasMore = activeSection\?\.hasMore === true && !autoLoadStalled;/,
+    "«more» is no longer asked of the section that is open",
+  );
+  assert.match(
+    panelSource,
+    /const sectionLoading = activeSection\?\.kind === "link" \? loadingLinks : loadingMedia;/,
+    "one loading flag stands for two different queries again",
+  );
+});
+
+test("one request at a time, and none at all once one comes back empty", () => {
+  const loader = panelSource.match(/const loadMoreActiveSection = useCallback\([\s\S]*?\n {2}\}, \[[^\]]*\]\);/);
+  assert.ok(loader, "nothing loads the next page");
+  assert.match(
+    loader[0],
+    /if \(!activeSection \|\| activeSection\.hasMore !== true\) return;/,
+    "a complete section is still fetched",
+  );
+  assert.match(loader[0], /if \(autoLoadStalled\) return;/, "an exhausted section is fetched forever");
+  assert.match(loader[0], /if \(loadingLinks\) return;/, "two link pages can be in flight at once");
+  assert.match(loader[0], /if \(loadingMedia\) return;/, "two media pages can be in flight at once");
+  // A state flag is only visible after a render, and a second press does not
+  // wait for one.
+  assert.match(loader[0], /if \(loadingMoreRef\.current\) return;/, "two presses can both start a page");
+  assert.match(loader[0], /loadingMoreRef\.current = true;/);
+  assert.match(loader[0], /\} finally \{\s*\n\s*loadingMoreRef\.current = false;/, "a failed page locks the list");
+  // The guard that the loading flag cannot provide: a request that returns
+  // nothing while the total still says there is more.
+  assert.match(loader[0], /=== 0\) setAutoLoadStalled\(true\)/, "an empty page does not stop the sentinel");
+  assert.equal(
+    (loader[0].match(/=== 0\) setAutoLoadStalled\(true\)/g) ?? []).length,
+    2,
+    "only one of the two queries can stall",
+  );
+});
+
+test("a page is asked for by cursor, not by how many rows survived", () => {
+  // Hidden rows are dropped after they arrive, so the list grows more slowly
+  // than the range does. Paging from the list's length re-requests rows that
+  // were already refused, and once a whole page is hidden it stops advancing —
+  // which, with the button gone, is a loop rather than a stuck control.
+  assert.match(panelSource, /mediaCursorRef\.current = start \+ received;/, "the media cursor never advances");
+  assert.match(panelSource, /linkCursorRef\.current = start \+ rows\.length;/, "the link cursor never advances");
+  assert.doesNotMatch(panelSource, /loadMedia\(false, media\.length\)/, "paging is back on the list's length");
+});
+
+test("a reader who never scrolls can still reach the rest", () => {
+  const sentinel = panelSource.match(
+    /\{activeSection && sectionHasMore && \(\s*\n\s*<div ref=\{sentinelRef\}[\s\S]*?\n {10}\)\}/,
+  );
+  assert.ok(sentinel, "the end of the list is gone");
+  // Nothing scrolls into view when a reader tabs, so an observer alone leaves
+  // the rest of the list unreachable from the keyboard.
+  assert.match(sentinel[0], /onClick=\{\(\) => void loadMoreActiveSection\(\)\}/, "there is no control to press");
+  assert.match(sentinel[0], /Загрузить ещё/, "the control has no label");
+  // One element across the load: unmounting the button somebody just pressed
+  // drops their focus to the document.
+  assert.equal((sentinel[0].match(/<button/g) ?? []).length, 1, "the control is swapped out mid-load");
+  assert.match(sentinel[0], /aria-busy=\{sectionLoading\}/, "a screen reader is not told a page is loading");
+  // The indicator is a skeleton, which is where this codebase already answers
+  // `prefers-reduced-motion` — see `.kub-skeleton` in index.css.
+  assert.match(sentinel[0], /KubStableSkeleton/, "the loading indicator animates without a reduced-motion answer");
+  assert.match(sentinel[0], /Загружаем ещё…/, "nothing says a page is on its way");
+});
+
+test("opening a kind fetches that kind once its total is known", () => {
+  const opener = panelSource.match(/const openMediaSection = \(kind: MessageMediaKind\) => \{[\s\S]*?\n  \};/);
+  assert.ok(opener, "pressing a counted row no longer opens anything");
+  // «96 файлов» is a row because the chat holds ninety-six files, not because a
+  // loaded page contained one. Without narrowing the query it opens on nothing.
+  assert.match(opener[0], /if \(!mediaCounts \|\| kind === "link" \|\| mediaScope === kind\) return;/);
+  assert.match(opener[0], /void loadMedia\(true, kind\);/, "the kind that was opened is never fetched");
+  assert.match(opener[0], /mediaCursorRef\.current = 0;/, "the new scope pages from the old scope's cursor");
+  assert.match(opener[0], /setAutoLoadStalled\(false\);/, "one exhausted section exhausts every other one");
+  assert.match(
+    panelSource,
+    /\.in\("type", kind \? MEDIA_KIND_MESSAGE_TYPES\[kind\] : MEDIA_MESSAGE_TYPES\)/,
+    "the query is not narrowed to the kind that was opened",
   );
 });

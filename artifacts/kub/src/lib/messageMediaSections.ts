@@ -203,16 +203,73 @@ export const MESSAGE_MEDIA_COUNT_FORMS: Readonly<Record<MessageMediaKind, Russia
   audio: ["аудиозапись", "аудиозаписи", "аудиозаписей"] as const,
 });
 
+/**
+ * A total per kind, as counted where the rows are.
+ *
+ * `chat_media_counts` returns one row per kind that a chat actually holds, so a
+ * kind missing from this map holds nothing — which is different from a kind
+ * this map does not know about, and `null` in place of the whole map is that
+ * second case: the server was not asked, or could not answer.
+ */
+export type MessageMediaCounts = Partial<Record<MessageMediaKind, number>>;
+
+const MESSAGE_MEDIA_KIND_SET: ReadonlySet<string> = new Set<string>(MESSAGE_MEDIA_SECTION_ORDER);
+
+export function isMessageMediaKind(value: unknown): value is MessageMediaKind {
+  return typeof value === "string" && MESSAGE_MEDIA_KIND_SET.has(value);
+}
+
+/** One row of `chat_media_counts`, before it is trusted. */
+export interface ChatMediaCountRow {
+  kind?: unknown;
+  total?: unknown;
+}
+
+/**
+ * The RPC's rows as a map, with anything unrecognised dropped.
+ *
+ * A kind the server names and this build does not know is skipped rather than
+ * shown as a row with no label, so deploying a migration ahead of the client
+ * degrades to the old behaviour for that kind instead of rendering `undefined`.
+ */
+export function parseMessageMediaCounts(
+  rows: readonly ChatMediaCountRow[] | null | undefined,
+): MessageMediaCounts {
+  const counts: MessageMediaCounts = {};
+  for (const row of rows ?? []) {
+    const kind = row?.kind;
+    const total = typeof row?.total === "string" ? Number(row.total) : row?.total;
+    if (!isMessageMediaKind(kind)) continue;
+    if (typeof total !== "number" || !Number.isFinite(total) || total < 0) continue;
+    counts[kind] = Math.trunc(total);
+  }
+  return counts;
+}
+
 export interface MessageMediaSection<TRow extends MessageMediaRow> {
   kind: MessageMediaKind;
   label: string;
   items: TRow[];
-  /** How many are held here. Always `items.length`; named so a caller reads it. */
-  count: number;
   /**
-   * What to print beside the label. `12+` when more rows are still unloaded,
-   * because the exact total is not known until they are — and «at least 12» is
-   * true either way, where a bare `12` beside 300 photos is not.
+   * How many of this kind the chat holds — the server's total when one is
+   * known, and only otherwise `items.length`.
+   */
+  count: number;
+  /** How many are held here, which can be fewer than `count`. */
+  loadedCount: number;
+  /**
+   * More of this kind exist than are held here.
+   *
+   * This is per section on purpose. The sub-view's «show more» used to key off
+   * the media page counter, so it appeared under «Ссылки» — a section that
+   * counter cannot extend — and offered to fetch something that was already
+   * complete.
+   */
+  hasMore: boolean;
+  /**
+   * What to print beside the label. `12+` only when the total is a guess:
+   * «at least 12» is true of a partial page either way, where a bare `12`
+   * beside 300 photos is not. With a server total there is nothing to hedge.
    */
   countLabel: string;
   /**
@@ -243,16 +300,36 @@ export function formatMediaCountLabel(
 }
 
 export interface BuildMediaSectionsOptions {
-  /** More rows exist on the server than were loaded. */
+  /** More media rows exist on the server than were loaded. */
   hasMore?: boolean;
+  /**
+   * More link rows exist on the server than were loaded.
+   *
+   * Separate from `hasMore` because links are ordinary text messages fetched by
+   * their own query: one flag standing for both is how «Ссылки» came to offer
+   * more when it had everything.
+   */
+  hasMoreLinks?: boolean;
+  /**
+   * Exact per-kind totals from `chat_media_counts`, or null when the server was
+   * not asked. With them a kind gets a row because the chat holds it, not
+   * because a page happened to contain it.
+   */
+  counts?: MessageMediaCounts | null;
 }
 
 /**
- * Divide loaded rows into the sections that are actually populated.
+ * Divide the chat's media into the sections it actually holds.
  *
  * A section with nothing in it is never returned. Offering «0 ссылок» in a chat
  * that has never contained a link is a row that does nothing, and eight of them
  * is the whole card spent on emptiness.
+ *
+ * Which sections exist comes from the server's totals when there are any, and
+ * only otherwise from the loaded rows. That distinction is the point: counted
+ * from one page of 24, a chat whose newest messages are all photos has no
+ * «Файлы» row while holding ninety-six files, and a list that looks like an
+ * inventory is then making a false claim by omission.
  */
 export function buildMessageMediaSections<TRow extends MessageMediaRow>(
   rows: readonly TRow[],
@@ -267,17 +344,30 @@ export function buildMessageMediaSections<TRow extends MessageMediaRow>(
     else grouped.set(kind, [row]);
   }
 
+  const counts = options.counts ?? null;
   const sections: MessageMediaSection<TRow>[] = [];
   for (const kind of MESSAGE_MEDIA_SECTION_ORDER) {
-    const items = grouped.get(kind);
-    if (!items || items.length === 0) continue;
+    const items = grouped.get(kind) ?? [];
+    const total = counts?.[kind];
+    const totalKnown = typeof total === "number";
+    if (items.length === 0 && !(totalKnown && total > 0)) continue;
+    // A total below what is already on screen would print a number the reader
+    // can disprove by counting, so the larger of the two wins.
+    const count = totalKnown ? Math.max(total, items.length) : items.length;
+    const hasMore = totalKnown
+      ? items.length < count
+      : (kind === "link" ? options.hasMoreLinks === true : options.hasMore === true);
+    // Only a guessed total is hedged with `+`.
+    const partial = !totalKnown && hasMore;
     sections.push({
       kind,
       label: MESSAGE_MEDIA_SECTION_LABELS[kind],
       items,
-      count: items.length,
-      countLabel: formatMediaCount(items.length, options.hasMore === true),
-      countedLabel: formatMediaCountLabel(kind, items.length, options.hasMore === true),
+      count,
+      loadedCount: items.length,
+      hasMore,
+      countLabel: formatMediaCount(count, partial),
+      countedLabel: formatMediaCountLabel(kind, count, partial),
     });
   }
   return sections;
