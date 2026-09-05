@@ -1644,6 +1644,14 @@ textarea::placeholder, input::placeholder {
     border-radius: 0.45rem;
     padding: 0.3rem 0.45rem;
     color: var(--kub-muted);
+    /* The one 11px left in the product, and deliberately. Everything else moved
+       to 12px when 10 and 11 were folded into one step — 203 places — but this
+       control is 7.5rem wide in two equal columns, so each option has about
+       42px for its label after padding, and "Stable" at 12px semibold fills
+       very nearly all of it. The parent clips rather than overflows, so being
+       wrong here means a cut word rather than a visible mistake. Raising it
+       needs the control widened, which is a layout decision about the settings
+       row, not a typographic one — do not fold it in without measuring. */
     font-size: 0.6875rem;
     font-weight: 600;
     transition: background-color 150ms ease, color 150ms ease;
