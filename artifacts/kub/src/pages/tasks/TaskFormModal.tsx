@@ -771,7 +771,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
               "mb-2 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors",
               chatId === null
                 ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] text-[color:var(--kub-accent-text)]"
-                : "text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)]",
+                : "text-[color:var(--kub-muted)] kub-raise-hover",
             )}
           >
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--kub-surface)]">
@@ -804,7 +804,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                     "flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors",
                     active
                       ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)]"
-                      : "hover:bg-[var(--kub-surface-3)]",
+                      : "kub-raise-hover",
                   )}
                 >
                   <ChatAvatar
@@ -864,7 +864,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
             <button
               type="button"
               onClick={() => { setAssignee(null); setSearch(""); }}
-              className="p-1.5 rounded-lg hover:bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)]"
+              className="p-1.5 rounded-lg kub-raise-hover text-[color:var(--kub-muted)]"
               aria-label="Убрать"
             >
               <KubIcon name="close" size={14} />
@@ -890,7 +890,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                     type="button"
                     key={p.id}
                     onClick={() => { setAssignee(p); setSearch(""); setResults([]); }}
-                    className="w-full flex items-center gap-3 px-3 py-2 hover:bg-[var(--kub-surface-3)] text-left"
+                    className="w-full flex items-center gap-3 px-3 py-2 kub-raise-hover text-left"
                   >
                     <UserAvatar user={p} size="sm" />
                     <div className="min-w-0">

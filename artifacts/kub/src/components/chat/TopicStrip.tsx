@@ -56,7 +56,7 @@ export function TopicStrip({ topics, canManage, onCreate }: TopicStripProps) {
           onClick={() => setCreating(true)}
           title="Создать топик"
           aria-label="Создать топик"
-          className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]"
+          className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors kub-raise-hover text-[color:var(--kub-cyan)]"
         >
           <KubIcon name="create" size={14} />
         </button>

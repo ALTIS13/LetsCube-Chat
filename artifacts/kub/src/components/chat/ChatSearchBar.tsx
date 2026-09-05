@@ -166,7 +166,7 @@ export function ChatSearchBar({ chatId, currentTopicId, isForum = false, message
             type="button"
             onClick={() => jumpTo(Math.max(0, idx - 1))}
             disabled={total === 0 || idx === 0}
-            className="rounded-lg p-1.5 text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-cyan)] disabled:opacity-30"
+            className="rounded-lg p-1.5 text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-cyan)] disabled:opacity-30"
             aria-label="Предыдущий"
           >
             <KubIcon name="chevronUp" size={16} />
@@ -175,7 +175,7 @@ export function ChatSearchBar({ chatId, currentTopicId, isForum = false, message
             type="button"
             onClick={() => jumpTo(Math.min(total - 1, idx + 1))}
             disabled={total === 0 || idx === total - 1}
-            className="rounded-lg p-1.5 text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-cyan)] disabled:opacity-30"
+            className="rounded-lg p-1.5 text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-cyan)] disabled:opacity-30"
             aria-label="Следующий"
           >
             <KubIcon name="chevronDown" size={16} />
@@ -185,7 +185,7 @@ export function ChatSearchBar({ chatId, currentTopicId, isForum = false, message
         <button
           type="button"
           onClick={onClose}
-          className="rounded-lg p-1.5 text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)]"
+          className="rounded-lg p-1.5 text-[color:var(--kub-muted)] transition-colors kub-raise-hover"
           aria-label="Закрыть"
         >
           <KubIcon name="close" size={16} />
@@ -222,7 +222,7 @@ export function ChatSearchBar({ chatId, currentTopicId, isForum = false, message
                   "flex w-full min-w-0 items-start gap-2 rounded-xl px-2 py-1.5 text-left text-xs transition-colors",
                   active
                     ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,var(--kub-surface-2))] text-[color:var(--kub-text)]"
-                    : "hover:bg-[var(--kub-surface-2)]",
+                    : "kub-raise-hover",
                 ].join(" ")}
               >
                 <span className="mt-0.5 shrink-0 text-[10px] tabular-nums text-[color:var(--kub-muted)]">

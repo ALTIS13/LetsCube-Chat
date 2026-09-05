@@ -75,7 +75,7 @@ export function ForwardModal({ message, onClose, onForward }: ForwardModalProps)
               key={chat.id}
               onClick={() => handlePick(chat.id)}
               disabled={busyId !== null}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)] disabled:opacity-50"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors kub-raise-hover disabled:opacity-50"
             >
               <ChatAvatar chat={chat} size="sm" />
               <div className="text-left min-w-0 flex-1">

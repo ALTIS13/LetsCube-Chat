@@ -78,7 +78,7 @@ export function AdminLayout() {
         <Link
           href="/"
           aria-label="Назад в чат"
-          className="kub-icon-action p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] transition-colors text-[color:var(--kub-cyan)] flex-shrink-0"
+          className="kub-icon-action p-1.5 rounded-lg kub-raise-hover transition-colors text-[color:var(--kub-cyan)] flex-shrink-0"
         >
           <KubIcon name="back" size={20} />
         </Link>

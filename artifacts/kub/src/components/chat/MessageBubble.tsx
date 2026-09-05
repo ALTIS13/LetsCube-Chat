@@ -1098,7 +1098,7 @@ export function MessageBubble({
           // and 3.90:1, which clears the 3:1 WCAG asks of a UI boundary. It is
           // the accent already used for this chip's hover and focus, so
           // nothing new is introduced.
-          className="inline-flex h-4 items-center gap-0.5 rounded-full border border-[color:var(--kub-cyan)] bg-[var(--kub-surface-3)] px-1 text-[10px] leading-none text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-accent-text)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--kub-cyan)]"
+          className="inline-flex h-4 items-center gap-0.5 rounded-full border border-[color:var(--kub-cyan)] bg-[var(--kub-surface-3)] px-1 text-[10px] leading-none text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-accent-text)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--kub-cyan)]"
           title={groupReadAriaLabel}
           aria-label={groupReadAriaLabel}
           onClick={(event) => {
@@ -1112,7 +1112,7 @@ export function MessageBubble({
       )}
       <button
         type="button"
-        className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)] sm:hidden"
+        className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-[color:var(--kub-muted)] kub-raise-hover sm:hidden"
         aria-label="Действия сообщения"
         onClick={(event) => {
           event.stopPropagation();
@@ -1249,7 +1249,7 @@ export function MessageBubble({
                     key={emoji}
                     onClick={() => { onReaction(emoji); closeContext(); }}
                     className={cn(
-                      "kub-interactive flex min-w-0 flex-1 items-center justify-center rounded-full transition-colors hover:bg-[var(--kub-surface-3)]",
+                      "kub-interactive flex min-w-0 flex-1 items-center justify-center rounded-full transition-colors kub-raise-hover",
                       compactContextMenu ? "h-11 text-2xl" : "h-10 text-xl",
                     )}
                     aria-label={`Поставить реакцию ${emoji}`}
@@ -1264,7 +1264,7 @@ export function MessageBubble({
                     openFullReactionCatalog({ x: rect.left + rect.width / 2, y: rect.top });
                   }}
                   className={cn(
-                    "kub-interactive flex min-w-0 flex-1 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]",
+                    "kub-interactive flex min-w-0 flex-1 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]",
                     compactContextMenu ? "h-11" : "h-10",
                   )}
                   aria-label="Больше реакций"
@@ -1283,7 +1283,7 @@ export function MessageBubble({
                 key={label}
                 onClick={action}
                 className={cn(
-                  "flex w-full items-center gap-3 whitespace-nowrap px-4 py-2.5 text-left text-sm transition-colors hover:bg-[var(--kub-surface-3)]",
+                  "flex w-full items-center gap-3 whitespace-nowrap px-4 py-2.5 text-left text-sm transition-colors kub-raise-hover",
                   danger ? "text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-text)]"
                 )}
               >
@@ -1327,7 +1327,7 @@ export function MessageBubble({
                 <button
                   key={emoji}
                   onClick={() => { onReaction(emoji); onCloseReactionMenu?.(); }}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-lg transition-all hover:scale-125 hover:bg-[var(--kub-surface-3)]"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-lg transition-all hover:scale-125 kub-raise-hover"
                   aria-label={`Поставить реакцию ${emoji}`}
                 >
                   {emoji}
@@ -1336,7 +1336,7 @@ export function MessageBubble({
               <button
                 type="button"
                 onClick={() => setReactionCatalogOpen(true)}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]"
                 aria-label="Больше реакций"
                 title="Больше реакций"
               >
@@ -1442,7 +1442,7 @@ export function MessageBubble({
                   onClick={handleToggleReactionMenu}
                   data-reaction-trigger="true"
                   aria-label="Реакция"
-                  className="kub-interactive flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]"
+                  className="kub-interactive flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]"
                 >
                   <KubIcon name="smile" size={14} />
                 </button>
@@ -1450,7 +1450,7 @@ export function MessageBubble({
               <button
                 onClick={onReply}
                 aria-label="Ответить"
-                className="kub-interactive flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]"
+                className="kub-interactive flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]"
               >
                 <KubIcon name="reply" size={14} />
               </button>
@@ -1461,7 +1461,7 @@ export function MessageBubble({
                   openContextAt(rect.left, rect.bottom + 4);
                 }}
                 aria-label="Действия сообщения"
-                className="kub-interactive flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]"
+                className="kub-interactive flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]"
               >
                 <KubIcon name="more" size={14} />
               </button>
@@ -1627,7 +1627,7 @@ export function MessageBubble({
                 {message.type === "text" && onEditFailedSend && (
                   <button
                     type="button"
-                    className="inline-flex h-6 items-center rounded-full px-2 font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)]"
+                    className="inline-flex h-6 items-center rounded-full px-2 font-semibold text-[color:var(--kub-muted)] kub-raise-hover"
                     onClick={(event) => { event.stopPropagation(); onEditFailedSend(); }}
                   >
                     Изменить

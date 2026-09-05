@@ -102,7 +102,7 @@ export function TaskAssignModal({ taskId, currentAssignee, onClose, onDone }: Pr
           <button
             type="button"
             onClick={() => { setPicked(null); setSearch(""); }}
-            className="p-1.5 rounded-lg hover:bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)]"
+            className="p-1.5 rounded-lg kub-raise-hover text-[color:var(--kub-muted)]"
             aria-label="Сбросить"
           >
             <KubIcon name="close" size={14} />
@@ -129,7 +129,7 @@ export function TaskAssignModal({ taskId, currentAssignee, onClose, onDone }: Pr
                   type="button"
                   key={p.id}
                   onClick={() => { setPicked(p); setSearch(""); setResults([]); }}
-                  className="w-full flex items-center gap-3 px-3 py-2 hover:bg-[var(--kub-surface-3)] text-left"
+                  className="w-full flex items-center gap-3 px-3 py-2 kub-raise-hover text-left"
                 >
                   <UserAvatar user={p} size="sm" />
                   <div className="min-w-0">

@@ -176,7 +176,7 @@ export function GroupInviteModal({
               return (
                 <div
                   key={user.id}
-                  className="flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-[var(--kub-surface-2)]"
+                  className="flex items-center gap-3 rounded-xl px-2 py-2 transition-colors kub-raise-hover"
                 >
                   <UserAvatar user={user} size="sm" />
                   <div className="min-w-0 flex-1">

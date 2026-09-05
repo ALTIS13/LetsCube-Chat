@@ -70,7 +70,7 @@ export function PinnedMessage({ messages, onJump, onUnpin }: PinnedMessageProps)
             jumpToMessage(selectedMessage);
           }
         }}
-        className="relative flex min-w-0 cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors hover:bg-[var(--kub-surface-2)]"
+        className="relative flex min-w-0 cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors kub-raise-hover"
       >
         <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-[var(--kub-cyan)]" />
         <KubIcon name="pin" size={14} className="flex-shrink-0 text-[color:var(--kub-accent-text)]" />
@@ -97,7 +97,7 @@ export function PinnedMessage({ messages, onJump, onUnpin }: PinnedMessageProps)
               event.stopPropagation();
               setOpen((value) => !value);
             }}
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]"
             aria-label="Показать список закреплённых сообщений"
             title="Список закреплённых"
           >
@@ -112,7 +112,7 @@ export function PinnedMessage({ messages, onJump, onUnpin }: PinnedMessageProps)
               event.stopPropagation();
               unpinMessage(selectedMessage);
             }}
-            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]"
+            className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]"
             aria-label="Открепить сообщение"
             title="Открепить"
           >
@@ -126,7 +126,7 @@ export function PinnedMessage({ messages, onJump, onUnpin }: PinnedMessageProps)
             setDismissed(true);
             setOpen(false);
           }}
-          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]"
+          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]"
           aria-label="Скрыть закреплённые сообщения"
           title="Скрыть"
         >
@@ -143,7 +143,7 @@ export function PinnedMessage({ messages, onJump, onUnpin }: PinnedMessageProps)
             {visibleMessages.map((message) => (
               <div
                 key={message.id}
-                className="group flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-[var(--kub-surface-2)]"
+                className="group flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 transition-colors kub-raise-hover"
               >
                 <button
                   type="button"
@@ -163,7 +163,7 @@ export function PinnedMessage({ messages, onJump, onUnpin }: PinnedMessageProps)
                 <button
                   type="button"
                   onClick={() => jumpToMessage(message)}
-                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]"
+                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]"
                   aria-label="Перейти к сообщению"
                   title="Перейти к сообщению"
                 >
@@ -173,7 +173,7 @@ export function PinnedMessage({ messages, onJump, onUnpin }: PinnedMessageProps)
                   <button
                     type="button"
                     onClick={() => unpinMessage(message)}
-                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]"
+                    className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]"
                     aria-label="Открепить"
                     title="Открепить"
                   >

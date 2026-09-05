@@ -41,13 +41,13 @@ export function PublicPageShell({ children, scrollRootRef }: PublicPageShellProp
           >
             <Link
               href="/privacy"
-              className="inline-flex min-h-11 items-center rounded-md px-2 py-2 text-[color:var(--kub-text)] transition-colors hover:bg-[var(--kub-surface-2)]"
+              className="inline-flex min-h-11 items-center rounded-md px-2 py-2 text-[color:var(--kub-text)] transition-colors kub-raise-hover"
             >
               Конфиденциальность
             </Link>
             <Link
               href="/support"
-              className="hidden min-h-11 items-center rounded-md px-2 py-2 text-[color:var(--kub-text)] transition-colors hover:bg-[var(--kub-surface-2)] sm:inline-flex"
+              className="hidden min-h-11 items-center rounded-md px-2 py-2 text-[color:var(--kub-text)] transition-colors kub-raise-hover sm:inline-flex"
             >
               Поддержка
             </Link>

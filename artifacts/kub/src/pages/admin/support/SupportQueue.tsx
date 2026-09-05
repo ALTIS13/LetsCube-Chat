@@ -82,7 +82,7 @@ export function SupportQueue({
               "kub-button kub-interactive h-9 shrink-0 rounded-lg px-3 text-xs font-semibold transition-colors",
               filter === item.id
                 ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
-                : "text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-text)]",
+                : "text-[color:var(--kub-muted)] kub-raise-hover hover:text-[color:var(--kub-text)]",
             )}
           >
             {item.label}

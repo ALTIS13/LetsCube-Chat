@@ -235,7 +235,7 @@ function SanctionsHistory({ audit }: { audit: ReturnType<typeof useAuditLogs> })
             <button
               disabled={audit.page === 0}
               onClick={() => audit.setPage(Math.max(0, audit.page - 1))}
-              className="kub-icon-action p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
+              className="kub-icon-action p-1.5 rounded-lg kub-raise-hover disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
               aria-label="Предыдущая страница"
             >
               <KubIcon name="chevronLeft" size={16} />
@@ -243,7 +243,7 @@ function SanctionsHistory({ audit }: { audit: ReturnType<typeof useAuditLogs> })
             <button
               disabled={audit.page + 1 >= totalPages}
               onClick={() => audit.setPage(audit.page + 1)}
-              className="kub-icon-action p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
+              className="kub-icon-action p-1.5 rounded-lg kub-raise-hover disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
               aria-label="Следующая страница"
             >
               <KubIcon name="chevronRight" size={16} />
@@ -308,7 +308,7 @@ function CollapsibleSection({
       <button
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        className="w-full flex items-center gap-2 px-4 h-12 text-left hover:bg-[var(--kub-surface-2)] transition-colors"
+        className="w-full flex items-center gap-2 px-4 h-12 text-left kub-raise-hover transition-colors"
       >
         <KubIcon name={open ? "chevronDown" : "chevronRight"} size={16} tone="muted" />
         <div
@@ -374,7 +374,7 @@ function RowCard({
       <button
         onClick={onRemove}
         aria-label="Снять ограничение"
-        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold hover:bg-[var(--kub-surface-2)] flex-shrink-0 text-[color:var(--kub-accent-text)]"
+        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold kub-raise-hover flex-shrink-0 text-[color:var(--kub-accent-text)]"
       >
         <KubIcon name="rotate" size={12} />
         Снять

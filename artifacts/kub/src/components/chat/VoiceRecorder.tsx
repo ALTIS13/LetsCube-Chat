@@ -83,7 +83,7 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
         </div>
         <button
           onClick={onCancel}
-          className="flex-shrink-0 min-h-[40px] px-4 rounded-lg text-xs font-semibold transition-colors hover:bg-[var(--kub-surface-3)] text-[color:var(--kub-text)]"
+          className="flex-shrink-0 min-h-[40px] px-4 rounded-lg text-xs font-semibold transition-colors kub-raise-hover text-[color:var(--kub-text)]"
         >
           Закрыть
         </button>

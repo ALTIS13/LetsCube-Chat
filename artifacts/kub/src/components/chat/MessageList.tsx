@@ -729,7 +729,7 @@ export function MessageList({
           <button
             type="button"
             onClick={cancelSelection}
-            className="inline-flex h-8 items-center justify-center rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)]"
+            className="inline-flex h-8 items-center justify-center rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-muted)] kub-raise-hover"
           >
             Отмена
           </button>

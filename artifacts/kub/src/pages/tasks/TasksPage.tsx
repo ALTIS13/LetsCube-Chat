@@ -342,7 +342,7 @@ export function TasksPage() {
 
   if (taskChecking) {
     return (
-      <div className="flex flex-col h-[100dvh] bg-[var(--kub-bg)]">
+      <div className="flex flex-col h-[100dvh]">
         <KubHeader
           title="Задачи"
           subtitle="Проверяем права доступа"
@@ -350,7 +350,7 @@ export function TasksPage() {
             <button
               type="button"
               onClick={() => setLocation("/")}
-              className="kub-icon-action kub-interactive rounded-lg hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]"
+              className="kub-icon-action kub-interactive rounded-lg kub-raise-hover text-[color:var(--kub-muted)]"
               aria-label="Назад"
             >
               <KubIcon name="back" size={18} />
@@ -366,7 +366,7 @@ export function TasksPage() {
 
   if (!canViewTasks) {
     return (
-      <div className="flex flex-col h-[100dvh] bg-[var(--kub-bg)]">
+      <div className="flex flex-col h-[100dvh]">
         <KubHeader
           title="Задачи"
           subtitle="Раздел доступен по ролям и правам"
@@ -374,7 +374,7 @@ export function TasksPage() {
             <button
               type="button"
               onClick={() => setLocation("/")}
-              className="kub-icon-action kub-interactive rounded-lg hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]"
+              className="kub-icon-action kub-interactive rounded-lg kub-raise-hover text-[color:var(--kub-muted)]"
               aria-label="Назад"
             >
               <KubIcon name="back" size={18} />
@@ -397,8 +397,15 @@ export function TasksPage() {
     );
   }
 
+  // No background on the page root, in any of its three states. Unlike the bots
+  // page — where the fill only ever showed as a strip behind the header — this
+  // one really was the ground the task list stood on, because the scroller
+  // carries no fill of its own. That is the point: every row brings its own
+  // surface (`kub-panel` in card mode, --kub-surface in list mode), so the list
+  // lies on the ambient exactly the way the message feed does, and the header
+  // above it gets something other than one flat colour to blur.
   return (
-    <div className="flex flex-col h-[100dvh] bg-[var(--kub-bg)]">
+    <div className="flex flex-col h-[100dvh]">
       <KubHeader
         title="Задачи"
         subtitle={canCreateTasks ? "Управление задачами локации" : "Ваши задачи"}
@@ -406,7 +413,7 @@ export function TasksPage() {
           <button
             type="button"
             onClick={() => setLocation("/")}
-            className="kub-icon-action kub-interactive rounded-lg hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]"
+            className="kub-icon-action kub-interactive rounded-lg kub-raise-hover text-[color:var(--kub-muted)]"
             aria-label="Назад"
           >
             <KubIcon name="back" size={18} />

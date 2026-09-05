@@ -350,7 +350,7 @@ export function LocationsTab() {
                   type="button"
                   onClick={() => setSelectedId(location.id)}
                   className={cn(
-                    "flex w-full min-w-0 items-center justify-between gap-2 border-b border-[color:var(--kub-border-color)] px-3 py-3 text-left last:border-b-0 hover:bg-[var(--kub-surface-2)]",
+                    "flex w-full min-w-0 items-center justify-between gap-2 border-b border-[color:var(--kub-border-color)] px-3 py-3 text-left last:border-b-0 kub-raise-hover",
                     selectedLocation?.id === location.id && "bg-[color-mix(in_srgb,var(--kub-cyan)_10%,transparent)]",
                   )}
                 >

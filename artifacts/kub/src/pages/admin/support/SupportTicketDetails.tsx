@@ -97,7 +97,7 @@ export function SupportTicketDetails({
           type="button"
           onClick={onBack}
           aria-label="Назад к очереди"
-          className="mt-0.5 inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-2)] md:hidden"
+          className="mt-0.5 inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-cyan)] kub-raise-hover md:hidden"
         >
           <KubIcon name="back" size={18} />
         </button>

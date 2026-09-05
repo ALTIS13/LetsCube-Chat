@@ -53,7 +53,7 @@ export function BotsPage() {
       <KubHeader
         title={<h1 className="truncate text-sm font-semibold">Мои боты</h1>}
         subtitle={eligibility ? `${eligibility.active_bot_count} из ${eligibility.max_bots}` : "Управление Bot API"}
-        leading={<button type="button" onClick={() => setLocation("/")} className="flex h-11 w-11 items-center justify-center rounded-md text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)]" aria-label="Назад к чатам"><KubIcon name="back" size={18} /></button>}
+        leading={<button type="button" onClick={() => setLocation("/")} className="flex h-11 w-11 items-center justify-center rounded-md text-[color:var(--kub-muted)] kub-raise-hover" aria-label="Назад к чатам"><KubIcon name="back" size={18} /></button>}
         trailing={
           <div className="flex items-center gap-2">
             {/* The Bot API documentation has existed at /bots/docs all along and
@@ -63,7 +63,7 @@ export function BotsPage() {
               href="/bots/docs"
               target="_blank"
               rel="noreferrer"
-              className="kub-button kub-interactive inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-text)]"
+              className="kub-button kub-interactive inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]"
             >
               <KubIcon name="help" size={15} />
               Документация
@@ -91,7 +91,7 @@ export function BotsPage() {
           {selectedId ? (
             <>
               <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[color:var(--kub-border-color)] px-3 md:hidden">
-                <button type="button" onClick={() => select(null)} className="flex h-11 min-w-11 items-center gap-2 rounded-md px-2 text-sm text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)]" aria-label="Назад к списку"><KubIcon name="back" size={18} />К списку</button>
+                <button type="button" onClick={() => select(null)} className="flex h-11 min-w-11 items-center gap-2 rounded-md px-2 text-sm text-[color:var(--kub-muted)] kub-raise-hover" aria-label="Назад к списку"><KubIcon name="back" size={18} />К списку</button>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                 {detail.isLoading && <DetailSkeleton />}
@@ -118,7 +118,7 @@ function selectedBotId(searchParams: URLSearchParams) {
 
 function BotRow({ bot, selected, onSelect }: { bot: BotSummary; selected: boolean; onSelect(): void }) {
   const tone = bot.state === "active" ? "online" : bot.state === "paused" ? "warn" : bot.state === "deleted" ? "muted" : "danger";
-  return <button type="button" onClick={onSelect} aria-current={selected ? "true" : undefined} className={cn("flex w-full min-w-0 items-start gap-3 rounded-md border px-3 py-3 text-left transition-colors", selected ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_8%,var(--kub-surface))]" : "border-transparent hover:border-[color:var(--kub-border-color)] hover:bg-[var(--kub-surface-2)]")}><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]"><KubIcon name="bot" size={21} /></div><div className="min-w-0 flex-1"><div className="break-words text-sm font-semibold text-[color:var(--kub-text)]">{bot.display_name}</div><div className="break-all text-xs text-[color:var(--kub-muted)]">@{bot.username}</div><div className="mt-2 flex flex-wrap items-center gap-1.5"><KubBadge tone={tone} dot className="text-[color:var(--kub-text)]">{STATE_COPY[bot.state]}</KubBadge><KubBadge tone="muted">{bot.role === "owner" ? "Владелец" : "Разработчик"}</KubBadge></div><div className="mt-2 text-[11px] text-[color:var(--kub-muted)]">Обновлён {formatDate(bot.updated_at)}</div></div><KubIcon name="chevronRight" size={16} className="mt-2 shrink-0 text-[color:var(--kub-muted)]" /></button>;
+  return <button type="button" onClick={onSelect} aria-current={selected ? "true" : undefined} className={cn("flex w-full min-w-0 items-start gap-3 rounded-md border px-3 py-3 text-left transition-colors", selected ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_8%,var(--kub-surface))]" : "border-transparent hover:border-[color:var(--kub-border-color)] kub-raise-hover")}><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]"><KubIcon name="bot" size={21} /></div><div className="min-w-0 flex-1"><div className="break-words text-sm font-semibold text-[color:var(--kub-text)]">{bot.display_name}</div><div className="break-all text-xs text-[color:var(--kub-muted)]">@{bot.username}</div><div className="mt-2 flex flex-wrap items-center gap-1.5"><KubBadge tone={tone} dot className="text-[color:var(--kub-text)]">{STATE_COPY[bot.state]}</KubBadge><KubBadge tone="muted">{bot.role === "owner" ? "Владелец" : "Разработчик"}</KubBadge></div><div className="mt-2 text-[11px] text-[color:var(--kub-muted)]">Обновлён {formatDate(bot.updated_at)}</div></div><KubIcon name="chevronRight" size={16} className="mt-2 shrink-0 text-[color:var(--kub-muted)]" /></button>;
 }
 
 function EligibilityNotice({ eligibility }: { eligibility: NonNullable<ReturnType<typeof useBots>["data"]>["eligibility"] }) {

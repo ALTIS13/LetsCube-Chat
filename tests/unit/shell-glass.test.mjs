@@ -130,6 +130,36 @@ const veiled = [
   ["components/kub/KubFeedbackViewport.tsx", 1],
   ["components/chat/ChatHeader.tsx", 5],
   ["components/chat/MessageInput.tsx", 8],
+  ["components/chat/ChatInfoPanel.tsx", 20],
+  ["components/chat/MessageBubble.tsx", 11],
+  ["components/chat/PinnedMessage.tsx", 7],
+  ["components/chat/ChatSearchBar.tsx", 4],
+  ["components/chat/ChatMediaPlayback.tsx", 3],
+  ["components/chat/VideoMessageRecorderModal.tsx", 2],
+  ["components/chat/VoiceRecorder.tsx", 1],
+  ["components/chat/TopicStrip.tsx", 1],
+  ["components/chat/MessageList.tsx", 1],
+  ["components/chat/GroupInviteModal.tsx", 1],
+  ["components/chat/ForwardModal.tsx", 1],
+  // Six, not seven. The user row was written as a card on a phone and a bare
+  // line on a desktop, so it carried two hovers, one per ground —
+  // `hover:bg-[var(--kub-surface-3)] sm:hover:bg-[var(--kub-surface-2)]`. The
+  // veil is one rule against whatever the ground turns out to be, so the pair
+  // is one class at both widths.
+  ["pages/admin/UsersTab.tsx", 6],
+  ["pages/admin/AuditTab.tsx", 6],
+  ["pages/admin/RolesPermissionsTab.tsx", 4],
+  ["pages/admin/BansMutesTab.tsx", 4],
+  ["pages/admin/AdminLayout.tsx", 1],
+  ["pages/admin/LocationsTab.tsx", 1],
+  ["pages/admin/support/SupportQueue.tsx", 1],
+  ["pages/admin/support/SupportTicketDetails.tsx", 1],
+  ["pages/tasks/TasksPage.tsx", 3],
+  ["pages/tasks/TaskFormModal.tsx", 4],
+  ["pages/tasks/TaskAssignModal.tsx", 2],
+  ["pages/bots/BotsPage.tsx", 4],
+  ["pages/public/PublicHomePage.tsx", 1],
+  ["pages/public/PublicPageShell.tsx", 2],
 ];
 
 /** The class string of one surface, found by a landmark that is not the glass class itself. */
@@ -230,6 +260,17 @@ for (const [file, needle, count] of raised) {
 /** Any neutral elevation fill spent on a hover, which the veil replaces. */
 const LEFTOVER = /hover:bg-\[var\(--kub-(raised|surface-2|surface-3)\)\]/g;
 
+/**
+ * `.kub-raise-hover` is a plain class in index.css, not a utility Tailwind
+ * knows how to compose, so a variant written in front of it — `sm:`, `md:`,
+ * `group-hover:` — matches no rule and emits no CSS. Nothing warns: the build
+ * passes, the class sits in the markup, and the hover is simply gone at that
+ * breakpoint. This is the exact shape a search-and-replace produces when it
+ * walks over `sm:hover:bg-[var(--kub-surface-2)]`, which one row in UsersTab
+ * really did carry, so it is worth a line of its own.
+ */
+const PREFIXED_VEIL = /[A-Za-z0-9_-]:kub-raise-hover/g;
+
 for (const [file, count] of veiled) {
   test(`${file} finds its hovers with the veil, not with a fixed colour`, () => {
     const source = read(file);
@@ -244,6 +285,13 @@ for (const [file, count] of veiled) {
       0,
       `${file}: ${leftBehind} hover(s) still painted with a fixed elevation colour, which goes ` +
         "flush the moment the surface under it moves",
+    );
+    const prefixed = (withoutComments(source).match(PREFIXED_VEIL) ?? []).length;
+    assert.equal(
+      prefixed,
+      0,
+      `${file}: ${prefixed} veil class(es) carry a variant prefix, which Tailwind emits no rule ` +
+        "for — the hover is absent at that breakpoint and nothing reports it",
     );
   });
 }
@@ -295,6 +343,39 @@ for (const [file, needle] of transparentShells) {
     );
   });
 }
+
+/**
+ * The tasks page is not in the list above because it does not have one shell:
+ * it returns three, one per state — checking permissions, permission refused,
+ * and the list itself — and every one of them painted --kub-bg across the full
+ * height. `classString` finds the first match and would have reported the whole
+ * page clean while two of the three states still painted over the ambient,
+ * which is the shape of failure this file keeps warning about. So the roots are
+ * counted, and each is asserted separately.
+ *
+ * This page differs from the bots page in one way worth writing down: there the
+ * fill only ever showed as a strip behind the header, because both panes below
+ * painted their own. Here the scroller carries no fill, so the fill really was
+ * the ground under the task list. Removing it puts the list on the ambient on
+ * purpose — every row brings its own surface, `kub-panel` in card mode and
+ * --kub-surface in list mode, exactly as the message feed does.
+ */
+test("pages/tasks/TasksPage.tsx lets the page ambient through in each of its three states", () => {
+  const roots = read("pages/tasks/TasksPage.tsx").match(/className="flex flex-col h-\[100dvh\][^"]*"/g) ?? [];
+  assert.equal(
+    roots.length,
+    3,
+    `expected the page's three state shells, found ${roots.length} — if a state was added or ` +
+      "removed, check its root before changing this number",
+  );
+  for (const root of roots) {
+    assert.doesNotMatch(
+      root,
+      /\bbg-\[var\(--kub-(bg|chat-bg|surface)/,
+      `a tasks page state paints over --kub-ambient, so the header above it blurs a flat colour: ${root}`,
+    );
+  }
+});
 
 /** Comments explain the measurements; only the code is under this rule. */
 const withoutComments = (source) =>

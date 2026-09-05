@@ -516,7 +516,7 @@ export function ChatMediaPlaybackBar({ compact = false }: { compact?: boolean } 
             type="button"
             onClick={playback.previous}
             disabled={!playback.canPrevious}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-3)] disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Предыдущее медиа"
           >
             <KubIcon name="chevronLeft" size={18} />
@@ -533,7 +533,7 @@ export function ChatMediaPlaybackBar({ compact = false }: { compact?: boolean } 
             type="button"
             onClick={playback.next}
             disabled={!playback.canNext}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-3)] disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Следующее медиа"
           >
             <KubIcon name="chevronRight" size={18} />
@@ -571,7 +571,7 @@ export function ChatMediaPlaybackBar({ compact = false }: { compact?: boolean } 
             type="button"
             data-testid="chat-media-playback-close"
             onClick={playback.close}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-3)]"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover"
             aria-label="Закрыть панель воспроизведения"
           >
             <KubIcon name="close" size={16} />

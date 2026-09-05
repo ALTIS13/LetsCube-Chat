@@ -438,7 +438,7 @@ export function VideoMessageRecorderModal({
       className={cn(
         "flex h-10 w-10 items-center justify-center rounded-full border text-white shadow-lg backdrop-blur transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:cursor-wait disabled:opacity-70",
         isRound
-          ? "border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] hover:bg-[var(--kub-surface-3)]"
+          ? "border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] kub-raise-hover"
           : "border-white/15 bg-black/60 hover:bg-black/75"
       )}
       aria-label="Сменить камеру"
@@ -601,7 +601,7 @@ export function VideoMessageRecorderModal({
           <button
             type="button"
             onClick={close}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[color:var(--kub-muted)] kub-raise-hover hover:text-[color:var(--kub-text)]"
             aria-label="Закрыть видеосообщение"
           >
             <KubIcon name="close" size={15} />

@@ -1056,7 +1056,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   const rowMotionClass =
     "transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)]";
   const actionRowClass = cn(
-    "inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 text-left hover:bg-[var(--kub-surface-2)]",
+    "inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 text-left kub-raise-hover",
     rowMotionClass,
   );
   const dangerActionRowClass = cn(
@@ -1094,7 +1094,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         {view === "gallery" ? (
           <button
             onClick={() => setView("root")}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)]"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover"
             aria-label="Назад"
             data-testid="chat-info-back"
           >
@@ -1103,7 +1103,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         ) : (
           <button
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)]"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover"
             aria-label="Закрыть"
           >
             <KubIcon name="close" size={18} />
@@ -1116,7 +1116,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
           {canEditChatProfile && !editing && view === "root" && (
             <button
               onClick={() => setEditing(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-2)]"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-cyan)] kub-raise-hover"
               aria-label="Редактировать"
             >
               <KubIcon name="edit" size={16} />
@@ -1126,7 +1126,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-2)]"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-cyan)] kub-raise-hover"
               aria-label="Сохранить"
             >
               <KubIcon name="check" size={16} />
@@ -1211,7 +1211,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                   type="button"
                   data-testid="chat-info-copy-username"
                   onClick={() => void copyUsername()}
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-cyan)]"
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-cyan)]"
                   aria-label="Скопировать никнейм"
                   title="Скопировать никнейм"
                 >
@@ -1314,7 +1314,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                           "h-8 rounded-lg px-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                           invitePolicy === "owner_admin_only"
                             ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
-                            : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)]",
+                            : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] kub-raise-hover",
                         )}
                       >
                         Администраторы
@@ -1327,7 +1327,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                           "h-8 rounded-lg px-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                           invitePolicy === "members_can_invite"
                             ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
-                            : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)]",
+                            : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] kub-raise-hover",
                         )}
                       >
                         Все участники
@@ -1512,7 +1512,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                 <button
                   type="button"
                   onClick={() => setInviteOpen(true)}
-                  className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm font-semibold text-[color:var(--kub-accent-text)] transition-colors hover:bg-[var(--kub-surface-3)]"
+                  className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm font-semibold text-[color:var(--kub-accent-text)] transition-colors kub-raise-hover"
                 >
                   <KubIcon name="userPlus" size={15} />
                   Пригласить пользователя
@@ -1535,7 +1535,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                 isOwner || (myRole === "admin" && member.chat_role === "member")
               );
               return (
-                <div key={member.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-[var(--kub-surface-2)] group">
+                <div key={member.id} className="flex items-center gap-3 px-4 py-2.5 kub-raise-hover group">
                   <UserAvatar user={member} size="sm" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate flex items-center gap-1 text-[color:var(--kub-text)]">
@@ -1555,7 +1555,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                         onClick={() => setMemberRole(member.id, "admin")}
                         title="Сделать администратором"
                         aria-label="Сделать администратором"
-                        className="p-1.5 rounded-lg hover:bg-[var(--kub-surface-3)] transition-all text-[color:var(--kub-cyan)]"
+                        className="p-1.5 rounded-lg kub-raise-hover transition-all text-[color:var(--kub-cyan)]"
                       >
                         <KubIcon name="chevronUp" size={14} />
                       </button>
@@ -1565,7 +1565,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                         onClick={() => setMemberRole(member.id, "member")}
                         title="Снять администратора"
                         aria-label="Снять администратора"
-                        className="p-1.5 rounded-lg hover:bg-[var(--kub-surface-3)] transition-all text-[color:var(--kub-muted)]"
+                        className="p-1.5 rounded-lg kub-raise-hover transition-all text-[color:var(--kub-muted)]"
                       >
                         <KubIcon name="shieldOff" size={14} />
                       </button>
@@ -1607,7 +1607,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                   <button
                     type="button"
                     onClick={() => void loadInvites()}
-                    className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)]"
+                    className="inline-flex h-7 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-muted)] kub-raise-hover"
                   >
                     <KubIcon name="rotate" size={12} />
                     Обновить
@@ -1638,7 +1638,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                       );
                       const canCancel = invite.status === "pending";
                       return (
-                        <div key={invite.id} className="rounded-xl px-2 py-2 hover:bg-[var(--kub-surface-2)]">
+                        <div key={invite.id} className="rounded-xl px-2 py-2 kub-raise-hover">
                           <div className="flex min-w-0 items-center gap-3">
                             <UserAvatar user={invitee ?? { id: invite.invitee_id, full_name: null, username: null, avatar_url: null }} size="sm" />
                             <div className="min-w-0 flex-1">
@@ -1665,7 +1665,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                                   type="button"
                                   onClick={() => void handleCancelInvite(invite)}
                                   disabled={inviteBusyId === invite.id}
-                                  className="inline-flex h-7 items-center justify-center rounded-lg border border-[color:var(--kub-border-color)] px-2 text-xs font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)] disabled:opacity-60"
+                                  className="inline-flex h-7 items-center justify-center rounded-lg border border-[color:var(--kub-border-color)] px-2 text-xs font-semibold text-[color:var(--kub-muted)] kub-raise-hover disabled:opacity-60"
                                 >
                                   {inviteBusyId === invite.id ? "Отмена..." : "Отменить"}
                                 </button>
@@ -1757,7 +1757,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                     href={href}
                     target="_blank"
                     rel="noreferrer noopener"
-                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[color:var(--kub-text)] transition-colors hover:bg-[var(--kub-surface-2)]"
+                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[color:var(--kub-text)] transition-colors kub-raise-hover"
                   >
                     <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]">
                       <KubIcon name="externalLink" size={15} tone="accent" />
@@ -1780,7 +1780,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                   href={m.media_url!}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[color:var(--kub-text)] transition-colors hover:bg-[var(--kub-surface-2)]"
+                  className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[color:var(--kub-text)] transition-colors kub-raise-hover"
                 >
                   <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]">
                     <KubIcon name={MEDIA_SECTION_ICONS[activeSection.kind]} size={15} tone="accent" />
@@ -1814,7 +1814,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                 onClick={() => void loadMoreActiveSection()}
                 aria-busy={sectionLoading}
                 data-testid="chat-info-media-sentinel"
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-sm text-[color:var(--kub-accent-text)] hover:bg-[var(--kub-surface-2)]"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-sm text-[color:var(--kub-accent-text)] kub-raise-hover"
               >
                 {sectionLoading && <KubStableSkeleton width="0.875rem" height="0.875rem" rounded="full" />}
                 <span>{sectionLoading ? "Загружаем ещё…" : "Загрузить ещё"}</span>
@@ -1840,7 +1840,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               type="button"
               onClick={() => setLeaveGroupOpen(false)}
               disabled={leavingChat}
-              className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)] disabled:opacity-50"
+              className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-muted)] kub-raise-hover disabled:opacity-50"
             >
               Отмена
             </button>
@@ -1881,7 +1881,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               type="button"
               onClick={() => setDeleteGroupOpen(false)}
               disabled={deletingChat}
-              className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)] disabled:opacity-50"
+              className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-muted)] kub-raise-hover disabled:opacity-50"
             >
               Отмена
             </button>

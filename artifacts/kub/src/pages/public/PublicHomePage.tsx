@@ -63,7 +63,7 @@ export function PublicHomePage() {
             {preferredPlatform && <ReleaseDownloadAction platform={preferredPlatform} onRetry={refresh} />}
             <Link
               href="/login"
-              className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[color:var(--kub-border-color)] px-5 text-sm font-semibold text-[color:var(--kub-text)] transition-colors hover:bg-[var(--kub-surface-2)]"
+              className="inline-flex min-h-11 items-center justify-center rounded-lg border border-[color:var(--kub-border-color)] px-5 text-sm font-semibold text-[color:var(--kub-text)] transition-colors kub-raise-hover"
             >
               Открыть веб-версию
             </Link>

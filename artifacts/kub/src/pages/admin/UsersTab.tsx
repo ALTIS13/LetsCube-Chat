@@ -569,7 +569,7 @@ export function UsersTab() {
         {queryRaw && (
           <button
             onClick={() => setQueryRaw("")}
-            className="kub-icon-action kub-interactive rounded hover:bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)]"
+            className="kub-icon-action kub-interactive rounded kub-raise-hover text-[color:var(--kub-muted)]"
             aria-label="Очистить"
           >
             <KubIcon name="close" size={14} />
@@ -815,7 +815,7 @@ export function UsersTab() {
                     "rounded-xl bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] mb-2",
                     "sm:rounded-none sm:bg-transparent sm:border-0 sm:mb-0",
                     i > 0 ? "sm:border-t sm:border-[color:var(--kub-border-color)]" : "",
-                    "hover:bg-[var(--kub-surface-3)] sm:hover:bg-[var(--kub-surface-2)]",
+                    "kub-raise-hover",
                     isSelected && "border-[color:var(--kub-cyan)]/65 bg-[color-mix(in_srgb,var(--kub-cyan)_8%,var(--kub-surface))] shadow-[0_0_0_1px_color-mix(in_srgb,var(--kub-cyan)_24%,transparent)] sm:bg-[color-mix(in_srgb,var(--kub-cyan)_8%,transparent)]",
                   )}
                 >
@@ -879,7 +879,7 @@ export function UsersTab() {
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
-                        className="kub-icon-action kub-interactive rounded-lg hover:bg-[var(--kub-surface-3)] transition-colors text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
+                        className="kub-icon-action kub-interactive rounded-lg kub-raise-hover transition-colors text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
                         aria-label="Действия"
                       >
                         <KubIcon name="more" size={16} />
@@ -929,7 +929,7 @@ export function UsersTab() {
             <button
               disabled={page === 0}
               onClick={() => setPage((p) => Math.max(0, p - 1))}
-              className="kub-icon-action p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
+              className="kub-icon-action p-1.5 rounded-lg kub-raise-hover disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
               aria-label="Предыдущая страница"
             >
               <KubIcon name="chevronLeft" size={16} />
@@ -937,7 +937,7 @@ export function UsersTab() {
             <button
               disabled={page + 1 >= totalPages}
               onClick={() => setPage((p) => p + 1)}
-              className="kub-icon-action p-1.5 rounded-lg hover:bg-[var(--kub-surface-2)] disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
+              className="kub-icon-action p-1.5 rounded-lg kub-raise-hover disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
               aria-label="Следующая страница"
             >
               <KubIcon name="chevronRight" size={16} />
@@ -1167,7 +1167,7 @@ function ProfilePreviewModal({
           </div>
           {canManageAvatar && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[color:var(--kub-border-color)] px-2 py-1 text-xs text-[color:var(--kub-accent-text)] hover:bg-[var(--kub-surface-2)]">
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[color:var(--kub-border-color)] px-2 py-1 text-xs text-[color:var(--kub-accent-text)] kub-raise-hover">
                 <KubIcon name={avatarSaving ? "spinner" : "camera"} size={12} />
                 <span>{avatarSaving ? "Сохранение..." : "Сменить аватар"}</span>
                 <input
