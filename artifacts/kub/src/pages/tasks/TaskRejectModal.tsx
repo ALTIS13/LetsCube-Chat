@@ -78,7 +78,7 @@ export function TaskRejectModal({ taskId, mode, onClose, onDone }: Props) {
           onChange={(e) => setReason(e.target.value)}
           rows={4}
           placeholder={c.placeholder}
-          className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-danger)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-danger)_18%,transparent)] transition-all"
+          className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-danger)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-danger)_18%,transparent)] transition-all"
         />
       </div>
 

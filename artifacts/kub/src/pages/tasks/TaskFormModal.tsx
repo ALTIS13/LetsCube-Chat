@@ -400,7 +400,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
           onChange={(e) => setDescription(e.target.value)}
           rows={3}
           placeholder="Детали, шаги, ссылки…"
-          className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all"
+          className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all"
         />
       </div>
 
@@ -439,7 +439,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
           type="datetime-local"
           value={dueAt}
           onChange={(e) => setDueAt(e.target.value)}
-          className="w-full rounded-xl px-3 py-2 text-sm outline-none bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)] transition-all"
+          className="w-full rounded-xl px-3 py-2 text-sm outline-none bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)] transition-all"
         />
       </div>
 
@@ -500,7 +500,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                     <select
                       value={recurrenceFrequency}
                       onChange={(event) => setRecurrenceFrequency(event.target.value as TaskRecurrenceFrequency)}
-                      className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                      className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
                     >
                       {(Object.keys(RECURRENCE_FREQUENCY_LABEL) as TaskRecurrenceFrequency[]).map((value) => (
                         <option key={value} value={value}>{RECURRENCE_FREQUENCY_LABEL[value]}</option>
@@ -516,7 +516,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                       max={365}
                       value={recurrenceInterval}
                       onChange={(event) => setRecurrenceInterval(Math.max(1, Number(event.target.value) || 1))}
-                      className="h-10 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                      className="h-10 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
                     />
                   </label>
                 </div>
@@ -560,7 +560,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                       max={31}
                       value={recurrenceMonthday}
                       onChange={(event) => setRecurrenceMonthday(clampNumber(Number(event.target.value) || 1, 1, 31))}
-                      className="h-10 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                      className="h-10 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
                     />
                   </label>
                 )}
@@ -572,7 +572,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                       type="datetime-local"
                       value={recurrenceStartsAt}
                       onChange={(event) => setRecurrenceStartsAt(event.target.value)}
-                      className="h-10 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                      className="h-10 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
                     />
                   </label>
 
@@ -581,7 +581,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                     <select
                       value={recurrenceEndMode}
                       onChange={(event) => setRecurrenceEndMode(event.target.value as RecurrenceEndMode)}
-                      className="h-10 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                      className="h-10 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
                     >
                       <option value="never">Никогда</option>
                       <option value="date">До даты</option>
@@ -597,7 +597,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                       type="datetime-local"
                       value={recurrenceEndAt}
                       onChange={(event) => setRecurrenceEndAt(event.target.value)}
-                      className="h-10 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                      className="h-10 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
                     />
                   </label>
                 )}
@@ -611,7 +611,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                       max={365}
                       value={recurrenceMaxOccurrences}
                       onChange={(event) => setRecurrenceMaxOccurrences(Math.max(1, Number(event.target.value) || 1))}
-                      className="h-10 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                      className="h-10 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
                     />
                   </label>
                 )}
@@ -653,7 +653,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                     setLocationId(event.target.value);
                     setRouteAdminId("");
                   }}
-                  className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                  className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
                 >
                   <option value="">Без локации</option>
                   {routing.locations.map((location) => (
@@ -669,7 +669,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                 <select
                   value={targetRole}
                   onChange={(event) => setTargetRole(event.target.value as TaskTargetRole | "")}
-                  className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                  className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
                 >
                   <option value="">По текущему назначению</option>
                   {targetRoleOptions.map((role) => (
@@ -685,7 +685,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                 <select
                   value={visibility}
                   onChange={(event) => setVisibility(event.target.value as TaskVisibility)}
-                  className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                  className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
                 >
                   {(Object.keys(TASK_VISIBILITY_META) as TaskVisibility[]).map((value) => (
                     <option key={value} value={value}>{TASK_VISIBILITY_META[value].label}</option>
@@ -702,7 +702,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                     setAssignmentScope(next);
                     if (next !== "user") setAssignee(null);
                   }}
-                  className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                  className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
                 >
                   {(Object.keys(TASK_ASSIGNMENT_SCOPE_META) as TaskAssignmentScope[]).map((value) => (
                     <option key={value} value={value}>{TASK_ASSIGNMENT_SCOPE_META[value].label}</option>
@@ -717,7 +717,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                 value={routeAdminId}
                 onChange={(event) => setRouteAdminId(event.target.value)}
                 disabled={!locationId || selectedLocationAdmins.length === 0}
-                className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] disabled:opacity-50"
+                className="h-10 w-full min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] disabled:opacity-50"
               >
                 <option value="">Не выбран</option>
                 {selectedLocationAdmins.map((member) => (
@@ -780,7 +780,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
             <span className="min-w-0 flex-1">Без привязки к чату</span>
           </button>
 
-          <div className="mb-2 flex h-9 items-center gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2">
+          <div className="mb-2 flex h-9 items-center gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2">
             <KubIcon name="search" size={13} className="shrink-0 text-[color:var(--kub-muted)]" />
             <input
               type="text"
@@ -872,7 +872,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-2 rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] transition-all">
+            <div className="flex items-center gap-2 rounded-xl px-3 h-10 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] transition-all">
               <KubIcon name="search" size={14} className="text-[color:var(--kub-muted)]" />
               <input
                 type="text"

@@ -110,7 +110,7 @@ export function TaskAssignModal({ taskId, currentAssignee, onClose, onDone }: Pr
         </div>
       ) : (
         <>
-          <div className="flex items-center gap-2 rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] transition-all">
+          <div className="flex items-center gap-2 rounded-xl px-3 h-10 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] transition-all">
             <KubIcon name="search" size={14} className="text-[color:var(--kub-muted)]" />
             <input
               autoFocus

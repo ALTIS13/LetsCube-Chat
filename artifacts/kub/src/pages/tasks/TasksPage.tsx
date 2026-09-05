@@ -404,6 +404,11 @@ export function TasksPage() {
   // surface (`kub-panel` in card mode, --kub-surface in list mode), so the list
   // lies on the ambient exactly the way the message feed does, and the header
   // above it gets something other than one flat colour to blur.
+  //
+  // The tab strip and the filter toolbar below the header are chrome, so they
+  // are the panel material. The class goes on the elements themselves: the four
+  // modals are siblings of both bars at the page root, so no backdrop-filter
+  // here can become the containing block of anything fixed.
   return (
     <div className="flex flex-col h-[100dvh]">
       <KubHeader
@@ -434,7 +439,7 @@ export function TasksPage() {
       />
 
       {/* Tabs */}
-      <div className="flex-shrink-0 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] overflow-x-auto">
+      <div className="kub-glass flex-shrink-0 border-b border-[color:var(--kub-border-color)] overflow-x-auto">
         <div className="flex items-stretch gap-1 px-3">
           {tabs.map((t) => {
             const active = t.id === tabId;
@@ -461,7 +466,7 @@ export function TasksPage() {
                           ? "bg-[color-mix(in_srgb,var(--kub-warn)_18%,transparent)] text-[color:var(--kub-warn)]"
                           : t.id === "available"
                             ? "bg-[color-mix(in_srgb,var(--kub-online)_18%,transparent)] text-[color:var(--kub-online)]"
-                            : "bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]",
+                            : "kub-raise text-[color:var(--kub-muted)]",
                     )}
                   >
                     {tabCounts[t.id] > 99 ? "99+" : tabCounts[t.id]}
@@ -476,7 +481,7 @@ export function TasksPage() {
         </div>
       </div>
 
-      <div className="flex-shrink-0 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 sm:px-5 py-3">
+      <div className="kub-glass flex-shrink-0 border-b border-[color:var(--kub-border-color)] px-3 sm:px-5 py-3">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
           <KubInput
             value={search}
@@ -488,7 +493,7 @@ export function TasksPage() {
                 <button
                   type="button"
                   onClick={() => setSearch("")}
-                  className="shrink-0 rounded-md p-1 text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface)] hover:text-[color:var(--kub-text)]"
+                  className="shrink-0 rounded-md p-1 text-[color:var(--kub-muted)] kub-raise-hover hover:text-[color:var(--kub-text)]"
                   aria-label="Очистить поиск задач"
                 >
                   <KubIcon name="close" size={14} />
@@ -512,7 +517,7 @@ export function TasksPage() {
               id="task-assignee-filter"
               value={assigneeFilter}
               onChange={(event) => setAssigneeFilter(event.target.value)}
-              className="h-9 min-w-0 w-full max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] sm:w-auto sm:max-w-[220px]"
+              className="h-9 min-w-0 w-full max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] sm:w-auto sm:max-w-[220px]"
               style={{ width: "min(100%, 220px)", maxWidth: "100%", minWidth: 0 }}
             >
               <option value="all">Все исполнители</option>
@@ -530,7 +535,7 @@ export function TasksPage() {
                   id="task-location-filter"
                   value={locationFilter}
                   onChange={(event) => setLocationFilter(event.target.value)}
-                  className="h-9 min-w-0 w-full max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] sm:w-auto sm:max-w-[220px]"
+                  className="h-9 min-w-0 w-full max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] sm:w-auto sm:max-w-[220px]"
                   style={{ width: "min(100%, 220px)", maxWidth: "100%", minWidth: 0 }}
                 >
                   <option value="all">Все доступные локации</option>
@@ -545,7 +550,7 @@ export function TasksPage() {
                   id="task-recipient-filter"
                   value={recipientFilter}
                   onChange={(event) => setRecipientFilter(event.target.value as RecipientFilter)}
-                  className="h-9 min-w-0 w-full max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] sm:w-auto sm:max-w-[220px]"
+                  className="h-9 min-w-0 w-full max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] sm:w-auto sm:max-w-[220px]"
                   style={{ width: "min(100%, 220px)", maxWidth: "100%", minWidth: 0 }}
                 >
                   <option value="all">Все получатели</option>
@@ -556,7 +561,7 @@ export function TasksPage() {
             )}
 
             {canViewDeletedTasks && (
-              <label className="inline-flex h-9 max-w-full items-center gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2.5 text-xs font-medium text-[color:var(--kub-text)]">
+              <label className="inline-flex h-9 max-w-full items-center gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2.5 text-xs font-medium text-[color:var(--kub-text)]">
                 <input
                   type="checkbox"
                   checked={showDeleted}
@@ -576,14 +581,14 @@ export function TasksPage() {
                 sitting on the element that has to grow — and the same fix: the
                 track keeps its 36px on a cursor and follows its segments on a
                 finger. See D-013. */}
-            <div className="inline-flex min-h-9 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-0.5">
+            <div className="inline-flex min-h-9 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] p-0.5">
               <button
                 type="button"
                 onClick={() => setViewMode("cards")}
                 className={cn(
                   "kub-button kub-interactive inline-flex items-center gap-1 rounded-md px-2.5 text-xs font-semibold transition-colors",
                   viewMode === "cards"
-                    ? "bg-[var(--kub-surface)] text-[color:var(--kub-accent-text)]"
+                    ? "kub-raise text-[color:var(--kub-accent-text)]"
                     : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
                 )}
                 aria-pressed={viewMode === "cards"}
@@ -597,7 +602,7 @@ export function TasksPage() {
                 className={cn(
                   "kub-button kub-interactive inline-flex items-center gap-1 rounded-md px-2.5 text-xs font-semibold transition-colors",
                   viewMode === "list"
-                    ? "bg-[var(--kub-surface)] text-[color:var(--kub-accent-text)]"
+                    ? "kub-raise text-[color:var(--kub-accent-text)]"
                     : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
                 )}
                 aria-pressed={viewMode === "list"}
@@ -621,7 +626,7 @@ export function TasksPage() {
         />
 
         {canBulkDeleteTasks && visibleDeletableTaskIds.length > 0 && (
-          <div className="mt-3 rounded-2xl border border-[color:var(--kub-border-color)] bg-[color-mix(in_srgb,var(--kub-surface)_92%,var(--kub-cyan)_8%)] px-3 py-2.5 text-xs shadow-sm">
+          <div className="mt-3 rounded-2xl border border-[color:var(--kub-border-color)] bg-[color-mix(in_srgb,var(--kub-cyan)_10%,transparent)] px-3 py-2.5 text-xs shadow-sm">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 items-center gap-2">
                 <BulkSelectControl

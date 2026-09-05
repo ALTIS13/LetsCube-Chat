@@ -47,12 +47,27 @@ export function TaskCard({ task, nowMs, onClick, selected = false, selectionCont
       }}
       className="text-left w-full rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)]/45"
     >
+      {/* Every edge state here is drawn with `outline`, and that is not a
+          preference. `.kub-panel` sets `background`, `box-shadow` and the
+          `border` shorthand, and it sits outside any cascade layer, so it beats
+          Tailwind's utilities no matter what they say — an unlayered rule wins
+          over a layered one regardless of order or specificity. Measured on the
+          built stylesheet: a selected card composited to rgb(16,39,67) in the
+          dark theme and a plain one to rgb(16,39,67) as well, a ratio of 1.000.
+          The fill, the ring and the border colour were all present in the markup
+          and none of them reached a pixel, so bulk selection in card mode was
+          invisible while looking perfectly correct in the source.
+
+          `outline` is the one edge property the panel does not claim. It follows
+          `border-radius`, and a negative offset tucks it inside the card so the
+          grid gap does not change. */}
       <KubPanel
         padded={false}
         className={cn(
-          "p-3 flex flex-col gap-2.5 hover:border-[color:var(--kub-cyan)]/40 transition-colors cursor-pointer",
-          selected && "border-[color:var(--kub-cyan)]/65 bg-[color-mix(in_srgb,var(--kub-cyan)_8%,var(--kub-surface))] shadow-[0_0_0_1px_color-mix(in_srgb,var(--kub-cyan)_28%,transparent)]",
-          isDeleted && "opacity-70 border-[color:var(--kub-danger)]/35",
+          "p-3 flex flex-col gap-2.5 transition-colors cursor-pointer",
+          "hover:outline-1 hover:-outline-offset-1 hover:outline-[color:var(--kub-cyan)]/40",
+          selected && "outline-2 -outline-offset-1 outline-[color:var(--kub-cyan)]/65",
+          isDeleted && "opacity-70 outline-1 -outline-offset-1 outline-[color:var(--kub-danger)]/35",
         )}
       >
         <div className="flex items-start justify-between gap-3">
@@ -113,7 +128,7 @@ export function TaskCard({ task, nowMs, onClick, selected = false, selectionCont
           )}
         </div>
 
-        <div className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2.5 py-2">
+        <div className="kub-raise rounded-lg border border-[color:var(--kub-border-color)] px-2.5 py-2">
           <div className="flex min-w-0 items-center justify-between gap-2 text-[11px]">
             <span className={cn(
               "flex min-w-0 items-center gap-1.5 font-medium",

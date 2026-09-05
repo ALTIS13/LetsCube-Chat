@@ -44,10 +44,18 @@ export function BotsPage() {
     queryClient.refetchQueries({ queryKey: ["bot-management", "list"] });
   const eligibility = list.data?.eligibility;
 
-  // <main> carries no background of its own. Both panes below paint theirs and
-  // fill the row at every breakpoint, so the only place that fill was ever
-  // visible was the strip behind the header — where it cancelled the header's
-  // translucency by putting a flat colour directly behind it.
+  // <main> carries no background of its own, and neither does the detail pane.
+  // The list column is the chrome the bot list sits on, so it is the panel
+  // material; the detail pane is ground, and the settings surfaces inside it
+  // bring their own material the way the settings page does. Giving both
+  // columns the material would frost the whole viewport edge to edge, which
+  // composites to one flat colour again — the very thing the material exists to
+  // avoid.
+  //
+  // The class sits on the column itself rather than on a KubGlassLayer because
+  // nothing fixed lives inside it: both dialogs below are siblings of the grid
+  // AND portaled to the body, and the confirm dialog inside BotSettingsPanel is
+  // portaled too, so no backdrop-filter here can become their containing block.
   return (
     <main data-testid="bots-page" className="bots-management-surface flex h-[100dvh] min-w-0 flex-col overflow-hidden text-[color:var(--kub-text)]">
       <KubHeader
@@ -74,7 +82,7 @@ export function BotsPage() {
       />
 
       <div className="grid min-h-0 flex-1 md:grid-cols-[22rem_minmax(0,1fr)]">
-        <section data-testid="bots-list-pane" aria-label="Список ботов" className={cn("min-h-0 min-w-0 border-r border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]", selectedId ? "hidden md:flex" : "flex", "flex-col")}>
+        <section data-testid="bots-list-pane" aria-label="Список ботов" className={cn("kub-glass min-h-0 min-w-0 border-r border-[color:var(--kub-border-color)]", selectedId ? "hidden md:flex" : "flex", "flex-col")}>
           {!eligibility?.can_create && eligibility && <EligibilityNotice eligibility={eligibility} />}
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
             {list.isLoading && <BotListSkeleton />}
@@ -87,7 +95,7 @@ export function BotsPage() {
           </div>
         </section>
 
-        <section data-testid="bots-detail-pane" aria-label="Настройки бота" className={cn("min-h-0 min-w-0 bg-[var(--kub-bg)]", selectedId ? "flex" : "hidden md:flex", "flex-col")}>
+        <section data-testid="bots-detail-pane" aria-label="Настройки бота" className={cn("min-h-0 min-w-0", selectedId ? "flex" : "hidden md:flex", "flex-col")}>
           {selectedId ? (
             <>
               <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[color:var(--kub-border-color)] px-3 md:hidden">
@@ -118,7 +126,7 @@ function selectedBotId(searchParams: URLSearchParams) {
 
 function BotRow({ bot, selected, onSelect }: { bot: BotSummary; selected: boolean; onSelect(): void }) {
   const tone = bot.state === "active" ? "online" : bot.state === "paused" ? "warn" : bot.state === "deleted" ? "muted" : "danger";
-  return <button type="button" onClick={onSelect} aria-current={selected ? "true" : undefined} className={cn("flex w-full min-w-0 items-start gap-3 rounded-md border px-3 py-3 text-left transition-colors", selected ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_8%,var(--kub-surface))]" : "border-transparent hover:border-[color:var(--kub-border-color)] kub-raise-hover")}><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]"><KubIcon name="bot" size={21} /></div><div className="min-w-0 flex-1"><div className="break-words text-sm font-semibold text-[color:var(--kub-text)]">{bot.display_name}</div><div className="break-all text-xs text-[color:var(--kub-muted)]">@{bot.username}</div><div className="mt-2 flex flex-wrap items-center gap-1.5"><KubBadge tone={tone} dot className="text-[color:var(--kub-text)]">{STATE_COPY[bot.state]}</KubBadge><KubBadge tone="muted">{bot.role === "owner" ? "Владелец" : "Разработчик"}</KubBadge></div><div className="mt-2 text-[11px] text-[color:var(--kub-muted)]">Обновлён {formatDate(bot.updated_at)}</div></div><KubIcon name="chevronRight" size={16} className="mt-2 shrink-0 text-[color:var(--kub-muted)]" /></button>;
+  return <button type="button" onClick={onSelect} aria-current={selected ? "true" : undefined} className={cn("flex w-full min-w-0 items-start gap-3 rounded-md border px-3 py-3 text-left transition-colors", selected ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)]" : "border-transparent hover:border-[color:var(--kub-border-color)] kub-raise-hover")}><div className="kub-raise flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-[color:var(--kub-cyan)]"><KubIcon name="bot" size={21} /></div><div className="min-w-0 flex-1"><div className="break-words text-sm font-semibold text-[color:var(--kub-text)]">{bot.display_name}</div><div className="break-all text-xs text-[color:var(--kub-muted)]">@{bot.username}</div><div className="mt-2 flex flex-wrap items-center gap-1.5"><KubBadge tone={tone} dot className="text-[color:var(--kub-text)]">{STATE_COPY[bot.state]}</KubBadge><KubBadge tone="muted">{bot.role === "owner" ? "Владелец" : "Разработчик"}</KubBadge></div><div className="mt-2 text-[11px] text-[color:var(--kub-muted)]">Обновлён {formatDate(bot.updated_at)}</div></div><KubIcon name="chevronRight" size={16} className="mt-2 shrink-0 text-[color:var(--kub-muted)]" /></button>;
 }
 
 function EligibilityNotice({ eligibility }: { eligibility: NonNullable<ReturnType<typeof useBots>["data"]>["eligibility"] }) {
@@ -132,11 +140,11 @@ function EligibilityNotice({ eligibility }: { eligibility: NonNullable<ReturnTyp
 }
 
 function BotListSkeleton() {
-  return <div aria-label="Загрузка списка ботов" role="status" className="space-y-2"><span className="sr-only">Загрузка</span>{[0, 1, 2].map((item) => <div key={item} className="h-[6.5rem] animate-pulse rounded-md bg-[var(--kub-surface-2)] motion-reduce:animate-none" />)}</div>;
+  return <div aria-label="Загрузка списка ботов" role="status" className="space-y-2"><span className="sr-only">Загрузка</span>{[0, 1, 2].map((item) => <div key={item} className="kub-raise h-[6.5rem] animate-pulse rounded-md motion-reduce:animate-none" />)}</div>;
 }
 
 function DetailSkeleton() {
-  return <div aria-label="Загрузка настроек бота" role="status" className="space-y-3 p-4 sm:p-6"><div className="h-20 animate-pulse rounded-md bg-[var(--kub-surface-2)] motion-reduce:animate-none" /><div className="h-11 animate-pulse rounded-md bg-[var(--kub-surface-2)] motion-reduce:animate-none" /><div className="h-64 animate-pulse rounded-md bg-[var(--kub-surface-2)] motion-reduce:animate-none" /></div>;
+  return <div aria-label="Загрузка настроек бота" role="status" className="space-y-3 p-4 sm:p-6"><div className="kub-raise h-20 animate-pulse rounded-md motion-reduce:animate-none" /><div className="kub-raise h-11 animate-pulse rounded-md motion-reduce:animate-none" /><div className="kub-raise h-64 animate-pulse rounded-md motion-reduce:animate-none" /></div>;
 }
 
 function formatDate(value: string) {

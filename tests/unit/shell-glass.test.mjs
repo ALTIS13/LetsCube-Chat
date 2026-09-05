@@ -40,6 +40,17 @@ const panels = [
   ["components/layout/AppTopBar.tsx", "kub-app-topbar-height", "kub-glass"],
   ["components/layout/BottomNav.tsx", "justify-around", "kub-glass"],
   ["components/kub/KubHeader.tsx", "border-b border-[color:var(--kub-border-color)]", "kub-glass"],
+  // The tasks page's two chrome bars. Neither is sticky, so what they blur is
+  // the ambient rather than passing content — which is the same thing the
+  // sidebar blurs, and the reason the ambient is painted on `body` and not on
+  // the scrollers.
+  ["pages/tasks/TasksPage.tsx", "overflow-x-auto", "kub-glass"],
+  ["pages/tasks/TasksPage.tsx", "px-3 sm:px-5 py-3", "kub-glass"],
+  // The bot settings surfaces. The pane holding them is ground, so these are
+  // the panels of that page the way the cards are the panels of settings.
+  ["components/bots/BotSettingsPanel.tsx", "px-4 py-4 sm:px-6", "kub-glass"],
+  ["components/bots/BotSettingsPanel.tsx", "grid h-auto w-full", "kub-glass"],
+  ["components/bots/BotSettingsPanel.tsx", "rounded-md border border-[color:var(--kub-border-color)] p-4", "kub-glass"],
 ];
 
 /**
@@ -107,6 +118,13 @@ const covers = [
  */
 const raised = [
   ["components/chat/MessageInput.tsx", "bg-[var(--kub-raised)]", 7],
+  // The active tab pill of the bot settings panel. Radix drives it from
+  // `data-[state=active]`, and `.kub-raise` is a plain class rather than a
+  // Tailwind utility, so no variant can put the veil behind that attribute —
+  // Tailwind emits no rule and the pill would simply have no fill. The pairing
+  // is fixed and reviewable instead: this pill sits on that toolbar and nowhere
+  // else, which is exactly the case the absolute token is for.
+  ["components/bots/BotSettingsPanel.tsx", "bg-[var(--kub-raised)]", 1],
 ];
 
 /** [file, how many hovers it carries]. Leftover elevation fills must be zero. */
@@ -154,10 +172,11 @@ const veiled = [
   ["pages/admin/LocationsTab.tsx", 1],
   ["pages/admin/support/SupportQueue.tsx", 1],
   ["pages/admin/support/SupportTicketDetails.tsx", 1],
-  ["pages/tasks/TasksPage.tsx", 3],
+  ["pages/tasks/TasksPage.tsx", 4],
   ["pages/tasks/TaskFormModal.tsx", 4],
   ["pages/tasks/TaskAssignModal.tsx", 2],
   ["pages/bots/BotsPage.tsx", 4],
+  ["components/bots/BotSettingsPanel.tsx", 2],
   ["pages/public/PublicHomePage.tsx", 1],
   ["pages/public/PublicPageShell.tsx", 2],
 ];
@@ -375,6 +394,50 @@ test("pages/tasks/TasksPage.tsx lets the page ambient through in each of its thr
       `a tasks page state paints over --kub-ambient, so the header above it blurs a flat colour: ${root}`,
     );
   }
+});
+
+/**
+ * The bots page has two columns, and only one of them is the material.
+ *
+ * Frosting both would frost the viewport edge to edge: a blur that covers
+ * everything has nothing left to be seen against, and the two columns composite
+ * to the same colour, so the page reads as one flat sheet again — the exact
+ * outcome the material exists to avoid. The list column is chrome, so it is
+ * glass; the detail pane is ground, and the settings surfaces inside it bring
+ * their own.
+ *
+ * Found by `data-testid` rather than by a class landmark, because both panes
+ * are built with `cn()` and their literal strings share `min-h-0 min-w-0` and
+ * `hidden md:flex` — a needle-based lookup would report the list column twice
+ * and never look at the detail pane at all.
+ */
+test("pages/bots/BotsPage.tsx frosts the list column and leaves the detail pane on the ambient", () => {
+  const source = read("pages/bots/BotsPage.tsx");
+  const pane = (id) => {
+    const found = source.match(new RegExp(`<section data-testid="${id}"[^>]*>`));
+    assert.ok(found, `no <section> carries data-testid="${id}"`);
+    return found[0];
+  };
+
+  const list = pane("bots-list-pane");
+  assert.match(list, /\bkub-glass(?!-strong)\b/, "the bot list column is not made of the material");
+  assert.doesNotMatch(
+    list,
+    /\bbg-\[var\(--kub-(surface|bg)/,
+    "the bot list column keeps an opaque fill beside the glass utility",
+  );
+
+  const detail = pane("bots-detail-pane");
+  assert.doesNotMatch(
+    detail,
+    /\bbg-\[var\(--kub-(bg|surface)/,
+    "the bot detail pane paints over --kub-ambient, so every settings panel above it blurs a flat colour",
+  );
+  assert.doesNotMatch(
+    detail,
+    /\bkub-glass\b/,
+    "both bot columns are frosted, which composites the whole viewport to one flat sheet",
+  );
 });
 
 /** Comments explain the measurements; only the code is under this rule. */

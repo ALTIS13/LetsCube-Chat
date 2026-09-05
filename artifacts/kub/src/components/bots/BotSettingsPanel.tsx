@@ -87,7 +87,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
 
   return (
     <div className="min-w-0">
-      <div className="border-b border-[color:var(--kub-border-color)] px-4 py-4 sm:px-6">
+      <div className="kub-glass border-b border-[color:var(--kub-border-color)] px-4 py-4 sm:px-6">
         <div className="flex min-w-0 items-start gap-3">
           <BotMark name={bot.display_name} avatarUrl={bot.avatar_url} />
           <div className="min-w-0 flex-1">
@@ -105,15 +105,15 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
         </div>
       </div>
 
-      {error && <div role="alert" className="mx-4 mt-4 rounded-md border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_8%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-text)] sm:mx-6">{error}</div>}
+      {error && <div role="alert" className="kub-glass mx-4 mt-4 rounded-md border border-[color:var(--kub-danger)]/40 px-3 py-2 text-sm text-[color:var(--kub-text)] sm:mx-6">{error}</div>}
       {bot.state === "suspended" && <Notice>Бот приостановлен платформой. Владелец не может изменить состояние или настройки.</Notice>}
       {bot.state === "pending_delete" && <Notice>Настройки доступны только для чтения. Отмена вернёт бота на паузу без токена.</Notice>}
       {!owner && <Notice>Доступ разработчика: команды, webhook, настройки приватности и диагностика.</Notice>}
 
       <Tabs defaultValue="main" className="min-w-0">
-        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-none border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-2 sm:grid-cols-4">
+        <TabsList className="kub-glass grid h-auto w-full grid-cols-2 gap-1 rounded-none border-b border-[color:var(--kub-border-color)] p-2 sm:grid-cols-4">
           {[["main", "Основное"], ["api", "API"], ["team", "Команда"], ["diagnostics", "Диагностика"]].map(([value, label]) => (
-            <TabsTrigger key={value} value={value} className="min-h-11 rounded-md text-xs text-[color:var(--kub-muted)] data-[state=active]:bg-[var(--kub-surface-2)] data-[state=active]:text-[color:var(--kub-text)] data-[state=active]:shadow-none">{label}</TabsTrigger>
+            <TabsTrigger key={value} value={value} className="min-h-11 rounded-md text-xs text-[color:var(--kub-muted)] data-[state=active]:bg-[var(--kub-raised)] data-[state=active]:text-[color:var(--kub-text)] data-[state=active]:shadow-none">{label}</TabsTrigger>
           ))}
         </TabsList>
 
@@ -123,7 +123,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
               <KubInput label="Название" value={profile.display_name} onChange={(event) => setProfile({ ...profile, display_name: event.target.value })} disabled={!owner || !editable} maxLength={64} />
               <div>
                 <label htmlFor={`bot-description-${bot.id}`} className="text-xs font-medium uppercase text-[color:var(--kub-muted)]">Описание</label>
-                <textarea id={`bot-description-${bot.id}`} value={profile.description} onChange={(event) => setProfile({ ...profile, description: event.target.value })} disabled={!owner || !editable} maxLength={512} rows={4} className="mt-1.5 w-full resize-none rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3 text-sm text-[color:var(--kub-text)] outline-none disabled:opacity-60" />
+                <textarea id={`bot-description-${bot.id}`} value={profile.description} onChange={(event) => setProfile({ ...profile, description: event.target.value })} disabled={!owner || !editable} maxLength={512} rows={4} className="mt-1.5 w-full resize-none rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] p-3 text-sm text-[color:var(--kub-text)] outline-none disabled:opacity-60" />
               </div>
               {owner && (
                 <div className="flex flex-wrap items-center gap-3">
@@ -188,7 +188,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
                 <div key={`${command.command}-${index}`} className="grid gap-2 border-b border-[color:var(--kub-border-color)] pb-3 sm:grid-cols-[10rem_1fr_2.75rem]">
                   <KubInput aria-label={`Команда ${index + 1}`} value={command.command} disabled={!editable} onChange={(event) => setCommands(commands.map((item, itemIndex) => itemIndex === index ? { ...item, command: event.target.value.toLowerCase() } : item))} />
                   <KubInput aria-label={`Описание команды ${index + 1}`} value={command.description} disabled={!editable} onChange={(event) => setCommands(commands.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} />
-                  <button type="button" aria-label={`Удалить команду ${index + 1}`} disabled={!editable} className="h-11 w-11 rounded-md text-[color:var(--kub-danger)] hover:bg-[var(--kub-surface-2)] disabled:opacity-40" onClick={() => setCommands(commands.filter((_, itemIndex) => itemIndex !== index))}><KubIcon name="delete" size={18} className="mx-auto" /></button>
+                  <button type="button" aria-label={`Удалить команду ${index + 1}`} disabled={!editable} className="h-11 w-11 rounded-md text-[color:var(--kub-danger)] kub-raise-hover disabled:opacity-40" onClick={() => setCommands(commands.filter((_, itemIndex) => itemIndex !== index))}><KubIcon name="delete" size={18} className="mx-auto" /></button>
                 </div>
               ))}
               {commands.length === 0 && <KubEmptyState title="Команд пока нет" description="Добавьте первую команду для Bot API." className="py-5" />}
@@ -237,7 +237,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
           <Section title="Разработчики" description="Разработчики могут менять API-конфигурацию, но не профиль, токен или состояние бота.">
             {owner && editable && <div className="mb-4 flex flex-col gap-2 sm:flex-row"><KubInput aria-label="Имя пользователя разработчика" value={developerUsername} onChange={(event) => setDeveloperUsername(event.target.value)} placeholder="username" containerClassName="flex-1" /><KubButton className="min-h-11" disabled={!developerUsername || mutations.addDeveloper.isPending} onClick={() => run(async () => { await mutations.addDeveloper.mutateAsync(developerUsername); setDeveloperUsername(""); })}>Добавить разработчика</KubButton></div>}
             <div className="space-y-2">
-              {detail.developers.map((developer) => <div key={developer.user_id} className="flex min-h-14 items-center gap-3 border-b border-[color:var(--kub-border-color)] py-2"><div className="min-w-0 flex-1"><div className="break-words text-sm font-medium text-[color:var(--kub-text)]">{developer.display_name}</div><div className="break-all text-xs text-[color:var(--kub-muted)]">{developer.username ? `@${developer.username}` : "Без имени пользователя"}</div></div>{owner && editable && <button aria-label={`Удалить разработчика ${developer.display_name}`} className="h-11 w-11 rounded-md text-[color:var(--kub-danger)] hover:bg-[var(--kub-surface-2)]" onClick={() => run(() => mutations.removeDeveloper.mutateAsync(developer.user_id))}><KubIcon name="userRemove" size={18} className="mx-auto" /></button>}</div>)}
+              {detail.developers.map((developer) => <div key={developer.user_id} className="flex min-h-14 items-center gap-3 border-b border-[color:var(--kub-border-color)] py-2"><div className="min-w-0 flex-1"><div className="break-words text-sm font-medium text-[color:var(--kub-text)]">{developer.display_name}</div><div className="break-all text-xs text-[color:var(--kub-muted)]">{developer.username ? `@${developer.username}` : "Без имени пользователя"}</div></div>{owner && editable && <button aria-label={`Удалить разработчика ${developer.display_name}`} className="h-11 w-11 rounded-md text-[color:var(--kub-danger)] kub-raise-hover" onClick={() => run(() => mutations.removeDeveloper.mutateAsync(developer.user_id))}><KubIcon name="userRemove" size={18} className="mx-auto" /></button>}</div>)}
               {detail.developers.length === 0 && <KubEmptyState title="Разработчиков пока нет" description="Владелец может добавить участника по имени пользователя." className="py-5" />}
             </div>
           </Section>
@@ -268,7 +268,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
 
 function BotMark({ name, avatarUrl }: { name: string; avatarUrl?: string | null }) {
   return (
-    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]">
+    <div className="kub-raise flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md border border-[color:var(--kub-border-color)] text-[color:var(--kub-cyan)]">
       {avatarUrl ? (
         <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
       ) : (
@@ -284,15 +284,15 @@ function LifecycleBadge({ state }: { state: BotDetail["bot"]["state"] }) {
 }
 
 function Notice({ children }: { children: string }) {
-  return <div className="mx-4 mt-4 rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-sm text-[color:var(--kub-text)] sm:mx-6">{children}</div>;
+  return <div className="kub-glass mx-4 mt-4 rounded-md border border-[color:var(--kub-border-color)] px-3 py-2 text-sm text-[color:var(--kub-text)] sm:mx-6">{children}</div>;
 }
 
 function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
-  return <section aria-labelledby={`bot-section-${title}`} className="rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-4"><h3 id={`bot-section-${title}`} className="text-sm font-semibold text-[color:var(--kub-text)]">{title}</h3>{description && <p className="mt-1 text-xs leading-5 text-[color:var(--kub-muted)]">{description}</p>}<div className="mt-4">{children}</div></section>;
+  return <section aria-labelledby={`bot-section-${title}`} className="kub-glass rounded-md border border-[color:var(--kub-border-color)] p-4"><h3 id={`bot-section-${title}`} className="text-sm font-semibold text-[color:var(--kub-text)]">{title}</h3>{description && <p className="mt-1 text-xs leading-5 text-[color:var(--kub-muted)]">{description}</p>}<div className="mt-4">{children}</div></section>;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
-  return <div className="min-w-0 bg-[var(--kub-surface-2)] p-3"><dt className="text-xs text-[color:var(--kub-muted)]">{label}</dt><dd className="mt-1 break-all text-sm font-medium text-[color:var(--kub-text)]">{value}</dd></div>;
+  return <div className="min-w-0 bg-[var(--kub-inset)] p-3"><dt className="text-xs text-[color:var(--kub-muted)]">{label}</dt><dd className="mt-1 break-all text-sm font-medium text-[color:var(--kub-text)]">{value}</dd></div>;
 }
 
 function ConfirmDialog({ action, onClose, onConfirm }: { action: ConfirmAction; onClose(): void; onConfirm(): Promise<unknown> }) {

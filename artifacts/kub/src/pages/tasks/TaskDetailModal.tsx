@@ -775,7 +775,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
               rows={2}
               disabled={taskIsDeleted}
               placeholder="Оставьте комментарий…"
-              className="flex-1 rounded-xl px-3 py-2 text-sm outline-none resize-none bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all"
+              className="flex-1 rounded-xl px-3 py-2 text-sm outline-none resize-none bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all"
             />
             <KubButton
               variant="primary"
