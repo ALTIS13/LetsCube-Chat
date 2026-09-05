@@ -949,12 +949,34 @@ textarea::placeholder, input::placeholder {
 }
 
 /* Surface panel with cyber border + inner gradient sheen. */
+/* The panel keeps its own identity — a faint cyan wash falling off towards
+   the middle — but the wash is now a layer over the shared fill rather than a
+   colour mixed into an opaque surface, so the panel is made of the same
+   material as everything else and still looks like itself.
+
+   Note for whoever puts a position: fixed descendant inside one of these: a
+   backdrop-filter makes its element a containing block for fixed children, so
+   the child would lay out against the panel instead of the viewport. That is a
+   real defect that was hit and fixed on the app chrome; the escape hatch there
+   is KubGlassLayer, which puts the same material on a sheet behind the panel
+   where it has no descendants to capture. */
 .kub-panel {
+  isolation: isolate;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--kub-cyan) 5%, var(--kub-surface)) 0%, var(--kub-surface) 60%);
+    linear-gradient(180deg, color-mix(in srgb, var(--kub-cyan) 7%, transparent) 0%, transparent 60%),
+    var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
   border: 1px solid var(--kub-border-color);
   border-radius: 14px;
   position: relative;
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .kub-panel {
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--kub-cyan) 5%, var(--kub-surface)) 0%, var(--kub-surface) 60%);
+  }
 }
 
 /* Hex-style cut corners (decorative, used on primary CTAs and hero card). */
