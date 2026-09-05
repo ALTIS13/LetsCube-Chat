@@ -194,7 +194,11 @@ function SupportFact({
 }) {
   return (
     <div className="flex gap-3 border-b border-[color:var(--kub-border-color)] pb-5">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]">
+      {/* A chip, so the veil: it has to be found against the page here, and
+          against whatever this column sits on if the layout ever changes.
+          --kub-surface-2 answered "one step above" for a surface that has since
+          moved past it. */}
+      <span className="kub-raise flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[color:var(--kub-cyan)]">
         <KubIcon name={icon} size={17} />
       </span>
       <div>

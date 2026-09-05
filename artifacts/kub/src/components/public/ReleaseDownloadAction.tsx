@@ -56,7 +56,11 @@ function renderControl(platform: PublicPlatformState, onRetry?: () => void): Rea
       <button
         type="button"
         onClick={onRetry}
-        className={cn(ACTION_BOX, OUTLINE, "text-[color:var(--kub-text)]")}
+        // The only pressable control among the outlined states, and it lands on
+        // a card whose own surface differs per platform, so the hover is the
+        // veil rather than a fixed elevation colour that would go flush on one
+        // of them.
+        className={cn(ACTION_BOX, OUTLINE, "kub-raise-hover text-[color:var(--kub-text)]")}
       >
         <KubIcon name="rotate" size={16} tone="muted" />
         Повторить проверку

@@ -76,7 +76,22 @@ export function PlatformShowcase({ platform, onRetry }: Props) {
   return (
     <section
       aria-labelledby={`platform-${platform.platform}`}
-      className="border-t border-[color:var(--kub-border-color)] py-8 first:border-t-0 sm:py-12"
+      className={cn(
+        "rounded-2xl border border-[color:var(--kub-border-color)] p-5 sm:p-8",
+        // The difference the words already state, said again in depth. A
+        // platform with a published catalog is a sheet of the material, lifted
+        // off the page and carrying its own shadow; one still in development
+        // lies flat on that page inside the same outline.
+        //
+        // Distance, not fault. Nothing here is tinted with --kub-danger and
+        // nothing is dimmed, so an unbuilt platform reads as further away
+        // rather than as a refusal — which is what "В разработке" means.
+        //
+        // Keyed on `catalogPublished` rather than on `state` because that is a
+        // fixed input per platform: the card cannot change substance while the
+        // catalog is being checked, or when a fetch fails and comes back.
+        platform.catalogPublished && "kub-glass",
+      )}
     >
       <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:gap-12">
         <div className="min-w-0 lg:w-[38%]">

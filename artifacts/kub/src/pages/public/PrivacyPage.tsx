@@ -55,7 +55,12 @@ export function PrivacyPage() {
             </div>
           </div>
 
-          <dl className="mt-7 grid gap-px overflow-hidden rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-border-color)] sm:grid-cols-3">
+          {/* One card with hairlines inside it, rather than three cells over a
+              `gap-px` sheet of --kub-border-color. That trick needs an opaque
+              fill behind the cells, which is a flat colour for them to blur —
+              the material would have collapsed to paint here and nowhere
+              else on the page. */}
+          <dl className="kub-glass mt-7 grid divide-y divide-[color:var(--kub-border-color)] overflow-hidden rounded-md border border-[color:var(--kub-border-color)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             <PolicyMeta label="Версия" value={PRIVACY_POLICY_VERSION} />
             <PolicyMeta label="Действует с" value={PRIVACY_POLICY_EFFECTIVE_DATE} />
             <PolicyMeta label="Оператор" value={PRIVACY_POLICY.operator.shortName} />
@@ -112,7 +117,7 @@ export function PrivacyPage() {
 
 function PolicyMeta({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-[var(--kub-surface)] px-4 py-3">
+    <div className="px-4 py-3">
       <dt className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--kub-muted)]">
         {label}
       </dt>

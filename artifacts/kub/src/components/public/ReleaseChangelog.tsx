@@ -25,7 +25,10 @@ export function ReleaseChangelog({ entry }: { entry: PublicChangelogEntry | null
   return (
     <section
       aria-labelledby="public-changelog-title"
-      className="border-t border-[color:var(--kub-border-color)] py-10 sm:py-14"
+      // A card of the same material as the platforms above it, carrying its own
+      // top margin so the two surfaces keep one rhythm on both pages that mount
+      // this. `mt-*` matches the gap of the platform grid it follows.
+      className="kub-glass mt-4 rounded-2xl border border-[color:var(--kub-border-color)] p-5 sm:mt-5 sm:p-8"
     >
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h2 id="public-changelog-title" className="text-2xl font-bold text-[color:var(--kub-text)]">

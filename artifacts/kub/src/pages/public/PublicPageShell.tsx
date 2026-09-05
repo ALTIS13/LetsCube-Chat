@@ -16,9 +16,17 @@ export function PublicPageShell({ children, scrollRootRef }: PublicPageShellProp
     <div
       ref={scrollRootRef}
       data-testid="public-scroll-root"
-      className="h-dvh overflow-x-hidden overflow-y-auto bg-[var(--kub-bg)] text-[color:var(--kub-text)]"
+      // No fill. --kub-ambient is painted once, on `body`, and this element is
+      // full height: an opaque --kub-bg here handed the header, the footer and
+      // every card on these pages one flat colour to blur, which is the same
+      // colour back. The shell is the window, not the wall.
+      className="h-dvh overflow-x-hidden overflow-y-auto text-[color:var(--kub-text)]"
     >
-      <header className="public-page-print-hide sticky top-0 z-30 border-b border-[color:var(--kub-border-color)] bg-[color:var(--kub-surface)]/95 backdrop-blur">
+      {/* The material, not a hand-rolled 95% fill under a `backdrop-blur`: one
+          declaration for every frosted surface in the product, so the public
+          header cannot drift into being a slightly different substance from
+          the application header a visitor sees after signing in. */}
+      <header className="public-page-print-hide kub-glass sticky top-0 z-30 border-b border-[color:var(--kub-border-color)]">
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
           <Link
             href="/"
@@ -64,7 +72,7 @@ export function PublicPageShell({ children, scrollRootRef }: PublicPageShellProp
 
       {children}
 
-      <footer className="public-page-print-hide border-t border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]">
+      <footer className="public-page-print-hide kub-glass border-t border-[color:var(--kub-border-color)]">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-7 text-xs text-[color:var(--kub-muted)] sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
           <p>© {new Date().getFullYear()} ООО «КУБ». LETSCUBE.</p>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">

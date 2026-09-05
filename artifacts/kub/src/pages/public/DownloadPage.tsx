@@ -29,7 +29,10 @@ export function DownloadPage() {
           </p>
         </header>
 
-        <div className="mt-8">
+        {/* The platforms are cards now, so the space between them is a gap
+            rather than the rule that used to separate two stretches of the
+            same page. */}
+        <div className="mt-8 grid gap-4 sm:gap-5">
           {platforms.map((platform) => (
             <PlatformShowcase key={platform.platform} platform={platform} onRetry={refresh} />
           ))}
@@ -39,7 +42,10 @@ export function DownloadPage() {
 
         <section
           aria-labelledby="web-version-title"
-          className="border-t border-[color:var(--kub-border-color)] pt-10"
+          // The browser is the universal fallback and it needs no download, so
+          // it is a released surface like Windows and Android: the same
+          // material, the same box.
+          className="kub-glass mt-4 rounded-2xl border border-[color:var(--kub-border-color)] p-5 sm:mt-5 sm:p-8"
         >
           <h2 id="web-version-title" className="text-xl font-semibold text-[color:var(--kub-text)]">
             Веб-версия

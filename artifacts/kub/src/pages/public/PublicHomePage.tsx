@@ -104,7 +104,9 @@ export function PublicHomePage() {
             {describePublicAvailability(platforms)}
           </p>
 
-          <div className="mt-4">
+          {/* Cards, so a gap rather than the rule that used to separate two
+              stretches of the same page. */}
+          <div className="mt-4 grid gap-4 sm:gap-5">
             {platforms.map((platform) => (
               <PlatformShowcase key={platform.platform} platform={platform} onRetry={refresh} />
             ))}

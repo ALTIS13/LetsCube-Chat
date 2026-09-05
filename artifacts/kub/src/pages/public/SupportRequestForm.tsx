@@ -115,7 +115,20 @@ export function SupportRequestForm({ busy, error, onSubmit }: SupportRequestForm
             <select
               value={input.category}
               onChange={(event) => setField("category", event.target.value)}
-              className="h-11 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none transition focus:border-[color:var(--kub-cyan)] focus:ring-2 focus:ring-[color:var(--kub-cyan)]/20"
+              // --kub-inset, not --kub-surface-2. Both read as a well here, so
+              // this is not a rescue: measured off the rendered frame in the
+              // dark theme, the panel composites to rgb(16,44,75), the old fill
+              // to rgb(11,33,58) at 1.148 below it and this one to rgb(8,22,41)
+              // at 1.282. What decides it is that --kub-surface-2 now also
+              // means a RAISED thing — a hover, a chip, a context row — and one
+              // token cannot mean both "above" and "below" once the surfaces
+              // around it move. --kub-inset is the one that only ever means
+              // below, and it is what the composer and the sidebar search
+              // already use.
+              //
+              // In the light theme the two tokens are the same value, so
+              // nothing moves there at all.
+              className="h-11 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none transition focus:border-[color:var(--kub-cyan)] focus:ring-2 focus:ring-[color:var(--kub-cyan)]/20"
               aria-invalid={Boolean(fieldErrors.category)}
               required
             >
@@ -153,7 +166,8 @@ export function SupportRequestForm({ busy, error, onSubmit }: SupportRequestForm
             maxLength={SUPPORT_LIMITS.messageMax}
             rows={6}
             required
-            className="min-h-32 w-full resize-y rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2.5 text-sm leading-6 text-[color:var(--kub-text)] outline-none transition placeholder:text-[color:var(--kub-muted)] focus:border-[color:var(--kub-cyan)] focus:ring-2 focus:ring-[color:var(--kub-cyan)]/20"
+            // --kub-inset, for the reason spelled out on the category select.
+            className="min-h-32 w-full resize-y rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2.5 text-sm leading-6 text-[color:var(--kub-text)] outline-none transition placeholder:text-[color:var(--kub-muted)] focus:border-[color:var(--kub-cyan)] focus:ring-2 focus:ring-[color:var(--kub-cyan)]/20"
             placeholder="Опишите проблему, ожидаемый результат и что уже пробовали сделать."
             aria-invalid={Boolean(fieldErrors.message)}
           />

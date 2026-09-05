@@ -35,7 +35,9 @@ export function BotDocsPage() {
       <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
         <header className="border-b border-[color:var(--kub-border-color)] pb-8">
           <div className="flex max-w-4xl items-start gap-4">
-            <span className="mt-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] text-[color:var(--kub-cyan)]">
+            {/* A chip, so the veil rather than a fill: one step nearer than
+                whatever it is laid on. */}
+            <span className="kub-raise mt-1 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[color:var(--kub-border-color)] text-[color:var(--kub-cyan)]">
               <KubIcon name="bot" size={22} />
             </span>
             <div className="min-w-0">
@@ -52,12 +54,15 @@ export function BotDocsPage() {
             </div>
           </div>
 
-          <dl className="mt-6 grid gap-px overflow-hidden rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-border-color)] md:grid-cols-2">
+          {/* One card with a hairline inside it. See the same table on the
+              privacy page: `gap-px` over an opaque sheet hands the cells one
+              flat colour to blur. */}
+          <dl className="kub-glass mt-6 grid divide-y divide-[color:var(--kub-border-color)] overflow-hidden rounded-md border border-[color:var(--kub-border-color)] md:grid-cols-2 md:divide-x md:divide-y-0">
             <EndpointMeta label="Базовый URL" value={BOT_API_BASE_URL} />
             <EndpointMeta label="Авторизация" value={BOT_API_AUTHORIZATION} />
           </dl>
 
-          <div className="mt-5 flex gap-3 rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-4 text-sm leading-6 text-[color:var(--kub-muted)]">
+          <div className="kub-glass mt-5 flex gap-3 rounded-md border border-[color:var(--kub-border-color)] p-4 text-sm leading-6 text-[color:var(--kub-muted)]">
             <KubIcon name="info" size={18} className="mt-0.5 shrink-0 text-[color:var(--kub-cyan)]" />
             <p>
               Концепции знакомы разработчикам Telegram-ботов, но LETSCUBE не заявляет
@@ -246,7 +251,7 @@ export function BotDocsPage() {
 
 function EndpointMeta({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 bg-[var(--kub-surface)] px-4 py-3">
+    <div className="min-w-0 px-4 py-3">
       <dt className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--kub-muted)]">
         {label}
       </dt>
@@ -287,7 +292,7 @@ function NumberedStep({
   children: ReactNode;
 }) {
   return (
-    <div className="border-t-2 border-[color:var(--kub-cyan)] bg-[var(--kub-surface)] p-4">
+    <div className="kub-glass border-t-2 border-[color:var(--kub-cyan)] p-4">
       <div className="flex items-center gap-2">
         <span className="font-mono text-xs font-bold text-[color:var(--kub-pink)]">{number}</span>
         <h3 className="text-sm font-bold text-[color:var(--kub-text)]">{title}</h3>
@@ -299,11 +304,16 @@ function NumberedStep({
 
 function CodeBlock({ title, code }: { title: string; code: string }) {
   return (
-    <section className="min-w-0 overflow-hidden rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]">
-      <h3 className="border-b border-[color:var(--kub-border-color)] px-4 py-2.5 text-xs font-bold text-[color:var(--kub-text)]">
+    // A well, not a card. Code is recessed, --kub-inset is what a well is cut
+    // into, and this page renders eight of these: eight `backdrop-filter`s on a
+    // long scrolling document would be eight layers recomposited per frame to
+    // reveal a page that is already behind them. The title strip takes the veil
+    // over the same fill, which is the lip of the well.
+    <section className="min-w-0 overflow-hidden rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)]">
+      <h3 className="kub-raise border-b border-[color:var(--kub-border-color)] px-4 py-2.5 text-xs font-bold text-[color:var(--kub-text)]">
         {title}
       </h3>
-      <pre className="max-w-full overflow-x-auto bg-[var(--kub-surface-2)] p-4 text-xs leading-6 text-[color:var(--kub-muted)]">
+      <pre className="max-w-full overflow-x-auto p-4 text-xs leading-6 text-[color:var(--kub-muted)]">
         <code>{code}</code>
       </pre>
     </section>

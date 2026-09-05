@@ -106,7 +106,11 @@ export function GuestSupportChat({
         </div>
       </header>
 
-      <div className="relative min-h-0 flex-1 bg-[var(--kub-bg)]/45">
+      {/* No fill. The panel around this is the material; a translucent
+          --kub-bg painted by hand across its middle covered the frosting over
+          the whole conversation and left it showing only in the header and the
+          composer strips. The bubbles carry their own elevation instead. */}
+      <div className="relative min-h-0 flex-1">
         <div
           ref={scrollRef}
           onScroll={handleScroll}
@@ -124,13 +128,20 @@ export function GuestSupportChat({
               className={system ? "flex justify-center" : `flex ${own ? "justify-end" : "justify-start"}`}
             >
               <div
+                // The veil, not --kub-surface-2: a bubble has to be found
+                // against the panel it lies on, and that panel is translucent,
+                // so its composited value depends on what is behind the page.
+                // An absolute colour chosen against one of those values is
+                // flush against the next. Deliberately not glass either —
+                // there is one blur per bubble to pay for on every scrolled
+                // frame, to reveal the panel that is already right behind it.
                 className={
                   system
-                    ? "max-w-xl rounded-md bg-[var(--kub-surface-2)] px-3 py-2 text-center text-xs text-[color:var(--kub-muted)]"
+                    ? "kub-raise max-w-xl rounded-md px-3 py-2 text-center text-xs text-[color:var(--kub-muted)]"
                     : `max-w-[88%] rounded-md px-3 py-2.5 text-sm leading-6 sm:max-w-[72%] ${
                         own
                           ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
-                          : "border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-[color:var(--kub-text)]"
+                          : "kub-raise border border-[color:var(--kub-border-color)] text-[color:var(--kub-text)]"
                       }`
                 }
               >
@@ -168,7 +179,9 @@ export function GuestSupportChat({
             rows={2}
             maxLength={4_000}
             placeholder="Напишите сообщение оператору"
-            className="min-h-11 flex-1 resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2.5 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+            // --kub-inset: a composer field is cut into the panel holding it,
+            // the same way the application's own composer is.
+            className="min-h-11 flex-1 resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2.5 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
           />
           <KubButton
             type="submit"
