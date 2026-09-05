@@ -178,6 +178,32 @@
   --kub-pink: #f04a92;
   --kub-online: #4DCD5E;
   --kub-danger: #EF4444;
+
+  /* ── Colours that carry text ──────────────────────────────────────────────
+   * A colour that is legible as a 3px border or a filled button is not
+   * necessarily legible as a word. These two are the cases where the product
+   * says something in colour rather than drawing something in it, and they are
+   * measured against the worst backdrop a translucent panel can composite to
+   * — a solid white field under the dark theme, a solid black one under the
+   * light theme. A blur cannot make a uniform field lighter or darker than
+   * itself, so that composite really is the limit.
+   *
+   * Use these ONLY for text. Fills, borders and icon shapes keep --kub-danger
+   * and --kub-cyan: those answer a 3:1 requirement, which they already meet,
+   * and swapping them would shift the product's colour for no reason.
+   */
+  /* --kub-danger as a word measured 3.45:1 here. This is NOT a cost of the
+     translucency: the same red reaches only 4.44:1 on a fully opaque dark
+     surface, so it has never been legible as text in this theme and no fill
+     alpha could have fixed it. #FF6B6B is 4.67:1 on the worst composite and
+     5.85:1 on --kub-surface-2. */
+  --kub-danger-text: #FF6B6B;
+  /* The accent as a word — active tabs, links. This one IS a regression the
+     material introduced: 5.14:1 on the opaque surface, 3.65:1 once the panel
+     samples what is behind it. #6FA3DC is 4.91:1 and 6.15:1. Raising the
+     panel's own alpha until the old colour passed would have meant giving up
+     the translucency to keep a colour, which is backwards. */
+  --kub-accent-text: #6FA3DC;
   --kub-warn: #F5B50A;
   --kub-chat-bg: var(--kub-bg);
   --kub-message-out: #0E2C44;
@@ -375,6 +401,13 @@
      Found by the badge contract, not by eye. */
   --kub-online: #3C8B3C;
   --kub-danger: #DC2626;
+  /* See the note in .dark. Measured against a solid black field, which is what
+     a panel in this theme composites towards at worst. #DC2626 as a word is
+     4.05:1 there; #C81E1E is 4.81:1, and 5.74:1 on white. */
+  --kub-danger-text: #C81E1E;
+  /* 4.42:1 for --kub-cyan (#2d6fac) here, against 5.02:1 for this one, which
+     is the smallest step along the same hue that clears the threshold. */
+  --kub-accent-text: #2A66A0;
   /* Darkened along the same hue: at #C2870A the warning dot measured 2.55:1 on
      --kub-surface-3, under the 3:1 an indicator needs. */
   --kub-warn: #A8760A;
