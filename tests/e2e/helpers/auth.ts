@@ -186,10 +186,9 @@ export async function loginIfNeeded(
       restored = await waitForAuthenticatedShell(page, 4_000);
     }
 
-    expect(
-      restored,
-      "neither the login form nor the authenticated shell appeared at /login",
-    ).toBe(true);
+    expect(restored, "neither the login form nor the authenticated shell appeared at /login").toBe(
+      true,
+    );
     await saveAuthState(page, authStateName);
     return;
   }
@@ -227,6 +226,41 @@ async function signInWithForm(
   // is how a guest visit overwrote a role's stored session with nothing but the
   // release-catalog cache.
   await saveAuthState(page, authStateName);
+}
+
+/**
+ * Signs in through the form every time, and never touches the saved state.
+ *
+ * For the two-device suite this is the point rather than an inefficiency. A
+ * saved storage state carries one refresh token, and Supabase rotates refresh
+ * tokens on use — so restoring the same state into two contexts gives them one
+ * token family to fight over and produces failures no real pair of devices
+ * would ever see. Two devices each sign in for themselves.
+ *
+ * It also skips rather than restores when only a saved state exists: this
+ * helper cannot manufacture a second independent session out of one.
+ */
+export async function signInFreshOrSkip(page: Page, role: QaRole) {
+  const credentials = loadQaCredentials(role);
+  test.skip(
+    !credentials,
+    `QA credentials for '${role}' are required; a saved auth state cannot give two independent sessions`,
+  );
+  if (!credentials) return;
+
+  await gotoLogin(page);
+  const emailInput = page.locator('input[type="email"]').first();
+  await expect(emailInput).toBeEditable({ timeout: 20_000 });
+  await emailInput.fill(credentials.email);
+  const passwordInput = page.locator('input[type="password"]').first();
+  await expect(passwordInput).toBeEditable();
+  await passwordInput.fill(credentials.password);
+  await page.locator('button[type="submit"]').first().click();
+
+  expect(
+    await waitForAuthenticatedShell(page, 25_000),
+    `sign-in as '${role}' did not reach the authenticated shell`,
+  ).toBe(true);
 }
 
 export async function loginAsRoleOrSkip(page: Page, role: QaAuthStateName) {
