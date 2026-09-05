@@ -103,6 +103,21 @@ test.describe("public privacy and support surfaces", () => {
   test("/support opens and restores a guest chat without leaking its secret", async ({ page }) => {
     const guestSecret = "guest-secret-value-that-stays-in-indexeddb";
     const ticketId = "f7a42e23-bd69-4ca3-a983-1fde8b7c44c1";
+    // The guest session is dated against the wall clock: `guestSupportSessionStore.load()`
+    // deletes an idle- or absolutely-expired record and hands the page back
+    // nothing, so the chat is not restored. Pinned dates made this a time bomb —
+    // the fixture used to say `idleExpiresAt: "2026-08-26T00:00:00.000Z"`, and
+    // from that morning onwards the reload below restored nothing and read as a
+    // product regression. Anchor the window to the run. The expiry rule itself
+    // is pinned against a fixed clock in tests/unit/support-guest-session.test.mjs,
+    // which is where a change in that behaviour belongs.
+    //
+    // 30 and 90 days are what supabase/functions/support-gateway/index.ts issues
+    // on `POST /tickets` — the old pinned pair was that same window, frozen on
+    // the day the fixture was written.
+    const day = 24 * 60 * 60 * 1000;
+    const idleExpiresAt = new Date(Date.now() + 30 * day).toISOString();
+    const absoluteExpiresAt = new Date(Date.now() + 90 * day).toISOString();
     const ticket = {
       id: ticketId,
       publicReference: "LC-2026-0042",
@@ -145,9 +160,9 @@ test.describe("public privacy and support surfaces", () => {
             session: {
               ticketId,
               secret: guestSecret,
-              idleExpiresAt: "2026-08-26T00:00:00.000Z",
-              absoluteExpiresAt: "2026-10-25T00:00:00.000Z",
-              updatedAt: "2026-07-27T09:00:00.000Z",
+              idleExpiresAt,
+              absoluteExpiresAt,
+              updatedAt: new Date().toISOString(),
             },
           }),
         });
@@ -188,6 +203,16 @@ test.describe("public privacy and support surfaces", () => {
     });
 
     await gotoOrSkip(page, "/support");
+    // `installFakeSmartCaptcha` stands in for a *rendered* SmartCaptcha widget.
+    // With no VITE_AUTH_CAPTCHA_SITE_KEY in the dev server's environment the
+    // component renders an "unavailable" plate instead, never calls
+    // `smartCaptcha.render`, and `__supportCaptchaCallback` is never installed —
+    // the test then fails several steps later on a message that says nothing
+    // about the missing variable.
+    await expect(
+      page.getByTestId("support-captcha"),
+      "the dev server for this spec needs VITE_AUTH_CAPTCHA_SITE_KEY set (any non-empty value); without it the support form renders the unconfigured-captcha plate",
+    ).not.toContainText("не настроена");
     await page.getByLabel("Ваше имя").fill("  Анна   Иванова ");
     await page.getByLabel("Эл. почта для ответа").fill(" ANNA@example.test ");
     await page.getByLabel("Номер телефона").fill("+7 (999) 123-45-67");
