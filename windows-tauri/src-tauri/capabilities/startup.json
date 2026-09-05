@@ -1,12 +1,17 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "startup",
-  "description": "Local startup retry control only.",
+  "description": "Local startup retry and changed-certificate acknowledgement only.",
   "local": true,
-  "windows": ["main"],
-  "platforms": ["windows"],
+  "windows": [
+    "main"
+  ],
+  "platforms": [
+    "windows"
+  ],
   "permissions": [
     "allow-retry-main",
+    "allow-startup-accept-peer-change",
     "allow-begin-startup-qa",
     "allow-startup-start-dragging",
     "allow-startup-minimize",

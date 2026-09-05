@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::Deserialize;
-use startup::{StartupErrorCode, StartupSnapshot, StartupStage, StartupState};
+use startup::{PeerIdentity, StartupErrorCode, StartupSnapshot, StartupStage, StartupState};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::webview::{NewWindowResponse, PageLoadEvent};
@@ -32,6 +32,13 @@ const BUNDLED_STARTUP_URL: &str = "http://tauri.localhost/startup.html";
 const PRODUCTION_PROFILE: &str = "webview-production-v1";
 const UPDATE_CHANNEL_FILE: &str = "updater-channel.json";
 const STORAGE_SETTINGS_FILE: &str = "storage-settings.json";
+/// Where the fingerprint of the node's certificate is remembered between runs.
+/// Reached through app_data_root like every other file the shell owns, so the
+/// storage QA harness relocates it with the rest of the profile.
+const PEER_TRUST_FILE: &str = "node-trust.json";
+/// A trust record is 64 hex characters and a timestamp. Anything larger is not
+/// one, and is refused without being parsed.
+const MAX_PEER_TRUST_BYTES: u64 = 4 * 1024;
 const UPDATE_TIMEOUT: Duration = Duration::from_secs(8);
 const STARTUP_EVENT: &str = "letscube://startup-state";
 const DESKTOP_NOTIFICATION_ACTION_EVENT: &str = "letscube:desktop-notification-action";
@@ -150,6 +157,72 @@ fn app_data_root<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
     }
 
     app.path().app_local_data_dir()
+}
+
+/// SHA-256 of the DER leaf certificate, lowercase hex.
+///
+/// The bytes come off a response that reqwest already returned `Ok` for, which
+/// means rustls had validated the chain against the platform roots and matched
+/// the hostname before this function can be reached. This is a fingerprint of
+/// an already-trusted certificate, never a substitute for trusting it: there is
+/// no custom verifier anywhere in this file and no path that accepts an invalid
+/// chain.
+fn certificate_fingerprint(der: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(der);
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        use std::fmt::Write as _;
+        let _ = write!(hex, "{byte:02x}");
+    }
+    hex
+}
+
+fn peer_trust_path<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
+    Ok(app_data_root(app)?.join(PEER_TRUST_FILE))
+}
+
+/// The recorded fingerprint, or None when there is nothing to compare against —
+/// a first run, a cleared profile, or a file that is not a record this version
+/// wrote. A damaged record reads as "no record": it re-adopts on the next
+/// success rather than accusing the node of changing.
+fn load_peer_trust<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
+    let path = peer_trust_path(app).ok()?;
+    let file = std::fs::File::open(&path).ok()?;
+    if file.metadata().ok()?.len() > MAX_PEER_TRUST_BYTES {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(
+        &mut std::io::Read::take(file, MAX_PEER_TRUST_BYTES + 1),
+        &mut bytes,
+    )
+    .ok()?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    let recorded = value.get("sha256")?.as_str()?;
+    is_fingerprint(recorded).then(|| recorded.to_ascii_lowercase())
+}
+
+/// 32 bytes of lowercase hex and nothing else. Guards both what is written to
+/// the record and what is read back out of it.
+fn is_fingerprint(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn store_peer_trust<R: Runtime>(app: &AppHandle<R>, fingerprint: &str) {
+    if !is_fingerprint(fingerprint) {
+        return;
+    }
+    let Ok(path) = peer_trust_path(app) else {
+        return;
+    };
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let record = serde_json::json!({ "sha256": fingerprint });
+    if let Ok(text) = serde_json::to_string(&record) {
+        let _ = std::fs::write(path, text);
+    }
 }
 
 fn storage_settings_path<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
@@ -1007,6 +1080,9 @@ async fn run_preflight<R: Runtime>(app: AppHandle<R>) {
 
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
+        // Surfaces the leaf certificate of a connection rustls has already
+        // validated. It changes nothing about how that validation is done.
+        .tls_info(true)
         .redirect(reqwest::redirect::Policy::custom(|attempt| {
             if is_allowed_navigation(attempt.url()) {
                 attempt.follow()
@@ -1042,6 +1118,59 @@ async fn run_preflight<R: Runtime>(app: AppHandle<R>) {
     {
         fail_startup(&app, StartupErrorCode::TlsOrigin);
         return;
+    }
+
+    // Only now, on a response whose chain and hostname rustls already accepted,
+    // is the certificate hashed and compared with the one this computer
+    // recorded. The comparison is a change detector, not an authentication: a
+    // client whose first connection is intercepted records the interceptor. The
+    // authentication is the chain validation above, which fails the request
+    // outright and can never be continued past.
+    if let Some(der) = response
+        .extensions()
+        .get::<reqwest::tls::TlsInfo>()
+        .and_then(|info| info.peer_certificate())
+    {
+        let observed = certificate_fingerprint(der);
+        let expected = load_peer_trust(&app);
+        let accepted = app
+            .state::<StartupController>()
+            .0
+            .lock()
+            .ok()
+            .and_then(|state| state.accepted_peer().map(str::to_owned));
+        let identity = PeerIdentity {
+            observed_sha256: observed.clone(),
+            expected_sha256: expected.clone(),
+        };
+
+        match expected {
+            // A recorded value that no longer matches, and which the person has
+            // not just accepted for this attempt. This stops, and offers the
+            // comparison; it never blocks permanently, because an ordinary
+            // renewal looks exactly like this and a hard block would lock every
+            // client out of the app that carries its own updater.
+            Some(recorded)
+                if recorded != observed && accepted.as_deref() != Some(observed.as_str()) =>
+            {
+                if let Ok(mut state) = app.state::<StartupController>().0.lock() {
+                    let _ = state.fail_peer_changed(identity);
+                }
+                PREFLIGHT_RUNNING.store(false, Ordering::Release);
+                emit_startup_snapshot(&app);
+                return;
+            }
+            _ => {
+                // First run, an unchanged certificate, or one accepted for this
+                // attempt: adopt it so the next run compares against what was
+                // actually served.
+                store_peer_trust(&app, &observed);
+                if let Ok(mut state) = app.state::<StartupController>().0.lock() {
+                    state.set_peer(identity);
+                }
+                emit_startup_snapshot(&app);
+            }
+        }
     }
 
     if !transition_startup(&app, StartupStage::UpdateCheck) {
@@ -1519,6 +1648,28 @@ fn retry_main(window: WebviewWindow, app: AppHandle) {
 }
 
 #[tauri::command]
+fn startup_accept_peer_change(window: WebviewWindow, app: AppHandle) {
+    // Same guard as every other startup command: the exact bundled startup URL
+    // in the main window, nothing else.
+    if require_startup_main(&window).is_err() {
+        return;
+    }
+    // The state machine refuses unless the machine is sitting on a changed pin,
+    // so this cannot be used to continue past a chain that failed to validate.
+    let accepted = app
+        .state::<StartupController>()
+        .0
+        .lock()
+        .ok()
+        .is_some_and(|mut state| state.accept_peer_change().is_ok());
+    if !accepted {
+        return;
+    }
+    emit_startup_snapshot(&app);
+    tauri::async_runtime::spawn(run_preflight(app));
+}
+
+#[tauri::command]
 fn begin_startup_qa(window: WebviewWindow, app: AppHandle) {
     #[cfg(not(debug_assertions))]
     {
@@ -1559,6 +1710,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             retry_main,
+            startup_accept_peer_change,
             begin_startup_qa,
             desktop_get_update_state,
             desktop_get_update_channel,
@@ -1933,10 +2085,39 @@ mod tests {
         assert!(css.contains(
             "right: calc(25% - var(--column-shift) + var(--node-half) + var(--node-offset))"
         ));
+        assert!(css.contains(
+            "--node-offset: calc(var(--connector-clear) + var(--connector-node) - var(--chassis-inset))"
+        ));
         assert!(script.contains("matchMedia"));
         assert!(script.contains("reducedMotion ? 1 : 320"));
         assert!(script.contains("fadeDuration"));
         assert!(!script.contains("service_role"));
+    }
+
+    #[test]
+    fn a_certificate_fingerprint_is_the_sha256_of_the_der_bytes() {
+        // NIST vector for the empty input, so a swapped digest is caught rather
+        // than a self-consistent wrong one.
+        assert_eq!(
+            certificate_fingerprint(b""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(
+            certificate_fingerprint(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(certificate_fingerprint(b"").len(), 64);
+    }
+
+    #[test]
+    fn only_32_bytes_of_hex_is_accepted_as_a_fingerprint() {
+        assert!(is_fingerprint(&"a".repeat(64)));
+        assert!(is_fingerprint(&certificate_fingerprint(b"abc")));
+        assert!(!is_fingerprint(""));
+        assert!(!is_fingerprint(&"a".repeat(63)));
+        assert!(!is_fingerprint(&"a".repeat(65)));
+        assert!(!is_fingerprint(&format!("{}z", "a".repeat(63))));
+        assert!(!is_fingerprint(&"-".repeat(64)));
     }
 
     #[test]

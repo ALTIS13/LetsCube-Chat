@@ -408,6 +408,10 @@ test("Windows Tauri shell files encode the minimum-capability production contrac
   assert.deepEqual(startupCapability.permissions.sort(), [
     "allow-begin-startup-qa",
     "allow-retry-main",
+    // Added deliberately: the one control that continues past a fingerprint
+    // that no longer matches. It is scoped to our own recorded value and can
+    // never reach the chain validation, which fails the request outright.
+    "allow-startup-accept-peer-change",
     "allow-startup-close-to-tray",
     "allow-startup-minimize",
     "allow-startup-start-dragging",

@@ -2,6 +2,7 @@ use std::fs;
 
 const COMMANDS: &[&str] = &[
     "retry_main",
+    "startup_accept_peer_change",
     "begin_startup_qa",
     "desktop_get_update_state",
     "desktop_get_update_channel",
