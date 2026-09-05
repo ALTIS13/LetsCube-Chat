@@ -14,6 +14,7 @@ import { TopicStrip } from "./TopicStrip";
 import { useTopics } from "@/hooks/useTopics";
 import { useMessages } from "@/hooks/useMessages";
 import { useMessageMediaVariantUrls, type MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
+import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
 import { useAppStore } from "@/store/app.store";
 import { createClient, getSupabasePublicUrl } from "@/lib/supabase/client";
 import { KubEmptyState, KubIcon } from "@/components/kub";
@@ -122,7 +123,18 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const [openMedia, setOpenMedia] = useState<MediaViewerItem | null>(null);
   const [draftRestore, setDraftRestore] = useState<{ id: string; text: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const composerRef = useRef<HTMLDivElement>(null);
+  // Both pieces of chrome run over the conversation, so both have to report the
+  // height the list pads itself by. The composer is the one that moves most —
+  // reply preview, attachments, a draft that wraps — and it was already
+  // measured; the header stack grows too, when a message is pinned or the
+  // in-chat search opens.
+  const {
+    ref: composerRef,
+    height: composerHeight,
+    measure: measureComposerHeight,
+    node: composerNode,
+  } = useMeasuredHeight<HTMLDivElement>(chatId);
+  const { ref: chromeRef, height: chromeHeight } = useMeasuredHeight<HTMLDivElement>(chatId);
   const messageRefs = useRef<Record<string, HTMLDivElement>>({});
   const pendingJumpRef = useRef<string | null>(null);
   const initialUnreadRef = useRef<{ chatId: string; count: number; since: string | null } | null>(null);
@@ -133,7 +145,6 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     return normalizeMediaQuality(window.localStorage.getItem(MEDIA_QUALITY_STORAGE_KEY));
   });
   const [keyboardInset, setKeyboardInset] = useState(0);
-  const [composerHeight, setComposerHeight] = useState(0);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
   const stagedAttachmentsRef = useRef<StagedAttachment[]>([]);
   const cancelledAttachmentIdsRef = useRef<Set<string>>(new Set());
@@ -162,7 +173,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     const visualViewport = window.visualViewport;
     const updateKeyboardInset = () => {
       const mobile = window.innerWidth < 768;
-      const composerHasFocus = Boolean(composerRef.current?.contains(document.activeElement));
+      const composerHasFocus = Boolean(composerNode?.contains(document.activeElement));
       if (!mobile || !visualViewport || !isComposerFocused || !composerHasFocus) {
         setKeyboardInset(0);
         return;
@@ -182,33 +193,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       window.removeEventListener("resize", updateKeyboardInset);
       window.removeEventListener("orientationchange", updateKeyboardInset);
     };
-  }, [isComposerFocused]);
-
-  const measureComposerHeight = useCallback(() => {
-    const node = composerRef.current;
-    const nextHeight = node ? Math.ceil(node.getBoundingClientRect().height) : 0;
-    setComposerHeight((current) => current === nextHeight ? current : nextHeight);
-  }, []);
-
-  useLayoutEffect(() => {
-    measureComposerHeight();
-    const node = composerRef.current;
-    if (!node) return;
-
-    let frame = window.requestAnimationFrame(measureComposerHeight);
-    const observer = typeof ResizeObserver !== "undefined"
-      ? new ResizeObserver(() => {
-        window.cancelAnimationFrame(frame);
-        frame = window.requestAnimationFrame(measureComposerHeight);
-      })
-      : null;
-
-    observer?.observe(node);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      observer?.disconnect();
-    };
-  }, [measureComposerHeight, chatId]);
+  }, [composerNode, isComposerFocused]);
 
   useLayoutEffect(() => {
     measureComposerHeight();
@@ -773,7 +758,13 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     if (files.length) stageFiles(files, "drop");
   }, [stageFiles]);
 
-  const messageListBottomInset = 0;
+  // The conversation runs the full height of the pane, under both pieces of
+  // chrome, so its padding is exactly what they cover. Note what this does
+  // *not* change: the list gains `chromeHeight + composerHeight` of client
+  // height and the same amount of padding, so `scrollHeight - clientHeight` —
+  // every anchor in this chat is expressed in it — comes out unmoved.
+  const messageListTopInset = chromeHeight;
+  const messageListBottomInset = composerHeight;
   const messageMediaVariants = useMessageMediaVariantUrls(messages);
   const mediaPlaylist = useMemo(
     () => messages
@@ -785,15 +776,16 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   return (
     <ChatMediaPlaybackProvider chatId={chatId} playlist={mediaPlaylist}>
       <div
-        // The pane no longer paints --kub-chat-bg. It never showed: the message
-        // list carries `chat-bg` (wallpaper and colour both) and fills the rest,
-        // so this was a flat sheet behind the header and the composer and the
-        // only thing their blur could have sampled. Dropped, those two sit on
-        // the page ambient instead. The list is untouched.
+        // The pane paints no fill of its own. It used to paint --kub-chat-bg,
+        // which never showed, and was the flat sheet behind the header and the
+        // composer that their blur had to sample. Now the list runs the whole
+        // height of the pane and passes under both, so what they sample is the
+        // conversation — which is the only thing that reads as frosted.
         className="relative flex h-full w-full min-w-0 overflow-hidden"
         style={{
           "--kub-keyboard-inset": `${keyboardInset}px`,
           "--kub-composer-height": `${composerHeight}px`,
+          "--kub-chat-chrome-height": `${chromeHeight}px`,
           "--kub-message-list-bottom-inset": `${messageListBottomInset}px`,
         } as CSSProperties}
         onDragEnter={handleDragEnter}
@@ -810,48 +802,62 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           </div>
         </div>
       )}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <ChatHeader
-          chatId={chatId}
-          chat={chat}
-          onSearchOpen={() => setShowSearch(true)}
-          onInfoOpen={() => setShowInfo(true)}
-          onClearForMe={clearChatForMe}
-          mediaPlayback={<ChatMediaPlaybackBar compact />}
-        />
-
-        {isForum && (
-          <TopicStrip
-            topics={topics}
-            canManage={canManageTopics}
-            onCreate={createTopic}
-          />
-        )}
-
-        {showSearch && (
-          <ChatSearchBar
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div
+          ref={chromeRef}
+          // Over the conversation, not above it. Taken out of the column's flow
+          // so the list can have the whole pane and the glass something to
+          // frost; the list pays it back as padding, measured from this box.
+          //
+          // Still the first thing in the column's markup, which is the point of
+          // doing it this way: reading order and tab order are unchanged, and
+          // the header keeps its plain `relative` box, so the menu and dialogs
+          // it opens are laid out against the viewport exactly as before.
+          className="absolute inset-x-0 top-0 flex flex-col"
+          data-testid="chat-chrome-stack"
+        >
+          <ChatHeader
             chatId={chatId}
-            currentTopicId={messageTopicId}
-            isForum={isForum}
-            messages={messages}
-            onClose={() => setShowSearch(false)}
-            onJumpTo={handleSearchJump}
+            chat={chat}
+            onSearchOpen={() => setShowSearch(true)}
+            onInfoOpen={() => setShowInfo(true)}
+            onClearForMe={clearChatForMe}
+            mediaPlayback={<ChatMediaPlaybackBar compact />}
           />
-        )}
 
-        {pinError && (
-          <div className="mx-3 mt-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
-            {pinError}
-          </div>
-        )}
+          {isForum && (
+            <TopicStrip
+              topics={topics}
+              canManage={canManageTopics}
+              onCreate={createTopic}
+            />
+          )}
 
-        {pinnedReady && pinnedMessages.length > 0 && (
-          <PinnedMessage
-            messages={pinnedMessages}
-            onJump={handleJumpToPinned}
-            onUnpin={userId ? (msg) => void handleTogglePin(msg) : undefined}
-          />
-        )}
+          {showSearch && (
+            <ChatSearchBar
+              chatId={chatId}
+              currentTopicId={messageTopicId}
+              isForum={isForum}
+              messages={messages}
+              onClose={() => setShowSearch(false)}
+              onJumpTo={handleSearchJump}
+            />
+          )}
+
+          {pinError && (
+            <div className="mx-3 mt-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
+              {pinError}
+            </div>
+          )}
+
+          {pinnedReady && pinnedMessages.length > 0 && (
+            <PinnedMessage
+              messages={pinnedMessages}
+              onJump={handleJumpToPinned}
+              onUnpin={userId ? (msg) => void handleTogglePin(msg) : undefined}
+            />
+          )}
+        </div>
 
         {loading ? (
           <div className="flex-1 flex items-center justify-center chat-bg">
@@ -895,6 +901,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             loadingOlder={loadingOlder}
             olderError={olderError}
             bottomInset={messageListBottomInset}
+            topInset={messageListTopInset}
             layoutKey={chatId}
             layoutVersion={composerHeight}
             initialUnreadCount={initialUnreadRef.current?.chatId === chatId ? initialUnreadRef.current.count : 0}
@@ -904,7 +911,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
         <div
           ref={composerRef}
-          className="shrink-0 transition-[padding-bottom] duration-150 ease-out"
+          data-testid="chat-composer-dock"
+          // Over the conversation for the same reason the header is, and last
+          // in the column's markup for the same reason it was: nothing about
+          // the composer's own box changes, so the camera, the video recorder
+          // and the attachment backdrop still lay out against the viewport.
+          className="absolute inset-x-0 bottom-0 transition-[padding-bottom] duration-150 ease-out"
           style={{ paddingBottom: "calc(var(--kub-keyboard-inset, 0px) + env(safe-area-inset-bottom))" }}
         >
           <MessageInput

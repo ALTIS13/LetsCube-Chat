@@ -57,7 +57,10 @@ interface MessageListProps {
   hasMoreOlder?: boolean;
   loadingOlder?: boolean;
   olderError?: string | null;
+  /** Height of the chrome the composer occupies over the foot of the list. */
   bottomInset?: number;
+  /** Height of the chrome the header stack occupies over the head of the list. */
+  topInset?: number;
   layoutKey?: string;
   layoutVersion?: number;
   initialUnreadSince?: string | null;
@@ -147,6 +150,7 @@ export function MessageList({
   loadingOlder = false,
   olderError = null,
   bottomInset = 0,
+  topInset = 0,
   layoutKey,
   layoutVersion = 0,
   initialUnreadSince = null,
@@ -632,7 +636,7 @@ export function MessageList({
     // then let the deferred pass absorb whatever settles afterwards.
     applyBottomNow();
     return scrollToBottomAfterLayout(false);
-  }, [applyBottomNow, bottomInset, layoutVersion, scrollToBottomAfterLayout]);
+  }, [applyBottomNow, bottomInset, topInset, layoutVersion, scrollToBottomAfterLayout]);
 
   useEffect(() => {
     const content = contentRef.current;
@@ -697,11 +701,36 @@ export function MessageList({
   }, [applyBottomNow, applyMessageTopNow, isInitialBottomLocked, initialScrollKey, firstUnreadMessageId, sortedMessages.length, scrollToBottom, scrollToBottomAfterLayout, scrollToMessageAfterLayout, releaseInitialScrollGuard]);
 
   const resolvedBottomInset = Math.max(0, bottomInset);
+  const resolvedTopInset = Math.max(0, topInset);
 
   return (
-    <div className="relative flex-1 min-h-0 min-w-0 overflow-hidden">
+    <div
+      className="relative flex-1 min-h-0 min-w-0 overflow-hidden"
+      style={{
+        // Painted before the chrome that frosts over it.
+        //
+        // The list runs the full height of the pane, behind the header and the
+        // composer, so a blur over either has messages to sample instead of a
+        // flat page. But it sits between them in the DOM, and positioned
+        // siblings with `z-index: auto` paint in tree order, so by default it
+        // covers the header. `order` is the only way to move a flex item's
+        // paint position without a z-index, and a z-index here would make this
+        // box a stacking context and clamp the `fixed` overlays it hosts — the
+        // read-receipts dialog, the selection bar on a phone — inside it. That
+        // is the defect `KubGlassLayer`, `AppTopBar` and `MediaViewer` each
+        // carry a note about; this is the same trap approached from the other
+        // side. Measured: with `order` removed, a relatively positioned message
+        // bubble hit-tests above the header.
+        order: -1,
+        // The overlays below hang off this box's edges, and those edges are now
+        // under the chrome. They read the insets from here rather than take
+        // them as props so the offsets stay in the class that owns them.
+        "--kub-list-top-inset": `${resolvedTopInset}px`,
+        "--kub-list-bottom-inset": `${resolvedBottomInset}px`,
+      } as React.CSSProperties}
+    >
       {onBulkHideForMe && selectionMode && (
-        <div className="fixed bottom-[4.75rem] left-3 right-3 z-[70] flex items-center justify-between gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]/95 p-2 shadow-lg backdrop-blur sm:absolute sm:bottom-auto sm:left-auto sm:right-3 sm:top-2 sm:w-auto sm:justify-start sm:p-1.5">
+        <div className="fixed bottom-[4.75rem] left-3 right-3 z-[70] flex items-center justify-between gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]/95 p-2 shadow-lg backdrop-blur sm:absolute sm:bottom-auto sm:left-auto sm:right-3 sm:top-[calc(var(--kub-list-top-inset,0px)+0.5rem)] sm:w-auto sm:justify-start sm:p-1.5">
           <span className="px-2 text-xs font-semibold text-[color:var(--kub-muted)]">
             Выбрано: {selectedMessages.length}
           </span>
@@ -741,7 +770,7 @@ export function MessageList({
         </div>
       )}
       {bulkError && (
-        <div className="absolute left-3 right-3 top-14 z-20 rounded-xl border border-[color:var(--kub-danger)]/40 bg-[var(--kub-surface)]/95 px-3 py-2 text-xs text-[color:var(--kub-danger-text)] shadow-lg backdrop-blur">
+        <div className="absolute left-3 right-3 top-[calc(var(--kub-list-top-inset,0px)+3.5rem)] z-20 rounded-xl border border-[color:var(--kub-danger)]/40 bg-[var(--kub-surface)]/95 px-3 py-2 text-xs text-[color:var(--kub-danger-text)] shadow-lg backdrop-blur">
           {bulkError}
         </div>
       )}
@@ -771,7 +800,18 @@ export function MessageList({
           if (openActionMessageId) setOpenActionMessageId(null);
         }}
         className="chat-bg h-full min-w-0 overflow-y-auto overflow-x-hidden px-3 py-2 pb-6 [overflow-anchor:none] sm:px-4"
+        // Padding and scroll-padding move together, on both edges.
+        //
+        // The padding is what keeps the conversation out from under the chrome
+        // that now runs over it. The scroll-padding is what keeps every
+        // programmatic scroll honest: `scrollIntoView` aligns to the scrollport,
+        // and without this the search jump, the reply jump and the first-unread
+        // entry would all deliver their target to an edge the chrome covers —
+        // arriving, by the browser's account, exactly where it was asked to.
+        // That is the quiet way this change could have broken everything.
         style={{
+          paddingTop: `calc(0.5rem + ${resolvedTopInset}px)`,
+          scrollPaddingTop: `calc(0.5rem + ${resolvedTopInset}px)`,
           paddingBottom: `calc(1.5rem + ${resolvedBottomInset}px)`,
           scrollPaddingBottom: `calc(1.5rem + ${resolvedBottomInset}px)`,
         }}
@@ -976,7 +1016,7 @@ export function MessageList({
         <button
           onClick={() => scrollToBottom(true)}
           aria-label="К последним сообщениям"
-          className="absolute bottom-4 right-4 w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 z-10 bg-[var(--kub-surface)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-text)] hover:text-[color:var(--kub-cyan)] kub-glow-soft"
+          className="absolute bottom-[calc(var(--kub-list-bottom-inset,0px)+1rem)] right-4 w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 z-10 bg-[var(--kub-surface)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-text)] hover:text-[color:var(--kub-cyan)] kub-glow-soft"
         >
           {newCount > 0 && (
             <span className="absolute -top-2 -right-1 min-w-5 h-5 rounded-full text-xs font-semibold flex items-center justify-center px-1 bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]">

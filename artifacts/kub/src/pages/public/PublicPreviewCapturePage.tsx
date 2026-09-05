@@ -8,6 +8,7 @@ import { MessageInput } from "@/components/chat/MessageInput";
 import { MessageList } from "@/components/chat/MessageList";
 import { SidebarHeader } from "@/components/sidebar/SidebarHeader";
 import { KubGlassLayer } from "@/components/kub";
+import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
 import { useAppStore } from "@/store/app.store";
 import { cn } from "@/lib/utils";
 import {
@@ -46,6 +47,8 @@ export default function PublicPreviewCapturePage() {
   const setChats = useAppStore((state) => state.setChats);
   const setSelectedChatId = useAppStore((state) => state.setSelectedChatId);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const { ref: chromeRef, height: chromeHeight } = useMeasuredHeight<HTMLDivElement>();
+  const { ref: composerRef, height: composerHeight } = useMeasuredHeight<HTMLDivElement>();
 
   const chats = useMemo(() => (fixture ? previewChats(fixture) : []), [fixture]);
   const messages = useMemo(() => (fixture ? previewMessages(fixture) : []), [fixture]);
@@ -142,8 +145,15 @@ export default function PublicPreviewCapturePage() {
           </div>
 
           <div className="flex h-full flex-1 overflow-hidden">
-            <div className="flex h-full min-w-0 flex-1 flex-col">
-              <ChatHeader chatId={activeChat.id} chat={activeChat} />
+            {/* The same three-layer conversation `ChatWindow` builds: the list
+                runs the full height of the column and the chrome frosts over
+                it. Copied rather than abstracted for the same reason the rest
+                of this page is composed from shipping parts — but the geometry
+                has to match, because the scroll contracts are measured here. */}
+            <div className="relative flex h-full min-w-0 flex-1 flex-col">
+              <div ref={chromeRef} className="absolute inset-x-0 top-0 flex flex-col" data-testid="chat-chrome-stack">
+                <ChatHeader chatId={activeChat.id} chat={activeChat} />
+              </div>
               <MessageList
                 messages={messages}
                 onReply={() => undefined}
@@ -152,13 +162,18 @@ export default function PublicPreviewCapturePage() {
                 chatMembers={members}
                 chatType={activeChat.type}
                 myRole="owner"
+                topInset={chromeHeight}
+                bottomInset={composerHeight}
+                layoutVersion={composerHeight}
               />
-              <MessageInput
-                chatId={activeChat.id}
-                replyTo={null}
-                onCancelReply={() => undefined}
-                onSend={() => undefined}
-              />
+              <div ref={composerRef} data-testid="chat-composer-dock" className="absolute inset-x-0 bottom-0">
+                <MessageInput
+                  chatId={activeChat.id}
+                  replyTo={null}
+                  onCancelReply={() => undefined}
+                  onSend={() => undefined}
+                />
+              </div>
             </div>
           </div>
         </div>
