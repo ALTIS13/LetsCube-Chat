@@ -193,19 +193,49 @@ fn settle_storage_before_launch<R: Runtime>(app: &AppHandle<R>) {
             .map(PathBuf::from)
             .or_else(|| default_profile_dir(app).ok())
             .unwrap_or_else(|| target.clone());
+        // Set once the new location has been durably written down.
+        let mut recorded = false;
         if target.is_absolute() && target != current {
-            match storage::apply_pending_move(&current, &target) {
-                Ok(()) => {
-                    settings.location = Some(target.to_string_lossy().into_owned());
+            // The new location is written down BEFORE the old copy is removed,
+            // and the move is abandoned if that write fails.
+            //
+            // The previous order removed the original first and then wrote the
+            // settings with `let _ =`. A failing write — a full disk, an
+            // antivirus lock — left the settings naming a directory that no
+            // longer existed; WebView2 recreated it empty at the next launch
+            // and the person was signed out with their data stranded at a path
+            // nothing referenced. Reproduced end to end on the real client:
+            // 210 files moved, settings unwritten, /login with no auth keys.
+            //
+            // Committing first makes that failure harmless: the settings still
+            // name the original, the original is still whole, and the only cost
+            // is a duplicate copy left at the target.
+            let mut committed = settings.clone();
+            committed.location = Some(target.to_string_lossy().into_owned());
+            committed.pending_location = None;
+            let settings_path_for_commit = settings_path.clone();
+            match storage::apply_pending_move(&current, &target, || {
+                storage::store_settings(&settings_path_for_commit, &committed)
+            }) {
+                // Either outcome means the profile is at the target and
+                // recorded there. `MovedWithLeftovers` differs only in that
+                // stale bytes remain at the old path, which is rubbish to
+                // collect, not a reason to revert anything.
+                Ok(_) => {
+                    settings = committed;
+                    recorded = true;
                 }
                 Err(_) => {
-                    // The original is still whole; leaving the request cleared
-                    // is better than retrying a failing copy on every launch.
+                    // Nothing was committed, so the original is still whole and
+                    // still the recorded location. Clear the request rather
+                    // than retrying a failing copy on every launch.
                 }
             }
         }
-        settings.pending_location = None;
-        let _ = storage::store_settings(&settings_path, &settings);
+        if !recorded {
+            settings.pending_location = None;
+            let _ = storage::store_settings(&settings_path, &settings);
+        }
     }
 
     if let Ok(profile) = production_profile_dir(app) {

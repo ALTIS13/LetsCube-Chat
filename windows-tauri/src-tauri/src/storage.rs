@@ -305,13 +305,33 @@ pub fn verify_copy(expected: u64, actual: u64) -> io::Result<()> {
     Ok(())
 }
 
+/// What a relocation actually achieved.
+///
+/// Collapsing these into `Ok(())` would hide the case the caller must not react
+/// to: the profile is at its new home and recorded there, but the old directory
+/// could not be fully removed. Reverting on that would strand the person.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MoveOutcome {
+    /// The profile is at the target and the old copy is gone.
+    Moved,
+    /// The profile is at the target and recorded, but stale bytes remain behind.
+    MovedWithLeftovers,
+}
+
 /// Performs a recorded relocation. Only ever called before a window exists.
 ///
-/// Copy, verify by size, and only then remove the original. A failure at any
-/// point leaves the original where it was, which is the state the app can still
-/// start from.
-pub fn apply_pending_move(current: &Path, target: &Path) -> io::Result<()> {
-    apply_pending_move_with(current, target, copy_tree)
+/// Copy, verify by size, **record the new location**, and only then remove the
+/// original. The commit is what makes the order safe: a failure before it
+/// leaves the original where it was and still named by the settings, which is
+/// a state the app starts from unchanged.
+pub fn apply_pending_move(
+    current: &Path,
+    target: &Path,
+    commit: impl FnOnce() -> io::Result<()>,
+) -> io::Result<MoveOutcome> {
+    apply_pending_move_with(current, target, copy_tree, commit, |path| {
+        fs::remove_dir_all(path)
+    })
 }
 
 /// The body of a relocation, with the copy handed in.
@@ -325,17 +345,47 @@ fn apply_pending_move_with(
     current: &Path,
     target: &Path,
     copy: impl FnOnce(&Path, &Path) -> io::Result<u64>,
-) -> io::Result<()> {
+    commit: impl FnOnce() -> io::Result<()>,
+    remove: impl FnOnce(&Path) -> io::Result<()>,
+) -> io::Result<MoveOutcome> {
     if !current.exists() {
         fs::create_dir_all(target)?;
-        return Ok(());
+        commit()?;
+        return Ok(MoveOutcome::Moved);
     }
 
     let expected = directory_size(current);
     copy(current, target)?;
     verify_copy(expected, directory_size(target))?;
-    fs::remove_dir_all(current)?;
-    Ok(())
+
+    // Record where the profile now lives BEFORE the old copy is destroyed.
+    //
+    // This ordering is the whole fix. Previously the move removed the original
+    // and the caller wrote the settings afterwards, ignoring the result. When
+    // that write failed — a full disk, an antivirus lock — the settings still
+    // named a directory that no longer existed, WebView2 recreated it empty on
+    // the next launch, and the person was signed out with their data stranded
+    // at a path nothing referenced. Reproduced end to end: 210 files moved,
+    // settings unwritten, the client came up at /login with no auth keys.
+    //
+    // Committing first turns that into a harmless outcome: the settings still
+    // name the original, the original is still whole, the app starts as it
+    // always did, and the only cost is a duplicate copy at the target.
+    commit()?;
+
+    // From here the new location is the recorded truth. If the old directory
+    // cannot be fully removed the profile is still correct and reachable, so
+    // this is NOT a failed move — it leaves stale bytes behind, not a broken
+    // client, and the caller must not react by reverting anything. Reporting
+    // it as an error is what the previous shape did, which would have left the
+    // shell pointing at a half-deleted original while a complete copy sat
+    // unused. The outcome says which happened rather than collapsing both into
+    // `Ok`, because silently swallowing a failure is what produced the defect
+    // this function now exists to prevent.
+    match remove(current) {
+        Ok(()) => Ok(MoveOutcome::Moved),
+        Err(_) => Ok(MoveOutcome::MovedWithLeftovers),
+    }
 }
 
 /// The browser argument that asks the engine to bound its own cache.
@@ -425,7 +475,7 @@ mod tests {
         write(&from.join("EBWebView/Default/Cache/data_1"), &vec![7u8; 4096]);
 
         let before = directory_size(&from);
-        apply_pending_move(&from, &to).expect("move");
+        apply_pending_move(&from, &to, || Ok(())).expect("move");
 
         assert!(!from.exists(), "the original is removed once the copy is verified");
         assert_eq!(directory_size(&to), before, "every byte arrived");
@@ -465,12 +515,18 @@ mod tests {
         // A copy that reports success having written everything except the part
         // that matters: a volume that filled, a share that dropped, a copy that
         // lied. This is the shape of failure `verify_copy` exists for.
-        let result = apply_pending_move_with(&from, &to, |source, destination| {
-            copy_tree(
-                &source.join("EBWebView/Default/Cache"),
-                &destination.join("EBWebView/Default/Cache"),
-            )
-        });
+        let result = apply_pending_move_with(
+            &from,
+            &to,
+            |source, destination| {
+                copy_tree(
+                    &source.join("EBWebView/Default/Cache"),
+                    &destination.join("EBWebView/Default/Cache"),
+                )
+            },
+            || panic!("a short copy must never reach the commit"),
+            |_| panic!("a short copy must never reach the removal"),
+        );
 
         assert!(result.is_err(), "a short copy must be refused, not accepted");
         assert!(from.exists(), "the original profile must survive a short copy");
@@ -479,6 +535,124 @@ mod tests {
             b"session",
             "and the session inside it with it"
         );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_move_whose_record_cannot_be_written_keeps_the_original() {
+        // The defect this ordering exists to prevent, reproduced end to end on
+        // the real client before it was fixed: 210 files were copied, the old
+        // profile was removed, and only then were the settings written. That
+        // write failed, so the settings still named a directory that no longer
+        // existed. WebView2 recreated it empty at the next launch and the person
+        // was signed out, their data stranded at a path nothing referenced.
+        //
+        // Committing before the removal turns that into a harmless duplicate.
+        let base = temp_dir("commit-fails");
+        let from = base.join("from");
+        let to = base.join("to");
+        write(&from.join("EBWebView/Default/Local Storage/leveldb/CURRENT"), b"session");
+
+        let result = apply_pending_move_with(
+            &from,
+            &to,
+            copy_tree,
+            || Err(io::Error::new(io::ErrorKind::Other, "disk full")),
+            |_| panic!("an unrecorded move must never remove the original"),
+        );
+
+        assert!(result.is_err(), "a move that cannot be recorded is not a move");
+        assert!(
+            from.exists(),
+            "the original must survive: the settings still name it",
+        );
+        assert_eq!(
+            fs::read(from.join("EBWebView/Default/Local Storage/leveldb/CURRENT")).unwrap(),
+            b"session",
+            "and the session with it, which is the whole point",
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_move_that_copies_records_and_clears_reports_a_clean_move() {
+        let base = temp_dir("clean-move");
+        let from = base.join("from");
+        let to = base.join("to");
+        write(&from.join("EBWebView/Default/Local Storage/leveldb/CURRENT"), b"session");
+
+        let outcome =
+            apply_pending_move_with(&from, &to, copy_tree, || Ok(()), |path| fs::remove_dir_all(path)).unwrap();
+
+        assert_eq!(outcome, MoveOutcome::Moved);
+        assert!(to.join("EBWebView/Default/Local Storage/leveldb/CURRENT").exists());
+        assert!(!from.exists(), "a clean move removes the original");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_recorded_move_that_cannot_clear_the_old_copy_is_still_a_move() {
+        // The opposite mistake to the one above. Once the new location is
+        // written down the profile IS there, so a locked file left behind at
+        // the old path is rubbish to collect later — not an error to report,
+        // and certainly not a reason for the caller to revert and strand the
+        // person. The removal is a parameter because no real filesystem can be
+        // asked to refuse one: a file open in another process is what this
+        // stands for, and read-only attributes do not stop `remove_dir_all`.
+        let base = temp_dir("leftovers");
+        let from = base.join("from");
+        let to = base.join("to");
+        write(&from.join("EBWebView/Default/Local Storage/leveldb/CURRENT"), b"session");
+
+        let outcome = apply_pending_move_with(
+            &from,
+            &to,
+            copy_tree,
+            || Ok(()),
+            |_| Err(io::Error::new(io::ErrorKind::PermissionDenied, "file in use")),
+        )
+        .unwrap();
+
+        assert_eq!(
+            outcome,
+            MoveOutcome::MovedWithLeftovers,
+            "a move the cleanup could not finish is still a move",
+        );
+        assert!(
+            to.join("EBWebView/Default/Local Storage/leveldb/CURRENT").exists(),
+            "which is only true because the profile really is at the target",
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn the_commit_runs_before_the_original_is_removed() {
+        // Ordering stated as a fact rather than left to be read: at the moment
+        // the record is written, both copies must still exist.
+        let base = temp_dir("commit-order");
+        let from = base.join("from");
+        let to = base.join("to");
+        write(&from.join("EBWebView/Default/Local Storage/leveldb/CURRENT"), b"session");
+
+        let from_at_commit = std::cell::Cell::new(false);
+        let to_at_commit = std::cell::Cell::new(false);
+        let outcome = apply_pending_move_with(
+            &from,
+            &to,
+            copy_tree,
+            || {
+                from_at_commit.set(from.exists());
+                to_at_commit
+                    .set(to.join("EBWebView/Default/Local Storage/leveldb/CURRENT").exists());
+                Ok(())
+            },
+            |path| fs::remove_dir_all(path),
+        )
+        .unwrap();
+
+        assert_eq!(outcome, MoveOutcome::Moved);
+        assert!(from_at_commit.get(), "the original was gone before the record was written");
+        assert!(to_at_commit.get(), "the copy was not complete when the record was written");
         let _ = fs::remove_dir_all(&base);
     }
 
@@ -509,7 +683,7 @@ mod tests {
         let base = temp_dir("absent");
         let from = base.join("missing");
         let to = base.join("target");
-        apply_pending_move(&from, &to).expect("move");
+        apply_pending_move(&from, &to, || Ok(())).expect("move");
         assert!(to.is_dir());
         let _ = fs::remove_dir_all(&base);
     }
