@@ -176,6 +176,13 @@
      blue had. Lightened along the same hue by the smallest step that clears
      every surface. */
   --kub-pink: #f04a92;
+  /* The third colour used as text, joining --kub-danger-text and
+     --kub-accent-text for the same reason: this one measures 4.71:1 on a panel
+     but 3.75:1 against the worst backdrop a translucent panel can composite to,
+     and the label it carries on the registration screen sits on exactly such a
+     panel. 6.92:1 and 5.50:1 respectively. As with the other two, fills,
+     borders and icon shapes keep --kub-pink — they answer 3:1 and meet it. */
+  --kub-pink-text: #FF7FB4;
   --kub-online: #4DCD5E;
   --kub-danger: #EF4444;
   /* What a field, a well or a track is cut into. Deliberately not
@@ -449,6 +456,11 @@
      the smallest step that clears both the background and a white surface.
      The dark theme keeps the brand magenta. */
   --kub-pink: #c03068;
+  /* Deliberately the same value. Measured 5.29:1 on a panel and 4.77:1 against
+     the worst backdrop, so it passes and there is no reason to shift the
+     product's colour; the token exists so call sites can be uniform across
+     themes and so there is one place to change if the surfaces move again. */
+  --kub-pink-text: #c03068;
   /* Darkened along the same hue: at #4FAE4E the status dot measured 2.80:1 on
      white and 2.62:1 on the page, under the 3:1 a non-text indicator needs.
      Found by the badge contract, not by eye. */
@@ -1377,11 +1389,19 @@ textarea::placeholder, input::placeholder {
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--kub-cyan) 28%, var(--kub-border-color));
   border-radius: 0.75rem;
-  background: color-mix(in srgb, var(--kub-surface) 94%, transparent);
+  /* The shared material rather than a private imitation of it. What was here
+     was --kub-surface at 94% behind a 14px blur — six percent of the scene
+     reaching the sampler, which is to say a compositing layer bought and not
+     used — plus a shadow and a blur radius belonging to nothing else in the
+     product. This pill covers content it is not part of, so it takes the
+     stronger fill. */
+  isolation: isolate;
+  background: var(--glass-fill-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   padding: 0.55rem 0.625rem;
   color: var(--kub-text);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(14px);
+  box-shadow: var(--glass-shadow);
   animation: desktop-update-enter 180ms ease-out both;
 }
 

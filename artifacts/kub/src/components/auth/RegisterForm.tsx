@@ -335,7 +335,7 @@ export function RegisterForm() {
 
         <KubPanel glow="soft" padded={false} className="overflow-hidden">
           <div className="px-3 py-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-inset)]">
-            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-pink)]">
+            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-pink-text)]">
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--kub-pink)] kub-pulse" />
               Регистрация
             </div>
