@@ -152,6 +152,38 @@ behaviour:
   sentence *about* a token as a declaration of it. Writing prose about a token
   was therefore a way to break the test guarding it.
 
+### 10. The application's own classes sit outside cascade layers, and therefore win
+
+`.kub-panel`, `.kub-glass`, `.kub-glow-*`, `.kub-interactive`, `.kub-field`,
+`.kub-switch` and the rest are declared outside any `@layer`. Unlayered CSS
+beats **everything** inside a layer regardless of specificity or source order,
+and Tailwind's utilities live in `@layer utilities`. So a utility applied to an
+element carrying one of these classes, touching a property that class also sets,
+is silently dead.
+
+Two live defects came from this before it was understood as one thing:
+
+- The raise utilities set a `transition` shorthand, which replaced the
+  transition of everything they were applied to. A hover that paired
+  `transition-all hover:scale-125` went from easing to snapping.
+- `.kub-panel` sets `background`, `box-shadow` and the `border` shorthand, so a
+  task card's selected state — a fill, a ring and a border colour, all written
+  as utilities — never reached a pixel. Selected and unselected composited to
+  the same `rgb(16,39,67)`: a ratio of **1.000**. Its hover and deleted states
+  were dead by the same mechanism.
+
+The workaround where it has already bitten is `outline`, the one edge property
+`.kub-panel` does not claim; it follows the radius and a negative offset keeps
+the layout unchanged.
+
+The real fix is to move these classes into `@layer components`, below
+utilities. That is a cascade change across the whole product and every place
+where one of these classes was quietly overriding a utility would flip — some
+of those flips being the correction and some being a regression — so it needs
+its own pass with before-and-after measurement, not a quick edit. Until it is
+done: **assume a utility on an element with a `kub-` class does nothing until
+you have seen it work.**
+
 ## Where the material is not used, on purpose
 
 - **Message bubbles and list rows** — rule 6.

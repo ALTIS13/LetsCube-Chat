@@ -46,6 +46,37 @@ export interface StagedAttachment {
   mediaQuality?: MediaQuality;
 }
 
+/**
+ * The text a staged attachment is sent with, given the caption the sender typed.
+ *
+ * A picture or a video with no caption has no text. The file's name was never
+ * something the sender wrote, and using it as the message body made every
+ * silent photo arrive captioned with something they did not type — a real one
+ * read "ChatGPT Image 31 авг. 2026 г., 05_38_12-image.webp", in the sender's
+ * own bubble, as though they had typed it.
+ *
+ * The receiving side already tried to hide these, matching a word followed by a
+ * media extension. That could not work in general and did not work on that
+ * name: `\w` without the unicode flag contains no Cyrillic, and the class has
+ * no comma. Every such heuristic has unbounded holes, and closing them costs
+ * real captions that happen to look like file names — so the name is not
+ * written in the first place, and the guard on the other side stays only for
+ * the messages already stored this way.
+ *
+ * A document or an audio file keeps its name. There it is not decoration:
+ * nothing about the message says what it is without it, which is exactly why
+ * the filter on the receiving side only ever covered images and video.
+ */
+export function stagedAttachmentTextContent(
+  kind: StagedAttachmentKind,
+  caption: string | null | undefined,
+  fileName: string,
+): string {
+  const typed = caption?.trim() ?? "";
+  if (kind === "image" || kind === "video") return typed;
+  return typed || fileName;
+}
+
 export const CHAT_MEDIA_BUCKET = "media";
 export const MAX_STAGED_ATTACHMENTS = 10;
 export const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;

@@ -45,6 +45,7 @@ import {
   createStagedVideoMessageAttachment,
   createStagedVoiceAttachment,
   revokeAttachmentPreview,
+  stagedAttachmentTextContent,
   validateStagedAttachment,
   type StagedAttachment,
   type StagedAttachmentUpload,
@@ -970,7 +971,7 @@ function getStagedAttachmentMessageContent(attachment: StagedAttachment, caption
   if (attachment.kind === "video_message") {
     return `Видео-сообщение (${formatVoiceDurationLabel(attachment.durationMs ?? 0)})`;
   }
-  return caption?.trim() || attachment.name;
+  return stagedAttachmentTextContent(attachment.kind, caption, attachment.name);
 }
 
 function getStagedAttachmentMediaMetadata(attachment: StagedAttachment): Json | null | undefined {
