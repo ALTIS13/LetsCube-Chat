@@ -185,6 +185,14 @@
      chrome was raised past it, and every field went flush with the panel
      holding it. */
   --kub-inset: #081629;
+  /* A hover, a chip, a strip inside the composer — anything that has to be
+     found against the surface holding it. Its direction is per-theme and that
+     is the point: here it goes up, because a lighter surface is a nearer one
+     on a dark ground. --kub-surface-2 used to serve this and can no longer,
+     since the raised chrome now composites two values ABOVE it — a hover
+     painted with it was measured at a ratio of 1.002 against the row it was
+     meant to highlight, which is to say it had stopped existing. */
+  --kub-raised: #112B47;
 
   /* ── Colours that carry text ──────────────────────────────────────────────
    * A colour that is legible as a 3px border or a filled button is not
@@ -429,6 +437,11 @@
   /* See .dark. On a light ground a well goes down towards the page, which is
      the value fields in this theme already had. */
   --kub-inset: #EAF3FA;
+  /* See .dark. The direction reverses here: on a light ground the panel is
+     already close to white, so a nearer surface is told by going down towards
+     the page rather than up. This is the value hovers in this theme already
+     had, and it was measured working — the light theme never broke. */
+  --kub-raised: #EAF3FA;
   /* See the note in .dark. Measured against a solid black field, which is what
      a panel in this theme composites towards at worst. #DC2626 as a word is
      4.05:1 there; #C81E1E is 4.81:1, and 5.74:1 on white. */
@@ -515,9 +528,15 @@
   --glass-fill-strong: rgba(255, 255, 255, 0.94);
   --glass-line: rgba(255, 255, 255, 0.85);
   --glass-blur: blur(20px) saturate(140%);
+  /* On a light ground the fill cannot carry elevation: the page is already
+     rgb(244,248,252) and white is 255, so there are eleven values of headroom
+     against the dark theme's two hundred and fifty. The shadow is the only
+     lever, and it was not pulling — a spread of -26 shrinks the shadow by 26px
+     on every side before the 40px blur spreads it, so barely any of it cleared
+     the panel's own edge. Less negative spread and a shorter, denser fall. */
   --glass-shadow:
-    0 18px 40px -26px rgba(23, 51, 82, 0.26),
-    0 2px 8px -5px rgba(23, 51, 82, 0.16),
+    0 12px 28px -12px rgba(23, 51, 82, 0.24),
+    0 2px 6px -2px rgba(23, 51, 82, 0.10),
     inset 0 1px 0 var(--glass-line);
   --kub-ambient:
     radial-gradient(66% 50% at 14% -8%, rgba(66, 127, 194, 0.20) 0%, rgba(66, 127, 194, 0) 62%),
