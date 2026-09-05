@@ -148,7 +148,11 @@ export function HumanVerificationCaptcha({
       // plate around a white widget reads as a mistake, so the plate is light
       // and the widget looks like the embedded third-party control it is.
       ? "flex min-h-[136px] w-full items-center justify-center rounded-xl border border-[color:#d7dee6] bg-[#eef1f5] p-2"
-      : "min-h-[65px] overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/60 px-1 py-2";
+      // A third-party widget dropped into the card, which is what --kub-inset
+      // is for. --kub-surface-2 used to sit above the chrome around it; the
+      // chrome is translucent now and composites past it, so the plate had
+      // stopped reading as a recess in the auth card.
+      : "min-h-[65px] overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-1 py-2";
 
   return (
     <div className="space-y-2" data-testid={testId}>

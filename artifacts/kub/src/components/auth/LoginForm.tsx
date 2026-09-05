@@ -169,7 +169,18 @@ export function LoginForm() {
         </div>
 
         <KubPanel glow="soft" padded={false} className="overflow-hidden">
-          <div className="px-3 py-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/50">
+          {/* --kub-inset, which is the honest name for what this band already
+              was. It carried --kub-surface-2 at half alpha, an absolute
+              elevation colour — and the card is translucent chrome now that
+              composites ABOVE that token, so the "raised" strip was reading as
+              a dip. Four variants were measured live on both screens and in
+              both themes; the veil is the worst of them, because it is dense
+              enough to take the register card's --kub-pink label, which has no
+              text-legible variant, to 3.52:1. Cut into the card instead, the
+              accent label measures 7.83:1 dark and 6.18:1 light, and the pink
+              one 5.27:1 and 4.84:1 — better in dark than the half-alpha fill
+              managed (6.76:1 and 4.55:1) and level with it in light. */}
+          <div className="px-3 py-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-inset)]">
             <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-accent-text)]">
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--kub-cyan)] kub-pulse" />
               Авторизация

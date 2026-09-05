@@ -294,7 +294,10 @@ export function SupportWindow() {
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
         className={cn(
-          "flex shrink-0 items-center gap-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2",
+          // The veil, not a fill. The window is frosted, so an opaque strip
+          // across its top both cancels the material there and pins the title
+          // bar to an elevation the window itself has moved past.
+          "kub-raise flex shrink-0 items-center gap-2 border-b border-[color:var(--kub-border-color)] px-3 py-2",
           docked ? "" : "cursor-grab active:cursor-grabbing select-none",
         )}
         style={docked ? undefined : { paddingTop: "max(0.5rem, env(safe-area-inset-top))" }}
@@ -319,7 +322,7 @@ export function SupportWindow() {
             setDraft("");
             setError("");
           }}
-          className="rounded-lg p-1.5 text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface)] hover:text-[color:var(--kub-text)]"
+          className="rounded-lg p-1.5 text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]"
         >
           <KubIcon name="create" size={16} />
         </button>
@@ -327,7 +330,7 @@ export function SupportWindow() {
           type="button"
           aria-label="Закрыть поддержку"
           onClick={() => setOpen(false)}
-          className="rounded-lg p-1.5 text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface)] hover:text-[color:var(--kub-text)]"
+          className="rounded-lg p-1.5 text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]"
         >
           <KubIcon name="close" size={16} />
         </button>
@@ -348,7 +351,7 @@ export function SupportWindow() {
                 "shrink-0 rounded-lg px-2.5 py-1 text-xs transition-colors",
                 ticket.id === activeId && !composing
                   ? "bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] text-[color:var(--kub-text)]"
-                  : "text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)]",
+                  : "text-[color:var(--kub-muted)] kub-raise-hover",
               )}
               title={ticket.subject}
             >
@@ -369,7 +372,7 @@ export function SupportWindow() {
               onChange={(event) => setSubject(event.target.value)}
               maxLength={180}
               placeholder="Коротко о проблеме"
-              className="mt-1 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+              className="mt-1 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
             />
           </label>
           <label className="text-xs text-[color:var(--kub-muted)]">
@@ -377,7 +380,7 @@ export function SupportWindow() {
             <select
               value={category}
               onChange={(event) => setCategory(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+              className="mt-1 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
             >
               {SUPPORT_CATEGORIES.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -393,7 +396,7 @@ export function SupportWindow() {
               onChange={(event) => setDraft(event.target.value)}
               maxLength={8000}
               placeholder="Опишите, что случилось и что вы делали до этого"
-              className="mt-1 min-h-[7rem] flex-1 resize-none rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+              className="mt-1 min-h-[7rem] flex-1 resize-none rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
             />
           </label>
           {error && <p className="text-xs text-[color:var(--kub-danger-text)]">{error}</p>}
@@ -442,9 +445,13 @@ export function SupportWindow() {
                   <div
                     className={cn(
                       "max-w-[85%] rounded-2xl px-3 py-2 text-sm",
+                      // Both bubbles composite over the window rather than
+                      // replacing it: the person's own already mixed its cyan
+                      // into transparent, and support's now takes the veil so
+                      // the pair sit at the same distance from the glass.
                       mine
                         ? "bg-[color-mix(in_srgb,var(--kub-cyan)_22%,transparent)] text-[color:var(--kub-text)]"
-                        : "bg-[var(--kub-surface-2)] text-[color:var(--kub-text)]",
+                        : "kub-raise text-[color:var(--kub-text)]",
                     )}
                   >
                     {!mine && (
@@ -485,7 +492,7 @@ export function SupportWindow() {
                   maxLength={8000}
                   placeholder="Сообщение поддержке"
                   aria-label="Сообщение поддержке"
-                  className="max-h-24 min-h-[2.25rem] flex-1 resize-none rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                  className="max-h-24 min-h-[2.25rem] flex-1 resize-none rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
                 />
                 <KubButton
                   size="sm"

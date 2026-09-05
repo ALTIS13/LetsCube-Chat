@@ -115,7 +115,7 @@ export function AppUpdateBanner() {
             <button
               type="button"
               onClick={() => setSnoozedUntil(Date.now() + SNOOZE_MS)}
-              className="h-9 flex-1 rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)] sm:flex-none"
+              className="h-9 flex-1 rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-muted)] kub-raise-hover sm:flex-none"
             >
               Позже
             </button>

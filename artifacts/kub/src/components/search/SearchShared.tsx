@@ -126,9 +126,13 @@ export function SearchSection({
               className={cn(
                 "flex w-full min-w-0 items-center gap-3 rounded-2xl text-left transition-colors",
                 compact ? "px-2.5 py-2" : "px-3 py-2.5",
+                // The keyboard cursor mixes into transparent, not into
+                // --kub-surface-2: mixing into a surface makes the row opaque
+                // and pins it to an elevation the panel around it has already
+                // passed. The hover is the veil for the same reason.
                 active
-                  ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,var(--kub-surface-2))]"
-                  : "hover:bg-[var(--kub-surface-2)]",
+                  ? "bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]"
+                  : "kub-raise-hover",
               )}
             >
               <SearchResultIcon result={result} compact={compact} />
@@ -166,7 +170,7 @@ export function SearchEmptyState({
 }) {
   return (
     <div className={cn("flex flex-col items-center justify-center px-6 text-center", compact ? "min-h-[180px]" : "min-h-[220px]")}>
-      <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]">
+      <span className="kub-raise mb-3 flex h-12 w-12 items-center justify-center rounded-2xl text-[color:var(--kub-muted)]">
         <KubIcon name="search" size={22} />
       </span>
       <div className="text-sm font-semibold text-[color:var(--kub-text)]">{title}</div>
@@ -196,7 +200,7 @@ export function SearchFilterChips({
           data-testid={`search-filter-chip-${chip.key}`}
           onClick={() => onChangeQuery(removeSearchChip(query, chip))}
           className={cn(
-            "inline-flex shrink-0 items-center gap-1 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] font-semibold text-[color:var(--kub-muted)] transition hover:border-[color:var(--kub-cyan)] hover:text-[color:var(--kub-accent-text)]",
+            "kub-raise inline-flex shrink-0 items-center gap-1 rounded-lg border border-[color:var(--kub-border-color)] font-semibold text-[color:var(--kub-muted)] transition hover:border-[color:var(--kub-cyan)] hover:text-[color:var(--kub-accent-text)]",
             compact ? "h-7 px-2 text-[11px]" : "h-8 px-2.5 text-xs",
           )}
           title="Убрать фильтр"
@@ -238,13 +242,16 @@ export function SearchProfilePreview({
     }
   }, [profile.username]);
   return (
-    <div className="absolute inset-0 z-10 flex flex-col bg-[var(--kub-surface)]">
+    // `-strong`: this sheet is dropped over the result list, which it is not
+    // part of, in both the palette and the sidebar column. It hosts nothing
+    // `fixed`, so it can wear the material on itself rather than on a layer.
+    <div className="kub-glass-strong absolute inset-0 z-10 flex flex-col">
       <div className="flex items-center gap-2 border-b border-[color:var(--kub-border-color)] px-4 py-3">
         <button
           type="button"
           data-testid="global-search-profile-back"
           onClick={onBack}
-          className="rounded-lg p-2 text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-text)]"
+          className="rounded-lg p-2 text-[color:var(--kub-muted)] kub-raise-hover hover:text-[color:var(--kub-text)]"
           aria-label="Назад к результатам"
         >
           <KubIcon name="back" size={17} />
@@ -263,7 +270,7 @@ export function SearchProfilePreview({
               type="button"
               data-testid="search-profile-copy-username"
               onClick={() => void copyUsername()}
-              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-cyan)]"
+              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition kub-raise-hover hover:text-[color:var(--kub-cyan)]"
               aria-label="Скопировать никнейм"
               title={copiedUsername ? "Никнейм скопирован" : "Скопировать никнейм"}
             >
@@ -319,7 +326,13 @@ function SearchResultIcon({ result, compact = false }: { result: GlobalSearchRes
               ? "zap"
               : "user";
   return (
-    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]">
+    // The slot an avatar would have filled, so it is cut into the row rather
+    // than raised off it — and unlike the veil it does not move with the row's
+    // state. Measured: veiled, this plate lightened under the cursor and under
+    // the keyboard cursor until the cyan glyph on it fell to 2.73:1 and 2.65:1,
+    // below the 3:1 a non-text shape needs. On --kub-inset it is 5.12:1 dark
+    // and 4.70:1 light in every row state.
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--kub-inset)] text-[color:var(--kub-cyan)]">
       <KubIcon name={iconName} size={16} />
     </span>
   );

@@ -31,8 +31,15 @@ export function BannedScreen({ ban }: Props) {
   });
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-[var(--kub-bg)] kub-grid-bg text-[color:var(--kub-text)]">
-      <div className="relative w-full max-w-md rounded-2xl p-8 text-center shadow-2xl bg-[var(--kub-surface)] border border-[color:var(--kub-danger)]/40 kub-cut">
+    // `kub-grid-bg` already sets --kub-bg as its own background-colour, so the
+    // fill that used to sit here was a second copy of it.
+    <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 kub-grid-bg text-[color:var(--kub-text)]">
+      {/* This is a full-screen state rather than an overlay, so the question is
+          whether there is anything under the card worth showing — and there is:
+          the shell paints the lattice and both radial glows behind it. The card
+          is `-strong` because it covers them, and it drops `shadow-2xl` because
+          --glass-shadow is already one. */}
+      <div className="kub-glass-strong relative w-full max-w-md rounded-2xl p-8 text-center border border-[color:var(--kub-danger)]/40 kub-cut">
         <div className="absolute -top-6 left-1/2 -translate-x-1/2 opacity-50">
           <KubLogo size={28} />
         </div>
@@ -48,7 +55,13 @@ export function BannedScreen({ ban }: Props) {
           LETSCUBE
         </p>
 
-        <div className="rounded-xl p-4 text-left text-sm space-y-3 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
+        {/* A read-only block of facts, so it is cut into the card. The veil was
+            tried here first and is measurably wrong for it: it is denser than
+            the surface --kub-danger-text was chosen against, and "Бессрочно"
+            fell to 4.33:1. On --kub-inset it is 6.54:1 dark, up from the
+            5.85:1 this block gave before the pass, and 5.44:1 light, which is
+            exactly what it was. */}
+        <div className="rounded-xl p-4 text-left text-sm space-y-3 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)]">
           <Row label="Причина" value={ban.reason} mono />
           <Row label="Кто заблокировал" value={issuer} />
           <Row label="Когда" value={fmt(issued)} />

@@ -176,7 +176,13 @@ function CriticalUpdateGate({ title, description, pending, onInstall }: Critical
   return (
     <div
       ref={gateRef}
-      className="desktop-update-gate fixed inset-0 z-[75] flex items-center justify-center bg-[color:var(--kub-bg)]/94 px-4 backdrop-blur-md"
+      // The scrim dims the shell; it does not erase it. At 94% of --kub-bg with
+      // a blur of its own this wrote the material by hand and then left the
+      // panel over it a flat rectangle to sample, so the gate read as a plain
+      // dark box rather than as a sheet over the application. Same value the
+      // product's own Radix dialogs settled on, for the same reason, so the two
+      // layers cannot drift apart.
+      className="desktop-update-gate fixed inset-0 z-[75] flex items-center justify-center bg-black/45 px-4"
       data-testid="desktop-critical-update-gate"
       role="alertdialog"
       aria-modal="true"
@@ -184,8 +190,12 @@ function CriticalUpdateGate({ title, description, pending, onInstall }: Critical
       aria-describedby="desktop-critical-update-description"
       tabIndex={-1}
     >
-      <section className="w-full max-w-md rounded-2xl border border-[color:var(--kub-pink)]/45 bg-[var(--kub-surface)] p-6 text-center shadow-2xl">
-        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[color-mix(in_srgb,var(--kub-pink)_18%,var(--kub-surface))] text-[color:var(--kub-pink)]">
+      {/* `-strong`, and no shadow of its own: this covers the whole shell, and
+          the material already carries --glass-shadow. It is the same substance
+          the Tauri startup window's own dialogs are made of, which matters more
+          here than matching the browser. */}
+      <section className="kub-glass-strong w-full max-w-md rounded-2xl border border-[color:var(--kub-pink)]/45 p-6 text-center">
+        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[color-mix(in_srgb,var(--kub-pink)_18%,transparent)] text-[color:var(--kub-pink)]">
           <KubIcon name="shield" size={25} />
         </span>
         <h2 id="desktop-critical-update-title" className="mt-4 text-lg font-semibold text-[color:var(--kub-text)]">

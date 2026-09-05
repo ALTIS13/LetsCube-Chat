@@ -155,8 +155,11 @@ export function GlobalSearchPalette() {
       mobileSheet
     >
       <div className="relative flex h-full min-h-0 flex-col" data-testid="global-search-palette">
-        <div className="border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-4 py-3">
-          <div className="flex h-11 items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 focus-within:border-[color:var(--kub-cyan)]">
+        {/* No fill of its own. The dialog around this strip is frosted, and an
+            opaque band inside it hands that stretch of the panel one flat
+            colour to blur — the material simply stops at the header. */}
+        <div className="border-b border-[color:var(--kub-border-color)] px-4 py-3">
+          <div className="flex h-11 items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 focus-within:border-[color:var(--kub-cyan)]">
             <KubIcon name="search" size={17} className="shrink-0 text-[color:var(--kub-muted)]" />
             <input
               ref={inputRef}
@@ -173,7 +176,7 @@ export function GlobalSearchPalette() {
               <button
                 type="button"
                 onClick={() => setQuery("")}
-                className="rounded-lg p-1 text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface)] hover:text-[color:var(--kub-text)]"
+                className="rounded-lg p-1 text-[color:var(--kub-muted)] kub-raise-hover hover:text-[color:var(--kub-text)]"
                 aria-label="Очистить поиск"
               >
                 <KubIcon name="close" size={14} />
@@ -193,7 +196,10 @@ export function GlobalSearchPalette() {
                     "h-8 shrink-0 rounded-lg px-3 text-xs font-semibold transition-colors",
                     active
                       ? "bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] text-[color:var(--kub-accent-text)]"
-                      : "bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
+                      // The veil, so the resting chip is one step above
+                      // whatever the dialog composites to rather than a fixed
+                      // colour that the dialog has already passed.
+                      : "kub-raise text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
                   )}
                 >
                   {filter.label}
@@ -205,12 +211,12 @@ export function GlobalSearchPalette() {
           <SearchFilterChips parsed={parsed} query={query} onChangeQuery={setQuery} />
 
           {search.migrationMissing && parsed.filters.type !== "command" && (
-            <div className="mt-3 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+            <div className="kub-raise mt-3 rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
               Поиск по всей истории требует обновления базы данных. Сейчас доступны видимые чаты, загруженные сообщения, пользователи, задачи и локации по RLS.
             </div>
           )}
           {search.filtersLimited && (
-            <div className="mt-3 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+            <div className="kub-raise mt-3 rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
               Расширенные фильтры по всей истории требуют обновления базы данных. Сейчас поиск применяет доступные локальные фильтры.
             </div>
           )}
@@ -224,7 +230,7 @@ export function GlobalSearchPalette() {
         <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2 sm:px-3">
           {showHint && (
             <div className="space-y-3 px-2 py-3">
-              <div className="rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-4">
+              <div className="kub-raise rounded-2xl border border-[color:var(--kub-border-color)] p-4">
                 <div className="text-sm font-semibold text-[color:var(--kub-text)]">Быстрый поиск</div>
                 <div className="mt-1 text-xs leading-relaxed text-[color:var(--kub-muted)]">
                   Начните вводить имя, @никнейм, чат, сообщение, задачу или локацию. Сотрудники с доступом к пользователям могут найти профиль по полному подтверждённому +номеру. Для фильтра можно набрать `type:user`, `type:message` или выбрать чип сверху.

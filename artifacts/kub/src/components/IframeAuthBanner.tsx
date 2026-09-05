@@ -61,7 +61,13 @@ export function IframeAuthBanner() {
   if (!show) return null;
 
   return (
-    <div className="fixed top-0 inset-x-0 z-[9999] px-4 py-2.5 flex items-center gap-3 justify-center text-xs font-medium bg-[color-mix(in_srgb,var(--kub-warn)_20%,var(--kub-bg))] text-[color:var(--kub-text)] border-b border-[color:var(--kub-warn)]/40 backdrop-blur-sm">
+    // `-strong`, because it covers the top of an application it is not part
+    // of. What it replaced was an opaque warn/background mix with a
+    // `backdrop-blur-sm` behind it — a blur over a flat fill returns that fill,
+    // so the frosting was inert and the material was written by hand. The
+    // warning is carried by the edge and the icon, both of which answer a 3:1
+    // requirement rather than a 4.5:1 one.
+    <div className="kub-glass-strong fixed top-0 inset-x-0 z-[9999] px-4 py-2.5 flex items-center gap-3 justify-center text-xs font-medium text-[color:var(--kub-text)] border-b-2 border-[color:var(--kub-warn)]">
       <KubIcon name="warning" size={14} tone="warn" className="flex-shrink-0" />
       <span className="text-center">
         Превью Replit запущено в iframe — браузер может блокировать сессию.

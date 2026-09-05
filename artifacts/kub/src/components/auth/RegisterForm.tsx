@@ -228,7 +228,9 @@ export function RegisterForm() {
           </div>
 
           <KubPanel glow="soft" padded={false} className="overflow-hidden">
-            <div className="px-3 py-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/50">
+            {/* --kub-inset, for the reason spelled out on the login card's
+                identical strip. */}
+            <div className="px-3 py-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-inset)]">
               <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-accent-text)]">
                 <span className="h-1.5 w-1.5 rounded-full bg-[var(--kub-cyan)] kub-pulse" />
                 Подтверждение
@@ -248,7 +250,10 @@ export function RegisterForm() {
                   <p>Неподтверждённая учётная запись будет удалена автоматически.</p>
                 </div>
               </div>
-              <p className="break-all rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/60 px-3 py-2 font-mono text-sm text-[color:var(--kub-text)]">
+              {/* The address is read back, not entered, but it is the same
+                  shape as the field it was typed into — so it is cut into the
+                  card with --kub-inset rather than raised off it. */}
+              <p className="break-all rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 font-mono text-sm text-[color:var(--kub-text)]">
                 {maskRegistrationEmail(submittedEmail)}
               </p>
               <div className="relative">
@@ -258,8 +263,11 @@ export function RegisterForm() {
                   required
                   resetSignal={resendCaptchaResetSignal}
                 />
+                {/* The cover below takes the covering material rather than a
+                    hand-picked alpha: it hides the captcha it is not part of
+                    while the resend timer runs. */}
                 {resendLocked && (
-                  <p className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl bg-[var(--kub-surface-2)]/85 px-4 text-center text-xs leading-5 text-[color:var(--kub-muted)]">
+                  <p className="kub-glass-strong pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl px-4 text-center text-xs leading-5 text-[color:var(--kub-muted)]">
                     Подтверждение защиты станет доступно после окончания таймера.
                   </p>
                 )}
@@ -326,7 +334,7 @@ export function RegisterForm() {
         </div>
 
         <KubPanel glow="soft" padded={false} className="overflow-hidden">
-          <div className="px-3 py-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/50">
+          <div className="px-3 py-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-inset)]">
             <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-pink)]">
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--kub-pink)] kub-pulse" />
               Регистрация
