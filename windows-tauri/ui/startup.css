@@ -1,117 +1,447 @@
+/* LETSCUBE Windows startup screen.
+ *
+ * This file is served as-is from `frontendDist: "../ui"`. There is no build
+ * step here and there must not be one, so the application's design tokens are
+ * copied across by hand below rather than imported. Every value carries the
+ * line it was copied from, so a drift is findable.
+ *
+ * The window CSP is `default-src 'self'; style-src 'self'` — no inline
+ * `<style>` element and no `style=""` attribute will be applied. Everything
+ * visual lives here and is driven by classes and data attributes.
+ *
+ * The screen is dark only, on purpose. It has no access to the person's stored
+ * theme: that lives in the production origin's storage, behind the navigation
+ * this screen is still waiting on. The overlay that continues this scene on the
+ * production page is dark as well, so a light startup screen would flash to
+ * dark at the handoff.
+ */
+
 :root {
   color-scheme: dark;
-  font-family: Inter, "Segoe UI", sans-serif;
-  background: #071019;
-  color: #f4f7fa;
+
+  /* ── Palette ──────────────────────────────────────────────────────────────
+   * Copied from the `.dark` block of artifacts/kub/src/index.css.
+   * Names are kept identical so a diff between the two is a plain text search.
+   */
+  --kub-bg: #050B18;              /* index.css --kub-bg */
+  --kub-surface: #081629;         /* index.css --kub-surface */
+  --kub-surface-2: #0B213A;       /* index.css --kub-surface-2 */
+  --kub-surface-3: #112B47;       /* index.css --kub-surface-3 */
+  --kub-text: #F5F7FB;            /* index.css --kub-text */
+  --kub-muted: #8FA9C4;           /* index.css --kub-muted */
+  --brand-blue: #427fc2;          /* index.css --brand-blue */
+  --brand-border: rgba(66, 127, 194, 0.32); /* index.css --brand-border */
+  --kub-border-color: var(--brand-border);  /* index.css --kub-border-color */
+  /* Lightened along the same hue in the app so accent text clears 4.5:1 on the
+     card surfaces, not only on the page background. See the D-014 note in
+     index.css — the same reason applies here, where the accent sits on
+     --kub-surface-2. */
+  --kub-cyan: #4d8bd0;            /* index.css --kub-cyan */
+  --kub-cyan-hover: #5b96d4;      /* index.css --kub-cyan-hover */
+  --kub-online: #4DCD5E;          /* index.css --kub-online */
+  --kub-danger: #EF4444;          /* index.css --kub-danger */
+  --kub-warn: #F5B50A;            /* index.css --kub-warn */
+
+  /* ── Motion ───────────────────────────────────────────────────────────────
+   * The five semantic durations and two easings from index.css, mirrored by
+   * MOTION_MS in artifacts/kub/src/lib/motion.ts and documented in
+   * docs/operations/shared-motion-feedback.md. A duration written by hand
+   * anywhere below is outside the system and drifts silently, so there are
+   * none: every transition here resolves to one of these.
+   */
+  --kub-motion-instant: 90ms;     /* index.css --kub-motion-instant */
+  --kub-motion-fast: 140ms;       /* index.css --kub-motion-fast */
+  --kub-motion-standard: 220ms;   /* index.css --kub-motion-standard */
+  --kub-motion-emphasis: 320ms;   /* index.css --kub-motion-emphasis */
+  /* Ambient, not an interaction timing — the same note index.css carries. It
+     paces the travelling highlight on the stage in flight. */
+  --kub-motion-shimmer: 1200ms;   /* index.css --kub-motion-shimmer */
+  --kub-ease-standard: cubic-bezier(.2, .8, .2, 1);  /* index.css */
+  --kub-ease-emphasis: cubic-bezier(.16, 1, .3, 1);  /* index.css */
+
+  /* index.css --radius: .5rem, and --app-font-sans. Inter is not installed with
+     the shell, so the Windows stack behind it is what will usually render. */
+  --kub-radius: 8px;
+  --app-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --startup-font-mono: Consolas, 'Cascadia Mono', Menlo, monospace;
+
+  /* Local to this screen: the accent that states the current verification
+     result. Re-pointed by [data-verdict] on <body> rather than by scattering
+     colour rules through every component. */
+  --verify-accent: var(--kub-cyan);
+  --verify-dim: var(--kub-muted);
+  /* The progress track reports how far the sequence got, which is not the same
+     question as whether the node was confirmed. A stage that finished stays
+     finished even when the comparison afterwards failed, so this accent never
+     turns red — painting a completed check red says it failed. The verdict is
+     carried by the seal, the fingerprints and the notice. */
+  --track-accent: var(--kub-cyan);
+
+  font-family: var(--app-font-sans);
+  background: var(--kub-bg);
+  color: var(--kub-text);
 }
+
+body[data-verdict="verified"] { --verify-accent: var(--kub-online); --track-accent: var(--kub-online); }
+/* "changed" is the pin that no longer matches; "failed" is no connection at
+   all, including a chain the trust store rejected. Both are red because both
+   mean the screen cannot confirm the node, but only "changed" ever gets an
+   override — see the notice rules further down. */
+body[data-verdict="changed"] { --verify-accent: var(--kub-danger); }
+body[data-verdict="failed"] { --verify-accent: var(--kub-danger); }
 
 * { box-sizing: border-box; }
 html, body { width: 100%; min-width: 960px; height: 100%; min-height: 640px; margin: 0; overflow: hidden; }
-body { background: #071019; }
+body { background: var(--kub-bg); }
 
+/* The middle band takes whatever is left, so the notice under the progress
+   track can grow without pushing the scene off the bottom of a 640px window. */
 .startup-shell {
-  width: 100%; height: 100%; display: grid; grid-template-rows: 44px minmax(390px, 1fr) 190px;
-  padding: 0 6vw 28px; background: linear-gradient(180deg, #0b1824 0, #071019 72%);
+  width: 100%; height: 100%;
+  display: grid; grid-template-rows: 44px minmax(0, 1fr) auto;
+  padding: 0 6vw 26px;
+  background:
+    radial-gradient(120% 80% at 50% 0%, #0A1B30 0%, rgba(10, 27, 48, 0) 62%),
+    linear-gradient(180deg, var(--kub-surface) 0%, var(--kub-bg) 58%);
 }
-.startup-header { display: flex; align-items: stretch; justify-content: space-between; margin: 0 -6vw; padding-left: 6vw; border-bottom: 1px solid #1d3140; background: #0b1824; }
+
+/* ── Title bar ───────────────────────────────────────────────────────────── */
+.startup-header {
+  display: flex; align-items: stretch; justify-content: space-between;
+  margin: 0 -6vw; padding-left: 6vw;
+  border-bottom: 1px solid var(--kub-border-color);
+  background: color-mix(in srgb, var(--kub-surface) 88%, transparent);
+}
 .startup-drag-region { display: flex; min-width: 0; flex: 1; align-items: center; gap: 14px; cursor: default; }
-.brand { width: 154px; height: auto; opacity: .94; }
-.version-pill { display: flex; align-items: center; gap: 7px; color: #7f96a7; font-size: 11px; }
-.version-dot { width: 7px; height: 7px; border-radius: 50%; background: #e0a928; box-shadow: 0 0 0 3px #e0a92820; }
+.brand { width: 148px; height: auto; opacity: .92; }
+.version-pill {
+  display: flex; align-items: center; gap: 7px;
+  border: 1px solid var(--kub-border-color); border-radius: 999px;
+  padding: 3px 9px 3px 7px;
+  color: var(--kub-muted); font-size: 11px; letter-spacing: .01em;
+}
+.version-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--verify-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--verify-accent) 18%, transparent);
+  transition: background var(--kub-motion-standard) var(--kub-ease-standard),
+              box-shadow var(--kub-motion-standard) var(--kub-ease-standard);
+}
 .startup-window-controls { display: flex; height: 43px; align-items: stretch; }
-.window-control { display: grid; width: 44px; height: 43px; place-items: center; border: 0; border-radius: 0; padding: 0; background: transparent; color: #91a5b5; }
-.window-control:hover { background: #152737; color: #f4f7fa; }
-.window-control-close:hover { background: #c42b3a; color: #fff; }
+.window-control {
+  display: grid; width: 44px; height: 43px; place-items: center;
+  border: 0; border-radius: 0; padding: 0; background: transparent; color: var(--kub-muted);
+  transition: background var(--kub-motion-instant) var(--kub-ease-standard),
+              color var(--kub-motion-instant) var(--kub-ease-standard);
+}
+.window-control:hover { background: var(--kub-surface-3); color: var(--kub-text); }
+.window-control-close:hover { background: #C42B3A; color: #fff; }
+.window-control:focus-visible { outline: 2px solid var(--kub-cyan); outline-offset: -2px; }
 .window-minimize { width: 12px; height: 1px; background: currentColor; }
-.window-maximize { width: 12px; height: 12px; border: 1px solid currentColor; }
-.window-close { position: relative; width: 14px; height: 14px; }
-.window-close::before, .window-close::after { content: ""; position: absolute; top: 6px; left: 0; width: 14px; height: 1px; background: currentColor; }
+.window-maximize { width: 11px; height: 11px; border: 1px solid currentColor; border-radius: 2px; }
+.window-close { position: relative; width: 13px; height: 13px; }
+.window-close::before, .window-close::after { content: ""; position: absolute; top: 6px; left: 0; width: 13px; height: 1px; background: currentColor; }
 .window-close::before { transform: rotate(45deg); }
 .window-close::after { transform: rotate(-45deg); }
 
+/* ── The two endpoints ───────────────────────────────────────────────────────
+ * The column and row template is deliberately fixed. It was tuned so that at
+ * the 960px minimum window every text box clears every other one and the rails
+ * meet the ports; tests/e2e/windows-tauri-startup.spec.ts measures exactly
+ * that. The identity row is 74px because a SHA-256 shown as four lines of
+ * eight bytes is four lines tall — the block was always this size, it just had
+ * nothing real in it.
+ */
 .handshake { display: grid; grid-template-columns: 1fr 34px 1fr; align-items: center; position: relative; max-width: 980px; width: 100%; margin: 0 auto; isolation: isolate; }
+/* Two declarations on purpose. If the scene ever does outgrow its track, plain
+   `center` splits the overflow and puts the identity block on top of the title
+   bar; `safe` sends all of it downwards instead. The first line is the fallback
+   for an engine that drops the second. */
+.handshake { align-content: center; }
+.handshake { align-content: safe center; }
 .endpoint { display: grid; grid-template-rows: 74px 20px 126px 20px 19px 4px 14px; justify-items: center; align-content: center; min-width: 0; }
 .endpoint-client { grid-column: 1; }
 .endpoint-server { grid-column: 3; }
-.endpoint h2 { grid-row: 5; margin: 0; font-size: 16px; font-weight: 650; line-height: 19px; letter-spacing: 0; }
-.endpoint p { grid-row: 7; margin: 0; color: #718797; font-size: 12px; line-height: 14px; }
-.fingerprints { grid-row: 1; height: 74px; display: grid; gap: 4px; margin: 0; color: #6c8799; font: 11px/1.25 Consolas, monospace; text-align: center; }
-.fingerprints span { opacity: .34; animation: fingerprint 1.8s steps(1, end) infinite; }
-.fingerprints span:nth-child(2) { animation-delay: .28s; }
-.fingerprints span:nth-child(3) { animation-delay: .56s; }
-.fingerprints span:nth-child(4) { animation-delay: .84s; }
-.endpoint-server .fingerprints span { animation-delay: .17s; }
-.endpoint-server .fingerprints span:nth-child(2) { animation-delay: .49s; }
-.endpoint-server .fingerprints span:nth-child(3) { animation-delay: .73s; }
-.endpoint-server .fingerprints span:nth-child(4) { animation-delay: 1.02s; }
+.endpoint h2 { grid-row: 5; margin: 0; font-size: 16px; font-weight: 650; line-height: 19px; letter-spacing: 0; color: var(--kub-text); }
+.endpoint p { grid-row: 7; margin: 0; color: var(--kub-muted); font-size: 12px; line-height: 14px; }
 
-.computer { grid-row: 3; position: relative; width: 148px; height: 126px; display: grid; justify-items: center; align-content: start; }
-.screen { width: 148px; height: 94px; border: 5px solid #405363; border-radius: 6px; background: #0e2432; box-shadow: inset 0 0 0 1px #547086; padding: 8px; }
-.screen i { display: block; width: 100%; height: 100%; border: 1px solid #244252; background: linear-gradient(135deg, #102f3f, #091924); }
-.stand { width: 56px; height: 25px; border-bottom: 6px solid #405363; border-left: 10px solid transparent; border-right: 10px solid transparent; }
-.server { grid-row: 3; position: relative; width: 132px; height: 126px; padding: 9px; border: 4px solid #405363; border-radius: 5px; background: #101d27; display: grid; gap: 7px; }
-.server div { display: flex; align-items: center; gap: 7px; padding: 0 8px; border: 1px solid #314757; background: #172a37; }
-.server i { width: 7px; height: 7px; border-radius: 50%; background: #28b783; box-shadow: 0 0 7px #28b78380; }
-.server b { width: 22px; height: 3px; background: #496172; }
+/* ── Identity block ──────────────────────────────────────────────────────────
+ * Everything rendered here is written by startup.js from the snapshot the
+ * shell emits. Nothing is authored in the markup. When the shell sends no
+ * certificate at all the block states what it does know — never a placeholder
+ * shaped like a fingerprint, which is the defect this screen was rebuilt to
+ * remove.
+ */
+.fingerprints {
+  grid-row: 1; height: 74px; width: 100%;
+  display: grid; grid-template-rows: 14px 1fr; gap: 4px;
+  align-content: start; justify-items: center;
+  margin: 0; text-align: center;
+}
+.fingerprint-label {
+  color: var(--verify-dim); font-size: 10px; line-height: 14px;
+  letter-spacing: .06em; text-transform: uppercase;
+  transition: color var(--kub-motion-standard) var(--kub-ease-standard);
+}
+.fingerprint-value {
+  display: grid; gap: 2px; align-content: start;
+  min-width: 0; max-width: 100%;
+  color: var(--kub-muted); font: 11px/1.28 var(--startup-font-mono);
+}
+/* A note rather than a value: the shell had nothing more precise to say. */
+.fingerprint-value[data-kind="note"] { font-family: var(--app-font-sans); font-size: 11.5px; line-height: 15px; color: var(--verify-dim); }
+.fingerprint-value[data-kind="digest"] { color: var(--verify-accent); }
+.fingerprint-value[data-kind="digest"] span { letter-spacing: .04em; }
+/* The short form is one line and is the normal case, so it can afford to be
+   read at a glance. The full 32 bytes only appear when two of them have to be
+   compared, and then the four lines have to fit the 74px block. */
+.fingerprint-value[data-digest="short"] { font-size: 13px; line-height: 17px; letter-spacing: .1em; }
+.fingerprint-value[data-digest="full"] { font-size: 11px; line-height: 1.28; }
+body[data-verdict="changed"] .fingerprint-value[data-kind="digest"] { color: var(--kub-danger); }
+body[data-verdict="changed"] .fingerprint-label { color: var(--kub-danger); }
 
-.connection-port { position: absolute; top: 57px; width: 12px; height: 12px; border: 2px solid #4d7388; border-radius: 50%; background: #0a151e; box-shadow: 0 0 0 3px #071019; z-index: 3; }
-.connection-port::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: #55b7dd; }
+/* ── Devices ─────────────────────────────────────────────────────────────────
+ * Both are inline SVG in the same idiom as the application's icon set
+ * (lucide-react): one stroke weight, round caps and joins, no fills, drawn in
+ * currentColor so a state change is a colour change on the parent. The former
+ * markup stacked bordered <div>/<i>/<b> elements, which could not hold a
+ * consistent weight and did not match anything else in the product.
+ * The boxes stay 148x126 and 132x126: the rails and ports are positioned
+ * against those two widths.
+ */
+.computer, .server { grid-row: 3; position: relative; display: grid; place-items: center; color: var(--kub-surface-3); }
+.computer { width: 148px; height: 126px; }
+.server { width: 132px; height: 126px; }
+.device-art { display: block; width: 100%; height: 100%; overflow: visible; }
+.device-art .device-glass { fill: var(--kub-surface-2); stroke: none; }
+/* The chassis holds a constant weight; only the detail strokes and the status
+   lamp change colour, so a state change never redraws the object. */
+.device-art .device-frame {
+  fill: none; stroke: var(--kub-border-color);
+  stroke-width: 3; stroke-linecap: round; stroke-linejoin: round;
+}
+.device-art .device-line {
+  fill: none; stroke: var(--verify-dim); stroke-width: 2.5;
+  stroke-linecap: round; stroke-linejoin: round;
+  transition: stroke var(--kub-motion-standard) var(--kub-ease-standard);
+}
+.device-art .device-live { fill: var(--verify-accent); stroke: none; transition: fill var(--kub-motion-standard) var(--kub-ease-standard); }
+
+/* ── Rails, ports and the seal ───────────────────────────────────────────── */
+.connection-port {
+  position: absolute; top: 57px; width: 12px; height: 12px;
+  border: 2px solid var(--verify-dim); border-radius: 50%;
+  background: var(--kub-bg); box-shadow: 0 0 0 3px var(--kub-bg); z-index: 3;
+  transition: border-color var(--kub-motion-standard) var(--kub-ease-standard);
+}
+.connection-port::after {
+  content: ""; position: absolute; inset: 3px; border-radius: 50%;
+  background: var(--verify-accent);
+  transition: background var(--kub-motion-standard) var(--kub-ease-standard);
+}
 .connection-port-client { right: -18px; }
 .connection-port-server { top: 53px; left: -22px; }
 
 .rail-wrap { position: absolute; inset: calc(50% + 1.5px) 0 auto; height: 34px; pointer-events: none; }
-.rail { position: absolute; top: calc(50% - 1.5px); height: 3px; overflow: hidden; background: #223847; }
+.rail { position: absolute; top: calc(50% - 1.5px); height: 3px; overflow: hidden; background: var(--kub-surface-3); border-radius: 2px; }
 .rail-left { left: calc(25% + 83.5px); right: calc(50% + 17px); }
 .rail-right { left: calc(50% + 17px); right: calc(25% + 75.5px); }
-.rail i { display: block; width: 100%; height: 100%; background: #2f8db5; transform: scaleX(.08); transition: transform .32s ease; }
+/* scaleX only. Animating the rail's width would change a laid-out box, which
+   docs/operations/shared-motion-feedback.md rules out; a transform reflows
+   nothing. */
+.rail i {
+  display: block; width: 100%; height: 100%; background: var(--verify-accent);
+  transform: scaleX(.06);
+  transition: transform var(--kub-motion-emphasis) var(--kub-ease-standard),
+              background var(--kub-motion-standard) var(--kub-ease-standard);
+}
 .rail-left i { transform-origin: left; }
 .rail-right i { transform-origin: right; }
-.center-seal { position: absolute; top: 0; left: 50%; width: 34px; height: 34px; border: 2px solid #38505f; border-radius: 50%; display: grid; place-items: center; background: #0a151e; transform: translateX(-50%); z-index: 2; }
-.center-seal span { width: 8px; height: 8px; border-radius: 50%; background: #60717d; }
-body[data-stage="tls_origin_check"] .rail i { transform: scaleX(.36); }
-body[data-stage="update_check"] .rail i { transform: scaleX(.68); }
+
+.center-seal {
+  position: absolute; top: 0; left: 50%; width: 34px; height: 34px;
+  border: 2px solid var(--kub-surface-3); border-radius: 50%;
+  display: grid; place-items: center; background: var(--kub-surface);
+  transform: translateX(-50%); z-index: 2;
+  transition: border-color var(--kub-motion-standard) var(--kub-ease-standard),
+              box-shadow var(--kub-motion-standard) var(--kub-ease-standard);
+}
+.center-seal span {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--verify-dim);
+  transition: background var(--kub-motion-standard) var(--kub-ease-standard);
+}
+
+body[data-stage="tls_origin_check"] .rail i { transform: scaleX(.34); }
+body[data-stage="update_check"] .rail i { transform: scaleX(.62); }
 body[data-stage="production_navigation"] .rail i,
 body[data-stage="workspace_ready"] .rail i,
 body[data-stage="complete"] .rail i { transform: scaleX(1); }
-.handshake.is-connected .fingerprints span { animation: none; opacity: 1; color: #8edabe; }
-.handshake.is-connected .connection-port { border-color: #28b783; }
-.handshake.is-connected .connection-port::after { background: #28b783; box-shadow: 0 0 7px #28b78380; }
-.handshake.is-connected .center-seal { border-color: #28b783; box-shadow: 0 0 18px #28b78355; }
-.handshake.is-connected .center-seal span { background: #28b783; }
+/* A stopped connection retracts the rail rather than leaving it mid-sweep,
+   because a half-filled rail reads as "still working". */
+body[data-stage="recoverable_error"] .rail i { transform: scaleX(.06); }
 
-.startup-state { display: grid; align-content: start; justify-items: center; border-top: 1px solid #1d3140; padding-top: 28px; }
-#startup-status { margin: 0 0 24px; color: #dbe5eb; font-size: 14px; }
-.stages { width: min(680px, 78vw); display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin: 0; padding: 0; list-style: none; }
-/* The stage list is paced in CSS, with no timer anywhere.
-   The shell verifies the connection faster than a person can read: measured on
-   this workstation all four stages completed within about 300ms — 75ms each —
-   and the scene then sat still for the remaining 1.9s of its minimum display
-   time. A flicker of motion followed by a long hold is what "it starts
-   jerkily" describes.
-   Each stage's colour change is a transition with its own delay, so the
-   progression reads as progress. It is display only: nothing here can show a
-   stage as done before the shell has said so, which is why this is done with
-   transitions rather than the timers the startup contract forbids. */
-.stages li { position: relative; padding-top: 18px; color: #607584; font-size: 11px; text-align: center; border-top: 2px solid #273c4b; transition: color 220ms ease, border-color 220ms ease; }
-.stages li::before { content: ""; position: absolute; top: -5px; left: calc(50% - 4px); width: 8px; height: 8px; border-radius: 50%; background: #273c4b; transition: background 220ms ease, box-shadow 220ms ease; }
-.stages li:nth-child(2), .stages li:nth-child(2)::before { transition-delay: 200ms; }
-.stages li:nth-child(3), .stages li:nth-child(3)::before { transition-delay: 400ms; }
-.stages li:nth-child(4), .stages li:nth-child(4)::before { transition-delay: 600ms; }
-.stages li.is-active { color: #dbe5eb; border-color: #2f8db5; }
-.stages li.is-active::before { background: #55b7dd; box-shadow: 0 0 0 4px #2f8db525; }
-.stages li.is-done { color: #8fb2c6; border-color: #28b783; }
-.stages li.is-done::before { background: #28b783; }
-.failure { display: flex; align-items: center; gap: 14px; margin-top: 18px; }
-.failure[hidden] { display: none; }
-.failure p { margin: 0; color: #d6a5aa; font-size: 12px; }
-button { border: 1px solid #517185; background: #142a38; color: #fff; border-radius: 6px; padding: 7px 13px; cursor: pointer; }
-button:focus-visible { outline: 2px solid #55b7dd; outline-offset: 2px; }
+.handshake.is-connected .center-seal {
+  border-color: var(--verify-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--verify-accent) 14%, transparent);
+}
+.handshake.is-connected .center-seal span { background: var(--verify-accent); }
+.handshake.is-connected .device-art .device-line { stroke: var(--verify-accent); }
+
+/* ── Progress track ──────────────────────────────────────────────────────────
+ * One continuous track with four nodes, replacing four separate top borders.
+ * The fill is a transform, and each node's colour change is delayed by its
+ * position so the change reads left to right instead of arriving as one blink:
+ * measured on this workstation all four stages complete inside about 300ms and
+ * the scene then holds for the remaining ~1.9s of the overlay's minimum
+ * display time.
+ *
+ * The delays only postpone a paint. Nothing here can show a stage as done
+ * before the shell has said so — the class is still applied by startup.js from
+ * the snapshot — which is why this is done with transition delays and not with
+ * the timers the startup contract forbids.
+ */
+/* The band is sized so that its tallest state — the mismatch notice — still
+ * leaves the 277px the endpoint column needs at the 960x640 minimum window.
+ * Header 44 + endpoint 277 = 321, so this band has 319px to work with, and the
+ * measured worst case is about 300. The two rules below defend the remainder:
+ * short windows tighten the spacing, and `safe center` sends any overflow that
+ * still happens downwards instead of splitting it across the title bar. */
+.startup-state { display: grid; align-content: start; justify-items: center; border-top: 1px solid var(--kub-border-color); padding-top: 20px; }
+#startup-status { margin: 0 0 14px; color: var(--kub-text); font-size: 14px; line-height: 18px; text-align: center; }
+/* Same measure as the progress track below it, so the caption and the track
+   share one column rather than reading as two different widths. */
+.startup-scope { margin: 0 0 16px; color: var(--kub-muted); font-size: 11.5px; line-height: 15px; text-align: center; width: min(680px, 78vw); }
+
+/* Four separate capsules, one per stage, rather than a hairline threaded
+   through four dots. The dotted rail was the shape this screen had before and
+   read as a diagram of a process; a segmented bar reads as progress through it,
+   and each segment belongs to the label underneath it instead of floating
+   above a shared line. */
+.stages {
+  width: min(680px, 78vw);
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+  margin: 0; padding: 0; list-style: none;
+}
+.stages li {
+  position: relative; padding-top: 15px;
+  color: var(--kub-muted); font-size: 11px; line-height: 14px; text-align: center;
+  transition: color var(--kub-motion-standard) var(--kub-ease-standard);
+}
+.stages li::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+  border-radius: 999px; background: var(--kub-surface-3);
+  transition: background var(--kub-motion-standard) var(--kub-ease-standard);
+}
+/* Multiples of --kub-motion-instant, so the sweep is paced by the same unit as
+   the rest of the product rather than by a number chosen here. The delay only
+   postpones a paint: the class is still applied from the shell's snapshot, so
+   nothing can show a stage as finished before the shell has said it is. */
+.stages li:nth-child(2), .stages li:nth-child(2)::before { transition-delay: var(--kub-motion-instant); }
+.stages li:nth-child(3), .stages li:nth-child(3)::before { transition-delay: calc(var(--kub-motion-instant) * 2); }
+.stages li:nth-child(4), .stages li:nth-child(4)::before { transition-delay: calc(var(--kub-motion-instant) * 3); }
+.stages li.is-done { color: var(--kub-muted); }
+.stages li.is-done::before { background: var(--track-accent); }
+.stages li.is-active { color: var(--kub-text); }
+/* The stage in flight carries a travelling highlight so an unfinished segment
+   is distinguishable from a finished one at a glance. It moves a gradient, not
+   a box: the capsule's size never changes. --kub-motion-shimmer is the
+   application's own ambient timing, the one .kub-skeleton uses. */
+.stages li.is-active::before {
+  background:
+    linear-gradient(90deg,
+      color-mix(in srgb, var(--track-accent) 26%, var(--kub-surface-3)) 0%,
+      var(--track-accent) 46%,
+      var(--track-accent) 54%,
+      color-mix(in srgb, var(--track-accent) 26%, var(--kub-surface-3)) 100%);
+  background-size: 260% 100%;
+  animation: stage-sweep var(--kub-motion-shimmer) linear infinite;
+}
+@keyframes stage-sweep {
+  from { background-position: 130% 0; }
+  to { background-position: -130% 0; }
+}
+
+/* ── Notices ─────────────────────────────────────────────────────────────────
+ * Two different failures, deliberately not sharing a component:
+ *
+ *  .failure   the connection could not be established at all, including a
+ *             certificate the system trust store rejects. There is no override
+ *             here and there must never be one.
+ *  .mismatch  the chain validated, but the certificate is not the one this
+ *             computer recorded last time. Usually a renewal. This one may be
+ *             continued past, once, by an explicit choice.
+ */
+.failure, .mismatch {
+  width: min(680px, 78vw); margin-top: 20px;
+  border: 1px solid var(--kub-border-color); border-radius: var(--kub-radius);
+  background: var(--kub-surface-2);
+  padding: 14px 16px;
+  opacity: 1; transform: translateY(0);
+  transition: opacity var(--kub-motion-standard) var(--kub-ease-standard),
+              transform var(--kub-motion-standard) var(--kub-ease-standard);
+}
+@starting-style {
+  .failure, .mismatch { opacity: 0; transform: translateY(6px); }
+}
+.failure[hidden], .mismatch[hidden] { display: none; }
+.failure { border-color: color-mix(in srgb, var(--kub-danger) 42%, transparent); display: flex; align-items: center; gap: 14px; }
+.failure p { flex: 1; margin: 0; color: var(--kub-text); font-size: 12px; line-height: 16px; }
+.mismatch { display: grid; gap: 8px; border-color: color-mix(in srgb, var(--kub-warn) 40%, transparent); }
+.mismatch-title { margin: 0; color: var(--kub-text); font-size: 12.5px; font-weight: 620; line-height: 16px; }
+.mismatch-detail { margin: 0; color: var(--kub-muted); font-size: 11.5px; line-height: 16px; }
+.mismatch-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* The 640px minimum window is the tight case, and it is the one the shell
+   actually ships as `minHeight`. Trim the standing caption rather than the
+   notice: the notice is the thing the person has to act on. */
+@media (max-height: 720px) {
+  .startup-state { padding-top: 16px; }
+  #startup-status { margin-bottom: 12px; }
+  .startup-scope { margin-bottom: 12px; font-size: 11px; line-height: 14px; }
+  .failure, .mismatch { margin-top: 14px; padding: 12px 14px; }
+  .startup-shell { padding-bottom: 20px; }
+}
+
+button {
+  border: 1px solid var(--kub-border-color); border-radius: var(--kub-radius);
+  background: var(--kub-surface-3); color: var(--kub-text);
+  padding: 7px 14px; font: inherit; font-size: 12px; cursor: pointer;
+  transition: background var(--kub-motion-instant) var(--kub-ease-standard),
+              border-color var(--kub-motion-instant) var(--kub-ease-standard),
+              color var(--kub-motion-instant) var(--kub-ease-standard);
+}
+button:hover { background: var(--kub-surface-2); border-color: var(--kub-cyan); }
+button:focus-visible { outline: 2px solid var(--kub-cyan); outline-offset: 2px; }
 button:disabled { opacity: .55; cursor: default; }
+/* The safe action is the filled one and takes focus; the override is the quiet
+   one. Reversing this would put the emphasis on the choice that gives up an
+   assurance. */
+button.is-primary { background: var(--kub-cyan); border-color: var(--kub-cyan); color: var(--kub-bg); font-weight: 620; }
+button.is-primary:hover { background: var(--kub-cyan-hover); border-color: var(--kub-cyan-hover); }
+button.is-quiet { background: transparent; color: var(--kub-muted); border-color: var(--kub-border-color); font-size: 11.5px; }
+button.is-quiet:hover { background: var(--kub-surface-3); color: var(--kub-text); }
 
-@keyframes fingerprint { 0%, 24% { opacity: .28; color: #6c8799; } 25%, 48% { opacity: 1; color: #55b7dd; } 49%, 100% { opacity: .28; color: #6c8799; } }
 @media (prefers-reduced-motion: reduce) {
-  .fingerprints span { animation: none; }
-  .rail i { transition: none; }
+  /* The four movement durations collapse; nothing on this screen carries a
+     transient confirmation, so there is no --kub-motion-feedback to preserve.
+     See docs/operations/shared-motion-feedback.md. */
+  :root {
+    --kub-motion-instant: 1ms;
+    --kub-motion-fast: 1ms;
+    --kub-motion-standard: 1ms;
+    --kub-motion-emphasis: 1ms;
+  }
   .stages li,
-  .stages li::before { transition: none; transition-delay: 0s; }
+  .stages li::before { transition-delay: 0s; }
+  /* The highlight is removed rather than sped up: collapsing --kub-motion-shimmer
+     would leave it looping at 1ms, which is a flicker, not a reduction. A
+     part-filled capsule says "in progress" without moving, so the stage in
+     flight is still distinguishable from the ones behind it. */
+  .stages li.is-active::before {
+    animation: none;
+    background: linear-gradient(90deg, var(--track-accent) 0 55%, var(--kub-surface-3) 55% 100%);
+  }
+  @starting-style {
+    .failure, .mismatch { opacity: 1; transform: none; }
+  }
 }

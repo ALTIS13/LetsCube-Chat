@@ -1,19 +1,36 @@
+<!--
+  The production-side continuation of the startup scene. It is injected into
+  the workspace page once the shell navigates there, and it listens to the same
+  `letscube://startup-state` event, so it shows the same certificate the
+  startup window showed and the handoff does not blink.
+
+  As in startup.html, no value is written here. The identity blocks are empty
+  and are filled by startup-overlay.js from the snapshot; a build whose shell
+  sends no certificate shows no fingerprint rather than a placeholder.
+-->
 <main class="startup-overlay-scene" aria-live="polite">
   <header class="startup-overlay-header">
     <span class="startup-overlay-brand" role="img" aria-label="LETSCUBE">__LETSCUBE_LOGO_SVG__</span>
-    <span class="startup-overlay-connection-pill"><i aria-hidden="true"></i>Защищённое подключение</span>
+    <span class="startup-overlay-connection-pill"><i aria-hidden="true"></i>Соединение подтверждено оболочкой</span>
   </header>
   <section class="startup-overlay-handshake" id="production-startup-handshake">
     <article class="startup-overlay-endpoint startup-overlay-endpoint-client">
-      <div class="startup-overlay-fingerprint" aria-hidden="true">
-        <span>4E 1A 90</span><span>C8 72 B4</span><span>0F 6D A2</span><span>91 3C E7</span>
+      <div class="startup-overlay-fingerprint" data-testid="production-startup-client-fingerprint">
+        <span class="startup-overlay-fingerprint-label" data-fingerprint-label></span>
+        <span class="startup-overlay-fingerprint-value" data-fingerprint-value data-kind="note"></span>
       </div>
-      <div class="startup-overlay-computer" aria-hidden="true">
-        <div class="startup-overlay-screen"><i></i></div><div class="startup-overlay-stand"></div>
+      <div class="startup-overlay-computer">
+        <svg class="startup-overlay-art" viewBox="0 0 148 126" role="img" aria-label="Этот компьютер" focusable="false">
+          <rect class="startup-overlay-glass" x="9" y="9" width="130" height="80" rx="6" />
+          <rect class="startup-overlay-frame" x="9" y="9" width="130" height="80" rx="6" />
+          <path class="startup-overlay-frame" d="M74 89v14M55 111h38" />
+          <path class="startup-overlay-detail" d="M28 36h44M28 50h62M28 64h30" />
+          <circle class="startup-overlay-lamp" cx="116" cy="36" r="4.5" />
+        </svg>
         <span class="startup-overlay-port startup-overlay-port-client" data-testid="production-startup-client-port"></span>
       </div>
       <h2>Этот компьютер</h2>
-      <p>Защищённый клиент</p>
+      <p>Оболочка LETSCUBE</p>
     </article>
     <div class="startup-overlay-rail-wrap" aria-hidden="true">
       <div class="startup-overlay-rail"><i></i></div>
@@ -21,23 +38,40 @@
       <div class="startup-overlay-rail"><i></i></div>
     </div>
     <article class="startup-overlay-endpoint startup-overlay-endpoint-server">
-      <div class="startup-overlay-fingerprint" aria-hidden="true">
-        <span>72 B9 0D</span><span>18 E4 C3</span><span>A6 2F 81</span><span>3D C0 57</span>
+      <div class="startup-overlay-fingerprint" data-testid="production-startup-server-fingerprint">
+        <span class="startup-overlay-fingerprint-label" data-fingerprint-label></span>
+        <span class="startup-overlay-fingerprint-value" data-fingerprint-value data-kind="note"></span>
       </div>
-      <div class="startup-overlay-server" aria-hidden="true">
-        <div><i></i><b></b><b></b></div><div><i></i><b></b><b></b></div><div><i></i><b></b><b></b></div>
+      <div class="startup-overlay-server">
+        <svg class="startup-overlay-art" viewBox="0 0 132 126" role="img" aria-label="Узел LETSCUBE" focusable="false">
+          <rect class="startup-overlay-glass" x="11" y="7" width="110" height="112" rx="9" />
+          <rect class="startup-overlay-frame" x="11" y="7" width="110" height="112" rx="9" />
+          <path class="startup-overlay-detail" d="M48 31h50M48 63h50M48 95h50" />
+          <circle class="startup-overlay-lamp" cx="34" cy="31" r="4" />
+          <circle class="startup-overlay-lamp" cx="34" cy="63" r="4" />
+          <circle class="startup-overlay-lamp" cx="34" cy="95" r="4" />
+        </svg>
         <span class="startup-overlay-port startup-overlay-port-server" data-testid="production-startup-server-port"></span>
       </div>
-      <h2>LETSCUBE Secure Node</h2>
+      <h2>Узел LETSCUBE</h2>
       <p>Проверенный сервер</p>
     </article>
   </section>
   <section class="startup-overlay-state">
+    <!--
+      "Подготавливаем", not the startup window's "Открываем": these are two
+      different moments. The startup window says "Открываем рабочее
+      пространство" while the navigation is being issued; by the time this
+      overlay exists the page has already been opened and is being prepared.
+      The string is asserted in src-tauri/src/lib.rs, which is the right place
+      for it — it is the one line of copy the handoff depends on.
+    -->
     <p id="production-startup-status" class="startup-overlay-status">Подготавливаем рабочее пространство</p>
+    <p class="startup-overlay-scope">Сертификат проверен оболочкой при её HTTPS-запросе. Эту страницу WebView2 загрузил сам и проверил своё соединение отдельно, средствами Windows.</p>
     <ol class="startup-overlay-stages" aria-label="Этапы подключения">
       <li class="is-done">Сеть</li>
       <li class="is-done">Сертификат</li>
-      <li class="is-done">Версия</li>
+      <li class="is-done">Обновления</li>
       <li class="is-active">Рабочее пространство</li>
     </ol>
   </section>

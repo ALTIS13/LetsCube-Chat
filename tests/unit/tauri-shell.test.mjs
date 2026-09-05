@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import vm from "node:vm";
 
 const repoRoot = new URL("../../", import.meta.url);
 const windowsTauriRoot = new URL("../../windows-tauri/", import.meta.url);
@@ -16,6 +17,31 @@ function readText(relativePath) {
 
 function readJson(relativePath) {
   return JSON.parse(readText(relativePath));
+}
+
+/* The startup screen is plain script served as-is — there is no build step in
+ * windows-tauri/ui and there must not be one — so a helper cannot be imported.
+ * Lifting the declaration out of the shipped file and running it is still a
+ * behavioural test of the code that ships, which a regex over the source would
+ * not be: a scan stays green while the rule inside the function rots. */
+function evaluateStartupHelper(source, name, dependencies = []) {
+  const declarationOf = (fn) => {
+    const declaration = source.match(new RegExp(`^function ${fn}\\([\\s\\S]*?^\\}`, "m"))?.[0];
+    assert.ok(declaration, `${fn} must remain a top-level function in windows-tauri/ui/startup.js`);
+    return declaration;
+  };
+  const program = [...dependencies, name].map(declarationOf).join("\n");
+  return vm.runInNewContext(`${program}\n${name}`);
+}
+
+/* `--kub-x: #hex;` declarations of one CSS block, as a Map. */
+function collectTokens(css, blockPattern) {
+  const block = css.match(blockPattern)?.[0] ?? "";
+  const tokens = new Map();
+  for (const [, name, value] of block.matchAll(/(--(?:kub|brand|app)-[a-z0-9-]+)\s*:\s*([^;]+);/g)) {
+    tokens.set(name, value.trim());
+  }
+  return tokens;
 }
 
 test("Windows Tauri shell stays isolated from the root workspace and exposes only the root launcher scripts", () => {
@@ -437,6 +463,291 @@ test("Windows startup uses one main window and a local approved handshake scene"
   const iconNames = readdirSync(iconsDir).map((entry) => path.basename(entry).toLowerCase());
   assert.ok(iconNames.some((entry) => entry.endsWith(".ico")), "Windows icon asset is missing");
   assert.ok(iconNames.some((entry) => entry.endsWith(".png")), "PNG icon asset is missing");
+});
+
+/* A run of two-digit groups separated by spaces or colons — the shape a
+ * fingerprint is written in. The markup used to carry four of them per side as
+ * literals, which is what made the screen claim a comparison it never
+ * performed. Nothing of that shape may be authored in either scene again. */
+const FINGERPRINT_SHAPED = /\b[0-9A-Fa-f]{2}(?:[ :][0-9A-Fa-f]{2}){2,}\b/;
+
+test("the startup scenes state no fingerprint they were not given", () => {
+  const html = readText("windows-tauri/ui/startup.html");
+  const overlayHtml = readText("windows-tauri/ui/startup-overlay.html");
+  const script = readText("windows-tauri/ui/startup.js");
+  const overlayScript = readText("windows-tauri/ui/startup-overlay.js");
+
+  assert.doesNotMatch(html, FINGERPRINT_SHAPED, "startup.html must not author a fingerprint");
+  assert.doesNotMatch(overlayHtml, FINGERPRINT_SHAPED, "startup-overlay.html must not author a fingerprint");
+  assert.doesNotMatch(script, FINGERPRINT_SHAPED, "startup.js must not carry a fallback fingerprint");
+  assert.doesNotMatch(overlayScript, FINGERPRINT_SHAPED, "startup-overlay.js must not carry a fallback fingerprint");
+
+  // Both identity blocks ship empty; every digit in them is written from the
+  // snapshot at runtime.
+  for (const [name, markup] of [["startup.html", html], ["startup-overlay.html", overlayHtml]]) {
+    for (const [, body] of markup.matchAll(/data-fingerprint-value[^>]*>([\s\S]*?)<\/span>/g)) {
+      assert.equal(body.trim(), "", `${name} must leave the fingerprint value empty`);
+    }
+    assert.equal(
+      (markup.match(/data-fingerprint-value/g) ?? []).length,
+      2,
+      `${name} must keep exactly one identity value per endpoint`,
+    );
+  }
+
+  // Both scenes read the observed and the expected value from separate fields.
+  // Rendering one value into both panels would be the same theatre with extra
+  // steps, so the pair of reads is the contract, not the pair of panels.
+  for (const [name, source] of [["startup.js", script], ["startup-overlay.js", overlayScript]]) {
+    assert.match(source, /digestLines\(peer\?\.observedSha256[,)]/, `${name} must read the observed value`);
+    assert.match(source, /digestLines\(peer\?\.expectedSha256[,)]/, `${name} must read the expected value`);
+  }
+
+  const digestLines = evaluateStartupHelper(script, "digestLines", ["normalizeDigest"]);
+  const sha256 = "952f8c14a7be03d95c61f0428ab7d3e6510c9d27fa8b46e0193c7d5ab2ee908f";
+  // Joined, because the helper runs in its own realm and its Array does not
+  // share a prototype with this one.
+  const lines = (value, full) => digestLines(value, full)?.join("\n") ?? null;
+
+  // The quiet form is a prefix and says so. Four leading bytes without the
+  // ellipsis would read as a whole fingerprint that happens to be short.
+  assert.equal(lines(sha256, false), "95:2F:8C:14…");
+  assert.equal(digestLines(sha256, false).length, 1, "the short form occupies one line");
+
+  // The full form appears only where two values have to be compared, and then
+  // it must carry all 32 bytes: a digest trimmed to fit is not comparable.
+  assert.equal(
+    lines(sha256, true),
+    ["95:2F:8C:14:A7:BE:03:D9", "5C:61:F0:42:8A:B7:D3:E6", "51:0C:9D:27:FA:8B:46:E0", "19:3C:7D:5A:B2:EE:90:8F"].join("\n"),
+  );
+  assert.equal(digestLines(sha256, true).length, 4, "the full form occupies four lines");
+  assert.equal(lines(sha256, true).replace(/[\n:]/g, "").length, 64, "the full form must lose no byte to the layout");
+  assert.equal(
+    lines("95:2F:8C:14:A7:BE:03:D9:5C:61:F0:42:8A:B7:D3:E6:51:0C:9D:27:FA:8B:46:E0:19:3C:7D:5A:B2:EE:90:8F", true),
+    lines(sha256, true),
+    "an already-grouped digest must format to the same four lines",
+  );
+
+  // Only the changed-pin state asks for the long form, so the screen stays
+  // quiet while there is nothing to compare.
+  assert.match(script, /renderPeer\(snapshot, peerChanged\)/, "the full digest belongs to the changed-pin state");
+  // Anything that is not exactly 32 bytes of hex is refused rather than shown
+  // in a shape a person would read as authoritative.
+  for (const rejected of [
+    undefined,
+    null,
+    42,
+    "",
+    sha256.slice(0, 62),
+    `${sha256}ab`,
+    `${sha256.slice(0, 63)}z`,
+    "неизвестно",
+  ]) {
+    for (const full of [false, true]) {
+      assert.equal(digestLines(rejected, full), null, `${String(rejected)} is not a SHA-256 and must not render`);
+    }
+  }
+
+  // The issuer and the validity date arrive from the certificate, so they are
+  // whatever answered the connection. They are bounded before they reach the
+  // notice.
+  const boundedField = evaluateStartupHelper(script, "boundedField");
+  assert.equal(boundedField("Let's Encrypt R11", 48), "Let's Encrypt R11");
+  assert.equal(boundedField("  Let's\n Encrypt  R11 ", 48), "Let's Encrypt R11");
+  assert.equal(boundedField("x".repeat(400), 48).length, 48);
+  assert.equal(boundedField("   ", 48), null);
+  assert.equal(boundedField(123, 48), null);
+});
+
+test("the startup screen offers an override for a changed pin and never for a rejected chain", () => {
+  const html = readText("windows-tauri/ui/startup.html");
+  const script = readText("windows-tauri/ui/startup.js");
+
+  // The hard failure — no connection, or a certificate the Windows trust store
+  // rejected — carries a retry and nothing else. A control that continued past
+  // it would turn a real interception into a dialog a person clicks through.
+  const failureBlock = html.match(/<div id="startup-failure"[\s\S]*?<\/div>/)?.[0] ?? "";
+  assert.notEqual(failureBlock, "", "the hard-failure notice must remain in the markup");
+  assert.deepEqual(
+    [...failureBlock.matchAll(/<button[^>]*id="([^"]+)"/g)].map(([, id]) => id),
+    ["startup-retry"],
+    "the hard-failure notice must offer a retry and no other action",
+  );
+  assert.doesNotMatch(failureBlock, /accept_peer_change|is-quiet/);
+
+  const mismatchBlock = html.match(/<div id="startup-mismatch"[\s\S]*?<div class="mismatch-actions">[\s\S]*?<\/div>/)?.[0] ?? "";
+  assert.deepEqual(
+    [...mismatchBlock.matchAll(/<button[^>]*id="([^"]+)"/g)].map(([, id]) => id),
+    ["startup-mismatch-recheck", "startup-mismatch-continue"],
+    "the changed-pin notice must offer a recheck first and the override second",
+  );
+
+  // The two notices are driven by two different states, and only the soft one
+  // reaches the override.
+  assert.match(
+    script,
+    /const peerChanged = snapshot\.stage === "recoverable_error" && snapshot\.errorCode === "peer_changed"/,
+    "the override state must be its own error code, not a variant of the TLS failure",
+  );
+  assert.match(
+    script,
+    /const hardFailure = snapshot\.stage === "recoverable_error" && !peerChanged/,
+    "every recoverable error that is not a changed pin must be the hard failure",
+  );
+  assert.match(script, /focusWhenRevealed\(mismatch, mismatchRecheck, peerChanged\)/);
+  assert.match(script, /focusWhenRevealed\(failure, retry, hardFailure\)/);
+
+  // The override command is wired to exactly one control, and it is the quiet
+  // one inside the changed-pin notice.
+  assert.deepEqual(
+    [...script.matchAll(/(\w+)\.addEventListener\("click", \(\) => invokeGuarded\(\1, "startup_accept_peer_change"\)\)/g)]
+      .map(([, control]) => control),
+    ["mismatchContinue"],
+    "startup_accept_peer_change must be reachable from the override control only",
+  );
+  assert.equal(
+    (script.match(/startup_accept_peer_change/g) ?? []).length,
+    1,
+    "a second call site would be a second way past the check",
+  );
+
+  // Nothing in this directory may weaken transport security, whatever a state
+  // is called. The override is about our own pin, never about validation.
+  for (const name of ["startup.html", "startup.css", "startup.js", "startup-overlay.html", "startup-overlay.css", "startup-overlay.js"]) {
+    const source = readText(`windows-tauri/ui/${name}`);
+    assert.doesNotMatch(
+      source,
+      /danger(?:ous)?_accept_invalid|rejectUnauthorized|insecure[_-]?skip[_-]?verify|allow[_-]?invalid[_-]?cert/i,
+      `${name} must not name a switch that disables certificate validation`,
+    );
+    assert.doesNotMatch(source, /http:\/\/(?:app|api)\.letscube\.ru/, `${name} must not name a plaintext LETSCUBE origin`);
+  }
+
+  // The override is per occurrence. A remembered "always allow" turns the
+  // comparison into a habit and deletes the only signal it exists to give.
+  assert.doesNotMatch(script, /localStorage|sessionStorage|alwaysAllow|remember/i);
+});
+
+test("the startup scenes never put the node's address in front of the person", () => {
+  const libRs = readText("windows-tauri/src-tauri/src/lib.rs");
+  const productionOrigin = libRs.match(/const PRODUCTION_ORIGIN: &str = "([^"]+)";/)?.[1] ?? null;
+  assert.equal(typeof productionOrigin, "string", "PRODUCTION_ORIGIN must remain a single constant in lib.rs");
+
+  // The product is heading for a distributed network. The host a given client
+  // reaches will be one of many, so an address shown here would be a fact that
+  // stops being true without anything on this screen changing — and it would
+  // still be there in the failure and override copy, which is exactly where a
+  // wrong one does the most damage. Both endpoints are named by their role.
+  //
+  // The host itself is checked, and the check is what the fingerprint attests
+  // to. It is only never displayed. The origin lives in lib.rs, where it is
+  // enforced and where a developer reads it.
+  const host = new URL(productionOrigin).hostname;
+  for (const name of [
+    "startup.html",
+    "startup.css",
+    "startup.js",
+    "startup-overlay.html",
+    "startup-overlay.css",
+    "startup-overlay.js",
+  ]) {
+    const source = readText(`windows-tauri/ui/${name}`);
+    assert.equal(
+      source.includes(host),
+      false,
+      `${name} names the node's host; the scenes must speak of the node by its role`,
+    );
+    assert.equal(
+      source.includes(productionOrigin),
+      false,
+      `${name} names the node's origin; the scenes must speak of the node by its role`,
+    );
+  }
+  // The overlay still guards on the origin — it must not mount on any other
+  // page. It reaches that value through a placeholder the shell substitutes,
+  // so the guard survives without the literal ever being in a rendered file.
+  assert.match(
+    readText("windows-tauri/ui/startup-overlay.js"),
+    /window\.location\.origin !== __LETSCUBE_PRODUCTION_ORIGIN__/,
+    "removing the address must not remove the overlay's origin guard",
+  );
+
+  const html = readText("windows-tauri/ui/startup.html");
+  // The version is injected by startup_runtime_script, so it can never go
+  // stale in the markup.
+  assert.match(html, /data-desktop-version/);
+  assert.doesNotMatch(html, /Desktop\s+\d+\.\d+\.\d+/);
+});
+
+test("the startup scenes carry the application's tokens and write no duration of their own", () => {
+  const appCss = readText("artifacts/kub/src/index.css");
+  const startupCss = readText("windows-tauri/ui/startup.css");
+  const overlayCss = readText("windows-tauri/ui/startup-overlay.css");
+
+  // windows-tauri/ui cannot import the application's stylesheet — it is served
+  // as-is, with no build step — so the tokens are copied. This is what makes a
+  // copy that drifted from its source a test failure rather than a colour
+  // nobody notices.
+  const appTokens = collectTokens(appCss, /^\.dark \{[\s\S]*?^\}/m);
+  const rootTokens = collectTokens(appCss, /^:root \{[\s\S]*?^\}/m);
+  for (const [name, value] of rootTokens) if (!appTokens.has(name)) appTokens.set(name, value);
+  assert.ok(appTokens.size > 20, "the application's dark token block must be readable");
+
+  for (const [label, css, pattern] of [
+    ["startup.css", startupCss, /^:root \{[\s\S]*?^\}/m],
+    ["startup-overlay.css", overlayCss, /^:host \{[\s\S]*?^\}/m],
+  ]) {
+    const copied = collectTokens(css, pattern);
+    const compared = [...copied].filter(([name]) => appTokens.has(name));
+    assert.ok(compared.length >= 10, `${label} must copy the application's tokens by their own names`);
+    for (const [name, value] of compared) {
+      assert.equal(
+        value.toLowerCase(),
+        appTokens.get(name).toLowerCase(),
+        `${label} copied ${name} from artifacts/kub/src/index.css and has drifted from it`,
+      );
+    }
+  }
+
+  // Every duration must resolve to one of the five semantic tokens. A number
+  // written here is outside the shared system and drifts silently — see
+  // docs/operations/shared-motion-feedback.md. Zero is not a choice of speed,
+  // so it is allowed.
+  // Comments explain measurements in milliseconds; only declarations are scanned.
+  const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, " "));
+  for (const [label, css] of [["startup.css", startupCss], ["startup-overlay.css", overlayCss]]) {
+    for (const line of stripComments(css).split("\n")) {
+      for (const [literal, amount] of line.matchAll(/\b(\d+(?:\.\d+)?)m?s\b/g)) {
+        // 0 is no duration, and 1ms is the collapse that
+        // docs/operations/shared-motion-feedback.md defines for reduced
+        // motion. Neither is a speed chosen on this screen.
+        if (Number(amount) === 0 || literal === "1ms") continue;
+        assert.match(
+          line,
+          /--kub-motion-/,
+          `${label} writes the duration ${literal} outside a motion token: ${line.trim()}`,
+        );
+      }
+    }
+    assert.match(css, /prefers-reduced-motion/, `${label} must honour the reduced-motion preference`);
+    assert.match(
+      css,
+      /prefers-reduced-motion: reduce\)\s*\{[\s\S]*?--kub-motion-standard:\s*1ms/,
+      `${label} must collapse the movement durations rather than each transition`,
+    );
+  }
+
+  // Nothing that occupies space may be animated: a box that resizes while it is
+  // being read cannot be measured, and moves the controls beside it.
+  for (const [label, css] of [["startup.css", startupCss], ["startup-overlay.css", overlayCss]]) {
+    for (const [, properties] of css.matchAll(/transition:\s*([^;]+);/g)) {
+      assert.doesNotMatch(
+        properties,
+        /\b(?:width|height|padding|margin|inset|top|left|right|bottom|font-size|all)\b/,
+        `${label} animates a property that changes a laid-out box: ${properties.trim()}`,
+      );
+    }
+  }
 });
 
 test("production startup handoff keeps one stable scene long enough to read", () => {

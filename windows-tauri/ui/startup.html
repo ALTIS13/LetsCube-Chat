@@ -6,8 +6,24 @@
     <title>LETSCUBE</title>
     <link rel="stylesheet" href="startup.css" />
   </head>
-  <body data-stage="boot">
-    <main class="startup-shell" aria-live="polite">
+  <!--
+    Nothing in this file states a result. The version, the stage, the
+    verification verdict and both certificate fingerprints are written by
+    startup.js from the snapshot the shell emits on `letscube://startup-state`.
+    The identity blocks below are deliberately empty: a fingerprint authored in
+    the markup is a constant pretending to be a measurement, which is what this
+    screen used to show.
+
+    The node's address is deliberately absent, and a test asserts it stays
+    absent. The product is heading for a distributed network, where the host a
+    given client happens to reach is either wrong or one of many, so an address
+    on this screen would be a fact that stops being true without anything here
+    changing. Both endpoints are named by their role instead. The origin itself
+    lives in PRODUCTION_ORIGIN in windows-tauri/src-tauri/src/lib.rs, where it
+    is enforced and where a developer can read it.
+  -->
+  <body data-stage="boot" data-verdict="pending">
+    <main class="startup-shell">
       <header class="startup-header" data-testid="startup-titlebar">
         <div class="startup-drag-region" id="startup-drag-region">
           <img src="letscube-logo.svg" alt="LETSCUBE" class="brand" />
@@ -20,51 +36,97 @@
         </div>
       </header>
 
-      <section class="handshake" id="startup-handshake" aria-labelledby="startup-status">
+      <section class="handshake" id="startup-handshake">
         <article class="endpoint endpoint-client">
-          <div class="fingerprints" data-testid="startup-client-fingerprint" aria-hidden="true">
-            <span>4E 1A 90</span><span>C8 72 B4</span><span>0F 6D A2</span><span>91 3C E7</span>
+          <div class="fingerprints" data-testid="startup-client-fingerprint">
+            <span class="fingerprint-label" data-fingerprint-label></span>
+            <span class="fingerprint-value" data-fingerprint-value data-kind="note"></span>
           </div>
-          <div class="computer" aria-hidden="true">
-            <div class="screen"><i></i></div><div class="stand"></div>
+          <div class="computer">
+            <svg class="device-art" viewBox="0 0 148 126" role="img" aria-label="Этот компьютер" focusable="false">
+              <rect class="device-glass" x="9" y="9" width="130" height="80" rx="6" />
+              <rect class="device-frame" x="9" y="9" width="130" height="80" rx="6" />
+              <path class="device-frame" d="M74 89v14M55 111h38" />
+              <path class="device-line" d="M28 36h44M28 50h62M28 64h30" />
+              <circle class="device-live" cx="116" cy="36" r="4.5" />
+            </svg>
             <span class="connection-port connection-port-client" data-testid="startup-client-port"></span>
           </div>
           <h2>Этот компьютер</h2>
-          <p>Защищённый клиент</p>
+          <p>Оболочка LETSCUBE</p>
         </article>
 
-        <div class="rail-wrap">
+        <div class="rail-wrap" aria-hidden="true">
           <div class="rail rail-left"><i></i></div>
-          <div id="startup-center-seal" data-testid="startup-center-seal" class="center-seal" aria-hidden="true">
+          <div id="startup-center-seal" data-testid="startup-center-seal" class="center-seal">
             <span></span>
           </div>
           <div class="rail rail-right"><i></i></div>
         </div>
 
         <article class="endpoint endpoint-server">
-          <div class="fingerprints" data-testid="startup-server-fingerprint" aria-hidden="true">
-            <span>72 B9 0D</span><span>18 E4 C3</span><span>A6 2F 81</span><span>3D C0 57</span>
+          <div class="fingerprints" data-testid="startup-server-fingerprint">
+            <span class="fingerprint-label" data-fingerprint-label></span>
+            <span class="fingerprint-value" data-fingerprint-value data-kind="note"></span>
           </div>
-          <div class="server" aria-hidden="true">
-            <div><i></i><b></b><b></b></div><div><i></i><b></b><b></b></div><div><i></i><b></b><b></b></div>
+          <div class="server">
+            <svg class="device-art" viewBox="0 0 132 126" role="img" aria-label="Узел LETSCUBE" focusable="false">
+              <rect class="device-glass" x="11" y="7" width="110" height="112" rx="9" />
+              <rect class="device-frame" x="11" y="7" width="110" height="112" rx="9" />
+              <path class="device-line" d="M48 31h50M48 63h50M48 95h50" />
+              <circle class="device-live" cx="34" cy="31" r="4" />
+              <circle class="device-live" cx="34" cy="63" r="4" />
+              <circle class="device-live" cx="34" cy="95" r="4" />
+            </svg>
             <span class="connection-port connection-port-server" data-testid="startup-server-port"></span>
           </div>
-          <h2>LETSCUBE Secure Node</h2>
+          <h2>Узел LETSCUBE</h2>
           <p>Проверенный сервер</p>
         </article>
       </section>
 
       <section class="startup-state">
-        <p id="startup-status">Подготавливаем защищённое соединение</p>
+        <p id="startup-status" aria-live="polite">Готовим подключение</p>
+        <!--
+          The scope line is the honest boundary of the claim and must stay.
+          The certificate is checked by the shell's own HTTPS request; the
+          workspace page is fetched by WebView2, which validates its own
+          connection separately. Neither sentence may be widened into "your
+          session is verified".
+        -->
+        <p class="startup-scope">Сертификат проверяет оболочка приложения при своём HTTPS-запросе. Страницу рабочего пространства загружает WebView2 — он проверяет своё соединение отдельно, средствами Windows.</p>
         <ol class="stages" aria-label="Этапы подключения">
           <li data-stage-name="network_check">Сеть</li>
           <li data-stage-name="tls_origin_check">Сертификат</li>
-          <li data-stage-name="update_check">Версия</li>
+          <li data-stage-name="update_check">Обновления</li>
           <li data-stage-name="production_navigation">Рабочее пространство</li>
         </ol>
-        <div id="startup-failure" class="failure" hidden>
+
+        <!--
+          Two failures, kept apart on purpose.
+
+          #startup-failure is the hard one: no connection, or a certificate the
+          Windows trust store rejects. It offers a retry and nothing else. There
+          must never be a control here that continues past it.
+        -->
+        <div id="startup-failure" class="failure" role="alert" hidden>
           <p id="startup-error">Не удалось установить защищённое соединение.</p>
-          <button id="startup-retry" type="button">Повторить</button>
+          <button id="startup-retry" type="button" class="is-primary">Повторить</button>
+        </div>
+
+        <!--
+          #startup-mismatch is the soft one: the chain validated and the host
+          matched, but the certificate is not the one this computer recorded.
+          A renewal looks exactly like this, which is why it may be continued
+          past — once, by an explicit press, never remembered as "always allow".
+        -->
+        <div id="startup-mismatch" class="mismatch" role="alert" hidden>
+          <p class="mismatch-title" id="startup-mismatch-title">Сертификат узла изменился</p>
+          <p class="mismatch-detail" id="startup-mismatch-detail"></p>
+          <div class="mismatch-actions">
+            <button id="startup-mismatch-recheck" type="button" class="is-primary">Проверить снова</button>
+            <button id="startup-mismatch-continue" type="button" class="is-quiet">Продолжить — отпечаток не подтверждён</button>
+          </div>
         </div>
       </section>
     </main>

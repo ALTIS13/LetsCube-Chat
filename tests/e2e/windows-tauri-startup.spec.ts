@@ -234,8 +234,12 @@ async function measureStartupGeometry(page: import("@playwright/test").Page) {
     const clientSubtitle = box(".endpoint-client p");
     const serverHeading = box(".endpoint-server h2");
     const serverSubtitle = box(".endpoint-server p");
-    const clientFingerprintLines = boxes('[data-testid="startup-client-fingerprint"] span');
-    const serverFingerprintLines = boxes('[data-testid="startup-server-fingerprint"] span');
+    const clientFingerprintLines = boxes(
+      '[data-testid="startup-client-fingerprint"] [data-fingerprint-value] span',
+    );
+    const serverFingerprintLines = boxes(
+      '[data-testid="startup-server-fingerprint"] [data-fingerprint-value] span',
+    );
     const retry = box("#startup-retry");
     const failureText = box("#startup-error");
     if (
@@ -255,20 +259,32 @@ async function measureStartupGeometry(page: import("@playwright/test").Page) {
       !clientSubtitle ||
       !serverHeading ||
       !serverSubtitle ||
-      stageLabels.length !== 4 ||
-      clientFingerprintLines.length !== 4 ||
-      serverFingerprintLines.length !== 4
+      stageLabels.length !== 4
     ) {
       throw new Error("startup_geometry_missing");
     }
+    // A fingerprint is written from the snapshot, never from the markup, so a
+    // side carries exactly one of three counts: none, when the shell sent no
+    // certificate and the block holds a note instead of digits; one, the short
+    // prefix shown while nothing needs comparing; or four, the whole SHA-256 as
+    // eight bytes a line, which only the changed-pin state asks for. Any other
+    // count means a partial value reached the screen.
+    if (
+      ![0, 1, 4].includes(clientFingerprintLines.length) ||
+      ![0, 1, 4].includes(serverFingerprintLines.length)
+    ) {
+      throw new Error(
+        `startup_fingerprint_line_count:${clientFingerprintLines.length}/${serverFingerprintLines.length}`,
+      );
+    }
     const clientStyles = [...document.querySelectorAll<HTMLElement>(
-      '[data-testid="startup-client-fingerprint"] span',
+      '[data-testid="startup-client-fingerprint"] [data-fingerprint-value] span',
     )].map((element) => {
       const style = getComputedStyle(element);
       return [style.color, style.opacity];
     });
     const serverStyles = [...document.querySelectorAll<HTMLElement>(
-      '[data-testid="startup-server-fingerprint"] span',
+      '[data-testid="startup-server-fingerprint"] [data-fingerprint-value] span',
     )].map((element) => {
       const style = getComputedStyle(element);
       return [style.color, style.opacity];
