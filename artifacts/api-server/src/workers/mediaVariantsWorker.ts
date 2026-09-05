@@ -667,16 +667,25 @@ async function recordMissingAvatarSource(
   }
 }
 
-/** The delta-seconds out of a `Cache-Control` value, for callers that want only that. */
-function cacheControlSeconds(value: string): string {
-  return /max-age=(\d+)/.exec(value)?.[1] ?? "3600";
-}
-
-/** See `artifacts/kub/src/lib/mediaCacheControl.ts`; kept in step by a test. */
-function variantCacheControl(path: string): string {
-  return path.startsWith("variants/profiles/")
-    ? "max-age=2592000"
-    : "max-age=31536000, immutable";
+/**
+ * How long a variant may be kept, in the two forms an upload needs.
+ *
+ * `seconds` is the TTL that goes in `cacheControl`; `directive` is the header
+ * the service should end up serving. See
+ * `artifacts/kub/src/lib/mediaCacheControl.ts`, which holds the same two
+ * lifetimes for the browser and is kept in step with this by a test.
+ *
+ * A profile variant is overwritten in place when someone changes their picture,
+ * so it must stay revalidatable and never claims to be immutable. Every other
+ * variant's path names one write and can be kept for a year.
+ */
+function variantCacheControl(path: string): { seconds: string; directive: string } {
+  const reused = path.startsWith("variants/profiles/");
+  const seconds = reused ? "2592000" : "31536000";
+  return {
+    seconds,
+    directive: reused ? `max-age=${seconds}` : `max-age=${seconds}, immutable`,
+  };
 }
 
 async function uploadVariant(
@@ -695,15 +704,21 @@ async function uploadVariant(
     // path is reused when the picture is, so it gets a shorter window and the
     // client versions the URL.
     //
-    // `cacheControl` takes SECONDS here, not a directive. For a Buffer body the
-    // client writes `max-age=${cacheControl}` itself, so passing the whole
-    // string produced `Cache-Control: max-age=max-age=31536000, immutable` on
-    // every variant this worker uploaded — a malformed max-age, which is worse
-    // than no header. The browser call sites are unaffected: a Blob goes up as
-    // a form field the service reads verbatim. `headers` is applied last and
-    // wins, so it is what actually carries `immutable`.
-    cacheControl: cacheControlSeconds(cacheControl),
-    headers: { "cache-control": cacheControl },
+    // `cacheControl` takes SECONDS, not a directive: whichever branch handles
+    // the body writes `max-age=` itself, so passing the whole string produces
+    // `max-age=max-age=31536000, immutable` — a malformed max-age, which is
+    // worse than no header.
+    //
+    // This body is a Buffer, so `storage-js` takes its binary branch and sends
+    // a real `cache-control` request header, which the service honours as
+    // written. `headers` is applied last and wins, so it is what carries
+    // `immutable`. The browser call sites cannot do this: a Blob goes up as a
+    // multipart form field, and there the service builds the header from the
+    // TTL and ignores the request header entirely — so they send seconds only
+    // and go without `immutable` on purpose. See
+    // `artifacts/kub/src/lib/mediaCacheControl.ts`.
+    cacheControl: cacheControl.seconds,
+    headers: { "cache-control": cacheControl.directive },
   });
   if (error) throw error;
 }

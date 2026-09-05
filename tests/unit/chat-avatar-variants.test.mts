@@ -7,8 +7,8 @@ import {
   pickAvatarVariant,
 } from "../../artifacts/kub/src/lib/avatarVariantStore.ts";
 import {
-  IMMUTABLE_CACHE_CONTROL,
-  REUSED_PATH_CACHE_CONTROL,
+  IMMUTABLE_PATH_MAX_AGE_SECONDS,
+  REUSED_PATH_MAX_AGE_SECONDS,
   cacheControlFor,
 } from "../../artifacts/kub/src/lib/mediaCacheControl.ts";
 
@@ -94,8 +94,8 @@ test("a chat's avatar variant is cached forever, because its address is per pict
   // so a new group photo is a new address and the old one is never overwritten.
   // The token stands in for what `avatarPathToken` produces.
   const path = `variants/chats/${CHAT_ID}/9f2c1d7ab3e54c0891fe6a4d2b7c8e10/avatar_128.webp`;
-  assert.equal(cacheControlFor(path), IMMUTABLE_CACHE_CONTROL);
-  assert.notEqual(cacheControlFor(path), REUSED_PATH_CACHE_CONTROL);
+  assert.equal(cacheControlFor(path), IMMUTABLE_PATH_MAX_AGE_SECONDS);
+  assert.notEqual(cacheControlFor(path), REUSED_PATH_MAX_AGE_SECONDS);
 });
 
 test("the worker gives a chat's variant the same lifetime the client expects", () => {

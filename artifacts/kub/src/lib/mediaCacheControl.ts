@@ -18,19 +18,61 @@
  * The value is only honoured when it is sent at upload time: this deployment's
  * storage service reads it from the request, not from the object row, so
  * editing the stored metadata afterwards changes nothing. Measured both ways.
+ *
+ * ## These are seconds, not a `Cache-Control` value
+ *
+ * The upload field is a TTL. The service writes the header itself, and the two
+ * ways a browser can upload disagree about what they will accept — read off
+ * `storage-api` v1.60.4 running in production:
+ *
+ * - A file at or under the resumable threshold goes up as a `Blob`, which
+ *   `storage-js` puts in a multipart form field. The service does
+ *   ``cacheControl = cacheTime ? `max-age=${cacheTime}` : "no-cache"`` with no
+ *   check at all (`dist/storage/uploader.js`), so a directive here is pasted
+ *   after its own prefix and stored as `max-age=max-age=31536000, immutable` —
+ *   a malformed `max-age`, which is worse than saying nothing.
+ * - A larger file goes over tus, where the same value travels as upload
+ *   metadata. There the service tests `/^-?\d+$/` first and falls back to
+ *   `no-cache` when it fails (`dist/http/routes/tus/lifecycle.js`), so a
+ *   directive does not merely deform the header, it throws the lifetime away.
+ *
+ * So a number is the only value both paths accept, and passing one is what the
+ * two constants below exist to guarantee.
+ *
+ * ## `immutable` is deliberately not sent from the browser
+ *
+ * A decision, not an omission. The multipart branch would today carry
+ * `"31536000, immutable"` through to the header, because it does not validate —
+ * but the tus branch already rejects exactly that shape, and the field is
+ * documented as a TTL, so relying on one branch's missing check is relying on a
+ * bug staying unfixed. `max-age` alone buys the whole measured win: a year is
+ * far past any session, and the browser does not revalidate inside it. What
+ * `immutable` adds is only that an explicit reload skips revalidation too.
+ *
+ * Where it is safe to be exact, it is still sent: the variants worker uploads a
+ * `Buffer`, which takes `storage-js`'s binary branch, and that branch honours a
+ * real `cache-control` request header. See `uploadVariant` in
+ * `artifacts/api-server/src/workers/mediaVariantsWorker.ts`.
  */
 
-/** A name that belongs to exactly one upload. Safe to keep for a year. */
-export const IMMUTABLE_CACHE_CONTROL = "max-age=31536000, immutable";
+/**
+ * `max-age`, in seconds, for a name that belongs to exactly one upload. A year,
+ * because nothing will ever be written to that address again.
+ *
+ * The path is what is immutable here, not the header: this value goes into an
+ * upload's `cacheControl`, which is a lifetime, and a browser upload has no way
+ * to add the `immutable` directive on top of it. See the note above.
+ */
+export const IMMUTABLE_PATH_MAX_AGE_SECONDS = "31536000";
 
 /**
- * A path that is reused when the picture changes.
+ * `max-age`, in seconds, for a path that is reused when the picture changes.
  *
  * Thirty days, not a year: long enough that the request cost disappears, short
  * enough that a reference which somehow lacks a version token heals by itself
  * rather than showing last month's face until next year.
  */
-export const REUSED_PATH_CACHE_CONTROL = "max-age=2592000";
+export const REUSED_PATH_MAX_AGE_SECONDS = "2592000";
 
 /**
  * Paths whose bytes are overwritten in place rather than given a new name.
@@ -46,18 +88,21 @@ export const REUSED_PATH_CACHE_CONTROL = "max-age=2592000";
 const REUSED_PREFIXES = ["variants/profiles/"];
 
 /**
- * The value to send when uploading to `objectPath`.
+ * The lifetime, in seconds, to send when uploading to `objectPath`.
  *
- * Defaults to immutable because that is what every upload path in this product
- * produces — a unique name per upload. A new prefix that overwrites in place
- * must be added to `REUSED_PREFIXES`, or it will be cached as though it never
- * changes.
+ * Goes straight into `cacheControl` on a `storage-js` upload, which is a TTL
+ * and not a header — see the note at the top of this file.
+ *
+ * Defaults to the immutable lifetime because that is what every upload path in
+ * this product produces — a unique name per upload. A new prefix that
+ * overwrites in place must be added to `REUSED_PREFIXES`, or it will be cached
+ * as though it never changes.
  */
 export function cacheControlFor(objectPath: string): string {
   const normalized = objectPath.replace(/^\/+/, "");
   return REUSED_PREFIXES.some((prefix) => normalized.startsWith(prefix))
-    ? REUSED_PATH_CACHE_CONTROL
-    : IMMUTABLE_CACHE_CONTROL;
+    ? REUSED_PATH_MAX_AGE_SECONDS
+    : IMMUTABLE_PATH_MAX_AGE_SECONDS;
 }
 
 /**
