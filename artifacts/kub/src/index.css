@@ -66,32 +66,36 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-.kub-selection-suppressed,
-.kub-selection-suppressed * {
-  -webkit-user-select: none !important;
-  user-select: none !important;
+@layer components {
+  .kub-selection-suppressed,
+  .kub-selection-suppressed * {
+    -webkit-user-select: none !important;
+    user-select: none !important;
+  }
 }
 
-@media print {
-  .public-page-print-hide {
-    display: none !important;
-  }
+@layer components {
+  @media print {
+    .public-page-print-hide {
+      display: none !important;
+    }
 
-  .public-policy {
-    max-width: none !important;
-    padding: 0 !important;
-  }
+    .public-policy {
+      max-width: none !important;
+      padding: 0 !important;
+    }
 
-  .public-policy,
-  .public-policy * {
-    color: #111827 !important;
-    background: #ffffff !important;
-    box-shadow: none !important;
-    text-shadow: none !important;
-  }
+    .public-policy,
+    .public-policy * {
+      color: #111827 !important;
+      background: #ffffff !important;
+      box-shadow: none !important;
+      text-shadow: none !important;
+    }
 
-  .public-policy section {
-    break-inside: avoid-page;
+    .public-policy section {
+      break-inside: avoid-page;
+    }
   }
 }
 
@@ -643,73 +647,75 @@ html, body {
   overflow: hidden;
 }
 
-/* The whole material in two classes. Applied rather than copied, so that
-   changing what the application is made of is one edit and not a search.
-   `isolation` is not optional: a backdrop-filter creates a containing block
-   for fixed descendants and blends against whatever is behind the element, so
-   a panel without its own stacking context can sample its own children.
+@layer components {
+  /* The whole material in two classes. Applied rather than copied, so that
+     changing what the application is made of is one edit and not a search.
+     `isolation` is not optional: a backdrop-filter creates a containing block
+     for fixed descendants and blends against whatever is behind the element, so
+     a panel without its own stacking context can sample its own children.
 
-   Neither class sets a border. A panel's edge belongs to the panel — some
-   carry --tg-border all round, some only a single side — so the surface stays
-   the surface and the edge stays a decision. */
-.kub-glass,
-.kub-glass-strong {
-  isolation: isolate;
-  -webkit-backdrop-filter: var(--glass-blur);
-  backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow);
-}
-.kub-glass { background-color: var(--glass-fill); }
-/* For anything that covers content it is not part of: menus, dialogs, toasts,
-   tooltips. At panel opacity these compete with what they cover. */
-.kub-glass-strong { background-color: var(--glass-fill-strong); }
+     Neither class sets a border. A panel's edge belongs to the panel — some
+     carry --tg-border all round, some only a single side — so the surface stays
+     the surface and the edge stays a decision. */
+  .kub-glass,
+  .kub-glass-strong {
+    isolation: isolate;
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow);
+  }
+  .kub-glass { background-color: var(--glass-fill); }
+  /* For anything that covers content it is not part of: menus, dialogs, toasts,
+     tooltips. At panel opacity these compete with what they cover. */
+  .kub-glass-strong { background-color: var(--glass-fill-strong); }
 
-/* Layered as a background IMAGE, which is the whole trick: it composites over
-   whatever background-color the element already has instead of replacing it,
-   so the same rule reads correctly on the page, on a panel and inside a menu.
-   Written as a gradient between one colour and itself because that is how CSS
-   spells "a flat layer" in a background-image slot.
+  /* Layered as a background IMAGE, which is the whole trick: it composites over
+     whatever background-color the element already has instead of replacing it,
+     so the same rule reads correctly on the page, on a panel and inside a menu.
+     Written as a gradient between one colour and itself because that is how CSS
+     spells "a flat layer" in a background-image slot.
 
-   Not an inset box-shadow, which would do the same job but would silently
-   cancel any shadow the element already carries — and several of the things
-   that need this are cards. */
-/* No transition here, and that is deliberate rather than an omission.
-   background-image does not interpolate: from `none` to a gradient is a
-   discrete swap, checked in a browser — sampled 200ms into a declared 600ms
-   transition, the computed value was already the final one. So the declaration
-   that used to sit here bought no fade at all, while a `transition` shorthand
-   outside any layer beats Tailwind's `@layer utilities`, which meant it
-   replaced the transition of anything it was applied to. Measured: the quick
-   reaction button, which pairs its hover with `transition-all hover:scale-125`,
-   went from easing to snapping.
+     Not an inset box-shadow, which would do the same job but would silently
+     cancel any shadow the element already carries — and several of the things
+     that need this are cards. */
+  /* No transition here, and that is deliberate rather than an omission.
+     background-image does not interpolate: from `none` to a gradient is a
+     discrete swap, checked in a browser — sampled 200ms into a declared 600ms
+     transition, the computed value was already the final one. So the declaration
+     that used to sit here bought no fade at all, while a `transition` shorthand
+     outside any layer beats Tailwind's `@layer utilities`, which meant it
+     replaced the transition of anything it was applied to. Measured: the quick
+     reaction button, which pairs its hover with `transition-all hover:scale-125`,
+     went from easing to snapping.
 
-   If a fade is ever wanted here it has to be an opacity transition on a
-   pseudo-element; there is no way to get one out of this property. */
-.kub-raise,
-.kub-raise-hover:hover,
-.kub-raise-hover:focus-visible {
-  background-image: linear-gradient(var(--kub-raise-veil), var(--kub-raise-veil));
-}
+     If a fade is ever wanted here it has to be an opacity transition on a
+     pseudo-element; there is no way to get one out of this property. */
+  .kub-raise,
+  .kub-raise-hover:hover,
+  .kub-raise-hover:focus-visible {
+    background-image: linear-gradient(var(--kub-raise-veil), var(--kub-raise-veil));
+  }
 
-/* A browser that cannot frost has to be given something opaque instead: a
-   translucent panel over unblurred content is unreadable, which is worse than
-   no effect at all. Checked for the unprefixed property, since that is the one
-   that carries the behaviour. */
-@supports not (backdrop-filter: blur(1px)) {
-  /* Each falls back to the colour its own fill is made of, not to the other
-     one. --glass-fill is --kub-surface-2 at reduced alpha and
-     --glass-fill-strong is --kub-surface, so pairing them the other way round
-     made the frosted and unfrosted renderings disagree about which surface is
-     which: in the dark theme --kub-surface-2 is the LIGHTER of the two, so the
-     strong variant came out less dense than the ordinary one — the opposite of
-     what it is for. */
-  /* Without a blur the absolute values cannot match what the frosted
-     rendering composites to, so what is preserved here is the relationship
-     instead: strong is the lighter of the two in the dark theme, because that
-     is what "above" means there, and a menu must not read as a recess in the
-     panel it opens over. */
-  .kub-glass { background-color: var(--kub-surface-2); }
-  .kub-glass-strong { background-color: var(--kub-surface-3); }
+  /* A browser that cannot frost has to be given something opaque instead: a
+     translucent panel over unblurred content is unreadable, which is worse than
+     no effect at all. Checked for the unprefixed property, since that is the one
+     that carries the behaviour. */
+  @supports not (backdrop-filter: blur(1px)) {
+    /* Each falls back to the colour its own fill is made of, not to the other
+       one. --glass-fill is --kub-surface-2 at reduced alpha and
+       --glass-fill-strong is --kub-surface, so pairing them the other way round
+       made the frosted and unfrosted renderings disagree about which surface is
+       which: in the dark theme --kub-surface-2 is the LIGHTER of the two, so the
+       strong variant came out less dense than the ordinary one — the opposite of
+       what it is for. */
+    /* Without a blur the absolute values cannot match what the frosted
+       rendering composites to, so what is preserved here is the relationship
+       instead: strong is the lighter of the two in the dark theme, because that
+       is what "above" means there, and a menu must not read as a recess in the
+       panel it opens over. */
+    .kub-glass { background-color: var(--kub-surface-2); }
+    .kub-glass-strong { background-color: var(--kub-surface-3); }
+  }
 }
 
 body {
@@ -733,23 +739,25 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--tg-muted); border-radius: 2px; opacity: 0.5; }
 ::-webkit-scrollbar-thumb:hover { background: var(--tg-text-secondary); }
 
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+@layer components {
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* Telegram-style chat wallpaper pattern (dot grid) */
-.chat-bg {
-  background-color: var(--tg-chat-bg);
-  background-image:
-    radial-gradient(var(--tg-pattern) 1px, transparent 1px),
-    radial-gradient(var(--tg-pattern) 1px, transparent 1px);
-  background-size: 40px 40px;
-  background-position: 0 0, 20px 20px;
-}
+  /* Telegram-style chat wallpaper pattern (dot grid) */
+  .chat-bg {
+    background-color: var(--tg-chat-bg);
+    background-image:
+      radial-gradient(var(--tg-pattern) 1px, transparent 1px),
+      radial-gradient(var(--tg-pattern) 1px, transparent 1px);
+    background-size: 40px 40px;
+    background-position: 0 0, 20px 20px;
+  }
 
-.context-menu {
-  background: var(--tg-context-bg);
-  border: 1px solid var(--tg-border);
-  box-shadow: 0 8px 32px var(--tg-shadow), 0 2px 8px rgba(0, 0, 0, 0.2);
+  .context-menu {
+    background: var(--tg-context-bg);
+    border: 1px solid var(--tg-border);
+    box-shadow: 0 8px 32px var(--tg-shadow), 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
 }
 
 @keyframes typing-dot {
@@ -757,9 +765,11 @@ body {
   30% { transform: translateY(-4px); opacity: 1; }
 }
 
-.typing-dot:nth-child(1) { animation: typing-dot 1.2s infinite 0ms; }
-.typing-dot:nth-child(2) { animation: typing-dot 1.2s infinite 150ms; }
-.typing-dot:nth-child(3) { animation: typing-dot 1.2s infinite 300ms; }
+@layer components {
+  .typing-dot:nth-child(1) { animation: typing-dot 1.2s infinite 0ms; }
+  .typing-dot:nth-child(2) { animation: typing-dot 1.2s infinite 150ms; }
+  .typing-dot:nth-child(3) { animation: typing-dot 1.2s infinite 300ms; }
+}
 
 /* A message arriving. Opacity and a small lift, nothing that has a size.
  *
@@ -778,16 +788,18 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.msg-appear {
-  animation: msg-appear var(--kub-motion-fast) var(--kub-ease-standard) backwards;
-  /* Composited, and the hint is dropped the moment the animation ends so an
-     idle chat is not holding a layer per bubble. */
-  will-change: opacity, transform;
-}
+@layer components {
+  .msg-appear {
+    animation: msg-appear var(--kub-motion-fast) var(--kub-ease-standard) backwards;
+    /* Composited, and the hint is dropped the moment the animation ends so an
+       idle chat is not holding a layer per bubble. */
+    will-change: opacity, transform;
+  }
 
-@media (prefers-reduced-motion: reduce) {
-  /* Movement goes; the message still appears. */
-  .msg-appear { animation: none; will-change: auto; }
+  @media (prefers-reduced-motion: reduce) {
+    /* Movement goes; the message still appears. */
+    .msg-appear { animation: none; will-change: auto; }
+  }
 }
 
 @keyframes ripple { to { transform: scale(2.5); opacity: 0; } }
@@ -796,27 +808,31 @@ body {
   0%, 100% { transform: scaleY(0.35); opacity: 0.55; }
   50%      { transform: scaleY(1);    opacity: 1; }
 }
-.vrec-bar {
-  transform-origin: center;
-  animation: vrec-bar 1.05s ease-in-out infinite;
-  will-change: transform, opacity;
-}
+@layer components {
+  .vrec-bar {
+    transform-origin: center;
+    animation: vrec-bar 1.05s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
 
-.unread-separator {
-  background: linear-gradient(90deg, transparent, var(--tg-active), transparent);
-}
+  .unread-separator {
+    background: linear-gradient(90deg, transparent, var(--tg-active), transparent);
+  }
 
-.msg-selected { background: var(--tg-active) !important; }
+  .msg-selected { background: var(--tg-active) !important; }
 
-.pinned-bar {
-  background: linear-gradient(90deg, var(--tg-accent) 0%, transparent 3px, var(--tg-header) 3px);
+  .pinned-bar {
+    background: linear-gradient(90deg, var(--tg-accent) 0%, transparent 3px, var(--tg-header) 3px);
+  }
 }
 
 textarea::placeholder, input::placeholder {
   color: var(--tg-text-secondary);
 }
 
-.transition-bg { transition: background 0.15s ease; }
+@layer components {
+  .transition-bg { transition: background 0.15s ease; }
+}
 
 /* ───────────────────────────────────────────────────────────────────────────
  * LETSCUBE brand utilities
@@ -824,108 +840,131 @@ textarea::placeholder, input::placeholder {
  * panel surfaces, neon focus rings, and the Letscube mark.
  * ─────────────────────────────────────────────────────────────────────────── */
 
-/* Layered cyber grid + radial glow; sized for full-bleed auth/welcome screens. */
-.kub-grid-bg {
-  background-color: var(--kub-bg);
-  background-image:
-    radial-gradient(ellipse 70% 55% at 18% 12%, color-mix(in srgb, var(--kub-cyan) 16%, transparent) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 85% 92%, color-mix(in srgb, var(--kub-pink) 14%, transparent) 0%, transparent 60%),
-    linear-gradient(color-mix(in srgb, var(--kub-cyan) 6%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--kub-cyan) 6%, transparent) 1px, transparent 1px);
-  background-size: 100% 100%, 100% 100%, 56px 56px, 56px 56px;
-  background-position: 0 0, 0 0, 0 0, 0 0;
-}
+@layer components {
+  /* Layered cyber grid + radial glow; sized for full-bleed auth/welcome screens. */
+  .kub-grid-bg {
+    background-color: var(--kub-bg);
+    background-image:
+      radial-gradient(ellipse 70% 55% at 18% 12%, color-mix(in srgb, var(--kub-cyan) 16%, transparent) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 85% 92%, color-mix(in srgb, var(--kub-pink) 14%, transparent) 0%, transparent 60%),
+      linear-gradient(color-mix(in srgb, var(--kub-cyan) 6%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in srgb, var(--kub-cyan) 6%, transparent) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 56px 56px, 56px 56px;
+    background-position: 0 0, 0 0, 0 0, 0 0;
+  }
 
-/* Subtle cyan grid for in-app surfaces (sidebar, chat empty bg).
- *
- * D-036. The lattice is anchored to each element's own padding box, and a
- * `linear-gradient(colour 1px, transparent 1px)` paints its rule at the TOP of
- * every tile — so with no offset there is a line at y=0 and x=0, exactly on the
- * element's own edge. Measured on a reproduction of the profile panel: the
- * header's bottom border and the summary block's first lattice rule both land
- * on y=57. A cyan line and a border line share one edge, which is what reads as
- * rules that do not meet.
- *
- * Half a cell moves every rule to the middle of a tile, so no edge of a block
- * carrying this class collides with its own border. Measured on the same
- * reproduction: offset 0 gives lines at 0 and 56 (hits the top edge), offset 28
- * gives 28 and 84 (hits neither).
- *
- * This does NOT make two adjacent blocks share one lattice — each still starts
- * its own. That needs the grid to live on a single ancestor, which is a bigger
- * change than the defect warrants; see the register entry. */
-.kub-grid-subtle {
-  background-color: var(--kub-bg);
-  background-image:
-    linear-gradient(color-mix(in srgb, var(--kub-cyan) 4%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--kub-cyan) 4%, transparent) 1px, transparent 1px);
-  background-size: 56px 56px;
-  background-position: 28px 28px;
-}
+  /* Subtle cyan grid for in-app surfaces (sidebar, chat empty bg).
+   *
+   * D-036. The lattice is anchored to each element's own padding box, and a
+   * `linear-gradient(colour 1px, transparent 1px)` paints its rule at the TOP of
+   * every tile — so with no offset there is a line at y=0 and x=0, exactly on the
+   * element's own edge. Measured on a reproduction of the profile panel: the
+   * header's bottom border and the summary block's first lattice rule both land
+   * on y=57. A cyan line and a border line share one edge, which is what reads as
+   * rules that do not meet.
+   *
+   * Half a cell moves every rule to the middle of a tile, so no edge of a block
+   * carrying this class collides with its own border. Measured on the same
+   * reproduction: offset 0 gives lines at 0 and 56 (hits the top edge), offset 28
+   * gives 28 and 84 (hits neither).
+   *
+   * This does NOT make two adjacent blocks share one lattice — each still starts
+   * its own. That needs the grid to live on a single ancestor, which is a bigger
+   * change than the defect warrants; see the register entry. */
+  .kub-grid-subtle {
+    background-color: var(--kub-bg);
+    background-image:
+      linear-gradient(color-mix(in srgb, var(--kub-cyan) 4%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in srgb, var(--kub-cyan) 4%, transparent) 1px, transparent 1px);
+    background-size: 56px 56px;
+    background-position: 28px 28px;
+  }
 
-/* Cyan / pink glow halos used behind hero elements and primary buttons. */
-.kub-glow-cyan { box-shadow: 0 0 0 1px color-mix(in srgb, var(--kub-cyan) 40%, transparent), 0 8px 32px -8px color-mix(in srgb, var(--kub-cyan) 55%, transparent); }
-.kub-glow-pink { box-shadow: 0 0 0 1px color-mix(in srgb, var(--kub-pink) 40%, transparent), 0 8px 32px -8px color-mix(in srgb, var(--kub-pink) 55%, transparent); }
-.kub-glow-soft { box-shadow: 0 4px 24px -8px color-mix(in srgb, var(--kub-cyan) 35%, transparent); }
+  /* Cyan / pink glow halos used behind hero elements and primary buttons. */
+  .kub-glow-cyan { box-shadow: 0 0 0 1px color-mix(in srgb, var(--kub-cyan) 40%, transparent), 0 8px 32px -8px color-mix(in srgb, var(--kub-cyan) 55%, transparent); }
+  .kub-glow-pink { box-shadow: 0 0 0 1px color-mix(in srgb, var(--kub-pink) 40%, transparent), 0 8px 32px -8px color-mix(in srgb, var(--kub-pink) 55%, transparent); }
+  .kub-glow-soft { box-shadow: 0 4px 24px -8px color-mix(in srgb, var(--kub-cyan) 35%, transparent); }
 
-/* The shared feel of a control responding to a pointer. Colour and shadow move
-   at the fast step; the press is a transform, never a size change. */
-.kub-interactive {
-  transition-duration: var(--kub-motion-fast);
-  transition-timing-function: var(--kub-ease-standard);
-}
-.kub-interactive:active:not(:disabled) { transform: scale(.98); }
+  /* The shared feel of a control responding to a pointer. Colour and shadow move
+     at the fast step; the press is a transform, never a size change.
 
-/* D-015: three of the four button sizes are below the 44px touch target —
-   `sm` at 32px, `md` at 40px and `icon` at 36px — and `sm` alone is used 118
-   times. The size scale is a design choice and is left exactly as it looks on a
-   pointer device; only a coarse pointer, which is a finger, gets a real target.
+     This class is the one that could not simply be moved into the layer. It
+     supplies no `transition-property` of its own — the property always comes
+     from a `transition-*` utility beside it — so the two are a pair by design,
+     and inside `@layer components` the utility's own
+     `transition-duration: var(--tw-duration, var(--default-transition-duration))`
+     would win and quietly replace the token with Tailwind's 150ms/ease-in-out.
+     Measured on the built sheet before the move: 0.14s and
+     cubic-bezier(.2,.8,.2,1), collapsing to 0.001s under reduced motion.
 
-   This raises the real height rather than stretching the hit area with a
-   pseudo-element. An overlay would have kept the layout identical, but two
-   adjacent 32px controls would then have overlapping 44px hit areas and one
-   would start stealing the other's taps, which is worse than the defect. */
-/* Icon-only actions — back arrows, row menus, clear buttons — are 32px so the
-   toolbars stay dense on a pointer device. That is under the touch target, so a
-   coarse pointer gets the full 44px, the same bargain as .kub-button above.
-   Padding alone gave 28-32px targets across the staff area. */
-.kub-icon-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 32px;
-  min-height: 32px;
-}
+     So the tokens are handed to the utility through the variables it already
+     reads instead of fighting it for the longhand. Both are registered
+     `@property … inherits: false`, so this reaches the element's own transition
+     and nothing below it. The longhands stay as the answer for an element that
+     carries no `transition-*` utility at all.
 
-/* A search or filter box: the border is what a person aims at, so the box is
-   the target and the field inside has to fill it. Measured before this, a 20px
-   input floated inside a 36px box with a dead strip above and below it. */
-.kub-field {
-  display: flex;
-  align-items: center;
-}
+     The coupling is to two Tailwind internals; `tests/unit/cascade-layers.test.mjs`
+     asserts the utilities still read them, so a rename fails a test instead of
+     silently drifting the whole product's timing. */
+  .kub-interactive {
+    --tw-duration: var(--kub-motion-fast);
+    --tw-ease: var(--kub-ease-standard);
+    transition-duration: var(--kub-motion-fast);
+    transition-timing-function: var(--kub-ease-standard);
+  }
+  .kub-interactive:active:not(:disabled) { transform: scale(.98); }
 
-/* The switch track stays 24px tall because that is the design; the control
-   around it is what a finger aims at. Measured before this, the switch was a
-   44x24 target. */
-.kub-switch {
-  min-height: 24px;
-}
+  /* D-015: three of the four button sizes are below the 44px touch target —
+     `sm` at 32px, `md` at 40px and `icon` at 36px — and `sm` alone is used 118
+     times. The size scale is a design choice and is left exactly as it looks on a
+     pointer device; only a coarse pointer, which is a finger, gets a real target.
 
-/* A loading placeholder. The shimmer is an ambient loop rather than a reaction
-   to anything a person did, so it is not one of the five interaction timings —
-   it gets its own token instead of being folded into a contract it does not
-   belong to. Under reduced motion the movement goes and the block stays: the
-   placeholder is still doing its job, which is holding the final size. */
-.kub-skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--kub-surface-2) 0%,
-    var(--kub-surface-3) 50%,
-    var(--kub-surface-2) 100%
-  );
-  background-size: 280px 100%;
-  animation: kub-shimmer var(--kub-motion-shimmer) linear infinite;
+     This raises the real height rather than stretching the hit area with a
+     pseudo-element. An overlay would have kept the layout identical, but two
+     adjacent 32px controls would then have overlapping 44px hit areas and one
+     would start stealing the other's taps, which is worse than the defect. */
+  /* Icon-only actions — back arrows, row menus, clear buttons — are 32px so the
+     toolbars stay dense on a pointer device. That is under the touch target, so a
+     coarse pointer gets the full 44px, the same bargain as .kub-button above.
+     Padding alone gave 28-32px targets across the staff area. */
+  .kub-icon-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    min-height: 32px;
+  }
+
+  /* A search or filter box: the border is what a person aims at, so the box is
+     the target and the field inside has to fill it. Measured before this, a 20px
+     input floated inside a 36px box with a dead strip above and below it. */
+  .kub-field {
+    display: flex;
+    align-items: center;
+  }
+
+  /* The switch track stays 24px tall because that is the design; the control
+     around it is what a finger aims at. Measured before this, the switch was a
+     44x24 target. */
+  .kub-switch {
+    min-height: 24px;
+  }
+
+  /* A loading placeholder. The shimmer is an ambient loop rather than a reaction
+     to anything a person did, so it is not one of the five interaction timings —
+     it gets its own token instead of being folded into a contract it does not
+     belong to. Under reduced motion the movement goes and the block stays: the
+     placeholder is still doing its job, which is holding the final size. */
+  .kub-skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--kub-surface-2) 0%,
+      var(--kub-surface-3) 50%,
+      var(--kub-surface-2) 100%
+    );
+    background-size: 280px 100%;
+    animation: kub-shimmer var(--kub-motion-shimmer) linear infinite;
+  }
 }
 
 /* Room beside a message for the hover action cluster.
@@ -946,12 +985,14 @@ textarea::placeholder, input::placeholder {
    panel rises 8px while scaling from .99 — geometry is untouched, so the
    dialog's own layout is settled from the first frame and a control inside it
    never shifts under the pointer. */
-.kub-modal-overlay {
-  animation: kub-modal-overlay-in var(--kub-motion-standard) var(--kub-ease-standard);
-}
+@layer components {
+  .kub-modal-overlay {
+    animation: kub-modal-overlay-in var(--kub-motion-standard) var(--kub-ease-standard);
+  }
 
-.kub-modal-panel {
-  animation: kub-modal-panel-in var(--kub-motion-emphasis) var(--kub-ease-emphasis);
+  .kub-modal-panel {
+    animation: kub-modal-panel-in var(--kub-motion-emphasis) var(--kub-ease-emphasis);
+  }
 }
 
 @keyframes kub-modal-overlay-in {
@@ -982,24 +1023,26 @@ textarea::placeholder, input::placeholder {
    393px wide inside a 390px viewport. `allow-discrete` and `@starting-style`
    keep the fade that `display: none` would otherwise cancel, and `:focus-within`
    means the keyboard reaches it too — hover alone never did. */
-.kub-tooltip {
-  display: none;
-  opacity: 0;
-  transition:
-    opacity var(--kub-motion-fast) var(--kub-ease-standard),
-    display var(--kub-motion-fast) allow-discrete;
-}
+@layer components {
+  .kub-tooltip {
+    display: none;
+    opacity: 0;
+    transition:
+      opacity var(--kub-motion-fast) var(--kub-ease-standard),
+      display var(--kub-motion-fast) allow-discrete;
+  }
 
-.group:hover > .kub-tooltip,
-.group:focus-within > .kub-tooltip {
-  display: block;
-  opacity: 1;
-}
-
-@starting-style {
   .group:hover > .kub-tooltip,
   .group:focus-within > .kub-tooltip {
-    opacity: 0;
+    display: block;
+    opacity: 1;
+  }
+
+  @starting-style {
+    .group:hover > .kub-tooltip,
+    .group:focus-within > .kub-tooltip {
+      opacity: 0;
+    }
   }
 }
 
@@ -1013,29 +1056,31 @@ textarea::placeholder, input::placeholder {
    is laid out at its final size from the first frame, and the shared-media grid
    inside it does not reflow while it is sliding. Durations come from the motion
    tokens, so reduced motion collapses them with everything else. */
-.kub-subview {
-  transition:
-    transform var(--kub-motion-standard) var(--kub-ease-standard),
-    opacity var(--kub-motion-standard) var(--kub-ease-standard);
-}
+@layer components {
+  .kub-subview {
+    transition:
+      transform var(--kub-motion-standard) var(--kub-ease-standard),
+      opacity var(--kub-motion-standard) var(--kub-ease-standard);
+  }
 
-.kub-subview[data-state="current"] {
-  transform: translateX(0);
-  opacity: 1;
-}
+  .kub-subview[data-state="current"] {
+    transform: translateX(0);
+    opacity: 1;
+  }
 
-/* The root, once the gallery is on top of it. */
-.kub-subview[data-state="behind"] {
-  transform: translateX(-12%);
-  opacity: 0;
-  pointer-events: none;
-}
+  /* The root, once the gallery is on top of it. */
+  .kub-subview[data-state="behind"] {
+    transform: translateX(-12%);
+    opacity: 0;
+    pointer-events: none;
+  }
 
-/* The gallery, before it is pushed and after it is popped. */
-.kub-subview[data-state="ahead"] {
-  transform: translateX(12%);
-  opacity: 0;
-  pointer-events: none;
+  /* The gallery, before it is pushed and after it is popped. */
+  .kub-subview[data-state="ahead"] {
+    transform: translateX(12%);
+    opacity: 0;
+    pointer-events: none;
+  }
 }
 
 /* A settings row opening its section.
@@ -1050,30 +1095,43 @@ textarea::placeholder, input::placeholder {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.kub-settings-panel {
-  animation: kub-settings-panel-in var(--kub-motion-fast) var(--kub-ease-standard) both;
+@layer components {
+  .kub-settings-panel {
+    animation: kub-settings-panel-in var(--kub-motion-fast) var(--kub-ease-standard) both;
+  }
+
+  @media (pointer: coarse) {
+    .kub-button {
+      min-height: 44px;
+    }
+    .kub-button.h-9.w-9 {
+      min-width: 44px;
+    }
+    .kub-icon-action {
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    .kub-field {
+      min-height: 44px;
+    }
+
+    .kub-switch {
+      min-height: 44px;
+    }
+  }
 }
 
+/* The element half of the same touch-target floor, kept OUT of
+   `@layer components` on purpose while the class half goes in.
+   A class is opt-in: whoever writes `kub-field` on a box can also write the
+   height they want on it, and a utility that disagrees should win. These rules
+   are the opposite — they exist so that a control nobody tagged is still
+   reachable by a finger, which only works if nothing silently outranks them.
+   Measured before deciding: no `min-h-*` utility is applied to a `select`,
+   checkbox or radio anywhere in `src/`, so this costs nothing today and is a
+   floor rather than a trap. */
 @media (pointer: coarse) {
-  .kub-button {
-    min-height: 44px;
-  }
-  .kub-button.h-9.w-9 {
-    min-width: 44px;
-  }
-  .kub-icon-action {
-    min-width: 44px;
-    min-height: 44px;
-  }
-
-  .kub-field {
-    min-height: 44px;
-  }
-
-  .kub-switch {
-    min-height: 44px;
-  }
-
   /* Native controls are covered by element, not by an opt-in class: a select or
      a checkbox added tomorrow is then correct without anyone remembering to tag
      it. The reach is deliberately narrow -- two element types whose intent is
@@ -1097,156 +1155,162 @@ textarea::placeholder, input::placeholder {
 }
 
 /* Neon focus ring for inputs and triggers. */
-.kub-neon-ring {
-  outline: none;
-  box-shadow:
-    0 0 0 1px var(--kub-cyan),
-    0 0 0 4px color-mix(in srgb, var(--kub-cyan) 20%, transparent);
-}
+@layer components {
+  .kub-neon-ring {
+    outline: none;
+    box-shadow:
+      0 0 0 1px var(--kub-cyan),
+      0 0 0 4px color-mix(in srgb, var(--kub-cyan) 20%, transparent);
+  }
 
-/* Surface panel with cyber border + inner gradient sheen. */
-/* The panel keeps its own identity — a faint cyan wash falling off towards
-   the middle — but the wash is now a layer over the shared fill rather than a
-   colour mixed into an opaque surface, so the panel is made of the same
-   material as everything else and still looks like itself.
+  /* Surface panel with cyber border + inner gradient sheen. */
+  /* The panel keeps its own identity — a faint cyan wash falling off towards
+     the middle — but the wash is now a layer over the shared fill rather than a
+     colour mixed into an opaque surface, so the panel is made of the same
+     material as everything else and still looks like itself.
 
-   Note for whoever puts a position: fixed descendant inside one of these: a
-   backdrop-filter makes its element a containing block for fixed children, so
-   the child would lay out against the panel instead of the viewport. That is a
-   real defect that was hit and fixed on the app chrome; the escape hatch there
-   is KubGlassLayer, which puts the same material on a sheet behind the panel
-   where it has no descendants to capture. */
-.kub-panel {
-  isolation: isolate;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--kub-cyan) 7%, transparent) 0%, transparent 60%),
-    var(--glass-fill);
-  -webkit-backdrop-filter: var(--glass-blur);
-  backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow);
-  border: 1px solid var(--kub-border-color);
-  border-radius: 14px;
-  position: relative;
-}
-@supports not (backdrop-filter: blur(1px)) {
+     Note for whoever puts a position: fixed descendant inside one of these: a
+     backdrop-filter makes its element a containing block for fixed children, so
+     the child would lay out against the panel instead of the viewport. That is a
+     real defect that was hit and fixed on the app chrome; the escape hatch there
+     is KubGlassLayer, which puts the same material on a sheet behind the panel
+     where it has no descendants to capture. */
   .kub-panel {
+    isolation: isolate;
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--kub-cyan) 5%, var(--kub-surface)) 0%, var(--kub-surface) 60%);
+      linear-gradient(180deg, color-mix(in srgb, var(--kub-cyan) 7%, transparent) 0%, transparent 60%),
+      var(--glass-fill);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow);
+    border: 1px solid var(--kub-border-color);
+    border-radius: 14px;
+    position: relative;
+  }
+  @supports not (backdrop-filter: blur(1px)) {
+    .kub-panel {
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--kub-cyan) 5%, var(--kub-surface)) 0%, var(--kub-surface) 60%);
+    }
   }
 }
 
 /* Hex-style cut corners (decorative, used on primary CTAs and hero card). */
-.kub-cut {
-  clip-path: polygon(
-    10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px),
-    calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px
-  );
+@layer components {
+  .kub-cut {
+    clip-path: polygon(
+      10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px),
+      calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px
+    );
+  }
+
+  /* Letscube mark container used by app chrome and auth surfaces. */
+  .kub-cube-logo {
+    display: inline-grid;
+    place-items: center;
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+  .kub-cube-logo::before,
+  .kub-cube-logo::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 14%;
+    pointer-events: none;
+  }
+  .kub-cube-logo::before {
+    background:
+      radial-gradient(circle at 26% 22%, color-mix(in srgb, #fff 18%, transparent), transparent 34%),
+      linear-gradient(135deg, color-mix(in srgb, var(--kub-bg) 74%, var(--kub-cyan)) 0%, var(--kub-surface-2) 58%, color-mix(in srgb, var(--kub-pink) 28%, var(--kub-surface-2)) 100%);
+    z-index: -2;
+  }
+  .kub-cube-logo::after {
+    background:
+      linear-gradient(135deg, transparent 48%, color-mix(in srgb, var(--kub-cyan) 22%, transparent) 50%, transparent 52%),
+      linear-gradient(45deg, transparent 48%, color-mix(in srgb, var(--kub-pink) 18%, transparent) 50%, transparent 52%);
+    z-index: -1;
+    mix-blend-mode: screen;
+  }
+  .kub-cube-logo > img {
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.28));
+    transform: translateZ(0);
+  }
+
+  /* Brand gradient text for headings on auth/welcome. */
+  .kub-text-gradient {
+    background: linear-gradient(90deg, var(--kub-cyan), var(--kub-pink));
+    -webkit-background-clip: text;
+            background-clip: text;
+    color: transparent;
+  }
 }
 
-/* Letscube mark container used by app chrome and auth surfaces. */
-.kub-cube-logo {
-  display: inline-grid;
-  place-items: center;
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-}
-.kub-cube-logo::before,
-.kub-cube-logo::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 14%;
-  pointer-events: none;
-}
-.kub-cube-logo::before {
-  background:
-    radial-gradient(circle at 26% 22%, color-mix(in srgb, #fff 18%, transparent), transparent 34%),
-    linear-gradient(135deg, color-mix(in srgb, var(--kub-bg) 74%, var(--kub-cyan)) 0%, var(--kub-surface-2) 58%, color-mix(in srgb, var(--kub-pink) 28%, var(--kub-surface-2)) 100%);
-  z-index: -2;
-}
-.kub-cube-logo::after {
-  background:
-    linear-gradient(135deg, transparent 48%, color-mix(in srgb, var(--kub-cyan) 22%, transparent) 50%, transparent 52%),
-    linear-gradient(45deg, transparent 48%, color-mix(in srgb, var(--kub-pink) 18%, transparent) 50%, transparent 52%);
-  z-index: -1;
-  mix-blend-mode: screen;
-}
-.kub-cube-logo > img {
-  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.28));
-  transform: translateZ(0);
-}
+@layer components {
+  .kub-auth-shell {
+    position: relative;
+    height: 100dvh;
+    min-height: 0;
+    align-items: flex-start;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    padding-block: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-bottom));
+    isolation: isolate;
+  }
 
-/* Brand gradient text for headings on auth/welcome. */
-.kub-text-gradient {
-  background: linear-gradient(90deg, var(--kub-cyan), var(--kub-pink));
-  -webkit-background-clip: text;
-          background-clip: text;
-  color: transparent;
-}
+  .kub-auth-shell > [data-testid="auth-form-shell"] {
+    margin-block: auto;
+  }
 
-.kub-auth-shell {
-  position: relative;
-  height: 100dvh;
-  min-height: 0;
-  align-items: flex-start;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-  padding-block: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-bottom));
-  isolation: isolate;
-}
+  .kub-auth-shell::after {
+    content: "";
+    /* D-018: this decorative glow hung 18% below the shell, and because the shell
+       scrolls so the form stays reachable on short screens, that overhang became
+       scrollable area. The auth screen therefore offered a scrollbar and 18% of
+       the viewport in nothing to scroll to — 162px at 900px tall, 126px at 700px,
+       152px at 844px, matching exactly. Fixed positioning keeps the glow where it
+       was drawn without adding it to the scroll area; it is decorative and
+       `pointer-events: none`, so nothing depends on it scrolling with the form. */
+    position: fixed;
+    inset: auto -12% -18% 40%;
+    z-index: 0;
+    height: min(44rem, 70vh);
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, color-mix(in srgb, var(--kub-pink) 18%, transparent), transparent 68%);
+    opacity: 0.55;
+  }
 
-.kub-auth-shell > [data-testid="auth-form-shell"] {
-  margin-block: auto;
-}
-
-.kub-auth-shell::after {
-  content: "";
-  /* D-018: this decorative glow hung 18% below the shell, and because the shell
-     scrolls so the form stays reachable on short screens, that overhang became
-     scrollable area. The auth screen therefore offered a scrollbar and 18% of
-     the viewport in nothing to scroll to — 162px at 900px tall, 126px at 700px,
-     152px at 844px, matching exactly. Fixed positioning keeps the glow where it
-     was drawn without adding it to the scroll area; it is decorative and
-     `pointer-events: none`, so nothing depends on it scrolling with the form. */
-  position: fixed;
-  inset: auto -12% -18% 40%;
-  z-index: 0;
-  height: min(44rem, 70vh);
-  pointer-events: none;
-  background: radial-gradient(ellipse at center, color-mix(in srgb, var(--kub-pink) 18%, transparent), transparent 68%);
-  opacity: 0.55;
-}
-
-.kub-auth-mascot {
-  pointer-events: none;
-  /* Same reason as the glow below: the mascot bleeds past the bottom edge on
-     purpose, and while it was absolutely positioned inside the scrolling shell
-     that bleed was scrollable area — the last 24px on a desktop and 48px on a
-     phone. See D-018. */
-  position: fixed;
-  z-index: 0;
-  right: max(1rem, 3vw);
-  bottom: -1.5rem;
-  width: min(30vw, 26rem);
-  max-height: 78vh;
-  object-fit: contain;
-  object-position: bottom right;
-  opacity: 0.78;
-  filter: drop-shadow(0 22px 42px rgba(0, 0, 0, 0.45));
-}
-
-@media (max-width: 1023px) {
   .kub-auth-mascot {
-    right: 50%;
-    bottom: -3rem;
-    width: min(86vw, 26rem);
-    max-height: 48vh;
-    object-position: bottom center;
-    opacity: 0.16;
-    transform: translateX(50%);
-    filter: blur(0.4px) saturate(1.05) drop-shadow(0 18px 38px rgba(0, 0, 0, 0.5));
+    pointer-events: none;
+    /* Same reason as the glow below: the mascot bleeds past the bottom edge on
+       purpose, and while it was absolutely positioned inside the scrolling shell
+       that bleed was scrollable area — the last 24px on a desktop and 48px on a
+       phone. See D-018. */
+    position: fixed;
+    z-index: 0;
+    right: max(1rem, 3vw);
+    bottom: -1.5rem;
+    width: min(30vw, 26rem);
+    max-height: 78vh;
+    object-fit: contain;
+    object-position: bottom right;
+    opacity: 0.78;
+    filter: drop-shadow(0 22px 42px rgba(0, 0, 0, 0.45));
+  }
+
+  @media (max-width: 1023px) {
+    .kub-auth-mascot {
+      right: 50%;
+      bottom: -3rem;
+      width: min(86vw, 26rem);
+      max-height: 48vh;
+      object-position: bottom center;
+      opacity: 0.16;
+      transform: translateX(50%);
+      filter: blur(0.4px) saturate(1.05) drop-shadow(0 18px 38px rgba(0, 0, 0, 0.5));
+    }
   }
 }
 
@@ -1255,17 +1319,21 @@ textarea::placeholder, input::placeholder {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--kub-online) 65%, transparent); }
   50%      { box-shadow: 0 0 0 6px transparent; }
 }
-.kub-pulse { animation: kub-pulse 2s ease-in-out infinite; }
+@layer components {
+  .kub-pulse { animation: kub-pulse 2s ease-in-out infinite; }
+}
 
-/* Make the chat-bg use the cyber grid in dark mode without losing dot pattern. */
-.dark .chat-bg {
-  background-image:
-    radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--kub-cyan) 5%, transparent) 0%, transparent 45%),
-    radial-gradient(circle at 80% 85%, color-mix(in srgb, var(--kub-pink) 4%, transparent) 0%, transparent 45%),
-    radial-gradient(var(--tg-pattern) 1px, transparent 1px),
-    radial-gradient(var(--tg-pattern) 1px, transparent 1px);
-  background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
-  background-position: 0 0, 0 0, 0 0, 20px 20px;
+@layer components {
+  /* Make the chat-bg use the cyber grid in dark mode without losing dot pattern. */
+  .dark .chat-bg {
+    background-image:
+      radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--kub-cyan) 5%, transparent) 0%, transparent 45%),
+      radial-gradient(circle at 80% 85%, color-mix(in srgb, var(--kub-pink) 4%, transparent) 0%, transparent 45%),
+      radial-gradient(var(--tg-pattern) 1px, transparent 1px),
+      radial-gradient(var(--tg-pattern) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+    background-position: 0 0, 0 0, 0 0, 20px 20px;
+  }
 }
 
 /* ─────────────────────────── Elevate utilities ─────────────────────────── */
@@ -1351,17 +1419,19 @@ textarea::placeholder, input::placeholder {
   50% { opacity: 1; transform: scale(1); }
 }
 
-.release-status-enter {
-  animation: release-status-enter 180ms ease-out both;
-}
+@layer components {
+  .release-status-enter {
+    animation: release-status-enter 180ms ease-out both;
+  }
 
-.release-status-pulse {
-  width: 0.5rem;
-  height: 0.5rem;
-  flex: 0 0 auto;
-  border-radius: 9999px;
-  background: var(--kub-cyan);
-  animation: release-status-pulse 1.1s ease-in-out infinite;
+  .release-status-pulse {
+    width: 0.5rem;
+    height: 0.5rem;
+    flex: 0 0 auto;
+    border-radius: 9999px;
+    background: var(--kub-cyan);
+    animation: release-status-pulse 1.1s ease-in-out infinite;
+  }
 }
 
 @keyframes desktop-update-enter {
@@ -1375,134 +1445,136 @@ textarea::placeholder, input::placeholder {
   100% { opacity: 0; transform: translateY(-4px) scale(0.98); }
 }
 
-.desktop-update-pill {
-  position: fixed;
-  top: calc(var(--kub-app-topbar-height) + max(0.75rem, env(safe-area-inset-top)));
-  right: 0.75rem;
-  z-index: 30;
-  display: flex;
-  width: 17.5rem;
-  min-height: 3.25rem;
-  max-width: calc(100vw - 1.5rem);
-  align-items: center;
-  gap: 0.625rem;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--kub-cyan) 28%, var(--kub-border-color));
-  border-radius: 0.75rem;
-  /* The shared material rather than a private imitation of it. What was here
-     was --kub-surface at 94% behind a 14px blur — six percent of the scene
-     reaching the sampler, which is to say a compositing layer bought and not
-     used — plus a shadow and a blur radius belonging to nothing else in the
-     product. This pill covers content it is not part of, so it takes the
-     stronger fill. */
-  isolation: isolate;
-  background: var(--glass-fill-strong);
-  -webkit-backdrop-filter: var(--glass-blur);
-  backdrop-filter: var(--glass-blur);
-  padding: 0.55rem 0.625rem;
-  color: var(--kub-text);
-  box-shadow: var(--glass-shadow);
-  animation: desktop-update-enter 180ms ease-out both;
+@layer components {
+  .desktop-update-pill {
+    position: fixed;
+    top: calc(var(--kub-app-topbar-height) + max(0.75rem, env(safe-area-inset-top)));
+    right: 0.75rem;
+    z-index: 30;
+    display: flex;
+    width: 17.5rem;
+    min-height: 3.25rem;
+    max-width: calc(100vw - 1.5rem);
+    align-items: center;
+    gap: 0.625rem;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--kub-cyan) 28%, var(--kub-border-color));
+    border-radius: 0.75rem;
+    /* The shared material rather than a private imitation of it. What was here
+       was --kub-surface at 94% behind a 14px blur — six percent of the scene
+       reaching the sampler, which is to say a compositing layer bought and not
+       used — plus a shadow and a blur radius belonging to nothing else in the
+       product. This pill covers content it is not part of, so it takes the
+       stronger fill. */
+    isolation: isolate;
+    background: var(--glass-fill-strong);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    padding: 0.55rem 0.625rem;
+    color: var(--kub-text);
+    box-shadow: var(--glass-shadow);
+    animation: desktop-update-enter 180ms ease-out both;
+  }
+
+  .desktop-update-pill--success {
+    width: auto;
+    min-height: 2.5rem;
+    max-width: min(14rem, calc(100vw - 1.5rem));
+    padding: 0.4rem 0.55rem;
+    pointer-events: none;
+    border-color: color-mix(in srgb, var(--kub-online) 38%, var(--kub-border-color));
+    animation: desktop-update-success 4.2s ease both;
+  }
+
+  .desktop-update-pill__action:focus-visible,
+  .desktop-update-channel-control__option:focus-visible {
+    outline: 2px solid var(--kub-cyan);
+    outline-offset: 2px;
+  }
+
+  .desktop-update-pill--test {
+    border-color: color-mix(in srgb, var(--kub-warn) 45%, var(--kub-border-color));
+  }
+
+  .desktop-update-pill__icon,
+  .desktop-update-pill__action {
+    display: inline-flex;
+    height: 2rem;
+    width: 2rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.6rem;
+    background: color-mix(in srgb, var(--kub-cyan) 12%, var(--kub-surface-2));
+    color: var(--kub-cyan);
+  }
+
+  .desktop-update-pill--success .desktop-update-pill__icon {
+    height: 1.8rem;
+    width: 1.8rem;
+    background: color-mix(in srgb, var(--kub-online) 14%, var(--kub-surface-2));
+    color: var(--kub-online);
+  }
+
+  .desktop-update-pill__action {
+    border: 1px solid color-mix(in srgb, var(--kub-cyan) 28%, var(--kub-border-color));
+    cursor: pointer;
+    transition: background-color 150ms ease, transform 150ms ease;
+  }
+
+  .desktop-update-pill__action:hover {
+    background: color-mix(in srgb, var(--kub-cyan) 20%, var(--kub-surface-2));
+  }
+
+  .desktop-update-pill__action:active { transform: scale(0.96); }
+  .desktop-update-pill__action:disabled { cursor: wait; opacity: 0.65; }
+
+  .desktop-update-pill__progress {
+    display: block;
+    height: 0.2rem;
+    margin-top: 0.35rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--kub-surface-3);
+  }
+
+  .desktop-update-pill__progress > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--kub-cyan), var(--kub-pink));
+    transition: width 180ms ease;
+  }
+
+  .desktop-update-channel-control {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 7.5rem;
+    flex: 0 0 auto;
+    overflow: hidden;
+    border: 1px solid var(--kub-border-color);
+    border-radius: 0.6rem;
+    background: var(--kub-surface-2);
+    padding: 0.125rem;
+  }
+
+  .desktop-update-channel-control__option {
+    min-width: 0;
+    border-radius: 0.45rem;
+    padding: 0.3rem 0.45rem;
+    color: var(--kub-muted);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .desktop-update-channel-control__option[data-active="true"] {
+    background: var(--kub-cyan);
+    color: var(--kub-bg);
+  }
+
+  .desktop-update-channel-control__option:disabled { cursor: wait; opacity: 0.65; }
 }
-
-.desktop-update-pill--success {
-  width: auto;
-  min-height: 2.5rem;
-  max-width: min(14rem, calc(100vw - 1.5rem));
-  padding: 0.4rem 0.55rem;
-  pointer-events: none;
-  border-color: color-mix(in srgb, var(--kub-online) 38%, var(--kub-border-color));
-  animation: desktop-update-success 4.2s ease both;
-}
-
-.desktop-update-pill__action:focus-visible,
-.desktop-update-channel-control__option:focus-visible {
-  outline: 2px solid var(--kub-cyan);
-  outline-offset: 2px;
-}
-
-.desktop-update-pill--test {
-  border-color: color-mix(in srgb, var(--kub-warn) 45%, var(--kub-border-color));
-}
-
-.desktop-update-pill__icon,
-.desktop-update-pill__action {
-  display: inline-flex;
-  height: 2rem;
-  width: 2rem;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.6rem;
-  background: color-mix(in srgb, var(--kub-cyan) 12%, var(--kub-surface-2));
-  color: var(--kub-cyan);
-}
-
-.desktop-update-pill--success .desktop-update-pill__icon {
-  height: 1.8rem;
-  width: 1.8rem;
-  background: color-mix(in srgb, var(--kub-online) 14%, var(--kub-surface-2));
-  color: var(--kub-online);
-}
-
-.desktop-update-pill__action {
-  border: 1px solid color-mix(in srgb, var(--kub-cyan) 28%, var(--kub-border-color));
-  cursor: pointer;
-  transition: background-color 150ms ease, transform 150ms ease;
-}
-
-.desktop-update-pill__action:hover {
-  background: color-mix(in srgb, var(--kub-cyan) 20%, var(--kub-surface-2));
-}
-
-.desktop-update-pill__action:active { transform: scale(0.96); }
-.desktop-update-pill__action:disabled { cursor: wait; opacity: 0.65; }
-
-.desktop-update-pill__progress {
-  display: block;
-  height: 0.2rem;
-  margin-top: 0.35rem;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--kub-surface-3);
-}
-
-.desktop-update-pill__progress > span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--kub-cyan), var(--kub-pink));
-  transition: width 180ms ease;
-}
-
-.desktop-update-channel-control {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  width: 7.5rem;
-  flex: 0 0 auto;
-  overflow: hidden;
-  border: 1px solid var(--kub-border-color);
-  border-radius: 0.6rem;
-  background: var(--kub-surface-2);
-  padding: 0.125rem;
-}
-
-.desktop-update-channel-control__option {
-  min-width: 0;
-  border-radius: 0.45rem;
-  padding: 0.3rem 0.45rem;
-  color: var(--kub-muted);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  transition: background-color 150ms ease, color 150ms ease;
-}
-
-.desktop-update-channel-control__option[data-active="true"] {
-  background: var(--kub-cyan);
-  color: var(--kub-bg);
-}
-
-.desktop-update-channel-control__option:disabled { cursor: wait; opacity: 0.65; }
 
 /* One reduced-motion block, not three competing ones. The preference removes
    movement; it does not remove feedback, so --kub-motion-feedback keeps its
@@ -1515,29 +1587,36 @@ textarea::placeholder, input::placeholder {
     --kub-motion-standard: 1ms;
     --kub-motion-emphasis: 1ms;
   }
+}
 
-  .kub-interactive:active:not(:disabled) { transform: none; }
+@layer components {
+  /* The same preference, applied to the classes rather than to the tokens. Split
+     from the `:root` block above only so that one half can sit in
+     `@layer components` and the other stays with the tokens it belongs to. */
+  @media (prefers-reduced-motion: reduce) {
+    .kub-interactive:active:not(:disabled) { transform: none; }
 
-  .kub-skeleton {
-    animation: none;
-    background: var(--kub-surface-2);
-  }
+    .kub-skeleton {
+      animation: none;
+      background: var(--kub-surface-2);
+    }
 
-  .kub-modal-overlay,
-  .kub-modal-panel {
-    animation: none;
-  }
+    .kub-modal-overlay,
+    .kub-modal-panel {
+      animation: none;
+    }
 
-  .release-status-enter,
-  .release-status-pulse,
-  .desktop-update-pill,
-  .desktop-update-pill__action,
-  .desktop-update-pill__progress > span,
-  .desktop-update-channel-control__option,
-  /* The push into the shared-media gallery still swaps the layer -- it simply
-     stops sliding. Removing the transition, not the navigation. */
-  .kub-subview {
-    animation: none;
-    transition-duration: 1ms;
+    .release-status-enter,
+    .release-status-pulse,
+    .desktop-update-pill,
+    .desktop-update-pill__action,
+    .desktop-update-pill__progress > span,
+    .desktop-update-channel-control__option,
+    /* The push into the shared-media gallery still swaps the layer -- it simply
+       stops sliding. Removing the transition, not the navigation. */
+    .kub-subview {
+      animation: none;
+      transition-duration: 1ms;
+    }
   }
 }

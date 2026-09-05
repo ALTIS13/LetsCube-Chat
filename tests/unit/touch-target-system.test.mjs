@@ -16,33 +16,65 @@ import test from "node:test";
  * inflated, which is the change deliberately not made.
  */
 
+import { parseRules } from "./helpers/css.mjs";
+
 const css = readFileSync(new URL("../../artifacts/kub/src/index.css", import.meta.url), "utf8");
 
-function coarseBlocks() {
-  const blocks = css.match(/@media\s*\(pointer:\s*coarse\)\s*\{[\s\S]*?\n\}/g) ?? [];
-  assert.ok(blocks.length > 0, "no coarse-pointer block was found");
-  return blocks.join("\n");
+const COARSE = /^@media \(pointer: coarse\)$/;
+
+/**
+ * Rules are read one at a time, by selector, rather than pattern-matched
+ * against a slab of text.
+ *
+ * Two reasons, and both were live defects. The class half of the touch-target
+ * rule now sits in `@layer components` and the element half outside it, so
+ * "from `@media (pointer: coarse) {` to the next brace at the start of a line"
+ * ran past the block and out through the layer — the negative assertions were
+ * being made against a sheet with most of the classes deleted. And
+ * `/\.kub-button\s*\{[\s\S]*?min-height:\s*44px/` never had to find the value
+ * inside `.kub-button`'s own body: dropping the button's floor to 40px left it
+ * green, because the match simply ran on into `.kub-icon-action`, four rules
+ * later, which does declare 44px. Proven by mutation both ways.
+ */
+const rulesFor = (selector) => parseRules(css).filter((rule) => rule.selectors.includes(selector));
+const isCoarse = (rule) => rule.at.some((prelude) => COARSE.test(prelude));
+
+/** The one coarse-pointer rule for `selector`; refuses if it is not exactly one. */
+function coarseRule(selector) {
+  const hits = rulesFor(selector).filter(isCoarse);
+  assert.equal(hits.length, 1, `${selector} has ${hits.length} coarse-pointer rules, not 1`);
+  return hits[0].body;
+}
+
+/** Every rule for `selector` that applies whatever the pointer is. */
+const pointerRules = (selector) => rulesFor(selector).filter((rule) => !isCoarse(rule));
+
+/** `selector` may not carry `property: value` outside the coarse-pointer query. */
+function onlyOnCoarse(selector, property, value, message) {
+  for (const body of pointerRules(selector).map((rule) => rule.body)) {
+    assert.doesNotMatch(body, new RegExp(`${property}:\\s*${value}`), message);
+  }
 }
 
 test("icon-only actions keep a dense size on a pointer device", () => {
-  const rule = css.match(/\.kub-icon-action\s*\{([\s\S]*?)\n\}/);
-  assert.ok(rule, ".kub-icon-action is not defined");
-  assert.match(rule[1], /min-width:\s*32px/, "the resting size is the design's, not an inflated one");
-  assert.match(rule[1], /min-height:\s*32px/);
+  const [rule, ...rest] = pointerRules(".kub-icon-action").map((entry) => entry.body);
+  assert.equal(rest.length, 0, ".kub-icon-action has more than one unconditional rule");
+  assert.match(rule, /min-width:\s*32px/, "the resting size is the design's, not an inflated one");
+  assert.match(rule, /min-height:\s*32px/);
 });
 
 test("icon-only actions reach the touch target on a coarse pointer", () => {
-  const coarse = coarseBlocks();
-  assert.match(coarse, /\.kub-icon-action\s*\{[\s\S]*?min-width:\s*44px/);
-  assert.match(coarse, /\.kub-icon-action\s*\{[\s\S]*?min-height:\s*44px/);
+  const coarse = coarseRule(".kub-icon-action");
+  assert.match(coarse, /min-width:\s*44px/);
+  assert.match(coarse, /min-height:\s*44px/);
 });
 
 test("buttons keep the same bargain, and only on a coarse pointer", () => {
-  assert.match(coarseBlocks(), /\.kub-button\s*\{[\s\S]*?min-height:\s*44px/);
-  const withoutCoarse = css.replace(/@media\s*\(pointer:\s*coarse\)\s*\{[\s\S]*?\n\}/g, "");
-  assert.doesNotMatch(
-    withoutCoarse,
-    /\.kub-button\s*\{[\s\S]*?min-height:\s*44px/,
+  assert.match(coarseRule(".kub-button"), /min-height:\s*44px/);
+  onlyOnCoarse(
+    ".kub-button",
+    "min-height",
+    "44px",
     "raising the resting height for every pointer is the change that was not made",
   );
 });
@@ -62,36 +94,36 @@ const nativeControls = [
   { name: "select", selector: "select", property: "min-height", value: "44px" },
   {
     name: "tick and radio boxes",
-    selector: 'input\\[type="checkbox"\\],\\s*\\n\\s*input\\[type="radio"\\]',
+    selector: 'input[type="checkbox"]',
     property: "min-width",
     value: "24px",
   },
   {
     name: "the row a tick box sits in",
-    selector: 'label:has\\(input\\[type="checkbox"\\]\\),\\s*\\n\\s*label:has\\(input\\[type="radio"\\]\\)',
+    selector: 'label:has(input[type="checkbox"])',
     property: "min-height",
     value: "44px",
   },
   // The switch track is 24px by design and stays that way; the control around
   // it is what a finger aims at. Measured before the split, the switch was a
   // 44x24 target on the invites screen.
-  { name: "the switch", selector: "\\.kub-switch", property: "min-height", value: "44px" },
+  { name: "the switch", selector: ".kub-switch", property: "min-height", value: "44px" },
 ];
 
 for (const { name, selector, property, value } of nativeControls) {
   test(`${name} reach the touch target on a coarse pointer`, () => {
     assert.match(
-      coarseBlocks(),
-      new RegExp(`${selector}\\s*\\{[\\s\\S]*?${property}:\\s*${value}`),
+      coarseRule(selector),
+      new RegExp(`${property}:\\s*${value}`),
       `${name}: no coarse-pointer ${property} of ${value} was found`,
     );
   });
 
   test(`${name} keep the design's size on a pointer device`, () => {
-    const withoutCoarse = css.replace(/@media\s*\(pointer:\s*coarse\)\s*\{[\s\S]*?\n\}/g, "");
-    assert.doesNotMatch(
-      withoutCoarse,
-      new RegExp(`${selector}\\s*\\{[\\s\\S]*?${property}:\\s*${value}`),
+    onlyOnCoarse(
+      selector,
+      property,
+      value,
       `${name}: growing the control for every pointer is the change that was not made`,
     );
   });

@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { MOTION_MS, feedbackDuration } from "../../artifacts/kub/src/lib/motion.ts";
+// The application's classes live in `@layer components`, so a rule's closing
+// brace is indented and no longer delimits it. See tests/unit/helpers/css.mjs.
+import { atRuleTexts, parseRules, ruleBody } from "./helpers/css.mjs";
 
 /**
  * The approved motion contract: five semantic timings and one transient success
@@ -54,7 +57,7 @@ test("the CSS variables carry the same numbers as the module", () => {
 });
 
 test("reduced motion collapses the movement durations but not the feedback one", () => {
-  const blocks = css.match(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\n\}/g) ?? [];
+  const blocks = atRuleTexts(css, /^@media \(prefers-reduced-motion: reduce\)$/);
   assert.ok(blocks.length > 0, "no reduced-motion block was found");
 
   const combined = blocks.join("\n");
@@ -75,14 +78,33 @@ test("reduced motion collapses the movement durations but not the feedback one",
 });
 
 test("the interactive press state is removed under reduced motion", () => {
-  assert.match(css, /\.kub-interactive:active:not\(:disabled\)\s*\{\s*transform:\s*scale\(\.?0?\.98\)/);
-  const blocks = css.match(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\n\}/g) ?? [];
+  assert.match(
+    ruleBody(css, ".kub-interactive:active:not(:disabled)"),
+    /transform:\s*scale\(\.?0?\.98\)/,
+  );
+  const blocks = atRuleTexts(css, /^@media \(prefers-reduced-motion: reduce\)$/);
   assert.match(
     blocks.join("\n"),
     /\.kub-interactive:active:not\(:disabled\)\s*\{\s*transform:\s*none/,
     "the press transform must be removed under reduced motion",
   );
 });
+
+/**
+ * Every rule the sheet gives `.name` outside a media or supports query.
+ *
+ * All of them, not the first: a class is routinely split across rules — the
+ * material writes `.kub-glass, .kub-glass-strong` for what the two share and
+ * then a rule each for the fill — and the regex this replaces only ever looked
+ * at whichever came first. Checking each one is what makes the assertion below
+ * mean "no rule of this class hard-codes a duration" rather than "the first
+ * one does not".
+ */
+function unconditionalRules(className: string): string[] {
+  return parseRules(css)
+    .filter((rule) => rule.at.length === 0 && rule.selectors.includes(`.${className}`))
+    .map((rule) => rule.body);
+}
 
 const controls = ["KubButton", "KubModal", "KubTooltip"].map((name) => ({
   name,
@@ -111,11 +133,10 @@ test("the shared controls take their timing from the system, not from a literal"
     const timed = [...source.matchAll(/\bkub-[a-z-]+\b/g)]
       .map((match) => match[0])
       .filter((value, index, all) => all.indexOf(value) === index)
-      .map((className) => ({
-        className,
-        rule: css.match(new RegExp(`\\.${className}\\s*\\{([\\s\\S]*?)\\n\\}`))?.[1],
-      }))
-      .filter((entry) => entry.rule !== undefined && /transition|animation/.test(entry.rule));
+      .flatMap((className) =>
+        unconditionalRules(className).map((rule) => ({ className, rule })),
+      )
+      .filter((entry) => /transition|animation/.test(entry.rule));
 
     assert.ok(
       timed.length > 0,
@@ -124,14 +145,14 @@ test("the shared controls take their timing from the system, not from a literal"
 
     for (const { className, rule } of timed) {
       assert.match(
-        rule!,
+        rule,
         /var\(--kub-motion-[a-z]+\)/,
         `.${className}, used by ${name}, takes no motion token at all`,
       );
       // Every duration must be a token, not merely one of them. Checking only
       // that a token appears somewhere let a rule keep one token property and
       // hard-code the other — which is exactly how drift starts.
-      const withoutTokens = rule!.replace(/var\(--[\w-]+\)/g, "");
+      const withoutTokens = rule.replace(/var\(--[\w-]+\)/g, "");
       assert.doesNotMatch(
         withoutTokens,
         /\d+m?s\b/,
@@ -154,16 +175,14 @@ test("the shared controls take their timing from the system, not from a literal"
  * at all.
  */
 test("a tooltip is out of the layout until it is shown", () => {
-  const rest = css.match(/\.kub-tooltip\s*\{([\s\S]*?)\n\}/);
-  assert.ok(rest, ".kub-tooltip is not defined");
-  assert.match(rest[1], /display:\s*none/, "an invisible tooltip must not occupy the layout");
+  const rest = ruleBody(css, ".kub-tooltip");
+  assert.match(rest, /display:\s*none/, "an invisible tooltip must not occupy the layout");
 
-  const shown = css.match(/\.group:hover > \.kub-tooltip[\s\S]{0,120}?\{([\s\S]*?)\n\}/);
-  assert.ok(shown, "no rule shows the tooltip on hover");
-  assert.match(shown[1], /display:\s*block/);
-  assert.match(shown[1], /opacity:\s*1/);
+  const shown = ruleBody(css, ".group:hover > .kub-tooltip");
+  assert.match(shown, /display:\s*block/);
+  assert.match(shown, /opacity:\s*1/);
 
-  assert.match(rest[1], /allow-discrete/, "the fade is cancelled by display:none without this");
+  assert.match(rest, /allow-discrete/, "the fade is cancelled by display:none without this");
   assert.match(css, /@starting-style\s*\{[\s\S]*?\.kub-tooltip/);
   assert.match(css, /\.group:focus-within > \.kub-tooltip/, "the keyboard must reach it too");
 });

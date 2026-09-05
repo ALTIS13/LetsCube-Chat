@@ -870,7 +870,7 @@ export function MessageInput({
       {showAttach && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setShowAttach(false)} />
-          <div className="mx-3 mb-2 rounded-2xl shadow-2xl relative z-20 overflow-hidden bg-[var(--kub-raised)] border border-[color:var(--kub-border-color)] kub-glow-soft">
+          <div className="mx-3 mb-2 rounded-2xl relative z-20 overflow-hidden bg-[var(--kub-raised)] border border-[color:var(--kub-border-color)] kub-glow-soft">
             {attachItems.map(({ icon, label, tone, action }) => (
               <button
                 key={label}

@@ -134,7 +134,7 @@ function AuthCallback() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 kub-grid-bg kub-auth-shell">
+    <div className="flex justify-center px-4 kub-grid-bg kub-auth-shell">
       <img
         src={kubBrandAsset("letscube-mascot-primary.png")}
         alt=""

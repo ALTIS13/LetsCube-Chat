@@ -2,7 +2,7 @@
 
 What LETSCUBE's surfaces are made of, and the rules that keep them one material
 rather than a set of similar-looking fills. Written after the stage that
-introduced it, because six of the nine rules below were learned by breaking
+introduced it, because six of the ten rules below were learned by breaking
 something first, and every one of them is cheaper to read than to rediscover.
 
 The source of truth is `artifacts/kub/src/index.css`. This file explains it; it
@@ -37,7 +37,7 @@ is not necessarily legible as a sentence. Fills, borders and icon shapes keep
 `--kub-danger` and `--kub-cyan`: those answer a 3:1 requirement they already
 meet.
 
-## The nine rules
+## The ten rules
 
 ### 1. Never write the material by hand
 
@@ -152,16 +152,18 @@ behaviour:
   sentence *about* a token as a declaration of it. Writing prose about a token
   was therefore a way to break the test guarding it.
 
-### 10. The application's own classes sit outside cascade layers, and therefore win
+### 10. The application's own classes are in `@layer components`, below utilities
 
 `.kub-panel`, `.kub-glass`, `.kub-glow-*`, `.kub-interactive`, `.kub-field`,
-`.kub-switch` and the rest are declared outside any `@layer`. Unlayered CSS
-beats **everything** inside a layer regardless of specificity or source order,
-and Tailwind's utilities live in `@layer utilities`. So a utility applied to an
-element carrying one of these classes, touching a property that class also sets,
-is silently dead.
+`.kub-switch` and the rest live in `@layer components`. Utilities live in
+`@layer utilities`, which is declared after it, so **a utility on an element
+carrying one of these classes wins**, which is what everyone writing markup
+already assumed.
 
-Two live defects came from this before it was understood as one thing:
+They used to sit outside every layer. Unlayered CSS beats everything inside a
+layer regardless of specificity and source order, so a utility touching a
+property one of these classes also set was silently dead. Two defects came from
+it before it was understood as one thing:
 
 - The raise utilities set a `transition` shorthand, which replaced the
   transition of everything they were applied to. A hover that paired
@@ -169,20 +171,49 @@ Two live defects came from this before it was understood as one thing:
 - `.kub-panel` sets `background`, `box-shadow` and the `border` shorthand, so a
   task card's selected state — a fill, a ring and a border colour, all written
   as utilities — never reached a pixel. Selected and unselected composited to
-  the same `rgb(16,39,67)`: a ratio of **1.000**. Its hover and deleted states
-  were dead by the same mechanism.
+  the same `rgb(16,39,67)`: a ratio of **1.000**.
 
-The workaround where it has already bitten is `outline`, the one edge property
-`.kub-panel` does not claim; it follows the radius and a negative offset keeps
-the layout unchanged.
+The move is `tests/unit/cascade-layers.test.mjs`, which also holds the two
+things it rests on: that the installed Tailwind still declares `components`
+before `utilities`, and that its `transition-*` utilities still read
+`--tw-duration` / `--tw-ease`.
 
-The real fix is to move these classes into `@layer components`, below
-utilities. That is a cascade change across the whole product and every place
-where one of these classes was quietly overriding a utility would flip — some
-of those flips being the correction and some being a regression — so it needs
-its own pass with before-and-after measurement, not a quick edit. Until it is
-done: **assume a utility on an element with a `kub-` class does nothing until
-you have seen it work.**
+Three things are worth knowing before editing the stylesheet.
+
+**The theme blocks stay unlayered.** `.dark`, `.light` and
+`.light .bots-management-surface` declare custom properties and nothing else.
+No utility declares `--kub-*` or `--tg-*`, so there is no cascade to lose.
+
+**The element half of the touch-target floor stays unlayered too.** A class is
+opt-in: whoever writes `kub-field` on a box can also write the height they want,
+and a utility that disagrees should win. `select`, `input[type="checkbox"]`,
+`input[type="radio"]` and the `label:has(…)` rows are the opposite — they exist
+so a control nobody tagged is still reachable by a finger, which only works
+while nothing silently outranks them.
+
+**`.kub-interactive` bridges its tokens into Tailwind's own variables.** It
+declares no `transition-property`; the property always comes from a
+`transition-*` utility beside it, and the pair only ever worked because the
+class outranked the utility. Inside the layer the utility's
+`transition-duration: var(--tw-duration, var(--default-transition-duration))`
+wins, so the class sets `--tw-duration` and `--tw-ease` as well as the
+longhands. Measured: 0.14s / `cubic-bezier(.2,.8,.2,1)` before and after,
+collapsing to 0.001s under reduced motion both times — and a `duration-*`
+written beside it now wins, which it did not before.
+
+Two rules follow from the move, and both are enforced:
+
+- **A glow is a box-shadow.** `.kub-glow-cyan|pink|soft` and a `shadow-*`
+  utility on the same element are two answers to one property; the utility now
+  wins and replaces the brand halo with a generic black drop shadow. Six
+  surfaces carried both and were rendering the glow; the `shadow-*` was removed
+  from each. Rule 1 says the same thing from the other direction.
+- **A utility that finally works can still be wrong.** The ops report's warning
+  and error callouts wrote a tinted fill that had never rendered. Photographed
+  in the light theme once it did, `--kub-muted` on the 8% wash measured
+  **4.52:1** and **4.39:1** against **5.59:1** on the untinted panel — the
+  second under the floor. The fill was dropped and the border colour, which
+  costs nothing and carries the same signal, was kept.
 
 ## Where the material is not used, on purpose
 

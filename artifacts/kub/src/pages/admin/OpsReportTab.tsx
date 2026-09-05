@@ -122,7 +122,17 @@ export function OpsReportTab() {
 
       {state === "missing" && (
         <KubPanel
-          className="border-[color:var(--kub-warn)]/35 bg-[color-mix(in_srgb,var(--kub-warn)_8%,transparent)]"
+          // Only the edge is tinted, and that is a measurement rather than a
+          // preference. `.kub-panel` sets `background` and the `border`
+          // shorthand, and while it sat outside every cascade layer both
+          // utilities here were dead — the callout rendered as a plain panel.
+          // With the class layered they take effect, and the fill costs
+          // contrast: photographed in the light theme, --kub-muted on the
+          // 8% wash measures 4.52:1 for the warning and 4.39:1 for the error
+          // below, against 5.59:1 on the untinted panel. 4.39 is under the
+          // 4.5:1 floor. The border colour carries the same signal for
+          // nothing: it measures 5.59:1, exactly the plain panel.
+          className="border-[color:var(--kub-warn)]/35"
           data-testid="admin-ops-migration-warning"
         >
           <div className="flex items-start gap-3">
@@ -141,7 +151,7 @@ export function OpsReportTab() {
       )}
 
       {state === "error" && (
-        <KubPanel className="border-[color:var(--kub-danger)]/35 bg-[color-mix(in_srgb,var(--kub-danger)_8%,transparent)]">
+        <KubPanel className="border-[color:var(--kub-danger)]/35">
           <div className="flex items-start gap-3">
             <KubIcon name="alert" size={20} tone="danger" className="mt-0.5 shrink-0" />
             <div className="min-w-0">

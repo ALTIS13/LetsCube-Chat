@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 
+import { ruleBody } from "./helpers/css.mjs";
+
 const css = readFileSync("artifacts/kub/src/index.css", "utf8");
 
-function rule(selector: string): string {
-  const start = css.indexOf(`${selector} {`);
-  assert.notEqual(start, -1, `${selector} is gone`);
-  return css.slice(start, css.indexOf("\n}", start));
-}
+// The classes sit in `@layer components`, so "up to the next brace at the
+// start of a line" runs past the rule and out through the layer.
+// See tests/unit/helpers/css.mjs.
+const rule = (selector: string): string => ruleBody(css, selector);
 
 /**
  * D-036. A `linear-gradient(colour 1px, transparent 1px)` paints its rule at the

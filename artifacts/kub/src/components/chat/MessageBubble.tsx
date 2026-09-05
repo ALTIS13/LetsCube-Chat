@@ -1238,7 +1238,7 @@ export function MessageBubble({
         <div className="fixed inset-0 z-50" onClick={closeContext}>
           <div
             data-action-menu="true"
-            className="absolute z-50 min-w-60 overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] py-1 shadow-2xl kub-glow-soft"
+            className="absolute z-50 min-w-60 overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] py-1 kub-glow-soft"
             style={contextMenuStyle}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1299,7 +1299,7 @@ export function MessageBubble({
         <div
           data-reaction-menu="true"
           className={cn(
-            "fixed z-[55] max-w-[calc(100vw-16px)] border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] shadow-2xl kub-glow-soft",
+            "fixed z-[55] max-w-[calc(100vw-16px)] border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] kub-glow-soft",
             reactionCatalogOpen
               ? "overflow-hidden rounded-xl p-2"
               : "flex items-center justify-center gap-0.5 rounded-full px-2 py-1.5",
@@ -1351,7 +1351,7 @@ export function MessageBubble({
         <div
           ref={reactionOverflowPopoverRef}
           data-message-reactions-overflow="true"
-          className="fixed z-[45] flex w-max flex-wrap items-center gap-1 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-1.5 shadow-2xl kub-glow-soft"
+          className="fixed z-[45] flex w-max flex-wrap items-center gap-1 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-1.5 kub-glow-soft"
           style={reactionOverflowStyle}
           onMouseEnter={clearReactionOverflowClose}
           onMouseLeave={closeReactionOverflowSoon}

@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+// The application's classes live in `@layer components`, so a rule's closing
+// brace is indented and no longer delimits it. See tests/unit/helpers/css.mjs.
+import { atRuleTexts, ruleBody } from "./helpers/css.mjs";
 import {
   DEFAULT_SIZE as FLOATING_DEFAULT_SIZE,
   DOCK_BREAKPOINT,
@@ -315,14 +318,13 @@ test("the gallery moves without resizing, and takes its timing from the tokens",
   assert.ok(panelSource.includes("kub-subview"), "the push uses no shared transition class");
 
   const css = readFileSync("artifacts/kub/src/index.css", "utf8");
-  const rule = css.match(/\.kub-subview\s*\{([\s\S]*?)\n\}/);
-  assert.ok(rule, ".kub-subview is not defined");
-  assert.match(rule[1], /var\(--kub-motion-[a-z]+\)/, "the push hard-codes its duration");
-  assert.match(rule[1], /var\(--kub-ease-[a-z]+\)/, "the push hard-codes its easing");
+  const rule = ruleBody(css, ".kub-subview");
+  assert.match(rule, /var\(--kub-motion-[a-z]+\)/, "the push hard-codes its duration");
+  assert.match(rule, /var\(--kub-ease-[a-z]+\)/, "the push hard-codes its easing");
 
   // Height, width and padding are never animated: the card would resize while
   // the grid inside it was being read, and the entry would be unmeasurable.
-  const transition = rule[1].match(/transition:([\s\S]*?);/);
+  const transition = rule.match(/transition:([\s\S]*?);/);
   assert.ok(transition, ".kub-subview declares no transition");
   // Written as literals rather than built from names: a regex assembled out of
   // an escaped template silently became /\bheight\b/ with a backspace in it,
@@ -343,7 +345,7 @@ test("the gallery moves without resizing, and takes its timing from the tokens",
     );
   }
 
-  const reduced = (css.match(/@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\n\}/g) ?? []).join("\n");
+  const reduced = atRuleTexts(css, /^@media \(prefers-reduced-motion: reduce\)$/).join("\n");
   assert.match(reduced, /\.kub-subview/, "the push still slides under reduced motion");
 });
 

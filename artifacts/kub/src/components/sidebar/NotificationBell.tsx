@@ -349,7 +349,7 @@ export function NotificationBell() {
           className={cn(
             "fixed z-[60] flex max-w-[calc(100vw-16px)] flex-col",
             "overflow-hidden overflow-x-hidden rounded-2xl border border-[color:var(--kub-border-color)]",
-            "bg-[var(--kub-surface)] shadow-2xl kub-glow-soft",
+            "bg-[var(--kub-surface)] kub-glow-soft",
           )}
           data-kub-popover="true"
           data-testid="notification-panel"

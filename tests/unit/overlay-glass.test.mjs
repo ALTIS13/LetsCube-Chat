@@ -24,6 +24,8 @@ import test from "node:test";
 
 const root = new URL("../../artifacts/kub/src/", import.meta.url);
 const uiDir = new URL("components/ui/", root);
+import { atRuleTexts } from "./helpers/css.mjs";
+
 const css = readFileSync(new URL("index.css", root), "utf8");
 const read = (file) => readFileSync(new URL(file, uiDir), "utf8");
 
@@ -180,8 +182,9 @@ for (const [theme, ground] of [["dark", [255, 255, 255]], ["light", [0, 0, 0]]])
   });
 
   test(`${theme}: a browser that cannot frost still gets an opaque overlay`, () => {
-    const fallback = css.match(/@supports not \(backdrop-filter[\s\S]*?\n\}/)?.[0];
-    assert.ok(fallback, "the no-backdrop-filter fallback is missing");
+    const fallbacks = atRuleTexts(css, /^@supports not \(backdrop-filter/);
+    assert.ok(fallbacks.length > 0, "the no-backdrop-filter fallback is missing");
+    const fallback = fallbacks.join("\n");
     const name = fallback.match(/\.kub-glass-strong\s*\{\s*background-color:\s*var\(--([\w-]+)\)/)?.[1];
     assert.ok(name, "the fallback gives .kub-glass-strong no fill");
 
