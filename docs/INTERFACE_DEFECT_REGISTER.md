@@ -2805,3 +2805,148 @@ pixels inside the viewport and survive both tests, so `profile-card` at the two
 coarse viewports still reports the reaction chip and one message-actions button
 from the conversation behind the card. Both are listed under D-047 anyway, where
 they belong to `chat`; they are not evidence about the card.
+
+## D-051 `[x]` The sidebar's whole realtime path was dead, poisoned by one table
+
+Found 2026-09-05 while building the two-device sync harness, and fixed.
+
+**Severity:** high. Every account, every device, every chat that is not the one
+currently open.
+
+**Surface:** `artifacts/kub/src/hooks/useChats.ts:278-287` (before the fix) —
+one channel, `chats:user:{userId}`, carrying four `postgres_changes` bindings:
+`messages` INSERT, `messages` UPDATE, `chats` UPDATE, `chats` DELETE.
+
+**Defect:** `public.chats` is not in the `supabase_realtime` publication, and a
+channel that asks for an unpublished table silently stops delivering *every*
+binding it carries — including the ones whose tables are published. Nothing in
+the client says so: the channel reports `SUBSCRIBED`, reaches state `joined`, and
+is assigned a server-side id for all four bindings.
+
+**Reproduction.** One account signed in with no chat selected; a peer sends one
+message. Instrumented on the live server:
+
+| | before | after |
+| --- | --- | --- |
+| `kub:chats-refresh` events in 16s | 0 | 1, at ~0.9s |
+| `unread_count` in the store | 0 for the full 16s | 1 within 1s |
+| sidebar preview | a message from a previous session | the new message |
+| `mark_chat_delivered` fired | no | yes |
+
+**Isolation.** Built by construction against production, on the application's own
+realtime client, all four subscribed successfully:
+
+| channel | bindings | delivered |
+| --- | --- | --- |
+| one binding | `messages` INSERT | yes |
+| three bindings | `messages` INSERT + UPDATE + DELETE | yes |
+| four bindings | `messages` ×3 + `chat_members` INSERT | yes |
+| two bindings | `messages` INSERT + `chats` UPDATE | **no** |
+| two bindings | `chats` UPDATE + `messages` INSERT | **no** |
+| two bindings | `messages` INSERT + `chats` DELETE | **no** |
+| four bindings | the application's exact set | **no** |
+
+So it is not the number of bindings and not their order: it is the presence of
+one binding on a table the publication does not carry. Confirmed against
+`pg_publication_tables`, which lists `messages`, `chat_members` and `profiles`
+but not `chats`.
+
+**Consequence:** the unread badge never appeared and the last-message preview
+never moved for any chat that was not open. Clearing an unread count worked
+(`chat-members:user:{id}` is single-table and healthy), so the badge could go
+down but never up.
+
+This was never a two-device defect — one device was hit exactly as hard. It only
+*surfaced* under two devices because a single one hides it: you leave the tab and
+come back, `refreshAfterBackground` fires on focus, and the sidebar catches up
+before you notice anything was stale. Someone who stays on the app the whole time
+sees no badge at all, on one device or five. Driving two focused devices of one
+account simply removed the tab-switch that had been papering over it.
+
+**Fixed** 2026-09-05, `artifacts/kub/src/lib/realtimeTableChannels.ts`: one
+channel per table, so a binding can only ever take down bindings on its own
+table. The rule is deliberately "group by table" rather than "isolate the tables
+that are not published" — an allowlist of published tables would duplicate a fact
+that lives in the database and would fail dangerously the day a table is dropped
+from the publication.
+
+The `chats` bindings are kept, on their own channel, rather than deleted: they
+are inert today but correct, and they cost nothing where they cannot contaminate
+anything. Live chat rename and delete therefore remain non-live. Making them work
+needs `public.chats` added to the `supabase_realtime` publication, which is a
+production DDL change and belongs to its own reviewed migration under the rules
+in CLAUDE.md §10 — it was **not** done here.
+
+Covered by `tests/unit/realtime-table-channels.test.mts` and
+`tests/e2e/multi-device-sync.spec.ts`.
+
+**Three more channels carry the same fault and were not fixed**, being outside a
+chat-sync task. Each mixes a binding on an unpublished table with bindings that
+would otherwise work, so all of them are inert:
+
+- `artifacts/kub/src/components/chat/ChatInfoPanel.tsx:440` — `chat-info:{id}`,
+  poisoned by `chats`; the info panel's member list and invites do not live-update.
+- `artifacts/kub/src/hooks/useAdminDashboard.ts:136` — `admin-dashboard-v2`,
+  poisoned by `chats` and `audit_logs`.
+- `artifacts/kub/src/hooks/useDynamicRoles.ts:151` — `roles:*`, poisoned by
+  `permissions`.
+
+Separately, `artifacts/kub/src/components/sidebar/PhoneSection.tsx:64` subscribes
+only to `profile_contacts`, which is also unpublished; it has nothing to poison
+but never fires either.
+
+Note that mixing tables is not wrong in itself —
+`task-routing:{id}:locations` carries `locations` and `location_members` and
+works, because both are published. What is wrong is mixing a published table with
+an unpublished one, which is indistinguishable from working until you measure it.
+
+## D-052 `[x]` A peer who is online reads as "был(а) N минут назад"
+
+Found 2026-09-05 while measuring D-051, and fixed.
+
+**Severity:** high. Any two people looking at a conversation without sending
+anything.
+
+**Surface:** `artifacts/kub/src/hooks/useMessages.ts:756-767` (before the fix) —
+the `profiles:chat:{chatId}` handler spent each realtime `profiles` row on
+`message.sender` and dropped the rest. The chat header and the sidebar read
+presence from `chat.other_user` (`ChatHeader.tsx:167`, `ChatListItem.tsx:84`),
+which nothing refreshed.
+
+**Defect:** `fetchChats` is what puts a fresh `online_at` into the chat list, and
+it runs on tab focus, reconnect, `pageshow` and message traffic. None of those
+happen while two people are simply reading a conversation, so the peer's presence
+value froze at whatever the last fetch returned and aged past the 90-second
+`USER_ONLINE_THRESHOLD_MS`.
+
+**Measured**, one account signed in and heartbeating correctly the whole time —
+five `PATCH /profiles` writes, exactly 60s apart, all 204:
+
+| elapsed | peer's view of `online_at` | staleness | label |
+| --- | --- | --- | --- |
+| 20s | fresh at start | 22s | в сети |
+| 60s | unchanged | 62s | в сети |
+| 100s | unchanged | 104s | **был(а) 1 мин назад** |
+| 200s | unchanged | 204s | **был(а) 3 мин назад** |
+
+After the fix, same 200-second window: staleness peaks at 43-50s, bounded by the
+60s heartbeat, and the label stays `в сети` throughout. A second device changes
+nothing either way — two devices do not fight over `online_at`, they both simply
+write it, and the database value was fresh in every one of these runs.
+
+This is the other half of `17a4b3d`, which fixed `sameChatList` so a refetch
+carrying only fresh presence is no longer discarded. A comparison can only help a
+refetch that happens; here none did.
+
+**Fixed** 2026-09-05, `artifacts/kub/src/lib/chatProfilePatch.ts`. The row was
+already arriving — `profiles:chat:{chatId}` subscribes to every `profiles`
+UPDATE and receives each peer's heartbeat — so this adds no subscription, no
+polling and no request volume. Covered by
+`tests/unit/chat-profile-patch.test.mts` and
+`tests/e2e/multi-device-sync.spec.ts`.
+
+**Not fixed:** presence still only refreshes while some chat is open, because
+that is where the subscription lives. A sidebar left open with no chat selected
+still ages out. And the margin is thin by design — a 60s heartbeat against a 90s
+threshold — so a single missed beat still shows someone as away. Worth revisiting
+together; neither is a two-device problem.
