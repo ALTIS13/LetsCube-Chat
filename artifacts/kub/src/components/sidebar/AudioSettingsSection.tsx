@@ -443,7 +443,7 @@ export function AudioSettingsSection() {
             </div>
           </div>
 
-          <div className="mt-3 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
+          <div className="mt-3 rounded-lg px-3 py-2 kub-raise">
             <div className="mb-2 flex items-center justify-between gap-3">
               <span className="min-w-0 text-xs font-semibold text-[color:var(--kub-text)]">Как звучит голос</span>
               <span className="shrink-0 text-[12px] text-[color:var(--kub-muted)]">
@@ -660,6 +660,11 @@ function ModeButton({
         "kub-button h-9 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors disabled:cursor-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
         active
           ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
+          // Периметр остаётся: это сегмент переключателя, то есть мишень, а не
+          // коробка, на которую смотрят. И ступень тут уже занята наведением —
+          // положить такую же на покое значит уравнять их, и наведение
+          // перестанет существовать, ровно как измеренные 1.002 в правиле 5
+          // контракта материала.
           : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] kub-raise-hover",
       )}
     >

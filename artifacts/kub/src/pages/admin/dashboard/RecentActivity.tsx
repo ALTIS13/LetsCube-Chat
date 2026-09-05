@@ -14,7 +14,7 @@ export function RecentActivity({ users, events, usersError, eventsError }: {
     <div className="grid gap-4 lg:grid-cols-2">
       <KubPanel padded={false} data-testid="admin-recent-users" className="overflow-hidden">
         <SectionHeader icon="users" title="Новые пользователи" detail="Последние регистрации" />
-        <div className="divide-y divide-[color:var(--kub-border-color)]">
+        <div className="divide-y divide-[color:var(--kub-rule)]">
           {users.map((user) => (
             <div key={user.id} className="flex min-w-0 items-center gap-3 px-4 py-3">
               <UserAvatar user={user} size="sm" />
@@ -36,7 +36,7 @@ export function RecentActivity({ users, events, usersError, eventsError }: {
 
       <KubPanel padded={false} data-testid="admin-recent-events" className="overflow-hidden">
         <SectionHeader icon="audit" title="Последние события" detail="Действия администрации" />
-        <div className="divide-y divide-[color:var(--kub-border-color)]">
+        <div className="divide-y divide-[color:var(--kub-rule)]">
           {events.map((event) => (
             <div key={event.id} className="flex min-w-0 gap-3 px-4 py-3">
               <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[color-mix(in_srgb,var(--kub-pink)_12%,transparent)] text-[color:var(--kub-pink)]">
@@ -58,7 +58,7 @@ export function RecentActivity({ users, events, usersError, eventsError }: {
 
 function SectionHeader({ icon, title, detail }: { icon: "users" | "audit"; title: string; detail: string }) {
   return (
-    <div className="flex items-center gap-3 border-b border-[color:var(--kub-border-color)] px-4 py-3">
+    <div className="flex items-center gap-3 border-b border-[color:var(--kub-rule)] px-4 py-3">
       <KubIcon name={icon} size={16} tone="accent" />
       <div>
         <h3 className="text-sm font-semibold text-[color:var(--kub-text)]">{title}</h3>

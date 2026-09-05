@@ -755,7 +755,7 @@ export function UsersTab() {
           <KubSkeletonRows
             count={8}
             label="Загрузка списка пользователей"
-            rowClassName="border-b border-[color:var(--kub-border-color)] last:border-b-0"
+            rowClassName="border-b border-[color:var(--kub-rule)] last:border-b-0"
           />
         ) : filteredRows.length === 0 ? (
           <KubNoResults
@@ -815,7 +815,7 @@ export function UsersTab() {
                     "flex items-start sm:items-center gap-3 px-3 py-3 transition-colors",
                     "rounded-xl bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] mb-2",
                     "sm:rounded-none sm:bg-transparent sm:border-0 sm:mb-0",
-                    i > 0 ? "sm:border-t sm:border-[color:var(--kub-border-color)]" : "",
+                    i > 0 ? "sm:border-t sm:border-[color:var(--kub-rule)]" : "",
                     "kub-raise-hover",
                     isSelected && "border-[color:var(--kub-cyan)]/65 bg-[color-mix(in_srgb,var(--kub-cyan)_8%,var(--kub-surface))] shadow-[0_0_0_1px_color-mix(in_srgb,var(--kub-cyan)_24%,transparent)] sm:bg-[color-mix(in_srgb,var(--kub-cyan)_8%,transparent)]",
                   )}

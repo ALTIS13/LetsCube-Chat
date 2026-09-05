@@ -1250,7 +1250,7 @@ export function MessageBubble({
             onClick={(e) => e.stopPropagation()}
           >
             {canReact && (
-              <div className="mb-1 flex items-center justify-between gap-1 border-b border-[color:var(--kub-border-color)] px-2 pb-2 pt-2">
+              <div className="mb-1 flex items-center justify-between gap-1 border-b border-[color:var(--kub-rule)] px-2 pb-2 pt-2">
                 {EMOJI_QUICK.slice(0, 6).map((emoji) => (
                   <button
                     key={emoji}
@@ -1625,7 +1625,7 @@ export function MessageBubble({
             {message.failed && isMe && (
               <div
                 data-message-send-error="true"
-                className="mt-1 flex max-w-full flex-wrap items-center gap-1.5 border-t border-[color:var(--kub-border-color)]/60 pt-1 text-[12px] leading-none text-[color:var(--kub-danger-text)]"
+                className="mt-1 flex max-w-full flex-wrap items-center gap-1.5 border-t border-[color:var(--kub-rule)] pt-1 text-[12px] leading-none text-[color:var(--kub-danger-text)]"
               >
                 <span className="mr-auto min-w-0">
                   {message.send_error ?? "Не удалось отправить"}

@@ -211,12 +211,12 @@ export function GlobalSearchPalette() {
           <SearchFilterChips parsed={parsed} query={query} onChangeQuery={setQuery} />
 
           {search.migrationMissing && parsed.filters.type !== "command" && (
-            <div className="kub-raise mt-3 rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+            <div className="kub-raise mt-3 rounded-xl px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
               Поиск по всей истории требует обновления базы данных. Сейчас доступны видимые чаты, загруженные сообщения, пользователи, задачи и локации по RLS.
             </div>
           )}
           {search.filtersLimited && (
-            <div className="kub-raise mt-3 rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+            <div className="kub-raise mt-3 rounded-xl px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
               Расширенные фильтры по всей истории требуют обновления базы данных. Сейчас поиск применяет доступные локальные фильтры.
             </div>
           )}
@@ -230,7 +230,7 @@ export function GlobalSearchPalette() {
         <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2 sm:px-3">
           {showHint && (
             <div className="space-y-3 px-2 py-3">
-              <div className="kub-raise rounded-2xl border border-[color:var(--kub-border-color)] p-4">
+              <div className="kub-raise rounded-2xl p-4">
                 <div className="text-sm font-semibold text-[color:var(--kub-text)]">Быстрый поиск</div>
                 <div className="mt-1 text-xs leading-relaxed text-[color:var(--kub-muted)]">
                   Начните вводить имя, @никнейм, чат, сообщение, задачу или локацию. Сотрудники с доступом к пользователям могут найти профиль по полному подтверждённому +номеру. Для фильтра можно набрать `type:user`, `type:message` или выбрать чип сверху.

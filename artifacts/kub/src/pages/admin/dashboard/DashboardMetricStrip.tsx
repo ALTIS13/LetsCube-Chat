@@ -39,7 +39,7 @@ export function DashboardMetricStrip({
           return (
             <div
               key={label}
-              className="min-w-0 border-b border-r border-[color:var(--kub-border-color)] p-3 [&:nth-child(2n)]:border-r-0 [&:nth-last-child(-n+2)]:border-b-0 sm:[&:nth-child(2n)]:border-r sm:[&:nth-child(4n)]:border-r-0 sm:[&:nth-last-child(-n+2)]:border-b sm:[&:nth-last-child(-n+4)]:border-b-0 xl:border-b-0 xl:[&:nth-child(4n)]:border-r xl:last:border-r-0"
+              className="min-w-0 border-b border-r border-[color:var(--kub-rule)] p-3 [&:nth-child(2n)]:border-r-0 [&:nth-last-child(-n+2)]:border-b-0 sm:[&:nth-child(2n)]:border-r sm:[&:nth-child(4n)]:border-r-0 sm:[&:nth-last-child(-n+2)]:border-b sm:[&:nth-last-child(-n+4)]:border-b-0 xl:border-b-0 xl:[&:nth-child(4n)]:border-r xl:last:border-r-0"
             >
               {/* The card used to carry an ordinal — 01 to 08 — in its corner.
                   It encoded nothing and sat in tabular numerals beside the one
@@ -60,7 +60,7 @@ export function DashboardMetricStrip({
         })}
       </div>
       {error && (
-        <div className="border-t border-[color:var(--kub-border-color)] px-3 py-2 text-xs text-[color:var(--kub-warn)]">
+        <div className="border-t border-[color:var(--kub-rule)] px-3 py-2 text-xs text-[color:var(--kub-warn)]">
           {error}
         </div>
       )}

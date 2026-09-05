@@ -549,7 +549,7 @@ function SettingsGroup({ title, children }: { title: string; children: ReactNode
       <h3 className="mb-1.5 px-1 text-[12px] font-semibold uppercase tracking-[0.14em] text-[color:var(--kub-muted)]">
         {title}
       </h3>
-      <div className="overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] divide-y divide-[color:var(--kub-border-color)]">
+      <div className="overflow-hidden rounded-xl divide-y divide-[color:var(--kub-rule)] kub-raise">
         {children}
       </div>
     </section>

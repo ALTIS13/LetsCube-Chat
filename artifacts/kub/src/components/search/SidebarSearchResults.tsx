@@ -94,13 +94,13 @@ export function SidebarSearchResults({ query }: { query: string }) {
       </div>
 
       {search.migrationMissing && parsed.filters.type !== "command" && (
-        <div className="kub-raise mx-3 mt-3 rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+        <div className="kub-raise mx-3 mt-3 rounded-xl px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
           Поиск по всей истории требует обновления базы данных. Сейчас доступны видимые чаты, загруженные сообщения, пользователи, задачи и локации.
         </div>
       )}
 
       {search.filtersLimited && (
-        <div className="kub-raise mx-3 mt-3 rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+        <div className="kub-raise mx-3 mt-3 rounded-xl px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
           Расширенные фильтры по всей истории требуют обновления базы данных. Сейчас поиск применяет доступные локальные фильтры.
         </div>
       )}

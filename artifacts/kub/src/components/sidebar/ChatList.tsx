@@ -622,7 +622,7 @@ function ChatActionHeader({ chat }: { chat: ChatWithLastMessage }) {
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
   const display = getChatDisplayInfo(chat, currentUserId);
   return (
-    <div className="flex min-w-0 items-center gap-3 border-b border-[color:var(--kub-border-color)] px-3 py-3">
+    <div className="flex min-w-0 items-center gap-3 border-b border-[color:var(--kub-rule)] px-3 py-3">
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--kub-surface-3)]">
         <KubIcon
           name={display.isSaved ? "bookmark" : chat.type === "private" ? "user" : "group"}

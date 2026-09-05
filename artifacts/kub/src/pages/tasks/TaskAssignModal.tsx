@@ -75,7 +75,7 @@ export function TaskAssignModal({ taskId, currentAssignee, onClose, onDone }: Pr
       }
     >
       {currentAssignee && !picked && (
-        <div className="rounded-xl px-3 py-2 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] flex items-center gap-2">
+        <div className="rounded-xl px-3 py-2 flex items-center gap-2 kub-raise">
           <UserAvatar user={currentAssignee} size="sm" />
           <div className="min-w-0 flex-1">
             <div className="text-[12px] uppercase tracking-wider text-[color:var(--kub-muted)]">
@@ -89,7 +89,7 @@ export function TaskAssignModal({ taskId, currentAssignee, onClose, onDone }: Pr
       )}
 
       {picked ? (
-        <div className="flex items-center gap-3 rounded-xl px-3 py-2 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
+        <div className="flex items-center gap-3 rounded-xl px-3 py-2 kub-raise">
           <UserAvatar user={picked} size="sm" />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold truncate text-[color:var(--kub-text)]">
@@ -123,7 +123,7 @@ export function TaskAssignModal({ taskId, currentAssignee, onClose, onDone }: Pr
             {searching && <KubIcon name="spinner" size={14} className="text-[color:var(--kub-cyan)]" />}
           </div>
           {results.length > 0 && (
-            <div className="max-h-56 overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]">
+            <div className="max-h-56 overflow-y-auto rounded-xl kub-raise">
               {results.map((p) => (
                 <button
                   type="button"

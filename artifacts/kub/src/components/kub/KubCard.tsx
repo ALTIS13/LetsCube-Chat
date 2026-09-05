@@ -15,8 +15,7 @@ export const KubCard = forwardRef<HTMLDivElement, KubCardProps>(
       <div
         ref={ref}
         className={cn(
-          "rounded-xl border bg-[var(--kub-surface)] border-[color:var(--kub-border-color)] p-4 transition-colors",
-          "hover:border-[color:var(--kub-cyan)]/40",
+          "rounded-xl p-4 transition-colors kub-raise",
           className
         )}
         {...rest}

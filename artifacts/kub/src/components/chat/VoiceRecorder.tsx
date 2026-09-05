@@ -92,7 +92,7 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
   }
 
   return (
-    <div className="flex items-center gap-3 rounded-2xl px-4 py-2.5 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
+    <div className="flex items-center gap-3 rounded-2xl px-4 py-2.5 kub-raise">
       <button
         onClick={handleCancel}
         disabled={sending}

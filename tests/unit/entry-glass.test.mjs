@@ -167,10 +167,19 @@ for (const [file, needle, what] of wells) {
   });
 }
 
-/** The register card carries the same band twice; both take the same token. */
+/**
+ * The register card carries the same band twice; both take the same tokens.
+ *
+ * The line under the band is `--kub-rule` rather than `--kub-border-color`: it
+ * separates the caption from the form on one surface, and that is a rule, not
+ * the edge of a sheet. Photographed, the old token put a step of 59 there
+ * against a sheet edge of 89 in the dark theme, and 56 against an edge of 46 in
+ * the light one — where the divider inside the card was heavier than the card's
+ * own outline. The fill is untouched and still the thing this test is named for.
+ */
 test("both of the register card's title bands are cut in", () => {
   const bands = withoutComments(read("components/auth/RegisterForm.tsx")).match(
-    /px-3 py-2 border-b border-\[color:var\(--kub-border-color\)\] bg-\[var\(--kub-inset\)\]/g,
+    /px-3 py-2 border-b border-\[color:var\(--kub-rule\)\] bg-\[var\(--kub-inset\)\]/g,
   );
   assert.equal(bands?.length, 2, "the register card's two title bands disagree about their fill");
 });

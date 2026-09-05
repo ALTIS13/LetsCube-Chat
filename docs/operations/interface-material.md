@@ -2,7 +2,7 @@
 
 What LETSCUBE's surfaces are made of, and the rules that keep them one material
 rather than a set of similar-looking fills. Written after the stage that
-introduced it, because six of the ten rules below were learned by breaking
+introduced it, because six of the rules below were learned by breaking
 something first, and every one of them is cheaper to read than to rediscover.
 
 The source of truth is `artifacts/kub/src/index.css`. This file explains it; it
@@ -27,6 +27,7 @@ that, which is noted at each one.
 | `--kub-raised` | A fixed step above a **known** surface |
 | `--kub-raise-veil` | A step above **whatever it is laid on** — see rule 5 |
 | `--kub-sink-veil` | A step below it: a control that is present but not offered |
+| `--kub-rule` | A line **between** things inside a sheet, as against the edge **of** one — see rule 11 |
 
 And two utilities, `.kub-glass` and `.kub-glass-strong`, which carry the whole
 material so that what the application is made of is one edit rather than a
@@ -38,7 +39,7 @@ is not necessarily legible as a sentence. Fills, borders and icon shapes keep
 `--kub-danger` and `--kub-cyan`: those answer a 3:1 requirement they already
 meet.
 
-## The ten rules
+## The eleven rules
 
 ### 1. Never write the material by hand
 
@@ -250,6 +251,56 @@ Two rules follow from the move, and both are enforced:
   **4.52:1** and **4.39:1** against **5.59:1** on the untinted panel — the
   second under the floor. The fill was dropped and the border colour, which
   costs nothing and carries the same signal, was kept.
+
+### 11. A border belongs to what you aim at, not to what you look at
+
+One blue line of one weight used to be drawn around the panel, around the card
+inside the panel, around the field inside the card and around the chip beside
+the field — 276 perimeters and 109 single sides from one token. When everything
+is outlined the outline stops being a message, and nested boxes of equal weight
+are the thing that reads as dated. Three jobs were being done by one
+declaration:
+
+- the **edge** of a sheet, and of chrome pinned against a scroll area, which has
+  to hold against arbitrary content passing under it: `--kub-border-color`;
+- a **rule** between two blocks that share one surface and scroll together:
+  `--kub-rule`, a third of the edge's weight;
+- a **nested box** inside a sheet: no perimeter at all, separated by a step of
+  material.
+
+Photographed on real pages, the old token as a rule measured a step of 59 in the
+dark theme against a sheet edge of 89, and 56 in the light theme against an edge
+of **46** — a divider inside a panel was heavier than the panel's own outline.
+`--kub-rule` gives 29 and 36, still visible hairlines.
+
+For the 69 boxes that lost their perimeter, what separates them went from a fill
+step of 11 (dark) and 14 (light) to **27** and **26**, with a worst case of 26
+and 23 — the border did the work before and the material does it now. The
+threshold is not invented: 23 is the step by which a panel in this theme stands
+off the page (rule 8), so a nested box clearing it is as visible as a panel is.
+
+Four things keep their perimeter, and each is a measurement or a signal rather
+than a preference:
+
+- **A well.** A box filled from `--kub-inset` already has a step and it goes
+  down; in the dark theme that step measures 18–20 against the panel holding it,
+  under the floor. The same wells measure 36–44 in the light theme and would
+  have been fine — one value cannot be right in both, and the darker theme
+  decides it.
+- **A target.** A field, a segment, a task row. Removing the line also removes
+  the channel its hover, selection and disabled states speak in — and a resting
+  step equal to the hover step is rule 5's 1.002 all over again.
+- **A covering surface.** A menu, a toast, a floating pill has to stand on a
+  backdrop nobody chose, so it cannot be separated by a step relative to it.
+- **A line that means something.** `border-dashed` for empty or deleted, a tone
+  on `KubBadge` and `KubNotice`, a media frame, and any variant whose name is
+  `outline`.
+
+Two failure modes belong to doing this in bulk, and both happened here. Removing
+a width and leaving the colour gives a declaration that draws nothing and looks
+deliberate. Adding a resting veil to something that already veils on hover
+deletes the hover. `tests/unit/edge-vocabulary.test.mjs` holds both, along with
+the named exceptions.
 
 ## Where the material is not used, on purpose
 

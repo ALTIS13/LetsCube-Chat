@@ -1267,12 +1267,12 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         {(tab === "info" || !isGroup) && (
           <div>
             {!isGroup && otherUser && (
-              <div className="px-4 py-3 border-b border-[color:var(--kub-border-color)]">
+              <div className="px-4 py-3 border-b border-[color:var(--kub-rule)]">
                 <ProfileRoleSummary user={otherUser} compact />
               </div>
             )}
             {!isGroup && otherUser?.bio && (
-              <div className="px-4 py-3 border-b border-[color:var(--kub-border-color)]">
+              <div className="px-4 py-3 border-b border-[color:var(--kub-rule)]">
                 <div className="text-[12px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">О себе</div>
                 <div className="text-sm text-[color:var(--kub-text)]">{otherUser.bio}</div>
               </div>
@@ -1297,7 +1297,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                 </button>
               )}
               {isGroup && (
-                <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
+                <div className="rounded-xl px-3 py-2 kub-raise">
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium text-[color:var(--kub-text)]">Кто может приглашать</div>
@@ -1413,7 +1413,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                 absent entirely in a chat that has only ever carried text. */}
             {mediaSections.length > 0 && (
               <div
-                className="px-4 py-3 mt-2 space-y-1 border-t border-[color:var(--kub-border-color)]"
+                className="px-4 py-3 mt-2 space-y-1 border-t border-[color:var(--kub-rule)]"
                 data-testid="chat-info-media-rows"
               >
                 {mediaSections.map((section) => (
@@ -1443,7 +1443,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                 a claim nothing has established while the query is in flight. */}
             {mediaSections.length === 0 && loadingMedia && (
               <div
-                className="px-4 py-3 mt-2 border-t border-[color:var(--kub-border-color)]"
+                className="px-4 py-3 mt-2 border-t border-[color:var(--kub-rule)]"
                 data-testid="chat-info-media-loading"
               >
                 <div className="flex items-center gap-3 px-2 py-2">
@@ -1452,7 +1452,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                 </div>
               </div>
             )}
-            <div className="px-4 py-3 mt-2 border-t border-[color:var(--kub-border-color)]">
+            <div className="px-4 py-3 mt-2 border-t border-[color:var(--kub-rule)]">
               <button
                 onClick={handlePinToggle}
                 className={cn(actionRowClass, "text-[color:var(--kub-text)]")}
@@ -1601,7 +1601,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               );
             })}
             {isOwnerOrAdmin && (
-              <div className="mt-3 border-t border-[color:var(--kub-border-color)] px-4 pt-3">
+              <div className="mt-3 border-t border-[color:var(--kub-rule)] px-4 pt-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div>
                     <div className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--kub-accent-text)]">

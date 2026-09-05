@@ -21,7 +21,7 @@ export function PrivacyPage() {
   return (
     <PublicPageShell>
       <main className="public-policy mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-        <header className="border-b border-[color:var(--kub-border-color)] pb-8 sm:pb-10">
+        <header className="border-b border-[color:var(--kub-rule)] pb-8 sm:pb-10">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-[color:var(--kub-pink)]">
@@ -60,7 +60,7 @@ export function PrivacyPage() {
               fill behind the cells, which is a flat colour for them to blur —
               the material would have collapsed to paint here and nowhere
               else on the page. */}
-          <dl className="kub-glass mt-7 grid divide-y divide-[color:var(--kub-border-color)] overflow-hidden rounded-md border border-[color:var(--kub-border-color)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <dl className="kub-glass mt-7 grid divide-y divide-[color:var(--kub-rule)] overflow-hidden rounded-md border border-[color:var(--kub-border-color)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             <PolicyMeta label="Версия" value={PRIVACY_POLICY_VERSION} />
             <PolicyMeta label="Действует с" value={PRIVACY_POLICY_EFFECTIVE_DATE} />
             <PolicyMeta label="Оператор" value={PRIVACY_POLICY.operator.shortName} />
@@ -81,7 +81,7 @@ export function PrivacyPage() {
               <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--kub-muted)]">
                 Оглавление
               </p>
-              <ol className="space-y-0.5 border-l border-[color:var(--kub-border-color)]">
+              <ol className="space-y-0.5 border-l border-[color:var(--kub-rule)]">
                 {PRIVACY_POLICY.sections.map((section) => (
                   <li key={section.id}>
                     <a
@@ -104,7 +104,7 @@ export function PrivacyPage() {
               <section
                 key={section.id}
                 id={section.id}
-                className="scroll-mt-24 border-b border-[color:var(--kub-border-color)] py-7 first:pt-0 last:border-b-0"
+                className="scroll-mt-24 border-b border-[color:var(--kub-rule)] py-7 first:pt-0 last:border-b-0"
               >
                 <h2 className="text-xl font-bold leading-snug text-[color:var(--kub-text)] sm:text-2xl">
                   {section.title}
@@ -152,7 +152,7 @@ function PolicyBlock({ block }: { block: PrivacyPolicyBlock }) {
   }
 
   return (
-    <dl className="divide-y divide-[color:var(--kub-border-color)] border-y border-[color:var(--kub-border-color)]">
+    <dl className="divide-y divide-[color:var(--kub-rule)] border-y border-[color:var(--kub-rule)]">
       {block.items.map((item) => (
         <div key={item.term} className="grid gap-1 py-3 sm:grid-cols-[190px_minmax(0,1fr)] sm:gap-5">
           <dt className="font-semibold text-[color:var(--kub-text)]">{item.term}</dt>

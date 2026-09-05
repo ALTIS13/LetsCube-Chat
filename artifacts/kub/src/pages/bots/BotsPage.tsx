@@ -133,7 +133,7 @@ function EligibilityNotice({ eligibility }: { eligibility: NonNullable<ReturnTyp
   const message = describeCreationBlock(eligibility);
   if (!message) return null;
   return (
-    <div className="border-b border-[color:var(--kub-border-color)] px-4 py-3 text-xs leading-5 text-[color:var(--kub-muted)]">
+    <div className="border-b border-[color:var(--kub-rule)] px-4 py-3 text-xs leading-5 text-[color:var(--kub-muted)]">
       {message}
     </div>
   );

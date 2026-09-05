@@ -169,7 +169,7 @@ export function ProfileRoleSummary({ user, compact = false, routing: routingProp
             {visibleMemberships.map(({ member, location, dynamicRole, primaryAdmin }) => (
               <div
                 key={`${member.location_id}:${member.user_id}`}
-                className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/55 px-3 py-2"
+                className="rounded-xl px-3 py-2 kub-raise"
               >
                 <div className="flex min-w-0 items-center justify-between gap-2">
                   <span className="truncate text-sm font-medium text-[color:var(--kub-text)]">
@@ -203,7 +203,7 @@ export function ProfileRoleSummary({ user, compact = false, routing: routingProp
             {[0, 1].map((row) => (
               <div
                 key={row}
-                className="flex items-center justify-between gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/55 px-3 py-2"
+                className="flex items-center justify-between gap-2 rounded-xl px-3 py-2 kub-raise"
               >
                 <KubStableSkeleton width="42%" height="0.875rem" />
                 <KubStableSkeleton width="5.5rem" height="1.125rem" rounded="full" />

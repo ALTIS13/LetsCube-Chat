@@ -159,15 +159,15 @@ function AuthCallback() {
         {recoveryMode ? (
           <form onSubmit={handlePasswordUpdate} className="w-full">
             <KubPanel glow="soft" padded={false} className="w-full overflow-hidden text-left">
-              <div className="border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/50 px-3 py-2">
+              <div className="border-b border-[color:var(--kub-rule)] bg-[var(--kub-surface-2)]/50 px-3 py-2">
                 <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-accent-text)]">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--kub-cyan)] kub-pulse" />
+                  <span className="h-2 w-2 rounded-full bg-[var(--kub-cyan)]" />
                   Восстановление доступа
                 </div>
               </div>
               <div className="space-y-4 p-5">
                 <div className="flex items-start gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[color:var(--kub-cyan)] kub-raise">
                     <KubIcon name="lock" size={18} />
                   </span>
                   <div className="min-w-0">
@@ -215,7 +215,7 @@ function AuthCallback() {
             </div>
             <div className="flex items-center justify-center gap-2 text-sm text-[color:var(--kub-text)]">
             {!error && (
-              <span className="inline-flex h-2 w-2 rounded-full bg-[var(--kub-cyan)] kub-pulse" />
+              <span className="inline-flex h-2 w-2 rounded-full bg-[var(--kub-cyan)]" />
             )}
             {error ?? "Входим..."}
             </div>
@@ -270,11 +270,11 @@ function LoadingScreen({
       <div className="flex max-w-sm flex-col items-center gap-4 px-5 text-center">
         <KubLogo size={56} withGlow />
         <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] font-semibold text-[color:var(--kub-accent-text)]">
-          <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[var(--kub-cyan)] kub-pulse" />
+          <span className="inline-flex h-2 w-2 rounded-full bg-[var(--kub-cyan)]" />
           Загрузка
         </div>
         {(error || slow) && (
-          <div className="w-full rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-4 shadow-xl">
+          <div className="w-full rounded-2xl p-4 shadow-xl kub-raise">
             <p className="text-sm font-semibold text-[color:var(--kub-text)]">
               {error ? "Не удалось загрузить профиль" : "Загрузка длится дольше обычного"}
             </p>

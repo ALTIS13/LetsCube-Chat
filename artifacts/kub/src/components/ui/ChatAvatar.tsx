@@ -195,10 +195,10 @@ export function ChatAvatar({ chat, size = "md", className, showOnline, isSaved: 
       )}
       {showOnline && (
         <span
-          className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2"
+          className="absolute bottom-0 right-0 h-2 w-2 rounded-full"
           style={{
             background: "var(--tg-online)",
-            borderColor: "var(--tg-sidebar)",
+            boxShadow: "0 0 0 2px var(--tg-sidebar)",
           }}
         />
       )}
@@ -300,10 +300,10 @@ export function UserAvatar({
       )}
       {showOnline && (
         <span
-          className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2"
+          className="absolute bottom-0 right-0 h-2 w-2 rounded-full"
           style={{
             background: "var(--tg-online)",
-            borderColor: "var(--tg-header)",
+            boxShadow: "0 0 0 2px var(--tg-header)",
           }}
         />
       )}

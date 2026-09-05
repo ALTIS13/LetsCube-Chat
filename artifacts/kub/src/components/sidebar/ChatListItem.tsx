@@ -207,10 +207,15 @@ export function ChatListItem({
           avatarVariant={avatarVariant}
           profileId={chat.other_user?.id ?? null}
         />
+        {/* 8px of colour with a 2px ring, which is the same picture the 12px
+            box with `border-2` drew — the disc was 8px there too, once the
+            border was taken off both sides. Said as a ring rather than as a
+            border so presence is one size everywhere it appears, including the
+            8px dot in the admin activity list. */}
         {isOtherOnline && (
           <span
-            className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 bg-[var(--kub-online)] kub-pulse"
-            style={{ borderColor: isSelected ? "color-mix(in srgb, var(--kub-cyan) 18%, var(--kub-surface))" : "var(--kub-surface)" }}
+            className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-[var(--kub-online)]"
+            style={{ boxShadow: `0 0 0 2px ${isSelected ? "color-mix(in srgb, var(--kub-cyan) 18%, var(--kub-surface))" : "var(--kub-surface)"}` }}
           />
         )}
       </div>

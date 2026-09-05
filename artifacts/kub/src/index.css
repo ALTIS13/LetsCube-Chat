@@ -255,6 +255,17 @@
      read, only not offered. Relative like its twin, so it works on a page, a
      panel or inside a menu. */
   --kub-sink-veil: rgba(0, 0, 0, 0.30);
+  /* A line BETWEEN things inside a sheet, as opposed to the edge OF the sheet.
+     It used to be --kub-border-color, which is to say the same declaration in
+     both jobs — and the sheet's own edge is the heavier of the two, so a rule
+     that matched it read as a second edge cutting the panel in half.
+
+     Measured on a real panel, photographed: --kub-border-color composites to a
+     step of 59 (1.52:1) against the surface, where the sheet's own edge
+     measures 89. This one gives 29 (1.22:1) — a third of the edge's weight,
+     and still a visible hairline, which is what a rule is for. Denser was
+     tried: .14 comes back to 55 and is the defect again. */
+  --kub-rule: rgba(255, 255, 255, 0.075);
 
   /* ── Colours that carry text ──────────────────────────────────────────────
    * A colour that is legible as a 3px border or a filled button is not
@@ -541,6 +552,13 @@
      more: measured, .10 gives 4.74:1 and .14 gives 4.40:1, so the step that
      looks bolder is the one that stops being readable. */
   --kub-sink-veil: rgba(23, 51, 82, 0.07);
+  /* See .dark. Ink rather than light, like the raise veil in this theme. The
+     defect is worse here than there and in the other direction: photographed,
+     --kub-border-color as a rule measures a step of 56 against the panel while
+     this theme's sheet edge measures only 46, so a divider inside a panel was
+     HEAVIER than the panel's own edge. This gives 36 — under the edge, where a
+     rule belongs, and still a visible hairline at 1.21:1. */
+  --kub-rule: rgba(23, 51, 82, 0.10);
   /* See the note in .dark. Measured against a solid black field, which is what
      a panel in this theme composites towards at worst. #DC2626 as a word is
      4.05:1 there; #C81E1E is 4.81:1, and 5.74:1 on white. */
@@ -1395,14 +1413,18 @@ textarea::placeholder, input::placeholder {
   }
 }
 
-/* Gentle pulsing glow used on online dots / live indicators. */
-@keyframes kub-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--kub-online) 65%, transparent); }
-  50%      { box-shadow: 0 0 0 6px transparent; }
-}
-@layer components {
-  .kub-pulse { animation: kub-pulse 2s ease-in-out infinite; }
-}
+/* `kub-pulse` was here: a 2s box-shadow loop, `infinite`, on a presence dot.
+   Removed rather than retuned, because the cost was structural. The dot sits on
+   the avatar of every chat-list row, so the loop ran once per visible row, for
+   as long as the list was open, around a fact that does not change while it is
+   shown — the person is online, and the animation restated it twice a second.
+
+   Four of the other six were a decorative bullet beside a static caption
+   ("Авторизация", "Регистрация", "Подтверждение", "Восстановление доступа"):
+   nothing there changes either. The remaining two did mark work in flight
+   ("Входим...", "Загрузка") and now say so in words only; motion for work in
+   flight belongs to the shared-motion plan, which owns exactly that and must
+   not be pre-empted with a second animation system here. */
 
 @layer components {
   /* Make the chat-bg use the cyber grid in dark mode without losing dot pattern. */

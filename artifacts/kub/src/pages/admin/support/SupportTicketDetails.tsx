@@ -143,7 +143,7 @@ export function SupportTicketDetails({
               Контакт
             </h3>
             {details.contact ? (
-              <div className="kub-raise mt-2 space-y-2 rounded-lg border border-[color:var(--kub-border-color)] p-3 text-sm">
+              <div className="kub-raise mt-2 space-y-2 rounded-lg p-3 text-sm">
                 <p className="font-semibold text-[color:var(--kub-text)]">{details.contact.contactName}</p>
                 <p className="break-all text-[color:var(--kub-text)]">{details.contact.email}</p>
                 <p className="text-[color:var(--kub-text)]">{details.contact.phone}</p>
@@ -323,7 +323,7 @@ export function SupportTicketDetails({
                   {customerCandidates.map((candidate) => (
                     <div
                       key={candidate.userId}
-                      className="kub-raise rounded-lg border border-[color:var(--kub-border-color)] p-2 text-xs"
+                      className="kub-raise rounded-lg p-2 text-xs"
                     >
                       <p className="font-semibold text-[color:var(--kub-text)]">
                         {candidate.fullName ?? "Пользователь"}
@@ -347,7 +347,7 @@ export function SupportTicketDetails({
               {details.events.map((event) => (
                 <li
                   key={event.id}
-                  className="border-l-2 border-[color:var(--kub-border-color)] pl-3 text-xs"
+                  className="border-l-2 border-[color:var(--kub-rule)] pl-3 text-xs"
                 >
                   <p className="font-semibold text-[color:var(--kub-text)]">
                     {eventLabel(event.eventType)}

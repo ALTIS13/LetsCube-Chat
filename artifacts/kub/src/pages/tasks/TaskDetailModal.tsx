@@ -380,7 +380,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
           </p>
         )}
 
-        <div className="rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3">
+        <div className="rounded-2xl p-3 kub-raise">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--kub-text)]">
@@ -396,7 +396,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
               </p>
             </div>
             {task.due_at && (
-              <div className="shrink-0 rounded-lg border border-[color:var(--kub-border-color)] px-2.5 py-1.5 text-xs font-medium text-[color:var(--kub-text)]">
+              <div className="shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium text-[color:var(--kub-text)] kub-raise">
                 {formatTaskDueDate(task.due_at)}
               </div>
             )}
@@ -414,7 +414,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
         </div>
 
         {(isRecurringTemplate || isRecurringOccurrence) && (
-          <div className="rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3">
+          <div className="rounded-2xl p-3 kub-raise">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--kub-text)]">
@@ -518,7 +518,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
+          <div className="rounded-xl px-3 py-2 kub-raise">
             <div className="text-[12px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
               Исполнитель
             </div>
@@ -533,7 +533,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
               <span className="text-xs text-[color:var(--kub-warn)]">Не назначен</span>
             )}
           </div>
-          <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
+          <div className="rounded-xl px-3 py-2 kub-raise">
             <div className="text-[12px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
               Создал
             </div>
@@ -548,7 +548,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
               <span className="text-xs text-[color:var(--kub-muted)]">—</span>
             )}
           </div>
-          <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
+          <div className="rounded-xl px-3 py-2 kub-raise">
             <div className="text-[12px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
               Видимость
             </div>
@@ -556,7 +556,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
               <KubBadge tone={visibility.tone} pill>{visibility.label}</KubBadge>
             </div>
           </div>
-          <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
+          <div className="rounded-xl px-3 py-2 kub-raise">
             <div className="text-[12px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
               Тип назначения
             </div>
@@ -571,7 +571,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
               )}
             </div>
           </div>
-          <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 sm:col-span-2">
+          <div className="rounded-xl px-3 py-2 sm:col-span-2 kub-raise">
             <div className="text-[12px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
               Связанный чат
             </div>
@@ -604,7 +604,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
 
         {/* Action buttons */}
         {hasTaskActions && (
-          <div className="rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="rounded-2xl p-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center kub-raise">
           <div className="w-full text-[12px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
             Действия
           </div>
@@ -767,7 +767,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
         </div>
 
         {/* Comment composer */}
-        <div className="border-t border-[color:var(--kub-border-color)] pt-3">
+        <div className="border-t border-[color:var(--kub-rule)] pt-3">
           <div className="flex items-end gap-2">
             <textarea
               value={comment}

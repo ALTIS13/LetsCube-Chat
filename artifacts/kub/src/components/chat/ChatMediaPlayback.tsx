@@ -466,7 +466,7 @@ export function ChatMediaPlaybackBar({ compact = false }: { compact?: boolean } 
       data-placement={compact ? "header" : "standalone"}
       data-current-kind={item.kind}
       className={cn(
-        "overflow-hidden border border-[color:var(--kub-border-color)] bg-[color-mix(in_srgb,var(--kub-surface)_92%,var(--kub-cyan)_8%)] shadow-lg transition-all",
+        "overflow-hidden bg-[color-mix(in_srgb,var(--kub-surface)_92%,var(--kub-cyan)_8%)] shadow-lg transition-all kub-raise",
         compact ? "mx-2 mb-2 rounded-xl sm:mx-3" : "mx-2 mt-2 rounded-2xl sm:mx-3"
       )}
     >

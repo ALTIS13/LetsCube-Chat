@@ -48,7 +48,7 @@ export function TaskDeleteModal({
       }
     >
       <div className="space-y-3">
-        <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-sm text-[color:var(--kub-text)]">
+        <div className="rounded-xl px-3 py-2 text-sm text-[color:var(--kub-text)] kub-raise">
           Будет удалено: <span className="font-semibold">{count}</span> {plural}.
         </div>
         <label className="block">

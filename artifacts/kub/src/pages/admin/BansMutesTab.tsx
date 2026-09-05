@@ -201,7 +201,7 @@ function SanctionsHistory({ audit }: { audit: ReturnType<typeof useAuditLogs> })
   const totalPages = Math.max(1, Math.ceil(audit.total / audit.pageSize));
   return (
     <KubPanel className="overflow-hidden p-0">
-      <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-[color:var(--kub-border-color)]">
+      <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-[color:var(--kub-rule)]">
         <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] border border-[color:var(--kub-cyan)]/30">
           <KubIcon name="audit" size={13} tone="accent" />
         </div>
@@ -229,7 +229,7 @@ function SanctionsHistory({ audit }: { audit: ReturnType<typeof useAuditLogs> })
       )}
 
       {!audit.loading && audit.total > audit.pageSize && (
-        <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-[color:var(--kub-border-color)] text-xs text-[color:var(--kub-muted)]">
+        <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-[color:var(--kub-rule)] text-xs text-[color:var(--kub-muted)]">
           <span>Стр. {audit.page + 1} из {totalPages}</span>
           <div className="flex items-center gap-1">
             <button
@@ -262,7 +262,7 @@ function SanctionHistoryRow({ row }: { row: AuditLogWithActor }) {
   const reason = auditString(row, "reason");
   const expires = auditString(row, "expires_at");
   return (
-    <div className="flex items-start gap-3 px-4 py-3 border-t border-[color:var(--kub-border-color)]">
+    <div className="flex items-start gap-3 px-4 py-3 border-t border-[color:var(--kub-rule)]">
       {target ? (
         <UserAvatar user={target} size="sm" />
       ) : (
@@ -348,7 +348,7 @@ function RowCard({
   onRemove: () => void;
 }) {
   return (
-    <div className="flex items-start gap-3 px-4 py-3 border-t border-[color:var(--kub-border-color)]">
+    <div className="flex items-start gap-3 px-4 py-3 border-t border-[color:var(--kub-rule)]">
       {user ? (
         <UserAvatar user={user as Profile} size="sm" />
       ) : (

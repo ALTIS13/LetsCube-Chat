@@ -169,7 +169,7 @@ export function SupportPage() {
                 title="Ответ по контактам"
                 text="Email и телефон в публичной форме считаются неподтверждёнными, пока пользователь не подтвердил их отдельно."
               />
-              <p className="border-t border-[color:var(--kub-border-color)] pt-5 text-xs leading-5 text-[color:var(--kub-muted)]">
+              <p className="border-t border-[color:var(--kub-rule)] pt-5 text-xs leading-5 text-[color:var(--kub-muted)]">
                 Почта поддержки:{" "}
                 <a className="font-semibold text-[color:var(--kub-accent-text)]" href="mailto:support@app.letscube.ru">
                   support@app.letscube.ru
@@ -193,7 +193,7 @@ function SupportFact({
   text: string;
 }) {
   return (
-    <div className="flex gap-3 border-b border-[color:var(--kub-border-color)] pb-5">
+    <div className="flex gap-3 border-b border-[color:var(--kub-rule)] pb-5">
       {/* A chip, so the veil: it has to be found against the page here, and
           against whatever this column sits on if the layout ever changes.
           --kub-surface-2 answered "one step above" for a surface that has since

@@ -212,7 +212,7 @@ export function InvitesTab() {
               смогут создаваться только по коду или ссылке-приглашению из этой вкладки.
             </p>
           </div>
-          <div className="kub-raise flex shrink-0 items-center justify-between gap-3 rounded-2xl border border-[color:var(--kub-border-color)] px-3 py-2">
+          <div className="kub-raise flex shrink-0 items-center justify-between gap-3 rounded-2xl px-3 py-2">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-[color:var(--kub-text)]">
                 Только по приглашениям
@@ -235,7 +235,7 @@ export function InvitesTab() {
           </KubNotice>
         )}
         {!systemAccess.checking && !systemAccess.hasPermission("system.manage") && (
-          <div className="kub-raise rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
+          <div className="kub-raise rounded-xl px-3 py-2 text-xs text-[color:var(--kub-muted)]">
             Переключать режим регистрации может только пользователь с правом «Управление системой».
           </div>
         )}
@@ -397,7 +397,7 @@ export function InvitesTab() {
         </div>
 
         {(!routingEnabled || routing.error) && (
-          <div className="kub-raise rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
+          <div className="kub-raise rounded-xl px-3 py-2 text-xs text-[color:var(--kub-muted)]">
             {routingEnabled ? routing.error ?? LOCATION_ROUTING_REQUIRED_MESSAGE : LOCATION_ROUTING_REQUIRED_MESSAGE}
             <KubButton
               type="button"
@@ -425,7 +425,7 @@ export function InvitesTab() {
       </KubPanel>
 
       <KubPanel padded={false} className="overflow-hidden">
-        <div className="kub-raise flex items-center justify-between border-b border-[color:var(--kub-border-color)] px-4 py-3">
+        <div className="kub-raise flex items-center justify-between border-b border-[color:var(--kub-rule)] px-4 py-3">
           <div>
             <h3 className="text-sm font-semibold text-[color:var(--kub-text)]">Активные и прошлые инвайты</h3>
             <p className="text-xs text-[color:var(--kub-muted)]">Ссылка копируется в формате /register?invite=CODE.</p>
@@ -439,14 +439,14 @@ export function InvitesTab() {
           <KubSkeletonRows
             count={5}
             label="Загрузка инвайтов"
-            rowClassName="border-b border-[color:var(--kub-border-color)] last:border-b-0"
+            rowClassName="border-b border-[color:var(--kub-rule)] last:border-b-0"
           />
         ) : invites.length === 0 ? (
           <div className="px-4 py-10 text-center text-sm text-[color:var(--kub-muted)]">
             Инвайтов пока нет.
           </div>
         ) : (
-          <div className="divide-y divide-[color:var(--kub-border-color)]">
+          <div className="divide-y divide-[color:var(--kub-rule)]">
             {invites.map((invite) => (
               <InviteRow
                 key={invite.id}

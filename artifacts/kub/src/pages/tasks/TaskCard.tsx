@@ -128,7 +128,7 @@ export function TaskCard({ task, nowMs, onClick, selected = false, selectionCont
           )}
         </div>
 
-        <div className="kub-raise rounded-lg border border-[color:var(--kub-border-color)] px-2.5 py-2">
+        <div className="kub-raise rounded-lg px-2.5 py-2">
           <div className="flex min-w-0 items-center justify-between gap-2 text-[12px]">
             <span className={cn(
               "flex min-w-0 items-center gap-1.5 font-medium",

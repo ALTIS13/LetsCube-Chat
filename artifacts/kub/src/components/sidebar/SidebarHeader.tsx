@@ -175,7 +175,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
                   className="kub-glass-strong absolute left-0 top-12 w-64 rounded-xl z-50 py-1 overflow-hidden border border-[color:var(--kub-border-color)]"
                 >
                   {currentUser && (
-                    <div className="flex items-center gap-3 px-4 py-3 mb-1 border-b border-[color:var(--kub-border-color)]">
+                    <div className="flex items-center gap-3 px-4 py-3 mb-1 border-b border-[color:var(--kub-rule)]">
                       <UserAvatar user={currentUser} size="sm" />
                       <div className="min-w-0">
                         <div className="text-sm font-semibold truncate text-[color:var(--kub-text)]">

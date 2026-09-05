@@ -443,7 +443,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
         />
       </div>
 
-      <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3">
+      <div className="rounded-xl p-3 kub-raise">
         <div className="mb-3 flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="text-[12px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
@@ -462,11 +462,11 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
         </div>
 
         {taskAlreadyRecurring ? (
-          <div className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+          <div className="rounded-lg px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)] kub-raise">
             Для этой задачи уже настроено повторение. Пауза, возобновление и остановка доступны в карточке задачи.
           </div>
         ) : isRecurrenceOccurrence ? (
-          <div className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+          <div className="rounded-lg px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)] kub-raise">
             Это отдельный экземпляр повторяемой задачи. Повторение настраивается у исходной задачи.
           </div>
         ) : recurring.available ? (
@@ -616,20 +616,20 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                   </label>
                 )}
 
-                <div className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                <div className="rounded-lg px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)] kub-raise">
                   {recurrenceSummary}. Следующее выполнение будет рассчитано сервером.
                 </div>
               </div>
             )}
           </div>
         ) : (
-          <div className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+          <div className="rounded-lg px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)] kub-raise">
             {recurring.message ?? RECURRING_TASKS_REQUIRED_MESSAGE} Существующее создание задач продолжит работать без повторения.
           </div>
         )}
       </div>
 
-      <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3">
+      <div className="rounded-xl p-3 kub-raise">
         <div className="mb-3 flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="text-[12px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
@@ -749,7 +749,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
             )}
           </div>
         ) : (
-          <div className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+          <div className="rounded-lg px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)] kub-raise">
             {routing.error ?? LOCATION_ROUTING_REQUIRED_MESSAGE} Старое создание задач продолжит работать без этих полей.
           </div>
         )}
@@ -762,7 +762,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
         >
           {visibility === "chat" ? "Связанный чат" : "Связанный чат (необязательно)"}
         </label>
-        <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-2">
+        <div className="rounded-xl p-2 kub-raise">
           <button
             type="button"
             id="task-chat-select"
@@ -845,11 +845,11 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
           Исполнитель
         </label>
         {assignmentScope !== "user" ? (
-          <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+          <div className="rounded-xl px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)] kub-raise">
             Для задач из пула конкретный исполнитель не назначается сразу. Работник возьмёт задачу в работу сам.
           </div>
         ) : assignee ? (
-          <div className="flex items-center gap-3 rounded-xl px-3 py-2 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
+          <div className="flex items-center gap-3 rounded-xl px-3 py-2 kub-raise">
             <UserAvatar user={assignee} size="sm" />
             <div className="min-w-0 flex-1">
               <div className="font-semibold truncate text-sm text-[color:var(--kub-text)]">
@@ -884,7 +884,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
               {searching && <KubIcon name="spinner" size={14} className="text-[color:var(--kub-cyan)]" />}
             </div>
             {results.length > 0 && (
-              <div className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]">
+              <div className="mt-2 max-h-40 overflow-y-auto rounded-xl kub-raise">
                 {results.map((p) => (
                   <button
                     type="button"

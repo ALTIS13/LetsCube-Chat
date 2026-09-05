@@ -230,9 +230,9 @@ export function RegisterForm() {
           <KubPanel glow="soft" padded={false} className="overflow-hidden">
             {/* --kub-inset, for the reason spelled out on the login card's
                 identical strip. */}
-            <div className="px-3 py-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-inset)]">
+            <div className="px-3 py-2 border-b border-[color:var(--kub-rule)] bg-[var(--kub-inset)]">
               <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-accent-text)]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[var(--kub-cyan)] kub-pulse" />
+                <span className="h-2 w-2 rounded-full bg-[var(--kub-cyan)]" />
                 Подтверждение
               </div>
             </div>
@@ -334,9 +334,9 @@ export function RegisterForm() {
         </div>
 
         <KubPanel glow="soft" padded={false} className="overflow-hidden">
-          <div className="px-3 py-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-inset)]">
+          <div className="px-3 py-2 border-b border-[color:var(--kub-rule)] bg-[var(--kub-inset)]">
             <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-pink-text)]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--kub-pink)] kub-pulse" />
+              <span className="h-2 w-2 rounded-full bg-[var(--kub-pink)]" />
               Регистрация
             </div>
           </div>

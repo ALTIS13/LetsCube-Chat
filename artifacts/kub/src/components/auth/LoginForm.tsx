@@ -180,9 +180,9 @@ export function LoginForm() {
               accent label measures 7.83:1 dark and 6.18:1 light, and the pink
               one 5.27:1 and 4.84:1 — better in dark than the half-alpha fill
               managed (6.76:1 and 4.55:1) and level with it in light. */}
-          <div className="px-3 py-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-inset)]">
+          <div className="px-3 py-2 border-b border-[color:var(--kub-rule)] bg-[var(--kub-inset)]">
             <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-accent-text)]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--kub-cyan)] kub-pulse" />
+              <span className="h-2 w-2 rounded-full bg-[var(--kub-cyan)]" />
               Авторизация
             </div>
           </div>

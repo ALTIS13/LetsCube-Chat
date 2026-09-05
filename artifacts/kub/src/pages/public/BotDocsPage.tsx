@@ -33,7 +33,7 @@ export function BotDocsPage() {
   return (
     <PublicPageShell>
       <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
-        <header className="border-b border-[color:var(--kub-border-color)] pb-8">
+        <header className="border-b border-[color:var(--kub-rule)] pb-8">
           <div className="flex max-w-4xl items-start gap-4">
             {/* A chip, so the veil rather than a fill: one step nearer than
                 whatever it is laid on. */}
@@ -57,7 +57,7 @@ export function BotDocsPage() {
           {/* One card with a hairline inside it. See the same table on the
               privacy page: `gap-px` over an opaque sheet hands the cells one
               flat colour to blur. */}
-          <dl className="kub-glass mt-6 grid divide-y divide-[color:var(--kub-border-color)] overflow-hidden rounded-md border border-[color:var(--kub-border-color)] md:grid-cols-2 md:divide-x md:divide-y-0">
+          <dl className="kub-glass mt-6 grid divide-y divide-[color:var(--kub-rule)] overflow-hidden rounded-md border border-[color:var(--kub-border-color)] md:grid-cols-2 md:divide-x md:divide-y-0">
             <EndpointMeta label="Базовый URL" value={BOT_API_BASE_URL} />
             <EndpointMeta label="Авторизация" value={BOT_API_AUTHORIZATION} />
           </dl>
@@ -78,7 +78,7 @@ export function BotDocsPage() {
               <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--kub-muted)]">
                 Содержание
               </p>
-              <ol className="border-l border-[color:var(--kub-border-color)]">
+              <ol className="border-l border-[color:var(--kub-rule)]">
                 {NAVIGATION.map((item) => (
                   <li key={item.id}>
                     <a
@@ -144,7 +144,7 @@ export function BotDocsPage() {
                     >
                       {group.title}
                     </h3>
-                    <div className="mt-2 divide-y divide-[color:var(--kub-border-color)] border-y border-[color:var(--kub-border-color)]">
+                    <div className="mt-2 divide-y divide-[color:var(--kub-rule)] border-y border-[color:var(--kub-rule)]">
                       {group.methods.map((method) => (
                         <div
                           key={method.name}
@@ -219,7 +219,7 @@ export function BotDocsPage() {
             </DocSection>
 
             <DocSection id="reliability" title="Надежная интеграция">
-              <dl className="divide-y divide-[color:var(--kub-border-color)] border-y border-[color:var(--kub-border-color)] text-sm">
+              <dl className="divide-y divide-[color:var(--kub-rule)] border-y border-[color:var(--kub-rule)] text-sm">
                 <GuidanceRow
                   term="Идемпотентность"
                   description="Повторяйте изменяющий запрос с тем же idempotency_key и неизменным телом. Новый ключ означает новую операцию."
@@ -274,7 +274,7 @@ function DocSection({
   return (
     <section
       id={id}
-      className="scroll-mt-24 border-b border-[color:var(--kub-border-color)] py-9 first:pt-0 last:border-b-0"
+      className="scroll-mt-24 border-b border-[color:var(--kub-rule)] py-9 first:pt-0 last:border-b-0"
     >
       <h2 className="text-2xl font-bold leading-tight text-[color:var(--kub-text)]">{title}</h2>
       <div className="mt-5">{children}</div>
@@ -310,7 +310,7 @@ function CodeBlock({ title, code }: { title: string; code: string }) {
     // reveal a page that is already behind them. The title strip takes the veil
     // over the same fill, which is the lip of the well.
     <section className="min-w-0 overflow-hidden rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)]">
-      <h3 className="kub-raise border-b border-[color:var(--kub-border-color)] px-4 py-2.5 text-xs font-bold text-[color:var(--kub-text)]">
+      <h3 className="kub-raise border-b border-[color:var(--kub-rule)] px-4 py-2.5 text-xs font-bold text-[color:var(--kub-text)]">
         {title}
       </h3>
       <pre className="max-w-full overflow-x-auto p-4 text-xs leading-6 text-[color:var(--kub-muted)]">

@@ -222,13 +222,13 @@ export function FolderEditModal({
       }
     >
       {!canManage && (
-        <div className="rounded-xl px-3 py-2 text-xs bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]">
+        <div className="rounded-xl px-3 py-2 text-xs text-[color:var(--kub-muted)] kub-raise">
           Эту папку создал другой человек — её можно открыть, но не изменить.
         </div>
       )}
 
       {folder?.scope === "shared" && !isCreator && creatorProfile && (
-        <div className="rounded-xl px-3 py-2 text-xs bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]">
+        <div className="rounded-xl px-3 py-2 text-xs text-[color:var(--kub-muted)] kub-raise">
           Общая папка. Создал:{" "}
           <span className="text-[color:var(--kub-text)] font-semibold">
             {creatorProfile.full_name ?? creatorProfile.username ?? "пользователь"}
@@ -328,7 +328,7 @@ export function FolderEditModal({
         </label>
         <div
           data-testid="folder-chat-list"
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-xl bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-xl kub-raise"
         >
           {chats.length === 0 ? (
             <p className="px-4 py-3 text-xs text-[color:var(--kub-muted)]">

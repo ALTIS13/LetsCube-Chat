@@ -238,7 +238,7 @@ export function LocationsTab() {
     return (
       <KubPanel className="space-y-3">
         <div className="flex items-start gap-3">
-          <span className="kub-raise flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--kub-border-color)] text-[color:var(--kub-cyan)]">
+          <span className="kub-raise flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[color:var(--kub-cyan)]">
             <KubIcon name="mapPin" size={18} />
           </span>
           <div className="min-w-0">
@@ -340,7 +340,7 @@ export function LocationsTab() {
           </KubCreateSection>
 
           <KubPanel padded={false} className="overflow-hidden">
-            <div className="border-b border-[color:var(--kub-border-color)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
+            <div className="border-b border-[color:var(--kub-rule)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
               Список локаций
             </div>
             <div className="max-h-[420px] overflow-y-auto">
@@ -350,7 +350,7 @@ export function LocationsTab() {
                   type="button"
                   onClick={() => setSelectedId(location.id)}
                   className={cn(
-                    "flex w-full min-w-0 items-center justify-between gap-2 border-b border-[color:var(--kub-border-color)] px-3 py-3 text-left last:border-b-0 kub-raise-hover",
+                    "flex w-full min-w-0 items-center justify-between gap-2 border-b border-[color:var(--kub-rule)] px-3 py-3 text-left last:border-b-0 kub-raise-hover",
                     selectedLocation?.id === location.id && "bg-[color-mix(in_srgb,var(--kub-cyan)_10%,transparent)]",
                   )}
                 >
@@ -504,13 +504,13 @@ export function LocationsTab() {
                   </KubButton>
                 </div>
 
-                <div className="overflow-hidden rounded-xl border border-[color:var(--kub-border-color)]">
+                <div className="overflow-hidden rounded-xl kub-raise">
                   {selectedMembers.map((member) => {
                     const dynamicRole = member.role_id ? roleById.get(member.role_id) ?? null : null;
                     return (
                     <div
                       key={`${member.location_id}:${member.user_id}`}
-                      className="grid gap-2 border-b border-[color:var(--kub-border-color)] px-3 py-3 last:border-b-0 xl:grid-cols-[minmax(0,1.6fr)_auto_minmax(0,1.1fr)_auto] xl:items-center"
+                      className="grid gap-2 border-b border-[color:var(--kub-rule)] px-3 py-3 last:border-b-0 xl:grid-cols-[minmax(0,1.6fr)_auto_minmax(0,1.1fr)_auto] xl:items-center"
                     >
                       <div className="flex min-w-0 items-center gap-2">
                         {member.profile ? (

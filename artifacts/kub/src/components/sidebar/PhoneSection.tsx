@@ -241,7 +241,7 @@ export function PhoneSection() {
   };
 
   return (
-    <div className="rounded-xl overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
+    <div className="rounded-xl overflow-hidden kub-raise">
       <div className="px-4 py-3 flex items-start gap-3">
         <div className="mt-0.5 flex-shrink-0 text-[color:var(--kub-cyan)]">
           <KubIcon name="phone" size={16} />
@@ -285,7 +285,7 @@ export function PhoneSection() {
       </div>
 
       {stage === "code-sent" && (
-        <div className="px-4 pt-0 pb-3 border-t border-[color:var(--kub-border-color)]">
+        <div className="px-4 pt-0 pb-3 border-t border-[color:var(--kub-rule)]">
           <label className="text-[12px] font-semibold uppercase tracking-wider mt-3 mb-1.5 block text-[color:var(--kub-accent-text)]">
             Код подтверждения (4 цифры)
           </label>
@@ -308,7 +308,7 @@ export function PhoneSection() {
       {(error || info) && (
         <div
           className={cn(
-            "px-4 py-2 text-xs border-t border-[color:var(--kub-border-color)]",
+            "px-4 py-2 text-xs border-t border-[color:var(--kub-rule)]",
             error
               ? "bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] text-[color:var(--kub-danger-text)]"
               : "bg-[color-mix(in_srgb,var(--kub-cyan)_10%,transparent)] text-[color:var(--kub-accent-text)]",
@@ -318,7 +318,7 @@ export function PhoneSection() {
         </div>
       )}
 
-      <div className="px-4 py-3 border-t border-[color:var(--kub-border-color)] flex flex-wrap items-center gap-2">
+      <div className="px-4 py-3 border-t border-[color:var(--kub-rule)] flex flex-wrap items-center gap-2">
         {stage === "code-sent" ? (
           <>
             <KubButton

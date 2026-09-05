@@ -14,7 +14,7 @@ export function RegistrationTrend({ series, metrics, error }: {
 
   return (
     <KubPanel padded={false} data-testid="admin-registration-trend" className="overflow-hidden">
-      <div className="flex flex-col border-b border-[color:var(--kub-border-color)] sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col border-b border-[color:var(--kub-rule)] sm:flex-row sm:items-center sm:justify-between">
         <div className="px-4 py-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--kub-text)]">
             <KubIcon name="activity" size={16} tone="accent" />
@@ -22,7 +22,7 @@ export function RegistrationTrend({ series, metrics, error }: {
           </div>
           <p className="mt-1 text-xs text-[color:var(--kub-muted)]">Фактические новые профили по дням</p>
         </div>
-        <div className="min-w-[210px] border-t border-[color:var(--kub-border-color)] px-4 py-3 sm:border-l sm:border-t-0">
+        <div className="min-w-[210px] border-t border-[color:var(--kub-rule)] px-4 py-3 sm:border-l sm:border-t-0">
           <div className="flex items-center justify-between text-xs">
             <span className="text-[color:var(--kub-muted)]">Пользователи онлайн</span>
             <strong className="tabular-nums text-[color:var(--kub-text)]">{onlinePercent}%</strong>
@@ -34,7 +34,7 @@ export function RegistrationTrend({ series, metrics, error }: {
       </div>
       <div className="h-56 px-4 pb-3 pt-4" aria-label="График регистраций за семь дней">
         <ol
-          className="grid h-full grid-cols-7 gap-2 border-b border-[color:var(--kub-border-color)] px-1"
+          className="grid h-full grid-cols-7 gap-2 border-b border-[color:var(--kub-rule)] px-1"
           data-testid="admin-registration-bars"
           style={{
             backgroundImage: "repeating-linear-gradient(to bottom, transparent 0, transparent calc(33.333% - 1px), color-mix(in srgb, var(--kub-border-color) 55%, transparent) 33.333%)",

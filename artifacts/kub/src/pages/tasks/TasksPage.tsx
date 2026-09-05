@@ -566,7 +566,11 @@ export function TasksPage() {
                   type="checkbox"
                   checked={showDeleted}
                   onChange={(event) => setShowDeleted(event.target.checked)}
-                  className="h-4 w-4 rounded border-[color:var(--kub-border-color)] accent-[var(--kub-cyan)]"
+                  // No `border` width anywhere: `rounded` is a radius, and the
+                  // stylesheet gives checkboxes a touch floor and nothing else.
+                  // The colour was drawing nothing, and this is a native
+                  // checkbox that the browser paints from `accent-*` regardless.
+                  className="h-4 w-4 rounded accent-[var(--kub-cyan)]"
                 />
                 <span className="truncate">Показать удалённые</span>
               </label>
@@ -626,7 +630,7 @@ export function TasksPage() {
         />
 
         {canBulkDeleteTasks && visibleDeletableTaskIds.length > 0 && (
-          <div className="mt-3 rounded-2xl border border-[color:var(--kub-border-color)] bg-[color-mix(in_srgb,var(--kub-cyan)_10%,transparent)] px-3 py-2.5 text-xs shadow-sm">
+          <div className="mt-3 rounded-2xl bg-[color-mix(in_srgb,var(--kub-cyan)_10%,transparent)] px-3 py-2.5 text-xs shadow-sm kub-raise">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 items-center gap-2">
                 <BulkSelectControl

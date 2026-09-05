@@ -203,7 +203,7 @@ export function StorageSection() {
       )}
 
       {state && editingLocation && (
-        <div className="border-t border-[color:var(--kub-border-color)] px-4 py-3">
+        <div className="border-t border-[color:var(--kub-rule)] px-4 py-3">
           <div data-testid="desktop-storage-location-editor">
             <KubInput
               label="Новая папка"
@@ -243,7 +243,7 @@ export function StorageSection() {
       )}
 
       {state && (
-        <div className="border-t border-[color:var(--kub-border-color)] px-4 py-3">
+        <div className="border-t border-[color:var(--kub-rule)] px-4 py-3">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <div className="flex items-center gap-1.5 text-sm text-[color:var(--kub-text)]">
               Лимит кэша
@@ -328,7 +328,7 @@ export function StorageSection() {
       )}
 
       {!state && errorMessage && (
-        <div className="border-t border-[color:var(--kub-border-color)] px-4 py-3 text-right">
+        <div className="border-t border-[color:var(--kub-rule)] px-4 py-3 text-right">
           <KubButton
             size="sm"
             variant="secondary"

@@ -265,7 +265,7 @@ export function CameraCaptureModal({ open, onClose, onAddFile }: CameraCaptureMo
           )}
         </div>
 
-        <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs leading-5 text-[color:var(--kub-muted)]">
+        <div className="rounded-xl px-3 py-2 text-xs leading-5 text-[color:var(--kub-muted)] kub-raise">
           <div className="flex items-center gap-2 font-semibold text-[color:var(--kub-text)]">
             <KubIcon name={status === "captured" ? "check" : "camera"} size={14} tone={status === "captured" ? "accent" : "muted"} />
             {statusCopy.title}

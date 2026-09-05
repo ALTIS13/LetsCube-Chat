@@ -491,7 +491,7 @@ export function AuditTab() {
           <KubSkeletonRows
             count={8}
             label="Загрузка журнала действий"
-            rowClassName="border-b border-[color:var(--kub-border-color)] last:border-b-0"
+            rowClassName="border-b border-[color:var(--kub-rule)] last:border-b-0"
           />
         ) : rows.length === 0 ? (
           <KubNoResults
@@ -509,7 +509,7 @@ export function AuditTab() {
                   key={r.id}
                   className={cn(
                     "px-3 py-3",
-                    i > 0 && "border-t border-[color:var(--kub-border-color)]",
+                    i > 0 && "border-t border-[color:var(--kub-rule)]",
                   )}
                 >
                   <button
@@ -547,7 +547,7 @@ export function AuditTab() {
                     />
                   </button>
                   {isOpen && (
-                    <div className="kub-raise mt-3 sm:ml-12 rounded-xl p-3 border border-[color:var(--kub-border-color)] space-y-1.5 text-xs">
+                    <div className="kub-raise mt-3 sm:ml-12 rounded-xl p-3 space-y-1.5 text-xs">
                       <KvRow label="ID записи" value={r.id} mono />
                       <KvRow label="Тип объекта" value={r.target_kind} />
                       <KvRow label="ID объекта" value={r.target_id ?? "—"} mono />

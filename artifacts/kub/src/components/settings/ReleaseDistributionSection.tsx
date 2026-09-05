@@ -127,7 +127,7 @@ export function ReleaseDistributionSection() {
           </div>
           {windowsNative && desktopUpdate && (
             <div
-              className="release-status-enter mt-3 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2"
+              className="release-status-enter mt-3 rounded-lg px-3 py-2 kub-raise"
               data-testid="desktop-update-settings"
             >
               <div className="flex items-center justify-between gap-3">
@@ -233,7 +233,7 @@ export function ReleaseDistributionSection() {
           )}
           {nativePackage && !windowsNative && (
             <div
-              className="release-status-enter mt-3 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2"
+              className="release-status-enter mt-3 rounded-lg px-3 py-2 kub-raise"
               data-testid="release-catalog-state"
               data-state={release.state}
             >
@@ -306,7 +306,7 @@ export function ReleaseDistributionSection() {
         </div>
       )}
       {(buildVersionLabel || shortCommit) && (
-        <div className="flex flex-wrap items-center gap-1.5 border-t border-[color:var(--kub-border-color)] px-4 py-2 text-xs text-[color:var(--kub-muted)]">
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-[color:var(--kub-rule)] px-4 py-2 text-xs text-[color:var(--kub-muted)]">
           {buildVersionLabel}
           {buildVersionLabel && shortCommit ? " · " : ""}
           {shortCommit ? `Ревизия ${shortCommit}` : ""}

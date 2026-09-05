@@ -506,7 +506,7 @@ export function VideoMessageRecorderModal({
 
   const statusPanel = (
     <div className={cn(
-      "w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs leading-5 text-[color:var(--kub-muted)]",
+      "w-full rounded-xl px-3 py-2 text-xs leading-5 text-[color:var(--kub-muted)] kub-raise",
       isRound && "bg-[var(--kub-surface)]"
     )}>
       <div className="flex items-center gap-2 font-semibold text-[color:var(--kub-text)]">

@@ -213,7 +213,7 @@ export function ProfileDecorationSection() {
           const style = key ? backgroundStyle(key) : null;
           return (
             <span
-              className="block h-9 w-14 rounded-lg border border-[color:var(--kub-border-color)]"
+              className="block h-9 w-14 rounded-lg kub-raise"
               style={{ background: style?.surface ?? "var(--kub-surface)" }}
             />
           );

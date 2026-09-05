@@ -465,7 +465,7 @@ export function RolesPermissionsTab() {
     return (
       <KubPanel className="space-y-3">
         <div className="flex items-start gap-3">
-          <span className="kub-raise flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--kub-border-color)] text-[color:var(--kub-cyan)]">
+          <span className="kub-raise flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[color:var(--kub-cyan)]">
             <KubIcon name="shield" size={18} />
           </span>
           <div className="min-w-0">
@@ -633,7 +633,7 @@ export function RolesPermissionsTab() {
             the pointer happened to be. The page is the scroller.
           */}
           <KubPanel padded={false} className="overflow-hidden">
-            <div className="border-b border-[color:var(--kub-border-color)] px-3 py-2.5">
+            <div className="border-b border-[color:var(--kub-rule)] px-3 py-2.5">
               <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
                 Роли по старшинству
               </div>
@@ -643,7 +643,7 @@ export function RolesPermissionsTab() {
             </div>
             {roleHierarchy.map((group) => (
               <div key={group.scope}>
-                <div className="kub-raise flex items-center justify-between gap-2 border-b border-[color:var(--kub-border-color)] px-3 py-1.5">
+                <div className="kub-raise flex items-center justify-between gap-2 border-b border-[color:var(--kub-rule)] px-3 py-1.5">
                   <span className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
                     {ROLE_SCOPE_LABEL[group.scope] ?? group.scope}
                   </span>
@@ -661,7 +661,7 @@ export function RolesPermissionsTab() {
                     <div
                       key={role.id}
                       className={cn(
-                        "flex w-full min-w-0 items-stretch border-b border-[color:var(--kub-border-color)] last:border-b-0",
+                        "flex w-full min-w-0 items-stretch border-b border-[color:var(--kub-rule)] last:border-b-0",
                         selectedRole?.id === role.id && "bg-[color-mix(in_srgb,var(--kub-cyan)_10%,transparent)]",
                       )}
                     >
@@ -754,7 +754,7 @@ export function RolesPermissionsTab() {
                     <KubBadge tone="muted" pill>{ROLE_SCOPE_LABEL[selectedRole.scope]}</KubBadge>
                   </div>
                 </div>
-                <div className="kub-raise rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                <div className="kub-raise rounded-xl px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
                   {getRoleScopeDescription(selectedRole.scope)}
                 </div>
                 {selectedRole.is_system && (
@@ -768,7 +768,7 @@ export function RolesPermissionsTab() {
                   </KubNotice>
                 )}
                 {!selectedRole.is_system && (
-                  <div className="kub-raise rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                  <div className="kub-raise rounded-xl px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-muted)]">
                     {selectedRoleUsageKnown
                       ? selectedRoleUsageCount === 0
                         ? "Кастомная роль нигде не назначена. После применения migration её можно удалить полностью."
@@ -898,7 +898,7 @@ export function RolesPermissionsTab() {
                     const open = openCategories.has(category);
                     const panelId = `role-permission-category-${category}`;
                     return (
-                      <div key={category} className="kub-raise overflow-hidden rounded-xl border border-[color:var(--kub-border-color)]">
+                      <div key={category} className="kub-raise overflow-hidden rounded-xl">
                         <button
                           type="button"
                           onClick={() => toggleCategory(category)}
@@ -926,7 +926,7 @@ export function RolesPermissionsTab() {
                           </span>
                         </button>
                         {open && (
-                          <div id={panelId} className="space-y-1.5 border-t border-[color:var(--kub-border-color)] px-3 py-3">
+                          <div id={panelId} className="space-y-1.5 border-t border-[color:var(--kub-rule)] px-3 py-3">
                             {PERMISSION_CATEGORY_DESCRIPTION[category] && (
                               <div className="pb-1 text-[12px] leading-relaxed text-[color:var(--kub-muted)]">
                                 {PERMISSION_CATEGORY_DESCRIPTION[category]}
@@ -1035,7 +1035,7 @@ export function RolesPermissionsTab() {
               </KubButton>
             </div>
 
-            <div className="overflow-hidden rounded-xl border border-[color:var(--kub-border-color)]">
+            <div className="overflow-hidden rounded-xl kub-raise">
               {roleAssignments.map(({ assignment, profile, role }) => {
                 if (!profile || !role) return null;
                 const busyKey = `remove-role-${assignment.user_id}-${assignment.role_id}`;
@@ -1043,7 +1043,7 @@ export function RolesPermissionsTab() {
                 return (
                   <div
                     key={`${assignment.user_id}:${assignment.role_id}`}
-                    className="grid gap-2 border-b border-[color:var(--kub-border-color)] px-3 py-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-center"
+                    className="grid gap-2 border-b border-[color:var(--kub-rule)] px-3 py-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-center"
                   >
                     <div className="flex min-w-0 items-center gap-2">
                       <UserAvatar user={profile} size="sm" />
