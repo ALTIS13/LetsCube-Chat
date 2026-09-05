@@ -53,9 +53,6 @@
   --kub-motion-fast: 140ms;       /* index.css --kub-motion-fast */
   --kub-motion-standard: 220ms;   /* index.css --kub-motion-standard */
   --kub-motion-emphasis: 320ms;   /* index.css --kub-motion-emphasis */
-  /* Ambient, not an interaction timing — the same note index.css carries. It
-     paces the travelling highlight on the stage in flight. */
-  --kub-motion-shimmer: 1200ms;   /* index.css --kub-motion-shimmer */
   --kub-ease-standard: cubic-bezier(.2, .8, .2, 1);  /* index.css */
   --kub-ease-emphasis: cubic-bezier(.16, 1, .3, 1);  /* index.css */
 
@@ -70,6 +67,11 @@
      colour rules through every component. */
   --verify-accent: var(--kub-cyan);
   --verify-dim: var(--kub-muted);
+  /* The channel has its own accent so red stays reserved for the one thing red
+     should mean here: the fingerprint did not match. A connection that never
+     opened is shown as a dead channel rather than a red one — it is not a
+     security finding, and colouring it the same would spend the alarm. */
+  --channel-accent: var(--kub-cyan);
   /* The progress track reports how far the sequence got, which is not the same
      question as whether the node was confirmed. A stage that finished stays
      finished even when the comparison afterwards failed, so this accent never
@@ -87,8 +89,9 @@ body[data-verdict="verified"] { --verify-accent: var(--kub-online); --track-acce
    all, including a chain the trust store rejected. Both are red because both
    mean the screen cannot confirm the node, but only "changed" ever gets an
    override — see the notice rules further down. */
-body[data-verdict="changed"] { --verify-accent: var(--kub-danger); }
-body[data-verdict="failed"] { --verify-accent: var(--kub-danger); }
+body[data-verdict="verified"] { --channel-accent: var(--kub-online); }
+body[data-verdict="changed"] { --verify-accent: var(--kub-danger); --channel-accent: var(--kub-danger); }
+body[data-verdict="failed"] { --verify-accent: var(--kub-danger); --channel-accent: var(--kub-muted); }
 
 * { box-sizing: border-box; }
 html, body { width: 100%; min-width: 960px; height: 100%; min-height: 640px; margin: 0; overflow: hidden; }
@@ -206,8 +209,11 @@ body[data-verdict="changed"] .fingerprint-label { color: var(--kub-danger); }
  * currentColor so a state change is a colour change on the parent. The former
  * markup stacked bordered <div>/<i>/<b> elements, which could not hold a
  * consistent weight and did not match anything else in the product.
- * The boxes stay 148x126 and 132x126: the rails and ports are positioned
- * against those two widths.
+ * The boxes stay 148x126 and 132x126, and both drawings are inset by exactly
+ * --chassis-inset from their box edges, so one node offset gives both sides the
+ * same visible gap. Before this, the two drawings had different insets and the
+ * two nodes had different hand-written offsets, which is how one of them ended
+ * up looking clipped against its block.
  */
 .computer, .server { grid-row: 3; position: relative; display: grid; place-items: center; color: var(--kub-surface-3); }
 .computer { width: 148px; height: 126px; }
@@ -227,64 +233,164 @@ body[data-verdict="changed"] .fingerprint-label { color: var(--kub-danger); }
 }
 .device-art .device-live { fill: var(--verify-accent); stroke: none; transition: fill var(--kub-motion-standard) var(--kub-ease-standard); }
 
-/* ── Rails, ports and the seal ───────────────────────────────────────────── */
-.connection-port {
-  position: absolute; top: 57px; width: 12px; height: 12px;
-  border: 2px solid var(--verify-dim); border-radius: 50%;
-  background: var(--kub-bg); box-shadow: 0 0 0 3px var(--kub-bg); z-index: 3;
-  transition: border-color var(--kub-motion-standard) var(--kub-ease-standard);
+/* ── Connector ───────────────────────────────────────────────────────────────
+ * One track with three identical nodes, and every number below derived from
+ * the six constants on .handshake rather than tuned by hand.
+ *
+ * The hand-tuned version was measurably crooked, which is what the rebuild is
+ * for. Measured in the browser before this change: the left rail met its node
+ * exactly, the right rail ran 4px *into* its node, the two nodes sat at
+ * different heights (63px and 59px) and different distances from their devices
+ * (6px and 10px), and the three circles were 12px, 34px and 12px. The right
+ * node was the one that read as clipped and out of place. Deriving both sides
+ * from the same expressions is what makes that class of defect unrepresentable
+ * — a single number now moves both sides together.
+ *
+ * The middle grid column is 34px wide, so each outer column is (W-34)/2 wide
+ * and its centre falls at W/4 ∓ 8.5px; --column-shift carries that offset.
+ */
+.handshake {
+  --device-half: 74px;      /* .computer is 148px wide */
+  --node-half: 66px;        /* .server is 132px wide */
+  --chassis-inset: 2px;     /* how far the drawn edge sits inside its own box */
+  --column-shift: 8.5px;    /* a quarter of the middle column: an outer
+                               column of width (W-34)/2 has its centre at
+                               W/4 - 8.5px, not at W/4 */
+  --connector-node: 14px;   /* the two sockets, one size */
+  --conduit-height: 20px;   /* the channel is an enclosure, not a line */
+  --conduit-core: 20px;     /* the junction that caps both halves */
+  --connector-clear: 18px;  /* drawn chassis edge to node, both sides alike */
+  /* Distance from a device box's edge out to the far side of its node. */
+  --node-offset: calc(var(--connector-clear) + var(--connector-node) - var(--chassis-inset));
 }
-.connection-port::after {
-  content: ""; position: absolute; inset: 3px; border-radius: 50%;
-  background: var(--verify-accent);
-  transition: background var(--kub-motion-standard) var(--kub-ease-standard);
-}
-.connection-port-client { right: -18px; }
-.connection-port-server { top: 53px; left: -22px; }
 
-.rail-wrap { position: absolute; inset: calc(50% + 1.5px) 0 auto; height: 34px; pointer-events: none; }
-.rail { position: absolute; top: calc(50% - 1.5px); height: 3px; overflow: hidden; background: var(--kub-surface-3); border-radius: 2px; }
-.rail-left { left: calc(25% + 83.5px); right: calc(50% + 17px); }
-.rail-right { left: calc(50% + 17px); right: calc(25% + 75.5px); }
-/* scaleX only. Animating the rail's width would change a laid-out box, which
-   docs/operations/shared-motion-feedback.md rules out; a transform reflows
-   nothing. */
-.rail i {
-  display: block; width: 100%; height: 100%; background: var(--verify-accent);
-  transform: scaleX(.06);
-  transition: transform var(--kub-motion-emphasis) var(--kub-ease-standard),
+/* The three nodes: same box, same border, same way of saying pending, in
+   flight and done. Only the state rules further down differ between them. */
+/* The two sockets where the channel meets each machine. Rounded rectangles,
+   like every other object on this screen; the circles they replaced were the
+   giveaway that this assembly was a stepper. */
+.connection-port {
+  position: absolute; z-index: 3;
+  width: var(--connector-node); height: var(--connector-node);
+  border: 2px solid var(--channel-accent); border-radius: 5px;
+  background: var(--kub-surface-2);
+  box-shadow: 0 0 0 3px var(--kub-bg);
+  transition: border-color var(--kub-motion-standard) var(--kub-ease-standard),
               background var(--kub-motion-standard) var(--kub-ease-standard);
 }
-.rail-left i { transform-origin: left; }
-.rail-right i { transform-origin: right; }
+/* Both devices are 126px tall, so one rule puts both nodes on the same line. */
+.connection-port { top: calc(50% - var(--connector-node) / 2); }
+/* Both sockets are the same object in the same state: the channel is plugged in
+   at both ends for as long as the screen exists. What changes is the channel. */
+.handshake.is-connected .connection-port { background: var(--channel-accent); }
+.connection-port-client { right: calc(-1 * var(--node-offset)); }
+.connection-port-server { left: calc(-1 * var(--node-offset)); }
 
+
+.rail-wrap { position: absolute; inset: calc(50% + 1.5px) 0 auto; height: 34px; pointer-events: none; }
+
+/* -- The channel ------------------------------------------------------------
+ * Not a progress bar. The row of stage capsules below already reports how far
+ * the sequence has got, and a second thing filling up beside it was reporting
+ * the same fact twice; this shows only what state the channel between the two
+ * machines is in.
+ *
+ * It is drawn as an enclosure rather than a line: rounded, filled with
+ * --kub-surface-2 and outlined in --kub-border-color, which is exactly how the
+ * two device blocks either side of it are drawn. The three states are told
+ * apart without reading anything - traffic moving inside it, a filled channel
+ * standing still, or an empty one - and red is spent only on the fingerprint
+ * that did not match.
+ */
+.rail {
+  position: absolute; top: calc(50% - var(--conduit-height) / 2);
+  height: var(--conduit-height); overflow: hidden;
+  background: var(--kub-surface-2);
+  border: 1px solid var(--kub-border-color);
+  transition: background var(--kub-motion-standard) var(--kub-ease-standard),
+              border-color var(--kub-motion-standard) var(--kub-ease-standard);
+}
+/* Each half is open towards the junction, so the two halves and the core read
+   as one tube rather than as three objects in a row. */
+.rail-left {
+  left: calc(25% - var(--column-shift) + var(--device-half) + var(--node-offset));
+  right: calc(50% + var(--conduit-core) / 2);
+  border-radius: 999px 0 0 999px; border-right: 0;
+}
+.rail-right {
+  left: calc(50% + var(--conduit-core) / 2);
+  right: calc(25% - var(--column-shift) + var(--node-half) + var(--node-offset));
+  border-radius: 0 999px 999px 0; border-left: 0;
+}
+/* Traffic: a highlight travelling the length of the channel, left to right,
+   from this computer towards the node. It moves a gradient inside a box whose
+   size never changes, so nothing is laid out again while it runs. */
+.rail i {
+  display: block; width: 100%; height: 100%;
+  background:
+    linear-gradient(90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--channel-accent) 30%, transparent) 38%,
+      color-mix(in srgb, var(--channel-accent) 68%, transparent) 50%,
+      color-mix(in srgb, var(--channel-accent) 30%, transparent) 62%,
+      transparent 100%);
+  background-size: 150px 100%;
+  background-repeat: no-repeat;
+  animation: conduit-flow calc(var(--kub-motion-standard) * 12) linear infinite;
+}
+@keyframes conduit-flow {
+  from { background-position: -150px 0; }
+  to { background-position: calc(100% + 150px) 0; }
+}
+
+/* The junction joining the two halves. Same height as the channel, so the tube
+   runs continuously through it. */
 .center-seal {
-  position: absolute; top: 0; left: 50%; width: 34px; height: 34px;
-  border: 2px solid var(--kub-surface-3); border-radius: 50%;
-  display: grid; place-items: center; background: var(--kub-surface);
-  transform: translateX(-50%); z-index: 2;
-  transition: border-color var(--kub-motion-standard) var(--kub-ease-standard),
+  position: absolute; z-index: 3;
+  top: calc(17px - var(--conduit-core) / 2);
+  left: 50%; margin-left: calc(-1 * var(--conduit-core) / 2);
+  width: var(--conduit-core); height: var(--conduit-core);
+  border: 1px solid var(--kub-border-color); border-radius: 7px;
+  background: var(--kub-surface-2);
+  transition: background var(--kub-motion-standard) var(--kub-ease-standard),
+              border-color var(--kub-motion-standard) var(--kub-ease-standard),
               box-shadow var(--kub-motion-standard) var(--kub-ease-standard);
 }
-.center-seal span {
-  width: 8px; height: 8px; border-radius: 50%; background: var(--verify-dim);
-  transition: background var(--kub-motion-standard) var(--kub-ease-standard);
+
+/* Confirmed: the channel stops moving and stands full. */
+.handshake.is-connected .rail {
+  background: color-mix(in srgb, var(--channel-accent) 20%, var(--kub-surface-2));
+  border-color: color-mix(in srgb, var(--channel-accent) 55%, transparent);
 }
-
-body[data-stage="tls_origin_check"] .rail i { transform: scaleX(.34); }
-body[data-stage="update_check"] .rail i { transform: scaleX(.62); }
-body[data-stage="production_navigation"] .rail i,
-body[data-stage="workspace_ready"] .rail i,
-body[data-stage="complete"] .rail i { transform: scaleX(1); }
-/* A stopped connection retracts the rail rather than leaving it mid-sweep,
-   because a half-filled rail reads as "still working". */
-body[data-stage="recoverable_error"] .rail i { transform: scaleX(.06); }
-
+.handshake.is-connected .rail i {
+  animation: none;
+  background: color-mix(in srgb, var(--channel-accent) 34%, transparent);
+}
 .handshake.is-connected .center-seal {
-  border-color: var(--verify-accent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--verify-accent) 14%, transparent);
+  background: var(--channel-accent);
+  border-color: var(--channel-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--channel-accent) 14%, transparent);
 }
-.handshake.is-connected .center-seal span { background: var(--verify-accent); }
+
+/* The fingerprint did not match, or nothing connected at all: the channel is
+   empty and still. --channel-accent is red for the first and muted for the
+   second, so the alarm is spent on the security finding only. */
+body[data-verdict="changed"] .rail,
+body[data-verdict="failed"] .rail {
+  background: var(--kub-bg);
+  border-color: color-mix(in srgb, var(--channel-accent) 45%, transparent);
+}
+body[data-verdict="changed"] .rail i,
+body[data-verdict="failed"] .rail i { animation: none; background: none; }
+body[data-verdict="failed"] .center-seal {
+  background: var(--kub-bg);
+  border-color: color-mix(in srgb, var(--channel-accent) 70%, transparent);
+}
+body[data-verdict="changed"] .center-seal {
+  background: var(--channel-accent);
+  border-color: var(--channel-accent);
+}
+
 .handshake.is-connected .device-art .device-line { stroke: var(--verify-accent); }
 
 /* ── Progress track ──────────────────────────────────────────────────────────
@@ -312,53 +418,93 @@ body[data-stage="recoverable_error"] .rail i { transform: scaleX(.06); }
    share one column rather than reading as two different widths. */
 .startup-scope { margin: 0 0 16px; color: var(--kub-muted); font-size: 11.5px; line-height: 15px; text-align: center; width: min(680px, 78vw); }
 
-/* Four separate capsules, one per stage, rather than a hairline threaded
-   through four dots. The dotted rail was the shape this screen had before and
-   read as a diagram of a process; a segmented bar reads as progress through it,
-   and each segment belongs to the label underneath it instead of floating
-   above a shared line. */
+/* -- Stage track -------------------------------------------------------------
+ * One object, not four. Four 4px bars separated by 10px gaps read as a dotted
+ * rule or as underlines beneath four fields; nothing joined them into a single
+ * indicator. This is one recessed channel with one continuous fill, and the
+ * stage boundaries are notches cut into it rather than gaps between separate
+ * pieces, so the division is visible without the object coming apart.
+ *
+ * The previous version also animated its active segment on
+ * --kub-motion-shimmer, which is .kub-skeleton's timing. That made a working
+ * screen look like one that had failed to load. Nothing here uses that timing:
+ * the only movement is a slow pulse on the head of the fill, several times
+ * longer and much weaker than a skeleton, and it stops entirely under reduced
+ * motion — a part-filled track already says "in progress" standing still.
+ */
 .stages {
+  position: relative; isolation: isolate;
+  --track-height: 7px;
+  --fill: 0%;
   width: min(680px, 78vw);
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
   margin: 0; padding: 0; list-style: none;
 }
+/* The channel: darker than the surface it sits on, with the light catching its
+   top edge, so it reads as cut into the page rather than drawn on it. */
+.stages::before {
+  content: ""; position: absolute; z-index: 0; top: 0; left: 0; right: 0;
+  height: var(--track-height); border-radius: 999px;
+  background: var(--kub-bg);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / .55), inset 0 0 0 1px var(--kub-border-color);
+}
+/* The fill: one unbroken run from the left edge to the head, brightest at the
+   head. Sized by background-size rather than by width, so the fill grows
+   without any box being laid out again. */
+.stages::after {
+  content: ""; position: absolute; z-index: 1; top: 0; left: 0; right: 0;
+  height: var(--track-height); border-radius: 999px;
+  background-image: linear-gradient(90deg,
+    color-mix(in srgb, var(--track-accent) 34%, transparent) 0%,
+    color-mix(in srgb, var(--track-accent) 68%, transparent) 60%,
+    var(--track-accent) 100%);
+  background-size: var(--fill) 100%;
+  background-repeat: no-repeat;
+  transition: background-size var(--kub-motion-emphasis) var(--kub-ease-standard);
+}
+/* The head sits at the middle of the stage in flight: that stage has started
+   and has not finished, and the middle is the only honest place to put it. */
+body[data-stage="network_check"] .stages { --fill: 12.5%; }
+body[data-stage="tls_origin_check"] .stages { --fill: 37.5%; }
+body[data-stage="update_check"] .stages { --fill: 62.5%; }
+body[data-stage="production_navigation"] .stages,
+body[data-stage="workspace_ready"] .stages { --fill: 87.5%; }
+body[data-stage="complete"] .stages { --fill: 100%; }
+/* A changed fingerprint is found after the handshake, so the network and
+   certificate stages did finish; the fill stops on that boundary rather than
+   emptying and contradicting the labels underneath it. */
+body[data-stage="recoverable_error"][data-verdict="changed"] .stages { --fill: 50%; }
+
 .stages li {
-  position: relative; padding-top: 15px;
-  color: var(--kub-muted); font-size: 11px; line-height: 14px; text-align: center;
+  position: relative; z-index: 2; padding-top: 15px;
+  color: color-mix(in srgb, var(--kub-muted) 55%, transparent);
+  font-size: 11px; line-height: 14px; text-align: center;
   transition: color var(--kub-motion-standard) var(--kub-ease-standard);
 }
-.stages li::before {
-  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px;
-  border-radius: 999px; background: var(--kub-surface-3);
-  transition: background var(--kub-motion-standard) var(--kub-ease-standard);
+/* Notches, cut through the fill in the page's own colour, so the track stays
+   one object while the four stages stay countable. */
+.stages li + li::before {
+  content: ""; position: absolute; z-index: 2; top: 0; left: 0;
+  width: 2px; height: var(--track-height);
+  background: var(--kub-bg);
 }
-/* Multiples of --kub-motion-instant, so the sweep is paced by the same unit as
-   the rest of the product rather than by a number chosen here. The delay only
-   postpones a paint: the class is still applied from the shell's snapshot, so
-   nothing can show a stage as finished before the shell has said it is. */
-.stages li:nth-child(2), .stages li:nth-child(2)::before { transition-delay: var(--kub-motion-instant); }
-.stages li:nth-child(3), .stages li:nth-child(3)::before { transition-delay: calc(var(--kub-motion-instant) * 2); }
-.stages li:nth-child(4), .stages li:nth-child(4)::before { transition-delay: calc(var(--kub-motion-instant) * 3); }
 .stages li.is-done { color: var(--kub-muted); }
-.stages li.is-done::before { background: var(--track-accent); }
 .stages li.is-active { color: var(--kub-text); }
-/* The stage in flight carries a travelling highlight so an unfinished segment
-   is distinguishable from a finished one at a glance. It moves a gradient, not
-   a box: the capsule's size never changes. --kub-motion-shimmer is the
-   application's own ambient timing, the one .kub-skeleton uses. */
-.stages li.is-active::before {
-  background:
-    linear-gradient(90deg,
-      color-mix(in srgb, var(--track-accent) 26%, var(--kub-surface-3)) 0%,
-      var(--track-accent) 46%,
-      var(--track-accent) 54%,
-      color-mix(in srgb, var(--track-accent) 26%, var(--kub-surface-3)) 100%);
-  background-size: 260% 100%;
-  animation: stage-sweep var(--kub-motion-shimmer) linear infinite;
+/* The head's glow, and the only thing on this indicator that moves. Twelve
+   times --kub-motion-standard is 2.64s, more than twice .kub-skeleton's loop
+   and far shallower, so it reads as something working rather than something
+   still loading. */
+.stages li.is-active::after {
+  content: ""; position: absolute; z-index: 1; pointer-events: none;
+  top: calc(var(--track-height) / 2); left: 50%;
+  width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%;
+  background: radial-gradient(closest-side,
+    color-mix(in srgb, var(--track-accent) 52%, transparent), transparent 100%);
+  animation: stage-head calc(var(--kub-motion-standard) * 12) var(--kub-ease-standard) infinite;
 }
-@keyframes stage-sweep {
-  from { background-position: 130% 0; }
-  to { background-position: -130% 0; }
+@keyframes stage-head {
+  0%, 100% { opacity: .5; }
+  50% { opacity: 1; }
 }
 
 /* ── Notices ─────────────────────────────────────────────────────────────────
@@ -431,16 +577,13 @@ button.is-quiet:hover { background: var(--kub-surface-3); color: var(--kub-text)
     --kub-motion-standard: 1ms;
     --kub-motion-emphasis: 1ms;
   }
-  .stages li,
-  .stages li::before { transition-delay: 0s; }
-  /* The highlight is removed rather than sped up: collapsing --kub-motion-shimmer
-     would leave it looping at 1ms, which is a flicker, not a reduction. A
-     part-filled capsule says "in progress" without moving, so the stage in
-     flight is still distinguishable from the ones behind it. */
-  .stages li.is-active::before {
-    animation: none;
-    background: linear-gradient(90deg, var(--track-accent) 0 55%, var(--kub-surface-3) 55% 100%);
-  }
+  /* Both loops are removed rather than shortened: collapsing their duration
+     would leave them cycling at a few milliseconds, which is a flicker and not
+     a reduction. Neither carries information — the fill's length says how far
+     the sequence has got, and the channel's colour says what state it is in,
+     and both of those still read standing still. */
+  .stages li.is-active::after { animation: none; }
+  .rail i { animation: none; }
   @starting-style {
     .failure, .mismatch { opacity: 1; transform: none; }
   }

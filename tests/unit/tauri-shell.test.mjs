@@ -445,10 +445,110 @@ test("Windows startup uses one main window and a local approved handshake scene"
   assert.match(css, /\.endpoint-client\s*\{\s*grid-column:\s*1;/);
   assert.match(css, /\.endpoint-server\s*\{\s*grid-column:\s*3;/);
   assert.match(css, /grid-template-rows:\s*74px\s+20px\s+126px\s+20px\s+19px\s+4px\s+14px/);
-  assert.match(css, /\.connection-port-client\s*\{\s*right:\s*-18px;/);
-  assert.match(css, /\.connection-port-server\s*\{\s*top:\s*53px;\s*left:\s*-22px;/);
-  assert.match(css, /\.rail-left\s*\{\s*left:\s*calc\(25% \+ 83\.5px\);/);
-  assert.match(css, /\.rail-right\s*\{[^}]*right:\s*calc\(25% \+ 75\.5px\);/s);
+  // These four numbers used to be pinned literally: right -18px, left -22px,
+  // and the two rail ends at 25%+83.5px and 25%+75.5px. Measured in a browser,
+  // that geometry put the left rail exactly on its node and the right rail 4px
+  // *inside* its node, with the two nodes 4px apart vertically and at different
+  // distances from their devices. The assertions were green the whole time,
+  // because pinning each side separately cannot notice that they disagree.
+  //
+  // What is pinned now is that neither side has a number of its own.
+  assert.match(css, /\.connection-port-client\s*\{\s*right:\s*calc\(-1 \* var\(--node-offset\)\);\s*\}/);
+  assert.match(css, /\.connection-port-server\s*\{\s*left:\s*calc\(-1 \* var\(--node-offset\)\);\s*\}/);
+  assert.match(css, /\.connection-port\s*\{\s*top:\s*calc\(50% - var\(--connector-node\) \/ 2\);\s*\}/);
+  assert.match(
+    css,
+    /--node-offset:\s*calc\(var\(--connector-clear\) \+ var\(--connector-node\) - var\(--chassis-inset\)\)/,
+  );
+  assert.match(
+    css,
+    /\.rail-left\s*\{[^}]*left:\s*calc\(25% - var\(--column-shift\) \+ var\(--device-half\) \+ var\(--node-offset\)\);[^}]*right:\s*calc\(50% \+ var\(--conduit-core\) \/ 2\);[^}]*\}/s,
+  );
+  assert.match(
+    css,
+    /\.rail-right\s*\{[^}]*left:\s*calc\(50% \+ var\(--conduit-core\) \/ 2\);[^}]*right:\s*calc\(25% - var\(--column-shift\) \+ var\(--node-half\) \+ var\(--node-offset\)\);[^}]*\}/s,
+  );
+  // The two sockets are one declaration, so they cannot end up different sizes
+  // the way the old 12px/34px/12px circles did.
+  assert.match(
+    css,
+    /\.connection-port\s*\{[^}]*width:\s*var\(--connector-node\);\s*height:\s*var\(--connector-node\);/s,
+  );
+  // The channel is an enclosure, not a line: it carries the device blocks' own
+  // fill and outline.
+  assert.match(
+    css,
+    /\.rail\s*\{[^}]*height:\s*var\(--conduit-height\);[^}]*background:\s*var\(--kub-surface-2\);[^}]*border:\s*1px solid var\(--kub-border-color\);/s,
+  );
+  // It must not report progress. The stage track below already does that, and
+  // two indicators counting the same stages is what made this one read as a
+  // stepper. Nothing here may key off a stage.
+  assert.doesNotMatch(css, /\.rail\s+i\s*\{[^}]*transform:\s*scaleX/s);
+  assert.doesNotMatch(
+    css,
+    /body\[data-stage=[^\]]+\][^{]*\.rail/,
+    "the channel must show the state of the channel, not the stage the shell is on",
+  );
+  // Movement along the channel is one of its three states, so it has to stop.
+  assert.match(css, /prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.rail i \{ animation: none; \}/);
+
+  // -- The stage track --------------------------------------------------------
+  // It was four 4px bars with 10px gaps, which read as a dotted rule or as
+  // underlines beneath four fields rather than as one indicator, and its active
+  // segment was animated on --kub-motion-shimmer, .kub-skeleton's own timing,
+  // so a working screen looked like one that had failed to load.
+  //
+  // One recessed channel, spanning the whole block, with one fill.
+  assert.match(css, /\.stages\s*\{[^}]*gap:\s*0;/s, "the track is one object, so the columns carry no gaps");
+  assert.match(
+    css,
+    /\.stages::before\s*\{[^}]*left:\s*0;\s*right:\s*0;[^}]*height:\s*var\(--track-height\);[^}]*background:\s*var\(--kub-bg\);[^}]*inset 0 1px 2px/s,
+    "the track must span the block and be recessed into it",
+  );
+  assert.match(
+    css,
+    /\.stages::after\s*\{[^}]*background-size:\s*var\(--fill\) 100%;/s,
+    "the fill is one continuous run, sized by background-size so no box is laid out again",
+  );
+  // Stage boundaries are cut into the track, not made by holding the pieces
+  // apart; that is what keeps it a single object.
+  assert.match(
+    css,
+    /\.stages li \+ li::before\s*\{[^}]*width:\s*2px;\s*height:\s*var\(--track-height\);\s*background:\s*var\(--kub-bg\);/s,
+    "the divisions must be notches in the track",
+  );
+  // Three levels of label, so the row reads without the track.
+  assert.match(css, /\.stages li\.is-done \{ color: var\(--kub-muted\); \}/);
+  assert.match(css, /\.stages li\.is-active \{ color: var\(--kub-text\); \}/);
+
+  // Nothing on this screen may borrow the skeleton's timing again. The head's
+  // pulse is a multiple of --kub-motion-standard, several times longer than
+  // .kub-skeleton's loop, and it is the only thing on the indicator that moves.
+  for (const [label, sheet] of [
+    ["startup.css", css],
+    ["startup-overlay.css", readText("windows-tauri/ui/startup-overlay.css")],
+  ]) {
+    assert.doesNotMatch(
+      sheet.replace(/\/\*[\s\S]*?\*\//g, ""),
+      /var\(--kub-motion-shimmer\)/,
+      `${label} must not animate on the skeleton's timing`,
+    );
+    for (const [, duration] of sheet.matchAll(/animation:[^;]*?calc\(var\(--kub-motion-standard\) \* (\d+)\)/g)) {
+      assert.ok(
+        Number(duration) >= 8,
+        `${label} runs an ambient loop at ${duration}x220ms; it has to stay well clear of the 1200ms skeleton`,
+      );
+    }
+  }
+  assert.match(
+    css,
+    /\.stages li\.is-active::after\s*\{[^}]*animation: stage-head calc\(var\(--kub-motion-standard\) \* 12\)/s,
+  );
+  assert.match(
+    css,
+    /prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.stages li\.is-active::after \{ animation: none; \}/,
+    "the head's pulse must stop, not merely shorten",
+  );
   assert.match(css, /prefers-reduced-motion/);
   assert.match(script, /letscube:\/\/startup-state/);
   assert.match(script, /startup_start_dragging/);
@@ -765,9 +865,40 @@ test("production startup handoff keeps one stable scene long enough to read", ()
   assert.match(css, /\.startup-overlay-endpoint-server\s*\{\s*grid-column:\s*3;/);
   assert.match(css, /\.startup-overlay-fingerprint\s*\{[^}]*height:\s*74px;/s);
   assert.match(css, /grid-template-rows:\s*74px\s+20px\s+126px\s+20px\s+19px\s+4px\s+14px/);
-  assert.match(css, /\.startup-overlay-port-server\s*\{\s*top:\s*53px;\s*left:\s*-22px;/);
-  assert.match(css, /\.startup-overlay-rail:first-child\s*\{[^}]*left:\s*calc\(25% \+ 83\.5px\);/s);
-  assert.match(css, /\.startup-overlay-rail:last-child\s*\{[^}]*right:\s*calc\(25% \+ 75\.5px\);/s);
+  // The overlay's connector must be derived exactly as the startup window's is,
+  // or the whole assembly shifts at the handoff. Same expressions, not the same
+  // numbers written twice.
+  assert.match(css, /\.startup-overlay-port-server\s*\{\s*left:\s*calc\(-1 \* var\(--node-offset\)\);\s*\}/);
+  assert.match(css, /\.startup-overlay-port-client\s*\{\s*right:\s*calc\(-1 \* var\(--node-offset\)\);\s*\}/);
+  assert.match(
+    css,
+    /\.startup-overlay-rail:first-child\s*\{[^}]*left:\s*calc\(25% - var\(--column-shift\) \+ var\(--device-half\) \+ var\(--node-offset\)\);/s,
+  );
+  assert.match(
+    css,
+    /\.startup-overlay-rail:last-child\s*\{[^}]*right:\s*calc\(25% - var\(--column-shift\) \+ var\(--node-half\) \+ var\(--node-offset\)\);/s,
+  );
+  // The constants must hold the same values in both scenes, so the two cannot
+  // drift apart one number at a time.
+  const startupCss = readText("windows-tauri/ui/startup.css");
+  for (const name of [
+    "--device-half",
+    "--node-half",
+    "--chassis-inset",
+    "--column-shift",
+    "--connector-node",
+    "--conduit-height",
+    "--conduit-core",
+    "--connector-clear",
+  ]) {
+    const read = (sheet) => sheet.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1]?.trim() ?? null;
+    assert.notEqual(read(css), null, `${name} must be declared in both scenes`);
+    assert.equal(
+      read(css),
+      read(startupCss),
+      `${name} differs between the startup window and the overlay`,
+    );
+  }
   assert.match(script, /minimumVisibleDuration\s*=\s*2_200/);
   assert.match(script, /successHoldDuration\s*=\s*900/);
   assert.match(script, /Math\.max\(minimumVisibleDuration[^)]*successHoldDuration/s);

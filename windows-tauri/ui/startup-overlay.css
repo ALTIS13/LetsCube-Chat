@@ -34,7 +34,6 @@
   --kub-motion-instant: 90ms;     /* index.css --kub-motion-instant */
   --kub-motion-standard: 220ms;   /* index.css --kub-motion-standard */
   --kub-motion-emphasis: 320ms;   /* index.css --kub-motion-emphasis */
-  --kub-motion-shimmer: 1200ms;   /* index.css --kub-motion-shimmer */
   --kub-ease-standard: cubic-bezier(.2, .8, .2, 1);  /* index.css */
 
   --kub-radius: 8px;
@@ -42,6 +41,9 @@
   --startup-font-mono: Consolas, 'Cascadia Mono', Menlo, monospace;
   --verify-accent: var(--kub-cyan);
   --verify-dim: var(--kub-muted);
+  /* See startup.css: the channel keeps its own accent so red means only the
+     fingerprint that did not match. */
+  --channel-accent: var(--kub-cyan);
   /* See startup.css: progress is not a verdict, so this one never turns red. */
   --track-accent: var(--kub-cyan);
 
@@ -51,8 +53,8 @@
   transition: opacity var(--kub-motion-emphasis) var(--kub-ease-standard);
 }
 :host(.is-fading) { opacity: 0; pointer-events: none; }
-:host([data-verdict="verified"]) { --verify-accent: var(--kub-online); --track-accent: var(--kub-online); }
-:host([data-verdict="changed"]) { --verify-accent: var(--kub-danger); }
+:host([data-verdict="verified"]) { --verify-accent: var(--kub-online); --track-accent: var(--kub-online); --channel-accent: var(--kub-online); }
+:host([data-verdict="changed"]) { --verify-accent: var(--kub-danger); --channel-accent: var(--kub-danger); }
 
 * { box-sizing: border-box; }
 .startup-overlay-scene {
@@ -99,6 +101,20 @@
 .startup-overlay-fingerprint-value[data-digest="short"] { font-size: 13px; line-height: 17px; letter-spacing: .1em; }
 .startup-overlay-fingerprint-value[data-digest="full"] { font-size: 11px; line-height: 1.28; }
 
+/* Connector: the same six constants and the same derived expressions as
+   startup.css. This scene continues the startup window's, so any difference
+   here would show up as the whole assembly jumping at the handoff. */
+.startup-overlay-handshake {
+  --device-half: 74px;
+  --node-half: 66px;
+  --chassis-inset: 2px;
+  --column-shift: 8.5px;
+  --connector-node: 14px;
+  --conduit-height: 20px;
+  --conduit-core: 20px;
+  --connector-clear: 18px;
+  --node-offset: calc(var(--connector-clear) + var(--connector-node) - var(--chassis-inset));
+}
 .startup-overlay-computer, .startup-overlay-server { grid-row: 3; position: relative; display: grid; place-items: center; }
 .startup-overlay-computer { width: 148px; height: 126px; }
 .startup-overlay-server { width: 132px; height: 126px; }
@@ -111,81 +127,141 @@
 }
 .startup-overlay-lamp { fill: var(--verify-accent); stroke: none; transition: fill var(--kub-motion-standard) var(--kub-ease-standard); }
 
+/* The same channel as startup.css, drawn the same way. This scene continues
+   the startup window's, so a different treatment here would read as the
+   connection changing at the handoff. */
 .startup-overlay-port {
-  position: absolute; top: 57px; width: 12px; height: 12px;
-  border: 2px solid var(--verify-dim); border-radius: 50%;
-  background: var(--kub-bg); box-shadow: 0 0 0 3px var(--kub-bg); z-index: 3;
-  transition: border-color var(--kub-motion-standard) var(--kub-ease-standard);
+  position: absolute; z-index: 3;
+  width: var(--connector-node); height: var(--connector-node);
+  border: 2px solid var(--channel-accent); border-radius: 5px;
+  background: var(--kub-surface-2);
+  box-shadow: 0 0 0 3px var(--kub-bg);
+  transition: border-color var(--kub-motion-standard) var(--kub-ease-standard),
+              background var(--kub-motion-standard) var(--kub-ease-standard);
 }
-.startup-overlay-port::after {
-  content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--verify-accent);
-  transition: background var(--kub-motion-standard) var(--kub-ease-standard);
-}
-.startup-overlay-port-client { right: -18px; }
-.startup-overlay-port-server { top: 53px; left: -22px; }
+.startup-overlay-port { top: calc(50% - var(--connector-node) / 2); }
+.startup-overlay-port-client { right: calc(-1 * var(--node-offset)); }
+.startup-overlay-port-server { left: calc(-1 * var(--node-offset)); }
 
 .startup-overlay-rail-wrap { position: absolute; inset: calc(50% + 1.5px) 0 auto; height: 34px; pointer-events: none; }
-.startup-overlay-rail { position: absolute; top: calc(50% - 1.5px); height: 3px; overflow: hidden; background: var(--kub-surface-3); border-radius: 2px; }
-.startup-overlay-rail:first-child { left: calc(25% + 83.5px); right: calc(50% + 17px); }
-.startup-overlay-rail:last-child { left: calc(50% + 17px); right: calc(25% + 75.5px); }
+.startup-overlay-rail {
+  position: absolute; top: calc(50% - var(--conduit-height) / 2);
+  height: var(--conduit-height); overflow: hidden;
+  background: var(--kub-surface-2);
+  border: 1px solid var(--kub-border-color);
+  transition: background var(--kub-motion-standard) var(--kub-ease-standard),
+              border-color var(--kub-motion-standard) var(--kub-ease-standard);
+}
+.startup-overlay-rail:first-child {
+  left: calc(25% - var(--column-shift) + var(--device-half) + var(--node-offset));
+  right: calc(50% + var(--conduit-core) / 2);
+  border-radius: 999px 0 0 999px; border-right: 0;
+}
+.startup-overlay-rail:last-child {
+  left: calc(50% + var(--conduit-core) / 2);
+  right: calc(25% - var(--column-shift) + var(--node-half) + var(--node-offset));
+  border-radius: 0 999px 999px 0; border-left: 0;
+}
 .startup-overlay-rail i {
-  display: block; width: 100%; height: 100%; background: var(--verify-accent);
-  transition: background var(--kub-motion-standard) var(--kub-ease-standard);
+  display: block; width: 100%; height: 100%;
+  background:
+    linear-gradient(90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--channel-accent) 30%, transparent) 38%,
+      color-mix(in srgb, var(--channel-accent) 68%, transparent) 50%,
+      color-mix(in srgb, var(--channel-accent) 30%, transparent) 62%,
+      transparent 100%);
+  background-size: 150px 100%;
+  background-repeat: no-repeat;
+  animation: startup-overlay-conduit-flow calc(var(--kub-motion-standard) * 12) linear infinite;
+}
+@keyframes startup-overlay-conduit-flow {
+  from { background-position: -150px 0; }
+  to { background-position: calc(100% + 150px) 0; }
 }
 .startup-overlay-seal {
-  position: absolute; top: 0; left: 50%; width: 34px; height: 34px;
-  border: 2px solid var(--kub-surface-3); border-radius: 50%;
-  display: grid; place-items: center; background: var(--kub-surface);
-  transform: translateX(-50%);
-  transition: border-color var(--kub-motion-standard) var(--kub-ease-standard),
+  position: absolute; z-index: 3;
+  top: calc(17px - var(--conduit-core) / 2);
+  left: 50%; margin-left: calc(-1 * var(--conduit-core) / 2);
+  width: var(--conduit-core); height: var(--conduit-core);
+  border: 1px solid var(--kub-border-color); border-radius: 7px;
+  background: var(--kub-surface-2);
+  transition: background var(--kub-motion-standard) var(--kub-ease-standard),
+              border-color var(--kub-motion-standard) var(--kub-ease-standard),
               box-shadow var(--kub-motion-standard) var(--kub-ease-standard);
 }
-.startup-overlay-seal span {
-  width: 8px; height: 8px; border-radius: 50%; background: var(--verify-dim);
-  transition: background var(--kub-motion-standard) var(--kub-ease-standard);
+.is-connected .startup-overlay-rail {
+  background: color-mix(in srgb, var(--channel-accent) 20%, var(--kub-surface-2));
+  border-color: color-mix(in srgb, var(--channel-accent) 55%, transparent);
 }
+.is-connected .startup-overlay-rail i {
+  animation: none;
+  background: color-mix(in srgb, var(--channel-accent) 34%, transparent);
+}
+.is-connected .startup-overlay-port { background: var(--channel-accent); }
 .is-connected .startup-overlay-seal {
-  border-color: var(--verify-accent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--verify-accent) 14%, transparent);
+  background: var(--channel-accent);
+  border-color: var(--channel-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--channel-accent) 14%, transparent);
 }
-.is-connected .startup-overlay-seal span { background: var(--verify-accent); }
 .is-connected .startup-overlay-detail { stroke: var(--verify-accent); }
 
 .startup-overlay-state { display: grid; align-content: start; justify-items: center; border-top: 1px solid var(--kub-border-color); padding-top: 20px; }
 .startup-overlay-status { margin: 0 0 14px; color: var(--kub-text); font-size: 14px; line-height: 18px; text-align: center; }
 .startup-overlay-scope { margin: 0 0 16px; width: min(680px, 78vw); color: var(--kub-muted); font-size: 11.5px; line-height: 15px; text-align: center; }
-/* Same segmented track as startup.css. The two scenes are one scene as far as
-   the person is concerned, so the indicator may not change shape at the
-   handoff. */
+/* The same single recessed track as startup.css. This scene continues the
+   startup window's, so the indicator may not change shape at the handoff. The
+   overlay only exists once the first three stages have finished, so its fill
+   always stands at the head of the fourth. */
 .startup-overlay-stages {
+  position: relative; isolation: isolate;
+  --track-height: 7px;
+  --fill: 87.5%;
   width: min(680px, 78vw);
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 0; padding: 0; list-style: none;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin: 0; padding: 0; list-style: none;
 }
+.startup-overlay-stages::before {
+  content: ""; position: absolute; z-index: 0; top: 0; left: 0; right: 0;
+  height: var(--track-height); border-radius: 999px;
+  background: var(--kub-bg);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / .55), inset 0 0 0 1px var(--kub-border-color);
+}
+.startup-overlay-stages::after {
+  content: ""; position: absolute; z-index: 1; top: 0; left: 0; right: 0;
+  height: var(--track-height); border-radius: 999px;
+  background-image: linear-gradient(90deg,
+    color-mix(in srgb, var(--track-accent) 34%, transparent) 0%,
+    color-mix(in srgb, var(--track-accent) 68%, transparent) 60%,
+    var(--track-accent) 100%);
+  background-size: var(--fill) 100%;
+  background-repeat: no-repeat;
+  transition: background-size var(--kub-motion-emphasis) var(--kub-ease-standard);
+}
+:host([data-connected="true"]) .startup-overlay-stages { --fill: 100%; }
 .startup-overlay-stages li {
-  position: relative; padding-top: 15px;
-  color: var(--kub-muted); font-size: 11px; line-height: 14px; text-align: center;
+  position: relative; z-index: 2; padding-top: 15px;
+  color: color-mix(in srgb, var(--kub-muted) 55%, transparent);
+  font-size: 11px; line-height: 14px; text-align: center;
   transition: color var(--kub-motion-standard) var(--kub-ease-standard);
 }
-.startup-overlay-stages li::before {
-  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px;
-  border-radius: 999px; background: var(--kub-surface-3);
-  transition: background var(--kub-motion-standard) var(--kub-ease-standard);
+.startup-overlay-stages li + li::before {
+  content: ""; position: absolute; z-index: 2; top: 0; left: 0;
+  width: 2px; height: var(--track-height);
+  background: var(--kub-bg);
 }
-.startup-overlay-stages li.is-done::before { background: var(--track-accent); }
+.startup-overlay-stages li.is-done { color: var(--kub-muted); }
 .startup-overlay-stages li.is-active { color: var(--kub-text); }
-.startup-overlay-stages li.is-active::before {
-  background:
-    linear-gradient(90deg,
-      color-mix(in srgb, var(--track-accent) 26%, var(--kub-surface-3)) 0%,
-      var(--track-accent) 46%,
-      var(--track-accent) 54%,
-      color-mix(in srgb, var(--track-accent) 26%, var(--kub-surface-3)) 100%);
-  background-size: 260% 100%;
-  animation: startup-overlay-stage-sweep var(--kub-motion-shimmer) linear infinite;
+.startup-overlay-stages li.is-active::after {
+  content: ""; position: absolute; z-index: 1; pointer-events: none;
+  top: calc(var(--track-height) / 2); left: 50%;
+  width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%;
+  background: radial-gradient(closest-side,
+    color-mix(in srgb, var(--track-accent) 52%, transparent), transparent 100%);
+  animation: startup-overlay-stage-head calc(var(--kub-motion-standard) * 12) var(--kub-ease-standard) infinite;
 }
-@keyframes startup-overlay-stage-sweep {
-  from { background-position: 130% 0; }
-  to { background-position: -130% 0; }
+@keyframes startup-overlay-stage-head {
+  0%, 100% { opacity: .5; }
+  50% { opacity: 1; }
 }
 
 @media (max-height: 720px) {
@@ -209,10 +285,8 @@
        workspace. src-tauri/src/lib.rs asserts this literal. */
     transition-duration: 1ms;
   }
-  /* Removed, not shortened: --kub-motion-shimmer at 1ms is a flicker. A
-     part-filled capsule says "in progress" without moving. */
-  .startup-overlay-stages li.is-active::before {
-    animation: none;
-    background: linear-gradient(90deg, var(--track-accent) 0 55%, var(--kub-surface-3) 55% 100%);
-  }
+  /* Both loops removed rather than shortened: at a few milliseconds they are a
+     flicker, not a reduction, and neither carries information. */
+  .startup-overlay-rail i { animation: none; }
+  .startup-overlay-stages li.is-active::after { animation: none; }
 }

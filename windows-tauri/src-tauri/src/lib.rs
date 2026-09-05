@@ -1922,8 +1922,17 @@ mod tests {
         assert!(css.contains("prefers-reduced-motion: reduce"));
         assert!(css.contains("transition-duration: 1ms"));
         assert!(css.contains("grid-template-rows: 74px 20px 126px 20px 19px 4px 14px"));
-        assert!(css.contains("left: calc(25% + 83.5px)"));
-        assert!(css.contains("right: calc(25% + 75.5px)"));
+        // Both rails derive their outer end from the same expression instead
+        // of from two hand-written numbers. The literals pinned here before
+        // described a connector whose right rail ran 4px into its own node and
+        // whose two nodes sat 4px apart vertically; pinning each side
+        // separately could not notice that they disagreed.
+        assert!(css.contains(
+            "left: calc(25% - var(--column-shift) + var(--device-half) + var(--node-offset))"
+        ));
+        assert!(css.contains(
+            "right: calc(25% - var(--column-shift) + var(--node-half) + var(--node-offset))"
+        ));
         assert!(script.contains("matchMedia"));
         assert!(script.contains("reducedMotion ? 1 : 320"));
         assert!(script.contains("fadeDuration"));

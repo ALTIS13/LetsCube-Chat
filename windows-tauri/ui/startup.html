@@ -43,12 +43,14 @@
             <span class="fingerprint-value" data-fingerprint-value data-kind="note"></span>
           </div>
           <div class="computer">
+            <!-- Drawn edge inset by exactly 2px, matching --chassis-inset, so the
+                 connector node keeps the same visible gap on both sides. -->
             <svg class="device-art" viewBox="0 0 148 126" role="img" aria-label="Этот компьютер" focusable="false">
-              <rect class="device-glass" x="9" y="9" width="130" height="80" rx="6" />
-              <rect class="device-frame" x="9" y="9" width="130" height="80" rx="6" />
-              <path class="device-frame" d="M74 89v14M55 111h38" />
-              <path class="device-line" d="M28 36h44M28 50h62M28 64h30" />
-              <circle class="device-live" cx="116" cy="36" r="4.5" />
+              <rect class="device-glass" x="2" y="6" width="144" height="92" rx="9" />
+              <rect class="device-frame" x="2" y="6" width="144" height="92" rx="9" />
+              <path class="device-frame" d="M74 98v12M52 118h44" />
+              <path class="device-line" d="M24 40h50M24 56h70M24 72h34" />
+              <circle class="device-live" cx="126" cy="40" r="5" />
             </svg>
             <span class="connection-port connection-port-client" data-testid="startup-client-port"></span>
           </div>
@@ -58,9 +60,7 @@
 
         <div class="rail-wrap" aria-hidden="true">
           <div class="rail rail-left"><i></i></div>
-          <div id="startup-center-seal" data-testid="startup-center-seal" class="center-seal">
-            <span></span>
-          </div>
+          <div id="startup-center-seal" data-testid="startup-center-seal" class="center-seal"></div>
           <div class="rail rail-right"><i></i></div>
         </div>
 
@@ -70,13 +70,15 @@
             <span class="fingerprint-value" data-fingerprint-value data-kind="note"></span>
           </div>
           <div class="server">
+            <!-- Same 2px inset as the monitor, and the middle bay is centred on
+                 126/2 so the connector meets the drawing where it is drawn. -->
             <svg class="device-art" viewBox="0 0 132 126" role="img" aria-label="Узел LETSCUBE" focusable="false">
-              <rect class="device-glass" x="11" y="7" width="110" height="112" rx="9" />
-              <rect class="device-frame" x="11" y="7" width="110" height="112" rx="9" />
-              <path class="device-line" d="M48 31h50M48 63h50M48 95h50" />
-              <circle class="device-live" cx="34" cy="31" r="4" />
-              <circle class="device-live" cx="34" cy="63" r="4" />
-              <circle class="device-live" cx="34" cy="95" r="4" />
+              <rect class="device-glass" x="2" y="4" width="128" height="118" rx="11" />
+              <rect class="device-frame" x="2" y="4" width="128" height="118" rx="11" />
+              <path class="device-line" d="M44 31h60M44 63h60M44 95h60" />
+              <circle class="device-live" cx="26" cy="31" r="4.5" />
+              <circle class="device-live" cx="26" cy="63" r="4.5" />
+              <circle class="device-live" cx="26" cy="95" r="4.5" />
             </svg>
             <span class="connection-port connection-port-server" data-testid="startup-server-port"></span>
           </div>
