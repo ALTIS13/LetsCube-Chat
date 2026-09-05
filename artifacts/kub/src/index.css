@@ -226,7 +226,12 @@
      samples what is behind it. #6FA3DC is 4.91:1 and 6.15:1. Raising the
      panel's own alpha until the old colour passed would have meant giving up
      the translucency to keep a colour, which is backwards. */
-  --kub-accent-text: #6FA3DC;
+  /* Raised to clear the veiled surfaces as well as the plain ones. The read
+     receipt chip sits on --kub-surface-3 and now takes the veil, compositing to
+     rgb(34,58,84), where the previous value measured 4.41:1. This is 5.03:1
+     there, 7.00:1 on a panel and 5.56:1 on the worst backdrop a panel can
+     meet. */
+  --kub-accent-text: #7FAEE2;
   --kub-warn: #F5B50A;
   --kub-chat-bg: var(--kub-bg);
   --kub-message-out: #0E2C44;
@@ -463,10 +468,15 @@
   /* See the note in .dark. Measured against a solid black field, which is what
      a panel in this theme composites towards at worst. #DC2626 as a word is
      4.05:1 there; #C81E1E is 4.81:1, and 5.74:1 on white. */
-  --kub-danger-text: #C81E1E;
+  /* 4.4953:1 on a veiled menu row — five thousandths short, which is still
+     short. The veil is very slightly denser than the surface this was measured
+     against when it was chosen. 4.78:1 now, and 5.44:1 unveiled. */
+  --kub-danger-text: #C11B1B;
   /* 4.42:1 for --kub-cyan (#2d6fac) here, against 5.02:1 for this one, which
      is the smallest step along the same hue that clears the threshold. */
-  --kub-accent-text: #2A66A0;
+  /* Same correction as .dark, same cause: 4.36:1 on the veiled chip. This is
+     5.05:1 there, 6.76:1 on a panel, 6.09:1 on the worst backdrop. */
+  --kub-accent-text: #255C92;
   /* Darkened along the same hue: at #C2870A the warning dot measured 2.55:1 on
      --kub-surface-3, under the 3:1 an indicator needs. */
   --kub-warn: #A8760A;
@@ -651,10 +661,18 @@ html, body {
    Not an inset box-shadow, which would do the same job but would silently
    cancel any shadow the element already carries — and several of the things
    that need this are cards. */
-.kub-raise,
-.kub-raise-hover {
-  transition: background-image var(--kub-motion-fast) var(--kub-ease-standard);
-}
+/* No transition here, and that is deliberate rather than an omission.
+   background-image does not interpolate: from `none` to a gradient is a
+   discrete swap, checked in a browser — sampled 200ms into a declared 600ms
+   transition, the computed value was already the final one. So the declaration
+   that used to sit here bought no fade at all, while a `transition` shorthand
+   outside any layer beats Tailwind's `@layer utilities`, which meant it
+   replaced the transition of anything it was applied to. Measured: the quick
+   reaction button, which pairs its hover with `transition-all hover:scale-125`,
+   went from easing to snapping.
+
+   If a fade is ever wanted here it has to be an opacity transition on a
+   pseudo-element; there is no way to get one out of this property. */
 .kub-raise,
 .kub-raise-hover:hover,
 .kub-raise-hover:focus-visible {
