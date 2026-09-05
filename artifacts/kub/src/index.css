@@ -125,7 +125,13 @@
   --app-font-serif: Georgia, serif;
   --app-font-mono: Menlo, monospace;
 
-  --radius: .5rem; /* 8px */
+  /* 10px, up from 8. The derived steps below it become 6 / 8 / 10 / 14, which
+     is the single change that moves the shapes furthest for the least risk:
+     a radius is not part of any layout calculation, so nothing measures
+     differently for it. The scale in actual use is rounded-xl 213 times,
+     rounded-lg 210, rounded-full 182, rounded-md 103 — so raising the base
+     raises the two most common steps together and keeps their relationship. */
+  --radius: .625rem; /* 10px */
 
   --tracking-normal: 0em;
   --spacing: 0.25rem;
@@ -218,6 +224,14 @@
      --kub-raised for anything that has to be findable against a surface which
      might itself move. */
   --kub-raise-veil: rgba(255, 255, 255, 0.07);
+  /* The other direction: a control that is present but not offered. It sinks
+     rather than fading, because fading is what the product did — six values of
+     opacity across 79 places — and on a translucent panel that shows the
+     wallpaper straight through the control. Measured: opacity gave 2.23:1 in
+     this theme, this gives 7.73:1, and a disabled control still has to be
+     read, only not offered. Relative like its twin, so it works on a page, a
+     panel or inside a menu. */
+  --kub-sink-veil: rgba(0, 0, 0, 0.30);
 
   /* ── Colours that carry text ──────────────────────────────────────────────
    * A colour that is legible as a 3px border or a filled button is not
@@ -347,7 +361,13 @@
      as raised because nothing was. This composites to rgb(13,33,57) against a
      page of rgb(5,11,24), which is an elevation the eye can find, and the text
      it carries still measures 15.13:1 with the secondary tone at 6.68:1. */
-  --glass-fill: rgba(17, 43, 71, 0.70);        /* --kub-surface-3 at .70 */
+  /* Quiet. Composites to rgb(11,26,46) over a ground of rgb(5,11,24) — six
+     values of lift, where .70 gave twenty-two and made the product look
+     washed out. What separates a panel here is its hairline, which composites
+     to rgb(29,58,93), close to double the panel in every channel. The text it
+     carries measures better for the change, not worse: 16.3:1 and 7.19:1
+     against 15.1:1 and 6.68:1. */
+  --glass-fill: rgba(17, 43, 71, 0.46);        /* --kub-surface-3 at .46 */
   /* Same base as the panel, at a much higher alpha. Both halves of that matter:
      the shared base keeps a menu on the panel's side of the elevation rather
      than below it, and the alpha is what makes it readable over content it
@@ -359,7 +379,7 @@
   /* The lit edge does most of the work of saying "this is a sheet of
      something". At .09 it was below the threshold of a 1px line on a dark
      ground — technically present, never seen. */
-  --glass-line: rgba(255, 255, 255, 0.14);
+  --glass-line: rgba(255, 255, 255, 0.10);
   --glass-blur: blur(20px) saturate(122%);
   --glass-shadow:
     0 20px 44px -26px rgba(0, 0, 0, 0.9),
@@ -368,9 +388,9 @@
   /* Two brand-hue pools and a vignette. Well below the contrast of any content
      — this is light for the glass to pick up, not decoration. */
   --kub-ambient:
-    radial-gradient(66% 50% at 14% -8%, rgba(77, 139, 208, 0.30) 0%, rgba(77, 139, 208, 0) 62%),
-    radial-gradient(58% 46% at 94% 4%, rgba(66, 127, 194, 0.22) 0%, rgba(66, 127, 194, 0) 64%),
-    radial-gradient(52% 42% at 78% 104%, rgba(77, 139, 208, 0.14) 0%, rgba(77, 139, 208, 0) 60%),
+    radial-gradient(66% 50% at 14% -8%, rgba(77, 139, 208, 0.12) 0%, rgba(77, 139, 208, 0) 62%),
+    radial-gradient(58% 46% at 94% 4%, rgba(66, 127, 194, 0.09) 0%, rgba(66, 127, 194, 0) 64%),
+    radial-gradient(52% 42% at 78% 104%, rgba(77, 139, 208, 0.06) 0%, rgba(77, 139, 208, 0) 60%),
     radial-gradient(120% 96% at 50% 58%, rgba(0, 0, 0, 0) 44%, rgba(0, 0, 0, 0.34) 100%);
 
   --tg-bg: var(--kub-bg);
@@ -493,6 +513,11 @@
   /* Ink rather than light, for the same reason the raised colour reverses
      here: on a light ground a nearer surface is told by going down. */
   --kub-raise-veil: rgba(23, 51, 82, 0.07);
+  /* See .dark. Ink here too — a well is darker than its surface in both
+     themes, which is the one elevation that does NOT reverse. .07 and not
+     more: measured, .10 gives 4.74:1 and .14 gives 4.40:1, so the step that
+     looks bolder is the one that stops being readable. */
+  --kub-sink-veil: rgba(23, 51, 82, 0.07);
   /* See the note in .dark. Measured against a solid black field, which is what
      a panel in this theme composites towards at worst. #DC2626 as a word is
      4.05:1 there; #C81E1E is 4.81:1, and 5.74:1 on white. */
