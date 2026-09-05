@@ -17,6 +17,8 @@ import {
 } from "@/lib/chatSummaryBatching";
 import { isIncomingMessage } from "@/lib/messageActor";
 import { MESSAGE_LAST_MESSAGE_SELECT } from "@/lib/messageProjection";
+import { subscribeByTable } from "@/lib/realtimeTableChannels";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 const VISIBILITY_REFRESH_THROTTLE_MS = 10_000;
 const CHAT_REFETCH_DEBOUNCE_MS = 350;
@@ -275,21 +277,34 @@ export function useChats() {
         void fetchChats();
       }, 250);
     };
-    const channelName = `chats:user:${userId}`;
-    const channel = rt
-      .channel(channelName)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, debouncedRefetch)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, debouncedRefetch)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chats" }, debouncedRefetch)
-      .on("postgres_changes", { event: "DELETE", schema: "public", table: "chats" }, debouncedRefetch)
-      .subscribe((status: string) => {
-        if (import.meta.env.DEV) console.debug("[chats:user]", userId, status);
-      });
-    registerChannel(channelName);
+    // One channel per table. These four bindings used to share a channel, and
+    // the two `chats` ones took the two `messages` ones down with them: the
+    // channel reported SUBSCRIBED and delivered nothing at all, because
+    // `public.chats` is not in the `supabase_realtime` publication. That is the
+    // sidebar's whole live path, so a chat that was not open never moved its
+    // unread badge or its preview until some unrelated refetch happened to run.
+    // See lib/realtimeTableChannels.ts for the measurement.
+    const baseName = `chats:user:${userId}`;
+    const channels = subscribeByTable<typeof debouncedRefetch, RealtimeChannel>(
+      rt,
+      baseName,
+      [
+        { event: "INSERT", schema: "public", table: "messages", handler: debouncedRefetch },
+        { event: "UPDATE", schema: "public", table: "messages", handler: debouncedRefetch },
+        { event: "UPDATE", schema: "public", table: "chats", handler: debouncedRefetch },
+        { event: "DELETE", schema: "public", table: "chats", handler: debouncedRefetch },
+      ],
+      (name, status) => {
+        if (import.meta.env.DEV) console.debug(`[${name}]`, userId, status);
+      },
+    );
+    for (const { name } of channels) registerChannel(name);
     return () => {
       if (timer) clearTimeout(timer);
-      rt.removeChannel(channel);
-      unregisterChannel(channelName);
+      for (const { name, channel } of channels) {
+        rt.removeChannel(channel);
+        unregisterChannel(name);
+      }
     };
   }, [userId, rt, fetchChats]);
 
