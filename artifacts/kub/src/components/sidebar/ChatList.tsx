@@ -559,7 +559,7 @@ function ChatDesktopContextMenu({
       <div
         role="menu"
         data-chat-context-menu="desktop"
-        className="fixed z-50 w-[272px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] py-1 shadow-2xl kub-glow-soft"
+        className="kub-glass-strong fixed z-50 w-[272px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] py-1"
         style={style}
       >
         <ChatActionHeader chat={chat} />
@@ -597,7 +597,7 @@ function ChatMobileActionSheet({
         role="dialog"
         aria-modal="true"
         data-chat-context-menu="mobile"
-        className="max-h-[82vh] w-full overflow-hidden rounded-t-2xl border-t border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] pb-safe shadow-2xl"
+        className="kub-glass-strong max-h-[82vh] w-full overflow-hidden rounded-t-2xl border-t border-[color:var(--kub-border-color)] pb-safe"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mx-auto mt-2 h-1.5 w-11 rounded-full bg-[var(--kub-surface-3)]" />

@@ -81,6 +81,36 @@ const covers = [
   ["components/kub/KubModal.tsx", "kub-modal-panel", "kub-glass-strong"],
   ["components/kub/KubTooltip.tsx", "text-[color:var(--kub-text)] border", "kub-glass-strong"],
   ["components/kub/KubFeedbackViewport.tsx", "py-2.5 pl-4 pr-3", "kub-glass-strong"],
+  // The chat list's context menu, in both the shapes it takes.
+  ["components/sidebar/ChatList.tsx", "w-[272px] max-w-[calc(100vw-24px)]", "kub-glass-strong"],
+  ["components/sidebar/ChatList.tsx", "max-h-[82vh] w-full overflow-hidden", "kub-glass-strong"],
+];
+
+/**
+ * Things that lie ON a piece of chrome and have to be found against it.
+ *
+ * They take `--kub-raised`, and specifically not `--kub-surface-2`. That token
+ * used to serve this, and stopped being able to the moment the chrome above it
+ * became translucent and composited past it: the chat list's hover was measured
+ * at a surface ratio of 1.002 against the row it was meant to highlight, which
+ * is to say it had stopped existing while still being perfectly present in the
+ * source. `--kub-raised` measures 1.127 in the same place.
+ *
+ * Each entry is [file, a landmark, how many such elements, how many uses of
+ * --kub-surface-2 may legitimately remain].
+ *
+ * ChatHeader keeps one. That button sits inside a dialog, not on chrome, and
+ * a dialog is `kub-glass-strong`, which composites to within two values of
+ * --kub-raised — converting it would move the problem rather than fix it.
+ * Raised-on-a-covering-surface has no token yet; the count is 1 so that the
+ * day one appears, this line is what asks to be updated.
+ */
+const raised = [
+  ["components/sidebar/ChatListItem.tsx", "hover:bg-[var(--kub-raised)]", 1, 0],
+  ["components/sidebar/SidebarHeader.tsx", "hover:bg-[var(--kub-raised)]", 2, 0],
+  ["components/sidebar/FolderTabs.tsx", "hover:bg-[var(--kub-raised)]", 1, 0],
+  ["components/chat/ChatHeader.tsx", "hover:bg-[var(--kub-raised)]", 3, 1],
+  ["components/chat/MessageInput.tsx", "bg-[var(--kub-raised)]", 7, 0],
 ];
 
 /** The class string of one surface, found by a landmark that is not the glass class itself. */
@@ -157,6 +187,28 @@ for (const [file, rootClasses] of layered) {
       /\b-?z-\d/,
       `${file}'s body takes a z-index; that makes it a stacking context and clamps the ` +
         "overlays it opens",
+    );
+  });
+}
+
+for (const [file, needle, count, survivors] of raised) {
+  test(`${file} finds its raised surfaces against the chrome, not with --kub-surface-2`, () => {
+    const source = read(file);
+    const found = source.split(needle).length - 1;
+    assert.equal(
+      found,
+      count,
+      `${file}: expected ${count} element(s) carrying "${needle}", found ${found}`,
+    );
+    // Counting the survivors as well as the converts, because a partial
+    // conversion is the failure that actually happens: one strip left behind
+    // is invisible in a screenshot of the others.
+    const leftBehind = withoutComments(source).split("bg-[var(--kub-surface-2)]").length - 1;
+    assert.equal(
+      leftBehind,
+      survivors,
+      `${file}: ${leftBehind} surface(s) filled from --kub-surface-2, expected ${survivors}. ` +
+        "That token now composites below the chrome these sit on",
     );
   });
 }

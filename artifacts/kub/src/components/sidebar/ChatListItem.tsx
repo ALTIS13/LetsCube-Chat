@@ -158,7 +158,7 @@ export function ChatListItem({
       data-has-messages={lastMsg ? "true" : "false"}
       className={cn(
         "w-full flex items-center gap-3 px-3 py-2.5 transition-colors relative group",
-        "hover:bg-[var(--kub-surface-2)]",
+        "hover:bg-[var(--kub-raised)]",
         isSelected && "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] hover:bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]",
         isDragging && "opacity-55",
         isDragOver && "bg-[color-mix(in_srgb,var(--kub-cyan)_10%,transparent)] outline outline-1 outline-[color:var(--kub-cyan)]/45"

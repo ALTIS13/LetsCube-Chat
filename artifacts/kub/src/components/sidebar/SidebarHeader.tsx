@@ -42,7 +42,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
   const [showNewGroup, setShowNewGroup] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const iconButtonClass =
-    "kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)]";
+    "kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-[var(--kub-raised)]";
 
   // Search commands use `mobileSection='search'` as a one-shot focus signal.
   useEffect(() => {
@@ -151,7 +151,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
           <div className="relative shrink-0">
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              className="kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)] p-1"
+              className="kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-[var(--kub-raised)] p-1"
               aria-label="Меню"
             >
               {currentUser ? (

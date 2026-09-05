@@ -694,7 +694,7 @@ export function MessageInput({
       : null;
     return (
       <div className="flex-shrink-0 px-3 pb-3 pt-2 bg-[var(--kub-chat-bg)]">
-        <div className="flex items-center gap-3 rounded-2xl px-4 py-3 bg-[var(--kub-surface-2)] border border-[color:var(--kub-danger)]/30">
+        <div className="flex items-center gap-3 rounded-2xl px-4 py-3 bg-[var(--kub-raised)] border border-[color:var(--kub-danger)]/30">
           <KubIcon name="muted" size={18} tone="danger" className="flex-shrink-0" />
           <div className="flex-1 min-w-0 text-xs">
             <div className="font-semibold text-[color:var(--kub-text)]">
@@ -870,7 +870,7 @@ export function MessageInput({
       {showAttach && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setShowAttach(false)} />
-          <div className="mx-3 mb-2 rounded-2xl shadow-2xl relative z-20 overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] kub-glow-soft">
+          <div className="mx-3 mb-2 rounded-2xl shadow-2xl relative z-20 overflow-hidden bg-[var(--kub-raised)] border border-[color:var(--kub-border-color)] kub-glow-soft">
             {attachItems.map(({ icon, label, tone, action }) => (
               <button
                 key={label}
@@ -896,7 +896,7 @@ export function MessageInput({
 
       <div className="px-3 pb-3 pt-2">
         {isEditing && editingMessage && (
-          <div className="flex items-center gap-2 rounded-t-xl px-3 py-2 mb-1 bg-[var(--kub-surface-2)] border-l-2 border-[color:var(--kub-cyan)]">
+          <div className="flex items-center gap-2 rounded-t-xl px-3 py-2 mb-1 bg-[var(--kub-raised)] border-l-2 border-[color:var(--kub-cyan)]">
             <KubIcon name="edit" size={13} tone="accent" className="flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">Редактирование</div>
@@ -913,7 +913,7 @@ export function MessageInput({
         )}
 
         {!isEditing && replyTo && (
-          <div className="flex items-center gap-2 rounded-t-xl px-3 py-2 mb-1 bg-[var(--kub-surface-2)] border-l-2 border-[color:var(--kub-cyan)]">
+          <div className="flex items-center gap-2 rounded-t-xl px-3 py-2 mb-1 bg-[var(--kub-raised)] border-l-2 border-[color:var(--kub-cyan)]">
             <KubIcon name="reply" size={13} tone="accent" className="flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="text-xs font-semibold text-[color:var(--kub-accent-text)]">
@@ -967,7 +967,7 @@ export function MessageInput({
         {(modeFeedback || holdRecorderState) && (
           <div
             data-testid={holdRecorderState ? "composer-recording-lock-indicator" : "recorder-mode-feedback"}
-            className="relative mb-2 flex items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs text-[color:var(--kub-muted)]"
+            className="relative mb-2 flex items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-raised)] px-3 py-2 text-xs text-[color:var(--kub-muted)]"
           >
             {holdRecorderState && (
               <div
@@ -1129,7 +1129,7 @@ function MediaQualitySelector({
     <div
       data-testid="media-quality-selector"
       className={cn(
-        "rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 py-2",
+        "rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-raised)] px-2 py-2",
         !compact && "mb-2",
         compact && "bg-[var(--kub-surface)]",
       )}
@@ -1203,7 +1203,7 @@ function AttachmentTray({
   onRerecord?: (attachmentId: string) => void;
 }) {
   return (
-    <div data-testid="staged-attachment-tray" className="mb-2 rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 py-2">
+    <div data-testid="staged-attachment-tray" className="mb-2 rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-raised)] px-2 py-2">
       <div className="flex max-w-full gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
         {attachments.map((attachment) => {
           const busy = attachment.status === "uploading" || attachment.status === "sending";
