@@ -103,9 +103,12 @@ test.describe("LETSCUBE Windows storage", () => {
         return;
       }
 
-      // One phase deliberately breaks a relocation half way through, and is
-      // here to record what the person is left with rather than to require that
-      // it be good. Its verdict is the harness's, taken from the tree.
+      // One phase deliberately breaks a relocation half way through: the copy
+      // succeeds and the settings file cannot be written. What the person is
+      // left with is the whole point of it, so it is recorded either way — and,
+      // since the relocation now records the new location before removing the
+      // old copy, it is also required to be good. An unwritable settings file
+      // must cost a duplicate copy at the target, never the session.
       if (phase === "orphan") {
         const observed = await observeSession(page);
         const state = await storageState(page).catch(() => null);
@@ -115,6 +118,15 @@ test.describe("LETSCUBE Windows storage", () => {
         expect(observed.url, "the client must have reached production at all").toContain(
           PRODUCTION_ORIGIN,
         );
+        const survived = await expectStillSignedIn(page);
+        expect(
+          survived,
+          "a relocation that could not be recorded must leave the session where it was",
+        ).toContain("phase-record-");
+        expect(
+          state?.location,
+          "and must leave the app running from the profile the settings still name",
+        ).not.toBe(relocatedProfile);
         return;
       }
 
