@@ -475,10 +475,46 @@ test("Windows startup uses one main window and a local approved handshake scene"
     /\.connection-port\s*\{[^}]*width:\s*var\(--connector-node\);\s*height:\s*var\(--connector-node\);/s,
   );
   // The channel is an enclosure, not a line: it carries the device blocks' own
-  // fill and outline.
+  // material. The relationship is what is pinned, not a literal colour — the
+  // colour is exactly what changed when these surfaces became translucent, and
+  // a pin on the old value would have failed for a change that kept the
+  // contract intact.
   assert.match(
     css,
-    /\.rail\s*\{[^}]*height:\s*var\(--conduit-height\);[^}]*background:\s*var\(--kub-surface-2\);[^}]*border:\s*1px solid var\(--kub-border-color\);/s,
+    /\.rail\s*\{[^}]*height:\s*var\(--conduit-height\);[^}]*background:\s*var\(--glass-fill\);[^}]*border:\s*1px solid var\(--kub-border-color\);/s,
+  );
+  // Every panel on this screen is the same material, and none of them is
+  // opaque. A surface that stops sampling the scene behind it stops being a
+  // surface and becomes a flat patch of a slightly different colour, which is
+  // what this screen was before.
+  for (const selector of [".handshake::before {", ".computer::before, .server::before {", ".rail {"]) {
+    const start = css.indexOf(selector);
+    assert.ok(start >= 0, selector + " is missing");
+    const block = css.slice(start, css.indexOf("}", start));
+    // The unprefixed property specifically. Matching the bare name as a
+    // substring also matches -webkit-backdrop-filter, so deleting the real
+    // declaration left this green on the prefix alone — measured, not assumed.
+    assert.match(
+      block,
+      /(?:^|[^-\w])backdrop-filter:\s*var\(--glass-blur\)/m,
+      selector + " must sample the scene behind it",
+    );
+  }
+  // An SVG fill cannot be glass: backdrop-filter has no effect on one, so the
+  // rect could only ever be an opaque colour pretending to be a pane.
+  assert.doesNotMatch(css, /\.device-art \.device-glass/);
+  assert.doesNotMatch(html, /class="device-glass"/);
+  // The scene needs something behind it worth revealing. One flat colour blurs
+  // to the same flat colour and the panels stop reading as material at all.
+  // Counted inside .startup-shell's own block. Across the whole sheet this
+  // also counted the stage head's glow, so the scene could lose a light while
+  // the total still cleared the bar.
+  const sceneStart = css.indexOf(".startup-shell {");
+  assert.ok(sceneStart >= 0, ".startup-shell is missing");
+  const scene = css.slice(sceneStart, css.indexOf("}", sceneStart));
+  assert.ok(
+    (scene.match(/radial-gradient\(/g) ?? []).length >= 4,
+    "the ambient scene must be layered, or the translucency has nothing to sample",
   );
   // It must not report progress. The stage track below already does that, and
   // two indicators counting the same stages is what made this one read as a

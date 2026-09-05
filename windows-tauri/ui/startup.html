@@ -21,13 +21,24 @@
     changing. Both endpoints are named by their role instead. The origin itself
     lives in PRODUCTION_ORIGIN in windows-tauri/src-tauri/src/lib.rs, where it
     is enforced and where a developer can read it.
+
+    Every `.hint` below is a tooltip, and each one exists because the thing it
+    describes is named in words this screen cannot avoid but a person has no
+    reason to know — "отпечаток", "цепочка", "рабочее пространство". They are
+    plain <span> elements shown by CSS on hover and on keyboard focus, wired to
+    their trigger with aria-describedby so they are announced rather than only
+    seen. They carry no value: like everything else here, a fingerprint is
+    written by startup.js or not shown at all.
   -->
   <body data-stage="boot" data-verdict="pending">
     <main class="startup-shell">
       <header class="startup-header" data-testid="startup-titlebar">
         <div class="startup-drag-region" id="startup-drag-region">
           <img src="letscube-logo.svg" alt="LETSCUBE" class="brand" />
-          <div class="version-pill"><span class="version-dot"></span><span data-desktop-version>Desktop</span></div>
+          <div class="version-pill has-hint" tabindex="0" aria-describedby="hint-version">
+            <span class="version-dot"></span><span data-desktop-version>Desktop</span>
+            <span class="hint hint-below" role="tooltip" id="hint-version">Версия оболочки LETSCUBE для Windows. Обновляется отдельно от рабочего пространства.</span>
+          </div>
         </div>
         <div class="startup-window-controls" aria-label="Управление окном">
           <button type="button" class="window-control" id="startup-window-minimize" data-testid="startup-window-minimize" aria-label="Свернуть" title="Свернуть"><span class="window-minimize"></span></button>
@@ -38,21 +49,24 @@
 
       <section class="handshake" id="startup-handshake">
         <article class="endpoint endpoint-client">
-          <div class="fingerprints" data-testid="startup-client-fingerprint">
+          <div class="fingerprints has-hint" data-testid="startup-client-fingerprint" tabindex="0" aria-describedby="hint-expected">
             <span class="fingerprint-label" data-fingerprint-label></span>
             <span class="fingerprint-value" data-fingerprint-value data-kind="note"></span>
+            <span class="hint hint-below" role="tooltip" id="hint-expected">Отпечаток — короткая контрольная сумма сертификата узла. Здесь тот, что этот компьютер запомнил при прошлом подключении. Если он совпадает с полученным, вы разговариваете с тем же сервером, что и раньше.</span>
           </div>
-          <div class="computer">
+          <div class="computer has-hint" tabindex="0" aria-describedby="hint-client">
             <!-- Drawn edge inset by exactly 2px, matching --chassis-inset, so the
-                 connector node keeps the same visible gap on both sides. -->
+                 connector node keeps the same visible gap on both sides. The
+                 glass plate behind the drawing is a real element, not this
+                 rect: an SVG fill cannot blur what is behind it. -->
             <svg class="device-art" viewBox="0 0 148 126" role="img" aria-label="Этот компьютер" focusable="false">
-              <rect class="device-glass" x="2" y="6" width="144" height="92" rx="9" />
               <rect class="device-frame" x="2" y="6" width="144" height="92" rx="9" />
               <path class="device-frame" d="M74 98v12M52 118h44" />
               <path class="device-line" d="M24 40h50M24 56h70M24 72h34" />
               <circle class="device-live" cx="126" cy="40" r="5" />
             </svg>
             <span class="connection-port connection-port-client" data-testid="startup-client-port"></span>
+            <span class="hint hint-above" role="tooltip" id="hint-client">Ваш компьютер и установленная на нём оболочка LETSCUBE. Проверку сертификата выполняет именно она, своими средствами, до того как открыть рабочее пространство.</span>
           </div>
           <h2>Этот компьютер</h2>
           <p>Оболочка LETSCUBE</p>
@@ -65,15 +79,15 @@
         </div>
 
         <article class="endpoint endpoint-server">
-          <div class="fingerprints" data-testid="startup-server-fingerprint">
+          <div class="fingerprints has-hint" data-testid="startup-server-fingerprint" tabindex="0" aria-describedby="hint-observed">
             <span class="fingerprint-label" data-fingerprint-label></span>
             <span class="fingerprint-value" data-fingerprint-value data-kind="note"></span>
+            <span class="hint hint-below" role="tooltip" id="hint-observed">Отпечаток сертификата, который узел прислал в этом соединении, прямо сейчас. Он вычисляется по полученным байтам, а не берётся из настроек.</span>
           </div>
-          <div class="server">
+          <div class="server has-hint" tabindex="0" aria-describedby="hint-server">
             <!-- Same 2px inset as the monitor, and the middle bay is centred on
                  126/2 so the connector meets the drawing where it is drawn. -->
             <svg class="device-art" viewBox="0 0 132 126" role="img" aria-label="Узел LETSCUBE" focusable="false">
-              <rect class="device-glass" x="2" y="4" width="128" height="118" rx="11" />
               <rect class="device-frame" x="2" y="4" width="128" height="118" rx="11" />
               <path class="device-line" d="M44 31h60M44 63h60M44 95h60" />
               <circle class="device-live" cx="26" cy="31" r="4.5" />
@@ -81,9 +95,10 @@
               <circle class="device-live" cx="26" cy="95" r="4.5" />
             </svg>
             <span class="connection-port connection-port-server" data-testid="startup-server-port"></span>
+            <span class="hint hint-above" role="tooltip" id="hint-server">Сервер, на котором живёт ваша переписка и файлы. Оболочка соединяется с ним по защищённому каналу и сверяет, что это тот же сервер, что и в прошлый раз.</span>
           </div>
           <h2>Узел LETSCUBE</h2>
-          <p>Проверенный сервер</p>
+          <p>Сервер рабочего пространства</p>
         </article>
       </section>
 
@@ -98,10 +113,22 @@
         -->
         <p class="startup-scope">Сертификат проверяет оболочка приложения при своём HTTPS-запросе. Страницу рабочего пространства загружает WebView2 — он проверяет своё соединение отдельно, средствами Windows.</p>
         <ol class="stages" aria-label="Этапы подключения">
-          <li data-stage-name="network_check">Сеть</li>
-          <li data-stage-name="tls_origin_check">Сертификат</li>
-          <li data-stage-name="update_check">Обновления</li>
-          <li data-stage-name="production_navigation">Рабочее пространство</li>
+          <li data-stage-name="network_check" class="has-hint" tabindex="0" aria-describedby="hint-stage-network">
+            <span class="stage-name">Сеть</span>
+            <span class="hint hint-above" role="tooltip" id="hint-stage-network">Проверяем, что интернет есть и узел вообще отвечает.</span>
+          </li>
+          <li data-stage-name="tls_origin_check" class="has-hint" tabindex="0" aria-describedby="hint-stage-tls">
+            <span class="stage-name">Сертификат</span>
+            <span class="hint hint-above" role="tooltip" id="hint-stage-tls">Windows проверяет цепочку доверия сертификата, а оболочка сверяет его отпечаток с запомненным.</span>
+          </li>
+          <li data-stage-name="update_check" class="has-hint" tabindex="0" aria-describedby="hint-stage-update">
+            <span class="stage-name">Обновления</span>
+            <span class="hint hint-above" role="tooltip" id="hint-stage-update">Смотрим, вышла ли новая версия оболочки. Запуск это не задерживает.</span>
+          </li>
+          <li data-stage-name="production_navigation" class="has-hint" tabindex="0" aria-describedby="hint-stage-workspace">
+            <span class="stage-name">Рабочее пространство</span>
+            <span class="hint hint-above" role="tooltip" id="hint-stage-workspace">Открываем сам мессенджер: чаты, файлы и уведомления.</span>
+          </li>
         </ol>
 
         <!--
@@ -127,7 +154,10 @@
           <p class="mismatch-detail" id="startup-mismatch-detail"></p>
           <div class="mismatch-actions">
             <button id="startup-mismatch-recheck" type="button" class="is-primary">Проверить снова</button>
-            <button id="startup-mismatch-continue" type="button" class="is-quiet">Продолжить — отпечаток не подтверждён</button>
+            <button id="startup-mismatch-continue" type="button" class="is-quiet has-hint" aria-describedby="hint-override">
+              Продолжить — отпечаток не подтверждён
+              <span class="hint hint-above" role="tooltip" id="hint-override">Открывает рабочее пространство и запоминает новый отпечаток как ожидаемый. Проверку сертификата средствами Windows это не отключает и действует только на этот раз.</span>
+            </button>
           </div>
         </div>
       </section>

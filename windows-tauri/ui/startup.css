@@ -62,6 +62,30 @@
   --app-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --startup-font-mono: Consolas, 'Cascadia Mono', Menlo, monospace;
 
+  /* ── Glass ────────────────────────────────────────────────────────────────
+   * The surfaces on this screen are translucent rather than filled. Three
+   * values do the work and every panel uses the same three, so a panel cannot
+   * drift into being a slightly different material from the one beside it.
+   *
+   * The fill is --kub-surface-2 at reduced alpha rather than a grey: tinting
+   * with the palette's own surface keeps the hue of the scene when the blur
+   * samples the ambient light behind it. The hairline is warm white at very
+   * low alpha, which is what reads as a lit edge; a border in the palette's
+   * blue reads as a drawn outline instead.
+   */
+  --glass-fill: rgba(11, 33, 58, .56);        /* --kub-surface-2 at .56 */
+  --glass-fill-strong: rgba(8, 22, 41, .86);  /* --kub-surface at .86 */
+  --glass-line: rgba(255, 255, 255, .09);
+  --glass-blur: blur(18px) saturate(122%);
+  /* Two shadows, not one: a wide ambient pool that separates the panel from
+     the scene, and a tight contact shadow that keeps it from floating. The
+     inset highlight on the top edge is the third of the three and the one that
+     actually makes it look like a sheet of something. */
+  --glass-shadow:
+    0 20px 44px -26px rgb(0 0 0 / .9),
+    0 3px 10px -6px rgb(0 0 0 / .55),
+    inset 0 1px 0 var(--glass-line);
+
   /* Local to this screen: the accent that states the current verification
      result. Re-pointed by [data-verdict] on <body> rather than by scattering
      colour rules through every component. */
@@ -103,9 +127,18 @@ body { background: var(--kub-bg); }
   width: 100%; height: 100%;
   display: grid; grid-template-rows: 44px minmax(0, 1fr) auto;
   padding: 0 6vw 26px;
+  /* Layered rather than flat, because the panels above are translucent: a
+     blur over one flat colour returns that same flat colour, and the surfaces
+     stop reading as material. Two brand-hue pools and one cool pool give the
+     glass something to pick up, and the vignette keeps the corners from
+     competing with the scene. All four are far below the contrast of any
+     content; this is light, not decoration. */
   background:
-    radial-gradient(120% 80% at 50% 0%, #0A1B30 0%, rgba(10, 27, 48, 0) 62%),
-    linear-gradient(180deg, var(--kub-surface) 0%, var(--kub-bg) 58%);
+    radial-gradient(72% 52% at 50% -8%, rgba(77, 139, 208, .20) 0%, rgba(77, 139, 208, 0) 64%),
+    radial-gradient(56% 44% at 6% 104%, rgba(66, 127, 194, .14) 0%, rgba(66, 127, 194, 0) 66%),
+    radial-gradient(52% 40% at 96% 100%, rgba(77, 139, 208, .10) 0%, rgba(77, 139, 208, 0) 62%),
+    radial-gradient(120% 90% at 50% 50%, rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, .34) 100%),
+    linear-gradient(180deg, var(--kub-surface) 0%, var(--kub-bg) 62%);
 }
 
 /* ── Title bar ───────────────────────────────────────────────────────────── */
@@ -160,6 +193,37 @@ body { background: var(--kub-bg); }
    `center` splits the overflow and puts the identity block on top of the title
    bar; `safe` sends all of it downwards instead. The first line is the fallback
    for an engine that drops the second. */
+/* The scene sits on a pane of its own rather than directly on the page.
+   Two reasons, and neither is decoration. The band between the title bar and
+   the divider is taller than the 277px the endpoint column needs, so without a
+   container the surplus read as ~90px of nothing under the labels; as padding
+   inside a pane the same space reads as margin. And a translucent surface needs
+   an edge to be a surface at all — glass with no boundary is just a lighter
+   patch of background.
+
+   Drawn as a pseudo-element that expands past the grid rather than as padding
+   on it: the rails are positioned as percentages of this element, and padding
+   would resolve those percentages against the padding box while the grid
+   columns lay out in the content box, silently pulling every rail off its
+   socket. This adds a surface without moving a single number. */
+.handshake::before {
+  content: ""; position: absolute; z-index: -1; pointer-events: none;
+  inset: -34px -44px; border-radius: 20px;
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-line);
+  box-shadow: var(--glass-shadow);
+}
+/* The grid item is centred in the band instead of stretching to fill it, so
+   the element is exactly as tall as the 277px it lays out — which is what the
+   pane above is drawn around. Stretched, it was the height of the whole band
+   and the pane covered the title bar and the status line with it.
+   Two declarations, same fallback pattern as align-content below: 'safe' sends
+   any overflow downwards rather than splitting it across the title bar, and
+   the plain value is there for an engine that drops the safe keyword. */
+.handshake { align-self: center; }
+.handshake { align-self: safe center; }
 .handshake { align-content: center; }
 .handshake { align-content: safe center; }
 .endpoint { display: grid; grid-template-rows: 74px 20px 126px 20px 19px 4px 14px; justify-items: center; align-content: center; min-width: 0; }
@@ -176,6 +240,7 @@ body { background: var(--kub-bg); }
  * remove.
  */
 .fingerprints {
+  position: relative;
   grid-row: 1; height: 74px; width: 100%;
   display: grid; grid-template-rows: 14px 1fr; gap: 4px;
   align-content: start; justify-items: center;
@@ -218,8 +283,22 @@ body[data-verdict="changed"] .fingerprint-label { color: var(--kub-danger); }
 .computer, .server { grid-row: 3; position: relative; display: grid; place-items: center; color: var(--kub-surface-3); }
 .computer { width: 148px; height: 126px; }
 .server { width: 132px; height: 126px; }
-.device-art { display: block; width: 100%; height: 100%; overflow: visible; }
-.device-art .device-glass { fill: var(--kub-surface-2); stroke: none; }
+/* The pane each device is drawn on. It used to be a <rect> filled with
+   --kub-surface-2, which cannot be glass: backdrop-filter has no effect on an
+   SVG fill, so the shape could only ever be an opaque colour. This is a real
+   element behind the drawing, positioned on the same numbers the rect used —
+   the monitor's screen (2,6,144x92,r9) and the server's chassis
+   (2,4,128x118,r11) — so the artwork did not move when the material changed. */
+.computer::before, .server::before {
+  content: ""; position: absolute; z-index: 0; pointer-events: none;
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+}
+.computer::before { left: 2px; top: 6px; width: 144px; height: 92px; border-radius: 9px; }
+.server::before { left: 2px; top: 4px; width: 128px; height: 118px; border-radius: 11px; }
+.device-art { position: relative; z-index: 1; display: block; width: 100%; height: 100%; overflow: visible; }
 /* The chassis holds a constant weight; only the detail strokes and the status
    lamp change colour, so a state change never redraws the object. */
 .device-art .device-frame {
@@ -273,8 +352,12 @@ body[data-verdict="changed"] .fingerprint-label { color: var(--kub-danger); }
   position: absolute; z-index: 3;
   width: var(--connector-node); height: var(--connector-node);
   border: 2px solid var(--channel-accent); border-radius: 5px;
-  background: var(--kub-surface-2);
-  box-shadow: 0 0 0 3px var(--kub-bg);
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  /* The ring is the page's own colour so the socket reads as punched through
+     the channel rather than laid on top of it. */
+  box-shadow: 0 0 0 3px var(--kub-bg), inset 0 1px 0 var(--glass-line);
   transition: border-color var(--kub-motion-standard) var(--kub-ease-standard),
               background var(--kub-motion-standard) var(--kub-ease-standard);
 }
@@ -305,8 +388,11 @@ body[data-verdict="changed"] .fingerprint-label { color: var(--kub-danger); }
 .rail {
   position: absolute; top: calc(50% - var(--conduit-height) / 2);
   height: var(--conduit-height); overflow: hidden;
-  background: var(--kub-surface-2);
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   border: 1px solid var(--kub-border-color);
+  box-shadow: inset 0 1px 0 var(--glass-line);
   transition: background var(--kub-motion-standard) var(--kub-ease-standard),
               border-color var(--kub-motion-standard) var(--kub-ease-standard);
 }
@@ -391,7 +477,11 @@ body[data-verdict="changed"] .center-seal {
   border-color: var(--channel-accent);
 }
 
-.handshake.is-connected .device-art .device-line { stroke: var(--verify-accent); }
+/* Deliberately absent: the device drawings do NOT take the accent on success.
+   They did, and between them, the channel, the track, both fingerprints and
+   the version dot, nearly every lit pixel turned one colour at once — which
+   reads as an alarm, not as a confirmation. The state is told by the lamps,
+   the channel and the seal; the objects themselves stay the colour they are. */
 
 /* ── Progress track ──────────────────────────────────────────────────────────
  * One continuous track with four nodes, replacing four separate top borders.
@@ -413,7 +503,16 @@ body[data-verdict="changed"] .center-seal {
  * short windows tighten the spacing, and `safe center` sends any overflow that
  * still happens downwards instead of splitting it across the title bar. */
 .startup-state { display: grid; align-content: start; justify-items: center; border-top: 1px solid var(--kub-border-color); padding-top: 20px; }
-#startup-status { margin: 0 0 14px; color: var(--kub-text); font-size: 14px; line-height: 18px; text-align: center; }
+/* The one place the eye should land first. Every other string on this screen
+   is between 10px and 13px, so at 14px this line led nothing — the largest
+   object was a coloured circle. It states what the screen is doing, which is
+   the one thing a person opening the application wants to know. */
+#startup-status {
+  margin: 0 0 12px; color: var(--kub-text);
+  font-size: 19px; font-weight: 620; line-height: 24px; letter-spacing: -.01em;
+  text-align: center;
+  transition: color var(--kub-motion-standard) var(--kub-ease-standard);
+}
 /* Same measure as the progress track below it, so the caption and the track
    share one column rather than reading as two different widths. */
 .startup-scope { margin: 0 0 16px; color: var(--kub-muted); font-size: 11.5px; line-height: 15px; text-align: center; width: min(680px, 78vw); }
@@ -507,6 +606,73 @@ body[data-stage="recoverable_error"][data-verdict="changed"] .stages { --fill: 5
   50% { opacity: 1; }
 }
 
+/* ── Hints ───────────────────────────────────────────────────────────────────
+ * This screen cannot avoid words a person has no reason to know — отпечаток,
+ * цепочка, рабочее пространство — because they are what is actually being
+ * checked, and softening them into "всё хорошо" would be the same theatre the
+ * fake fingerprints were. So the terms stay and each one carries an
+ * explanation a step away.
+ *
+ * Hover and keyboard focus both open one: a hint reachable only by pointer is
+ * not reachable at all for someone on a keyboard, which is why each trigger is
+ * focusable and wired with aria-describedby rather than made a title="".
+ *
+ * The delay is a transition-delay, not a timer. The startup contract forbids
+ * setTimeout on this screen and a test asserts its absence; a hint that opened
+ * instantly would also fire on every pointer that merely crossed it.
+ */
+.has-hint { position: relative; }
+.has-hint:focus-visible { outline: 2px solid var(--kub-cyan); outline-offset: 4px; border-radius: 6px; }
+.hint {
+  position: absolute; z-index: 40; left: 50%;
+  width: max-content; max-width: 264px;
+  padding: 9px 12px; border-radius: 10px;
+  background: var(--glass-fill-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-line);
+  box-shadow: var(--glass-shadow);
+  color: var(--kub-text);
+  font-family: var(--app-font-sans); font-size: 11.5px; font-weight: 400;
+  line-height: 15.5px; letter-spacing: 0; text-align: left; text-transform: none;
+  white-space: normal;
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transform: translate(-50%, 0) scale(.97);
+  transition:
+    opacity var(--kub-motion-fast) var(--kub-ease-standard),
+    transform var(--kub-motion-fast) var(--kub-ease-standard),
+    visibility 0s linear var(--kub-motion-fast);
+}
+.hint-below { top: calc(100% + 10px); }
+.hint-above { bottom: calc(100% + 10px); }
+/* The pointer. Drawn as a rotated square rather than a border triangle so it
+   carries the panel's own fill and hairline instead of a flat colour that
+   would not match a translucent surface. */
+.hint::after {
+  content: ""; position: absolute; left: 50%; width: 9px; height: 9px;
+  margin-left: -4.5px; transform: rotate(45deg);
+  background: var(--glass-fill-strong);
+}
+.hint-below::after { top: -5px; border-left: 1px solid var(--glass-line); border-top: 1px solid var(--glass-line); }
+.hint-above::after { bottom: -5px; border-right: 1px solid var(--glass-line); border-bottom: 1px solid var(--glass-line); }
+.has-hint:hover > .hint,
+.has-hint:focus-visible > .hint {
+  opacity: 1; visibility: visible; transform: translate(-50%, 0) scale(1);
+  /* Opening is delayed, closing is not: a hint that lingers after the pointer
+     has left follows it around the screen. */
+  transition-delay: var(--kub-motion-standard), var(--kub-motion-standard), 0s;
+}
+/* The first and last stage sit at the ends of the track, where a hint centred
+   on the trigger would run off the window; both are held inside it. */
+.stages li:first-child .hint { left: 0; transform: translate(0, 0) scale(.97); }
+.stages li:first-child .hint::after { left: 32px; }
+.stages li:last-child .hint { left: auto; right: 0; transform: translate(0, 0) scale(.97); }
+.stages li:last-child .hint::after { left: auto; right: 28px; }
+.stages li:first-child.has-hint:hover > .hint,
+.stages li:first-child.has-hint:focus-visible > .hint,
+.stages li:last-child.has-hint:hover > .hint,
+.stages li:last-child.has-hint:focus-visible > .hint { transform: translate(0, 0) scale(1); }
+
 /* ── Notices ─────────────────────────────────────────────────────────────────
  * Two different failures, deliberately not sharing a component:
  *
@@ -520,7 +686,13 @@ body[data-stage="recoverable_error"][data-verdict="changed"] .stages { --fill: 5
 .failure, .mismatch {
   width: min(680px, 78vw); margin-top: 20px;
   border: 1px solid var(--kub-border-color); border-radius: var(--kub-radius);
-  background: var(--kub-surface-2);
+  /* The stronger fill, not the panel fill: this is the one thing on the screen
+     a person has to read and act on, and a notice that lets the scene through
+     at panel opacity competes with itself. */
+  background: var(--glass-fill-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
   padding: 14px 16px;
   opacity: 1; transform: translateY(0);
   transition: opacity var(--kub-motion-standard) var(--kub-ease-standard),
@@ -584,6 +756,17 @@ button.is-quiet:hover { background: var(--kub-surface-3); color: var(--kub-text)
      and both of those still read standing still. */
   .stages li.is-active::after { animation: none; }
   .rail i { animation: none; }
+  /* The hint still opens and still waits before opening — a delay is not
+     motion. What goes is the scale, which is. */
+  .hint,
+  .has-hint:hover > .hint,
+  .has-hint:focus-visible > .hint { transform: translate(-50%, 0); }
+  .stages li:first-child .hint,
+  .stages li:last-child .hint,
+  .stages li:first-child.has-hint:hover > .hint,
+  .stages li:last-child.has-hint:hover > .hint,
+  .stages li:first-child.has-hint:focus-visible > .hint,
+  .stages li:last-child.has-hint:focus-visible > .hint { transform: none; }
   @starting-style {
     .failure, .mismatch { opacity: 1; transform: none; }
   }
