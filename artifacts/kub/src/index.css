@@ -193,6 +193,14 @@
      painted with it was measured at a ratio of 1.002 against the row it was
      meant to highlight, which is to say it had stopped existing. */
   --kub-raised: #112B47;
+  /* One step nearer than WHATEVER it is laid on, rather than a colour that
+     happens to be one step above one particular surface. Because it is a veil
+     rather than a fill, it gives the same visible step on a page, on a panel
+     and inside a menu, and it cannot go flush with its own background the way
+     the three absolute tokens above did in turn. Prefer .kub-raise-hover over
+     --kub-raised for anything that has to be findable against a surface which
+     might itself move. */
+  --kub-raise-veil: rgba(255, 255, 255, 0.07);
 
   /* ── Colours that carry text ──────────────────────────────────────────────
    * A colour that is legible as a 3px border or a filled button is not
@@ -393,7 +401,14 @@
   --brand-danger: #dc2626;
   --brand-success: #4fae4e;
   --brand-warning: #c2870a;
-  --kub-bg: #F4F8FC;
+  /* Was #F4F8FC, which left the page nine values from the panels standing on
+     it — the dark theme's page is two hundred and fifty from its own, which is
+     why separation there came for free and here it had to be fought for
+     through the fill and then the shadow. Moving the ground down instead
+     doubles the step under every panel at once, without touching a single one
+     of them: the panel composites to rgb(251,252,253) against this, a
+     difference of 18/13/7 where it was 9/6/3. */
+  --kub-bg: #E9EFF6;
   --kub-surface: #FFFFFF;
   --kub-surface-2: #EAF3FA;
   --kub-surface-3: #DCEBF7;
@@ -442,6 +457,9 @@
      the page rather than up. This is the value hovers in this theme already
      had, and it was measured working — the light theme never broke. */
   --kub-raised: #EAF3FA;
+  /* Ink rather than light, for the same reason the raised colour reverses
+     here: on a light ground a nearer surface is told by going down. */
+  --kub-raise-veil: rgba(23, 51, 82, 0.07);
   /* See the note in .dark. Measured against a solid black field, which is what
      a panel in this theme composites towards at worst. #DC2626 as a word is
      4.05:1 there; #C81E1E is 4.81:1, and 5.74:1 on white. */
@@ -623,6 +641,25 @@ html, body {
 /* For anything that covers content it is not part of: menus, dialogs, toasts,
    tooltips. At panel opacity these compete with what they cover. */
 .kub-glass-strong { background-color: var(--glass-fill-strong); }
+
+/* Layered as a background IMAGE, which is the whole trick: it composites over
+   whatever background-color the element already has instead of replacing it,
+   so the same rule reads correctly on the page, on a panel and inside a menu.
+   Written as a gradient between one colour and itself because that is how CSS
+   spells "a flat layer" in a background-image slot.
+
+   Not an inset box-shadow, which would do the same job but would silently
+   cancel any shadow the element already carries — and several of the things
+   that need this are cards. */
+.kub-raise,
+.kub-raise-hover {
+  transition: background-image var(--kub-motion-fast) var(--kub-ease-standard);
+}
+.kub-raise,
+.kub-raise-hover:hover,
+.kub-raise-hover:focus-visible {
+  background-image: linear-gradient(var(--kub-raise-veil), var(--kub-raise-veil));
+}
 
 /* A browser that cannot frost has to be given something opaque instead: a
    translucent panel over unblurred content is unreadable, which is worse than
