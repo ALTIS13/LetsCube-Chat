@@ -178,6 +178,13 @@
   --kub-pink: #f04a92;
   --kub-online: #4DCD5E;
   --kub-danger: #EF4444;
+  /* What a field, a well or a track is cut into. Deliberately not
+     --kub-surface-2: that token also stands for a raised thing — a hover, a
+     chip, a context row — and one value cannot mean both "above" and "below"
+     once the surfaces around it move. Which is exactly what happened: the
+     chrome was raised past it, and every field went flush with the panel
+     holding it. */
+  --kub-inset: #081629;
 
   /* ── Colours that carry text ──────────────────────────────────────────────
    * A colour that is legible as a 3px border or a filled button is not
@@ -295,9 +302,26 @@
    * a blur over one flat colour returns that same flat colour. --kub-ambient
    * below is that something, and the two ship together.
    */
-  --glass-fill: rgba(11, 33, 58, 0.58);        /* --kub-surface-2 at .58 */
-  --glass-fill-strong: rgba(8, 22, 41, 0.88);  /* --kub-surface at .88 */
-  --glass-line: rgba(255, 255, 255, 0.09);
+  /* --kub-surface-3, not --kub-surface-2, and that is the whole difference
+     between a material you can see and one you cannot. Measured over the page:
+     surface-2 at .58 composites to rgb(8,24,44) while the opaque surface it
+     replaced was rgb(8,22,41) — two values apart in one channel. Nothing read
+     as raised because nothing was. This composites to rgb(13,33,57) against a
+     page of rgb(5,11,24), which is an elevation the eye can find, and the text
+     it carries still measures 15.13:1 with the secondary tone at 6.68:1. */
+  --glass-fill: rgba(17, 43, 71, 0.70);        /* --kub-surface-3 at .70 */
+  /* Same base as the panel, at a much higher alpha. Both halves of that matter:
+     the shared base keeps a menu on the panel's side of the elevation rather
+     than below it, and the alpha is what makes it readable over content it
+     does not belong to. Measured — it composites 12 values above the panel over
+     the page, and over the worst backdrop a panel can meet it still carries
+     text at 12.01:1 and the secondary tone at 5.30:1, which is the margin the
+     darker fill had before this change. Nothing was traded for the fix. */
+  --glass-fill-strong: rgba(17, 43, 71, 0.96); /* --kub-surface-3 at .96 */
+  /* The lit edge does most of the work of saying "this is a sheet of
+     something". At .09 it was below the threshold of a 1px line on a dark
+     ground — technically present, never seen. */
+  --glass-line: rgba(255, 255, 255, 0.14);
   --glass-blur: blur(20px) saturate(122%);
   --glass-shadow:
     0 20px 44px -26px rgba(0, 0, 0, 0.9),
@@ -306,15 +330,16 @@
   /* Two brand-hue pools and a vignette. Well below the contrast of any content
      — this is light for the glass to pick up, not decoration. */
   --kub-ambient:
-    radial-gradient(64% 46% at 16% -6%, rgba(77, 139, 208, 0.16) 0%, rgba(77, 139, 208, 0) 62%),
-    radial-gradient(56% 44% at 92% 8%, rgba(66, 127, 194, 0.12) 0%, rgba(66, 127, 194, 0) 64%),
-    radial-gradient(120% 96% at 50% 60%, rgba(0, 0, 0, 0) 46%, rgba(0, 0, 0, 0.30) 100%);
+    radial-gradient(66% 50% at 14% -8%, rgba(77, 139, 208, 0.30) 0%, rgba(77, 139, 208, 0) 62%),
+    radial-gradient(58% 46% at 94% 4%, rgba(66, 127, 194, 0.22) 0%, rgba(66, 127, 194, 0) 64%),
+    radial-gradient(52% 42% at 78% 104%, rgba(77, 139, 208, 0.14) 0%, rgba(77, 139, 208, 0) 60%),
+    radial-gradient(120% 96% at 50% 58%, rgba(0, 0, 0, 0) 44%, rgba(0, 0, 0, 0.34) 100%);
 
   --tg-bg: var(--kub-bg);
   --tg-sidebar: var(--kub-surface);
   --tg-chat-bg: var(--kub-bg);
   --tg-header: var(--kub-surface);
-  --tg-input: var(--kub-surface-2);
+  --tg-input: var(--kub-inset);
   --tg-message-meta: var(--kub-message-meta);
   --tg-accent: var(--kub-cyan);
   --tg-accent-hover: var(--kub-cyan-hover);
@@ -401,6 +426,9 @@
      Found by the badge contract, not by eye. */
   --kub-online: #3C8B3C;
   --kub-danger: #DC2626;
+  /* See .dark. On a light ground a well goes down towards the page, which is
+     the value fields in this theme already had. */
+  --kub-inset: #EAF3FA;
   /* See the note in .dark. Measured against a solid black field, which is what
      a panel in this theme composites towards at worst. #DC2626 as a word is
      4.05:1 there; #C81E1E is 4.81:1, and 5.74:1 on white. */
@@ -480,24 +508,28 @@
      light ground the fill must be lighter than what it covers, or the panel
      reads as a stain rather than as glass, and the shadow is a fraction of the
      dark one — the same opacity on a light ground looks like dirt. */
-  --glass-fill: rgba(255, 255, 255, 0.66);
-  --glass-fill-strong: rgba(255, 255, 255, 0.92);
-  --glass-line: rgba(255, 255, 255, 0.75);
+  /* Same correction as the dark theme: a panel that composites to within a
+     couple of values of the page is not a panel. Here the direction is towards
+     white, which is where elevation goes on a light ground. */
+  --glass-fill: rgba(255, 255, 255, 0.80);
+  --glass-fill-strong: rgba(255, 255, 255, 0.94);
+  --glass-line: rgba(255, 255, 255, 0.85);
   --glass-blur: blur(20px) saturate(140%);
   --glass-shadow:
     0 18px 40px -26px rgba(23, 51, 82, 0.26),
     0 2px 8px -5px rgba(23, 51, 82, 0.16),
     inset 0 1px 0 var(--glass-line);
   --kub-ambient:
-    radial-gradient(64% 46% at 16% -6%, rgba(66, 127, 194, 0.10) 0%, rgba(66, 127, 194, 0) 62%),
-    radial-gradient(56% 44% at 92% 8%, rgba(66, 127, 194, 0.07) 0%, rgba(66, 127, 194, 0) 64%),
-    radial-gradient(120% 96% at 50% 60%, rgba(23, 51, 82, 0) 52%, rgba(23, 51, 82, 0.05) 100%);
+    radial-gradient(66% 50% at 14% -8%, rgba(66, 127, 194, 0.20) 0%, rgba(66, 127, 194, 0) 62%),
+    radial-gradient(58% 46% at 94% 4%, rgba(66, 127, 194, 0.14) 0%, rgba(66, 127, 194, 0) 64%),
+    radial-gradient(52% 42% at 78% 104%, rgba(45, 111, 172, 0.10) 0%, rgba(45, 111, 172, 0) 60%),
+    radial-gradient(120% 96% at 50% 58%, rgba(23, 51, 82, 0) 50%, rgba(23, 51, 82, 0.07) 100%);
 
   --tg-bg: var(--kub-bg);
   --tg-sidebar: var(--kub-surface);
   --tg-chat-bg: var(--kub-bg);
   --tg-header: var(--kub-surface);
-  --tg-input: var(--kub-surface-2);
+  --tg-input: var(--kub-inset);
   --tg-message-meta: var(--kub-message-meta);
   --tg-accent: var(--kub-cyan);
   --tg-accent-hover: var(--kub-cyan-hover);
@@ -585,8 +617,13 @@ html, body {
      which: in the dark theme --kub-surface-2 is the LIGHTER of the two, so the
      strong variant came out less dense than the ordinary one — the opposite of
      what it is for. */
+  /* Without a blur the absolute values cannot match what the frosted
+     rendering composites to, so what is preserved here is the relationship
+     instead: strong is the lighter of the two in the dark theme, because that
+     is what "above" means there, and a menu must not read as a recess in the
+     panel it opens over. */
   .kub-glass { background-color: var(--kub-surface-2); }
-  .kub-glass-strong { background-color: var(--kub-surface); }
+  .kub-glass-strong { background-color: var(--kub-surface-3); }
 }
 
 body {
