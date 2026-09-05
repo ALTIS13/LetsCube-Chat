@@ -65,7 +65,11 @@ export function MainLayout() {
   }, [selectedChatId, setSelectedChatId, updateBlocking]);
 
   return (
-    <div className="flex flex-col h-[100dvh] w-screen overflow-hidden bg-[var(--kub-bg)]">
+    // No background of its own. `body` paints --tg-bg with --kub-ambient over
+    // it, and that ambient is the only thing the chrome's blur has to pick up:
+    // an opaque shell here would hand every panel one flat colour to sample and
+    // the glass would come back as paint. See the Glass note in index.css.
+    <div className="flex flex-col h-[100dvh] w-screen overflow-hidden">
       <DesktopUpdatePill />
       <div
         className="flex min-h-0 flex-1 flex-col overflow-hidden"
@@ -77,6 +81,14 @@ export function MainLayout() {
         <div className="flex flex-1 overflow-hidden">
           <div
             className={cn(
+              // No z-index here on purpose. An earlier revision gave this
+              // column `z-10` so the sidebar's shadow would fall on the chat
+              // pane; that made the column a stacking context, and every dialog
+              // the sidebar opens — settings, new chat, folders — was clamped
+              // inside it and rendered underneath the top bar. The shadow is
+              // not worth that. `Sidebar` paints its material from a positioned
+              // layer, which already draws over the non-positioned pane beside
+              // it.
               "h-full flex-shrink-0 flex-col border-r border-[color:var(--kub-border-color)]",
               "md:flex md:w-[360px] lg:w-[380px] xl:w-[400px]",
               isMobileChatOpen ? "hidden" : "flex w-full",

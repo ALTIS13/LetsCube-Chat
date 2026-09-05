@@ -7,6 +7,7 @@ import { FolderTabs } from "@/components/sidebar/FolderTabs";
 import { MessageInput } from "@/components/chat/MessageInput";
 import { MessageList } from "@/components/chat/MessageList";
 import { SidebarHeader } from "@/components/sidebar/SidebarHeader";
+import { KubGlassLayer } from "@/components/kub";
 import { useAppStore } from "@/store/app.store";
 import { cn } from "@/lib/utils";
 import {
@@ -92,7 +93,10 @@ export default function PublicPreviewCapturePage() {
 
   return (
     <div
-      className="flex h-[100dvh] w-screen flex-col overflow-hidden bg-[var(--kub-bg)]"
+      // Mirrors MainLayout, background included: the shell is transparent so
+      // the chrome blurs the page ambient. A capture that painted an opaque
+      // --kub-bg here would photograph a product nobody ships.
+      className="flex h-[100dvh] w-screen flex-col overflow-hidden"
       // The capture script waits for this attribute instead of a timeout, so a
       // slow first paint can never produce a half-rendered image.
       {...{ [PUBLIC_PREVIEW_READY_ATTRIBUTE]: "true" }}
@@ -103,28 +107,37 @@ export default function PublicPreviewCapturePage() {
         <div className="flex flex-1 overflow-hidden">
           <div
             className={cn(
-              "h-full flex-shrink-0 flex-col border-r border-[color:var(--kub-border-color)]",
+              // Stands in for the `Sidebar` root, which this page does not
+              // mount — it composes the column from the same parts, so it also
+              // copies how `Sidebar` wears the material: a layer, not a filter
+              // on the box, because `SidebarHeader` opens dialogs from in here.
+              "relative h-full flex-shrink-0 flex-col border-r border-[color:var(--kub-border-color)]",
               "md:flex md:w-[360px] lg:w-[380px] xl:w-[400px]",
               // A chat is open, so a narrow viewport shows the conversation
               // alone, which is what MainLayout does.
               "hidden",
             )}
           >
-            <SidebarHeader />
-            <FolderTabs
-              folders={[{ id: null, name: "Все", emoji: null }]}
-              activeFolder={null}
-              onFolderChange={() => undefined}
-            />
-            <div className="flex-1 overflow-hidden">
-              {chats.map((chat) => (
-                <ChatListItem
-                  key={chat.id}
-                  chat={chat}
-                  isSelected={chat.id === activeChat.id}
-                  onClick={() => undefined}
-                />
-              ))}
+            <KubGlassLayer />
+            {/* Positioned, like `Sidebar`'s body wrapper: the layer is
+                positioned too, and two positioned boxes paint in tree order. */}
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              <SidebarHeader />
+              <FolderTabs
+                folders={[{ id: null, name: "Все", emoji: null }]}
+                activeFolder={null}
+                onFolderChange={() => undefined}
+              />
+              <div className="flex-1 overflow-hidden">
+                {chats.map((chat) => (
+                  <ChatListItem
+                    key={chat.id}
+                    chat={chat}
+                    isSelected={chat.id === activeChat.id}
+                    onClick={() => undefined}
+                  />
+                ))}
+              </div>
             </div>
           </div>
 

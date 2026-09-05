@@ -21,7 +21,10 @@ export function KubHeader({
     <header
       className={cn(
         "flex items-center gap-3 px-4 h-14 flex-shrink-0",
-        "bg-[var(--kub-surface)] border-b border-[color:var(--kub-border-color)]",
+        // `relative`, no z-index: positioned is enough to lay the shadow over
+        // what follows, and a z-index would make this a stacking context that
+        // the page's own dialogs would then have to out-rank.
+        "kub-glass relative border-b border-[color:var(--kub-border-color)]",
         className
       )}
       {...rest}

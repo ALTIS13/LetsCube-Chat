@@ -17,6 +17,7 @@ export { KubAsyncButton } from "./KubAsyncButton";
 export { KubStableSkeleton } from "./KubStableSkeleton";
 export { KubModal } from "./KubModal";
 export { KubHeader } from "./KubHeader";
+export { KubGlassLayer } from "./KubGlassLayer";
 export { KubEmptyState } from "./KubEmptyState";
 export { KubTooltip } from "./KubTooltip";
 export { KubLogo } from "./KubLogo";

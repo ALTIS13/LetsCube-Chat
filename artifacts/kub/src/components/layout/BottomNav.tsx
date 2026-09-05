@@ -52,7 +52,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Навигация"
-      className="md:hidden flex items-center justify-around flex-shrink-0 px-2 pb-safe bg-[var(--kub-surface)] border-t border-[color:var(--kub-border-color)]"
+      className="kub-glass relative md:hidden flex items-center justify-around flex-shrink-0 px-2 pb-safe border-t border-[color:var(--kub-border-color)]"
       style={{ height: "56px" }}
     >
       {tabs.map(({ id, label, icon }) => {

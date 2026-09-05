@@ -23,7 +23,7 @@ import { VideoMessageRecorderModal } from "./VideoMessageRecorderModal";
 import { useChatMediaPlayback, VideoCircleProgressRing, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 import { useAppStore } from "@/store/app.store";
 import { useMuteState } from "@/hooks/useMuteState";
-import { KubIcon, type KubIconName } from "@/components/kub";
+import { KubGlassLayer, KubIcon, type KubIconName } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
@@ -783,12 +783,24 @@ export function MessageInput({
   ];
 
   return (
-    <div className="flex-shrink-0 bg-[var(--kub-chat-bg)]">
+    // A plain box: the material is the layer below it. This subtree opens the
+    // camera and the video recorder — both viewport-covering dialogs — and the
+    // attachment menu's click-away backdrop, so a frosted ancestor here would
+    // clamp all three to the composer. The box itself is untouched; the height
+    // it reports is what ChatWindow measures into --kub-composer-height and
+    // the list's bottom inset, so it must not move.
+    <div className="relative flex-shrink-0">
+      <KubGlassLayer />
+      <div className="relative">
       {showEmoji && (
         <div className="flex justify-end px-3 pb-2 pt-1.5">
           <div
             data-testid="message-emoji-surface"
-            className="w-full max-w-[480px] rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-2 shadow-[0_12px_32px_rgba(0,0,0,0.2)]"
+            // The emoji sheet opens over the conversation, so it takes the
+            // covering fill. Its hand-rolled drop shadow goes with it: that
+            // shadow was the composer's own idea of depth, and the material
+            // already carries one for every panel in the product.
+            className="kub-glass-strong w-full max-w-[480px] rounded-xl border border-[color:var(--kub-border-color)] p-2"
           >
             <EmojiCategoryPicker
               categories={MESSAGE_EMOJI_CATEGORIES}
@@ -1091,6 +1103,7 @@ export function MessageInput({
             </button>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

@@ -51,7 +51,12 @@ export function AppTopBar() {
   return (
     <header
       className={cn(
-        "hidden h-[var(--kub-app-topbar-height)] shrink-0 select-none items-center border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] md:flex",
+        // The bar opens nothing, so it can wear the material directly. It is
+        // `relative` and deliberately has no z-index: a z-index would make it a
+        // stacking context that every dialog in the product then has to beat,
+        // and being positioned is already enough to put its shadow over the
+        // panes below.
+        "kub-glass relative hidden h-[var(--kub-app-topbar-height)] shrink-0 select-none items-center border-b border-[color:var(--kub-border-color)] md:flex",
         desktop ? "pl-3" : "px-3",
       )}
       data-testid="app-top-bar"

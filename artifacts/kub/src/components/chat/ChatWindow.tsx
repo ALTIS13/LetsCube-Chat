@@ -784,7 +784,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   return (
     <ChatMediaPlaybackProvider chatId={chatId} playlist={mediaPlaylist}>
       <div
-        className="relative flex h-full w-full min-w-0 overflow-hidden bg-[var(--kub-chat-bg)]"
+        // The pane no longer paints --kub-chat-bg. It never showed: the message
+        // list carries `chat-bg` (wallpaper and colour both) and fills the rest,
+        // so this was a flat sheet behind the header and the composer and the
+        // only thing their blur could have sampled. Dropped, those two sit on
+        // the page ambient instead. The list is untouched.
+        className="relative flex h-full w-full min-w-0 overflow-hidden"
         style={{
           "--kub-keyboard-inset": `${keyboardInset}px`,
           "--kub-composer-height": `${composerHeight}px`,

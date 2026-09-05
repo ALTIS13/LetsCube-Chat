@@ -169,7 +169,10 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
                 <div
                   role="menu"
                   data-kub-menu="true"
-                  className="absolute left-0 top-12 w-64 rounded-xl shadow-2xl z-50 py-1 overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] kub-glow-soft"
+                  // `-strong`, because this covers the chat list it opens over.
+                  // The glow and shadow-2xl are gone: both set box-shadow, and
+                  // whichever won would have replaced the material's own.
+                  className="kub-glass-strong absolute left-0 top-12 w-64 rounded-xl z-50 py-1 overflow-hidden border border-[color:var(--kub-border-color)]"
                 >
                   {currentUser && (
                     <div className="flex items-center gap-3 px-4 py-3 mb-1 border-b border-[color:var(--kub-border-color)]">

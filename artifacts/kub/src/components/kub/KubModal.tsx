@@ -85,7 +85,10 @@ export function KubModal({
     >
       <div
         className={cn(
-          "kub-modal-panel w-full bg-[var(--kub-surface)] shadow-2xl flex flex-col kub-glow-soft border-[color:var(--kub-border-color)]",
+          // A dialog covers whatever it was opened from, so `-strong`. Both
+          // `shadow-2xl` and `kub-glow-soft` are dropped: each sets box-shadow,
+          // and the material already carries its own.
+          "kub-modal-panel kub-glass-strong w-full flex flex-col border-[color:var(--kub-border-color)]",
           mobileSheet
             ? "h-full max-h-screen rounded-none border-0 pb-safe sm:h-auto sm:max-h-[85vh] sm:rounded-2xl sm:border sm:pb-0"
             : "rounded-2xl border max-h-[85vh]",

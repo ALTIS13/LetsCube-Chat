@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAppStore } from "@/store/app.store";
 import { ChatAvatar } from "@/components/ui/ChatAvatar";
-import { KubModal, KubIcon, type KubIconName } from "@/components/kub";
+import { KubGlassLayer, KubModal, KubIcon, type KubIconName } from "@/components/kub";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { prefixError } from "@/lib/errors";
@@ -206,9 +206,16 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
   return (
     <>
       <div
-        className="flex flex-shrink-0 flex-col bg-[var(--kub-surface)]"
+        // A plain box: the material is the layer below it. The action menu in
+        // this header is `fixed` on a narrow viewport, and a frosted ancestor
+        // would lay it out against the 56px header instead of the screen. The
+        // box itself is untouched — same height, same flex sizing, still
+        // statically positioned in the column the message list measures.
+        className="relative flex flex-shrink-0 flex-col"
         data-testid="chat-header-shell"
       >
+        <KubGlassLayer />
+        <div className="relative flex flex-col">
         <div
           className="flex h-[var(--kub-control-row-height)] items-center gap-1 border-b border-[color:var(--kub-border-color)] px-2"
           data-testid="chat-control-row"
@@ -264,7 +271,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
               <div
                 role="menu"
                 data-kub-menu="true"
-                className="fixed inset-x-3 bottom-3 z-50 max-h-[min(70vh,480px)] overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] py-1 shadow-2xl kub-glow-soft sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-10 sm:w-60"
+                className="kub-glass-strong fixed inset-x-3 bottom-3 z-50 max-h-[min(70vh,480px)] overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] py-1 sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-10 sm:w-60"
               >
                 {menuItems.map(({ icon, label, danger, disabled, action }) => (
                   <button
@@ -298,6 +305,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
             {mediaPlayback}
           </div>
         )}
+        </div>
       </div>
       <KubModal
       open={deleteGroupOpen}

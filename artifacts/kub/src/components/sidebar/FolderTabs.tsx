@@ -75,13 +75,18 @@ export function FolderTabs({ folders, activeFolder, onFolderChange, onCreate, on
   };
 
   return (
-    <div className="relative flex items-center flex-shrink-0 min-w-0 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]">
+    // Deliberately no surface of its own. The strip sits inside the sidebar's
+    // glass, so a second fill here would read as an opaque band punched through
+    // the panel, and a second blur would be a blur of a blur.
+    <div className="relative flex items-center flex-shrink-0 min-w-0 border-b border-[color:var(--kub-border-color)]">
       {canScrollLeft && (
         <button
           type="button"
           onClick={() => scrollByStep(-1)}
           aria-label="Прокрутить папки влево"
-          className="absolute left-0 top-0 bottom-0 z-10 flex items-center justify-center px-1.5 text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] transition-colors bg-gradient-to-r from-[var(--kub-surface)] from-60% to-transparent"
+          // The fade is the panel's own fill, not a colour picked to match it:
+          // read from --glass-fill it cannot drift when the material changes.
+          className="absolute left-0 top-0 bottom-0 z-10 flex items-center justify-center px-1.5 text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] transition-colors bg-gradient-to-r from-[var(--glass-fill)] from-60% to-transparent"
         >
           <KubIcon name="chevronLeft" size={14} />
         </button>
@@ -147,7 +152,7 @@ export function FolderTabs({ folders, activeFolder, onFolderChange, onCreate, on
           type="button"
           onClick={() => scrollByStep(1)}
           aria-label="Прокрутить папки вправо"
-          className="absolute right-0 top-0 bottom-0 z-10 flex items-center justify-center px-1.5 text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] transition-colors bg-gradient-to-l from-[var(--kub-surface)] from-60% to-transparent"
+          className="absolute right-0 top-0 bottom-0 z-10 flex items-center justify-center px-1.5 text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] transition-colors bg-gradient-to-l from-[var(--glass-fill)] from-60% to-transparent"
         >
           <KubIcon name="chevronRight" size={14} />
         </button>

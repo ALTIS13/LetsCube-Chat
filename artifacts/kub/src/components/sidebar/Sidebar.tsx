@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { KubIcon } from "@/components/kub";
+import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { SidebarHeader } from "./SidebarHeader";
 import { FolderTabs } from "./FolderTabs";
 import { ChatList } from "./ChatList";
@@ -89,34 +89,48 @@ export function Sidebar() {
   ], [chats, folders, folderChats]);
 
   return (
-    <div className="flex flex-col h-full w-full bg-[var(--kub-surface)]">
-      <SidebarHeader onNewChat={() => setShowNewChat(true)} onRefetch={refetch} />
-      {!hasSearchQuery && (
-        <FolderTabs
-          folders={tabs}
-          activeFolder={activeFolder}
-          onFolderChange={setActiveFolder}
-          onCreate={() => setEditingFolder("new")}
-          onEdit={(id) => {
-            const target = folders.find((f) => f.id === id);
-            if (target) setEditingFolder(target);
-          }}
-        />
-      )}
+    // The column is a plain box; the material is the layer below, because this
+    // subtree opens dialogs and a frosted ancestor would lay them out against
+    // the column instead of the viewport. See KubGlassLayer.
+    //
+    // `kub-glass`, not `-strong`: the column holds the chat list, it does not
+    // cover it. Everything inside stays flat — the list rows in particular, a
+    // blur each on a list that scrolls is the one place this material costs
+    // real frames.
+    <div className="relative flex h-full w-full flex-col">
+      <KubGlassLayer />
+      {/* One in-flow child, sized exactly as the four used to be, so the layer
+          has a sibling to sit behind and the column's own layout is unchanged.
+          The dialogs stay outside it — they are `fixed` and take no space. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <SidebarHeader onNewChat={() => setShowNewChat(true)} onRefetch={refetch} />
+        {!hasSearchQuery && (
+          <FolderTabs
+            folders={tabs}
+            activeFolder={activeFolder}
+            onFolderChange={setActiveFolder}
+            onCreate={() => setEditingFolder("new")}
+            onEdit={(id) => {
+              const target = folders.find((f) => f.id === id);
+              if (target) setEditingFolder(target);
+            }}
+          />
+        )}
 
-      {hasSearchQuery ? (
-        <SidebarSearchResults query={searchQuery} />
-      ) : loading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <KubIcon name="spinner" size={22} className="text-[color:var(--kub-cyan)]" />
-        </div>
-      ) : (
-        <ChatList
-          chats={filtered}
-          selectedChatId={selectedChatId}
-          onChatSelect={setSelectedChatId}
-        />
-      )}
+        {hasSearchQuery ? (
+          <SidebarSearchResults query={searchQuery} />
+        ) : loading ? (
+          <div className="flex-1 flex items-center justify-center">
+            <KubIcon name="spinner" size={22} className="text-[color:var(--kub-cyan)]" />
+          </div>
+        ) : (
+          <ChatList
+            chats={filtered}
+            selectedChatId={selectedChatId}
+            onChatSelect={setSelectedChatId}
+          />
+        )}
+      </div>
 
       {showNewChat && (
         <NewChatModal onClose={() => setShowNewChat(false)} onRefetch={refetch} />

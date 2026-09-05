@@ -79,7 +79,9 @@ export function KubFeedbackViewport() {
           className={cn(
             "kub-feedback-card pointer-events-auto relative flex w-full max-w-sm items-start gap-2.5",
             "overflow-hidden rounded-xl border border-[color:var(--kub-border-color)]",
-            "bg-[var(--kub-surface-2)] py-2.5 pl-4 pr-3 text-sm shadow-lg",
+            // A toast floats over whatever the person was looking at, so it
+            // takes the covering fill rather than the panel one.
+            "kub-glass-strong py-2.5 pl-4 pr-3 text-sm",
             "text-[color:var(--kub-text)]",
           )}
         >
