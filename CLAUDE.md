@@ -78,25 +78,58 @@ The task environment may still display the removed/stale desktop path
 checkout. Always verify `git rev-parse --show-toplevel`, branch, status, and remote
 before editing.
 
-All local implementation and handoff commits remain intentionally unpushed at this
-stop point. Do not push or deploy them until Task 2 is fixed, reviewed, and
-validated. Never push directly to `main` without complete validation.
+**`main` was fast-forwarded to `5fcc6dd` and deployed on 2026-09-05**, on the
+owner's explicit instruction, after the whole set was validated at that exact
+commit. This paragraph replaced one saying the commits were intentionally
+unpushed; anything left elsewhere in this file that still says so describes the
+state before that date.
 
-Latest local commits:
+Deployment baseline:
 
-- `f4ab801 test(public): harden the unconfigured routing fixture`
-- `591ad1c docs(handoff): record Task 2 test closure`
-- `0e406a3 test(public): address scoped review of the routing coverage`
-- `a455610 test(public): cover unconfigured routing and near matches`
-- `3990715 docs(handoff): correct validation commands and record environment`
-- `000259e docs(handoff): record LETSCUBE context for Claude`
-- `aeaaace test(public): cover mounted root routing`
-- `fdd8933 feat(public): route guests to LETSCUBE home`
-- `c035431 docs(plan): close release highlights task`
-- `f6f9233 fix(release): resolve jq executable from path`
-- `1af9091 test(release): exercise production jq highlights parity`
-- `22df764 feat(release): add compact Stable changelog metadata`
-- `c405f8a docs(plan): harden public home rollout contracts`
+- `main` and `codex/bot-platform` are both at `5fcc6dd`.
+- `letscube-web` runs image `l64kyyu1sysev2izzjjbizhe:5fcc6ddd5529…` — verified
+  by reading the running container's tag, not by trusting the webhook. It passed
+  its healthcheck and replaced the previous replica; one replica runs.
+- Verified live at `https://app.letscube.ru`: 200, and the served stylesheet
+  carries `--kub-raise-veil`, nineteen `backdrop-filter` declarations and the
+  moved light ground — so the change reached the reader, not only the build.
+- Gates at that commit: typecheck of both packages clean, unit suite 1304/1304,
+  production build clean, mounted routing matrix 15/15.
+- Rollback is a fast-forward of `main` back to `7b95021`.
+
+Two production database repairs were applied the same day, each with a verified
+schema backup taken first and each with a self-check that raises rather than
+reporting success on a half-applied state. Both are recorded in
+`.migration-backup/supabase/migrations/`:
+
+- `20260905140000_bot_avatar_policy_repair.sql` — every client upload had been
+  failing since 2026-09-04T14:54Z with "permission denied for function
+  _kub_bot_avatar_path_allowed". The bot-avatar migration created four
+  `storage.objects` policies calling that function and revoked its EXECUTE from
+  `public` and `anon` without granting it to anyone; `authenticated` held it by
+  inheritance from PUBLIC and lost it too. Message media, avatars and TUS
+  uploads all fell over, none of which involves a bot.
+- `20260905150000_media_path_uuid_pattern_repair.sql` — `_kub_media_path_allowed`
+  carried a UUID pattern of 8-4-4-12 where a UUID is 8-4-4-4-12, so the two
+  branches it guards (a chat's avatar, an administrator replacing someone's
+  picture) had never been reachable. It predates the outage above and was hidden
+  by it.
+
+Both were read off production before being written, and one report that
+identified the first was wrong on two details that would have caused harm if
+taken on trust: the live UUID pattern in the bot function was already correct,
+and the first apply attempt had to be repeated as `supabase_admin` because
+`postgres` does not own that function. Verify against the database, not against
+a description of it.
+
+Never push directly to `main` without complete validation, and check what else
+is in `HEAD` before pushing it — pushing `HEAD:main` without reading the log
+once carried three other agents' unreviewed commits into `main` in this project.
+
+Interface material: the product's surfaces were rebuilt as one translucent
+material during this stage. The contract, and the ten rules behind it — six of
+which were learned by breaking something — are in
+`docs/operations/interface-material.md`. Read it before touching a surface.
 
 ## 3. Sources Of Truth
 
