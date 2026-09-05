@@ -21,7 +21,7 @@ export const THEME_LEGACY_KEY = "kub:theme";
  */
 export const THEME_SURFACE_COLORS: Record<ResolvedTheme, string> = {
   dark: "#050B18",
-  light: "#F4F8FC",
+  light: "#E9EFF6",
 };
 
 /** Everything a theme change must touch. */
