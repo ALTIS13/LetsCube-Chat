@@ -173,16 +173,21 @@ export function MessageList({
   // so a message you sent does not animate a second time when its optimistic
   // `tmp:` row is replaced by the server row. The ids are still passed as the
   // render identity, which is what the idempotency cache has to key off.
+  // `layoutKey` is the chat id, and it is passed as the entrance scope because
+  // this component is not remounted between conversations: without it the ids
+  // of the previous chat stayed in `seen`, so every message of the next one was
+  // an id that had never been seen and the whole history animated.
   const entranceRef = React.useRef(EMPTY_ENTRANCE_STATE);
   const enteringKeys = React.useMemo(() => {
     const { state, entering } = advanceMessageEntrance(
       entranceRef.current,
       sortedMessages.map(messageEntranceKey),
       sortedMessages.map((m) => m.id),
+      layoutKey ?? null,
     );
     entranceRef.current = state;
     return entering;
-  }, [sortedMessages]);
+  }, [sortedMessages, layoutKey]);
   const senderAvatarProfileIds = React.useMemo(() => {
     const ids = new Set<string>();
     for (const message of sortedMessages) {

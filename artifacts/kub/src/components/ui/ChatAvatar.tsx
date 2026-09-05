@@ -326,13 +326,19 @@ export function MessageActorAvatar({
   const avatarUrl = messageActorAvatarUrl(actor);
   const actorId = "id" in actor ? actor.id : actor.kind;
   const iconName = actor.kind === "bot" || actor.kind === "deleted_bot" ? "bot" : "user";
+  const bgColor = getAvatarColor(actorId);
   const fallback = (
     <div
       className={cn(
-        "flex items-center justify-center rounded-full font-medium text-white",
+        "rounded-full flex items-center justify-center font-medium",
         sizeMap[size],
       )}
-      style={{ background: getAvatarColor(actorId) }}
+      // D-044. This is the same palette the chat list and the header draw, and
+      // it was the only one of the three still forcing white ink: all ten
+      // colours are pastel, so the monogram beside a message measured 1.19:1 to
+      // 2.78:1 while its siblings measured 6.75:1 to 15.67:1 on the same person.
+      // The icon takes the ink too — a bot's glyph is a shape on the same fill.
+      style={{ background: bgColor, color: avatarInkFor(bgColor) }}
       aria-label={name}
     >
       {actor.kind === "user" ? getInitials(name) : <KubIcon name={iconName} size={Math.max(12, Math.round(pixelMap[size] * 0.48))} />}

@@ -555,7 +555,8 @@ export function AudioSettingsSection() {
         <button
           type="button"
           onClick={() => void resetAudioSettings()}
-          className="text-xs font-semibold text-[color:var(--kub-accent-text)] hover:underline"
+          // D-047: 162x16 before this, the smallest target on the screen.
+          className="kub-button inline-flex items-center text-xs font-semibold text-[color:var(--kub-accent-text)] hover:underline"
         >
           Сбросить настройки звука
         </button>
@@ -651,7 +652,12 @@ function ModeButton({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "min-h-9 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors disabled:cursor-default",
+        // D-047: 288x36 before this.
+        // `h-9` rather than `min-h-9`: index.css now lives in @layer
+        // components, so a `min-h-*` utility outranks `.kub-button`'s own
+        // min-height and the touch minimum never reached this control.
+        // Measured: with `min-h-9` the coarse box stayed 36px.
+        "kub-button h-9 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors disabled:cursor-default",
         active
           ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
           : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] kub-raise-hover",
@@ -743,7 +749,10 @@ function SliderRow({
         step={step}
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
-        className="w-full accent-[var(--kub-cyan)]"
+        // D-047: 314x16 before this. A slider is a control a finger aims at,
+        // and `kub-field` is what carries the touch minimum for a box whose
+        // whole area is the target.
+        className="kub-field w-full accent-[var(--kub-cyan)]"
       />
     </label>
   );

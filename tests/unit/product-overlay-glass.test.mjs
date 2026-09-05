@@ -37,11 +37,14 @@ const read = (file) => readFileSync(new URL(file, root), "utf8");
  */
 const surfaces = [
   // The contact card, in both shapes. Docking only happens below 640px, where
-  // the card is the full width of a phone, so both are `-strong`.
-  ["lib/profileWindow.ts", "flex min-h-0 flex-col h-full w-full", "kub-glass-strong"],
+  // the card covers the whole phone, so both are `-strong`. The docked one is
+  // laid over the conversation rather than beside it — see D-050.
+  ["lib/profileWindow.ts", "absolute inset-0 z-[60] flex min-h-0 flex-col", "kub-glass-strong"],
   ["lib/profileWindow.ts", "fixed z-[60] flex min-h-0 flex-col", "kub-glass-strong"],
   // Its two sticky bars, which would otherwise be opaque strips inside it.
-  ["components/chat/ChatInfoPanel.tsx", "grid-cols-[2.5rem_minmax(0,1fr)_2.5rem]", "kub-glass-strong"],
+  // The title bar's tracks size to their contents so a control that grows to
+  // the touch minimum is not overflowing a fixed 2.5rem column — see D-047.
+  ["components/chat/ChatInfoPanel.tsx", "grid-cols-[auto_minmax(0,1fr)_auto]", "kub-glass-strong"],
   ["components/chat/ChatInfoPanel.tsx", "sticky top-0 z-10 flex flex-shrink-0", "kub-glass-strong"],
   // The round recorder, attached above the composer, over the message list.
   ["components/chat/VideoMessageRecorderModal.tsx", "mx-3 mb-2 rounded-3xl", "kub-glass-strong"],

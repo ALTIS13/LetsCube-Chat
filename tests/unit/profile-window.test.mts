@@ -66,9 +66,27 @@ test("on a phone the card is still the docked panel, not a window to drag around
   const frame = profileWindowFrame(placementAt(300, 200), PHONE);
   assert.equal(frame.docked, true);
   assert.equal(frame.style, undefined, "a docked panel is laid out, never positioned by hand");
-  assert.ok(frame.className.includes("border-l"), "it keeps the column border it always had");
-  assert.ok(frame.className.includes("h-full"));
   assert.ok(!frame.className.includes("fixed"), "nothing floats below the dock breakpoint");
+});
+
+test("the docked card is laid over the conversation, not beside it", () => {
+  // D-050. It used to be a flex child of the same row as the conversation,
+  // which is not what "covers the whole phone" means to a layout engine: the
+  // chat was compressed to 24px and pushed off the left edge rather than left
+  // alone. Measured at 390x844 with 75 rows, `scrollHeight` went from 6,586 to
+  // 114,731 and single rows were laid out up to 4,786px tall - every one of
+  // them re-measured at the wrong width, and again on the way back.
+  const frame = profileWindowFrame(placementAt(300, 200), PHONE);
+  assert.ok(frame.className.includes("absolute"), "the card is in the flow again");
+  assert.ok(frame.className.includes("inset-0"), "the card no longer covers the conversation");
+  assert.ok(
+    !/\bflex-shrink-0\b/.test(frame.className),
+    "a flex child of the conversation's row is what compressed the chat to 24px",
+  );
+  assert.ok(
+    !/\bw-full\b|\bmd:w-80\b/.test(frame.className),
+    "a positioned sheet is sized by its insets; a width class here means it is back in the row",
+  );
 });
 
 test("the dock breakpoint is the line between a panel and a window", () => {

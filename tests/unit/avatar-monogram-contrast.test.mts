@@ -75,13 +75,29 @@ test("a dark background still gets light ink", () => {
 });
 
 test("the monogram no longer hardcodes white ink", () => {
-  const monograms = source.match(/rounded-full flex items-center justify-center font-medium[^"]*/g) ?? [];
-  assert.ok(monograms.length >= 2, `expected the monogram class list, found ${monograms.length}`);
-  for (const classes of monograms) {
-    assert.ok(
-      !/\btext-white\b/.test(classes),
-      `the monogram still forces white ink: "${classes}"`,
-    );
-  }
-  assert.match(source, /color: avatarInkFor\(bgColor\)/, "the monogram must take its ink from the palette check");
+  // D-044: this used to look for one exact class ordering, and a third
+  // component wrote the same classes in a different order - `flex items-center
+  // justify-center rounded-full font-medium text-white` - so the scan never saw
+  // it. `MessageActorAvatar` kept white ink on all ten pastel colours for as
+  // long as this file was green. The anchor is now the palette call itself,
+  // which is what every monogram has to make, in any order.
+  const sites = source.match(/const bgColor = getAvatarColor\([^)]*\)/g) ?? [];
+  assert.ok(sites.length >= 3, `expected every monogram to read the palette, found ${sites.length}`);
+  // Read through one name, so a fourth component cannot reach the palette by a
+  // route this file does not count.
+  const calls = (source.match(/getAvatarColor\(/g) ?? []).length - 1; // minus its own declaration
+  assert.equal(calls, sites.length, `${calls} calls to the palette but ${sites.length} of them named bgColor`);
+
+  const inked = source.match(/color: avatarInkFor\(bgColor\)/g) ?? [];
+  assert.equal(
+    inked.length,
+    sites.length,
+    `${sites.length} components read the palette but only ${inked.length} take their ink from it`,
+  );
+
+  assert.doesNotMatch(
+    source,
+    /\btext-white\b/,
+    "a monogram forces white ink again, which no colour in this palette can carry",
+  );
 });

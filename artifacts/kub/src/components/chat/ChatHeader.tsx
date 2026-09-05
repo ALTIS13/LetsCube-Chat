@@ -222,7 +222,9 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
         >
       <button
         onClick={() => setSelectedChatId(null)}
-        className="md:hidden p-2 rounded-lg kub-raise-hover transition-colors flex-shrink-0 text-[color:var(--kub-cyan)]"
+        // D-047: 36x36 before this, and it is the only way back to the chat
+        // list on a phone.
+        className="kub-icon-action md:hidden p-2 rounded-lg kub-raise-hover transition-colors flex-shrink-0 text-[color:var(--kub-cyan)]"
         aria-label="Назад"
       >
         <KubIcon name="back" size={20} />

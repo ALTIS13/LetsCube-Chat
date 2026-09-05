@@ -2502,7 +2502,7 @@ later change to it: **750 row-observations across ten chat cells, 0 rows changed
 height after their first painted frame.** D-032 and D-041 are closed and stay
 closed at all five widths in both themes.
 
-## D-044 — a message's monogram is white on every colour the palette has
+## D-044 `[x]` a message's monogram is white on every colour the palette has
 
 **Severity:** high. Every message from a sender with no picture, in every chat,
 at every viewport, in both themes.
@@ -2554,7 +2554,7 @@ there is no picture, and it is the one place in the product where it is
 illegible. 56 instances across the 7 measured `profile-media` cells; the count is
 one per avatar-less incoming message on screen.
 
-## D-045 — a history prepend fades in a hundred bubbles at once
+## D-045 `[x]` a history prepend fades in a hundred bubbles at once
 
 **Severity:** medium. Every load of older history, in every chat with more than
 one page of it.
@@ -2597,7 +2597,7 @@ the movement (`index.css:534-537`), so this is a defect for everyone else.
 **Not the same as D-042**, which is the 42px loading band displacing the reader.
 That entry is about the band; this one is about the rows.
 
-## D-046 — the entrance class, and its compositing hint, are never taken off
+## D-046 `[x]` the entrance class, and its compositing hint, are never taken off
 
 **Severity:** low.
 
@@ -2664,7 +2664,7 @@ surfaces rebuilt three days later carry none of them, so the rule reaches nothin
 on either. Whether the answer is more classes or a wider selector is a decision,
 not a patch.
 
-## D-048 — the required marker misses 4.5:1 in both themes
+## D-048 `[x]` the required marker misses 4.5:1 in both themes
 
 **Severity:** low. All ten `settings` cells and all ten `settings-expanded` cells.
 
@@ -2698,7 +2698,7 @@ under the 3:1 a non-text indicator needs." It was solved for the **dot**, which
 needs 3:1, and the same value is then used for 12px **text**, which needs 4.5:1.
 `#3C8B3C` clears the first bar by a margin and misses the second by 0.26.
 
-## D-050 — opening the profile card on a phone re-lays the conversation at 24px
+## D-050 `[x]` opening the profile card on a phone re-lays the conversation at 24px
 
 **Severity:** low — nothing visibly wrong, and the anchor is restored exactly.
 Recorded for the work it does and the hazard it leaves.
@@ -2950,3 +2950,314 @@ that is where the subscription lives. A sidebar left open with no chat selected
 still ages out. And the margin is thin by design — a 60s heartbeat against a 90s
 threshold — so a single missed beat still shows someone as away. Worth revisiting
 together; neither is a two-device problem.
+
+## D-044 to D-050 revisited, five closed and two left standing
+
+Re-measured and fixed 2026-09-05, on `31a0568`, in both themes at 1440x900 and
+390x844. D-053 below was raised in the same pass and is older than any of them.
+
+All seven were re-measured on the current tree before anything was changed,
+because the material stage landed text variants of three colours in between and
+one of the seven could have closed itself. One had. The measurements below are
+the product's pixels in both themes: the fictional capture fixture at
+`/__qa/public-preview` where the surface is reachable without signing in, and
+the signed-in application where it is not. Every contrast number is photographed
+— the glyphs are made transparent with an injected `!important` rule keyed off
+an attribute, the element's own box is screenshotted, and the PNG is decoded —
+so blur, alpha and ambient are all inside it.
+
+| finding | still alive on 2026-09-05 | before | after |
+| --- | --- | --- | --- |
+| D-044 | yes | white on `#45B7D1`, **2.35:1** | `#0B1220`, **7.98:1** |
+| D-045 | yes | 91 rows carrying `.msg-appear` in one frame, 11 on screen, lowest opacity **0** | **0** in every frame of a prepend |
+| D-046 | yes | 91 nodes still classed, `will-change: opacity, transform`, 6s after | **0** nodes |
+| D-047 | yes | profile card 4/4 controls under 44px, settings 24/48 | **0/4** and **0/48** |
+| D-048 | **no — closed itself** | — | `#FF6B6B` **5.31:1**, `#C11B1B` **6.09:1** |
+| D-049 | yes, light theme only | `#3C8B3C` on the photographed header, **4.08:1** | needs a token; see below |
+| D-050 | yes | scroller 390 → **24** → 390, `scrollHeight` 6,586 → **114,731** | 390 → **390** → 390, `scrollHeight` unchanged |
+
+### D-044 `[x]` — the monogram takes the ink the palette was chosen for
+
+`MessageActorAvatar` now calls `avatarInkFor(bgColor)`, like the two components
+beside it. Measured on the same person in the same conversation, both themes:
+`#FFFFFF` on `#45B7D1` was **2.35:1**, and `#0B1220` on it is **7.98:1**. The
+palette's worst case moves from 1.19:1 to 6.75:1.
+
+**How it survived a test written for exactly this.**
+`tests/unit/avatar-monogram-contrast.test.mts` did scan for hardcoded white ink,
+and it was green the whole time: it matched the class string
+`rounded-full flex items-center justify-center font-medium`, and the third
+component wrote the same classes in a different order —
+`flex items-center justify-center rounded-full font-medium text-white`. A
+class-order-sensitive anchor is a test of one component pretending to be a test
+of a rule. The scan is now anchored on the palette call itself, counts the call
+sites, and requires the same number of `avatarInkFor` sites, so a fourth
+monogram cannot be added without being covered.
+
+### D-045 `[x]` — a prepend is history, not an arrival
+
+`advanceMessageEntrance` gained a notion of *where* an id turned up. The anchor
+is the last id that was already on screen: anything after it arrived at the end
+of the conversation, which is the only arrival a reader watches happen;
+anything before it is history that has just been fetched, or a gap a jump has
+filled in.
+
+Measured on one prepend at 1440x900 in both themes, sampling every animation
+frame for 9 seconds:
+
+| | before | after |
+| --- | --- | --- |
+| rows | 100 → 200 | 100 → 200 |
+| peak `.msg-appear` in one frame | **91** | **0** |
+| of those inside the viewport | **11** | **0** |
+| lowest opacity sampled | **0** | **1** |
+| frames with a faded row | 1 of 541 sampled | 0 of 550 |
+
+**A second defect fell out of the same reading, and it was worse.** The entrance
+state is a `useRef` inside `MessageList`, and `MessageList` is not remounted
+between conversations — there is no `key`, only a `layoutKey` prop. So `seen`
+carried over: every message of the chat you opened *second* was an id that had
+never been seen, and the whole history animated. `primed` could not catch this,
+because it only knows whether *a* first pass has happened, not whether this is
+the first pass of this conversation. The state now carries a `scope`, the list
+passes the open chat's id, and a scope change re-primes. The idempotency cache
+is keyed on the scope too: two conversations can render the same ids — a
+forwarded message, a fixture, a chat cleared and refilled — and answering the
+second from the first's cache would carry its entering set across with it.
+
+One exception is deliberate: a chat that held no messages at all animates its
+first one, because there was nothing for it to be different from.
+
+### D-046 `[x]` — the hint is dropped where the stylesheet said it was
+
+`MessageBubble` listens for `animationend`, checks the animation is `msg-appear`
+and that it is its own rather than a child's, and sets a flag that takes the
+class off. The flag only ever goes from false to true for the life of the mount,
+which is also strictly better than what was there: a later render can no longer
+put the class back and replay the fade on a bubble that had already settled.
+
+Measured six seconds after the last animation ended, both themes: **91 nodes
+carrying `.msg-appear` and `will-change: opacity, transform` before, 0 after.**
+
+Under `prefers-reduced-motion: reduce` the rule sets `animation: none`, so no
+`animationend` fires and the class stays — but that branch also sets
+`will-change: auto`, so nothing is retained and there is nothing to drop.
+
+### D-047 — closed on both rebuilt surfaces, open inside a message bubble
+
+The rule is opt-in and lives in `index.css`; the answer is therefore more
+classes, not a wider selector, and the classes are the ones that already exist.
+`kub-icon-action` for an icon-only control, `kub-button` for a row or a text
+button, `kub-field` for a box whose whole area is the target.
+
+Measured at 390x844 with a coarse pointer, both themes:
+
+| surface | before | after |
+| --- | --- | --- |
+| profile card | 4 of 4 controls under 44px | **0 of 4** |
+| settings, all disclosures open | 24 of 48 | **0 of 48** |
+
+The settings count excludes two kinds that the rule already answers as written
+and that are reported separately rather than as misses: the hidden file input
+behind «Сменить фото», which is not a target, and the four tick boxes, which the
+rule gives a 24px box inside a 44px label. Everything else was opted in:
+the card's title-bar controls and its action rows, every dialog's close button,
+the avatar's camera badge, the three theme radios, the name/nickname/bio fields,
+the three audio processing modes, the audio reset, the two volume sliders, the
+five icon-only help triggers — 13x13, the smallest control the product had — and
+the chat's back control, which is the only way back to the list on a phone.
+
+Two of them needed more than a class:
+
+- The card's title bar was `grid-cols-[2.5rem_...]`. A 44px control simply
+  overflows a 40px track, so the tracks now size to what they hold: 36px on a
+  pointer, 44px on a finger, without a second copy of the breakpoint.
+- The three audio modes were written `min-h-9`. `index.css` now lives in
+  `@layer components` and Tailwind's utilities are a later layer, so a `min-h-*`
+  utility **outranks** `.kub-button { min-height: 44px }` and the touch minimum
+  never applies. Measured: `kub-button min-h-9` came out 36px tall on a coarse
+  pointer, exactly as if the class were absent. `h-9` is safe — it sets
+  `height`, and the used height is the larger of the two. This is rule 10 of the
+  material notes pointing the other way now that the layer exists, and it is
+  asserted rather than remembered:
+  `tests/unit/touch-target-system.test.mjs` fails any class list that pairs a
+  touch class with a smaller `min-h-*`.
+
+**Two controls were deliberately not changed, and both are inside a message
+bubble**: the per-message actions button (20x20) and the read-receipt chip
+(39.7x16). D-015 already ruled out the pseudo-element overlay for this rule —
+two adjacent controls would end up with overlapping hit areas and steal each
+other's taps, and these two are adjacent, two pixels apart — so the only option
+is the real box, and the real box moves the conversation. Measured on the
+fixture at 390x844, raising the chip alone to 44x44:
+
+| | before | with the chip at 44px |
+| --- | --- | --- |
+| mean row height | 74.8px | **98.8px** |
+| every row grew by | — | **24px** |
+| conversation height, 8 rows | 718px | **832px** (+16%) |
+
+That is a change to the density of the product's main surface, which is a design
+decision and not a defect patch, so it is left for the owner to take. The long
+press on the bubble opens the same menu meanwhile.
+
+**Three more near misses were measured and not fixed**, being outside this
+entry's list: the composer's attach, emoji and voice buttons at 40x40, and the
+chat header's title button at 278x40.5. Each is four pixels short and each would
+be a one-class change; none is recorded as a defect yet, and polishing by eye is
+what this stage is not for.
+
+### D-048 `[x]` — closed by the text tokens, with no change here
+
+The marker at `SettingsModal.tsx` already reads `--kub-danger-text`, which
+landed with the material stage for exactly this reason. Re-measured in the
+signed-in settings screen at 390x844, photographed:
+
+| theme | ink | ground | ratio |
+| --- | --- | --- | --- |
+| dark | `#FF6B6B` | `rgb(16,41,69)` | **5.31:1** |
+| light | `#C11B1B` | `rgb(254,255,255)` | **6.09:1** |
+
+The clip's first pixel row is the settings row's own border at `rgb(49,71,94)`
+and carries no glyph; the asterisk's ink is on the surface. Recorded because a
+worst-pixel reading over the whole box reports 3.45:1 and would send the next
+person after a defect that is a 1px line.
+
+### D-049 — measured, and waiting on one token
+
+Still alive, light theme only, exactly as recorded. Photographed on the chat
+header's own subtitle, `#3C8B3C` measures **4.08:1** — slightly worse than the
+4.24:1 the entry recorded against pure white, because the header composites to
+`rgb(248,251,254)` rather than to white. The dark theme measures **7.62:1** on
+the same surface and **6.27:1** against the limiting composite, so it passes and
+needs nothing.
+
+The remedy is the one D-048 and the two colours before it used: the dot keeps
+`--kub-online`, which answers 3:1 and meets it, and the word gets a variant.
+Measured across every ground the colour lands on — the photographed header, the
+limiting composite of a panel over the field a blur cannot see past, all six
+surface tokens, and the veil, which is denser than the surface under it and is
+what caught both existing text tokens five thousandths short:
+
+| candidate | photographed header | limit `rgb(240,240,240)` | veiled panel row | worst |
+| --- | --- | --- | --- | --- |
+| `#3C8B3C` (today) | 4.08 | 3.72 | 3.30 | **3.30** |
+| `#367E36` | 4.82 | 4.39 | 3.89 | 3.89 |
+| `#317431` | 5.50 | 5.02 | 4.44 | 4.44 |
+| **`#2E6E2E`** | 5.97 | 5.44 | 4.82 | **4.82** |
+| `#276027` | 7.25 | 6.61 | 5.85 | 5.85 |
+
+`#2E6E2E` is the smallest step along the same hue that clears 4.5:1 on every
+ground the existing text tokens are held to. `#276027` additionally clears the
+harsher case of `kub-glass` — the header's own fill, not the stronger one — over
+a solid black field, which is reachable when a black photograph scrolls under
+the header: 4.69:1 against `#2E6E2E`'s 3.86:1 there.
+
+`index.css` belongs to someone else this week, so nothing was changed. What it
+needs is `--kub-online-text: #4DCD5E` in `.dark` — deliberately the same value,
+as `--kub-pink-text` is in the light theme, so call sites can be uniform — and
+`--kub-online-text: #2E6E2E` in `.light`. Then `ChatHeader.tsx:251` moves to it,
+and so do the six other places that paint `--kub-online` as words rather than as
+a shape: `RegisterForm.tsx:240` and `:277`, `ChatInfoPanel.tsx:1943`,
+`StorageSection.tsx:307`, `KubFeedbackViewport.tsx:22`,
+`TaskDetailModal.tsx:736`, and the two invite tones in
+`notificationPresentation.ts`. `KubIcon`, `KubBadge`, the status dot and every
+fill keep `--kub-online`.
+
+### D-050 `[x]` — the sheet is laid over the conversation, not beside it
+
+`DOCKED_CLASS` positions the card `absolute inset-0` inside the chat pane, which
+is already `relative`, instead of making it a flex child of the row the
+conversation is in. The comment above it always said "a sheet over the
+conversation, not a column beside it"; now the layout says so too.
+
+Measured at 390x844 with 75 rows, both themes:
+
+| | before | after |
+| --- | --- | --- |
+| scroller width | 390 → **24** → 390 | 390 → **390** → 390 |
+| `scrollHeight` | 6,586 → **114,731** → 6,586 | 6,586 → **6,586** → 6,586 |
+| tallest row while open | **4,786px** | **236px** |
+| `scrollTop` | 5,868 → 5,868 | 5,868 → 5,868 |
+| witness row top | 79 → 79 | 79 → 79 |
+
+The section 11 contract held before and holds now — the drift was zero in both
+cases; what has gone is the work. The card also stops being able to compress the
+conversation into something the audit harness has to be taught to ignore.
+
+### D-053 `[x]` — the support window's own timestamp, at 4.44:1 and 4.30:1
+
+Raised outside the seven on 2026-09-05, and older than all of them: it has been
+there since the window was built.
+
+**Severity:** low. Every message in the support window, both themes.
+
+**Surface:** `artifacts/kub/src/components/support/SupportWindow.tsx`, the
+`text-[10px]` line under each bubble.
+
+**Measured**, photographed at 10px on the fill the product paints:
+
+| theme | ground | `--kub-muted` |
+| --- | --- | --- |
+| dark | `rgb(29,63,100)` | **4.44:1** |
+| light | `rgb(208,223,237)` | **4.30:1** |
+
+**It is the ink that changed, and the reason is that the ground cannot be fixed.**
+A chat bubble is opaque, so its meta line sits on a token value and the muted
+grey is guaranteed there — 5.91:1 and 4.80:1 on `--kub-message-out`. The support
+window's bubbles are a wash over a panel that floats above whatever the
+messenger happens to be showing. Every fill that would have rescued the grey was
+measured, one at a time and always in the same place, and each failed:
+
+| fill | dark, photographed | light, photographed | dark, limit | light, limit |
+| --- | --- | --- | --- | --- |
+| `--kub-cyan` 22% (today) | 4.44 | 4.30 | 3.98 | 3.86 |
+| `--kub-message-out` | 5.91 | 4.80 | 5.91 | 4.80 |
+| `--kub-cyan` 22% over `--kub-message-out` | 4.35 | 3.66 | 4.35 | 3.66 |
+| `--kub-cyan` 12% | 5.15 | 4.93 | 4.51 | **4.42** |
+| the veil, as support's own bubble wears it | 4.93 | 5.10 | **4.31** | 4.54 |
+
+`--kub-message-out` passes and is the only one that does, because it is a token
+and cannot drift with what is behind the window — and it composites to within
+**1.01** of the window itself in the dark theme, which is a bubble nobody can
+see. Weakening the cyan far enough to pass the limit in both themes (about 8%)
+puts the bubble at 1.20 against the window, which is the same defect wearing a
+different number. And the veil — what the *incoming* bubble already uses, which
+is why only the outgoing one was reported — is 4.31:1 on that same worst ground,
+so the grey is not guaranteed anywhere in this window.
+
+So the timestamp takes `--kub-text`: **10.06:1** and **13.94:1**, measured on
+the same bubble. A quieter dedicated token would read better and is the token
+owner's call; nothing here needs one.
+
+### Where the evidence is
+
+The probes are in the ignored `output/d044-d050/`: `probe-fixture.mjs` (the
+capture fixture, no sign-in, invented data), `probe-auth.mjs`, `probe-online.mjs`
+(D-049's candidate sweep), `probe-support-candidates.mjs`,
+`probe-bubble-cost.mjs` (what raising the in-bubble controls would cost) and
+`mutate.mjs`. Screenshots and the decoded backdrops are under
+`output/d044-d050/shots/`. Nothing in any of them carries a real conversation:
+the fixture surface is `tests/fixtures/public-home-demo.json`, and where the
+signed-in application was needed the glyphs are transparent in every picture
+that was kept.
+
+`mutate.mjs` is the proof the contracts are load-bearing. It compares the file's
+SHA-256 before and after each substitution — not the presence of an anchor,
+which reports a false "applied" on an insertion — and refuses to judge when the
+anchor is not unique. Nine mutations, all caught: the monogram back to white
+ink; every new id counted as an arrival again; the entrance state unscoped from
+the chat; nothing taking the entrance class off; the card's action rows and the
+chat's back control losing their touch class; a mode button back to the utility
+that outranks it; the docked card back in the conversation's row; and the
+support timestamp back to the muted grey.
+
+### One pre-existing failure found on the way, and not touched
+
+`tests/e2e/unified-interface-chrome.spec.ts:122` fails on this branch with a
+strict-mode violation: `getByRole("button", { name: "Чистый голос" })` matches
+both the audio disclosure row, whose accessible name includes the mode it
+summarises, and the mode button itself. Confirmed pre-existing by reverting
+`AudioSettingsSection.tsx` to `HEAD` and re-running — it fails identically — and
+the file was restored to the same SHA-256 afterwards. It is a locator that
+needs narrowing, not a product defect, and it belongs to whoever owns that spec.

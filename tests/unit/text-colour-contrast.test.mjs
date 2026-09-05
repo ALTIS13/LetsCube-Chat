@@ -163,11 +163,97 @@ const SITES = [
     what: "an icon tone, which is a shape and stays on the shape token",
     expect: /accent: "text-\[color:var\(--kub-cyan\)\]"[\s\S]{0,120}danger: "text-\[color:var\(--kub-danger\)\]"/,
   },
+  {
+    file: "components/support/SupportWindow.tsx",
+    what: "the timestamp on a support bubble, where the muted grey has no guaranteed ground",
+    expect: /mt-0\.5 text-right text-\[10px\] text-\[color:var\(--kub-text\)\]/,
+  },
 ];
 
 for (const site of SITES) {
   test(`${site.file} carries the right colour for ${site.what}`, () => {
     const source = readFileSync(new URL(site.file, root), "utf8");
     assert.match(source, site.expect);
+  });
+}
+
+
+/**
+ * Why the support window's timestamp is not the muted grey every other
+ * timestamp uses.
+ *
+ * A chat bubble is opaque, so its meta line sits on a token value and the grey
+ * is guaranteed there — measured, 5.91:1 in the dark theme and 4.80:1 in the
+ * light one on `--kub-message-out`. The support window's bubbles are
+ * translucent inside a panel that floats over whatever the messenger happens to
+ * be showing, so their ground is whatever is behind the window. Photographed at
+ * 10px on the fill the product paints, the grey measured 4.44:1 and 4.30:1; on
+ * the worst ground this window can reach, 3.98:1 and 3.86:1.
+ *
+ * Every fill that would have rescued the grey was measured too, and each failed
+ * for its own reason: the veil the support bubble already uses is 4.31:1 on the
+ * same worst ground, and `--kub-message-out` passes but composites to within
+ * 1.01 of the window in the dark theme, which is a bubble nobody can see. So it
+ * is the ink that changed.
+ *
+ * This asserts the number that made the decision, not the decision, so lifting
+ * the panel's opacity — or moving the grey — is what breaks it.
+ */
+
+/**
+ * The support window's own bubble, which is the one place a timestamp has no
+ * guaranteed ground.
+ *
+ * A chat bubble is opaque, so its meta line sits on a token value and the muted
+ * grey is safe there — 5.91:1 in the dark theme and 4.80:1 in the light one on
+ * `--kub-message-out`. The support window's bubbles are a wash over a panel
+ * that floats above whatever the messenger happens to be showing, so their
+ * ground is whatever is behind the window. Photographed at 10px on the fill the
+ * product paints, the grey measured 4.44:1 and 4.30:1; the arithmetic below,
+ * against the worst ground the window can reach, agrees with the picture.
+ *
+ * Every fill that would have rescued the grey was measured too, and each failed
+ * for its own reason: the veil the support bubble already uses is 4.31:1 on the
+ * same worst ground, and `--kub-message-out` passes but composites to within
+ * 1.01 of the window in the dark theme, which is a bubble nobody can see. So it
+ * is the ink that changed, and the assertion is the number that decided it.
+ */
+const supportSource = readFileSync(new URL("components/support/SupportWindow.tsx", root), "utf8");
+
+/** `color-mix(in srgb, X p%, over)` — the form the bubble is written in. */
+function mixOver(colour, percent, over) {
+  const c = rgbOf(colour);
+  return [0, 1, 2].map((i) => Math.round((c[i] * percent + over[i] * (100 - percent)) / 100));
+}
+
+/** The person's own support bubble, on the worst ground its window can reach. */
+function ownBubbleGround(theme) {
+  const block = themeBlock(theme);
+  const panel = composite(token(block, "glass-fill-strong"), WORST_FIELD[theme]);
+  // Read from the component: a change to the wash has to move this number, not
+  // leave a stale constant passing.
+  const wash = supportSource.match(/var\(--kub-cyan\)_(\d+)%,transparent/);
+  assert.ok(wash, "the own support bubble's fill could not be read from the component");
+  return mixOver(token(block, "kub-cyan"), Number(wash[1]), panel);
+}
+
+for (const theme of ["dark", "light"]) {
+  test(`the muted grey cannot carry the support timestamp in the ${theme} theme`, () => {
+    const ground = ownBubbleGround(theme);
+    const ratio = contrast(rgbOf(token(themeBlock(theme), "kub-muted")), ground);
+    assert.ok(
+      ratio < 4.5,
+      `--kub-muted now measures ${ratio.toFixed(2)}:1 on rgb(${ground}). If that is real ` +
+        `the timestamp can go back to it, but photograph the bubble before believing it.`,
+    );
+  });
+
+  test(`the ink the support timestamp uses instead does carry it in the ${theme} theme`, () => {
+    const ground = ownBubbleGround(theme);
+    const ratio = contrast(rgbOf(token(themeBlock(theme), "kub-text")), ground);
+    assert.ok(
+      ratio >= 4.5,
+      `--kub-text measures ${ratio.toFixed(2)}:1 on rgb(${ground}), under the 4.5:1 a word needs`,
+    );
   });
 }

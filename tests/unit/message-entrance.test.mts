@@ -72,14 +72,83 @@ test("the same ids asked twice give the same answer", () => {
 });
 
 test("loading older history does not animate it", () => {
-  // Prepending is not arrival. Fifty bubbles fading in above the reader is the
-  // exact thing this is here to prevent.
+  // D-045. Prepending is not arrival. This used to return all three: `primed`
+  // suppressed the first pass only, and after it every id that was not in
+  // `seen` counted as new wherever it turned up. Measured on one prepend in the
+  // real chat, 91 bubbles carried `.msg-appear` in a single frame and 11 of
+  // them were in the viewport, fading from opacity 0 - the behaviour this
+  // module exists to remove, in the one case it did not cover.
   const first = advanceMessageEntrance(EMPTY_ENTRANCE_STATE, ["d", "e"]);
   const prepended = advanceMessageEntrance(first.state, ["a", "b", "c", "d", "e"]);
-  assert.deepEqual([...prepended.entering].sort(), ["a", "b", "c"]);
-  // NOTE: this is the honest current behaviour, and it is why `MessageList`
-  // must not animate a prepend. Recorded so the limit is visible rather than
-  // discovered.
+  assert.equal(prepended.entering.size, 0, "a history prepend animated");
+});
+
+test("a prepend arriving together with a new message animates only the new one", () => {
+  // The anchor is the last id that was already on screen, so one pass can carry
+  // both an arrival and a page of history without confusing them.
+  const first = advanceMessageEntrance(EMPTY_ENTRANCE_STATE, ["d", "e"]);
+  const both = advanceMessageEntrance(first.state, ["a", "b", "c", "d", "e", "f"]);
+  assert.deepEqual([...both.entering], ["f"]);
+});
+
+test("a jump that replaces the window animates nothing", () => {
+  // `ensureMessageLoaded` can land a page from somewhere else in the same
+  // conversation, sharing no id with what was on screen. Nobody watched any of
+  // it arrive.
+  const first = advanceMessageEntrance(EMPTY_ENTRANCE_STATE, ["m", "n", "o"]);
+  const jumped = advanceMessageEntrance(first.state, ["x", "y", "z"]);
+  assert.equal(jumped.entering.size, 0);
+  // And the list carries on normally from where it landed.
+  const after = advanceMessageEntrance(jumped.state, ["x", "y", "z", "w"]);
+  assert.deepEqual([...after.entering], ["w"]);
+});
+
+test("the first message in an empty chat does animate", () => {
+  // The "nothing was on screen a moment ago" rule has one exception, and this
+  // is it: an empty conversation had nothing to be different from, so its first
+  // message really did arrive while the reader was watching.
+  const empty = advanceMessageEntrance(EMPTY_ENTRANCE_STATE, [], [], "chat-1");
+  const firstMessage = advanceMessageEntrance(empty.state, ["a"], ["a"], "chat-1");
+  assert.deepEqual([...firstMessage.entering], ["a"]);
+});
+
+test("opening a second chat animates nothing", () => {
+  // `MessageList` is not remounted between conversations, so `seen` carried
+  // over: every message of the chat you opened second was an id that had never
+  // been seen, and the whole history animated. `primed` cannot see this - it
+  // only knows whether *a* first pass has happened, not whether this is the
+  // first pass of this conversation.
+  const first = advanceMessageEntrance(EMPTY_ENTRANCE_STATE, ["a", "b"], ["a", "b"], "chat-1");
+  const second = advanceMessageEntrance(first.state, ["x", "y", "z"], ["x", "y", "z"], "chat-2");
+  assert.equal(second.entering.size, 0, "switching chats animated the whole history");
+  // Back to the first chat: also a fresh scope, so also nothing.
+  const back = advanceMessageEntrance(second.state, ["a", "b"], ["a", "b"], "chat-1");
+  assert.equal(back.entering.size, 0);
+  // And an arrival in the chat now open still animates.
+  const arrival = advanceMessageEntrance(back.state, ["a", "b", "c"], ["a", "b", "c"], "chat-1");
+  assert.deepEqual([...arrival.entering], ["c"]);
+});
+
+test("the idempotency cache does not answer across a scope change", () => {
+  // The signature is the rendered ids, and two chats can render the same ones -
+  // a forwarded message, a fixture, a chat cleared and refilled. Answering the
+  // second from the first's cache would carry its entering set over with it.
+  const first = advanceMessageEntrance(EMPTY_ENTRANCE_STATE, ["a"], ["a"], "chat-1");
+  const arrival = advanceMessageEntrance(first.state, ["a", "b"], ["a", "b"], "chat-1");
+  assert.deepEqual([...arrival.entering], ["b"]);
+  const elsewhere = advanceMessageEntrance(arrival.state, ["a", "b"], ["a", "b"], "chat-2");
+  assert.equal(elsewhere.entering.size, 0, "the cache answered a different conversation");
+});
+
+test("the list passes the chat it is showing as the entrance scope", () => {
+  // Without this the scope is always null, and every test above exercises a
+  // rule the product never asks for.
+  const list = readFileSync("artifacts/kub/src/components/chat/MessageList.tsx", "utf8");
+  assert.match(
+    list,
+    /advanceMessageEntrance\([\s\S]{0,240}layoutKey \?\? null,/,
+    "MessageList no longer scopes the entrance state to the open chat",
+  );
 });
 
 test("a message leaving does not resurrect an old one", () => {
@@ -92,11 +161,45 @@ test("a message leaving does not resurrect an old one", () => {
 
 test("the animation is applied only to entering messages", () => {
   const bubble = readFileSync("artifacts/kub/src/components/chat/MessageBubble.tsx", "utf8");
-  assert.match(bubble, /isEntering && "msg-appear"/, "msg-appear is unconditional again");
+  assert.match(
+    bubble,
+    /isEntering && !entranceSettled && "msg-appear"/,
+    "msg-appear is unconditional again",
+  );
   assert.ok(
     !/relative msg-appear/.test(bubble),
     "the class is back in the static list, so history animates again",
   );
+});
+
+test("the entrance class, and its compositing hint, come off when it ends", () => {
+  // D-046. The stylesheet's own comment says the hint is dropped the moment the
+  // animation ends. Nothing dropped it: measured, a hundred rows still carried
+  // `.msg-appear` and `will-change: opacity, transform` eighteen seconds after
+  // the last one finished, and a chat nothing else touches never renders again
+  // to clear them.
+  const bubble = readFileSync("artifacts/kub/src/components/chat/MessageBubble.tsx", "utf8");
+  assert.match(bubble, /onAnimationEnd=\{/, "nothing listens for the animation ending");
+  assert.match(
+    bubble,
+    /event\.animationName !== "msg-appear"/,
+    "any animation in the subtree would clear the flag, including ones that run before the entrance",
+  );
+  assert.match(
+    bubble,
+    /event\.target !== event\.currentTarget/,
+    "an animation bubbling up from a child would clear the flag",
+  );
+  assert.match(bubble, /setEntranceSettled\(true\)/);
+  // Monotonic for the life of the mount, so a later render cannot put the class
+  // back and replay the fade on a bubble that has already settled.
+  assert.doesNotMatch(bubble, /setEntranceSettled\(false\)/, "the flag is cleared again somewhere");
+
+  // The hint the listener exists to drop is still declared, so this cannot pass
+  // by the stylesheet having quietly stopped setting it.
+  const css = readFileSync("artifacts/kub/src/index.css", "utf8");
+  const block = css.slice(css.indexOf(".msg-appear {"), css.indexOf("@keyframes ripple"));
+  assert.match(block, /will-change:\s*opacity,\s*transform/);
 });
 
 test("the animation moves nothing that has a size", () => {

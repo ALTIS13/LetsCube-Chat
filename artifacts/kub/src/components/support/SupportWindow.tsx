@@ -460,7 +460,21 @@ export function SupportWindow() {
                       </div>
                     )}
                     <p className="whitespace-pre-wrap break-words">{message.body}</p>
-                    <div className="mt-0.5 text-right text-[10px] text-[color:var(--kub-muted)]">
+                    {/* `--kub-text`, not `--kub-muted`, and it is the ink that
+                        changed rather than the bubble. Both bubbles here are
+                        translucent over a window that floats above whatever the
+                        messenger happens to be showing, so their ground is not
+                        a fixed value the way an opaque chat bubble's is.
+                        Photographed at 10px: the muted grey measured 4.44:1 in
+                        the dark theme and 4.30:1 in the light one on the fill
+                        the product paints, and 3.98:1 and 3.86:1 against the
+                        worst ground this window can reach. Every fill that
+                        would have rescued the grey either failed the same worst
+                        ground or went flush with the window — `--kub-message-out`
+                        composited to within 1.01 of it in the dark theme, which
+                        is a bubble you cannot see. This measures 10.06:1 and
+                        13.94:1. */}
+                    <div className="mt-0.5 text-right text-[10px] text-[color:var(--kub-text)]">
                       {formatWhen(message.createdAt)}
                     </div>
                   </div>

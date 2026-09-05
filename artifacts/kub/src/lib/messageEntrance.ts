@@ -19,6 +19,15 @@ export interface MessageEntranceState {
   /** False until the first pass has been recorded, so history never animates. */
   primed: boolean;
   /**
+   * Which conversation `seen` belongs to.
+   *
+   * The list component is not remounted between chats, so without this the set
+   * carried over: every message of the chat you opened second was an id that
+   * had never been seen, and the whole history animated — the exact behaviour
+   * `primed` was added to stop, surviving in every case but the first.
+   */
+  scope: string | null;
+  /**
    * The exact input that produced `lastEntering`, and that result.
    *
    * The caller advances this from inside a `useMemo`, which React may invoke
@@ -35,6 +44,7 @@ export interface MessageEntranceState {
 export const EMPTY_ENTRANCE_STATE: MessageEntranceState = {
   seen: new Set<string>(),
   primed: false,
+  scope: null,
   signature: null,
   lastEntering: new Set<string>(),
 };
@@ -79,24 +89,54 @@ export function advanceMessageEntrance(
   previous: MessageEntranceState,
   ids: readonly string[],
   renderIdentity: readonly string[] = ids,
+  scope: string | null = null,
 ): { state: MessageEntranceState; entering: ReadonlySet<string> } {
   const signature = renderIdentity.join("\u0000");
   // Asked the same question twice: give the same answer, do not re-diff against
   // a `seen` this call already advanced.
-  if (previous.signature === signature) {
+  if (previous.signature === signature && previous.scope === scope) {
     return { state: previous, entering: previous.lastEntering };
   }
 
   const now = new Set(ids);
-  if (!previous.primed) {
-    const entering = new Set<string>();
-    return { state: { seen: now, primed: true, signature, lastEntering: entering }, entering };
+  const settle = (entering: Set<string>) => ({
+    state: { seen: now, primed: true, scope, signature, lastEntering: entering },
+    entering,
+  });
+
+  // The first pass records; it never animates. Neither does the first pass of a
+  // different conversation, which is the same statement now that the list is
+  // known to outlive the chat it is showing.
+  if (!previous.primed || previous.scope !== scope) return settle(new Set<string>());
+
+  // D-045. "Arrived while I was watching" is a claim about *where* an id turned
+  // up, not only about whether it is new. A history prepend adds a hundred ids
+  // that are all new and all older than everything on screen, and the previous
+  // rule animated every one of them: measured on one prepend, 91 bubbles
+  // carried the class in a single frame and 11 of those were in the viewport.
+  //
+  // The anchor is the last id that was already on screen. Anything after it
+  // arrived at the end of the conversation, which is the only arrival a reader
+  // watches happen. Anything before it is history that has just been fetched,
+  // or a gap a jump has filled in - nobody saw either of those arrive.
+  let lastSeenIndex = -1;
+  for (let index = ids.length - 1; index >= 0; index -= 1) {
+    if (previous.seen.has(ids[index])) {
+      lastSeenIndex = index;
+      break;
+    }
   }
+
+  // Nothing on screen was on screen a moment ago. Inside one conversation that
+  // means the window was replaced wholesale - a jump to a message far from here
+  // - so there is no arrival to animate. The exception is a chat that held no
+  // messages at all, where the first one really did just arrive.
+  if (lastSeenIndex < 0 && previous.seen.size > 0) return settle(new Set<string>());
 
   const entering = new Set<string>();
-  for (const id of ids) {
-    if (!previous.seen.has(id)) entering.add(id);
+  for (let index = lastSeenIndex + 1; index < ids.length; index += 1) {
+    if (!previous.seen.has(ids[index])) entering.add(ids[index]);
   }
 
-  return { state: { seen: now, primed: true, signature, lastEntering: entering }, entering };
+  return settle(entering);
 }

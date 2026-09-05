@@ -183,3 +183,138 @@ test("the staff search box is itself a touch target", () => {
     );
   }
 });
+
+
+/**
+ * D-047: the rule reaches the surfaces, not only the stylesheet.
+ *
+ * The 44px rule is opt-in — it applies to `.kub-button`, `.kub-icon-action`,
+ * `.kub-field`, `.kub-switch` and a short list of native elements, and to
+ * nothing else. Two surfaces were rebuilt after it was written and carried none
+ * of those classes, so the rule reached nothing on either: measured at 390x844
+ * with a coarse pointer, the profile card had 4 of its 4 controls under 44px
+ * and the settings screen 24 of its 48.
+ *
+ * Every entry below is a class list read out of the component, so a control
+ * that loses its opt-in fails here rather than on someone's phone.
+ */
+const OPTED_IN = [
+  {
+    file: "artifacts/kub/src/components/chat/ChatInfoPanel.tsx",
+    what: "the card's action rows, which were 357x36",
+    expect: [
+      /const actionRowClass = cn\(\s*\n\s*"kub-button /,
+      /const dangerActionRowClass = cn\(\s*\n\s*"kub-button /,
+    ],
+  },
+  {
+    file: "artifacts/kub/src/components/chat/ChatInfoPanel.tsx",
+    what: "the card's title-bar controls, which were 36x36",
+    expect: [
+      /className="kub-icon-action h-9 w-9 [^"]*"\s*\n\s*aria-label="Назад"/,
+      /className="kub-icon-action h-9 w-9 [^"]*"\s*\n\s*aria-label="Закрыть"/,
+      /className="kub-icon-action h-9 w-9 [^"]*"\s*\n\s*aria-label="Редактировать"/,
+      /className="kub-icon-action h-9 w-9 [^"]*"\s*\n\s*aria-label="Сохранить"/,
+      // And the tracks they sit in size to what they hold: pinned at 2.5rem a
+      // 44px control simply overflows a 40px column.
+      /grid-cols-\[auto_minmax\(0,1fr\)_auto\]/,
+    ],
+  },
+  {
+    file: "artifacts/kub/src/components/kub/KubModal.tsx",
+    what: "every dialog's close button, which was 28x28",
+    expect: [/className="kub-icon-action kub-interactive flex-shrink-0 p-1\.5/],
+  },
+  {
+    file: "artifacts/kub/src/components/sidebar/SettingsModal.tsx",
+    what: "the avatar's camera badge, which was 28x28 and is the only way to change the picture on a phone",
+    expect: [/"kub-icon-action absolute -bottom-0\.5 -right-0\.5 h-7 w-7/],
+  },
+  {
+    file: "artifacts/kub/src/components/sidebar/SettingsModal.tsx",
+    what: "the three theme radios, which were 36x32",
+    expect: [/"kub-icon-action h-8 w-9 rounded-md/],
+  },
+  {
+    file: "artifacts/kub/src/components/sidebar/SettingsModal.tsx",
+    what: "the name, nickname and bio fields, which were 232x36",
+    expect: [/"kub-field h-9 w-full min-w-0 rounded-lg/],
+  },
+  {
+    file: "artifacts/kub/src/components/sidebar/AudioSettingsSection.tsx",
+    what: "the three processing modes, which were 288x36",
+    expect: [/"kub-button h-9 rounded-lg px-2 py-1\.5/],
+  },
+  {
+    file: "artifacts/kub/src/components/sidebar/AudioSettingsSection.tsx",
+    what: "the audio reset, which was 162x16 — the smallest target on the screen",
+    expect: [/className="kub-button inline-flex items-center text-xs font-semibold/],
+  },
+  {
+    file: "artifacts/kub/src/components/sidebar/AudioSettingsSection.tsx",
+    what: "the volume sliders, which were 314x16",
+    expect: [/className="kub-field w-full accent-\[var\(--kub-cyan\)\]"/],
+  },
+  {
+    file: "artifacts/kub/src/components/settings/InfoHint.tsx",
+    what: "the icon-only help trigger, which was 13x13",
+    expect: [/: "kub-icon-action shrink-0 text-\[color:var\(--kub-muted\)\]/],
+  },
+  {
+    file: "artifacts/kub/src/components/chat/ChatHeader.tsx",
+    what: "the chat's back control, which was 36x36 and is the only way back to the list on a phone",
+    expect: [/className="kub-icon-action md:hidden p-2 rounded-lg/],
+  },
+];
+
+for (const site of OPTED_IN) {
+  test(`${site.file.split("/").pop()} opts ${site.what} into the touch rule`, () => {
+    const source = readFileSync(new URL(`../../${site.file}`, import.meta.url), "utf8");
+    for (const pattern of site.expect) {
+      assert.match(source, pattern, `${site.file}: ${site.what} lost its opt-in`);
+    }
+  });
+}
+
+/**
+ * And the opt-in has to still be the declaration that wins.
+ *
+ * `index.css` now lives in `@layer components`, and Tailwind's utilities are a
+ * later layer, so a `min-h-*` utility on the same element outranks
+ * `.kub-button { min-height: 44px }` and the touch minimum silently never
+ * applies. Measured: a mode button written `kub-button min-h-9` came out 36px
+ * tall on a coarse pointer, exactly as if the class were absent. `h-9` is safe
+ * — it sets `height`, and the used height is the larger of the two.
+ *
+ * This is the same trap as rule 10 of the material notes, pointing the other
+ * way now that the layer exists, which is why it is asserted rather than
+ * remembered.
+ */
+const TOUCH_CLASSES = /\b(kub-button|kub-icon-action|kub-field|kub-switch)\b/;
+
+test("no control defeats its own touch class with a smaller min-height utility", () => {
+  const files = [
+    "artifacts/kub/src/components/chat/ChatInfoPanel.tsx",
+    "artifacts/kub/src/components/chat/ChatHeader.tsx",
+    "artifacts/kub/src/components/kub/KubModal.tsx",
+    "artifacts/kub/src/components/kub/KubButton.tsx",
+    "artifacts/kub/src/components/kub/KubHelpNotes.tsx",
+    "artifacts/kub/src/components/settings/InfoHint.tsx",
+    "artifacts/kub/src/components/sidebar/SettingsModal.tsx",
+    "artifacts/kub/src/components/sidebar/AudioSettingsSection.tsx",
+  ];
+  let checked = 0;
+  for (const file of files) {
+    const source = readFileSync(new URL(`../../${file}`, import.meta.url), "utf8");
+    for (const classes of source.match(/"[^"\n]*"/g) ?? []) {
+      if (!TOUCH_CLASSES.test(classes)) continue;
+      checked += 1;
+      const min = classes.match(/\bmin-h-(\d+)\b/);
+      assert.ok(
+        !min || Number(min[1]) >= 11,
+        `${file}: "min-h-${min?.[1]}" outranks the touch class beside it, so the 44px minimum never applies: ${classes}`,
+      );
+    }
+  }
+  assert.ok(checked >= 8, `expected to check a real set of class lists, checked ${checked}`);
+});

@@ -120,7 +120,9 @@ export function KubModal({
             <button
               type="button"
               onClick={onClose}
-              className="kub-interactive flex-shrink-0 p-1.5 rounded-lg text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)] kub-raise-hover transition-colors"
+              // D-047: 28x28 before this. `kub-icon-action` is the shared opt-in for
+              // an icon-only control: 32px on a pointer, 44px on a finger.
+              className="kub-icon-action kub-interactive flex-shrink-0 p-1.5 rounded-lg text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)] kub-raise-hover transition-colors"
               aria-label="Закрыть"
             >
               <KubIcon name="close" size={16} />

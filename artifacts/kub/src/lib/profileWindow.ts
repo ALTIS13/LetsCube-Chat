@@ -48,17 +48,26 @@ export const PROFILE_WINDOW_DRAG_IGNORE_SELECTOR =
   "button, a, input, select, textarea, label, [role='button']";
 
 /**
- * The docked panel, exactly as it was before the window existed.
+ * The docked panel: a sheet laid over the conversation.
  *
- * `-strong`, like the floating shape, even though this one is laid out rather
- * than floated. Docking only happens below DOCK_BREAKPOINT (640px), so `md:w-80`
- * can never apply and the docked card is always the full width of a phone —
- * a sheet over the conversation, not a column beside it. Measured over a white
- * field, `kub-glass` composites to rgb(113,126,141), which is 3.86:1 for this
- * panel's own body text; the conversation it covers is full of photographs.
+ * `-strong`, like the floating shape. Docking only happens below
+ * DOCK_BREAKPOINT (640px), so the card is always the full width of a phone and
+ * covers the conversation completely. Measured over a white field, `kub-glass`
+ * composites to rgb(113,126,141), which is 3.86:1 for this panel's own body
+ * text; the conversation it covers is full of photographs.
+ *
+ * D-050: it used to be a flex child of the same row as the conversation, which
+ * is not what "covers it completely" means to a layout engine. The chat was
+ * compressed to **24px** and pushed off the left edge rather than left alone —
+ * measured at 390x844 with 75 rows, `scrollHeight` went from 6,586 to 114,731
+ * and individual rows were laid out up to 4,786px tall, all of it invisible and
+ * all of it re-measured twice more on the way back. Positioning the sheet over
+ * the row instead of inside it costs the conversation nothing: it keeps its
+ * width, so the meta-placement machinery closed by D-032 and D-041 is never
+ * asked the question at the wrong width.
  */
 const DOCKED_CLASS =
-  "kub-glass-strong flex min-h-0 flex-col h-full w-full md:w-80 flex-shrink-0 border-l border-[color:var(--kub-border-color)]";
+  "kub-glass-strong absolute inset-0 z-[60] flex min-h-0 flex-col";
 
 /**
  * `min-h-0` and `flex-col` are load-bearing: the media grid inside scrolls

@@ -1055,12 +1055,16 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   // the tokens collapse to 1ms under the preference, a literal does not.
   const rowMotionClass =
     "transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)]";
+  // D-047: `kub-button` is the opt-in for the 44px touch rule. These rows are
+  // 357x36 without it, and this card is one of the two surfaces rebuilt after
+  // the rule was written, so it had never been opted in. The class costs
+  // nothing on a pointer device — it only carries the coarse-pointer minimum.
   const actionRowClass = cn(
-    "inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 text-left kub-raise-hover",
+    "kub-button inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 text-left kub-raise-hover",
     rowMotionClass,
   );
   const dangerActionRowClass = cn(
-    "inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 text-left text-[color:var(--kub-danger-text)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:cursor-not-allowed disabled:opacity-60",
+    "kub-button inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 text-left text-[color:var(--kub-danger-text)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:cursor-not-allowed disabled:opacity-60",
     rowMotionClass,
   );
 
@@ -1081,7 +1085,10 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         onPointerUp={endHandleDrag}
         onPointerCancel={endHandleDrag}
         className={cn(
-          "kub-glass-strong sticky top-0 z-20 grid h-[var(--kub-control-row-height)] flex-shrink-0 grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-2 border-b border-[color:var(--kub-border-color)] px-3",
+          // D-047: the tracks size to what they hold rather than to a fixed 2.5rem,
+          // so a control that grows to the 44px touch minimum on a coarse
+          // pointer is not overflowing a 40px column.
+          "kub-glass-strong sticky top-0 z-20 grid h-[var(--kub-control-row-height)] flex-shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-[color:var(--kub-border-color)] px-3",
           // The title bar is the handle. `touch-none` stops a drag on a tablet
           // from scrolling the page instead of moving the card.
           docked ? "" : "cursor-grab touch-none select-none active:cursor-grabbing",
@@ -1094,7 +1101,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         {view === "gallery" ? (
           <button
             onClick={() => setView("root")}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover"
+            className="kub-icon-action h-9 w-9 rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover"
             aria-label="Назад"
             data-testid="chat-info-back"
           >
@@ -1103,7 +1110,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         ) : (
           <button
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover"
+            className="kub-icon-action h-9 w-9 rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover"
             aria-label="Закрыть"
           >
             <KubIcon name="close" size={18} />
@@ -1112,11 +1119,11 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         <span className="min-w-0 truncate text-center text-sm font-semibold text-[color:var(--kub-text)]">
           {windowTitle}
         </span>
-        <div className="flex h-9 w-9 items-center justify-center justify-self-end">
+        <div className="flex min-h-9 min-w-9 items-center justify-center justify-self-end">
           {canEditChatProfile && !editing && view === "root" && (
             <button
               onClick={() => setEditing(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-cyan)] kub-raise-hover"
+              className="kub-icon-action h-9 w-9 rounded-lg text-[color:var(--kub-cyan)] kub-raise-hover"
               aria-label="Редактировать"
             >
               <KubIcon name="edit" size={16} />
@@ -1126,7 +1133,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-cyan)] kub-raise-hover"
+              className="kub-icon-action h-9 w-9 rounded-lg text-[color:var(--kub-cyan)] kub-raise-hover"
               aria-label="Сохранить"
             >
               <KubIcon name="check" size={16} />

@@ -351,7 +351,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                   title={label}
                   onClick={() => setTheme(value)}
                   className={cn(
-                    "flex h-8 w-9 items-center justify-center rounded-md transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)]",
+                    // D-047: 36x32 before this. `kub-icon-action` gives the radio the same
+                    // 32px pointer floor and 44px touch floor as every other icon control.
+                    "kub-icon-action h-8 w-9 rounded-md transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)]",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)] focus-visible:ring-offset-1 focus-visible:ring-offset-[color:var(--kub-surface-2)]",
                     selected
                       ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
@@ -461,7 +463,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
               }
             }}
             className={cn(
-              "absolute -bottom-0.5 -right-0.5 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan",
+              // D-047: 28x28 before this, and it is the only way to change the
+              // picture on a phone.
+              "kub-icon-action absolute -bottom-0.5 -right-0.5 h-7 w-7 cursor-pointer rounded-full bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan",
               "transition-transform duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)] hover:scale-110",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--kub-surface)]",
               uploadingAvatar && "pointer-events-none opacity-60",
@@ -657,7 +661,11 @@ function TextFieldRow({
           placeholder={placeholder}
           onChange={(event) => onChange(event.target.value)}
           className={cn(
-            "h-9 w-full min-w-0 rounded-lg border border-transparent bg-[var(--kub-surface)] px-2.5 text-sm text-[color:var(--kub-text)] outline-none",
+            // D-047: 232x36 before this. The input is its own box here - it
+            // carries the border a finger aims at - so `kub-field` is the right
+            // opt-in, and the rule's own requirement that the field fill the box
+            // is satisfied by construction.
+            "kub-field h-9 w-full min-w-0 rounded-lg border border-transparent bg-[var(--kub-surface)] px-2.5 text-sm text-[color:var(--kub-text)] outline-none",
             "placeholder:text-[color:var(--kub-muted)]",
             "transition-[border-color,box-shadow] duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)]",
             "focus:border-[color:var(--kub-cyan)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)]",

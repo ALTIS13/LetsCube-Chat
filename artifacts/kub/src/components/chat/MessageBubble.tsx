@@ -681,6 +681,13 @@ export function MessageBubble({
   messagesMap = {}, mediaVariant, senderAvatarVariant, deliveryState, groupReadInfo, onOpenGroupReadReceipts, isSavedChat,
 }: MessageBubbleProps) {
   const [showContext, setShowContext] = useState(false);
+  // D-046. `.msg-appear` carries `will-change: opacity, transform` under a
+  // comment saying the hint is dropped when the animation ends. Nothing dropped
+  // it: measured, a hundred rows still held the class and the hint eighteen
+  // seconds after the last one finished. This is what drops it, and because the
+  // flag only ever goes from false to true for this mount, a later render can
+  // no longer put the class back and replay the fade on a settled bubble.
+  const [entranceSettled, setEntranceSettled] = useState(false);
   const [reactionCatalogOpen, setReactionCatalogOpen] = useState(false);
   const [reactionsExpanded, setReactionsExpanded] = useState(false);
   const [contextPos, setContextPos] = useState({ x: 0, y: 0 });
@@ -1367,10 +1374,18 @@ export function MessageBubble({
       <div
         className={cn(
           "flex gap-1.5 mb-0.5 group relative",
-          isEntering && "msg-appear",
+          isEntering && !entranceSettled && "msg-appear",
           "max-w-full min-w-0",
           isMe ? "justify-end" : "justify-start",
         )}
+        onAnimationEnd={(event) => {
+          // Named, because the subtree runs other animations — a spinner, a
+          // recording bar — and any of them would otherwise clear the flag
+          // before the entrance had played.
+          if (event.animationName !== "msg-appear") return;
+          if (event.target !== event.currentTarget) return;
+          setEntranceSettled(true);
+        }}
         onContextMenu={openContext}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
