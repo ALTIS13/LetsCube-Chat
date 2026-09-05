@@ -545,8 +545,15 @@ html, body {
    no effect at all. Checked for the unprefixed property, since that is the one
    that carries the behaviour. */
 @supports not (backdrop-filter: blur(1px)) {
-  .kub-glass { background-color: var(--kub-surface); }
-  .kub-glass-strong { background-color: var(--kub-surface-2); }
+  /* Each falls back to the colour its own fill is made of, not to the other
+     one. --glass-fill is --kub-surface-2 at reduced alpha and
+     --glass-fill-strong is --kub-surface, so pairing them the other way round
+     made the frosted and unfrosted renderings disagree about which surface is
+     which: in the dark theme --kub-surface-2 is the LIGHTER of the two, so the
+     strong variant came out less dense than the ordinary one — the opposite of
+     what it is for. */
+  .kub-glass { background-color: var(--kub-surface-2); }
+  .kub-glass-strong { background-color: var(--kub-surface); }
 }
 
 body {
