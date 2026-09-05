@@ -465,7 +465,7 @@ export function TasksPage() {
                         : t.id === "review"
                           ? "bg-[color-mix(in_srgb,var(--kub-warn)_18%,transparent)] text-[color:var(--kub-warn)]"
                           : t.id === "available"
-                            ? "bg-[color-mix(in_srgb,var(--kub-online)_18%,transparent)] text-[color:var(--kub-online)]"
+                            ? "bg-[color-mix(in_srgb,var(--kub-online)_12%,transparent)] text-[color:var(--kub-online-text)]"
                             : "kub-raise text-[color:var(--kub-muted)]",
                     )}
                   >
@@ -670,7 +670,7 @@ export function TasksPage() {
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {bulkDeleteNotice && (
-                <span className="text-[color:var(--kub-online)]">{bulkDeleteNotice}</span>
+                <span className="text-[color:var(--kub-online-text)]">{bulkDeleteNotice}</span>
               )}
             </div>
           </div>

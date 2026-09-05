@@ -188,6 +188,12 @@
      borders and icon shapes keep --kub-pink — they answer 3:1 and meet it. */
   --kub-pink-text: #FF7FB4;
   --kub-online: #4DCD5E;
+  /* The fourth colour used as words, joining --kub-danger-text,
+     --kub-accent-text and --kub-pink-text. Same value as the dot here: it
+     measures 7.89:1 on a panel, so nothing is gained by moving it. The token
+     exists so the call sites read the same in both themes and so there is one
+     place to change if the surfaces move again. */
+  --kub-online-text: #4DCD5E;
   --kub-danger: #EF4444;
   /* What a field, a well or a track is cut into. Deliberately not
      --kub-surface-2: that token also stands for a raised thing — a hover, a
@@ -469,6 +475,12 @@
      white and 2.62:1 on the page, under the 3:1 a non-text indicator needs.
      Found by the badge contract, not by eye. */
   --kub-online: #3C8B3C;
+  /* #3C8B3C as a word measures 4.13:1 on a panel and 3.72:1 against the worst
+     plain backdrop — a colour tuned for a dot, used for a sentence. This is
+     the smallest step along the same hue that clears 4.5:1 everywhere the
+     other three text tokens are held: 6.04:1 on a panel, 5.44:1 at the limit,
+     4.82:1 on a veiled row. */
+  --kub-online-text: #2E6E2E;
   --kub-danger: #DC2626;
   /* See .dark. On a light ground a well goes down towards the page, which is
      the value fields in this theme already had. */

@@ -733,7 +733,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
           </div>
         )}
         {actionNotice && (
-          <div className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-online)_12%,transparent)] text-[color:var(--kub-online)] border border-[color:var(--kub-online)]/30">
+          <div className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-online)_12%,transparent)] text-[color:var(--kub-online-text)] border border-[color:var(--kub-online)]/30">
             {actionNotice}
           </div>
         )}

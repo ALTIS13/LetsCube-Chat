@@ -304,7 +304,7 @@ export function StorageSection() {
           <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
             <div className="flex shrink-0 items-center gap-2">
               {cacheCleared && (
-                <span className="text-[11px] text-[color:var(--kub-online)]" role="status">
+                <span className="text-[11px] text-[color:var(--kub-online-text)]" role="status">
                   Кэш очищен
                 </span>
               )}

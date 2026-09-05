@@ -250,7 +250,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
           {subtitle && (
             <div className={cn(
               "text-xs truncate leading-tight",
-              isOnline ? "text-[color:var(--kub-online)]" : "text-[color:var(--kub-muted)]"
+              isOnline ? "text-[color:var(--kub-online-text)]" : "text-[color:var(--kub-muted)]"
             )}>
               {subtitle}
             </div>

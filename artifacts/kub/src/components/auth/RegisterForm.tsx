@@ -274,7 +274,7 @@ export function RegisterForm() {
               </div>
               <div className="min-h-10 px-1 text-xs leading-5" aria-live="polite">
                 {resendError && <p className="text-[color:var(--kub-danger-text)]">{resendError}</p>}
-                {resendSuccess && <p className="text-[color:var(--kub-online)]">{resendSuccess}</p>}
+                {resendSuccess && <p className="text-[color:var(--kub-online-text)]">{resendSuccess}</p>}
               </div>
               <div className="grid gap-3 pt-1">
                 <KubButton

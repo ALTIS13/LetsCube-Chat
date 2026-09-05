@@ -1947,7 +1947,7 @@ function inviteStatusLabel(status: GroupInviteStatus, isCurrentMember = false): 
 function inviteStatusClass(status: GroupInviteStatus): string {
   if (status === "pending") return "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] text-[color:var(--kub-accent-text)]";
   if (status === "declined") return "bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger-text)]";
-  if (status === "accepted") return "bg-[color-mix(in_srgb,var(--kub-online)_14%,transparent)] text-[color:var(--kub-online)]";
+  if (status === "accepted") return "bg-[color-mix(in_srgb,var(--kub-online)_14%,transparent)] text-[color:var(--kub-online-text)]";
   return "bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)]";
 }
 
