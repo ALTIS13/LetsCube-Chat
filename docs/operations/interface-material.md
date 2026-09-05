@@ -26,6 +26,7 @@ that, which is noted at each one.
 | `--kub-inset` | What a field, a well or a track is cut into |
 | `--kub-raised` | A fixed step above a **known** surface |
 | `--kub-raise-veil` | A step above **whatever it is laid on** — see rule 5 |
+| `--kub-sink-veil` | A step below it: a control that is present but not offered |
 
 And two utilities, `.kub-glass` and `.kub-glass-strong`, which carry the whole
 material so that what the application is made of is one edit rather than a
@@ -55,6 +56,32 @@ cancels it.** A page root painting `bg-[var(--kub-bg)]` under a glass header
 leaves the blur nothing to sample. The fix is to remove the fill, never to add
 more blur. This was found three times — the bots page, the tasks page, and both
 main shells.
+
+And a second corollary, which is what finally made the material look like
+glass: **a ground is not content.** Chrome sitting *beside* the thing it is
+made of glass for reveals only the page, and a blurred page is a page. The chat
+header and composer were siblings of the message list in a flex column — below
+it, never behind it — so their blur sampled a flat fill and returned it. They
+now overlay the list, which runs the full height behind them, and the list
+compensates with their *measured* height. Frosted text under the header is the
+difference between a translucent panel and glass.
+
+Three things that change costs when chrome overlays content:
+
+- **`scroll-padding` is the half that breaks silently.** Without it
+  `scrollIntoView` carries a target to the edge of the scrollport, which is now
+  covered: the browser reports success and the message sits under the header.
+  Padding and scroll-padding move together, on both sides.
+- **Do not reach for `z-index` to fix the paint order.** Positioned siblings
+  with `z-index: auto` paint in tree order, so the list covered the header —
+  but a `z-index` on the header makes it a stacking context and traps the fixed
+  dialogs inside it, which is rule 3 arriving by another road. `order: -1`
+  moves where a flex item paints and creates no stacking context.
+- **A `ResizeObserver` watches the content box by default**, so a composer that
+  grows by its own padding — which is how the mobile keyboard inset is
+  applied — does not register. Measured: the dock grew to 390px, the padding
+  stayed at 94, and the last message went 296px under the composer. Use
+  `border-box`.
 
 ### 3. `backdrop-filter` is a containing block for `position: fixed`
 
@@ -91,6 +118,15 @@ its own ground.
 Use `--kub-raised` only where the pair is fixed and a reviewer can confirm it by
 looking at two values. Use the veil for anything standing against a surface that
 might move.
+
+`--kub-sink-veil` is the same idea downwards, and it exists because **`opacity`
+is not a way to be disabled.** The product faded disabled controls with six
+different values of it across 79 places, and on a translucent panel opacity
+shows the wallpaper straight through the control: measured 2.23:1 in the dark
+theme and 1.94:1 in the light one, against a threshold of 4.5. Sinking gives
+7.73:1 and 5.02:1. A disabled control still has to be read; it just must not be
+offered. This is the one elevation that does **not** reverse between themes — a
+well is darker than its surface in both.
 
 Note: it carries **no transition**, deliberately. `background-image` does not
 interpolate — from `none` to a gradient is a discrete swap, confirmed in a
