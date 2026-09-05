@@ -42,7 +42,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
   const [showNewGroup, setShowNewGroup] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const iconButtonClass =
-    "kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-[var(--kub-raised)]";
+    "kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors kub-raise-hover";
 
   // Search commands use `mobileSection='search'` as a one-shot focus signal.
   useEffect(() => {
@@ -151,7 +151,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
           <div className="relative shrink-0">
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              className="kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-[var(--kub-raised)] p-1"
+              className="kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors kub-raise-hover p-1"
               aria-label="Меню"
             >
               {currentUser ? (
@@ -191,7 +191,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
                     <button
                       key={label}
                       className={cn(
-                        "flex items-center gap-3 w-full px-4 py-2.5 text-sm transition-colors hover:bg-[var(--kub-surface-3)]",
+                        "flex items-center gap-3 w-full px-4 py-2.5 text-sm transition-colors kub-raise-hover",
                         danger
                           ? "text-[color:var(--kub-danger-text)]"
                           : accent
@@ -250,7 +250,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
             className="h-full min-w-0 flex-1 truncate bg-transparent text-sm outline-none text-[color:var(--kub-text)]"
           />
           {searchQuery && (
-            <button className="kub-icon-action kub-interactive shrink-0 rounded-md text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)]" onClick={() => setSearchQuery("")} aria-label="Очистить">
+            <button className="kub-icon-action kub-interactive shrink-0 rounded-md text-[color:var(--kub-muted)] kub-raise-hover" onClick={() => setSearchQuery("")} aria-label="Очистить">
               <KubIcon name="close" size={12} className="text-[color:var(--kub-muted)]" />
             </button>
           )}

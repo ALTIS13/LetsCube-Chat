@@ -320,7 +320,7 @@ export function NotificationBell() {
             setOpen((v) => !v);
           }}
           className={cn(
-            "kub-icon-action kub-interactive relative h-9 w-9 shrink-0 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)]",
+            "kub-icon-action kub-interactive relative h-9 w-9 shrink-0 rounded-lg transition-colors kub-raise-hover",
             "inline-flex items-center justify-center",
             unreadCount > 0 ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)]",
           )}
@@ -364,7 +364,7 @@ export function NotificationBell() {
             <button
               onClick={() => void handleMarkVisibleRead()}
               disabled={activeUnreadCount === 0}
-              className="h-8 shrink-0 rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-accent-text)] transition-colors hover:bg-[var(--kub-surface-2)] disabled:cursor-not-allowed disabled:text-[color:var(--kub-muted)]"
+              className="h-8 shrink-0 rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-accent-text)] transition-colors kub-raise-hover disabled:cursor-not-allowed disabled:text-[color:var(--kub-muted)]"
             >
               Прочитать
             </button>
@@ -392,7 +392,7 @@ export function NotificationBell() {
                     "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors",
                     activeTab === tab.id
                       ? "bg-[color-mix(in_srgb,var(--kub-cyan)_16%,transparent)] text-[color:var(--kub-accent-text)]"
-                      : "text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)]",
+                      : "text-[color:var(--kub-muted)] kub-raise-hover",
                   )}
                 >
                   <span>{tab.label}</span>
@@ -493,7 +493,7 @@ function NotificationItem({
       data-notification-urgent={accent.urgent ? "true" : "false"}
       className={cn(
         "group relative w-full min-w-0 max-w-full overflow-hidden rounded-xl border px-3 py-3 text-left transition-colors",
-        "hover:bg-[var(--kub-surface-3)]",
+        "kub-raise-hover",
       )}
       style={{
         borderColor: accentBorder(accent, unread),
@@ -598,7 +598,7 @@ function NotificationItem({
                   onDecline();
                 }}
                 disabled={inviteBusy}
-                className="inline-flex h-8 items-center justify-center rounded-lg border border-[color:var(--kub-border-color)] px-3 text-xs font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-8 items-center justify-center rounded-lg border border-[color:var(--kub-border-color)] px-3 text-xs font-semibold text-[color:var(--kub-muted)] kub-raise-hover disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Отклонить
               </button>
@@ -652,7 +652,7 @@ function MessageGroupItem({
       data-notification-tone={accent.tone}
       className={cn(
         "group w-full min-w-0 max-w-full overflow-hidden rounded-xl border px-3 py-3 text-left transition-colors",
-        "hover:bg-[var(--kub-surface-3)]",
+        "kub-raise-hover",
       )}
       style={{
         borderColor: accentBorder(accent, unread),

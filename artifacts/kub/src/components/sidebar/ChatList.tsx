@@ -660,7 +660,7 @@ function ChatActionButton({
         mobile ? "px-3 py-3" : "px-3 py-2.5",
         action.danger
           ? "text-[color:var(--kub-danger-text)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)]"
-          : "text-[color:var(--kub-text)] hover:bg-[var(--kub-surface-3)]",
+          : "text-[color:var(--kub-text)] kub-raise-hover",
       )}
     >
       <KubIcon

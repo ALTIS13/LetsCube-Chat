@@ -158,7 +158,7 @@ export function ChatListItem({
       data-has-messages={lastMsg ? "true" : "false"}
       className={cn(
         "w-full flex items-center gap-3 px-3 py-2.5 transition-colors relative group",
-        "hover:bg-[var(--kub-raised)]",
+        "kub-raise-hover",
         isSelected && "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] hover:bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]",
         isDragging && "opacity-55",
         isDragOver && "bg-[color-mix(in_srgb,var(--kub-cyan)_10%,transparent)] outline outline-1 outline-[color:var(--kub-cyan)]/45"
@@ -173,7 +173,7 @@ export function ChatListItem({
         <span
           draggable
           data-pinned-drag-handle="true"
-          className="hidden h-8 w-4 shrink-0 cursor-grab items-center justify-center rounded-md text-[color:var(--kub-muted)] opacity-45 transition-opacity hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-cyan)] active:cursor-grabbing group-hover:opacity-100 sm:inline-flex"
+          className="hidden h-8 w-4 shrink-0 cursor-grab items-center justify-center rounded-md text-[color:var(--kub-muted)] opacity-45 transition-opacity kub-raise-hover hover:text-[color:var(--kub-cyan)] active:cursor-grabbing group-hover:opacity-100 sm:inline-flex"
           title="Перетащить закреплённый чат"
           aria-label="Перетащить закреплённый чат"
           onClick={(event) => {

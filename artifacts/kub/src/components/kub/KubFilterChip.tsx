@@ -41,7 +41,7 @@ export function KubFilterChip({ children, onRemove, label, className }: KubFilte
         aria-label={`Убрать фильтр: ${label}`}
         className={cn(
           "kub-icon-action kub-interactive rounded-full text-[color:var(--kub-muted)]",
-          "hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]",
+          "kub-raise-hover hover:text-[color:var(--kub-text)]",
         )}
       >
         <KubIcon name="close" size={12} />

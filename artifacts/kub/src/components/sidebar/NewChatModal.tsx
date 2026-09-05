@@ -81,7 +81,7 @@ export function NewChatModal({ onClose, onRefetch }: NewChatModalProps) {
             key={user.id}
             onClick={() => handleSelect(user)}
             disabled={loading}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors hover:bg-[var(--kub-surface-2)] disabled:opacity-50"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors kub-raise-hover disabled:opacity-50"
           >
             {loading ? (
               <KubIcon name="spinner" size={20} className="flex-shrink-0 text-[color:var(--kub-cyan)]" />

@@ -114,7 +114,7 @@ function Control({
         "flex h-full w-11 items-center justify-center text-[color:var(--kub-muted)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--kub-cyan)]",
         danger
           ? "hover:bg-[var(--kub-danger)] hover:text-white"
-          : "hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]",
+          : "kub-raise-hover hover:text-[color:var(--kub-text)]",
       )}
     >
       {children}

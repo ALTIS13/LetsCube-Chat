@@ -27,9 +27,9 @@ const variantClass: Record<Variant, string> = {
   accent:
     "font-semibold text-[color:var(--kub-action-accent-foreground)] bg-[var(--kub-action-accent-background)] hover:bg-[var(--kub-action-accent-hover)] kub-glow-pink disabled:bg-[var(--kub-surface-3)] disabled:text-[color:var(--kub-muted)] disabled:shadow-none",
   secondary:
-    "text-[color:var(--kub-text)] bg-[var(--kub-surface-2)] hover:bg-[var(--kub-surface-3)] border border-[color:var(--kub-border-color)]",
+    "text-[color:var(--kub-text)] bg-[var(--kub-surface-2)] kub-raise-hover border border-[color:var(--kub-border-color)]",
   ghost:
-    "text-[color:var(--kub-text)] bg-transparent hover:bg-[var(--kub-surface-2)]",
+    "text-[color:var(--kub-text)] bg-transparent kub-raise-hover",
   danger:
     "font-semibold text-[color:var(--kub-action-danger-foreground)] bg-[var(--kub-action-danger-background)] hover:bg-[var(--kub-action-danger-hover)] disabled:opacity-50",
 };

@@ -654,7 +654,7 @@ function ModeButton({
         "min-h-9 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors disabled:cursor-default",
         active
           ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
-          : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)]",
+          : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] kub-raise-hover",
       )}
     >
       {label}

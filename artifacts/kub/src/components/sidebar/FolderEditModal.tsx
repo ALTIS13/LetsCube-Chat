@@ -319,7 +319,7 @@ export function FolderEditModal({
             <button
               type="button"
               onClick={() => setChatFilter("")}
-              className="rounded-md p-1 text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)] hover:text-[color:var(--kub-text)]"
+              className="rounded-md p-1 text-[color:var(--kub-muted)] kub-raise-hover hover:text-[color:var(--kub-text)]"
               aria-label="Очистить поиск чатов"
             >
               <KubIcon name="close" size={12} />
@@ -347,7 +347,7 @@ export function FolderEditModal({
                   key={c.id}
                   onClick={() => toggleChat(c.id)}
                   disabled={!canManage}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 transition-colors hover:bg-[var(--kub-surface-3)] disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 transition-colors kub-raise-hover disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                   <div
                     className={cn(

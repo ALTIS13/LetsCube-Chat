@@ -136,7 +136,7 @@ function FolderRow({ name, emoji, unread, shared, isActive, count, onPick, onEdi
         "flex items-center gap-2 mb-1.5 rounded-xl border transition-colors",
         isActive
           ? "bg-[color-mix(in_srgb,var(--kub-cyan)_12%,transparent)] border-[color:var(--kub-cyan)]/40"
-          : "bg-[var(--kub-surface-2)] border-[color:var(--kub-border-color)] hover:bg-[var(--kub-surface-3)]"
+          : "bg-[var(--kub-surface-2)] border-[color:var(--kub-border-color)] kub-raise-hover"
       )}
     >
       <button

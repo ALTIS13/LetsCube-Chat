@@ -143,7 +143,7 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
               <button
                 key={user.id}
                 onClick={() => toggle(user)}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-[var(--kub-surface-2)] transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg kub-raise-hover transition-colors"
               >
                 <UserAvatar user={user} size="sm" />
                 <span className="flex-1 text-sm text-left text-[color:var(--kub-text)]">

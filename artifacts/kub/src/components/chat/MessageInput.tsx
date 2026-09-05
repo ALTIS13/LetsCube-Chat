@@ -876,7 +876,7 @@ export function MessageInput({
                 key={label}
                 onClick={action}
                 type="button"
-                className="flex items-center gap-3 w-full px-4 py-3 text-sm transition-colors hover:bg-[var(--kub-surface-3)] text-[color:var(--kub-text)]"
+                className="flex items-center gap-3 w-full px-4 py-3 text-sm transition-colors kub-raise-hover text-[color:var(--kub-text)]"
               >
                 <div
                   className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
@@ -905,7 +905,7 @@ export function MessageInput({
             <button
               onClick={exitEditMode}
               aria-label="Отменить редактирование"
-              className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg hover:bg-[var(--kub-surface-3)] flex-shrink-0 text-[color:var(--kub-muted)]"
+              className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg kub-raise-hover flex-shrink-0 text-[color:var(--kub-muted)]"
             >
               <KubIcon name="close" size={16} />
             </button>
@@ -924,7 +924,7 @@ export function MessageInput({
             <button
               onClick={onCancelReply}
               aria-label="Отменить ответ"
-              className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg hover:bg-[var(--kub-surface-3)] flex-shrink-0 text-[color:var(--kub-muted)]"
+              className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg kub-raise-hover flex-shrink-0 text-[color:var(--kub-muted)]"
             >
               <KubIcon name="close" size={16} />
             </button>
@@ -1098,7 +1098,7 @@ export function MessageInput({
                   ? "text-[color:var(--kub-muted)] opacity-60 cursor-not-allowed"
                   : recorderMode === "video"
                   ? "bg-[color-mix(in_srgb,var(--kub-pink)_18%,transparent)] text-[color:var(--kub-pink)] hover:bg-[color-mix(in_srgb,var(--kub-pink)_26%,transparent)]"
-                  : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-3)]"
+                  : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] kub-raise-hover"
               )}
               aria-label={recorderMode === "video" ? "Видеосообщение" : "Голосовое"}
               title={recorderMode === "video" ? "Видеосообщение" : "Голосовое"}
@@ -1236,7 +1236,7 @@ function AttachmentTray({
                   <button
                     type="button"
                     onClick={() => onRerecord(attachment.id)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-3)]"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--kub-cyan)] kub-raise-hover"
                     aria-label={isVideoMessage ? "Перезаписать видео-сообщение" : "Перезаписать голосовое"}
                     title="Перезаписать"
                   >
@@ -1247,7 +1247,7 @@ function AttachmentTray({
                   <button
                     type="button"
                     onClick={() => onRetry(attachment.id)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-3)]"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--kub-cyan)] kub-raise-hover"
                     aria-label="Повторить отправку"
                     title="Повторить"
                   >
@@ -1258,7 +1258,7 @@ function AttachmentTray({
                   <button
                     type="button"
                     onClick={() => onCancel(attachment.id)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)]"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--kub-muted)] kub-raise-hover"
                     aria-label="Отменить загрузку"
                     title="Отменить"
                   >
@@ -1269,7 +1269,7 @@ function AttachmentTray({
                     <button
                       type="button"
                       onClick={() => onRemove(attachment.id)}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)]"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-[color:var(--kub-muted)] kub-raise-hover"
                       aria-label="Убрать вложение"
                       title="Убрать"
                     >

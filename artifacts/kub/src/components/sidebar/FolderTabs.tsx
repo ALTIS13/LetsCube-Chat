@@ -140,7 +140,7 @@ export function FolderTabs({ folders, activeFolder, onFolderChange, onCreate, on
             onClick={onCreate}
             title="Новая папка"
             aria-label="Новая папка"
-            className="kub-icon-action kub-interactive px-3 py-2.5 text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] hover:bg-[var(--kub-raised)] transition-colors flex-shrink-0"
+            className="kub-icon-action kub-interactive px-3 py-2.5 text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] kub-raise-hover transition-colors flex-shrink-0"
           >
             <KubIcon name="create" size={14} />
           </button>

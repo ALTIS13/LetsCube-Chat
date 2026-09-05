@@ -399,7 +399,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           onClick={() => { onClose(); setLocation("/admin"); }}
           className={cn(
             ROW_GRID,
-            "kub-interactive text-left transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)] hover:bg-[var(--kub-surface-3)]",
+            "kub-interactive text-left transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)] kub-raise-hover",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--kub-cyan)]",
           )}
         >
@@ -734,7 +734,7 @@ function DisclosureRow({
         onClick={() => onToggle(id)}
         className={cn(
           ROW_GRID,
-          "kub-interactive text-left transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)] hover:bg-[var(--kub-surface-3)]",
+          "kub-interactive text-left transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)] kub-raise-hover",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--kub-cyan)]",
         )}
       >

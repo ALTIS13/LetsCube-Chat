@@ -222,7 +222,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
         >
       <button
         onClick={() => setSelectedChatId(null)}
-        className="md:hidden p-2 rounded-lg hover:bg-[var(--kub-raised)] transition-colors flex-shrink-0 text-[color:var(--kub-cyan)]"
+        className="md:hidden p-2 rounded-lg kub-raise-hover transition-colors flex-shrink-0 text-[color:var(--kub-cyan)]"
         aria-label="Назад"
       >
         <KubIcon name="back" size={20} />
@@ -231,7 +231,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
       <button
         onClick={onInfoOpen}
         data-testid="chat-header-info-button"
-        className="flex items-center gap-2.5 flex-1 min-w-0 rounded-lg px-1.5 py-1 hover:bg-[var(--kub-raised)] transition-colors"
+        className="flex items-center gap-2.5 flex-1 min-w-0 rounded-lg px-1.5 py-1 kub-raise-hover transition-colors"
       >
         <ChatAvatar
           chat={{ id: chatId, name, avatar_url: chat?.avatar_url ?? null, type }}
@@ -260,7 +260,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
         <div className="relative">
           <button
             onClick={() => setShowMenu(!showMenu)}
-            className="kub-icon-action kub-interactive rounded-lg hover:bg-[var(--kub-raised)] transition-colors text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
+            className="kub-icon-action kub-interactive rounded-lg kub-raise-hover transition-colors text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
             aria-label="Ещё"
           >
             <KubIcon name="more" size={18} />
@@ -279,7 +279,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
                     onClick={action}
                     disabled={disabled}
                     className={cn(
-                      "flex min-w-0 items-center gap-3 w-full px-4 py-2.5 text-left text-sm whitespace-nowrap transition-colors hover:bg-[var(--kub-surface-3)] disabled:cursor-not-allowed disabled:opacity-60",
+                      "flex min-w-0 items-center gap-3 w-full px-4 py-2.5 text-left text-sm whitespace-nowrap transition-colors kub-raise-hover disabled:cursor-not-allowed disabled:opacity-60",
                       danger ? "text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-text)]"
                     )}
                   >
@@ -323,7 +323,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
             type="button"
             onClick={() => setDeleteGroupOpen(false)}
             disabled={deletingChat}
-            className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)] disabled:opacity-50"
+            className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-muted)] kub-raise-hover disabled:opacity-50"
           >
             Отмена
           </button>

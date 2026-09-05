@@ -87,30 +87,49 @@ const covers = [
 ];
 
 /**
- * Things that lie ON a piece of chrome and have to be found against it.
+ * Elevation is relative, and the two halves of that are not interchangeable.
  *
- * They take `--kub-raised`, and specifically not `--kub-surface-2`. That token
- * used to serve this, and stopped being able to the moment the chrome above it
- * became translucent and composited past it: the chat list's hover was measured
- * at a surface ratio of 1.002 against the row it was meant to highlight, which
- * is to say it had stopped existing while still being perfectly present in the
- * source. `--kub-raised` measures 1.127 in the same place.
+ * `--kub-raised` is an absolute colour. It answers "one step above THIS
+ * surface", so it is right where the pairing is fixed and reviewable — the
+ * strips that always sit on the composer and nowhere else. It is wrong for
+ * anything whose ground can move, which is how the same defect landed three
+ * times in a row: a field, a list row and a menu item each held a colour that
+ * had been one step above its surface until that surface shifted, and each was
+ * measured flush afterwards (1.002 for the row's hover, which is to say it had
+ * stopped existing while still being perfectly present in the source).
  *
- * Each entry is [file, a landmark, how many such elements, how many uses of
- * --kub-surface-2 may legitimately remain].
- *
- * ChatHeader keeps one. That button sits inside a dialog, not on chrome, and
- * a dialog is `kub-glass-strong`, which composites to within two values of
- * --kub-raised — converting it would move the problem rather than fix it.
- * Raised-on-a-covering-surface has no token yet; the count is 1 so that the
- * day one appears, this line is what asks to be updated.
+ * `.kub-raise-hover` is a veil laid on as a background IMAGE, so it composites
+ * over whatever fill the element already has instead of replacing it. One rule
+ * reads the same on the page, on a panel and inside a menu, and it cannot go
+ * flush with its own background. Every hover in this zone uses it; measured, a
+ * chat row moves 1.211 and a menu item inside a frosted menu 1.229, where the
+ * absolute token could not have moved the menu item at all.
  */
 const raised = [
-  ["components/sidebar/ChatListItem.tsx", "hover:bg-[var(--kub-raised)]", 1, 0],
-  ["components/sidebar/SidebarHeader.tsx", "hover:bg-[var(--kub-raised)]", 2, 0],
-  ["components/sidebar/FolderTabs.tsx", "hover:bg-[var(--kub-raised)]", 1, 0],
-  ["components/chat/ChatHeader.tsx", "hover:bg-[var(--kub-raised)]", 3, 1],
-  ["components/chat/MessageInput.tsx", "bg-[var(--kub-raised)]", 7, 0],
+  ["components/chat/MessageInput.tsx", "bg-[var(--kub-raised)]", 7],
+];
+
+/** [file, how many hovers it carries]. Leftover elevation fills must be zero. */
+const veiled = [
+  ["components/sidebar/ChatListItem.tsx", 2],
+  ["components/sidebar/ChatList.tsx", 1],
+  ["components/sidebar/SidebarHeader.tsx", 4],
+  ["components/sidebar/FolderTabs.tsx", 1],
+  ["components/sidebar/NotificationBell.tsx", 6],
+  ["components/sidebar/SettingsModal.tsx", 2],
+  ["components/sidebar/FolderEditModal.tsx", 2],
+  ["components/sidebar/FolderListModal.tsx", 1],
+  ["components/sidebar/AudioSettingsSection.tsx", 1],
+  ["components/sidebar/NewGroupModal.tsx", 1],
+  ["components/sidebar/NewChatModal.tsx", 1],
+  ["components/layout/AppTopBar.tsx", 1],
+  ["components/layout/DesktopWindowChrome.tsx", 1],
+  ["components/kub/KubModal.tsx", 1],
+  ["components/kub/KubButton.tsx", 2],
+  ["components/kub/KubFilterChip.tsx", 1],
+  ["components/kub/KubFeedbackViewport.tsx", 1],
+  ["components/chat/ChatHeader.tsx", 5],
+  ["components/chat/MessageInput.tsx", 8],
 ];
 
 /** The class string of one surface, found by a landmark that is not the glass class itself. */
@@ -191,24 +210,40 @@ for (const [file, rootClasses] of layered) {
   });
 }
 
-for (const [file, needle, count, survivors] of raised) {
-  test(`${file} finds its raised surfaces against the chrome, not with --kub-surface-2`, () => {
+for (const [file, needle, count] of raised) {
+  test(`${file} keeps its static raised surfaces on --kub-raised`, () => {
     const source = read(file);
     const found = source.split(needle).length - 1;
+    assert.equal(found, count, `${file}: expected ${count} element(s) on "${needle}", found ${found}`);
+    // And none left on the token that used to serve this and no longer can:
+    // --kub-surface-2 composites BELOW the chrome these sit on.
+    const stale = withoutComments(source).split("bg-[var(--kub-surface-2)]").length - 1;
     assert.equal(
-      found,
-      count,
-      `${file}: expected ${count} element(s) carrying "${needle}", found ${found}`,
+      stale,
+      0,
+      `${file}: ${stale} surface(s) still filled from --kub-surface-2, which now composites ` +
+        "below the chrome they lie on",
     );
-    // Counting the survivors as well as the converts, because a partial
-    // conversion is the failure that actually happens: one strip left behind
-    // is invisible in a screenshot of the others.
-    const leftBehind = withoutComments(source).split("bg-[var(--kub-surface-2)]").length - 1;
+  });
+}
+
+/** Any neutral elevation fill spent on a hover, which the veil replaces. */
+const LEFTOVER = /hover:bg-\[var\(--kub-(raised|surface-2|surface-3)\)\]/g;
+
+for (const [file, count] of veiled) {
+  test(`${file} finds its hovers with the veil, not with a fixed colour`, () => {
+    const source = read(file);
+    const found = source.split("kub-raise-hover").length - 1;
+    assert.equal(found, count, `${file}: expected ${count} hover(s) on the veil, found ${found}`);
+    // Counting the survivors as well as the converts: a partial conversion is
+    // the failure that actually happens, and one hover left behind is
+    // invisible in a screenshot of the others.
+    const leftBehind = (withoutComments(source).match(LEFTOVER) ?? []).length;
     assert.equal(
       leftBehind,
-      survivors,
-      `${file}: ${leftBehind} surface(s) filled from --kub-surface-2, expected ${survivors}. ` +
-        "That token now composites below the chrome these sit on",
+      0,
+      `${file}: ${leftBehind} hover(s) still painted with a fixed elevation colour, which goes ` +
+        "flush the moment the surface under it moves",
     );
   });
 }
