@@ -128,7 +128,7 @@ export function StorageSection() {
               >
                 {state.location}
               </div>
-              <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-[color:var(--kub-muted)]">
+              <div className="mt-2 flex flex-wrap gap-1.5 text-[12px] text-[color:var(--kub-muted)]">
                 <span
                   className="rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-1"
                   data-testid="desktop-storage-total"
@@ -252,7 +252,7 @@ export function StorageSection() {
                 text="Кэш — это картинки, видео и файлы, скачанные заранее, чтобы открывались сразу. Всё это можно скачать заново, поэтому очистка не трогает переписку и не выкидывает из аккаунта."
               />
             </div>
-            <div className="text-[11px] text-[color:var(--kub-muted)]" data-testid="desktop-storage-cache-usage">
+            <div className="text-[12px] text-[color:var(--kub-muted)]" data-testid="desktop-storage-cache-usage">
               {formatStorageBytes(state.cacheBytes)} из {formatStorageBytes(state.cacheLimitBytes)}
             </div>
           </div>
@@ -287,7 +287,7 @@ export function StorageSection() {
                   onClick={() => selectCacheLimit(bytes)}
                   onKeyDown={(event) => handleCacheLimitKeyDown(event, bytes)}
                   className={cn(
-                    "flex-1 rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors",
+                    "flex-1 rounded-md px-2 py-1.5 text-[12px] font-semibold transition-colors",
                     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
                     "disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed",
                     selected
@@ -304,7 +304,7 @@ export function StorageSection() {
           <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
             <div className="flex shrink-0 items-center gap-2">
               {cacheCleared && (
-                <span className="text-[11px] text-[color:var(--kub-online-text)]" role="status">
+                <span className="text-[12px] text-[color:var(--kub-online-text)]" role="status">
                   Кэш очищен
                 </span>
               )}

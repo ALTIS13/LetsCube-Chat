@@ -899,7 +899,7 @@ export function MessageInput({
           <div className="flex items-center gap-2 rounded-t-xl px-3 py-2 mb-1 bg-[var(--kub-raised)] border-l-2 border-[color:var(--kub-cyan)]">
             <KubIcon name="edit" size={13} tone="accent" className="flex-shrink-0" />
             <div className="flex-1 min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">Редактирование</div>
+              <div className="text-[12px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">Редактирование</div>
               <div className="text-xs truncate text-[color:var(--kub-muted)]">{editingMessage.content}</div>
             </div>
             <button
@@ -1012,7 +1012,7 @@ export function MessageInput({
                 type="button"
                 data-testid="composer-locked-recording-stop"
                 onClick={stopLockedRecording}
-                className="ml-2 inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--kub-danger)] px-2.5 text-[11px] font-semibold text-white transition hover:brightness-110"
+                className="ml-2 inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--kub-danger)] px-2.5 text-[12px] font-semibold text-white transition hover:brightness-110"
               >
                 <KubIcon name="pause" size={13} />
                 Остановить
@@ -1134,7 +1134,7 @@ function MediaQualitySelector({
         compact && "bg-[var(--kub-surface)]",
       )}
     >
-      <div className="mb-1.5 flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
+      <div className="mb-1.5 flex items-center gap-2 px-1 text-[12px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
         <KubIcon name="video" size={13} />
         <span>Качество видео</span>
       </div>
@@ -1175,12 +1175,12 @@ function MediaQualitySelector({
                     : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] group-hover:border-[color:var(--kub-cyan)]",
                 )}
               />
-              <span className="block max-w-full truncate text-[11px] font-semibold">{option.label}</span>
+              <span className="block max-w-full truncate text-[12px] font-semibold">{option.label}</span>
             </button>
           );
         })}
       </div>
-      <p className="mt-1 px-1 text-center text-[10px] leading-4 text-[color:var(--kub-muted)]">
+      <p className="mt-1 px-1 text-center text-[12px] leading-4 text-[color:var(--kub-muted)]">
         {selectedOption.description}
       </p>
     </div>
@@ -1435,21 +1435,21 @@ function VideoMessageAttachmentPreview({
             <KubIcon name={activePlaying ? "pause" : "play"} size={16} />
           </span>
         </span>
-        <span className="absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-black/65 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-white backdrop-blur">
+        <span className="absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full bg-black/65 px-2 py-0.5 text-[12px] font-semibold tabular-nums text-white backdrop-blur">
           {formatDurationLabel(durationMs)}
         </span>
       </button>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate text-xs font-medium text-[color:var(--kub-text)]">Видео-сообщение</span>
-          <span className="shrink-0 text-[11px] tabular-nums text-[color:var(--kub-muted)]">
+          <span className="shrink-0 text-[12px] tabular-nums text-[color:var(--kub-muted)]">
             {formatDurationLabel(durationMs)}
           </span>
         </div>
-        <div className="mt-1 text-[11px] leading-snug text-[color:var(--kub-muted)]">
+        <div className="mt-1 text-[12px] leading-snug text-[color:var(--kub-muted)]">
           Нажмите на круг, чтобы просмотреть перед отправкой.
         </div>
-        <div className={cn("mt-1 truncate text-[11px] text-[color:var(--kub-muted)]", failed && "text-[color:var(--kub-danger-text)]")}>
+        <div className={cn("mt-1 truncate text-[12px] text-[color:var(--kub-muted)]", failed && "text-[color:var(--kub-danger-text)]")}>
           {attachment.error ?? attachmentStatusLabel(attachment.status)}
         </div>
         <StagedAttachmentTransferProgress attachment={attachment} />
@@ -1470,7 +1470,7 @@ function AttachmentMeta({
       <div className="truncate text-xs font-medium text-[color:var(--kub-text)]">
         {attachment.name}
       </div>
-      <div className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] text-[color:var(--kub-muted)]">
+      <div className="mt-0.5 flex min-w-0 items-center gap-1 text-[12px] text-[color:var(--kub-muted)]">
         <span className="shrink-0">
           {attachment.optimized && attachment.originalSize && attachment.originalSize > attachment.size
             ? `${formatAttachmentSize(attachment.size)} после сжатия`
@@ -1556,12 +1556,12 @@ function VoiceAttachmentPreview({
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <span className="truncate text-xs font-medium text-[color:var(--kub-text)]">Голосовое</span>
-          <span className="shrink-0 text-[11px] tabular-nums text-[color:var(--kub-muted)]">
+          <span className="shrink-0 text-[12px] tabular-nums text-[color:var(--kub-muted)]">
             {formatDurationLabel(durationMs)}
           </span>
         </div>
         <VoicePlaybackProgress progress={progress} />
-        <div className={cn("mt-1 truncate text-[11px] text-[color:var(--kub-muted)]", failed && "text-[color:var(--kub-danger-text)]")}>
+        <div className={cn("mt-1 truncate text-[12px] text-[color:var(--kub-muted)]", failed && "text-[color:var(--kub-danger-text)]")}>
           {attachment.error ?? attachmentStatusLabel(attachment.status)}
         </div>
         <StagedAttachmentTransferProgress attachment={attachment} />

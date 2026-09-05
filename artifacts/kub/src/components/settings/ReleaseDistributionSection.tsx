@@ -103,7 +103,7 @@ export function ReleaseDistributionSection() {
           <div className="text-xs text-[color:var(--kub-muted)]" data-testid="pwa-install-description">
             {installCopy.description}
           </div>
-          <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-[color:var(--kub-muted)]">
+          <div className="mt-2 flex flex-wrap gap-1.5 text-[12px] text-[color:var(--kub-muted)]">
             <span
               className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-1"
               data-testid="pwa-install-variant"
@@ -134,7 +134,7 @@ export function ReleaseDistributionSection() {
                 <div className="min-w-0 text-xs text-[color:var(--kub-text)]">
                   {desktopUpdate.presentation?.title ?? "Подготавливаем проверку обновлений"}
                   {installedVersionLabel && (
-                    <span className="mt-0.5 block text-[11px] text-[color:var(--kub-muted)]">
+                    <span className="mt-0.5 block text-[12px] text-[color:var(--kub-muted)]">
                       {installedVersionLabel}
                     </span>
                   )}
@@ -175,7 +175,7 @@ export function ReleaseDistributionSection() {
                 </div>
               </div>
               {desktopUpdate.presentation?.description && (
-                <p className="mt-2 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+                <p className="mt-2 text-[12px] leading-relaxed text-[color:var(--kub-muted)]">
                   {desktopUpdate.presentation.description}
                 </p>
               )}
@@ -184,7 +184,7 @@ export function ReleaseDistributionSection() {
                   className="mt-2 rounded-lg border border-[color:var(--kub-warn)]/40 bg-[color-mix(in_srgb,var(--kub-warn)_9%,var(--kub-surface))] p-2"
                   data-testid="desktop-test-channel-confirmation"
                 >
-                  <p className="text-[11px] leading-relaxed text-[color:var(--kub-text)]">
+                  <p className="text-[12px] leading-relaxed text-[color:var(--kub-text)]">
                     Тестовые сборки могут быть нестабильными. Перейти на канал Test?
                   </p>
                   <div className="mt-2 flex justify-end gap-2">
@@ -242,12 +242,12 @@ export function ReleaseDistributionSection() {
                 <span className="min-w-0">{STATE_COPY[release.state]}</span>
               </div>
               {manifest?.available && (
-                <div className="mt-1 text-[11px] text-[color:var(--kub-muted)]">
+                <div className="mt-1 text-[12px] text-[color:var(--kub-muted)]">
                   Версия {manifest.version} · {formatFileSize(manifest.artifact?.size ?? 0)} · {formatReleaseDate(manifest.publishedAt)}
                 </div>
               )}
               {handoff && (
-                <div className="mt-2 text-[11px] text-[color:var(--kub-accent-text)]" role="status">
+                <div className="mt-2 text-[12px] text-[color:var(--kub-accent-text)]" role="status">
                   Загрузка передана системе
                 </div>
               )}

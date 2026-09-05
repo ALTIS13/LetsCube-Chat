@@ -485,16 +485,16 @@ export function ChatMediaPlaybackBar({ compact = false }: { compact?: boolean } 
             <div className="flex min-w-0 items-center gap-2">
               <div className="truncate text-sm font-semibold text-[color:var(--kub-text)]">{item.title}</div>
               {item.isStaged && (
-                <span className="shrink-0 rounded-full bg-[var(--kub-surface-3)] px-2 py-0.5 text-[10px] font-medium text-[color:var(--kub-muted)]">
+                <span className="shrink-0 rounded-full bg-[var(--kub-surface-3)] px-2 py-0.5 text-[12px] font-medium text-[color:var(--kub-muted)]">
                   предпросмотр
                 </span>
               )}
             </div>
-            <div className="truncate text-[11px] text-[color:var(--kub-muted)]">
+            <div className="truncate text-[12px] text-[color:var(--kub-muted)]">
               {playback.error ?? item.subtitle ?? "Медиа в текущем чате"}
             </div>
             <div className="mt-1.5 flex min-w-0 items-center gap-2">
-              <span className="w-9 shrink-0 text-[10px] tabular-nums text-[color:var(--kub-muted)]">{elapsedLabel}</span>
+              <span className="w-11 shrink-0 text-[12px] tabular-nums text-[color:var(--kub-muted)]">{elapsedLabel}</span>
               <input
                 data-testid="chat-media-playback-progress"
                 type="range"
@@ -507,7 +507,7 @@ export function ChatMediaPlaybackBar({ compact = false }: { compact?: boolean } 
                 className="h-1.5 min-w-[80px] flex-1 cursor-pointer appearance-none rounded-full bg-[var(--kub-surface-3)] accent-[var(--kub-cyan)] disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label="Позиция воспроизведения"
               />
-              <span className="w-9 shrink-0 text-right text-[10px] tabular-nums text-[color:var(--kub-muted)]">{durationLabel}</span>
+              <span className="w-11 shrink-0 text-right text-[12px] tabular-nums text-[color:var(--kub-muted)]">{durationLabel}</span>
             </div>
           </div>
         </div>

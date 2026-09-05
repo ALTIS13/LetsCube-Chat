@@ -106,8 +106,8 @@ export function SearchSection({
   return (
     <section data-search-section={type}>
       <div className={cn(
-        "px-2 pb-1 text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--kub-muted)]",
-        compact && "px-1.5 text-[10px]",
+        "px-2 pb-1 text-[12px] font-bold uppercase tracking-[0.16em] text-[color:var(--kub-muted)]",
+        compact && "px-1.5 text-[12px]",
       )}>
         {title}
       </div>
@@ -201,7 +201,7 @@ export function SearchFilterChips({
           onClick={() => onChangeQuery(removeSearchChip(query, chip))}
           className={cn(
             "kub-raise inline-flex shrink-0 items-center gap-1 rounded-lg border border-[color:var(--kub-border-color)] font-semibold text-[color:var(--kub-muted)] transition hover:border-[color:var(--kub-cyan)] hover:text-[color:var(--kub-accent-text)]",
-            compact ? "h-7 px-2 text-[11px]" : "h-8 px-2.5 text-xs",
+            compact ? "h-7 px-2 text-[12px]" : "h-8 px-2.5 text-xs",
           )}
           title="Убрать фильтр"
           aria-label={`Убрать фильтр: ${chip.label}`}

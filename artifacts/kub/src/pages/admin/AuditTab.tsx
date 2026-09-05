@@ -351,7 +351,7 @@ export function AuditTab() {
       <KubPanel className="p-3 mb-3 space-y-2.5">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
           <div className="relative">
-            <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">Действующее лицо</div>
+            <div className="text-[12px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">Действующее лицо</div>
             {actorPicked ? (
               <div className="flex items-center gap-2 rounded-xl px-3 h-11 bg-[var(--kub-inset)] border border-[color:var(--kub-cyan)]/40">
                 <UserAvatar user={actorPicked} size="sm" />
@@ -390,7 +390,7 @@ export function AuditTab() {
                       <div className="text-sm truncate text-[color:var(--kub-text)]">
                         {p.full_name ?? "Без имени"}
                       </div>
-                      <div className="text-[11px] truncate text-[color:var(--kub-muted)]">
+                      <div className="text-[12px] truncate text-[color:var(--kub-muted)]">
                         {p.username ? `@${p.username}` : p.id.slice(0, 8)}
                       </div>
                     </div>
@@ -401,7 +401,7 @@ export function AuditTab() {
           </div>
 
           <div className="relative">
-            <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">Тип события</div>
+            <div className="text-[12px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">Тип события</div>
             <button
               onClick={() => setActionsOpen((v) => !v)}
               aria-expanded={actionsOpen}
@@ -447,7 +447,7 @@ export function AuditTab() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
           <div>
-            <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">Дата с</div>
+            <div className="text-[12px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">Дата с</div>
             <input
               type="date"
               value={fromDate}
@@ -456,7 +456,7 @@ export function AuditTab() {
             />
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">Дата по</div>
+            <div className="text-[12px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">Дата по</div>
             <input
               type="date"
               value={toDate}
@@ -531,7 +531,7 @@ export function AuditTab() {
                         <KubBadge tone="cyan">
                           {ACTION_LABEL[r.action as AuditAction] ?? "Системное событие"}
                         </KubBadge>
-                        <span className="text-[11px] text-[color:var(--kub-muted)]">
+                        <span className="text-[12px] text-[color:var(--kub-muted)]">
                           {fmtDateTime(r.created_at)}
                         </span>
                       </div>
@@ -559,7 +559,7 @@ export function AuditTab() {
                         <KvRow label="Чат" value={r.targetChat.name ?? r.targetChat.id.slice(0, 8)} />
                       )}
                       <div>
-                        <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">
+                        <div className="text-[12px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">
                           Данные изменения
                         </div>
                         <DiffDetails diff={r.diff} />
@@ -603,13 +603,13 @@ export function AuditTab() {
 function KvRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:gap-2">
-      <div className="sm:w-32 flex-shrink-0 text-[10px] uppercase tracking-wider pt-0.5 text-[color:var(--kub-muted)]">
+      <div className="sm:w-32 flex-shrink-0 text-[12px] tracking-wider pt-0.5 text-[color:var(--kub-muted)]">
         {label}
       </div>
       <div
         className={cn(
           "flex-1 min-w-0 break-words text-[color:var(--kub-text)]",
-          mono && "font-mono text-[11px]",
+          mono && "font-mono text-[12px]",
         )}
       >
         {value}

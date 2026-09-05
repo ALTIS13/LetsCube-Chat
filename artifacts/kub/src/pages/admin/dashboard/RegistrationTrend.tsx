@@ -53,7 +53,7 @@ export function RegistrationTrend({ series, metrics, error }: {
                 aria-label={`${point.label}: ${point.value.toLocaleString("ru-RU")} новых пользователей`}
                 title={`${point.label}: ${point.value.toLocaleString("ru-RU")}`}
               >
-                <span className="kub-glass-strong pointer-events-none absolute bottom-9 z-10 hidden rounded-md border border-[color:var(--kub-border-color)] px-2 py-1 text-[11px] font-semibold text-[color:var(--kub-text)] group-hover:block group-focus-within:block">
+                <span className="kub-glass-strong pointer-events-none absolute bottom-9 z-10 hidden rounded-md border border-[color:var(--kub-border-color)] px-2 py-1 text-[12px] font-semibold text-[color:var(--kub-text)] group-hover:block group-focus-within:block">
                   {point.value.toLocaleString("ru-RU")}
                 </span>
                 <span className="flex h-[calc(100%-1.75rem)] w-full max-w-9 items-end overflow-hidden rounded-t-md bg-[color-mix(in_srgb,var(--kub-cyan)_7%,transparent)]">
@@ -62,7 +62,7 @@ export function RegistrationTrend({ series, metrics, error }: {
                     style={{ height: `${height}%` }}
                   />
                 </span>
-                <span className="h-4 truncate text-[10px] text-[color:var(--kub-muted)]">{point.label}</span>
+                <span className="h-[18px] truncate text-[12px] text-[color:var(--kub-muted)]">{point.label}</span>
               </li>
             );
           })}

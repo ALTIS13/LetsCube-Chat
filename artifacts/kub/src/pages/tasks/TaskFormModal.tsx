@@ -392,7 +392,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       />
 
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
+        <label className="text-[12px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
           Описание
         </label>
         <textarea
@@ -405,7 +405,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
+        <label className="text-[12px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
           Приоритет
         </label>
         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
@@ -432,7 +432,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
+        <label className="text-[12px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
           Срок (необязательно)
         </label>
         <input
@@ -446,14 +446,14 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3">
         <div className="mb-3 flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
+            <div className="text-[12px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
               Повторение
             </div>
-            <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+            <p className="mt-1 text-[12px] leading-relaxed text-[color:var(--kub-muted)]">
               Повтор создаёт отдельные задачи с теми же локацией, получателем, видимостью и маршрутом администратора.
             </p>
             {canUseAdminTaskControls && (
-              <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+              <p className="mt-1 text-[12px] leading-relaxed text-[color:var(--kub-muted)]">
                 Автоматическое создание повторов требует настроенный scheduler на стороне Supabase.
               </p>
             )}
@@ -523,7 +523,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
 
                 {recurrenceFrequency === "weekly" && (
                   <div>
-                    <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
+                    <div className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
                       Дни недели
                     </div>
                     <div className="grid grid-cols-7 gap-1">
@@ -632,10 +632,10 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3">
         <div className="mb-3 flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
+            <div className="text-[12px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
               Маршрутизация по локации
             </div>
-            <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+            <p className="mt-1 text-[12px] leading-relaxed text-[color:var(--kub-muted)]">
               Выберите локацию, роль получателя и администратора, через которого проходит задача.
             </p>
           </div>
@@ -758,7 +758,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       <div>
         <label
           htmlFor="task-chat-select"
-          className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]"
+          className="text-[12px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]"
         >
           {visibility === "chat" ? "Связанный чат" : "Связанный чат (необязательно)"}
         </label>
@@ -816,7 +816,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                     <span className="block truncate text-sm font-semibold text-[color:var(--kub-text)]">
                       {display.title}
                     </span>
-                    <span className="block truncate text-[11px] text-[color:var(--kub-muted)]">
+                    <span className="block truncate text-[12px] text-[color:var(--kub-muted)]">
                       {getChatSecondaryLine(display, formatChatContext(chat, display.subtitle))}
                     </span>
                   </span>
@@ -831,7 +831,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
             )}
           </div>
         </div>
-        <p className="mt-1.5 text-[11px] text-[color:var(--kub-muted)]">
+        <p className="mt-1.5 text-[12px] text-[color:var(--kub-muted)]">
           {visibility === "chat" && !selectedChat
             ? "Для видимости «Чат» нужно выбрать чат."
             : selectedChat
@@ -841,7 +841,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
+        <label className="text-[12px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
           Исполнитель
         </label>
         {assignmentScope !== "user" ? (
@@ -898,7 +898,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                         {p.full_name ?? "Без имени"}
                       </div>
                       {p.username && (
-                        <div className="text-[11px] truncate text-[color:var(--kub-muted)]">
+                        <div className="text-[12px] truncate text-[color:var(--kub-muted)]">
                           @{p.username}
                         </div>
                       )}
@@ -907,7 +907,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
                 ))}
               </div>
             )}
-            <p className="mt-1.5 text-[11px] text-[color:var(--kub-muted)]">
+            <p className="mt-1.5 text-[12px] text-[color:var(--kub-muted)]">
               {isEdit
                 ? "Можно убрать исполнителя — задача станет неназначенной."
                 : "Можно создать задачу без исполнителя — назначить позже."}

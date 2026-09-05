@@ -237,7 +237,7 @@ export function FolderEditModal({
       )}
 
       <div>
-        <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-[color:var(--kub-muted)]">
+        <label className="block text-[12px] font-semibold uppercase tracking-wider mb-1.5 text-[color:var(--kub-muted)]">
           Название
         </label>
         <input
@@ -253,7 +253,7 @@ export function FolderEditModal({
 
       {showScopeSelector && (
         <div>
-          <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-[color:var(--kub-muted)]">
+          <label className="block text-[12px] font-semibold uppercase tracking-wider mb-1.5 text-[color:var(--kub-muted)]">
             Тип папки
           </label>
           <div className="flex rounded-xl p-0.5 bg-[var(--kub-bg)] border border-[color:var(--kub-border-color)]">
@@ -279,7 +279,7 @@ export function FolderEditModal({
               </button>
             ))}
           </div>
-          <p className="mt-1.5 text-[11px] text-[color:var(--kub-muted)]">
+          <p className="mt-1.5 text-[12px] text-[color:var(--kub-muted)]">
             {scope === "shared"
               ? "Видна всем, кто состоит хотя бы в одном из чатов внутри."
               : "Видна только тебе."}
@@ -288,7 +288,7 @@ export function FolderEditModal({
       )}
 
       <div>
-        <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-[color:var(--kub-muted)]">
+        <label className="block text-[12px] font-semibold uppercase tracking-wider mb-1.5 text-[color:var(--kub-muted)]">
           Иконка
         </label>
         <EmojiCategoryPicker
@@ -302,7 +302,7 @@ export function FolderEditModal({
       </div>
 
       <div className="flex min-h-[150px] flex-1 flex-col">
-        <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-[color:var(--kub-muted)]">
+        <label className="block text-[12px] font-semibold uppercase tracking-wider mb-1.5 text-[color:var(--kub-muted)]">
           Чаты в папке ({selectedChatIds.size})
         </label>
         <label className="mb-2 flex h-9 items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--kub-cyan)]">

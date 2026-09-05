@@ -207,11 +207,11 @@ function SanctionsHistory({ audit }: { audit: ReturnType<typeof useAuditLogs> })
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-bold text-[color:var(--kub-text)]">Журнал санкций</div>
-          <div className="text-[11px] text-[color:var(--kub-muted)]">
+          <div className="text-[12px] text-[color:var(--kub-muted)]">
             Последние действия по банам и мьютам, включая снятые и истёкшие ограничения
           </div>
         </div>
-        <span className="kub-raise text-[11px] font-semibold px-2 py-0.5 rounded-full text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]">
+        <span className="kub-raise text-[12px] font-semibold px-2 py-0.5 rounded-full text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]">
           {audit.total}
         </span>
       </div>
@@ -273,14 +273,14 @@ function SanctionHistoryRow({ row }: { row: AuditLogWithActor }) {
           <span className="text-sm font-semibold text-[color:var(--kub-text)]">
             {sanctionActionLabel(row.action as AuditAction)}
           </span>
-          <span className="kub-raise text-[10px] px-1.5 py-0.5 rounded font-semibold text-[color:var(--kub-muted)]">
+          <span className="kub-raise text-[12px] px-1.5 py-0.5 rounded font-semibold text-[color:var(--kub-muted)]">
             {fmt(row.created_at)}
           </span>
         </div>
         <div className="text-xs mt-0.5 break-words text-[color:var(--kub-text)]">
           К пользователю: {profileLabel(target, auditString(row, "target_user_id") ?? auditString(row, "user_id") ?? row.target_id)}
         </div>
-        <div className="text-[11px] mt-1 break-words text-[color:var(--kub-muted)]">
+        <div className="text-[12px] mt-1 break-words text-[color:var(--kub-muted)]">
           Назначил: {profileLabel(actor, row.actor_id)}
           {chat && <> · Чат: {chat.name ?? chat.id.slice(0, 8)}</>}
           {reason && <> · Причина: {reason}</>}
@@ -320,7 +320,7 @@ function CollapsibleSection({
         <div className="flex-1 text-sm font-bold text-[color:var(--kub-text)]">
           {title}
         </div>
-        <span className="kub-raise text-[11px] font-semibold px-2 py-0.5 rounded-full text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]">
+        <span className="kub-raise text-[12px] font-semibold px-2 py-0.5 rounded-full text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]">
           {count}
         </span>
       </button>
@@ -363,13 +363,13 @@ function RowCard({
             </span>
           )}
           {expired && (
-            <span className="kub-raise ml-2 text-[10px] px-1.5 py-0.5 rounded font-semibold text-[color:var(--kub-muted)]">
+            <span className="kub-raise ml-2 text-[12px] px-1.5 py-0.5 rounded font-semibold text-[color:var(--kub-muted)]">
               истёк
             </span>
           )}
         </div>
         <div className="text-xs mt-0.5 break-words text-[color:var(--kub-text)]">{reason}</div>
-        <div className="text-[11px] mt-1 break-words text-[color:var(--kub-muted)]">{meta}</div>
+        <div className="text-[12px] mt-1 break-words text-[color:var(--kub-muted)]">{meta}</div>
       </div>
       <button
         onClick={onRemove}

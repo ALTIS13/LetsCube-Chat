@@ -306,7 +306,7 @@ export function SupportWindow() {
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium text-[color:var(--kub-text)]">Поддержка</div>
           {activeTicket && !composing && (
-            <div className="truncate text-[11px] text-[color:var(--kub-muted)]">
+            <div className="truncate text-[12px] text-[color:var(--kub-muted)]">
               {activeTicket.publicReference} ·{" "}
               <span className={statusTone(activeTicket.status)}>
                 {STATUS_LABELS[activeTicket.status]}
@@ -455,7 +455,7 @@ export function SupportWindow() {
                     )}
                   >
                     {!mine && (
-                      <div className="mb-0.5 text-[11px] text-[color:var(--kub-accent-text)]">
+                      <div className="mb-0.5 text-[12px] text-[color:var(--kub-accent-text)]">
                         Поддержка
                       </div>
                     )}
@@ -474,7 +474,7 @@ export function SupportWindow() {
                         composited to within 1.01 of it in the dark theme, which
                         is a bubble you cannot see. This measures 10.06:1 and
                         13.94:1. */}
-                    <div className="mt-0.5 text-right text-[10px] text-[color:var(--kub-text)]">
+                    <div className="mt-0.5 text-right text-[12px] text-[color:var(--kub-text)]">
                       {formatWhen(message.createdAt)}
                     </div>
                   </div>

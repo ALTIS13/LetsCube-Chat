@@ -519,7 +519,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
+            <div className="text-[12px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
               Исполнитель
             </div>
             {task.assignee ? (
@@ -534,7 +534,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
             )}
           </div>
           <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
+            <div className="text-[12px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
               Создал
             </div>
             {task.creator ? (
@@ -549,7 +549,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
             )}
           </div>
           <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
+            <div className="text-[12px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
               Видимость
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -557,7 +557,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
             </div>
           </div>
           <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
+            <div className="text-[12px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
               Тип назначения
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -572,7 +572,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
             </div>
           </div>
           <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 sm:col-span-2">
-            <div className="text-[10px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
+            <div className="text-[12px] uppercase tracking-wider font-semibold mb-1 text-[color:var(--kub-muted)]">
               Связанный чат
             </div>
             {task.chat && linkedChat ? (
@@ -591,7 +591,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
                   <div className="truncate text-sm font-medium text-[color:var(--kub-text)]">
                     {linkedChat.title}
                   </div>
-                  <div className="truncate text-[11px] text-[color:var(--kub-muted)]">
+                  <div className="truncate text-[12px] text-[color:var(--kub-muted)]">
                     {getChatSecondaryLine(linkedChat)}
                   </div>
                 </div>
@@ -605,7 +605,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
         {/* Action buttons */}
         {hasTaskActions && (
           <div className="rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-          <div className="w-full text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
+          <div className="w-full text-[12px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
             Действия
           </div>
           {canClaim && (
@@ -619,7 +619,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
               >
                 Взять задачу
               </KubButton>
-              <span className="text-[11px] leading-snug text-[color:var(--kub-muted)]">
+              <span className="text-[12px] leading-snug text-[color:var(--kub-muted)]">
                 Задача из общего пула будет назначена вам
               </span>
             </div>
@@ -692,7 +692,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
             </>
           )}
           {isStaff && task.status === "waiting_confirmation" && isAssignee && (
-            <span className="text-[11px] self-center text-[color:var(--kub-muted)]">
+            <span className="text-[12px] self-center text-[color:var(--kub-muted)]">
               Подтвердить должен другой администратор или менеджер
             </span>
           )}
@@ -740,7 +740,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
 
         {/* Timeline */}
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider mb-2 text-[color:var(--kub-accent-text)]">
+          <div className="text-[12px] font-semibold uppercase tracking-wider mb-2 text-[color:var(--kub-accent-text)]">
             История
           </div>
           <ol className="relative space-y-3 pl-5 before:content-[''] before:absolute before:left-1.5 before:top-1 before:bottom-1 before:w-px before:bg-[color:var(--kub-border-color)]">

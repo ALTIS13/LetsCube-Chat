@@ -1273,7 +1273,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
             )}
             {!isGroup && otherUser?.bio && (
               <div className="px-4 py-3 border-b border-[color:var(--kub-border-color)]">
-                <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">О себе</div>
+                <div className="text-[12px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">О себе</div>
                 <div className="text-sm text-[color:var(--kub-text)]">{otherUser.bio}</div>
               </div>
             )}
@@ -1306,7 +1306,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                       </div>
                     </div>
                     {!invitePolicySupported && (
-                      <span className="shrink-0 rounded-full border border-[color:var(--kub-border-color)] px-2 py-0.5 text-[10px] font-semibold text-[color:var(--kub-muted)]">
+                      <span className="shrink-0 rounded-full border border-[color:var(--kub-border-color)] px-2 py-0.5 text-[12px] font-semibold text-[color:var(--kub-muted)]">
                         Недоступно
                       </span>
                     )}
@@ -1395,7 +1395,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                   />
                   <span className="flex-1 text-left">Топики</span>
                   <span className={cn(
-                    "text-[10px] uppercase tracking-wide font-semibold",
+                    "text-[12px] uppercase tracking-wide font-semibold",
                     chat.is_forum ? "text-[color:var(--kub-accent-text)]" : "text-[color:var(--kub-muted)]"
                   )}>
                     {chat.is_forum ? "Вкл" : "Выкл"}
@@ -1604,7 +1604,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               <div className="mt-3 border-t border-[color:var(--kub-border-color)] px-4 pt-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div>
-                    <div className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--kub-accent-text)]">
+                    <div className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--kub-accent-text)]">
                       Приглашения
                     </div>
                     <div className="text-xs text-[color:var(--kub-muted)]">
@@ -1654,7 +1654,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                                   {invitee ? displayProfileName(invitee) : "Пользователь"}
                                 </span>
                                 <span className={cn(
-                                  "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                                  "shrink-0 rounded-full px-2 py-0.5 text-[12px] font-semibold",
                                   inviteStatusClass(invite.status),
                                 )}>
                                   {inviteStatusLabel(invite.status, inviteeIsCurrentMember)}
@@ -2014,7 +2014,7 @@ function MediaGalleryTile({
       <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/14 backdrop-blur">
         <KubIcon name={icon} size={18} className="text-white" />
       </span>
-      <span className="rounded-full bg-black/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/80">
+      <span className="rounded-full bg-black/25 px-2 py-0.5 text-[12px] font-semibold uppercase tracking-wide text-white/80">
         {label}
       </span>
     </div>

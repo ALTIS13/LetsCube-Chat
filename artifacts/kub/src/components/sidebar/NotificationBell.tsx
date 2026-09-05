@@ -332,7 +332,7 @@ export function NotificationBell() {
           {unreadCount > 0 && (
             <span className={cn(
               "absolute -top-0.5 -right-0.5 h-[16px] min-w-[16px] px-1",
-              "rounded-full text-center text-[10px] font-bold leading-[16px]",
+              "rounded-full text-center text-[12px] font-bold leading-[16px]",
               "bg-[color:var(--kub-cyan)] text-[color:var(--kub-bg)]",
               "shadow-[0_0_0_2px_var(--kub-bg)]",
             )}>
@@ -357,7 +357,7 @@ export function NotificationBell() {
           <div className="shrink-0 bg-[var(--kub-surface)] flex items-center justify-between gap-3 border-b border-[color:var(--kub-border-color)] px-4 py-3">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-[color:var(--kub-text)]">Уведомления</div>
-              <div className="text-[11px] text-[color:var(--kub-muted)]">
+              <div className="text-[12px] text-[color:var(--kub-muted)]">
                 {activeUnreadCount > 0 ? `${activeUnreadCount} непрочит.` : "Все прочитаны"}
               </div>
             </div>
@@ -397,7 +397,7 @@ export function NotificationBell() {
                 >
                   <span>{tab.label}</span>
                   {tabUnread > 0 && (
-                    <span className="rounded-full bg-[color:var(--kub-cyan)] px-1.5 text-[10px] leading-4 text-[color:var(--kub-bg)]">
+                    <span className="rounded-full bg-[color:var(--kub-cyan)] px-1.5 text-[12px] leading-4 text-[color:var(--kub-bg)]">
                       {tabUnread > 99 ? "99+" : tabUnread}
                     </span>
                   )}
@@ -536,7 +536,7 @@ function NotificationItem({
             )}
           </div>
 
-          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[color:var(--kub-muted)]">
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-[color:var(--kub-muted)]">
             {accent.chips.map((chip) => (
               <span
                 key={chip.key}
@@ -685,7 +685,7 @@ function MessageGroupItem({
             )}
           </div>
 
-          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[color:var(--kub-muted)]">
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-[color:var(--kub-muted)]">
             {accent.attachment && (
               <span
                 data-testid="notification-attachment"

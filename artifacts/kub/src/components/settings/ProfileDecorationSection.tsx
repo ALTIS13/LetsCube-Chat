@@ -152,7 +152,7 @@ export function ProfileDecorationSection() {
                     {share && (
                       <div
                         data-testid={`achievement-share-${achievement.key}`}
-                        className="mt-0.5 text-[11px] text-[color:var(--kub-muted)]"
+                        className="mt-0.5 text-[12px] text-[color:var(--kub-muted)]"
                       >
                         {share}
                       </div>
@@ -167,7 +167,7 @@ export function ProfileDecorationSection() {
                             }}
                           />
                         </div>
-                        <span className="shrink-0 text-[10px] tabular-nums text-[color:var(--kub-muted)]">
+                        <span className="shrink-0 text-[12px] tabular-nums text-[color:var(--kub-muted)]">
                           {progress.current} / {progress.target}
                         </span>
                       </div>
@@ -345,7 +345,7 @@ function Option({
       )}
     >
       {swatch}
-      <span className="max-w-[7rem] truncate text-[11px] text-[color:var(--kub-text)]">{label}</span>
+      <span className="max-w-[8rem] truncate text-[12px] text-[color:var(--kub-text)]">{label}</span>
       {locked && (
         <span className="absolute right-1.5 top-1.5 text-[color:var(--kub-muted)]">
           <KubIcon name="lock" size={12} />

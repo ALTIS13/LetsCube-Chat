@@ -110,7 +110,7 @@ export function EmojiCategoryPicker({
               aria-pressed={active}
               className={cn(
                 "min-w-0 truncate rounded-md px-1.5 font-semibold transition-colors disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
-                compact ? "min-h-7 text-[9px]" : "min-h-8 text-[10px]",
+                compact ? "min-h-7 text-[9px]" : "min-h-8 text-[12px]",
                 active
                   ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
                   : "text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-text)]",

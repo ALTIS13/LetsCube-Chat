@@ -16,7 +16,7 @@ export function DashboardTab() {
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-bold text-[color:var(--kub-text)]">Состояние системы</h2>
-            <KubBadge tone="online" pill className="text-[10px]">
+            <KubBadge tone="online" pill className="text-[12px]">
               Данные обновляются
             </KubBadge>
           </div>
@@ -52,7 +52,7 @@ export function DashboardTab() {
       />
 
       {dashboard.updatedAt && (
-        <div className="flex items-center justify-end gap-1.5 text-[10px] uppercase text-[color:var(--kub-muted)]">
+        <div className="flex items-center justify-end gap-1.5 text-[12px] uppercase text-[color:var(--kub-muted)]">
           <KubIcon name="clock" size={11} />
           Обновлено {dashboard.updatedAt.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
         </div>

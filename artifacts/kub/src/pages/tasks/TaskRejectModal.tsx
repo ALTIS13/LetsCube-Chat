@@ -69,7 +69,7 @@ export function TaskRejectModal({ taskId, mode, onClose, onDone }: Props) {
       }
     >
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
+        <label className="text-[12px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
           {c.label}
         </label>
         <textarea

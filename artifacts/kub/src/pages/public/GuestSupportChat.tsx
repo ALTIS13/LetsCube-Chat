@@ -146,7 +146,7 @@ export function GuestSupportChat({
                 }
               >
                 {!system && (
-                  <p className={`mb-1 text-[10px] font-bold uppercase tracking-wide ${own ? "opacity-70" : "text-[color:var(--kub-muted)]"}`}>
+                  <p className={`mb-1 text-[12px] font-bold uppercase tracking-wide ${own ? "opacity-70" : "text-[color:var(--kub-muted)]"}`}>
                     {own ? "Вы" : "Поддержка LETSCUBE"}
                   </p>
                 )}
@@ -194,7 +194,7 @@ export function GuestSupportChat({
           </KubButton>
         </div>
         {error && <p role="alert" className="mt-2 text-xs text-[color:var(--kub-danger-text)]">{error}</p>}
-        <div className="mt-3 flex flex-col gap-2 text-[10px] leading-4 text-[color:var(--kub-muted)] sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-3 flex flex-col gap-2 text-[12px] leading-4 text-[color:var(--kub-muted)] sm:flex-row sm:items-center sm:justify-between">
           <p>Доступ на этом устройстве действует при активности до {expiresLabel}.</p>
           <button
             type="button"

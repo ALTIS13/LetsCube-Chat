@@ -179,7 +179,7 @@ export function OpsReportTab() {
               Контрольные точки
             </h3>
             {generatedAt && (
-              <span className="text-[11px] uppercase tracking-wide text-[color:var(--kub-muted)]">
+              <span className="text-[12px] uppercase tracking-wide text-[color:var(--kub-muted)]">
                 {generatedAt.toLocaleString("ru-RU", {
                   day: "2-digit",
                   month: "2-digit",
@@ -254,7 +254,7 @@ function MetricCard({
       <div className="mt-3 text-2xl font-bold tabular-nums text-[color:var(--kub-text)]">
         {typeof value === "number" ? value.toLocaleString("ru-RU") : value}
       </div>
-      <div className="mt-1 text-[11px] uppercase tracking-wide leading-tight text-[color:var(--kub-muted)]">
+      <div className="mt-1 text-[12px] tracking-wide leading-tight text-[color:var(--kub-muted)]">
         {label}
       </div>
     </KubPanel>
@@ -315,7 +315,7 @@ function EventList({ events, loading }: { events: AdminOpsSecurityReportEvent[];
             <KubBadge tone={event.action.includes("revoked") ? "warn" : "cyan"}>
               {eventLabel(event.action)}
             </KubBadge>
-            <span className="text-[11px] text-[color:var(--kub-muted)]">
+            <span className="text-[12px] text-[color:var(--kub-muted)]">
               {formatDate(event.created_at)}
             </span>
           </div>

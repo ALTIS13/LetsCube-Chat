@@ -63,7 +63,7 @@ export const BotTokenDialog = forwardRef<BotTokenDialogHandle>(function BotToken
             Токен показан один раз. Сохраните его сейчас: после закрытия восстановить значение нельзя.
           </Dialog.Description>
           <div className="mt-5 rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] p-3">
-            <div className="text-[11px] font-semibold uppercase text-[color:var(--kub-muted)]">Токен</div>
+            <div className="text-[12px] font-semibold uppercase text-[color:var(--kub-muted)]">Токен</div>
             {token && (
               <div data-testid="raw-bot-token" spellCheck={false} className="mt-2 break-all font-mono text-sm leading-6 text-[color:var(--kub-text)] select-all">
                 {token}

@@ -166,7 +166,14 @@ const SITES = [
   {
     file: "components/support/SupportWindow.tsx",
     what: "the timestamp on a support bubble, where the muted grey has no guaranteed ground",
-    expect: /mt-0\.5 text-right text-\[10px\] text-\[color:var\(--kub-text\)\]/,
+    // The size is matched as a size, not as a literal. What this row guards is
+    // the ink: the grey has no guaranteed ground here, so the timestamp is
+    // written in `--kub-text`. A contrast ratio does not depend on the type
+    // size, and the WCAG threshold does not move between 10px and 12px — both
+    // are small text at 4.5:1 — so pinning the exact literal only bought a
+    // false failure the day the bottom of the scale was raised. Pinning the
+    // colour is the contract; pinning the pixel was an accident.
+    expect: /mt-0\.5 text-right text-\[\d+px\] text-\[color:var\(--kub-text\)\]/,
   },
 ];
 
@@ -190,6 +197,11 @@ for (const site of SITES) {
  * 10px on the fill the product paints, the grey measured 4.44:1 and 4.30:1; on
  * the worst ground this window can reach, 3.98:1 and 3.86:1.
  *
+ * The timestamp has since moved to 12px with the rest of the bottom step, and
+ * none of those numbers moves with it: a contrast ratio is a property of two
+ * colours, and 12px is still small text, so the threshold is still 4.5:1. The
+ * decision stands on the same measurement.
+ *
  * Every fill that would have rescued the grey was measured too, and each failed
  * for its own reason: the veil the support bubble already uses is 4.31:1 on the
  * same worst ground, and `--kub-message-out` passes but composites to within
@@ -210,7 +222,9 @@ for (const site of SITES) {
  * that floats above whatever the messenger happens to be showing, so their
  * ground is whatever is behind the window. Photographed at 10px on the fill the
  * product paints, the grey measured 4.44:1 and 4.30:1; the arithmetic below,
- * against the worst ground the window can reach, agrees with the picture.
+ * against the worst ground the window can reach, agrees with the picture. The
+ * timestamp is 12px now, which moves neither number nor the 4.5:1 threshold it
+ * is judged against.
  *
  * Every fill that would have rescued the grey was measured too, and each failed
  * for its own reason: the veil the support bubble already uses is 4.31:1 on the

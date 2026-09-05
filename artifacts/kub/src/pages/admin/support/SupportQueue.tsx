@@ -151,7 +151,7 @@ export function SupportQueue({
                       {ticket.publicReference} · {CATEGORY_LABEL[ticket.category] ?? "Другое"}
                     </span>
                   </span>
-                  <span className="shrink-0 text-[10px] text-[color:var(--kub-muted)]">
+                  <span className="shrink-0 text-[12px] text-[color:var(--kub-muted)]">
                     {formatRelative(ticket.lastActivityAt)}
                   </span>
                 </span>
@@ -169,7 +169,7 @@ export function SupportQueue({
                   >
                     {STATUS_LABEL[ticket.status]}
                   </KubBadge>
-                  <span className="truncate text-[11px] text-[color:var(--kub-muted)]">
+                  <span className="truncate text-[12px] text-[color:var(--kub-muted)]">
                     {ticket.assignedOperatorId ? "Назначено оператору" : "Общий пул"}
                   </span>
                 </span>

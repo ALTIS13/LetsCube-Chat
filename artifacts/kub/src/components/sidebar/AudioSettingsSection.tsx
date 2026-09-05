@@ -446,7 +446,7 @@ export function AudioSettingsSection() {
           <div className="mt-3 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2">
             <div className="mb-2 flex items-center justify-between gap-3">
               <span className="min-w-0 text-xs font-semibold text-[color:var(--kub-text)]">Как звучит голос</span>
-              <span className="shrink-0 text-[10px] text-[color:var(--kub-muted)]">
+              <span className="shrink-0 text-[12px] text-[color:var(--kub-muted)]">
                 {processingModeLabel(settings.processingMode)}
               </span>
             </div>
@@ -716,7 +716,7 @@ function DeviceSelect({
             </option>
           ))}
       </select>
-      {note && <span className="mt-1 block text-[11px] leading-relaxed text-[color:var(--kub-muted)]">{note}</span>}
+      {note && <span className="mt-1 block text-[12px] leading-relaxed text-[color:var(--kub-muted)]">{note}</span>}
     </label>
   );
 }
@@ -783,7 +783,7 @@ function ToggleRow({
       <span className="min-w-0">
         <span className="block text-xs font-semibold text-[color:var(--kub-text)]">{label}</span>
         {description && (
-          <span className="mt-0.5 block text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+          <span className="mt-0.5 block text-[12px] leading-relaxed text-[color:var(--kub-muted)]">
             {description}
           </span>
         )}

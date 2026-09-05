@@ -160,13 +160,13 @@ function FolderRow({ name, emoji, unread, shared, isActive, count, onPick, onEdi
             {shared && <KubIcon name="group" size={12} className="text-[color:var(--kub-cyan)]" />}
           </div>
           {typeof count === "number" && (
-            <div className="text-[11px] text-[color:var(--kub-muted)]">
+            <div className="text-[12px] text-[color:var(--kub-muted)]">
               {count} {pluralizeChats(count)}
             </div>
           )}
         </div>
         {unread > 0 && (
-          <span className="min-w-[20px] h-5 rounded-full text-[11px] font-bold flex items-center justify-center px-1.5 bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] flex-shrink-0">
+          <span className="min-w-[20px] h-5 rounded-full text-[12px] font-bold flex items-center justify-center px-1.5 bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] flex-shrink-0">
             {unread}
           </span>
         )}

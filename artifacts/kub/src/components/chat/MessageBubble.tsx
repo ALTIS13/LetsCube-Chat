@@ -1052,7 +1052,7 @@ export function MessageBubble({
         <KubIcon name="pin" size={12} tone="muted" label="Закреплено" className="shrink-0" />
       )}
       {message.edited_at && (
-        <span className="max-w-8 shrink truncate text-[10px] text-[color:var(--kub-muted)]" title="изменено">изм.</span>
+        <span className="max-w-8 shrink truncate text-[12px] text-[color:var(--kub-muted)]" title="изменено">изм.</span>
       )}
       {/* `tabular-nums` already makes HH:MM a fixed width, so an extra minimum
           reserved 16px of dead space in every bubble and pushed the meta onto
@@ -1066,7 +1066,7 @@ export function MessageBubble({
           Nothing is resized, moved or removed. */}
       <span
         className={cn(
-          "inline-flex shrink-0 justify-end tabular-nums text-right text-[10px] leading-none text-[color:var(--kub-muted)]",
+          "inline-flex shrink-0 justify-end tabular-nums text-right text-[12px] leading-none text-[color:var(--kub-muted)]",
           (message.pinned || message.edited_at) && "ml-1",
         )}
       >
@@ -1105,7 +1105,7 @@ export function MessageBubble({
           // and 3.90:1, which clears the 3:1 WCAG asks of a UI boundary. It is
           // the accent already used for this chip's hover and focus, so
           // nothing new is introduced.
-          className="inline-flex h-4 items-center gap-0.5 rounded-full border border-[color:var(--kub-cyan)] bg-[var(--kub-surface-3)] px-1 text-[10px] leading-none text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-accent-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+          className="inline-flex h-4 items-center gap-0.5 rounded-full border border-[color:var(--kub-cyan)] bg-[var(--kub-surface-3)] px-1 text-[12px] leading-none text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-accent-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
           title={groupReadAriaLabel}
           aria-label={groupReadAriaLabel}
           onClick={(event) => {
@@ -1140,7 +1140,7 @@ export function MessageBubble({
         onReaction(emoji);
       }}
       className={cn(
-        "inline-flex h-[22px] items-center gap-1 rounded-full border px-2 text-[11px] leading-none transition-all hover:scale-105 active:scale-95",
+        "inline-flex h-[22px] items-center gap-1 rounded-full border px-2 text-[12px] leading-none transition-all hover:scale-105 active:scale-95",
         mine
           ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] border-[color-mix(in_srgb,var(--kub-cyan)_72%,transparent)] text-[color:var(--kub-accent-text)]"
           : "bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] text-[color:var(--kub-muted)]"
@@ -1168,7 +1168,7 @@ export function MessageBubble({
           <button
             ref={reactionOverflowTriggerRef}
             type="button"
-            className="inline-flex h-[22px] items-center rounded-full border border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] px-2 text-[11px] leading-none text-[color:var(--kub-muted)]"
+            className="inline-flex h-[22px] items-center rounded-full border border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] px-2 text-[12px] leading-none text-[color:var(--kub-muted)]"
             title={`Ещё ${hiddenReactionCount} реакций`}
             aria-label={`Ещё ${hiddenReactionCount} реакций`}
             aria-expanded={reactionsExpanded}
@@ -1625,7 +1625,7 @@ export function MessageBubble({
             {message.failed && isMe && (
               <div
                 data-message-send-error="true"
-                className="mt-1 flex max-w-full flex-wrap items-center gap-1.5 border-t border-[color:var(--kub-border-color)]/60 pt-1 text-[11px] leading-none text-[color:var(--kub-danger-text)]"
+                className="mt-1 flex max-w-full flex-wrap items-center gap-1.5 border-t border-[color:var(--kub-border-color)]/60 pt-1 text-[12px] leading-none text-[color:var(--kub-danger-text)]"
               >
                 <span className="mr-auto min-w-0">
                   {message.send_error ?? "Не удалось отправить"}
@@ -2039,7 +2039,7 @@ function RoundVideoMessage({
           </span>
         )}
         {durationLabel && (
-          <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/65 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-white backdrop-blur">
+          <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/65 px-2.5 py-1 text-[12px] font-semibold tabular-nums text-white backdrop-blur">
             {durationLabel}
           </span>
         )}

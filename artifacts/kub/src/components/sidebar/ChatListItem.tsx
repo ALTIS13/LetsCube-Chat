@@ -237,7 +237,7 @@ export function ChatListItem({
           <div className="flex shrink-0 items-center gap-1">
             {showGroupReadIndicator && groupReadInfo ? (
               <span
-                className="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-full text-[10px] leading-none text-[color:var(--kub-muted)]"
+                className="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-full text-[12px] leading-none text-[color:var(--kub-muted)]"
                 title={getGroupReadReceiptAriaLabel(groupReadInfo)}
                 aria-label={getGroupReadReceiptAriaLabel(groupReadInfo)}
               >
@@ -259,7 +259,7 @@ export function ChatListItem({
             {lastMsg && (
               <span
                 className={cn(
-                  "text-[11px]",
+                  "text-[12px]",
                   hasUnread ? "text-[color:var(--kub-accent-text)] font-semibold" : "text-[color:var(--kub-muted)]"
                 )}
               >
@@ -292,7 +292,7 @@ export function ChatListItem({
                   // and measured 3.55:1 against `--kub-cyan` in the dark theme.
                   // `--kub-bg` gives 5.55:1 there and 4.56:1 in the light theme,
                   // and it is the pair the accent's own action token declares.
-                  "min-w-[18px] h-[18px] rounded-full text-[10px] font-bold flex items-center justify-center px-1.5 text-[color:var(--kub-bg)]",
+                  "min-w-[18px] h-[18px] rounded-full text-[12px] font-bold flex items-center justify-center px-1.5 text-[color:var(--kub-bg)]",
                   isMuted ? "bg-[color:var(--kub-muted)]" : "bg-[var(--kub-cyan)] kub-glow-soft"
                 )}
               >

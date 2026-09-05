@@ -86,7 +86,7 @@ export function SidebarSearchResults({ query }: { query: string }) {
           Поиск
         </div>
         {search.loading && (
-          <div className="flex items-center gap-1.5 text-[11px] text-[color:var(--kub-muted)]">
+          <div className="flex items-center gap-1.5 text-[12px] text-[color:var(--kub-muted)]">
             <KubIcon name="spinner" size={13} tone="accent" />
             Ищем
           </div>

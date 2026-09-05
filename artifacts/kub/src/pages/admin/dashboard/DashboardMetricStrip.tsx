@@ -52,7 +52,7 @@ export function DashboardMetricStrip({
               <div className="text-xl font-bold tabular-nums text-[color:var(--kub-text)]">
                 {loading ? "…" : value.toLocaleString("ru-RU")}
               </div>
-              <div className="mt-0.5 text-[10px] leading-tight text-[color:var(--kub-muted)]">
+              <div className="mt-0.5 text-[12px] leading-tight text-[color:var(--kub-muted)]">
                 {label}
               </div>
             </div>

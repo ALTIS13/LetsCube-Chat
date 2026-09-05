@@ -546,7 +546,7 @@ const FIELD_ROW_GRID =
 function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="px-3 pt-4 sm:px-4">
-      <h3 className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--kub-muted)]">
+      <h3 className="mb-1.5 px-1 text-[12px] font-semibold uppercase tracking-[0.14em] text-[color:var(--kub-muted)]">
         {title}
       </h3>
       <div className="overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] divide-y divide-[color:var(--kub-border-color)]">
@@ -648,7 +648,7 @@ function TextFieldRow({
       </label>
       <div className="flex min-w-0 items-center gap-2">
         {counterVisible && (
-          <span className="shrink-0 tabular-nums text-[11px] text-[color:var(--kub-muted)]">
+          <span className="shrink-0 tabular-nums text-[12px] text-[color:var(--kub-muted)]">
             {value.length}/{maxLength}
           </span>
         )}

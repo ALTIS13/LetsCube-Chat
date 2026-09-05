@@ -126,7 +126,7 @@ export function PrivacyPage() {
 function PolicyMeta({ label, value }: { label: string; value: string }) {
   return (
     <div className="px-4 py-3">
-      <dt className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--kub-muted)]">
+      <dt className="text-[12px] font-bold uppercase tracking-[0.14em] text-[color:var(--kub-muted)]">
         {label}
       </dt>
       <dd className="mt-1 text-sm font-semibold text-[color:var(--kub-text)]">{value}</dd>

@@ -47,7 +47,7 @@ export function TopicCreateModal({ onClose, onCreate }: TopicCreateModalProps) {
       }
     >
       <div>
-        <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-[color:var(--kub-muted)]">
+        <label className="block text-[12px] font-semibold uppercase tracking-wider mb-1.5 text-[color:var(--kub-muted)]">
           Название
         </label>
         <input
@@ -62,7 +62,7 @@ export function TopicCreateModal({ onClose, onCreate }: TopicCreateModalProps) {
       </div>
 
       <div>
-        <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-[color:var(--kub-muted)]">
+        <label className="block text-[12px] font-semibold uppercase tracking-wider mb-1.5 text-[color:var(--kub-muted)]">
           Иконка (необязательно)
         </label>
         <div className="flex flex-wrap gap-1">

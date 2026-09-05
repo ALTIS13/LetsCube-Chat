@@ -589,7 +589,7 @@ export function RolesPermissionsTab() {
               placeholder="custom_shift_lead"
               disabled={!canManageRoles}
             />
-            <p className="-mt-2 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+            <p className="-mt-2 text-[12px] leading-relaxed text-[color:var(--kub-muted)]">
               Ключ нужен системе для безопасного хранения. Пользователи видят название роли, а не ключ.
             </p>
             <textarea
@@ -610,7 +610,7 @@ export function RolesPermissionsTab() {
                 <option key={scope} value={scope}>{ROLE_SCOPE_LABEL[scope]}</option>
               ))}
             </select>
-            <p className="-mt-2 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+            <p className="-mt-2 text-[12px] leading-relaxed text-[color:var(--kub-muted)]">
               {getRoleScopeDescription(createScope)}
             </p>
             <KubButton
@@ -637,17 +637,17 @@ export function RolesPermissionsTab() {
               <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
                 Роли по старшинству
               </div>
-              <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+              <p className="mt-1 text-[12px] leading-relaxed text-[color:var(--kub-muted)]">
                 {PRIORITY_IS_NOT_POWER}
               </p>
             </div>
             {roleHierarchy.map((group) => (
               <div key={group.scope}>
                 <div className="kub-raise flex items-center justify-between gap-2 border-b border-[color:var(--kub-border-color)] px-3 py-1.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
+                  <span className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
                     {ROLE_SCOPE_LABEL[group.scope] ?? group.scope}
                   </span>
-                  <span className="text-[11px] text-[color:var(--kub-muted)]">
+                  <span className="text-[12px] text-[color:var(--kub-muted)]">
                     {group.entries.length}
                   </span>
                 </div>
@@ -694,7 +694,7 @@ export function RolesPermissionsTab() {
                             exists to show: that two roles are deliberately level.
                           */}
                           {sharesRank && (
-                            <span className="block truncate text-[11px] text-[color:var(--kub-muted)]">
+                            <span className="block truncate text-[12px] text-[color:var(--kub-muted)]">
                               Равный ранг с другой ролью
                             </span>
                           )}
@@ -913,7 +913,7 @@ export function RolesPermissionsTab() {
                           <span
                             aria-hidden
                             className={cn(
-                              "shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold text-[color:var(--kub-text)]",
+                              "shrink-0 rounded-full border px-2 py-0.5 text-[12px] font-semibold text-[color:var(--kub-text)]",
                               enabled > 0
                                 ? "border-[color:color-mix(in_srgb,var(--kub-cyan)_55%,transparent)]"
                                 : "border-[color:var(--kub-border-color)]",
@@ -928,7 +928,7 @@ export function RolesPermissionsTab() {
                         {open && (
                           <div id={panelId} className="space-y-1.5 border-t border-[color:var(--kub-border-color)] px-3 py-3">
                             {PERMISSION_CATEGORY_DESCRIPTION[category] && (
-                              <div className="pb-1 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
+                              <div className="pb-1 text-[12px] leading-relaxed text-[color:var(--kub-muted)]">
                                 {PERMISSION_CATEGORY_DESCRIPTION[category]}
                               </div>
                             )}
@@ -953,7 +953,7 @@ export function RolesPermissionsTab() {
                                   <span className="block text-xs leading-relaxed text-[color:var(--kub-muted)]">
                                     {getPermissionDescription(permission)}
                                   </span>
-                                  <span className="block truncate text-[10px] font-medium text-[color:var(--kub-muted)] opacity-80">
+                                  <span className="block truncate text-[12px] font-medium text-[color:var(--kub-muted)] opacity-80">
                                     {permission.key}
                                   </span>
                                 </span>

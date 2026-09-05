@@ -78,7 +78,7 @@ export function TaskAssignModal({ taskId, currentAssignee, onClose, onDone }: Pr
         <div className="rounded-xl px-3 py-2 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] flex items-center gap-2">
           <UserAvatar user={currentAssignee} size="sm" />
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] uppercase tracking-wider text-[color:var(--kub-muted)]">
+            <div className="text-[12px] uppercase tracking-wider text-[color:var(--kub-muted)]">
               Сейчас назначен
             </div>
             <div className="text-sm font-medium truncate text-[color:var(--kub-text)]">
@@ -137,7 +137,7 @@ export function TaskAssignModal({ taskId, currentAssignee, onClose, onDone }: Pr
                       {p.full_name ?? "Без имени"}
                     </div>
                     {p.username && (
-                      <div className="text-[11px] truncate text-[color:var(--kub-muted)]">@{p.username}</div>
+                      <div className="text-[12px] truncate text-[color:var(--kub-muted)]">@{p.username}</div>
                     )}
                   </div>
                 </button>

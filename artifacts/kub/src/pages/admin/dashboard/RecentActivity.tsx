@@ -44,7 +44,7 @@ export function RecentActivity({ users, events, usersError, eventsError }: {
               </span>
               <div className="min-w-0 flex-1">
                 <div className="line-clamp-2 text-sm leading-snug text-[color:var(--kub-text)]">{formatAdminAuditEvent(event)}</div>
-                <div className="mt-1 text-[11px] text-[color:var(--kub-muted)]">{formatAdminDateTime(event.created_at)}</div>
+                <div className="mt-1 text-[12px] text-[color:var(--kub-muted)]">{formatAdminDateTime(event.created_at)}</div>
               </div>
             </div>
           ))}

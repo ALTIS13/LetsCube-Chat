@@ -56,7 +56,7 @@ export function TaskConfirmModal({ taskId, onClose, onDone }: Props) {
       </p>
 
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
+        <label className="text-[12px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
           Комментарий (необязательно)
         </label>
         <textarea

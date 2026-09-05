@@ -101,7 +101,7 @@ function SystemMessageNotice({ message }: { message: MessageWithSender }) {
   const text = message.content?.trim() || "Системное уведомление";
   return (
     <div className="my-2 flex w-full justify-center px-8" data-system-message={message.id}>
-      <span className="max-w-[min(82vw,32rem)] rounded-full border border-[color:var(--kub-border-color)] bg-[color-mix(in_srgb,var(--kub-bg)_76%,transparent)] px-3 py-1 text-center text-[11px] leading-snug text-[color:var(--kub-muted)] shadow-sm backdrop-blur-sm">
+      <span className="max-w-[min(82vw,32rem)] rounded-full border border-[color:var(--kub-border-color)] bg-[color-mix(in_srgb,var(--kub-bg)_76%,transparent)] px-3 py-1 text-center text-[12px] leading-snug text-[color:var(--kub-muted)] shadow-sm backdrop-blur-sm">
         {text}
       </span>
     </div>
@@ -891,7 +891,7 @@ export function MessageList({
               )}
               {msg.id === firstUnreadMessageId && (
                 <div className="unread-separator my-3 flex items-center justify-center" data-testid="first-unread-separator">
-                  <span className="rounded-full border border-[color-mix(in_srgb,var(--kub-pink)_35%,var(--kub-border-color))] bg-[color-mix(in_srgb,var(--kub-bg)_82%,var(--kub-pink)_8%)] px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--kub-pink)] backdrop-blur-sm">
+                  <span className="rounded-full border border-[color-mix(in_srgb,var(--kub-pink)_35%,var(--kub-border-color))] bg-[color-mix(in_srgb,var(--kub-bg)_82%,var(--kub-pink)_8%)] px-3 py-1 text-[12px] font-semibold uppercase tracking-wide text-[color:var(--kub-pink)] backdrop-blur-sm">
                     Новые сообщения
                   </span>
                 </div>

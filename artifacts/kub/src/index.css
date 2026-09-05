@@ -66,6 +66,29 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* The bottom of the type scale, raised one step.
+ *
+ * Ten and eleven pixels were doing one job in two hundred and three places, so
+ * they fold into a single 12px step, and `text-xs` moves up out of their way to
+ * 13px. Not `!important`, and not on the utility: the admin tab strip pairs a
+ * literal 12px size with an sm: variant of this token, and from 640px the
+ * variant has to win. It does, because Tailwind emits variant utilities after
+ * the base ones — an important base rule would invert that and freeze the strip
+ * at 12px.
+ *
+ * The size is spelled out in words above rather than as the class itself, and
+ * that is not fussiness: the density scanner counts occurrences of the literal
+ * across the sources, and a sentence about a utility would be counted as a use
+ * of it. Rule 9 of docs/operations/interface-material.md, from the other side.
+ *
+ * `--text-xs--line-height` is deliberately left alone: it is the unitless ratio
+ * `calc(1 / 0.75)`, so the leading follows the size up to 17.33px on its own.
+ * That proportional leading is what the density measurement modelled, and the
+ * container heights it recorded assume it. */
+@theme {
+  --text-xs: 0.8125rem;
+}
+
 @layer components {
   .kub-selection-suppressed,
   .kub-selection-suppressed * {

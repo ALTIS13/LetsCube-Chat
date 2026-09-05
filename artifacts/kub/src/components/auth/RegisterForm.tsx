@@ -231,7 +231,7 @@ export function RegisterForm() {
             {/* --kub-inset, for the reason spelled out on the login card's
                 identical strip. */}
             <div className="px-3 py-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-inset)]">
-              <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-accent-text)]">
+              <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-accent-text)]">
                 <span className="h-1.5 w-1.5 rounded-full bg-[var(--kub-cyan)] kub-pulse" />
                 Подтверждение
               </div>
@@ -335,7 +335,7 @@ export function RegisterForm() {
 
         <KubPanel glow="soft" padded={false} className="overflow-hidden">
           <div className="px-3 py-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-inset)]">
-            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-pink-text)]">
+            <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-pink-text)]">
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--kub-pink)] kub-pulse" />
               Регистрация
             </div>
@@ -449,7 +449,7 @@ export function RegisterForm() {
             Восстановить доступ
           </Link>
         </p>
-        <p className="mt-3 text-center text-[11px] leading-5 text-[color:var(--kub-muted)]">
+        <p className="mt-3 text-center text-[12px] leading-5 text-[color:var(--kub-muted)]">
           Перед созданием аккаунта ознакомьтесь с{" "}
           <Link
             href="/privacy"

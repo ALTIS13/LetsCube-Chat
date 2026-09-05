@@ -194,7 +194,7 @@ export function ChatSearchBar({ chatId, currentTopicId, isForum = false, message
 
       <SearchFilterChips parsed={parsed} query={query} onChangeQuery={setQuery} compact />
 
-      <div className="flex flex-wrap items-center gap-2 px-3 pb-2 text-[11px] text-[color:var(--kub-muted)]">
+      <div className="flex flex-wrap items-center gap-2 px-3 pb-2 text-[12px] text-[color:var(--kub-muted)]">
         {isForum && (
           <button
             type="button"
@@ -225,7 +225,7 @@ export function ChatSearchBar({ chatId, currentTopicId, isForum = false, message
                     : "kub-raise-hover",
                 ].join(" ")}
               >
-                <span className="mt-0.5 shrink-0 text-[10px] tabular-nums text-[color:var(--kub-muted)]">
+                <span className="mt-0.5 shrink-0 text-[12px] tabular-nums text-[color:var(--kub-muted)]">
                   {resultIndex + 1}
                 </span>
                 <span className="min-w-0 flex-1">
@@ -236,7 +236,7 @@ export function ChatSearchBar({ chatId, currentTopicId, isForum = false, message
                     {result.snippet}
                   </span>
                 </span>
-                <span className="shrink-0 text-[10px] text-[color:var(--kub-muted)]">
+                <span className="shrink-0 text-[12px] text-[color:var(--kub-muted)]">
                   {formatSearchDate(result.createdAt)}
                 </span>
               </button>

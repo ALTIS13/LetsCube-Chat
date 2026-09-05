@@ -213,7 +213,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
                       />
                       <span className="flex-1 text-left">{label}</span>
                       {note && (
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--kub-accent-text)]">
+                        <span className="text-[12px] font-semibold uppercase tracking-wide text-[color:var(--kub-accent-text)]">
                           {note}
                         </span>
                       )}

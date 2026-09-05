@@ -108,7 +108,7 @@ export function FolderTabs({ folders, activeFolder, onFolderChange, onCreate, on
               key={folder.id ?? "all"}
               onClick={handleClick}
               className={cn(
-                "kub-button kub-interactive relative flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap transition-colors flex-shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
+                "kub-button kub-interactive relative flex items-center gap-1.5 px-4 py-2.5 text-[12px] font-semibold uppercase tracking-wide whitespace-nowrap transition-colors flex-shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
                 isActive
                   ? "text-[color:var(--kub-accent-text)]"
                   : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
@@ -125,7 +125,7 @@ export function FolderTabs({ folders, activeFolder, onFolderChange, onCreate, on
               )}
               <span>{folder.name}</span>
               {(folder.unread ?? 0) > 0 && !isActive && (
-                <span className="min-w-[16px] h-4 rounded-full text-[10px] font-bold flex items-center justify-center px-1 bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]">
+                <span className="min-w-[18px] h-[18px] rounded-full text-[12px] font-bold flex items-center justify-center px-1 bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]">
                   {folder.unread}
                 </span>
               )}

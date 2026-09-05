@@ -63,7 +63,7 @@ export function DesktopUpdatePill() {
           <strong className="block truncate text-xs font-semibold text-[color:var(--kub-text)]">
             Обновление установлено
           </strong>
-          <span className="block truncate text-[11px] text-[color:var(--kub-muted)]">
+          <span className="block truncate text-[12px] text-[color:var(--kub-muted)]">
             Версия {activeSnapshot.installedVersion} готова к работе
           </span>
         </span>
@@ -90,7 +90,7 @@ export function DesktopUpdatePill() {
         <strong className="block truncate text-xs font-semibold text-[color:var(--kub-text)]">
           {presentation.title}
         </strong>
-        <span className="block truncate text-[11px] text-[color:var(--kub-muted)]">
+        <span className="block truncate text-[12px] text-[color:var(--kub-muted)]">
           {presentation.description}
         </span>
         {presentation.progress !== null && (

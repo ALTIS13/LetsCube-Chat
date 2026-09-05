@@ -61,7 +61,7 @@ export function KubBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 border px-2 py-0.5 text-[11px] font-semibold text-[color:var(--kub-text)]",
+        "inline-flex items-center gap-1.5 border px-2 py-0.5 text-[12px] font-semibold text-[color:var(--kub-text)]",
         pill ? "rounded-full" : "rounded-md",
         borderClass[tone],
         className,

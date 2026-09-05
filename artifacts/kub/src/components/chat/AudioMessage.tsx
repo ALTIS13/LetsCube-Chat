@@ -310,7 +310,7 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
           onPointerCancel={finishSeek}
           onChange={handleSeekChange}
         />
-        <span className="text-[10px] text-[color:var(--kub-muted)]">
+        <span className="text-[12px] text-[color:var(--kub-muted)]">
           {loadError || (!url ? "загрузка..." : `${fmt(currentTime)} / ${metadataReady ? fmt(durationSeconds) : "--:--"}`)}
         </span>
       </div>

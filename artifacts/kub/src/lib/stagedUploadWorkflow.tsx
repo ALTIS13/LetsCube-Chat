@@ -243,7 +243,7 @@ export function StagedAttachmentTransferProgress({ attachment }: { attachment: S
       ),
       createElement(
         "span",
-        { className: "w-8 shrink-0 text-right text-[10px] tabular-nums text-[color:var(--kub-muted)]" },
+        { className: "w-9 shrink-0 text-right text-[12px] tabular-nums text-[color:var(--kub-muted)]" },
         `${progress}%`,
       ),
     )

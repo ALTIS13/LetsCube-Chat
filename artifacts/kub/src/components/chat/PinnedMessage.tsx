@@ -76,11 +76,11 @@ export function PinnedMessage({ messages, onJump, onUnpin }: PinnedMessageProps)
         <KubIcon name="pin" size={14} className="flex-shrink-0 text-[color:var(--kub-accent-text)]" />
         <div className="min-w-0 flex-1">
           <div className="mb-0.5 flex min-w-0 items-center gap-2">
-            <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
+            <span className="truncate text-[12px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
               {isMultiple ? `Закреплено: ${visibleMessages.length}` : "Закреплённое сообщение"}
             </span>
             {isMultiple && (
-              <span className="flex-shrink-0 text-[10px] text-[color:var(--kub-muted)]">
+              <span className="flex-shrink-0 text-[12px] text-[color:var(--kub-muted)]">
                 {selectedIndex + 1} из {visibleMessages.length}
               </span>
             )}
@@ -136,7 +136,7 @@ export function PinnedMessage({ messages, onJump, onUnpin }: PinnedMessageProps)
 
       {open && (
         <div className="kub-glass-strong absolute left-3 right-3 top-[calc(100%+6px)] z-30 max-h-[min(340px,60vh)] overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] p-2">
-          <div className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-muted)]">
+          <div className="px-2 pb-2 text-[12px] font-semibold uppercase tracking-wider text-[color:var(--kub-muted)]">
             Закреплённые сообщения
           </div>
           <div className="space-y-1">
@@ -150,7 +150,7 @@ export function PinnedMessage({ messages, onJump, onUnpin }: PinnedMessageProps)
                   onClick={() => jumpToMessage(message)}
                   className="min-w-0 flex-1 text-left"
                 >
-                  <div className="mb-0.5 flex min-w-0 items-center gap-2 text-[11px] text-[color:var(--kub-muted)]">
+                  <div className="mb-0.5 flex min-w-0 items-center gap-2 text-[12px] text-[color:var(--kub-muted)]">
                     <span className="truncate font-medium text-[color:var(--kub-text)]">
                       {getSenderName(message)}
                     </span>

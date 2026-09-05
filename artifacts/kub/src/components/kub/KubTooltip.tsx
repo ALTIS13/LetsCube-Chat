@@ -22,7 +22,7 @@ export function KubTooltip({ label, side = "top", children, className }: KubTool
       <span
         role="tooltip"
         className={cn(
-          "pointer-events-none absolute z-50 whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-medium",
+          "pointer-events-none absolute z-50 whitespace-nowrap rounded-md px-2 py-1 text-[12px] font-medium",
           "kub-glass-strong text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)]",
           "kub-tooltip",
           sideClass[side]

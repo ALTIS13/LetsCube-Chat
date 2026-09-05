@@ -70,7 +70,7 @@ export function SupportConversation({
                       : "kub-raise mr-auto border-[color:var(--kub-border-color)]",
                 )}
               >
-                <div className="mb-1 flex items-center justify-between gap-3 text-[10px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
+                <div className="mb-1 flex items-center justify-between gap-3 text-[12px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
                   <span>
                     {operator
                       ? "Оператор"

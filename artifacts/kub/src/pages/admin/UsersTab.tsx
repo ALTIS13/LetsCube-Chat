@@ -677,7 +677,7 @@ export function UsersTab() {
                 <div className="text-sm font-semibold text-[color:var(--kub-text)]">
                   Выбрано: {selectedUsers.length}
                 </div>
-                <div className="truncate text-[11px] text-[color:var(--kub-muted)]">
+                <div className="truncate text-[12px] text-[color:var(--kub-muted)]">
                   Пакетно назначайте роли и локации без сброса фильтров.
                 </div>
               </div>
@@ -837,12 +837,12 @@ export function UsersTab() {
                         {u.full_name ?? "Без имени"}
                       </span>
                       {isSelf && (
-                        <KubBadge tone="cyan" dot={false} className="text-[10px]">
+                        <KubBadge tone="cyan" dot={false} className="text-[12px]">
                           вы
                         </KubBadge>
                       )}
                       {u.is_test_account && (
-                        <KubBadge tone="muted" dot={false} className="text-[10px]" data-testid="test-account-badge">
+                        <KubBadge tone="muted" dot={false} className="text-[12px]" data-testid="test-account-badge">
                           тест
                         </KubBadge>
                       )}
@@ -861,7 +861,7 @@ export function UsersTab() {
                       {badges}
                     </div>
                     {locationBadges.length > 0 && (
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[color:var(--kub-muted)]">
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[12px] text-[color:var(--kub-muted)]">
                         {locationBadges.map((badge) => (
                           <span key={badge.key} className="rounded-full bg-[var(--kub-inset)] px-2 py-0.5">
                             {badge.label}
@@ -1223,7 +1223,7 @@ function ProfilePreviewModal({
       <ProfileRoleSummary user={user} routing={routing} />
       {user.bio && (
         <div>
-          <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">
+          <div className="text-[12px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">
             О себе
           </div>
           <div className="text-sm text-[color:var(--kub-text)]">{user.bio}</div>
@@ -1283,7 +1283,7 @@ function Field({ label, value, mono, danger, warn, copyable }: { label: string; 
   };
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wider text-[color:var(--kub-accent-text)]">
+      <div className="text-[12px] uppercase tracking-wider text-[color:var(--kub-accent-text)]">
         {label}
       </div>
       <div
@@ -1320,7 +1320,7 @@ function PhoneField({
   };
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wider text-[color:var(--kub-accent-text)]">
+      <div className="text-[12px] uppercase tracking-wider text-[color:var(--kub-accent-text)]">
         Телефон
       </div>
       {phone ? (
@@ -1395,7 +1395,7 @@ function SelectField({
   const id = useId();
   return (
     <div className="min-w-0 space-y-1">
-      <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
+      <span className="flex items-center gap-1 text-[12px] font-semibold tracking-wider text-[color:var(--kub-accent-text)]">
         <label htmlFor={id}>{label}</label>
         {hint && <InfoHint term={label} text={hint} side="top" />}
       </span>

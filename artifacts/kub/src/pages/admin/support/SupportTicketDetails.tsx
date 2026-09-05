@@ -147,7 +147,7 @@ export function SupportTicketDetails({
                 <p className="font-semibold text-[color:var(--kub-text)]">{details.contact.contactName}</p>
                 <p className="break-all text-[color:var(--kub-text)]">{details.contact.email}</p>
                 <p className="text-[color:var(--kub-text)]">{details.contact.phone}</p>
-                <p className="text-[11px] text-[color:var(--kub-muted)]">
+                <p className="text-[12px] text-[color:var(--kub-muted)]">
                   Эл. почта и телефон предоставлены клиентом и не подтверждены.
                 </p>
               </div>
@@ -297,7 +297,7 @@ export function SupportTicketDetails({
               <h3 className="text-xs font-bold uppercase tracking-wide text-[color:var(--kub-muted)]">
                 Найти клиента
               </h3>
-              <p className="mt-1 text-[11px] text-[color:var(--kub-warn)]">
+              <p className="mt-1 text-[12px] text-[color:var(--kub-warn)]">
                 Поиск клиента фиксируется в журнале.
               </p>
               <div className="mt-2 flex gap-2">

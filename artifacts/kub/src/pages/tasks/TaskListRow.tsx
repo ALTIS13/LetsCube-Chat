@@ -69,7 +69,7 @@ export function TaskListRow({ task, nowMs, onClick, selected = false, selectionC
           {isDeleted && <KubBadge tone="danger" pill>Удалена</KubBadge>}
           <span
             className={cn(
-              "min-w-0 truncate text-[11px] font-medium",
+              "min-w-0 truncate text-[12px] font-medium",
               deadline.isOverdue && "text-[color:var(--kub-danger-text)]",
               deadline.isDueSoon && !deadline.isOverdue && "text-[color:var(--kub-warn)]",
               !deadline.isOverdue && !deadline.isDueSoon && "text-[color:var(--kub-muted)]",
@@ -78,7 +78,7 @@ export function TaskListRow({ task, nowMs, onClick, selected = false, selectionC
             {deadline.timeLabel}
           </span>
         </div>
-        <div className="mt-1 grid min-w-0 grid-cols-1 gap-0.5 text-[11px] text-[color:var(--kub-muted)] sm:hidden">
+        <div className="mt-1 grid min-w-0 grid-cols-1 gap-0.5 text-[12px] text-[color:var(--kub-muted)] sm:hidden">
           <MetaText label="Исполнитель" value={assigneeName} warn={!task.assignee} />
           <MetaText label="Создал" value={creatorName} />
         </div>
@@ -109,7 +109,7 @@ export function TaskListRow({ task, nowMs, onClick, selected = false, selectionC
             {deadline.timeLabel}
           </span>
           {task.due_at && (
-            <span className="shrink-0 text-[11px] text-[color:var(--kub-muted)]">
+            <span className="shrink-0 text-[12px] text-[color:var(--kub-muted)]">
               {formatTaskDueDate(task.due_at)}
             </span>
           )}
@@ -176,7 +176,7 @@ function PersonLine({
     <span className="flex min-w-0 items-center gap-1.5" title={`${label}: ${name}`}>
       {avatar ? <UserAvatar user={avatar} size="sm" /> : <KubIcon name="user" size={12} />}
       <span className="min-w-0">
-        <span className="block text-[10px] uppercase leading-none tracking-wide text-[color:var(--kub-muted)]">
+        <span className="block text-[12px] uppercase leading-none tracking-wide text-[color:var(--kub-muted)]">
           {label}
         </span>
         <span className={cn("block truncate text-xs font-medium", muted ? "text-[color:var(--kub-muted)]" : "text-[color:var(--kub-text)]")}>

@@ -38,7 +38,7 @@ export function KubFilterButton({ count, open, onToggle, className }: KubFilterB
       {count > 0 && (
         <span
           className={cn(
-            "inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold",
+            "inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 text-[12px] font-bold",
             "bg-[var(--kub-action-primary-background)] text-[color:var(--kub-action-primary-foreground)]",
           )}
         >

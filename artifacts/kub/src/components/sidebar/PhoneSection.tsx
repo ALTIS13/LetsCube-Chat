@@ -271,12 +271,12 @@ export function PhoneSection() {
             className="w-full bg-transparent text-sm outline-none text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]"
           />
           {phoneInput && !isValid && (
-            <div className="text-[11px] mt-1 text-[color:var(--kub-warn)]">
+            <div className="text-[12px] mt-1 text-[color:var(--kub-warn)]">
               {PHONE_FORMAT_HINT}
             </div>
           )}
           {storedPhone && !dirty && (
-            <div className="text-[11px] mt-1 text-[color:var(--kub-muted)]">
+            <div className="text-[12px] mt-1 text-[color:var(--kub-muted)]">
               Сохранённый номер: {storedPhone}
               {verifiedAtLabel ? ` · подтверждён ${verifiedAtLabel}` : ""}
             </div>
@@ -286,7 +286,7 @@ export function PhoneSection() {
 
       {stage === "code-sent" && (
         <div className="px-4 pt-0 pb-3 border-t border-[color:var(--kub-border-color)]">
-          <label className="text-[10px] font-semibold uppercase tracking-wider mt-3 mb-1.5 block text-[color:var(--kub-accent-text)]">
+          <label className="text-[12px] font-semibold uppercase tracking-wider mt-3 mb-1.5 block text-[color:var(--kub-accent-text)]">
             Код подтверждения (4 цифры)
           </label>
           <input

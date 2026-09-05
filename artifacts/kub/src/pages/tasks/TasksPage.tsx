@@ -459,7 +459,7 @@ export function TasksPage() {
                 {tabCounts[t.id] > 0 && (
                   <span
                     className={cn(
-                      "ml-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none",
+                      "ml-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 py-0.5 text-[12px] leading-none",
                       t.id === "urgent"
                         ? "bg-[color-mix(in_srgb,var(--kub-danger)_18%,transparent)] text-[color:var(--kub-danger-text)]"
                         : t.id === "review"
@@ -639,7 +639,7 @@ export function TasksPage() {
                   <div className="font-semibold text-[color:var(--kub-text)]">
                     {selectedCount > 0 ? `Выбрано: ${selectedCount}` : "Пакетный выбор"}
                   </div>
-                  <div className="truncate text-[11px] text-[color:var(--kub-muted)]">
+                  <div className="truncate text-[12px] text-[color:var(--kub-muted)]">
                     Выберите видимые задачи для удаления без перезагрузки списка.
                   </div>
                 </div>
@@ -750,7 +750,7 @@ export function TasksPage() {
           )
         )}
         {!loading && visibleTasks.length > 0 && (
-          <div className="mt-4 text-center text-[11px] uppercase tracking-wide text-[color:var(--kub-muted)]">
+          <div className="mt-4 text-center text-[12px] uppercase tracking-wide text-[color:var(--kub-muted)]">
             {summary}
           </div>
         )}

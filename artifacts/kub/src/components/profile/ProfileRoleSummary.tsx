@@ -112,7 +112,7 @@ export function ProfileRoleSummary({ user, compact = false, routing: routingProp
   return (
     <div className="space-y-3">
       <section>
-        <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
+        <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
           Глобальные роли
           <InfoHint
             term="Глобальные роли"
@@ -156,7 +156,7 @@ export function ProfileRoleSummary({ user, compact = false, routing: routingProp
       </section>
 
       <section>
-        <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
+        <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
           Локации
           <InfoHint
             term="Локации"

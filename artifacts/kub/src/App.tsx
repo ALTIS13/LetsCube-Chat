@@ -160,7 +160,7 @@ function AuthCallback() {
           <form onSubmit={handlePasswordUpdate} className="w-full">
             <KubPanel glow="soft" padded={false} className="w-full overflow-hidden text-left">
               <div className="border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/50 px-3 py-2">
-                <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-accent-text)]">
+                <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-accent-text)]">
                   <span className="h-1.5 w-1.5 rounded-full bg-[var(--kub-cyan)] kub-pulse" />
                   Восстановление доступа
                 </div>

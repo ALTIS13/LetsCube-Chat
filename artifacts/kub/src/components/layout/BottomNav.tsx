@@ -75,7 +75,7 @@ export function BottomNav() {
             )}
           >
             <KubIcon name={icon} size={22} />
-            <span className="text-[10px] font-semibold uppercase tracking-wide">{label}</span>
+            <span className="text-[12px] font-semibold uppercase tracking-wide">{label}</span>
             {isActive && (
               <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[var(--kub-cyan)] kub-glow-soft" />
             )}

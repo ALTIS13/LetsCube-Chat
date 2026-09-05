@@ -100,7 +100,7 @@ export function AdminLayout() {
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold flex items-center gap-2 text-[color:var(--kub-text)] truncate">
               Админ-панель
-              <span className="hidden sm:inline text-[10px] uppercase tracking-[0.18em] text-[color:var(--kub-pink)] truncate">
+              <span className="hidden sm:inline text-[12px] uppercase tracking-[0.18em] text-[color:var(--kub-pink)] truncate">
                 LETSCUBE
               </span>
             </div>
@@ -123,7 +123,7 @@ export function AdminLayout() {
                 key={t.id}
                 href={t.path}
                 className={cn(
-                  "flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 h-11 text-[11px] sm:text-xs font-semibold uppercase tracking-wide transition-colors whitespace-nowrap relative",
+                  "flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 h-11 text-[12px] sm:text-xs font-semibold uppercase tracking-wide transition-colors whitespace-nowrap relative",
                   active ? "text-[color:var(--kub-accent-text)]" : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
                 )}
               >

@@ -129,7 +129,7 @@ export function TaskCard({ task, nowMs, onClick, selected = false, selectionCont
         </div>
 
         <div className="kub-raise rounded-lg border border-[color:var(--kub-border-color)] px-2.5 py-2">
-          <div className="flex min-w-0 items-center justify-between gap-2 text-[11px]">
+          <div className="flex min-w-0 items-center justify-between gap-2 text-[12px]">
             <span className={cn(
               "flex min-w-0 items-center gap-1.5 font-medium",
               deadline.isOverdue && "text-[color:var(--kub-danger-text)]",
@@ -157,7 +157,7 @@ export function TaskCard({ task, nowMs, onClick, selected = false, selectionCont
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px] text-[color:var(--kub-muted)]">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[12px] text-[color:var(--kub-muted)]">
           {task.assignee ? (
             <span className="flex max-w-full items-center gap-1.5 min-w-0">
               <UserAvatar user={task.assignee} size="sm" />
