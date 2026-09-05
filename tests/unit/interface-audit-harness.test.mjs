@@ -58,6 +58,27 @@ async function gotoFixture(page, body) {
   await page.goto("https://audit.invalid/audit-fixture", { waitUntil: "domcontentloaded" });
 }
 
+const shiftRows = (page) =>
+  page.evaluate(() => Array.from(window.__auditShift ?? [], ([id, record]) => ({ id, ...record })));
+
+/**
+ * Wait for something the recorder is supposed to have recorded, and say what
+ * it holds instead when it never does. A bare `waitForFunction` timeout reports
+ * only that a predicate stayed false, which is the least useful sentence
+ * available about a recorder whose whole output is a table of numbers.
+ *
+ * The budget is generous on purpose: nothing here should take more than a few
+ * frames, and a limit that is tight enough to be a stopwatch is the defect this
+ * test had.
+ */
+async function waitForShift(page, predicate, expectation) {
+  try {
+    await page.waitForFunction(predicate, undefined, { timeout: 15_000 });
+  } catch {
+    assert.fail(`${expectation}; the recorder holds ${JSON.stringify(await shiftRows(page))}`);
+  }
+}
+
 test("a page with nothing wrong produces no findings", async () => {
   const findings = await findingsFor(`
     <main style="padding:16px">
@@ -388,6 +409,26 @@ test("a control pushed past the viewport edge is not reported, one below the fol
  * The recorder that answers the D-032 / D-041 / D-043 question. It has to be
  * installed before the page's own script runs, so this drives it the way the
  * harness does rather than evaluating it after the fact.
+ *
+ * The growth is triggered from here rather than from a
+ * `requestAnimationFrame(requestAnimationFrame(...))` chain inside the page,
+ * and the waits are conditions rather than a 300 ms sleep. The earlier version
+ * was a race between two things that have nothing to do with the contract: the
+ * page's rAF chain is registered while the document is still parsing, and the
+ * recorder attaches its ResizeObserver at `DOMContentLoaded`. On an idle
+ * machine the parse finishes first and the row is observed at 40px. On a loaded
+ * one the parser yields, two rendering opportunities fit before
+ * `DOMContentLoaded`, and the recorder's first sight of the row is already
+ * 80px — `first: 80, changes: 0`, an empty `changed`, and a red test that says
+ * nothing except that the machine was busy. Measured: with the parser stalled
+ * by a blocking script, and again at a 20x CPU throttle, the old fixture
+ * produced exactly that; this one produces `first: 40, last: 80` under the same
+ * throttle.
+ *
+ * What is still pinned is the whole contract: the recorder is installed before
+ * the page renders (it must see the row at its authored 40px, which is asserted
+ * before anything grows), it notices a height that changes afterwards, it keeps
+ * both ends, and it leaves the untouched row alone.
  */
 test("the late-shift recorder sees a row that grows after its first frame", async () => {
   const browser = await chromium.launch();
@@ -402,20 +443,35 @@ test("the late-shift recorder sees a row that grows after its first frame", asyn
       page,
       `${BASE_STYLE}
         <div data-message-id="a" style="height:40px;background:#eee">стабильная</div>
-        <div data-message-id="b" style="height:40px;background:#ddd">растущая</div>
-        <script>
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            document.querySelector('[data-message-id="b"]').style.height = "80px";
-          }));
-        </script>`,
+        <div data-message-id="b" style="height:40px;background:#ddd">растущая</div>`,
     );
-    await page.waitForTimeout(300);
-    const changed = await page.evaluate(() =>
-      Array.from(window.__auditShift ?? [], ([id, record]) => ({ id, ...record })).filter((r) => r.changes > 0),
+
+    // Both rows recorded at the height the page itself rendered them. This is
+    // the half of the contract that has to hold *before* anything moves, and
+    // waiting for it is what the sleep used to be guessing at.
+    await waitForShift(
+      page,
+      () =>
+        window.__auditShift?.size === 2 &&
+        Array.from(window.__auditShift.values()).every((record) => record.first === 40),
+      "both rows should have been recorded at the 40px the page rendered them at",
     );
-    assert.deepEqual(changed.map((row) => row.id), ["b"], JSON.stringify(changed));
+
+    await page.evaluate(() => {
+      document.querySelector('[data-message-id="b"]').style.height = "80px";
+    });
+    await waitForShift(
+      page,
+      () => (window.__auditShift?.get("b")?.changes ?? 0) > 0,
+      "the row grown to 80px should have been recorded as changed",
+    );
+
+    const rows = await shiftRows(page);
+    const changed = rows.filter((row) => row.changes > 0);
+    assert.deepEqual(changed.map((row) => row.id), ["b"], JSON.stringify(rows));
     assert.equal(changed[0].first, 40);
     assert.equal(changed[0].last, 80);
+    assert.equal(changed[0].changes, 1);
     await context.close();
   } finally {
     await browser.close();
@@ -434,6 +490,12 @@ test("the late-shift recorder reports nothing when every row keeps its height", 
         <div data-message-id="a" style="height:40px;background:#eee">одна</div>
         <div data-message-id="b" style="height:40px;background:#ddd">другая</div>`,
     );
+    // Wait for the rows to be recorded rather than assuming 300 ms was enough
+    // to record them; then hold still for a window in which a recorder that
+    // invented a change would have recorded one. A negative assertion needs a
+    // settle window — it just must not be the thing that decides whether the
+    // positive half happened at all.
+    await waitForShift(page, () => window.__auditShift?.size === 2, "both rows should have been recorded");
     await page.waitForTimeout(300);
     const observed = await page.evaluate(() => ({
       seen: (window.__auditShift ?? new Map()).size,
