@@ -20,9 +20,9 @@ const RAIL: Record<ActionFeedbackKind, string> = {
 
 const TONE: Record<ActionFeedbackKind, string> = {
   success: "text-[color:var(--kub-online-text)]",
-  info: "text-[color:var(--kub-cyan)]",
+  info: "text-[color:var(--kub-accent-text)]",
   warning: "text-[color:var(--kub-warn)]",
-  error: "text-[color:var(--kub-danger)]",
+  error: "text-[color:var(--kub-danger-text)]",
 };
 
 /**

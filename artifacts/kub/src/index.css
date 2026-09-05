@@ -674,6 +674,25 @@
     @apply border-border;
   }
 
+  /* The product's focus ring, given to everything that can take focus.
+   *
+   * Declared here rather than repeated in markup because roughly fifty buttons
+   * live in files that never learned the vocabulary. They were not blind —
+   * Chrome drew its own `outline: auto` — but that is the browser's language
+   * and not this one's. A base-layer rule is beaten by any component rule or
+   * utility above it, so a control with its own considered treatment keeps it.
+   *
+   * `outline` and not a ring, for the reason recorded against D-010: Tailwind
+   * draws a ring as `box-shadow`, and .kub-glow-*, .kub-panel and every
+   * `shadow-*` utility answer to that same property — a focused button's
+   * computed style used to be byte-for-byte the same as an unfocused one.
+   * Outline is a property nothing else here writes, it follows the border
+   * radius, and the offset keeps it clear of the control's own edge. */
+  :focus-visible {
+    outline: 2px solid var(--kub-cyan);
+    outline-offset: 2px;
+  }
+
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
