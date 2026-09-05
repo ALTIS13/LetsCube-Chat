@@ -121,9 +121,13 @@ function WindowControlButton({
       title={label}
       onClick={onClick}
       className={cn(
-        "flex h-full w-11 items-center justify-center text-[color:var(--kub-muted)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--kub-cyan)]",
+        "flex h-full w-11 items-center justify-center text-[color:var(--kub-muted)] transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
         danger
-          ? "hover:bg-[var(--kub-danger)] hover:text-white"
+          // The close button takes the action token, not the shape token:
+          // white on --kub-danger measures 3.76:1 and white on
+          // --kub-action-danger-background 4.83:1, and the pair is already
+          // declared for exactly this.
+          ? "hover:bg-[var(--kub-action-danger-background)] hover:text-[color:var(--kub-action-danger-foreground)] active:brightness-95"
           : "kub-raise-hover hover:text-[color:var(--kub-text)]",
       )}
     >

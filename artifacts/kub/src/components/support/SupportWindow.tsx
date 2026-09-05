@@ -372,7 +372,7 @@ export function SupportWindow() {
               onChange={(event) => setSubject(event.target.value)}
               maxLength={180}
               placeholder="Коротко о проблеме"
-              className="mt-1 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+              className="mt-1 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
             />
           </label>
           <label className="text-xs text-[color:var(--kub-muted)]">
@@ -380,7 +380,7 @@ export function SupportWindow() {
             <select
               value={category}
               onChange={(event) => setCategory(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+              className="mt-1 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
             >
               {SUPPORT_CATEGORIES.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -396,7 +396,7 @@ export function SupportWindow() {
               onChange={(event) => setDraft(event.target.value)}
               maxLength={8000}
               placeholder="Опишите, что случилось и что вы делали до этого"
-              className="mt-1 min-h-[7rem] flex-1 resize-none rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+              className="mt-1 min-h-[7rem] flex-1 resize-none rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
             />
           </label>
           {error && <p className="text-xs text-[color:var(--kub-danger-text)]">{error}</p>}
@@ -506,7 +506,7 @@ export function SupportWindow() {
                   maxLength={8000}
                   placeholder="Сообщение поддержке"
                   aria-label="Сообщение поддержке"
-                  className="max-h-24 min-h-[2.25rem] flex-1 resize-none rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                  className="max-h-24 min-h-[2.25rem] flex-1 resize-none rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
                 />
                 <KubButton
                   size="sm"

@@ -559,7 +559,7 @@ export function UsersTab() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-      <div className="kub-field min-w-[220px] flex-1 gap-2 rounded-xl px-3 h-11 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
+      <div className="kub-field min-w-[220px] flex-1 gap-2 rounded-xl px-3 h-11 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] transition-all focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--kub-cyan)]">
         <KubIcon name="search" size={14} tone="muted" />
         <input
           value={queryRaw}
@@ -570,7 +570,7 @@ export function UsersTab() {
         {queryRaw && (
           <button
             onClick={() => setQueryRaw("")}
-            className="kub-icon-action kub-interactive rounded kub-raise-hover text-[color:var(--kub-muted)]"
+            className="kub-icon-action kub-interactive rounded kub-raise-hover text-[color:var(--kub-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
             aria-label="Очистить"
           >
             <KubIcon name="close" size={14} />
@@ -880,7 +880,7 @@ export function UsersTab() {
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
-                        className="kub-icon-action kub-interactive rounded-lg kub-raise-hover transition-colors text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
+                        className="kub-icon-action kub-interactive rounded-lg kub-raise-hover transition-colors text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
                         aria-label="Действия"
                       >
                         <KubIcon name="more" size={16} />
@@ -930,7 +930,7 @@ export function UsersTab() {
             <button
               disabled={page === 0}
               onClick={() => setPage((p) => Math.max(0, p - 1))}
-              className="kub-icon-action p-1.5 rounded-lg kub-raise-hover disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
+              className="kub-icon-action p-1.5 rounded-lg kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed hover:text-[color:var(--kub-cyan)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
               aria-label="Предыдущая страница"
             >
               <KubIcon name="chevronLeft" size={16} />
@@ -938,7 +938,7 @@ export function UsersTab() {
             <button
               disabled={page + 1 >= totalPages}
               onClick={() => setPage((p) => p + 1)}
-              className="kub-icon-action p-1.5 rounded-lg kub-raise-hover disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
+              className="kub-icon-action p-1.5 rounded-lg kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed hover:text-[color:var(--kub-cyan)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
               aria-label="Следующая страница"
             >
               <KubIcon name="chevronRight" size={16} />
@@ -1188,7 +1188,7 @@ function ProfilePreviewModal({
                   type="button"
                   disabled={avatarSaving}
                   onClick={() => void handleAvatarReset()}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--kub-danger)]/30 px-2 py-1 text-xs text-[color:var(--kub-danger-text)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:opacity-60"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--kub-danger)]/30 px-2 py-1 text-xs text-[color:var(--kub-danger-text)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
                 >
                   <KubIcon name="delete" size={12} />
                   <span>Сбросить</span>
@@ -1404,7 +1404,7 @@ function SelectField({
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-        className="h-9 w-full min-w-0 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2 text-xs text-[color:var(--kub-text)] outline-none disabled:opacity-50"
+        className="h-9 w-full min-w-0 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2 text-xs text-[color:var(--kub-text)] outline-none disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
       >
         {children}
       </select>

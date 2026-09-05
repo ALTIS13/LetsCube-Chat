@@ -299,7 +299,7 @@ export function PhoneSection() {
             className={cn(
               "w-full rounded-xl px-3 py-2 text-sm tracking-[0.4em] text-center outline-none",
               "bg-[var(--kub-surface-3)] text-[color:var(--kub-text)]",
-              "border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)]",
+              "border border-[color:var(--kub-border-color)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
             )}
           />
         </div>

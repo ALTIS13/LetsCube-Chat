@@ -26,8 +26,8 @@ export const KubSwitch = forwardRef<HTMLButtonElement, KubSwitchProps>(
           // looking exactly as designed while `.kub-switch` gives a coarse
           // pointer a full-height target around it.
           "kub-switch group/switch relative inline-flex shrink-0 items-center",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--kub-bg)]",
-          "disabled:cursor-not-allowed disabled:opacity-50",
+          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
+          "disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed",
           className,
         )}
         {...rest}

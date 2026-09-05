@@ -143,7 +143,12 @@ const veiled = [
   ["components/layout/AppTopBar.tsx", 1],
   ["components/layout/DesktopWindowChrome.tsx", 1],
   ["components/kub/KubModal.tsx", 1],
-  ["components/kub/KubButton.tsx", 2],
+  // One, not two: the secondary variant now RESTS on the veil (`kub-raise`) and
+  // hovers on a second layer of the same veil, written out because there is no
+  // utility for a doubled one. Its hover is still the veil and still nothing
+  // fixed, which is what this table is counting; it just cannot be found by
+  // looking for the hover-only class.
+  ["components/kub/KubButton.tsx", 1],
   ["components/kub/KubFilterChip.tsx", 1],
   ["components/kub/KubFeedbackViewport.tsx", 1],
   ["components/chat/ChatHeader.tsx", 5],

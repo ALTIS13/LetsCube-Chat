@@ -516,7 +516,7 @@ export function ChatMediaPlaybackBar({ compact = false }: { compact?: boolean } 
             type="button"
             onClick={playback.previous}
             disabled={!playback.canPrevious}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
             aria-label="Предыдущее медиа"
           >
             <KubIcon name="chevronLeft" size={18} />
@@ -533,7 +533,7 @@ export function ChatMediaPlaybackBar({ compact = false }: { compact?: boolean } 
             type="button"
             onClick={playback.next}
             disabled={!playback.canNext}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
             aria-label="Следующее медиа"
           >
             <KubIcon name="chevronRight" size={18} />
@@ -542,7 +542,7 @@ export function ChatMediaPlaybackBar({ compact = false }: { compact?: boolean } 
             data-testid="chat-media-playback-speed"
             value={playback.playbackRate}
             onChange={(event) => playback.setRate(Number(event.currentTarget.value))}
-            className="h-8 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-1.5 text-xs text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+            className="h-8 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-1.5 text-xs text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
             aria-label="Скорость воспроизведения"
           >
             {PLAYBACK_RATES.map((rate) => (

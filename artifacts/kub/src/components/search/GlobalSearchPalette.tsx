@@ -159,7 +159,7 @@ export function GlobalSearchPalette() {
             opaque band inside it hands that stretch of the panel one flat
             colour to blur — the material simply stops at the header. */}
         <div className="border-b border-[color:var(--kub-border-color)] px-4 py-3">
-          <div className="flex h-11 items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 focus-within:border-[color:var(--kub-cyan)]">
+          <div className="flex h-11 items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--kub-cyan)]">
             <KubIcon name="search" size={17} className="shrink-0 text-[color:var(--kub-muted)]" />
             <input
               ref={inputRef}

@@ -73,7 +73,7 @@ export function KubFilterSummary({
       <button
         type="button"
         onClick={onReset}
-        className="kub-button kub-interactive rounded-lg px-2 font-semibold text-[color:var(--kub-accent-text)] hover:underline"
+        className="kub-button kub-interactive rounded-lg px-2 font-semibold text-[color:var(--kub-accent-text)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
       >
         Сбросить всё
       </button>

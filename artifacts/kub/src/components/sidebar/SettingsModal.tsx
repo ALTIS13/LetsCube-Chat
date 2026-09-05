@@ -351,10 +351,10 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                   title={label}
                   onClick={() => setTheme(value)}
                   className={cn(
-                    // D-047: 36x32 before this. `kub-icon-action` gives the radio the same
+                    // D-047: 36x32 before this. `kub-icon-action focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]` gives the radio the same
                     // 32px pointer floor and 44px touch floor as every other icon control.
-                    "kub-icon-action h-8 w-9 rounded-md transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)]",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)] focus-visible:ring-offset-1 focus-visible:ring-offset-[color:var(--kub-surface-2)]",
+                    "kub-icon-action h-8 w-9 rounded-md transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
+                    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
                     selected
                       ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
                       : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
@@ -401,8 +401,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           onClick={() => { onClose(); setLocation("/admin"); }}
           className={cn(
             ROW_GRID,
-            "kub-interactive text-left transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)] kub-raise-hover",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--kub-cyan)]",
+            "kub-interactive text-left transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)] kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
+            "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
           )}
         >
           <KubIcon name="shield" size={16} className="text-[color:var(--kub-pink)]" />
@@ -465,9 +465,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             className={cn(
               // D-047: 28x28 before this, and it is the only way to change the
               // picture on a phone.
-              "kub-icon-action absolute -bottom-0.5 -right-0.5 h-7 w-7 cursor-pointer rounded-full bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan",
+              "kub-icon-action absolute -bottom-0.5 -right-0.5 h-7 w-7 cursor-pointer rounded-full bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:brightness-95",
               "transition-transform duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)] hover:scale-110",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--kub-surface)]",
+              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
               uploadingAvatar && "pointer-events-none opacity-60",
             )}
             aria-label="Сменить фото"
@@ -668,7 +668,7 @@ function TextFieldRow({
             "kub-field h-9 w-full min-w-0 rounded-lg border border-transparent bg-[var(--kub-surface)] px-2.5 text-sm text-[color:var(--kub-text)] outline-none",
             "placeholder:text-[color:var(--kub-muted)]",
             "transition-[border-color,box-shadow] duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)]",
-            "focus:border-[color:var(--kub-cyan)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)]",
+            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
           )}
         />
       </div>
@@ -742,8 +742,8 @@ function DisclosureRow({
         onClick={() => onToggle(id)}
         className={cn(
           ROW_GRID,
-          "kub-interactive text-left transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)] kub-raise-hover",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--kub-cyan)]",
+          "kub-interactive text-left transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)] kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
+          "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
         )}
       >
         <RowIcon name={icon} tone={open ? "accent" : "muted"} />

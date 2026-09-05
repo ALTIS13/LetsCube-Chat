@@ -4,6 +4,7 @@ import type {
   SupportTicket,
 } from "@/lib/support/operatorApi";
 import { cn } from "@/lib/utils";
+import { FOCUS_RING, PRESS_FILLED, PRESS_SINK } from "@/lib/controlSurface";
 
 const FILTERS: ReadonlyArray<{
   id: SupportQueueFilter;
@@ -79,10 +80,14 @@ export function SupportQueue({
             onClick={() => onFilterChange(item.id)}
             aria-pressed={filter === item.id}
             className={cn(
-              "kub-button kub-interactive h-9 shrink-0 rounded-lg px-3 text-xs font-semibold transition-colors",
+              `kub-button kub-interactive h-9 shrink-0 rounded-lg px-3 text-xs font-semibold transition-colors ${FOCUS_RING}`,
+              // The selected chip is a fill, so it presses by moving the fill;
+              // the veil is only for the ones that have none. Putting the sink
+              // on a filled control dilutes the ground its foreground was
+              // measured against.
               filter === item.id
-                ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
-                : "text-[color:var(--kub-muted)] kub-raise-hover hover:text-[color:var(--kub-text)]",
+                ? `bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] ${PRESS_FILLED}`
+                : `text-[color:var(--kub-muted)] kub-raise-hover hover:text-[color:var(--kub-text)] ${PRESS_SINK}`,
             )}
           >
             {item.label}

@@ -113,7 +113,7 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
       )}
       {step === "pick" ? (
         <>
-          <div className="flex items-center gap-2 rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
+          <div className="flex items-center gap-2 rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] transition-all focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--kub-cyan)]">
             <KubIcon name="search" size={14} className="text-[color:var(--kub-muted)]" />
             <input
               autoFocus
@@ -163,7 +163,7 @@ export function NewGroupModal({ onClose, onRefetch }: { onClose: () => void; onR
           onChange={(e) => setGroupName(limitText(e.target.value, CHAT_NAME_MAX_LENGTH))}
           placeholder="Название группы"
           maxLength={CHAT_NAME_MAX_LENGTH}
-          className="w-full text-sm outline-none rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-text)] focus:border-[color:var(--kub-cyan)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all"
+          className="w-full text-sm rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-text)] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
         />
       )}
     </KubModal>

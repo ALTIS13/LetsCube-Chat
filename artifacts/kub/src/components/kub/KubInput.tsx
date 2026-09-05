@@ -1,5 +1,6 @@
 import { forwardRef, useId, type InputHTMLAttributes, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { FOCUS_RING_WITHIN } from "@/lib/controlSurface";
 
 interface KubInputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
@@ -36,9 +37,14 @@ export const KubInput = forwardRef<HTMLInputElement, KubInputProps>(
             // within two values of the panel holding it, so a field rendered as
             // an outline with no fill.
             "bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)]",
-            "focus-within:border-[color:var(--kub-cyan)]",
-            "focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]",
-            error && "border-[color:var(--kub-danger)] focus-within:border-[color:var(--kub-danger)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-danger)_18%,transparent)]"
+            FOCUS_RING_WITHIN,
+            // The error keeps its own weight instead of borrowing the focus
+            // indicator's: a 2px danger border is a state the field is in, and
+            // the outline is what the keyboard is pointing at. They have to be
+            // able to appear at once and still be told apart, which is why the
+            // error is no longer a recolouring of the same one-pixel line the
+            // focus used to recolour too.
+            error && "border-2 border-[color:var(--kub-danger)]"
           )}
         >
           {leftIcon && (

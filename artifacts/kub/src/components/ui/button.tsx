@@ -3,21 +3,37 @@ import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
+import {
+  DISABLED_SINK,
+  DISABLED_SINK_FILLED,
+  FOCUS_RING,
+  PRESS_FILLED,
+  PRESS_SINK,
+  PRESS_SINK_RAISED,
+} from "@/lib/controlSurface"
 
+// The stock shadcn palette (`bg-primary`, `bg-destructive`, `bg-accent`) is a
+// second colour system standing beside the product's own: `--primary` is still
+// the cyan LETSCUBE used before the accent moved, and nothing here reads a
+// `--kub-*` token. Measured in the light theme, the filled variant carried its
+// foreground at 3.62:1. This component renders nowhere in the product today —
+// only other unused shadcn primitives import it — so this is not a repair of
+// something on screen; it is making sure the next person who reaches for it
+// gets the material rather than a fork of it.
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  `inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 ${FOCUS_RING}`,
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        default: `bg-[var(--kub-action-primary-background)] text-[color:var(--kub-action-primary-foreground)] hover:bg-[var(--kub-action-primary-hover)] ${PRESS_FILLED} ${DISABLED_SINK_FILLED}`,
         destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+          `bg-[var(--kub-action-danger-background)] text-[color:var(--kub-action-danger-foreground)] hover:bg-[var(--kub-action-danger-hover)] ${PRESS_FILLED} ${DISABLED_SINK_FILLED}`,
         outline:
-          "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+          `border border-[color:var(--kub-border-color)] bg-transparent text-[color:var(--kub-text)] kub-raise-hover ${PRESS_SINK} ${DISABLED_SINK}`,
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 hover:underline",
+          `bg-transparent text-[color:var(--kub-text)] kub-raise hover:bg-[image:linear-gradient(var(--kub-raise-veil),var(--kub-raise-veil)),linear-gradient(var(--kub-raise-veil),var(--kub-raise-veil))] ${PRESS_SINK_RAISED} ${DISABLED_SINK_FILLED}`,
+        ghost: `text-[color:var(--kub-text)] kub-raise-hover ${PRESS_SINK} ${DISABLED_SINK}`,
+        link: "text-[color:var(--kub-accent-text)] underline-offset-4 hover:underline disabled:text-[color:var(--kub-muted)]",
       },
       size: {
         default: "h-10 px-4 py-2",

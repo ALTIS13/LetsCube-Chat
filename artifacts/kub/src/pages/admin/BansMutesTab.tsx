@@ -235,7 +235,7 @@ function SanctionsHistory({ audit }: { audit: ReturnType<typeof useAuditLogs> })
             <button
               disabled={audit.page === 0}
               onClick={() => audit.setPage(Math.max(0, audit.page - 1))}
-              className="kub-icon-action p-1.5 rounded-lg kub-raise-hover disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
+              className="kub-icon-action p-1.5 rounded-lg kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed hover:text-[color:var(--kub-cyan)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
               aria-label="Предыдущая страница"
             >
               <KubIcon name="chevronLeft" size={16} />
@@ -243,7 +243,7 @@ function SanctionsHistory({ audit }: { audit: ReturnType<typeof useAuditLogs> })
             <button
               disabled={audit.page + 1 >= totalPages}
               onClick={() => audit.setPage(audit.page + 1)}
-              className="kub-icon-action p-1.5 rounded-lg kub-raise-hover disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
+              className="kub-icon-action p-1.5 rounded-lg kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed hover:text-[color:var(--kub-cyan)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
               aria-label="Следующая страница"
             >
               <KubIcon name="chevronRight" size={16} />

@@ -335,9 +335,20 @@ const wells = [
   ["pages/admin/dashboard/RegistrationTrend.tsx", 1],
 ];
 
+/**
+ * A well at rest, which is what this table counts.
+ *
+ * The lookbehind is not decoration: a disabled control is also a well — it
+ * takes `disabled:bg-[var(--kub-inset)]` so that "present but not offered"
+ * reads the same everywhere — and a bare substring match counts those too, so
+ * every control that learns to be disabled would move a number that is about
+ * fields.
+ */
+const RESTING_WELL = /(?<![:\w-])bg-\[var\(--kub-inset\)\]/g;
+
 for (const [file, count] of wells) {
   test(`${file} cuts its fields into the surface with --kub-inset`, () => {
-    const found = (withoutComments(read(file)).match(/bg-\[var\(--kub-inset\)\]/g) ?? []).length;
+    const found = (withoutComments(read(file)).match(RESTING_WELL) ?? []).length;
     assert.equal(found, count, `${file}: expected ${count} well(s) on --kub-inset, found ${found}`);
   });
 }

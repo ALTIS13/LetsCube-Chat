@@ -40,7 +40,7 @@ export function KubFilterChip({ children, onRemove, label, className }: KubFilte
         onClick={onRemove}
         aria-label={`Убрать фильтр: ${label}`}
         className={cn(
-          "kub-icon-action kub-interactive rounded-full text-[color:var(--kub-muted)]",
+          "kub-icon-action kub-interactive rounded-full text-[color:var(--kub-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
           "kub-raise-hover hover:text-[color:var(--kub-text)]",
         )}
       >

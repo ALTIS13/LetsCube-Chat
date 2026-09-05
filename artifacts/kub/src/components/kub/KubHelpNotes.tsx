@@ -62,7 +62,7 @@ export function KubHelpNotes({ id, label, children, className }: KubHelpNotesPro
         onClick={toggle}
         aria-expanded={!collapsed}
         className={cn(
-          "kub-button kub-interactive inline-flex items-center gap-1.5 rounded-lg px-2 text-xs font-semibold",
+          "kub-button kub-interactive inline-flex items-center gap-1.5 rounded-lg px-2 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
           "text-[color:var(--kub-accent-text)] hover:underline",
         )}
       >

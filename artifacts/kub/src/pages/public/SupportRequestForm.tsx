@@ -128,7 +128,7 @@ export function SupportRequestForm({ busy, error, onSubmit }: SupportRequestForm
               //
               // In the light theme the two tokens are the same value, so
               // nothing moves there at all.
-              className="h-11 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none transition focus:border-[color:var(--kub-cyan)] focus:ring-2 focus:ring-[color:var(--kub-cyan)]/20"
+              className="h-11 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
               aria-invalid={Boolean(fieldErrors.category)}
               required
             >
@@ -167,7 +167,7 @@ export function SupportRequestForm({ busy, error, onSubmit }: SupportRequestForm
             rows={6}
             required
             // --kub-inset, for the reason spelled out on the category select.
-            className="min-h-32 w-full resize-y rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2.5 text-sm leading-6 text-[color:var(--kub-text)] outline-none transition placeholder:text-[color:var(--kub-muted)] focus:border-[color:var(--kub-cyan)] focus:ring-2 focus:ring-[color:var(--kub-cyan)]/20"
+            className="min-h-32 w-full resize-y rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2.5 text-sm leading-6 text-[color:var(--kub-text)] transition placeholder:text-[color:var(--kub-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
             placeholder="Опишите проблему, ожидаемый результат и что уже пробовали сделать."
             aria-invalid={Boolean(fieldErrors.message)}
           />

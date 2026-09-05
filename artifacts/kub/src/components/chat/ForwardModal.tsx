@@ -55,7 +55,7 @@ export function ForwardModal({ message, onClose, onForward }: ForwardModalProps)
         <div className="truncate text-[color:var(--kub-muted)]">{preview}</div>
       </div>
 
-      <div className="flex items-center gap-2 rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
+      <div className="flex items-center gap-2 rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] transition-all focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--kub-cyan)]">
         <KubIcon name="search" size={14} className="text-[color:var(--kub-muted)]" />
         <input
           autoFocus
@@ -75,7 +75,7 @@ export function ForwardModal({ message, onClose, onForward }: ForwardModalProps)
               key={chat.id}
               onClick={() => handlePick(chat.id)}
               disabled={busyId !== null}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors kub-raise-hover disabled:opacity-50"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
             >
               <ChatAvatar chat={chat} size="sm" />
               <div className="text-left min-w-0 flex-1">

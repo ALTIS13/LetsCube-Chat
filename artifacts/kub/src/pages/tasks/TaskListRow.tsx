@@ -46,7 +46,7 @@ export function TaskListRow({ task, nowMs, onClick, selected = false, selectionC
         }
       }}
       className={cn(
-        "grid w-full gap-3 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2.5 text-left transition-colors hover:border-[color:var(--kub-cyan)]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)]/45",
+        "grid w-full gap-3 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2.5 text-left transition-colors hover:border-[color:var(--kub-cyan)]/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
         selectionControl
           ? "grid-cols-[auto_minmax(0,1fr)_auto] sm:grid-cols-[auto_minmax(180px,1.5fr)_minmax(140px,0.8fr)_minmax(160px,1fr)_minmax(160px,0.8fr)_auto]"
           : "grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(180px,1.5fr)_minmax(140px,0.8fr)_minmax(160px,1fr)_minmax(160px,0.8fr)_auto]",

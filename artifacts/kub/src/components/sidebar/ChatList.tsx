@@ -656,7 +656,7 @@ function ChatActionButton({
       disabled={action.disabled || busy}
       onClick={() => void onRun(action)}
       className={cn(
-        "flex w-full min-w-0 items-center gap-3 rounded-lg text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+        "flex w-full min-w-0 items-center gap-3 rounded-lg text-left text-sm transition-colors disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed",
         mobile ? "px-3 py-3" : "px-3 py-2.5",
         action.danger
           ? "text-[color:var(--kub-danger-text)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)]"

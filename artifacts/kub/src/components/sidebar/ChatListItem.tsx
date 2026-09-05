@@ -286,7 +286,13 @@ export function ChatListItem({
             {hasUnread && (
               <span
                 className={cn(
-                  "min-w-[18px] h-[18px] rounded-full text-[10px] font-bold flex items-center justify-center px-1.5 text-white",
+                  // The counter's foreground is the page colour, not white. The
+                  // folder tab and the notification bell already draw the same
+                  // badge on the same fill that way; this one kept `text-white`
+                  // and measured 3.55:1 against `--kub-cyan` in the dark theme.
+                  // `--kub-bg` gives 5.55:1 there and 4.56:1 in the light theme,
+                  // and it is the pair the accent's own action token declares.
+                  "min-w-[18px] h-[18px] rounded-full text-[10px] font-bold flex items-center justify-center px-1.5 text-[color:var(--kub-bg)]",
                   isMuted ? "bg-[color:var(--kub-muted)]" : "bg-[var(--kub-cyan)] kub-glow-soft"
                 )}
               >

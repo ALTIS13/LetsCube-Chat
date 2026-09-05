@@ -60,7 +60,7 @@ export function TaskDeleteModal({
             onChange={(event) => setReason(event.target.value)}
             rows={3}
             placeholder="Например: тестовая задача больше не нужна"
-            className="w-full resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none transition-colors focus:border-[color:var(--kub-cyan)]"
+            className="w-full resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
           />
         </label>
         {error && (

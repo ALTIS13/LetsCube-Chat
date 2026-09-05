@@ -135,7 +135,7 @@ export function GroupInviteModal({
         </KubButton>
       )}
     >
-      <div className="flex items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 h-10 transition-all focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)]">
+      <div className="flex items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 h-10 transition-all focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--kub-cyan)]">
         <KubIcon name="search" size={14} className="shrink-0 text-[color:var(--kub-muted)]" />
         <input
           autoFocus
@@ -194,7 +194,7 @@ export function GroupInviteModal({
                       canInvite && !migrationRequired
                         ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] hover:bg-[var(--kub-cyan-hover)]"
                         : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)]",
-                      "disabled:cursor-not-allowed disabled:opacity-60",
+                      "disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed",
                     )}
                   >
                     {sendingId === user.id ? "Отправка..." : statusLabel(status, migrationRequired)}

@@ -350,7 +350,7 @@ export function TasksPage() {
             <button
               type="button"
               onClick={() => setLocation("/")}
-              className="kub-icon-action kub-interactive rounded-lg kub-raise-hover text-[color:var(--kub-muted)]"
+              className="kub-icon-action kub-interactive rounded-lg kub-raise-hover text-[color:var(--kub-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
               aria-label="Назад"
             >
               <KubIcon name="back" size={18} />
@@ -374,7 +374,7 @@ export function TasksPage() {
             <button
               type="button"
               onClick={() => setLocation("/")}
-              className="kub-icon-action kub-interactive rounded-lg kub-raise-hover text-[color:var(--kub-muted)]"
+              className="kub-icon-action kub-interactive rounded-lg kub-raise-hover text-[color:var(--kub-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
               aria-label="Назад"
             >
               <KubIcon name="back" size={18} />
@@ -418,7 +418,7 @@ export function TasksPage() {
           <button
             type="button"
             onClick={() => setLocation("/")}
-            className="kub-icon-action kub-interactive rounded-lg kub-raise-hover text-[color:var(--kub-muted)]"
+            className="kub-icon-action kub-interactive rounded-lg kub-raise-hover text-[color:var(--kub-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
             aria-label="Назад"
           >
             <KubIcon name="back" size={18} />
@@ -449,7 +449,7 @@ export function TasksPage() {
                 type="button"
                 onClick={() => setTabId(t.id)}
                 className={cn(
-                  "kub-button kub-interactive relative px-4 py-3 text-xs font-semibold uppercase tracking-wider whitespace-nowrap transition-colors",
+                  "kub-button kub-interactive relative px-4 py-3 text-xs font-semibold uppercase tracking-wider whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
                   active
                     ? "text-[color:var(--kub-accent-text)]"
                     : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
@@ -517,7 +517,7 @@ export function TasksPage() {
               id="task-assignee-filter"
               value={assigneeFilter}
               onChange={(event) => setAssigneeFilter(event.target.value)}
-              className="h-9 min-w-0 w-full max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] sm:w-auto sm:max-w-[220px]"
+              className="h-9 min-w-0 w-full max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] sm:w-auto sm:max-w-[220px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
               style={{ width: "min(100%, 220px)", maxWidth: "100%", minWidth: 0 }}
             >
               <option value="all">Все исполнители</option>
@@ -535,7 +535,7 @@ export function TasksPage() {
                   id="task-location-filter"
                   value={locationFilter}
                   onChange={(event) => setLocationFilter(event.target.value)}
-                  className="h-9 min-w-0 w-full max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] sm:w-auto sm:max-w-[220px]"
+                  className="h-9 min-w-0 w-full max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] sm:w-auto sm:max-w-[220px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
                   style={{ width: "min(100%, 220px)", maxWidth: "100%", minWidth: 0 }}
                 >
                   <option value="all">Все доступные локации</option>
@@ -550,7 +550,7 @@ export function TasksPage() {
                   id="task-recipient-filter"
                   value={recipientFilter}
                   onChange={(event) => setRecipientFilter(event.target.value as RecipientFilter)}
-                  className="h-9 min-w-0 w-full max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] sm:w-auto sm:max-w-[220px]"
+                  className="h-9 min-w-0 w-full max-w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2.5 text-xs font-medium text-[color:var(--kub-text)] sm:w-auto sm:max-w-[220px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
                   style={{ width: "min(100%, 220px)", maxWidth: "100%", minWidth: 0 }}
                 >
                   <option value="all">Все получатели</option>
@@ -574,7 +574,7 @@ export function TasksPage() {
             </div>
 
             {/* The designed height is a floor, not a clamp. Its segments carry
-                `kub-button`, so a coarse pointer grows them to the 44px a finger
+                `kub-button focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]`, so a coarse pointer grows them to the 44px a finger
                 needs (D-015); a fixed `h-9` track could not contain that and the
                 active segment's pill broke 11px out through the bottom border.
                 Same mistake `KubSwitch` documents — a fixed decorative size
@@ -586,7 +586,7 @@ export function TasksPage() {
                 type="button"
                 onClick={() => setViewMode("cards")}
                 className={cn(
-                  "kub-button kub-interactive inline-flex items-center gap-1 rounded-md px-2.5 text-xs font-semibold transition-colors",
+                  "kub-button kub-interactive inline-flex items-center gap-1 rounded-md px-2.5 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
                   viewMode === "cards"
                     ? "kub-raise text-[color:var(--kub-accent-text)]"
                     : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
@@ -600,7 +600,7 @@ export function TasksPage() {
                 type="button"
                 onClick={() => setViewMode("list")}
                 className={cn(
-                  "kub-button kub-interactive inline-flex items-center gap-1 rounded-md px-2.5 text-xs font-semibold transition-colors",
+                  "kub-button kub-interactive inline-flex items-center gap-1 rounded-md px-2.5 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
                   viewMode === "list"
                     ? "kub-raise text-[color:var(--kub-accent-text)]"
                     : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",

@@ -25,7 +25,7 @@ export function KubFilterButton({ count, open, onToggle, className }: KubFilterB
       onClick={onToggle}
       aria-expanded={open}
       className={cn(
-        "kub-button kub-interactive inline-flex items-center gap-2 rounded-xl border px-3 text-sm font-semibold",
+        "kub-button kub-interactive inline-flex items-center gap-2 rounded-xl border px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
         "transition-colors",
         count > 0 || open
           ? "border-[color:var(--kub-cyan)] bg-[var(--kub-surface-2)] text-[color:var(--kub-text)]"

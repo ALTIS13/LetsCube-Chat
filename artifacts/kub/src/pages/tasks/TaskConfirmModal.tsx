@@ -64,7 +64,7 @@ export function TaskConfirmModal({ taskId, onClose, onDone }: Props) {
           onChange={(e) => setNote(e.target.value)}
           rows={3}
           placeholder="Например, «всё чисто, спасибо»"
-          className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] transition-all"
+          className="w-full rounded-xl px-3 py-2 text-sm resize-none bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
         />
       </div>
 

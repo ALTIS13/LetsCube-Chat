@@ -64,7 +64,7 @@ export function EmojiCategoryPicker({
     <div data-testid={`${testIdPrefix}-picker`} className={cn(compact ? "space-y-1.5" : "space-y-2", className)}>
       {searchable && (
         <label className={cn(
-          "flex items-center gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] px-2.5 focus-within:border-[color:var(--kub-cyan)]",
+          "flex items-center gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] px-2.5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--kub-cyan)]",
           compact ? "h-8" : "h-9",
         )}>
           <KubIcon name="search" size={14} className="shrink-0 text-[color:var(--kub-muted)]" />
@@ -109,7 +109,7 @@ export function EmojiCategoryPicker({
               data-state={active ? "active" : "inactive"}
               aria-pressed={active}
               className={cn(
-                "min-w-0 truncate rounded-md px-1.5 font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)] disabled:opacity-60",
+                "min-w-0 truncate rounded-md px-1.5 font-semibold transition-colors disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
                 compact ? "min-h-7 text-[9px]" : "min-h-8 text-[10px]",
                 active
                   ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
@@ -182,7 +182,7 @@ function EmojiOption({ label, active, disabled, onClick, children, compact }: Em
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex min-w-0 items-center justify-center rounded-lg border text-lg leading-none transition-[background-color,border-color,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)] active:scale-95 disabled:opacity-60",
+        "flex min-w-0 items-center justify-center rounded-lg border text-lg leading-none transition-[background-color,border-color,transform] active:scale-95 disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
         compact ? "h-7" : "h-9",
         active
           ? "border-[var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_18%,var(--kub-surface-2))] kub-glow-soft"

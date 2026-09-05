@@ -436,7 +436,7 @@ export function VideoMessageRecorderModal({
       onClick={switchCamera}
       disabled={switchingCamera}
       className={cn(
-        "flex h-10 w-10 items-center justify-center rounded-full border text-white shadow-lg backdrop-blur transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:cursor-wait disabled:opacity-70",
+        "flex h-10 w-10 items-center justify-center rounded-full border text-white shadow-lg backdrop-blur transition disabled:cursor-wait disabled:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
         isRound
           ? "border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] kub-raise-hover"
           : "border-white/15 bg-black/60 hover:bg-black/75"

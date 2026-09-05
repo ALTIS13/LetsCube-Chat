@@ -107,7 +107,7 @@ export function BanModal({ target, onClose, onSuccess }: Props) {
           onChange={(e) => setReason(e.target.value)}
           rows={3}
           placeholder="За что блокируется"
-          className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all"
+          className="w-full rounded-xl px-3 py-2 text-sm resize-none bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
         />
       </div>
 
@@ -136,7 +136,7 @@ export function BanModal({ target, onClose, onSuccess }: Props) {
             type="datetime-local"
             value={customAt}
             onChange={(e) => setCustomAt(e.target.value)}
-            className="mt-2 w-full rounded-xl px-3 py-2 text-sm outline-none bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)] transition-all"
+            className="mt-2 w-full rounded-xl px-3 py-2 text-sm bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
           />
         )}
       </div>

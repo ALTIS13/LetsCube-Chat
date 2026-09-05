@@ -124,7 +124,7 @@ export function SupportConversation({
                 maxLength={8_000}
                 rows={2}
                 placeholder="Напишите ответ клиенту…"
-                className="max-h-36 min-h-12 w-full resize-y rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none transition-colors placeholder:text-[color:var(--kub-muted)] focus:border-[color:var(--kub-cyan)]"
+                className="max-h-36 min-h-12 w-full resize-y rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] transition-colors placeholder:text-[color:var(--kub-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();

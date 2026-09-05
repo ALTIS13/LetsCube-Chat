@@ -1055,16 +1055,16 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   // the tokens collapse to 1ms under the preference, a literal does not.
   const rowMotionClass =
     "transition-colors duration-[var(--kub-motion-instant)] ease-[var(--kub-ease-standard)]";
-  // D-047: `kub-button` is the opt-in for the 44px touch rule. These rows are
+  // D-047: `kub-button focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]` is the opt-in for the 44px touch rule. These rows are
   // 357x36 without it, and this card is one of the two surfaces rebuilt after
   // the rule was written, so it had never been opted in. The class costs
   // nothing on a pointer device — it only carries the coarse-pointer minimum.
   const actionRowClass = cn(
-    "kub-button inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 text-left kub-raise-hover",
+    "kub-button inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 text-left kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
     rowMotionClass,
   );
   const dangerActionRowClass = cn(
-    "kub-button inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 text-left text-[color:var(--kub-danger-text)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:cursor-not-allowed disabled:opacity-60",
+    "kub-button inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 text-left text-[color:var(--kub-danger-text)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
     rowMotionClass,
   );
 
@@ -1101,7 +1101,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         {view === "gallery" ? (
           <button
             onClick={() => setView("root")}
-            className="kub-icon-action h-9 w-9 rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover"
+            className="kub-icon-action h-9 w-9 rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
             aria-label="Назад"
             data-testid="chat-info-back"
           >
@@ -1110,7 +1110,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         ) : (
           <button
             onClick={onClose}
-            className="kub-icon-action h-9 w-9 rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover"
+            className="kub-icon-action h-9 w-9 rounded-lg text-[color:var(--kub-muted)] transition-colors kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
             aria-label="Закрыть"
           >
             <KubIcon name="close" size={18} />
@@ -1123,7 +1123,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
           {canEditChatProfile && !editing && view === "root" && (
             <button
               onClick={() => setEditing(true)}
-              className="kub-icon-action h-9 w-9 rounded-lg text-[color:var(--kub-cyan)] kub-raise-hover"
+              className="kub-icon-action h-9 w-9 rounded-lg text-[color:var(--kub-cyan)] kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
               aria-label="Редактировать"
             >
               <KubIcon name="edit" size={16} />
@@ -1133,7 +1133,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
             <button
               onClick={handleSave}
               disabled={saving}
-              className="kub-icon-action h-9 w-9 rounded-lg text-[color:var(--kub-cyan)] kub-raise-hover"
+              className="kub-icon-action h-9 w-9 rounded-lg text-[color:var(--kub-cyan)] kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
               aria-label="Сохранить"
             >
               <KubIcon name="check" size={16} />
@@ -1182,14 +1182,14 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               value={name}
               onChange={(e) => setName(limitText(e.target.value, CHAT_NAME_MAX_LENGTH))}
               maxLength={CHAT_NAME_MAX_LENGTH}
-              className="w-full text-sm rounded-xl px-3 py-2 outline-none text-center font-semibold bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)]"
+              className="w-full text-sm rounded-xl px-3 py-2 text-center font-semibold bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
             />
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Описание…"
               rows={2}
-              className="w-full text-sm rounded-xl px-3 py-2 outline-none resize-none bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)]"
+              className="w-full text-sm rounded-xl px-3 py-2 resize-none bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
             />
           </div>
         ) : (
@@ -1318,7 +1318,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                         disabled={!invitePolicySupported || invitePolicySaving}
                         onClick={() => void handleInvitePolicyChange("owner_admin_only")}
                         className={cn(
-                          "h-8 rounded-lg px-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                          "h-8 rounded-lg px-2 text-xs font-semibold transition-colors disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed",
                           invitePolicy === "owner_admin_only"
                             ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
                             : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] kub-raise-hover",
@@ -1331,7 +1331,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                         disabled={!invitePolicySupported || invitePolicySaving}
                         onClick={() => void handleInvitePolicyChange("members_can_invite")}
                         className={cn(
-                          "h-8 rounded-lg px-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                          "h-8 rounded-lg px-2 text-xs font-semibold transition-colors disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed",
                           invitePolicy === "members_can_invite"
                             ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
                             : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] kub-raise-hover",
@@ -1672,7 +1672,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                                   type="button"
                                   onClick={() => void handleCancelInvite(invite)}
                                   disabled={inviteBusyId === invite.id}
-                                  className="inline-flex h-7 items-center justify-center rounded-lg border border-[color:var(--kub-border-color)] px-2 text-xs font-semibold text-[color:var(--kub-muted)] kub-raise-hover disabled:opacity-60"
+                                  className="inline-flex h-7 items-center justify-center rounded-lg border border-[color:var(--kub-border-color)] px-2 text-xs font-semibold text-[color:var(--kub-muted)] kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
                                 >
                                   {inviteBusyId === invite.id ? "Отмена..." : "Отменить"}
                                 </button>
@@ -1682,7 +1682,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                                   type="button"
                                   onClick={() => void handleReinvite(invite)}
                                   disabled={inviteBusyId === invite.id}
-                                  className="inline-flex h-7 items-center justify-center rounded-lg bg-[var(--kub-cyan)] px-2 text-xs font-semibold text-[color:var(--kub-bg)] hover:bg-[var(--kub-cyan-hover)] disabled:opacity-60"
+                                  className="inline-flex h-7 items-center justify-center rounded-lg bg-[var(--kub-cyan)] px-2 text-xs font-semibold text-[color:var(--kub-bg)] hover:bg-[var(--kub-cyan-hover)] disabled:bg-[var(--kub-inset)] disabled:shadow-none disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
                                 >
                                   {inviteBusyId === invite.id ? "Отправка..." : "Пригласить снова"}
                                 </button>
@@ -1742,7 +1742,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                   <button
                     type="button"
                     key={m.id}
-                    className="relative aspect-square overflow-hidden rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-left focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)]"
+                    className="relative aspect-square overflow-hidden rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
                     onClick={() => setOpenMedia({
                       type: m.type === "video" ? "video" : "image",
                       url: m.media_url!,
@@ -1847,7 +1847,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               type="button"
               onClick={() => setLeaveGroupOpen(false)}
               disabled={leavingChat}
-              className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-muted)] kub-raise-hover disabled:opacity-50"
+              className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-muted)] kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
             >
               Отмена
             </button>
@@ -1855,7 +1855,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               type="button"
               onClick={handleLeave}
               disabled={leavingChat}
-              className="inline-flex h-9 items-center justify-center rounded-lg bg-[color:var(--kub-danger)] px-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+              className="inline-flex h-9 items-center justify-center rounded-lg bg-[var(--kub-action-danger-background)] px-3 text-sm font-semibold text-[color:var(--kub-action-danger-foreground)] hover:bg-[var(--kub-action-danger-hover)] active:brightness-95 disabled:bg-[var(--kub-inset)] disabled:shadow-none disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
             >
               {leavingChat ? "Выходим..." : "Покинуть"}
             </button>
@@ -1888,7 +1888,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               type="button"
               onClick={() => setDeleteGroupOpen(false)}
               disabled={deletingChat}
-              className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-muted)] kub-raise-hover disabled:opacity-50"
+              className="inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-muted)] kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
             >
               Отмена
             </button>
@@ -1896,7 +1896,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               type="button"
               onClick={handleDeleteGroup}
               disabled={deletingChat}
-              className="inline-flex h-9 items-center justify-center rounded-lg bg-[color:var(--kub-danger)] px-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+              className="inline-flex h-9 items-center justify-center rounded-lg bg-[var(--kub-action-danger-background)] px-3 text-sm font-semibold text-[color:var(--kub-action-danger-foreground)] hover:bg-[var(--kub-action-danger-hover)] active:brightness-95 disabled:bg-[var(--kub-inset)] disabled:shadow-none disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
             >
               {deletingChat ? "Удаляем..." : "Удалить"}
             </button>

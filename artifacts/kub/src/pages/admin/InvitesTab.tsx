@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 import type { DynamicRole, RegistrationInviteListRow, RegistrationInviteModeRow } from "@/types/database";
 
 const selectClassName =
-  "h-11 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none transition-colors focus:border-[color:var(--kub-cyan)]";
+  "h-11 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]";
 
 export function InvitesTab() {
   const supabase = useMemo(() => createClient(), []);

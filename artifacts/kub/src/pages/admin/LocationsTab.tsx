@@ -326,7 +326,7 @@ export function LocationsTab() {
               onChange={(event) => setCreateDescription(event.target.value)}
               rows={3}
               placeholder="Описание"
-              className="w-full resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+              className="w-full resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
             />
             <KubButton
               variant="primary"
@@ -404,7 +404,7 @@ export function LocationsTab() {
                   onChange={(event) => setEditDescription(event.target.value)}
                   rows={3}
                   placeholder="Описание"
-                  className="w-full resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                  className="w-full resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
                 />
                 <label className="flex items-center gap-2 text-sm text-[color:var(--kub-text)]">
                   <input
@@ -449,7 +449,7 @@ export function LocationsTab() {
                   <select
                     value={assignUserId}
                     onChange={(event) => setAssignUserId(event.target.value)}
-                    className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                    className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
                   >
                     <option value="">Выберите пользователя</option>
                     {availableProfiles.map((profile) => (
@@ -460,7 +460,7 @@ export function LocationsTab() {
                     <select
                       value={assignRoleId}
                       onChange={(event) => setAssignRoleId(event.target.value)}
-                      className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                      className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
                     >
                       {dynamicLocationRoles.map((role) => (
                         <option key={role.id} value={role.id}>{getRoleLabel(role)}</option>
@@ -470,7 +470,7 @@ export function LocationsTab() {
                     <select
                       value={assignRole}
                       onChange={(event) => setAssignRole(event.target.value as LocationRole)}
-                      className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                      className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
                     >
                       {LOCATION_ROLES.map((role) => (
                         <option key={role} value={role}>{LOCATION_ROLE_LABEL[role]}</option>
@@ -486,7 +486,7 @@ export function LocationsTab() {
                         : assignRole !== "staff")
                       || locationAdmins.length === 0
                     }
-                    className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] disabled:opacity-50"
+                    className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
                   >
                     <option value="">Основной администратор</option>
                     {locationAdmins.map((member) => (

@@ -42,7 +42,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
   const [showNewGroup, setShowNewGroup] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const iconButtonClass =
-    "kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors kub-raise-hover";
+    "kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]";
 
   // Search commands use `mobileSection='search'` as a one-shot focus signal.
   useEffect(() => {
@@ -151,7 +151,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
           <div className="relative shrink-0">
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              className="kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors kub-raise-hover p-1"
+              className="kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors kub-raise-hover p-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
               aria-label="Меню"
             >
               {currentUser ? (
@@ -230,7 +230,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
             field went flush with it — measured at rgb(11,33,58) inside a panel
             of rgb(13,33,58), which is a hollow outline rather than a well.
             --kub-inset is the token for what a field is cut into. */}
-        <div className="kub-field min-w-0 flex-1 gap-2 rounded-lg px-3 h-9 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
+        <div className="kub-field min-w-0 flex-1 gap-2 rounded-lg px-3 h-9 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] transition-all focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--kub-cyan)]">
           <KubIcon name="search" size={14} className="shrink-0 text-[color:var(--kub-muted)]" />
           <input
             ref={searchInputRef}
@@ -250,7 +250,7 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
             className="h-full min-w-0 flex-1 truncate bg-transparent text-sm outline-none text-[color:var(--kub-text)]"
           />
           {searchQuery && (
-            <button className="kub-icon-action kub-interactive shrink-0 rounded-md text-[color:var(--kub-muted)] kub-raise-hover" onClick={() => setSearchQuery("")} aria-label="Очистить">
+            <button className="kub-icon-action kub-interactive shrink-0 rounded-md text-[color:var(--kub-muted)] kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]" onClick={() => setSearchQuery("")} aria-label="Очистить">
               <KubIcon name="close" size={12} className="text-[color:var(--kub-muted)]" />
             </button>
           )}

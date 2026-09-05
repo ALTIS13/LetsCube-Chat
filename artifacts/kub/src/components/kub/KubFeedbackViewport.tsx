@@ -101,7 +101,7 @@ export function KubFeedbackViewport() {
             type="button"
             onClick={() => actionFeedback.dismiss(item.id)}
             aria-label="Закрыть уведомление"
-            className="kub-icon-action kub-interactive shrink-0 rounded-md text-[color:var(--kub-muted)] kub-raise-hover hover:text-[color:var(--kub-text)]"
+            className="kub-icon-action kub-interactive shrink-0 rounded-md text-[color:var(--kub-muted)] kub-raise-hover hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
           >
             <KubIcon name="close" size={13} />
           </button>

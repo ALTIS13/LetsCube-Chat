@@ -247,7 +247,7 @@ export function FolderEditModal({
           placeholder="Работа, Семья, Учёба…"
           maxLength={FOLDER_NAME_MAX_LENGTH}
           disabled={!canManage}
-          className="w-full text-sm outline-none rounded-xl px-3 h-10 disabled:opacity-60 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-text)] focus:border-[color:var(--kub-cyan)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all"
+          className="w-full text-sm rounded-xl px-3 h-10 disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-text)] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
         />
       </div>
 
@@ -305,7 +305,7 @@ export function FolderEditModal({
         <label className="block text-[10px] font-semibold uppercase tracking-wider mb-1.5 text-[color:var(--kub-muted)]">
           Чаты в папке ({selectedChatIds.size})
         </label>
-        <label className="mb-2 flex h-9 items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 focus-within:border-[color:var(--kub-cyan)]">
+        <label className="mb-2 flex h-9 items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--kub-cyan)]">
           <KubIcon name="search" size={14} className="shrink-0 text-[color:var(--kub-muted)]" />
           <input
             type="search"
@@ -347,7 +347,7 @@ export function FolderEditModal({
                   key={c.id}
                   onClick={() => toggleChat(c.id)}
                   disabled={!canManage}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 transition-colors kub-raise-hover disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 transition-colors kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
                 >
                   <div
                     className={cn(

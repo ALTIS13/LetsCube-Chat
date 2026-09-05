@@ -556,7 +556,7 @@ export function AudioSettingsSection() {
           type="button"
           onClick={() => void resetAudioSettings()}
           // D-047: 162x16 before this, the smallest target on the screen.
-          className="kub-button inline-flex items-center text-xs font-semibold text-[color:var(--kub-accent-text)] hover:underline"
+          className="kub-button inline-flex items-center text-xs font-semibold text-[color:var(--kub-accent-text)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
         >
           Сбросить настройки звука
         </button>
@@ -657,7 +657,7 @@ function ModeButton({
         // components, so a `min-h-*` utility outranks `.kub-button`'s own
         // min-height and the touch minimum never reached this control.
         // Measured: with `min-h-9` the coarse box stayed 36px.
-        "kub-button h-9 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors disabled:cursor-default",
+        "kub-button h-9 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors disabled:cursor-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
         active
           ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
           : "border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)] kub-raise-hover",
@@ -705,7 +705,7 @@ function DeviceSelect({
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-        className="h-9 w-full min-w-0 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 text-xs text-[color:var(--kub-text)] outline-none disabled:cursor-not-allowed disabled:opacity-60"
+        className="h-9 w-full min-w-0 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 text-xs text-[color:var(--kub-text)] outline-none disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
       >
         <option value={DEFAULT_AUDIO_DEVICE_ID}>{defaultLabel}</option>
         {devices

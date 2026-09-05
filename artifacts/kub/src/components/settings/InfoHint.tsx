@@ -112,7 +112,7 @@ export function InfoHint({
             // D-047: icon-only, and 13x13 before this - the smallest control
             // the settings screen had. The text-carrying branch above is a word
             // in a sentence and is left as it reads.
-            : "kub-icon-action shrink-0 text-[color:var(--kub-muted)] transition-colors hover:text-[color:var(--kub-cyan)]",
+            : "kub-icon-action shrink-0 text-[color:var(--kub-muted)] transition-colors hover:text-[color:var(--kub-cyan)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
           className,
         )}
       >

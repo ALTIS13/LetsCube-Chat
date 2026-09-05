@@ -181,7 +181,7 @@ export function GuestSupportChat({
             placeholder="Напишите сообщение оператору"
             // --kub-inset: a composer field is cut into the panel holding it,
             // the same way the application's own composer is.
-            className="min-h-11 flex-1 resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2.5 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+            className="min-h-11 flex-1 resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2.5 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
           />
           <KubButton
             type="submit"
@@ -200,7 +200,7 @@ export function GuestSupportChat({
             type="button"
             onClick={forget}
             disabled={forgetting}
-            className="self-start font-semibold text-[color:var(--kub-danger-text)] hover:brightness-110 disabled:opacity-50 sm:self-auto"
+            className="self-start font-semibold text-[color:var(--kub-danger-text)] hover:brightness-110 disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed sm:self-auto"
           >
             {forgetting ? "Закрываем доступ…" : "Забыть обращение на устройстве"}
           </button>

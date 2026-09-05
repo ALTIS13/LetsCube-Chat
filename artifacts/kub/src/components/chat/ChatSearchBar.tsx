@@ -166,7 +166,7 @@ export function ChatSearchBar({ chatId, currentTopicId, isForum = false, message
             type="button"
             onClick={() => jumpTo(Math.max(0, idx - 1))}
             disabled={total === 0 || idx === 0}
-            className="rounded-lg p-1.5 text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-cyan)] disabled:opacity-30"
+            className="rounded-lg p-1.5 text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-cyan)] disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
             aria-label="Предыдущий"
           >
             <KubIcon name="chevronUp" size={16} />
@@ -175,7 +175,7 @@ export function ChatSearchBar({ chatId, currentTopicId, isForum = false, message
             type="button"
             onClick={() => jumpTo(Math.min(total - 1, idx + 1))}
             disabled={total === 0 || idx === total - 1}
-            className="rounded-lg p-1.5 text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-cyan)] disabled:opacity-30"
+            className="rounded-lg p-1.5 text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-cyan)] disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
             aria-label="Следующий"
           >
             <KubIcon name="chevronDown" size={16} />

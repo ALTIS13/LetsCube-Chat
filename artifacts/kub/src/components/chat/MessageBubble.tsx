@@ -1105,7 +1105,7 @@ export function MessageBubble({
           // and 3.90:1, which clears the 3:1 WCAG asks of a UI boundary. It is
           // the accent already used for this chip's hover and focus, so
           // nothing new is introduced.
-          className="inline-flex h-4 items-center gap-0.5 rounded-full border border-[color:var(--kub-cyan)] bg-[var(--kub-surface-3)] px-1 text-[10px] leading-none text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-accent-text)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--kub-cyan)]"
+          className="inline-flex h-4 items-center gap-0.5 rounded-full border border-[color:var(--kub-cyan)] bg-[var(--kub-surface-3)] px-1 text-[10px] leading-none text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-accent-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
           title={groupReadAriaLabel}
           aria-label={groupReadAriaLabel}
           onClick={(event) => {
@@ -1256,7 +1256,7 @@ export function MessageBubble({
                     key={emoji}
                     onClick={() => { onReaction(emoji); closeContext(); }}
                     className={cn(
-                      "kub-interactive flex min-w-0 flex-1 items-center justify-center rounded-full transition-colors kub-raise-hover",
+                      "kub-interactive flex min-w-0 flex-1 items-center justify-center rounded-full transition-colors kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
                       compactContextMenu ? "h-11 text-2xl" : "h-10 text-xl",
                     )}
                     aria-label={`Поставить реакцию ${emoji}`}
@@ -1271,7 +1271,7 @@ export function MessageBubble({
                     openFullReactionCatalog({ x: rect.left + rect.width / 2, y: rect.top });
                   }}
                   className={cn(
-                    "kub-interactive flex min-w-0 flex-1 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]",
+                    "kub-interactive flex min-w-0 flex-1 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
                     compactContextMenu ? "h-11" : "h-10",
                   )}
                   aria-label="Больше реакций"
@@ -1457,7 +1457,7 @@ export function MessageBubble({
                   onClick={handleToggleReactionMenu}
                   data-reaction-trigger="true"
                   aria-label="Реакция"
-                  className="kub-interactive flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]"
+                  className="kub-interactive flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
                 >
                   <KubIcon name="smile" size={14} />
                 </button>
@@ -1465,7 +1465,7 @@ export function MessageBubble({
               <button
                 onClick={onReply}
                 aria-label="Ответить"
-                className="kub-interactive flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]"
+                className="kub-interactive flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
               >
                 <KubIcon name="reply" size={14} />
               </button>
@@ -1476,7 +1476,7 @@ export function MessageBubble({
                   openContextAt(rect.left, rect.bottom + 4);
                 }}
                 aria-label="Действия сообщения"
-                className="kub-interactive flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]"
+                className="kub-interactive flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
               >
                 <KubIcon name="more" size={14} />
               </button>
@@ -1763,7 +1763,7 @@ function MediaImage({
     <button
       type="button"
       onClick={onOpen}
-      className="group block max-h-[340px] w-[min(360px,calc(100vw-7.5rem))] max-w-full overflow-hidden rounded-xl text-left focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)] sm:max-h-[380px] sm:w-[min(420px,70vw)]"
+      className="group block max-h-[340px] w-[min(360px,calc(100vw-7.5rem))] max-w-full overflow-hidden rounded-xl text-left sm:max-h-[380px] sm:w-[min(420px,70vw)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
       style={aspectStyle}
       aria-label="Открыть фото"
     >
@@ -2017,7 +2017,7 @@ function RoundVideoMessage({
         type="button"
         onClick={togglePlayback}
         className={cn(
-          "group relative z-10 block h-full w-full overflow-hidden rounded-full bg-black shadow-lg focus:outline-none focus:ring-2 focus:ring-[color:var(--kub-cyan)]",
+          "group relative z-10 block h-full w-full overflow-hidden rounded-full bg-black shadow-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
           isActiveMedia && "ring-2 ring-[color:var(--kub-cyan)]"
         )}
         aria-label={isActivePlaying ? "Пауза видео-сообщения" : "Воспроизвести видео-сообщение"}

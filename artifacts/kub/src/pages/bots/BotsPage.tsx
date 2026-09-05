@@ -71,7 +71,7 @@ export function BotsPage() {
               href="/bots/docs"
               target="_blank"
               rel="noreferrer"
-              className="kub-button kub-interactive inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]"
+              className="kub-button kub-interactive inline-flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
             >
               <KubIcon name="help" size={15} />
               Документация

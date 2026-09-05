@@ -57,7 +57,7 @@ export function TopicCreateModal({ onClose, onCreate }: TopicCreateModalProps) {
           placeholder="Общее, Релизы, Оффтоп…"
           maxLength={TOPIC_NAME_MAX_LENGTH}
           onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-          className="w-full text-sm outline-none rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-text)] focus:border-[color:var(--kub-cyan)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all"
+          className="w-full text-sm rounded-xl px-3 h-10 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-text)] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
         />
       </div>
 

@@ -53,12 +53,12 @@ function Calendar({
         ),
         button_previous: cn(
           buttonVariants({ variant: buttonVariant }),
-          "h-[--cell-size] w-[--cell-size] select-none p-0 aria-disabled:opacity-50",
+          "h-[--cell-size] w-[--cell-size] select-none p-0 aria-disabled:bg-[var(--kub-inset)] aria-disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] aria-disabled:text-[color:var(--kub-muted)] aria-disabled:cursor-not-allowed",
           defaultClassNames.button_previous
         ),
         button_next: cn(
           buttonVariants({ variant: buttonVariant }),
-          "h-[--cell-size] w-[--cell-size] select-none p-0 aria-disabled:opacity-50",
+          "h-[--cell-size] w-[--cell-size] select-none p-0 aria-disabled:bg-[var(--kub-inset)] aria-disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] aria-disabled:text-[color:var(--kub-muted)] aria-disabled:cursor-not-allowed",
           defaultClassNames.button_next
         ),
         month_caption: cn(
@@ -70,7 +70,7 @@ function Calendar({
           defaultClassNames.dropdowns
         ),
         dropdown_root: cn(
-          "has-focus:border-ring border-input shadow-xs has-focus:ring-ring/50 has-focus:ring-[3px] relative rounded-md border",
+          "border-input shadow-xs relative rounded-md border focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--kub-cyan)]",
           defaultClassNames.dropdown_root
         ),
         dropdown: cn(

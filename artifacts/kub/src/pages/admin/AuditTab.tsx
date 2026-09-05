@@ -328,7 +328,7 @@ export function AuditTab() {
           />
           <button
             onClick={refresh}
-            className="kub-button kub-interactive flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-xs font-semibold kub-raise-hover text-[color:var(--kub-accent-text)]"
+            className="kub-button kub-interactive flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-xs font-semibold kub-raise-hover text-[color:var(--kub-accent-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
             aria-label="Обновить"
           >
             <KubIcon name="rotate" size={13} /> Обновить
@@ -367,7 +367,7 @@ export function AuditTab() {
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-2 rounded-xl px-3 h-11 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)]">
+              <div className="flex items-center gap-2 rounded-xl px-3 h-11 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--kub-cyan)]">
                 <KubIcon name="search" size={13} tone="muted" />
                 <input
                   value={actorQueryRaw}
@@ -452,7 +452,7 @@ export function AuditTab() {
               type="date"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
-              className="w-full rounded-xl px-3 h-11 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] text-sm text-[color:var(--kub-text)] focus:outline-none focus:border-[color:var(--kub-cyan)]"
+              className="w-full rounded-xl px-3 h-11 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
             />
           </div>
           <div>
@@ -461,7 +461,7 @@ export function AuditTab() {
               type="date"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
-              className="w-full rounded-xl px-3 h-11 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] text-sm text-[color:var(--kub-text)] focus:outline-none focus:border-[color:var(--kub-cyan)]"
+              className="w-full rounded-xl px-3 h-11 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
             />
           </div>
           <div className="flex items-end">
@@ -580,7 +580,7 @@ export function AuditTab() {
             <button
               disabled={page === 0}
               onClick={() => setPage(Math.max(0, page - 1))}
-              className="kub-icon-action p-1.5 rounded-lg kub-raise-hover disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
+              className="kub-icon-action p-1.5 rounded-lg kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed hover:text-[color:var(--kub-cyan)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
               aria-label="Предыдущая страница"
             >
               <KubIcon name="chevronLeft" size={16} />
@@ -588,7 +588,7 @@ export function AuditTab() {
             <button
               disabled={page + 1 >= totalPages}
               onClick={() => setPage(page + 1)}
-              className="kub-icon-action p-1.5 rounded-lg kub-raise-hover disabled:opacity-30 hover:text-[color:var(--kub-cyan)]"
+              className="kub-icon-action p-1.5 rounded-lg kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed hover:text-[color:var(--kub-cyan)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
               aria-label="Следующая страница"
             >
               <KubIcon name="chevronRight" size={16} />

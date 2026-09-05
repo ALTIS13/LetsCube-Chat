@@ -289,7 +289,7 @@ export function StorageSection() {
                   className={cn(
                     "flex-1 rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors",
                     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
-                    "disabled:cursor-not-allowed disabled:opacity-60",
+                    "disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed",
                     selected
                       ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
                       : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",

@@ -1191,15 +1191,17 @@ textarea::placeholder, input::placeholder {
   }
 }
 
-/* Neon focus ring for inputs and triggers. */
+/* The focus indicator is not here, and that is deliberate.
+   `.kub-neon-ring` used to be: a box-shadow, described in this file and applied
+   in exactly zero places. Applying it would have reintroduced the defect the
+   comment above KubButton's className records (D-010) — a box-shadow ring is
+   one answer to a property that `.kub-glow-cyan|pink|soft`, `.kub-panel` and
+   every `shadow-*` utility also answer, so the ring was composed and then
+   overwritten, and a focused button's computed style came out byte-identical to
+   an unfocused one. The product's one focus language is an outline instead,
+   which no box-shadow can reach; it lives in src/lib/controlSurface.ts, and
+   tests/unit/control-vocabulary.test.mjs fails if a second dialect appears. */
 @layer components {
-  .kub-neon-ring {
-    outline: none;
-    box-shadow:
-      0 0 0 1px var(--kub-cyan),
-      0 0 0 4px color-mix(in srgb, var(--kub-cyan) 20%, transparent);
-  }
-
   /* Surface panel with cyber border + inner gradient sheen. */
   /* The panel keeps its own identity — a faint cyan wash falling off towards
      the middle — but the wash is now a layer over the shared fill rather than a

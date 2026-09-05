@@ -92,7 +92,7 @@ export function AdminLayout() {
           <Link
             href="/"
             aria-label="Назад в чат"
-            className="kub-icon-action p-1.5 rounded-lg kub-raise-hover transition-colors text-[color:var(--kub-cyan)] flex-shrink-0"
+            className="kub-icon-action p-1.5 rounded-lg kub-raise-hover transition-colors text-[color:var(--kub-cyan)] flex-shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
           >
             <KubIcon name="back" size={20} />
           </Link>

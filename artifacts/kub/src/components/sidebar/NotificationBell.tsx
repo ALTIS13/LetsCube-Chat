@@ -320,7 +320,7 @@ export function NotificationBell() {
             setOpen((v) => !v);
           }}
           className={cn(
-            "kub-icon-action kub-interactive relative h-9 w-9 shrink-0 rounded-lg transition-colors kub-raise-hover",
+            "kub-icon-action kub-interactive relative h-9 w-9 shrink-0 rounded-lg transition-colors kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
             "inline-flex items-center justify-center",
             unreadCount > 0 ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)]",
           )}
@@ -587,7 +587,7 @@ function NotificationItem({
                   onAccept();
                 }}
                 disabled={inviteBusy}
-                className="inline-flex h-8 items-center justify-center rounded-lg bg-[var(--kub-cyan)] px-3 text-xs font-semibold text-[color:var(--kub-bg)] hover:bg-[var(--kub-cyan-hover)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-8 items-center justify-center rounded-lg bg-[var(--kub-cyan)] px-3 text-xs font-semibold text-[color:var(--kub-bg)] hover:bg-[var(--kub-cyan-hover)] disabled:bg-[var(--kub-inset)] disabled:shadow-none disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
               >
                 Принять
               </button>
@@ -598,7 +598,7 @@ function NotificationItem({
                   onDecline();
                 }}
                 disabled={inviteBusy}
-                className="inline-flex h-8 items-center justify-center rounded-lg border border-[color:var(--kub-border-color)] px-3 text-xs font-semibold text-[color:var(--kub-muted)] kub-raise-hover disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-8 items-center justify-center rounded-lg border border-[color:var(--kub-border-color)] px-3 text-xs font-semibold text-[color:var(--kub-muted)] kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
               >
                 Отклонить
               </button>

@@ -271,7 +271,7 @@ export function ReleaseDistributionSection() {
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => setHandoff(true)}
-            className="col-span-2 inline-flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[var(--kub-cyan)] px-3 text-xs font-semibold text-[color:var(--kub-bg)] transition-[transform,filter] hover:brightness-110 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)] sm:col-span-1 sm:w-auto"
+            className="col-span-2 inline-flex h-8 w-full shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[var(--kub-cyan)] px-3 text-xs font-semibold text-[color:var(--kub-bg)] transition-[transform,filter] hover:brightness-110 active:scale-[0.98] sm:col-span-1 sm:w-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
             data-testid="release-download-button"
           >
             <KubIcon name="externalLink" size={13} />

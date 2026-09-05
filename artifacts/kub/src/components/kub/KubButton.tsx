@@ -1,6 +1,14 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { KubIcon } from "./KubIcon";
 import { cn } from "@/lib/utils";
+import {
+  DISABLED_SINK,
+  DISABLED_SINK_FILLED,
+  FOCUS_RING,
+  PRESS_FILLED,
+  PRESS_SINK,
+  PRESS_SINK_RAISED,
+} from "@/lib/controlSurface";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger" | "accent";
 type Size = "sm" | "md" | "lg" | "icon";
@@ -23,15 +31,23 @@ const sizeClass: Record<Size, string> = {
 
 const variantClass: Record<Variant, string> = {
   primary:
-    "text-[color:var(--kub-action-primary-foreground)] font-semibold bg-[var(--kub-action-primary-background)] hover:bg-[var(--kub-action-primary-hover)] kub-glow-soft hover:kub-glow-cyan disabled:bg-[var(--kub-surface-3)] disabled:text-[color:var(--kub-muted)] disabled:shadow-none",
+    `text-[color:var(--kub-action-primary-foreground)] font-semibold bg-[var(--kub-action-primary-background)] hover:bg-[var(--kub-action-primary-hover)] kub-glow-soft hover:kub-glow-cyan ${PRESS_FILLED} ${DISABLED_SINK_FILLED}`,
   accent:
-    "font-semibold text-[color:var(--kub-action-accent-foreground)] bg-[var(--kub-action-accent-background)] hover:bg-[var(--kub-action-accent-hover)] kub-glow-pink disabled:bg-[var(--kub-surface-3)] disabled:text-[color:var(--kub-muted)] disabled:shadow-none",
+    `font-semibold text-[color:var(--kub-action-accent-foreground)] bg-[var(--kub-action-accent-background)] hover:bg-[var(--kub-action-accent-hover)] kub-glow-pink ${PRESS_FILLED} ${DISABLED_SINK_FILLED}`,
+  // The secondary button is a step of material, not a box with a line round it.
+  // It used to be `--kub-surface-2` plus a border, and `--kub-surface-2` is an
+  // absolute token that stopped meaning "one step above" the moment the chrome
+  // was raised past it: on a panel the fill went flush and only the border was
+  // left doing the work. `--kub-raise-veil` answers "one step above whatever I
+  // am laid on", so the same declaration reads on the page, on a panel and
+  // inside a menu — and the hover is a second layer of the same veil rather
+  // than a different colour (rule 5).
   secondary:
-    "text-[color:var(--kub-text)] bg-[var(--kub-surface-2)] kub-raise-hover border border-[color:var(--kub-border-color)]",
+    `text-[color:var(--kub-text)] bg-transparent kub-raise hover:bg-[image:linear-gradient(var(--kub-raise-veil),var(--kub-raise-veil)),linear-gradient(var(--kub-raise-veil),var(--kub-raise-veil))] ${PRESS_SINK_RAISED} ${DISABLED_SINK_FILLED}`,
   ghost:
-    "text-[color:var(--kub-text)] bg-transparent kub-raise-hover",
+    `text-[color:var(--kub-text)] bg-transparent kub-raise-hover ${PRESS_SINK} ${DISABLED_SINK}`,
   danger:
-    "font-semibold text-[color:var(--kub-action-danger-foreground)] bg-[var(--kub-action-danger-background)] hover:bg-[var(--kub-action-danger-hover)] disabled:opacity-50",
+    `font-semibold text-[color:var(--kub-action-danger-foreground)] bg-[var(--kub-action-danger-background)] hover:bg-[var(--kub-action-danger-hover)] ${PRESS_FILLED} ${DISABLED_SINK_FILLED}`,
 };
 
 export const KubButton = forwardRef<HTMLButtonElement, KubButtonProps>(
@@ -65,8 +81,9 @@ export const KubButton = forwardRef<HTMLButtonElement, KubButtonProps>(
           // the glow won, and the ring was composed and then overwritten: the
           // computed style of a focused button was byte-identical to an
           // unfocused one. An outline is a separate property that a box-shadow
-          // cannot overwrite. See D-010.
-          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
+          // cannot overwrite. See D-010. This button is where the argument was
+          // found; it is now the whole product's language, in controlSurface.ts.
+          FOCUS_RING,
           "disabled:cursor-not-allowed",
           sizeClass[size],
           variantClass[variant],

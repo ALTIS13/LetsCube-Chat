@@ -45,7 +45,7 @@ export function TaskCard({ task, nowMs, onClick, selected = false, selectionCont
           onClick();
         }
       }}
-      className="text-left w-full rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)]/45"
+      className="text-left w-full rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
     >
       {/* Every edge state here is drawn with `outline`, and that is not a
           preference. `.kub-panel` sets `background`, `box-shadow` and the

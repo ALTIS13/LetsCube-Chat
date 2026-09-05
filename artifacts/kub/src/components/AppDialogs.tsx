@@ -53,7 +53,7 @@ export function AppDialogs() {
             onClick={() => finish(true)}
             className={
               isDanger
-                ? "inline-flex h-9 items-center justify-center rounded-lg bg-[color:var(--kub-danger)] px-3 text-sm font-semibold text-white hover:opacity-90"
+                ? "inline-flex h-9 items-center justify-center rounded-lg bg-[var(--kub-action-danger-background)] px-3 text-sm font-semibold text-[color:var(--kub-action-danger-foreground)] hover:bg-[var(--kub-action-danger-hover)] active:brightness-95"
                 : "inline-flex h-9 items-center justify-center rounded-lg bg-[var(--kub-cyan)] px-3 text-sm font-semibold text-[color:var(--kub-bg)] hover:brightness-110"
             }
           >

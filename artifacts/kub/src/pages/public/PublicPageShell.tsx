@@ -33,7 +33,7 @@ export function PublicPageShell({ children, scrollRootRef }: PublicPageShellProp
             aria-label="Открыть LETSCUBE"
             // `min-h-11` makes the header controls real targets on a phone; the marks
             // and labels keep their size. See D-013.
-            className="inline-flex min-h-11 min-w-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)]"
+            className="inline-flex min-h-11 min-w-0 items-center rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
           >
             <KubBrandLogo variant="mark" imgClassName="h-7 w-7 sm:hidden" />
             <KubBrandLogo

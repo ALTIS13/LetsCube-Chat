@@ -96,7 +96,7 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
       <button
         onClick={handleCancel}
         disabled={sending}
-        className="flex-shrink-0 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg hover:bg-[color-mix(in_srgb,var(--kub-danger)_15%,transparent)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-[color:var(--kub-danger)]"
+        className="flex-shrink-0 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg hover:bg-[color-mix(in_srgb,var(--kub-danger)_15%,transparent)] transition-colors disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed text-[color:var(--kub-danger)]"
         aria-label="Отменить запись"
       >
         <KubIcon name="close" size={18} />
@@ -127,7 +127,7 @@ export function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) {
       <button
         onClick={handleSend}
         disabled={sending}
-        className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all hover:brightness-110 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan"
+        className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all hover:brightness-110 active:scale-95 disabled:bg-[var(--kub-inset)] disabled:shadow-none disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan"
         aria-label="Готово"
       >
         {sending ? <KubIcon name="spinner" size={18} /> : <KubIcon name="check" size={18} />}

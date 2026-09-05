@@ -598,13 +598,13 @@ export function RolesPermissionsTab() {
               disabled={!canManageRoles}
               rows={3}
               placeholder="Коротко опишите, кому подходит эта роль"
-              className="w-full resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+              className="w-full resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
             />
             <select
               value={createScope}
               onChange={(event) => setCreateScope(event.target.value as RoleScope)}
               disabled={!canManageRoles}
-              className="h-10 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+              className="h-10 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
             >
               {ROLE_SCOPES.map((scope) => (
                 <option key={scope} value={scope}>{ROLE_SCOPE_LABEL[scope]}</option>
@@ -712,7 +712,7 @@ export function RolesPermissionsTab() {
                             disabled={upTarget === null || saving !== null}
                             aria-label={`Поднять роль «${label}» в списке`}
                             title={`Поднять «${label}» выше. На права не влияет.`}
-                            className="kub-icon-action kub-interactive rounded-md text-[color:var(--kub-muted)] kub-raise-hover hover:text-[color:var(--kub-text)] disabled:opacity-35"
+                            className="kub-icon-action kub-interactive rounded-md text-[color:var(--kub-muted)] kub-raise-hover hover:text-[color:var(--kub-text)] disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
                           >
                             <KubIcon name={busy ? "spinner" : "chevronUp"} size={13} />
                           </button>
@@ -722,7 +722,7 @@ export function RolesPermissionsTab() {
                             disabled={downTarget === null || saving !== null}
                             aria-label={`Опустить роль «${label}» в списке`}
                             title={`Опустить «${label}» ниже. На права не влияет.`}
-                            className="kub-icon-action kub-interactive rounded-md text-[color:var(--kub-muted)] kub-raise-hover hover:text-[color:var(--kub-text)] disabled:opacity-35"
+                            className="kub-icon-action kub-interactive rounded-md text-[color:var(--kub-muted)] kub-raise-hover hover:text-[color:var(--kub-text)] disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
                           >
                             <KubIcon name="chevronDown" size={13} />
                           </button>
@@ -786,7 +786,7 @@ export function RolesPermissionsTab() {
                   disabled={!canManageRoles}
                   rows={3}
                   placeholder="Описание"
-                  className="w-full resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                  className="w-full resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
                 />
 
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -813,7 +813,7 @@ export function RolesPermissionsTab() {
                         value={normalizeRoleColour(editColour) ?? COLOUR_PICKER_FALLBACK}
                         onChange={(event) => setEditColour(event.target.value)}
                         disabled={!canManageRoles}
-                        className="h-11 w-12 shrink-0 cursor-pointer rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] p-1 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="h-11 w-12 shrink-0 cursor-pointer rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] p-1 disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed"
                       />
                       <KubInput
                         containerClassName="min-w-0 flex-1"
@@ -1005,7 +1005,7 @@ export function RolesPermissionsTab() {
                 value={assignUserId}
                 onChange={(event) => setAssignUserId(event.target.value)}
                 disabled={!canAssignGlobalRoles}
-                className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
               >
                 <option value="">Пользователь</option>
                 {profiles.map((profile) => (
@@ -1016,7 +1016,7 @@ export function RolesPermissionsTab() {
                 value={assignRoleId}
                 onChange={(event) => setAssignRoleId(event.target.value)}
                 disabled={!canAssignGlobalRoles}
-                className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
               >
                 <option value="">Глобальная роль</option>
                 {assignableGlobalRoles.map((role) => (

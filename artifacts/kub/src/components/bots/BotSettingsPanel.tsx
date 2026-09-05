@@ -123,7 +123,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
               <KubInput label="Название" value={profile.display_name} onChange={(event) => setProfile({ ...profile, display_name: event.target.value })} disabled={!owner || !editable} maxLength={64} />
               <div>
                 <label htmlFor={`bot-description-${bot.id}`} className="text-xs font-medium uppercase text-[color:var(--kub-muted)]">Описание</label>
-                <textarea id={`bot-description-${bot.id}`} value={profile.description} onChange={(event) => setProfile({ ...profile, description: event.target.value })} disabled={!owner || !editable} maxLength={512} rows={4} className="mt-1.5 w-full resize-none rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] p-3 text-sm text-[color:var(--kub-text)] outline-none disabled:opacity-60" />
+                <textarea id={`bot-description-${bot.id}`} value={profile.description} onChange={(event) => setProfile({ ...profile, description: event.target.value })} disabled={!owner || !editable} maxLength={512} rows={4} className="mt-1.5 w-full resize-none rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] p-3 text-sm text-[color:var(--kub-text)] outline-none disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed" />
               </div>
               {owner && (
                 <div className="flex flex-wrap items-center gap-3">
@@ -188,7 +188,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
                 <div key={`${command.command}-${index}`} className="grid gap-2 border-b border-[color:var(--kub-border-color)] pb-3 sm:grid-cols-[10rem_1fr_2.75rem]">
                   <KubInput aria-label={`Команда ${index + 1}`} value={command.command} disabled={!editable} onChange={(event) => setCommands(commands.map((item, itemIndex) => itemIndex === index ? { ...item, command: event.target.value.toLowerCase() } : item))} />
                   <KubInput aria-label={`Описание команды ${index + 1}`} value={command.description} disabled={!editable} onChange={(event) => setCommands(commands.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} />
-                  <button type="button" aria-label={`Удалить команду ${index + 1}`} disabled={!editable} className="h-11 w-11 rounded-md text-[color:var(--kub-danger)] kub-raise-hover disabled:opacity-40" onClick={() => setCommands(commands.filter((_, itemIndex) => itemIndex !== index))}><KubIcon name="delete" size={18} className="mx-auto" /></button>
+                  <button type="button" aria-label={`Удалить команду ${index + 1}`} disabled={!editable} className="h-11 w-11 rounded-md text-[color:var(--kub-danger)] kub-raise-hover disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed" onClick={() => setCommands(commands.filter((_, itemIndex) => itemIndex !== index))}><KubIcon name="delete" size={18} className="mx-auto" /></button>
                 </div>
               ))}
               {commands.length === 0 && <KubEmptyState title="Команд пока нет" description="Добавьте первую команду для Bot API." className="py-5" />}

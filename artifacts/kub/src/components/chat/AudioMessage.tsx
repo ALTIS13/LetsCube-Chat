@@ -283,7 +283,7 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
         onClick={toggle}
         disabled={!canPlayAudio}
         aria-label={playing ? "Пауза" : "Воспроизвести"}
-        className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all hover:brightness-110 bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:brightness-100"
+        className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all hover:brightness-110 bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan disabled:bg-[var(--kub-inset)] disabled:shadow-none disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed disabled:hover:brightness-100"
       >
         {displayPlaying ? <KubIcon name="pause" size={16} /> : <KubIcon name="play" size={16} className="ml-0.5" />}
       </button>
