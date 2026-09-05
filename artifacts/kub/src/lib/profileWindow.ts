@@ -47,9 +47,18 @@ export const PROFILE_WINDOW_DEFAULT_SIZE: Size = { width: 380, height: 620 };
 export const PROFILE_WINDOW_DRAG_IGNORE_SELECTOR =
   "button, a, input, select, textarea, label, [role='button']";
 
-/** The docked panel, exactly as it was before the window existed. */
+/**
+ * The docked panel, exactly as it was before the window existed.
+ *
+ * `-strong`, like the floating shape, even though this one is laid out rather
+ * than floated. Docking only happens below DOCK_BREAKPOINT (640px), so `md:w-80`
+ * can never apply and the docked card is always the full width of a phone —
+ * a sheet over the conversation, not a column beside it. Measured over a white
+ * field, `kub-glass` composites to rgb(113,126,141), which is 3.86:1 for this
+ * panel's own body text; the conversation it covers is full of photographs.
+ */
 const DOCKED_CLASS =
-  "flex min-h-0 flex-col h-full w-full md:w-80 flex-shrink-0 border-l bg-[var(--kub-surface)] border-[color:var(--kub-border-color)]";
+  "kub-glass-strong flex min-h-0 flex-col h-full w-full md:w-80 flex-shrink-0 border-l border-[color:var(--kub-border-color)]";
 
 /**
  * `min-h-0` and `flex-col` are load-bearing: the media grid inside scrolls
@@ -58,7 +67,11 @@ const DOCKED_CLASS =
  * by the content.
  */
 const FLOATING_CLASS =
-  "fixed z-[60] flex min-h-0 flex-col overflow-hidden rounded-2xl border shadow-2xl bg-[var(--kub-surface)] border-[color:var(--kub-border-color)]";
+  // Floating, the card stands on the conversation, so `-strong`: at panel
+  // opacity the messages underneath would read through its own text.
+  // `shadow-2xl` goes with the fill — --glass-shadow is the card's shadow now,
+  // and two box-shadows on one element is a fight, not a stack.
+  "kub-glass-strong fixed z-[60] flex min-h-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--kub-border-color)]";
 
 export interface FloatingFrameStyle {
   left: string;

@@ -49,12 +49,12 @@ export const BotTokenDialog = forwardRef<BotTokenDialogHandle>(function BotToken
   return (
     <Dialog.Root open={token !== null} onOpenChange={() => undefined}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[80] bg-black/70" />
+        <Dialog.Overlay className="fixed inset-0 z-[80] bg-black/45" />
         <Dialog.Content
           aria-describedby="bot-token-description"
           onEscapeKeyDown={(event) => event.preventDefault()}
           onPointerDownOutside={(event) => event.preventDefault()}
-          className="bots-management-surface fixed left-1/2 top-1/2 z-[81] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-5 shadow-2xl focus:outline-none sm:p-6"
+          className="bots-management-surface kub-glass-strong fixed left-1/2 top-1/2 z-[81] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[color:var(--kub-border-color)] p-5 focus:outline-none sm:p-6"
         >
           <Dialog.Title className="text-lg font-semibold text-[color:var(--kub-text)]">
             Токен бота

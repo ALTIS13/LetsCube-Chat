@@ -278,7 +278,9 @@ export function SupportWindow() {
       data-testid="support-window"
       data-docked={docked ? "true" : "false"}
       className={cn(
-        "fixed z-[70] flex flex-col overflow-hidden border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] shadow-2xl",
+        // `-strong` in both shapes: floating it covers the conversation, and
+        // docked it covers the whole screen.
+        "kub-glass-strong fixed z-[70] flex flex-col overflow-hidden border border-[color:var(--kub-border-color)]",
         docked
           ? "inset-x-0 bottom-0 top-0 rounded-none"
           : "rounded-2xl",

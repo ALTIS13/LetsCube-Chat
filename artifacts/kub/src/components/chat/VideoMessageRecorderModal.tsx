@@ -584,7 +584,9 @@ export function VideoMessageRecorderModal({
         data-recorder-layout="compact-round"
         data-recorder-shell="composer-attached"
         data-facing-mode={facingMode}
-        className="mx-3 mb-2 rounded-3xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3 shadow-2xl kub-glow-soft"
+        // Stands on the message list, so `-strong`. `kub-glow-soft` and
+        // `shadow-2xl` both set box-shadow and both lose to --glass-shadow.
+        className="kub-glass-strong mx-3 mb-2 rounded-3xl border border-[color:var(--kub-border-color)] p-3"
       >
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2 text-sm font-semibold text-[color:var(--kub-text)]">

@@ -88,8 +88,8 @@ export function BotCreateModal({ open, onOpenChange, onCreated, onUncertain }: P
   return (
     <Dialog.Root open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[70] bg-black/70" />
-        <Dialog.Content className="bots-management-surface fixed bottom-0 left-0 right-0 z-[71] max-h-[92dvh] overflow-y-auto rounded-t-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-5 shadow-2xl focus:outline-none sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:w-[calc(100%-2rem)] sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:p-6">
+        <Dialog.Overlay className="fixed inset-0 z-[70] bg-black/45" />
+        <Dialog.Content className="bots-management-surface kub-glass-strong fixed bottom-0 left-0 right-0 z-[71] max-h-[92dvh] overflow-y-auto rounded-t-lg border border-[color:var(--kub-border-color)] p-5 focus:outline-none sm:bottom-auto sm:left-1/2 sm:right-auto sm:top-1/2 sm:w-[calc(100%-2rem)] sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:p-6">
           <Dialog.Title className="text-lg font-semibold text-[color:var(--kub-text)]">Создать бота</Dialog.Title>
           <Dialog.Description className="mt-1 text-sm text-[color:var(--kub-muted)]">
             Имя пользователя изменить нельзя. Токен будет показан один раз после создания.

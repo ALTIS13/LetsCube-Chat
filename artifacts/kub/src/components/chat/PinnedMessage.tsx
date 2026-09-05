@@ -1,6 +1,6 @@
 "use client";
 
-import { KubIcon } from "@/components/kub";
+import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { formatFullTime } from "@/lib/format";
 import type { MessageWithSender } from "@/types/database";
 import { useEffect, useMemo, useState } from "react";
@@ -58,7 +58,8 @@ export function PinnedMessage({ messages, onJump, onUnpin }: PinnedMessageProps)
   };
 
   return (
-    <div className="relative flex-shrink-0 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]">
+    <div className="relative flex-shrink-0 border-b border-[color:var(--kub-border-color)]">
+      <KubGlassLayer />
       <div
         role="button"
         tabIndex={0}
@@ -134,7 +135,7 @@ export function PinnedMessage({ messages, onJump, onUnpin }: PinnedMessageProps)
       </div>
 
       {open && (
-        <div className="absolute left-3 right-3 top-[calc(100%+6px)] z-30 max-h-[min(340px,60vh)] overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-2 shadow-2xl">
+        <div className="kub-glass-strong absolute left-3 right-3 top-[calc(100%+6px)] z-30 max-h-[min(340px,60vh)] overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] p-2">
           <div className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-muted)]">
             Закреплённые сообщения
           </div>

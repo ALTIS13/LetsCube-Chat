@@ -1081,7 +1081,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         onPointerUp={endHandleDrag}
         onPointerCancel={endHandleDrag}
         className={cn(
-          "sticky top-0 z-20 grid h-[var(--kub-control-row-height)] flex-shrink-0 grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3",
+          "kub-glass-strong sticky top-0 z-20 grid h-[var(--kub-control-row-height)] flex-shrink-0 grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-2 border-b border-[color:var(--kub-border-color)] px-3",
           // The title bar is the handle. `touch-none` stops a drag on a tablet
           // from scrolling the page instead of moving the card.
           docked ? "" : "cursor-grab touch-none select-none active:cursor-grabbing",
@@ -1235,7 +1235,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
       {/* The summary scrolls away with the content; the tabs do not, so a long
           member list is still switchable without scrolling back up. */}
       {isGroup && (
-        <div className="sticky top-0 z-10 flex flex-shrink-0 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]">
+        <div className="kub-glass-strong sticky top-0 z-10 flex flex-shrink-0 border-b border-[color:var(--kub-border-color)]">
           {(["info", "members"] as Tab[]).map((t) => (
             <button
               key={t}
