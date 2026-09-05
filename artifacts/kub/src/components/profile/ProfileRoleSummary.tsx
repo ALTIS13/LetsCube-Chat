@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { KubBadge, KubIcon, KubStableSkeleton } from "@/components/kub";
+import { InfoHint } from "@/components/settings/InfoHint";
 import { useDynamicRoles, useDynamicRolesEnabledPreference } from "@/hooks/useDynamicRoles";
 import { useRoleAccess } from "@/hooks/useRole";
 import { useTaskRouting, type TaskRoutingState } from "@/hooks/useTaskRouting";
@@ -111,34 +112,57 @@ export function ProfileRoleSummary({ user, compact = false, routing: routingProp
   return (
     <div className="space-y-3">
       <section>
-        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-cyan)]">
+        <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-cyan)]">
           Глобальные роли
+          <InfoHint
+            term="Глобальные роли"
+            className="normal-case tracking-normal"
+            text="Роль, которая действует во всём LETSCUBE, а не в какой-то одной локации. Именно она решает, какие разделы человек может открыть."
+          />
         </div>
         <div className="flex flex-wrap gap-1.5">
           {hasDynamicContent ? (
-            globalRoles.map((role) => (
-              <KubBadge key={role.id} tone={roleTone(role.key)} pill>
-                {role.key === "tech_admin" && <KubIcon name="settings" size={10} />}
-                {getRoleLabel(role)}
-              </KubBadge>
-            ))
+            globalRoles.map((role) => {
+              const badge = (
+                <KubBadge tone={roleTone(role.key)} pill>
+                  {role.key === "tech_admin" && <KubIcon name="settings" size={10} />}
+                  {getRoleLabel(role)}
+                </KubBadge>
+              );
+              const note = ROLE_ACCESS_NOTE[role.key];
+              // What the role actually lets someone do used to be two fixed
+              // lines under the list, present only for `owner` and
+              // `tech_admin` and silent about the rest. Attached to the badge
+              // it costs no height and covers every role that has an answer.
+              return note ? (
+                <InfoHint
+                  key={role.id}
+                  term={getRoleLabel(role)}
+                  text={note}
+                  className="no-underline"
+                >
+                  {badge}
+                </InfoHint>
+              ) : (
+                <span key={role.id}>{badge}</span>
+              );
+            })
           ) : (
             <KubBadge tone={user.role === "admin" ? "pink" : user.role === "manager" ? "cyan" : "muted"} pill>
               {fallbackRole}
             </KubBadge>
           )}
         </div>
-        {hasDynamicContent && globalRoles.some((role) => role.key === "tech_admin") && (
-          <p className="mt-1 text-xs text-[color:var(--kub-muted)]">Доступ: все технические разделы</p>
-        )}
-        {hasDynamicContent && globalRoles.some((role) => role.key === "owner") && (
-          <p className="mt-1 text-xs text-[color:var(--kub-muted)]">Доступ: все локации</p>
-        )}
       </section>
 
       <section>
-        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-cyan)]">
+        <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-cyan)]">
           Локации
+          <InfoHint
+            term="Локации"
+            className="normal-case tracking-normal"
+            text="Точки, к которым человек прикреплён. В каждой у него своя роль — сотрудник видит рабочие разделы этой локации, участник только состоит в ней."
+          />
         </div>
         {hasLocationContent ? (
           <div className="space-y-1.5">
@@ -193,6 +217,19 @@ export function ProfileRoleSummary({ user, compact = false, routing: routingProp
     </div>
   );
 }
+
+/**
+ * What each role actually lets someone do, in the words of the person reading
+ * it rather than the permission keys behind it.
+ */
+const ROLE_ACCESS_NOTE: Record<string, string> = {
+  owner: "Полный доступ: все локации, все разделы и настройки приложения.",
+  tech_admin:
+    "Технические разделы целиком: обновления, боты, диагностика и служебные настройки.",
+  admin: "Управление людьми: пользователи, приглашения, баны и мьюты.",
+  manager: "Рабочие разделы и задачи тех локаций, к которым человек прикреплён.",
+  user: "Обычный доступ: переписка и собственный профиль, без служебных разделов.",
+};
 
 function roleRank(key: string): number {
   if (key === "owner") return 0;

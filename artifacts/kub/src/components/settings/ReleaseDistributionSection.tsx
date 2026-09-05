@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { KubButton, KubIcon } from "@/components/kub";
+import { InfoHint } from "@/components/settings/InfoHint";
 import { usePwaInstall } from "@/hooks/usePwa";
 import { useReleaseCatalog, type ReleaseCatalogUiState } from "@/hooks/useReleaseCatalog";
 import { useDesktopUpdate } from "@/hooks/useDesktopUpdate";
@@ -86,7 +87,7 @@ export function ReleaseDistributionSection() {
 
   return (
     <div
-      className="release-distribution-card rounded-xl overflow-hidden bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]"
+      className="release-distribution-card kub-glass rounded-xl overflow-hidden border border-[color:var(--kub-border-color)]"
       data-testid="release-distribution-card"
     >
       <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
@@ -104,16 +105,24 @@ export function ReleaseDistributionSection() {
           </div>
           <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-[color:var(--kub-muted)]">
             <span
-              className="rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-1"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-1"
               data-testid="pwa-install-variant"
             >
               Версия установки: {installCopy.variantLabel}
+              <InfoHint
+                term="Версия установки"
+                text="Каким способом LETSCUBE установлен на это устройство. От этого зависит, откуда приходят обновления и как их ставить."
+              />
             </span>
             <span
-              className="rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-1"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-1"
               data-testid="pwa-install-mode"
             >
               Режим: {installCopy.modeLabel}
+              <InfoHint
+                term="Режим"
+                text="Как LETSCUBE открыт прямо сейчас: отдельным окном или вкладкой в браузере. На то, что доступно внутри, это не влияет."
+              />
             </span>
           </div>
           {windowsNative && desktopUpdate && (
@@ -130,12 +139,18 @@ export function ReleaseDistributionSection() {
                     </span>
                   )}
                 </div>
-                <div
-                  className="desktop-update-channel-control"
-                  role="radiogroup"
-                  aria-label="Канал обновлений"
-                  data-testid="desktop-update-channel-control"
-                >
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <InfoHint
+                    term="Канал обновлений"
+                    side="left"
+                    text="Stable — проверенные сборки, их ставит большинство. Test — то же приложение, но раньше: новое приходит первым, и что-то может работать не так. Переключиться обратно можно в любой момент."
+                  />
+                  <div
+                    className="desktop-update-channel-control"
+                    role="radiogroup"
+                    aria-label="Канал обновлений"
+                    data-testid="desktop-update-channel-control"
+                  >
                   {(["stable", "test"] as const).map((channel) => (
                     <button
                       key={channel}
@@ -156,6 +171,7 @@ export function ReleaseDistributionSection() {
                       {channel === "stable" ? "Stable" : "Test"}
                     </button>
                   ))}
+                  </div>
                 </div>
               </div>
               {desktopUpdate.presentation?.description && (
@@ -290,10 +306,16 @@ export function ReleaseDistributionSection() {
         </div>
       )}
       {(buildVersionLabel || shortCommit) && (
-        <div className="border-t border-[color:var(--kub-border-color)] px-4 py-2 text-xs text-[color:var(--kub-muted)]">
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-[color:var(--kub-border-color)] px-4 py-2 text-xs text-[color:var(--kub-muted)]">
           {buildVersionLabel}
           {buildVersionLabel && shortCommit ? " · " : ""}
           {shortCommit ? `Ревизия ${shortCommit}` : ""}
+          {shortCommit && (
+            <InfoHint
+              term="Ревизия"
+              text="Номер конкретной сборки приложения. Сам по себе ни на что не влияет — его стоит назвать, если вы описываете проблему в поддержку."
+            />
+          )}
         </div>
       )}
     </div>

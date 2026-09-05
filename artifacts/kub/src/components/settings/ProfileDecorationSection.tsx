@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppStore } from "@/store/app.store";
 import { KubIcon, type KubIconName } from "@/components/kub";
+import { InfoHint } from "@/components/settings/InfoHint";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { cn } from "@/lib/utils";
 import {
@@ -57,6 +58,12 @@ export function ProfileDecorationSection() {
     () => state.cosmetics.filter((item) => item.kind === "background" && canRenderCosmetic(item.key)),
     [state.cosmetics],
   );
+  // So a locked swatch can name the achievement that opens it instead of only
+  // saying that it is locked.
+  const achievementTitles = useMemo(
+    () => new Map(state.achievements.map((item) => [item.key, item.title])),
+    [state.achievements],
+  );
 
   const choose = useCallback(
     async (kind: "frame" | "background", key: string | null) => {
@@ -87,13 +94,18 @@ export function ProfileDecorationSection() {
       <Preview user={currentUser} />
 
       <div>
-        <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-[color:var(--kub-muted)]">
+        <h3 className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-[color:var(--kub-muted)]">
           Достижения
+          <InfoHint
+            term="Достижения"
+            className="normal-case tracking-normal"
+            text="Отметки за то, как вы пользуетесь LETSCUBE. Часть из них открывает рамки и фоны для профиля — их можно выбрать ниже."
+          />
         </h3>
         {loading ? (
           <p className="text-xs text-[color:var(--kub-muted)]">Загружаем…</p>
         ) : (
-          <ul className="grid gap-2 sm:grid-cols-2">
+          <ul className="grid gap-1.5 sm:grid-cols-2">
             {state.achievements.map((achievement) => {
               const held = state.earned.has(achievement.key);
               const progress = state.progress[achievement.key];
@@ -101,45 +113,53 @@ export function ProfileDecorationSection() {
               return (
                 <li
                   key={achievement.key}
-                  // The share appears on hover, and on focus so it is reachable
-                  // without a pointer. `title` carries it for a touch device,
-                  // where there is no hover to have.
-                  title={share ?? undefined}
                   className={cn(
-                    "group/achievement grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-xl border px-3 py-2.5",
+                    "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2.5 rounded-xl border px-3 py-2",
                     held
-                      ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_10%,transparent)]"
+                      // 6%, not 10%: measured on the light theme, muted text on
+                      // the 10% tint came to 4.37:1 — under the 4.5:1 a label
+                      // needs — and that covered the description too, not only
+                      // the share line added here. At 6% it measures 4.79:1,
+                      // and "earned" is still carried by the border and the
+                      // icon colour rather than by the fill alone.
+                      ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_6%,transparent)]"
                       : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]",
                   )}
                 >
                   <KubIcon
                     name={(achievement.icon as KubIconName) ?? "crown"}
                     size={18}
-                    className={held ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)]"}
+                    className={cn(
+                      "mt-0.5",
+                      held ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)]",
+                    )}
                   />
                   <div className="min-w-0">
                     <div
                       className={cn(
-                        "text-sm",
+                        "truncate text-sm",
                         held ? "text-[color:var(--kub-text)]" : "text-[color:var(--kub-muted)]",
                       )}
                     >
                       {achievement.title}
                     </div>
-                    <div className="text-xs leading-relaxed text-[color:var(--kub-muted)]">
+                    <div className="text-xs leading-snug text-[color:var(--kub-muted)]">
                       {achievement.description}
                     </div>
+                    {/* Shown rather than revealed on hover: it was reserving a
+                        line of height either way, and a rarity nobody sees is a
+                        line spent on nothing. */}
                     {share && (
                       <div
                         data-testid={`achievement-share-${achievement.key}`}
-                        className="mt-1 text-[11px] text-[color:var(--kub-muted)] opacity-0 transition-opacity duration-[var(--kub-motion-fast)] group-hover/achievement:opacity-100 group-focus-within/achievement:opacity-100 sm:opacity-0"
+                        className="mt-0.5 text-[11px] text-[color:var(--kub-muted)]"
                       >
                         {share}
                       </div>
                     )}
                     {!held && progress && (
-                      <div className="mt-1.5">
-                        <div className="h-1 overflow-hidden rounded-full bg-[var(--kub-surface)]">
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--kub-surface)]">
                           <div
                             className="h-full rounded-full bg-[color:var(--kub-cyan)] transition-[width] duration-500"
                             style={{
@@ -147,9 +167,9 @@ export function ProfileDecorationSection() {
                             }}
                           />
                         </div>
-                        <div className="mt-1 text-[11px] text-[color:var(--kub-muted)]">
-                          {progress.current} из {progress.target}
-                        </div>
+                        <span className="shrink-0 text-[10px] tabular-nums text-[color:var(--kub-muted)]">
+                          {progress.current} / {progress.target}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -162,7 +182,9 @@ export function ProfileDecorationSection() {
 
       <CosmeticPicker
         title="Рамка аватара"
+        hint="Кольцо вокруг вашей аватарки. Его видят все, кто открывает ваш профиль или встречает вас в чате."
         items={frames}
+        achievementTitles={achievementTitles}
         earned={state.earned}
         selected={currentUser.profile_frame ?? null}
         onSelect={(key) => void choose("frame", key)}
@@ -181,7 +203,9 @@ export function ProfileDecorationSection() {
 
       <CosmeticPicker
         title="Фон профиля"
+        hint="Подложка карточки профиля — той, что открывается, когда на вас нажимают в чате."
         items={backgrounds}
+        achievementTitles={achievementTitles}
         earned={state.earned}
         selected={currentUser.profile_background ?? null}
         onSelect={(key) => void choose("background", key)}
@@ -210,7 +234,7 @@ function Preview({
   return (
     <div
       data-testid="decoration-preview"
-      className="flex items-center gap-3 overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-4 py-3"
+      className="kub-glass flex items-center gap-3 overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] px-4 py-3"
       style={background ? { backgroundImage: background.surface } : undefined}
     >
       <UserAvatar user={user} size="lg" />
@@ -226,14 +250,18 @@ function Preview({
 
 function CosmeticPicker({
   title,
+  hint,
   items,
+  achievementTitles,
   earned,
   selected,
   onSelect,
   renderSwatch,
 }: {
   title: string;
+  hint: string;
   items: CosmeticDefinition[];
+  achievementTitles: ReadonlyMap<string, string>;
   earned: ReadonlySet<string>;
   selected: string | null;
   onSelect: (key: string | null) => void;
@@ -242,25 +270,37 @@ function CosmeticPicker({
   if (items.length === 0) return null;
   return (
     <div>
-      <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-[color:var(--kub-muted)]">
+      <h3 className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-[color:var(--kub-muted)]">
         {title}
+        <InfoHint term={title} className="normal-case tracking-normal" text={hint} />
       </h3>
       <div className="flex flex-wrap gap-2">
         <Option
           label="Без оформления"
           active={selected === null}
-          locked={false}
           onClick={() => onSelect(null)}
           swatch={renderSwatch(null)}
         />
         {items.map((item) => {
           const unlocked = isCosmeticUnlocked(item, earned);
+          const requirement = item.requiredAchievement
+            ? achievementTitles.get(item.requiredAchievement)
+            : null;
           return (
             <Option
               key={item.key}
               label={item.title}
               active={selected === item.key}
-              locked={!unlocked}
+              // "Пока не открыто" said only that the door was shut. The
+              // requirement is already on screen a few rows up, so naming it
+              // here turns a dead end into an instruction.
+              lockedReason={
+                unlocked
+                  ? null
+                  : requirement
+                    ? `Откроется вместе с достижением «${requirement}».`
+                    : "Пока не открыто — это оформление выдаётся за отдельное достижение."
+              }
               onClick={() => unlocked && onSelect(item.key)}
               swatch={renderSwatch(item.key)}
             />
@@ -274,29 +314,34 @@ function CosmeticPicker({
 function Option({
   label,
   active,
-  locked,
+  lockedReason = null,
   onClick,
   swatch,
 }: {
   label: string;
   active: boolean;
-  locked: boolean;
+  lockedReason?: string | null;
   onClick: () => void;
   swatch: React.ReactNode;
 }) {
-  return (
+  const locked = lockedReason !== null;
+  const button = (
     <button
       type="button"
       onClick={onClick}
-      disabled={locked}
+      // Not `disabled`: a disabled button takes no focus and fires no pointer
+      // events, so it could neither be tabbed to nor open the tooltip that says
+      // how to earn it. `aria-disabled` keeps it announced as unavailable while
+      // the guard in `onClick` keeps it inert.
+      aria-disabled={locked || undefined}
       aria-pressed={active}
-      title={locked ? "Пока не открыто" : label}
       className={cn(
-        "relative flex min-w-[6.5rem] flex-col items-center gap-1.5 rounded-xl border px-3 py-2.5 text-center transition-colors",
+        "relative flex min-w-[6.5rem] flex-col items-center gap-1.5 rounded-xl border px-3 py-2 text-center transition-colors",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
         active
           ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_12%,transparent)]"
           : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] hover:border-[color:var(--kub-cyan)]",
-        locked && "cursor-not-allowed opacity-45 hover:border-[color:var(--kub-border-color)]",
+        locked && "cursor-not-allowed opacity-60 hover:border-[color:var(--kub-border-color)]",
       )}
     >
       {swatch}
@@ -307,5 +352,12 @@ function Option({
         </span>
       )}
     </button>
+  );
+
+  if (!locked) return button;
+  return (
+    <InfoHint asChild term={label} text={lockedReason}>
+      {button}
+    </InfoHint>
   );
 }
