@@ -311,13 +311,28 @@ pub fn verify_copy(expected: u64, actual: u64) -> io::Result<()> {
 /// point leaves the original where it was, which is the state the app can still
 /// start from.
 pub fn apply_pending_move(current: &Path, target: &Path) -> io::Result<()> {
+    apply_pending_move_with(current, target, copy_tree)
+}
+
+/// The body of a relocation, with the copy handed in.
+///
+/// The copy is a parameter for exactly one reason: no real filesystem can be
+/// made to finish a copy successfully while writing fewer bytes than it was
+/// given, so without this seam the step that decides whether the original may
+/// be deleted could only be checked by reading the source for it. A test passes
+/// a copy that stops short; the application passes `copy_tree`.
+fn apply_pending_move_with(
+    current: &Path,
+    target: &Path,
+    copy: impl FnOnce(&Path, &Path) -> io::Result<u64>,
+) -> io::Result<()> {
     if !current.exists() {
         fs::create_dir_all(target)?;
         return Ok(());
     }
 
     let expected = directory_size(current);
-    copy_tree(current, target)?;
+    copy(current, target)?;
     verify_copy(expected, directory_size(target))?;
     fs::remove_dir_all(current)?;
     Ok(())
@@ -348,12 +363,25 @@ mod tests {
 
     #[test]
     fn the_cache_list_never_includes_the_session() {
+        // Everything a WebView2 profile keeps that a person would have to sign
+        // in again to replace.
+        const SIGNS_YOU_OUT: &[&str] = &[
+            "local storage",
+            "session storage",
+            "cookies",
+            "network",
+            "indexeddb",
+            "login data",
+            "web data",
+            "preferences",
+            "local state",
+            "webstorage",
+        ];
         for entry in CACHE_SUBDIRECTORIES {
             let lowered = entry.to_lowercase();
-            assert!(!lowered.contains("local storage"), "{entry}");
-            assert!(!lowered.contains("cookies"), "{entry}");
-            assert!(!lowered.contains("network"), "{entry}");
-            assert!(!lowered.contains("indexeddb"), "{entry}");
+            for forbidden in SIGNS_YOU_OUT {
+                assert!(!lowered.contains(forbidden), "{entry} contains {forbidden}");
+            }
         }
     }
 
@@ -422,21 +450,57 @@ mod tests {
     }
 
     #[test]
-    fn the_move_honours_the_verdict_rather_than_merely_asking_for_it() {
+    fn a_copy_that_stops_short_leaves_the_original_and_its_session_in_place() {
         // `verify_copy` is tested for what it decides, above. This is the other
-        // half — that the decision is acted on — and it is asserted against the
-        // source because there is no seam through which a real copy can be made
-        // to succeed while producing fewer bytes. Without it, changing the `?`
-        // to `let _ =` would delete a profile after a short copy and no test
-        // would notice.
-        // Built from pieces so the needle cannot match this assertion itself,
-        // which is exactly how the first version of this test passed against
-        // the very mutation it was written to catch.
-        let needle = format!("{}(expected, directory_size(target)){}", "verify_copy", "?;");
-        let source = include_str!("storage.rs");
-        assert!(
-            source.contains(&needle),
-            "apply_pending_move must propagate the verification, not discard it"
+        // half — that the decision is acted on — and it is exercised rather than
+        // read. An earlier version of this test scanned the source for the `?`,
+        // which caught that one mutation and nothing else; the seam in
+        // `apply_pending_move_with` lets the whole gate be run instead.
+        let base = temp_dir("short-copy");
+        let from = base.join("from");
+        let to = base.join("to");
+        write(&from.join("EBWebView/Default/Local Storage/leveldb/CURRENT"), b"session");
+        write(&from.join("EBWebView/Default/Cache/data_1"), &vec![7u8; 4096]);
+
+        // A copy that reports success having written everything except the part
+        // that matters: a volume that filled, a share that dropped, a copy that
+        // lied. This is the shape of failure `verify_copy` exists for.
+        let result = apply_pending_move_with(&from, &to, |source, destination| {
+            copy_tree(
+                &source.join("EBWebView/Default/Cache"),
+                &destination.join("EBWebView/Default/Cache"),
+            )
+        });
+
+        assert!(result.is_err(), "a short copy must be refused, not accepted");
+        assert!(from.exists(), "the original profile must survive a short copy");
+        assert_eq!(
+            fs::read(from.join("EBWebView/Default/Local Storage/leveldb/CURRENT")).unwrap(),
+            b"session",
+            "and the session inside it with it"
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn the_cache_list_is_exactly_the_nine_directories_it_is_meant_to_be() {
+        // An allowlist rather than a set of forbidden words: `Login Data`,
+        // `Web Data` and `Preferences` all carry credentials and none of them
+        // contains any of the words the test below looks for.
+        assert_eq!(
+            CACHE_SUBDIRECTORIES,
+            &[
+                "EBWebView/Default/Cache",
+                "EBWebView/Default/Code Cache",
+                "EBWebView/Default/GPUCache",
+                "EBWebView/Default/DawnGraphiteCache",
+                "EBWebView/Default/DawnWebGPUCache",
+                "EBWebView/GrShaderCache",
+                "EBWebView/ShaderCache",
+                "EBWebView/component_crx_cache",
+                "EBWebView/Subresource Filter",
+            ],
+            "adding a directory here empties it at every launch; the addition has to be deliberate"
         );
     }
 

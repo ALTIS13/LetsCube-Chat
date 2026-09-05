@@ -130,12 +130,34 @@ fn is_safe_external_url(url: &Url) -> bool {
         && url.password().is_none()
 }
 
+/// The directory this shell keeps its own files in.
+///
+/// Debug builds accept a replacement so QA can own the whole storage chain —
+/// the settings file, the default profile and the relocation performed between
+/// them — instead of only the profile. `LETSCUBE_WEBVIEW2_DATA_DIR` cannot do
+/// that job: it pins the profile path outright and so steps over the very code
+/// a relocation lives in, which is how that code reached users unrun. A release
+/// build has no such door and can only ever answer with the user's own AppData.
+fn app_data_root<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
+    #[cfg(debug_assertions)]
+    if let Some(value) = std::env::var_os("LETSCUBE_APP_DATA_DIR") {
+        let path = PathBuf::from(value);
+        // A relative root would resolve against whatever directory the process
+        // happened to start in, which is not isolation.
+        if path.is_absolute() {
+            return Ok(path);
+        }
+    }
+
+    app.path().app_local_data_dir()
+}
+
 fn storage_settings_path<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
-    Ok(app.path().app_local_data_dir()?.join(STORAGE_SETTINGS_FILE))
+    Ok(app_data_root(app)?.join(STORAGE_SETTINGS_FILE))
 }
 
 fn default_profile_dir<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
-    Ok(app.path().app_local_data_dir()?.join(PRODUCTION_PROFILE))
+    Ok(app_data_root(app)?.join(PRODUCTION_PROFILE))
 }
 
 fn production_profile_dir<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
@@ -1107,7 +1129,7 @@ fn build_main_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 }
 
 fn setup_update_controller<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    let channel_path = app.path().app_local_data_dir()?.join(UPDATE_CHANNEL_FILE);
+    let channel_path = app_data_root(app)?.join(UPDATE_CHANNEL_FILE);
     let channel = load_update_channel(&channel_path);
     let state = DesktopUpdateState::new(channel, app.package_info().version.to_string());
     #[cfg(debug_assertions)]

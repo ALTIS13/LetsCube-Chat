@@ -7,6 +7,8 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+import { buildStorageSuite } from "./windows-tauri-storage-suite.mjs";
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const manifestPath = path.join(
   root,
@@ -24,6 +26,10 @@ const executablePath = path.join(
 );
 const cargoPath = path.join(os.homedir(), ".cargo", "bin", "cargo.exe");
 const processImage = "letscube-windows-tauri.exe";
+// The installed client shares this shell's single-instance identity, so a
+// running release build would swallow the QA launch and leave the suite waiting
+// on a window that was never built.
+const conflictingImages = Object.freeze([processImage, "LETSCUBE.exe"]);
 const lifecycleModes = Object.freeze([
   "success",
   "offline",
@@ -33,7 +39,7 @@ const lifecycleModes = Object.freeze([
 ]);
 const requestedMode = process.env.LETSCUBE_TAURI_QA_STARTUP_MODE;
 const requestedSuite = process.env.LETSCUBE_TAURI_QA_SUITE || "standard";
-const supportedSuites = Object.freeze(["standard", "long-session"]);
+const supportedSuites = Object.freeze(["standard", "long-session", "storage"]);
 
 if (process.platform !== "win32") {
   console.error("Windows Tauri QA can run only on Windows.");
@@ -53,15 +59,16 @@ if (!supportedSuites.includes(requestedSuite)) {
   console.error("LETSCUBE_TAURI_QA_SUITE is invalid.");
   process.exit(1);
 }
-if (requestedSuite === "long-session" && requestedMode) {
+if (requestedSuite !== "standard" && requestedMode) {
   console.error(
-    "A startup mode cannot be combined with the long-session suite.",
+    `A startup mode cannot be combined with the ${requestedSuite} suite.`,
   );
   process.exit(1);
 }
-if (hasRunningClient()) {
+const running = runningClientImage();
+if (running) {
   console.error(
-    "Close the running LETSCUBE Windows client before starting isolated Tauri QA.",
+    `Close the running ${running} before starting isolated Tauri QA.`,
   );
   process.exit(1);
 }
@@ -81,8 +88,11 @@ let signalHandled = false;
 process.on("SIGINT", () => handleSignal(130));
 process.on("SIGTERM", () => handleSignal(143));
 
-const scenarios =
-  requestedSuite === "long-session"
+const storageSuite = requestedSuite === "storage" ? buildStorageSuite(root) : null;
+
+const scenarios = storageSuite
+  ? storageSuite.scenarios
+  : requestedSuite === "long-session"
     ? [
         {
           name: "long-session",
@@ -111,18 +121,36 @@ const scenarios =
           })),
         ];
 
-for (const scenario of scenarios) {
-  console.log(`\n[windows-tauri-qa] Running ${scenario.name}...`);
-  const result = await runScenario(scenario);
-  if (result !== 0) {
-    process.exitCode = result;
-    break;
+try {
+  for (const scenario of scenarios) {
+    console.log(`\n[windows-tauri-qa] Running ${scenario.name}...`);
+    if (scenario.prepare) scenario.prepare();
+    const result = await runScenario(scenario);
+    // Only the harness sees the tree between launches, so the observations that
+    // need the application stopped are taken here rather than in a spec — and
+    // taken even when the spec failed, because a spec that could not find a
+    // signed-in window is exactly when the state of the tree is the evidence.
+    let failures = [];
+    if (scenario.verify) {
+      failures = scenario.verify();
+      for (const failure of failures) console.error(`  [FAIL] ${failure}`);
+    }
+    if (result !== 0 || failures.length > 0) {
+      process.exitCode = result !== 0 ? result : 1;
+      break;
+    }
   }
+} finally {
+  if (storageSuite) await storageSuite.finish();
 }
 
-async function runScenario({ name, mode, spec }) {
+async function runScenario({ name, mode, spec, dataRoot, phase }) {
   const debugPort = await reserveLoopbackPort();
-  const profilePath = mkdtempSync(path.join(os.tmpdir(), `letscube-tauri-qa-${name}-`));
+  // A suite that measures relocation owns the whole data root instead of one
+  // pinned profile, and keeps it across its own launches.
+  const profilePath = dataRoot
+    ? null
+    : mkdtempSync(path.join(os.tmpdir(), `letscube-tauri-qa-${name}-`));
   const scenario = {
     profilePath,
     qaProcess: null,
@@ -145,10 +173,22 @@ async function runScenario({ name, mode, spec }) {
     };
     const clientEnv = {
       ...process.env,
-      LETSCUBE_WEBVIEW2_DATA_DIR: profilePath,
       LETSCUBE_WEBVIEW2_DEBUG_PORT: String(debugPort),
       LETSCUBE_TAURI_QA_HOLD_PREFLIGHT: "1",
     };
+    if (dataRoot) {
+      // Pinning the profile would step straight over the relocation code, so
+      // the root moves instead and the shell resolves its own way down to a
+      // profile, exactly as it does on a user's machine.
+      delete clientEnv.LETSCUBE_WEBVIEW2_DATA_DIR;
+      clientEnv.LETSCUBE_APP_DATA_DIR = dataRoot;
+      qaEnv.LETSCUBE_TAURI_QA_DATA_ROOT = dataRoot;
+      qaEnv.LETSCUBE_TAURI_QA_STORAGE_PHASE = phase;
+      qaEnv.LETSCUBE_TAURI_QA_STORAGE_TARGET = path.join(dataRoot, "relocated");
+    } else {
+      clientEnv.LETSCUBE_WEBVIEW2_DATA_DIR = profilePath;
+      delete clientEnv.LETSCUBE_APP_DATA_DIR;
+    }
     if (mode) {
       qaEnv.LETSCUBE_TAURI_QA_STARTUP_MODE = mode;
       clientEnv.LETSCUBE_TAURI_QA_STARTUP_MODE = mode;
@@ -193,15 +233,21 @@ async function runScenario({ name, mode, spec }) {
   }
 }
 
-function hasRunningClient() {
-  const result = spawnSync(
-    "tasklist.exe",
-    ["/FI", `IMAGENAME eq ${processImage}`, "/FO", "CSV", "/NH"],
-    { encoding: "utf8" },
-  );
-  return (
-    result.status === 0 && result.stdout.toLowerCase().includes(processImage)
-  );
+function runningClientImage() {
+  for (const image of conflictingImages) {
+    const result = spawnSync(
+      "tasklist.exe",
+      ["/FI", `IMAGENAME eq ${image}`, "/FO", "CSV", "/NH"],
+      { encoding: "utf8" },
+    );
+    if (
+      result.status === 0 &&
+      result.stdout.toLowerCase().includes(image.toLowerCase())
+    ) {
+      return image;
+    }
+  }
+  return null;
 }
 
 function reserveLoopbackPort() {
@@ -243,7 +289,8 @@ async function cleanupOwnedResources(scenario) {
     const { qaProcess, client, profilePath } = scenario;
     let clean = await terminateOwnedProcess(qaProcess);
     clean = (await terminateOwnedProcess(client)) && clean;
-    clean = (await removeProfile(profilePath)) && clean;
+    // A shared data root outlives its scenarios; its owner removes it.
+    if (profilePath) clean = (await removeProfile(profilePath)) && clean;
     if (!clean)
       console.error("Windows Tauri QA cleanup did not complete safely.");
     return clean;

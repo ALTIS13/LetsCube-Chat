@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 const repoRoot = new URL("../../", import.meta.url);
 const windowsTauriRoot = new URL("../../windows-tauri/", import.meta.url);
@@ -594,12 +595,13 @@ test("Windows lifecycle fixtures are deterministic and cleanup remains single-fl
 test("Windows lifecycle wrapper owns a profile before either child can exist", () => {
   const wrapper = readText("scripts/windows-tauri-qa.mjs");
   const scenarioSetup = wrapper.match(
-    /async function runScenario[\s\S]*?(?=\nfunction hasRunningClient)/,
+    /async function runScenario[\s\S]*?(?=\nfunction runningClientImage)/,
   )?.[0] ?? "";
+  assert.notEqual(scenarioSetup, "", "runScenario must remain the scenario entry point");
 
   assert.match(
     scenarioSetup,
-    /const profilePath = mkdtempSync\([^\n]+\);\s*const scenario = \{\s*profilePath,\s*qaProcess: null,\s*client: null,\s*cleanupPromise: null,?\s*\};\s*activeScenario = scenario;\s*try \{/,
+    /const profilePath = dataRoot\s*\?\s*null\s*:\s*mkdtempSync\([^\n]+\);\s*const scenario = \{\s*profilePath,\s*qaProcess: null,\s*client: null,\s*cleanupPromise: null,?\s*\};\s*activeScenario = scenario;\s*try \{/,
     "profile ownership must be registered immediately before setup or a child spawn can race a signal",
   );
   assert.match(scenarioSetup, /scenario\.qaProcess = spawn\(/);
@@ -621,6 +623,88 @@ test("Windows lifecycle spec observes real native updater UI and all startup tex
   assert.match(spec, /\.endpoint-server p/);
   assert.match(spec, /\.stages li/);
   assert.match(spec, /startup-offline-retry-\$\{viewport\.width\}x\$\{viewport\.height\}/);
+});
+
+test("Windows storage QA owns a data root instead of the user's own AppData", () => {
+  const wrapper = readText("scripts/windows-tauri-qa.mjs");
+  const suite = readText("scripts/windows-tauri-storage-suite.mjs");
+  const libRs = readText("windows-tauri/src-tauri/src/lib.rs");
+
+  assert.equal(
+    rootPackage.scripts["windows:tauri:qa:storage"],
+    "set LETSCUBE_TAURI_QA_SUITE=storage&& node scripts/windows-tauri-qa.mjs",
+  );
+
+  // The seam only exists so the relocation code can be run at all. It must stay
+  // debug-only, and it must be the single way the shell finds its own root, or
+  // a phase would record a move of the user's real profile.
+  const root = libRs.match(/fn app_data_root[\s\S]*?\n}/)?.[0] ?? "";
+  assert.match(root, /#\[cfg\(debug_assertions\)\]\s*if let Some\(value\) = std::env::var_os\("LETSCUBE_APP_DATA_DIR"\)/);
+  assert.match(root, /path\.is_absolute\(\)/, "a relative root is not isolation");
+  assert.match(root, /app\.path\(\)\.app_local_data_dir\(\)/);
+  assert.equal(
+    [...libRs.matchAll(/app_local_data_dir\(\)/g)].length,
+    1,
+    "app_local_data_dir must be reached only through app_data_root",
+  );
+  for (const site of ["storage_settings_path", "default_profile_dir"]) {
+    const body = libRs.match(new RegExp(`fn ${site}[\\s\\S]*?\\n}`))?.[0] ?? "";
+    assert.match(body, /app_data_root\(app\)\?/, `${site} must resolve through app_data_root`);
+  }
+
+  // The relocation runs before a window exists, because WebView2 locks a live
+  // profile and the session lives inside it.
+  assert.match(
+    libRs,
+    /settle_storage_before_launch\(app\.handle\(\)\);[\s\S]{0,200}?build_main_window\(app\.handle\(\)\)\?;/,
+    "a profile may only be moved before the window that would lock it is built",
+  );
+
+  assert.match(wrapper, /clientEnv\.LETSCUBE_APP_DATA_DIR = dataRoot;/);
+  assert.match(
+    wrapper,
+    /if \(dataRoot\) \{[\s\S]*?delete clientEnv\.LETSCUBE_WEBVIEW2_DATA_DIR;/,
+    "pinning the profile would step over the very code the suite exists to run",
+  );
+  assert.match(wrapper, /conflictingImages/);
+  assert.match(wrapper, /"LETSCUBE\.exe"/, "a running release client shares the single-instance identity");
+  assert.match(
+    wrapper,
+    /let failures = \[\];[\s\S]*?if \(scenario\.verify\)/,
+    "the tree must be measured even when a phase's spec failed",
+  );
+
+  assert.match(suite, /refuses a data root outside the temporary directory/);
+  assert.match(suite, /refuses a data root inside the user's own profile/);
+  assert.match(suite, /requires an empty data root/);
+  assert.match(
+    suite,
+    /LETSCUBE_APP_DATA_DIR was not honoured/,
+    "the suite must abort before recording a move if the seam was ignored",
+  );
+});
+
+test("the Windows cache list the harness measures is the list the shell clears", async () => {
+  const { CACHE_SUBDIRECTORIES, readCacheSubdirectoriesFromRust, SESSION_SUBDIRECTORIES } =
+    await import("../../scripts/windows-tauri-storage.mjs");
+  const repoRootPath = fileURLToPath(repoRoot);
+
+  assert.deepEqual(
+    readCacheSubdirectoriesFromRust(repoRootPath),
+    [...CACHE_SUBDIRECTORIES],
+    "storage.rs and the QA harness must agree on which directories are only cache",
+  );
+  assert.equal(CACHE_SUBDIRECTORIES.length, 9);
+  for (const entry of CACHE_SUBDIRECTORIES) {
+    for (const session of SESSION_SUBDIRECTORIES) {
+      assert.notEqual(entry, session, `${entry} carries the session and must never be cleared`);
+      assert.equal(
+        entry.startsWith(`${session}/`),
+        false,
+        `${entry} sits inside the session directory ${session}`,
+      );
+    }
+  }
 });
 
 test("Windows update UI contract confirms Test to Stable reversal", () => {

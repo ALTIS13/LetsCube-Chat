@@ -29,6 +29,7 @@
     "windows:tauri:test": "node --test tests/unit/tauri-shell.test.mjs",
     "windows:tauri:qa": "node scripts/windows-tauri-qa.mjs",
     "windows:tauri:qa:long-session": "set LETSCUBE_TAURI_QA_SUITE=long-session&& node scripts/windows-tauri-qa.mjs",
+    "windows:tauri:qa:storage": "set LETSCUBE_TAURI_QA_SUITE=storage&& node scripts/windows-tauri-qa.mjs",
     "windows:matrix": "pwsh -NoLogo -NoProfile -NonInteractive -File scripts/windows-device-matrix.ps1",
     "windows:identity:preflight": "pwsh -NoLogo -NoProfile -NonInteractive -File scripts/windows-package-identity.ps1 -Mode Preflight",
     "windows:identity:render": "pwsh -NoLogo -NoProfile -NonInteractive -File scripts/windows-package-identity.ps1 -Mode Render",
