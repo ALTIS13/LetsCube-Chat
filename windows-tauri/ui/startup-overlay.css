@@ -39,6 +39,18 @@
   --kub-radius: 8px;
   --app-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --startup-font-mono: Consolas, 'Cascadia Mono', Menlo, monospace;
+  /* The same four values as startup.css, for the same reason the geometry is
+     shared: this scene continues that one, and a panel that changed substance
+     across the handoff would say the connection had changed with it. */
+  --glass-fill: rgba(17, 43, 71, .70);
+  --glass-fill-strong: rgba(17, 43, 71, .96);
+  --glass-line: rgba(255, 255, 255, .14);
+  --glass-blur: blur(18px) saturate(122%);
+  --glass-shadow:
+    0 20px 44px -26px rgb(0 0 0 / .9),
+    0 3px 10px -6px rgb(0 0 0 / .55),
+    inset 0 1px 0 var(--glass-line);
+
   --verify-accent: var(--kub-cyan);
   --verify-dim: var(--kub-muted);
   /* See startup.css: the channel keeps its own accent so red means only the
@@ -61,9 +73,14 @@
   min-width: 960px; min-height: 640px; width: 100%; height: 100%;
   display: grid; grid-template-rows: 44px minmax(0, 1fr) auto;
   padding: 0 6vw 26px;
+  /* Layered, because the panels above it are translucent and a blur over one
+     flat colour returns that same flat colour. Matches startup.css. */
   background:
-    radial-gradient(120% 80% at 50% 0%, #0A1B30 0%, rgba(10, 27, 48, 0) 62%),
-    linear-gradient(180deg, var(--kub-surface) 0%, var(--kub-bg) 58%);
+    radial-gradient(72% 52% at 50% -8%, rgba(77, 139, 208, .20) 0%, rgba(77, 139, 208, 0) 64%),
+    radial-gradient(56% 44% at 6% 104%, rgba(66, 127, 194, .14) 0%, rgba(66, 127, 194, 0) 66%),
+    radial-gradient(52% 40% at 96% 100%, rgba(77, 139, 208, .10) 0%, rgba(77, 139, 208, 0) 62%),
+    radial-gradient(120% 90% at 50% 50%, rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, .34) 100%),
+    linear-gradient(180deg, var(--kub-surface) 0%, var(--kub-bg) 62%);
 }
 .startup-overlay-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--kub-border-color); }
 .startup-overlay-brand { display: block; width: 148px; height: auto; line-height: 0; opacity: .92; }
@@ -119,7 +136,20 @@
 .startup-overlay-computer { width: 148px; height: 126px; }
 .startup-overlay-server { width: 132px; height: 126px; }
 .startup-overlay-art { display: block; width: 100%; height: 100%; overflow: visible; }
-.startup-overlay-glass { fill: var(--kub-surface-2); stroke: none; }
+/* The pane each device is drawn on. It was a <rect> filled with a colour,
+   which cannot be glass: backdrop-filter has no effect on an SVG fill. This is
+   a real element behind the drawing, on the same numbers the rect used, so the
+   artwork did not move when the material changed. Mirrors startup.css. */
+.startup-overlay-computer::before, .startup-overlay-server::before {
+  content: ""; position: absolute; z-index: 0; pointer-events: none;
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+}
+.startup-overlay-computer::before { left: 2px; top: 6px; width: 144px; height: 92px; border-radius: 9px; }
+.startup-overlay-server::before { left: 2px; top: 4px; width: 128px; height: 118px; border-radius: 11px; }
+.startup-overlay-art { position: relative; z-index: 1; }
 .startup-overlay-frame { fill: none; stroke: var(--kub-border-color); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .startup-overlay-detail {
   fill: none; stroke: var(--verify-dim); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round;
@@ -134,8 +164,10 @@
   position: absolute; z-index: 3;
   width: var(--connector-node); height: var(--connector-node);
   border: 2px solid var(--channel-accent); border-radius: 5px;
-  background: var(--kub-surface-2);
-  box-shadow: 0 0 0 3px var(--kub-bg);
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: 0 0 0 3px var(--kub-bg), inset 0 1px 0 var(--glass-line);
   transition: border-color var(--kub-motion-standard) var(--kub-ease-standard),
               background var(--kub-motion-standard) var(--kub-ease-standard);
 }
@@ -147,8 +179,11 @@
 .startup-overlay-rail {
   position: absolute; top: calc(50% - var(--conduit-height) / 2);
   height: var(--conduit-height); overflow: hidden;
-  background: var(--kub-surface-2);
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   border: 1px solid var(--kub-border-color);
+  box-shadow: inset 0 1px 0 var(--glass-line);
   transition: background var(--kub-motion-standard) var(--kub-ease-standard),
               border-color var(--kub-motion-standard) var(--kub-ease-standard);
 }
@@ -185,7 +220,9 @@
   left: 50%; margin-left: calc(-1 * var(--conduit-core) / 2);
   width: var(--conduit-core); height: var(--conduit-core);
   border: 1px solid var(--kub-border-color); border-radius: 7px;
-  background: var(--kub-surface-2);
+  background: var(--glass-fill-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   transition: background var(--kub-motion-standard) var(--kub-ease-standard),
               border-color var(--kub-motion-standard) var(--kub-ease-standard),
               box-shadow var(--kub-motion-standard) var(--kub-ease-standard);

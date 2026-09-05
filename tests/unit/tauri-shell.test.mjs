@@ -36,7 +36,14 @@ function evaluateStartupHelper(source, name, dependencies = []) {
 
 /* `--kub-x: #hex;` declarations of one CSS block, as a Map. */
 function collectTokens(css, blockPattern) {
-  const block = css.match(blockPattern)?.[0] ?? "";
+  // Comments are blanked before the block is read. A prose sentence naming a
+  // token — "deliberately not --kub-surface-2: that one also means ..." — is a
+  // `--name:` sequence as far as the pattern below is concerned, and the value
+  // it then captures runs to the next semicolon, which is somewhere in the
+  // following declaration. That made writing about a token a way to break the
+  // check that guards it.
+  const source = css.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "));
+  const block = source.match(blockPattern)?.[0] ?? "";
   const tokens = new Map();
   for (const [, name, value] of block.matchAll(/(--(?:kub|brand|app)-[a-z0-9-]+)\s*:\s*([^;]+);/g)) {
     tokens.set(name, value.trim());
