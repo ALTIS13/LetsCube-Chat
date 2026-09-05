@@ -1021,7 +1021,11 @@ export function MessageInput({
           </div>
         )}
 
-        <div className="flex items-end gap-1 rounded-2xl px-2 py-1 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
+        {/* --kub-inset, for the reason spelled out on the sidebar's search
+            field: the composer is translucent chrome now and it composites
+            above --kub-surface-2, so the message box had stopped reading as a
+            box at all. */}
+        <div className="flex items-end gap-1 rounded-2xl px-2 py-1 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
           <button
             onClick={() => { setShowAttach(!showAttach); setShowEmoji(false); }}
             className={cn(

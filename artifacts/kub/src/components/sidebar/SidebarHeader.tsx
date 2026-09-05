@@ -225,7 +225,12 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
           </div>
         )}
 
-        <div className="kub-field min-w-0 flex-1 gap-2 rounded-lg px-3 h-9 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
+        {/* --kub-inset, not --kub-surface-2. The panel behind this field is now
+            translucent chrome that composites above --kub-surface-2, so the
+            field went flush with it — measured at rgb(11,33,58) inside a panel
+            of rgb(13,33,58), which is a hollow outline rather than a well.
+            --kub-inset is the token for what a field is cut into. */}
+        <div className="kub-field min-w-0 flex-1 gap-2 rounded-lg px-3 h-9 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
           <KubIcon name="search" size={14} className="shrink-0 text-[color:var(--kub-muted)]" />
           <input
             ref={searchInputRef}
