@@ -17,6 +17,7 @@ import {
 } from "@/lib/messageAckError";
 import { MESSAGE_SELECT_WITH_JOINS } from "@/lib/messageProjection";
 import { attachKnownSender } from "@/lib/realtimeMessage";
+import { applyProfileToChats } from "@/lib/chatProfilePatch";
 import {
   actorClientMessageKey,
   isIncomingMessage,
@@ -764,6 +765,14 @@ export function useMessages(
         return { ...message, sender: { ...message.sender, ...profile } };
       });
       if (changed) setMessages(activeChatId, next);
+
+      // The same row carries the peer's heartbeat, and the header and sidebar
+      // read presence from `chat.other_user` rather than from the messages. It
+      // used to be dropped here, so a peer who was actively online decayed to
+      // "был(а) N минут назад" while nothing refetched the list. See
+      // lib/chatProfilePatch.ts for the measurement.
+      const patchedChats = applyProfileToChats(useAppStore.getState().chats, profile);
+      if (patchedChats) useAppStore.getState().setChats(patchedChats);
     };
 
     const channel = rt
