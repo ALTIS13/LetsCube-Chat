@@ -71,7 +71,7 @@ export function BottomNav() {
             aria-current={isActive ? "page" : undefined}
             className={cn(
               "relative flex flex-col items-center gap-0.5 min-w-[44px] min-h-[44px] px-2 py-1 rounded-xl transition-colors",
-              isActive ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)]"
+              isActive ? "text-[color:var(--kub-accent-text)]" : "text-[color:var(--kub-muted)]"
             )}
           >
             <KubIcon name={icon} size={22} />

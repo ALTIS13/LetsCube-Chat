@@ -32,8 +32,14 @@ export interface AttachmentHint {
 
 export interface NotificationAccent {
   tone: NotificationTone;
-  /** A CSS colour expression that resolves in both themes. */
+  /** A CSS colour expression that resolves in both themes. Rails, dots, tints. */
   color: string;
+  /**
+   * The same hue where the tone has to be read as a word rather than seen as a
+   * shape. Two of the five differ: a rail only has to clear 3:1, a label has to
+   * clear 4.5:1, and the accent and the danger red do not do both at one value.
+   */
+  textColor: string;
   /** Raised presentation: a rail, a stronger tint, an alert chip. */
   urgent: boolean;
   chips: NotificationChip[];
@@ -53,6 +59,15 @@ const TONE_COLOR: Record<NotificationTone, string> = {
   support: "var(--kub-pink)",
   invite: "var(--kub-online)",
   system: "var(--kub-danger)",
+};
+
+/** The reading of TONE_COLOR that goes on letters; see `textColor` above. */
+const TONE_TEXT_COLOR: Record<NotificationTone, string> = {
+  message: "var(--kub-accent-text)",
+  task: "var(--kub-warn)",
+  support: "var(--kub-pink)",
+  invite: "var(--kub-online)",
+  system: "var(--kub-danger-text)",
 };
 
 const ATTACHMENTS: Record<string, AttachmentHint> = {
@@ -125,6 +140,7 @@ export function notificationAccent(item: { kind: string; payload: unknown }): No
     // Urgency overrides the hue: a task that must be acted on now is not a
     // louder task, it is a different thing on the screen.
     color: urgent ? TONE_COLOR.system : TONE_COLOR[tone],
+    textColor: urgent ? TONE_TEXT_COLOR.system : TONE_TEXT_COLOR[tone],
     urgent,
     chips,
     attachment: tone === "message" ? attachmentHint(item.payload) : null,

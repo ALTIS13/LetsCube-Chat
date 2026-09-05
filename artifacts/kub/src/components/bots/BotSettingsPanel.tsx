@@ -97,7 +97,7 @@ export function BotSettingsPanel({ detail, onToken }: Props) {
             </div>
             <div className="mt-0.5 break-all text-sm text-[color:var(--kub-muted)]">@{bot.username}</div>
             {bot.state === "pending_delete" && bot.delete_after && (
-              <div className="mt-2 text-xs text-[color:var(--kub-danger)]">
+              <div className="mt-2 text-xs text-[color:var(--kub-danger-text)]">
                 Удаление после <time dateTime={bot.delete_after}>{formatDate(bot.delete_after)}</time>
               </div>
             )}

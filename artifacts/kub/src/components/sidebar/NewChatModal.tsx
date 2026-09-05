@@ -59,7 +59,7 @@ export function NewChatModal({ onClose, onRefetch }: NewChatModalProps) {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger)] border border-[color:var(--kub-danger)]/30">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger-text)] border border-[color:var(--kub-danger)]/30">
           <KubIcon name="alert" size={13} />
           {error}
         </div>

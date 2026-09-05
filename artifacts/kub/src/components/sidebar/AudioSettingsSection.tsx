@@ -541,12 +541,12 @@ export function AudioSettingsSection() {
             </div>
           )}
           {error && (
-            <div className="mt-2 text-xs text-[color:var(--kub-danger)]">
+            <div className="mt-2 text-xs text-[color:var(--kub-danger-text)]">
               {error}
             </div>
           )}
           {monitorError && (
-            <div className="mt-2 text-xs text-[color:var(--kub-danger)]">
+            <div className="mt-2 text-xs text-[color:var(--kub-danger-text)]">
               {monitorError}
             </div>
           )}
@@ -555,7 +555,7 @@ export function AudioSettingsSection() {
         <button
           type="button"
           onClick={() => void resetAudioSettings()}
-          className="text-xs font-semibold text-[color:var(--kub-cyan)] hover:underline"
+          className="text-xs font-semibold text-[color:var(--kub-accent-text)] hover:underline"
         >
           Сбросить настройки звука
         </button>
@@ -665,7 +665,7 @@ function ModeButton({
 function SectionHeader({ title, description }: { title: string; description: string }) {
   return (
     <div>
-      <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-cyan)]">
+      <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-accent-text)]">
         {title}
       </div>
       <p className="mt-1 text-xs leading-relaxed text-[color:var(--kub-muted)]">

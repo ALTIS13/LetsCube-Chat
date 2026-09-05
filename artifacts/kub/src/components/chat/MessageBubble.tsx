@@ -1098,7 +1098,7 @@ export function MessageBubble({
           // and 3.90:1, which clears the 3:1 WCAG asks of a UI boundary. It is
           // the accent already used for this chip's hover and focus, so
           // nothing new is introduced.
-          className="inline-flex h-4 items-center gap-0.5 rounded-full border border-[color:var(--kub-cyan)] bg-[var(--kub-surface-3)] px-1 text-[10px] leading-none text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-cyan)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--kub-cyan)]"
+          className="inline-flex h-4 items-center gap-0.5 rounded-full border border-[color:var(--kub-cyan)] bg-[var(--kub-surface-3)] px-1 text-[10px] leading-none text-[color:var(--kub-muted)] transition-colors hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-accent-text)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--kub-cyan)]"
           title={groupReadAriaLabel}
           aria-label={groupReadAriaLabel}
           onClick={(event) => {
@@ -1135,7 +1135,7 @@ export function MessageBubble({
       className={cn(
         "inline-flex h-[22px] items-center gap-1 rounded-full border px-2 text-[11px] leading-none transition-all hover:scale-105 active:scale-95",
         mine
-          ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] border-[color-mix(in_srgb,var(--kub-cyan)_72%,transparent)] text-[color:var(--kub-cyan)]"
+          ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] border-[color-mix(in_srgb,var(--kub-cyan)_72%,transparent)] text-[color:var(--kub-accent-text)]"
           : "bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] text-[color:var(--kub-muted)]"
       )}
     >
@@ -1284,10 +1284,10 @@ export function MessageBubble({
                 onClick={action}
                 className={cn(
                   "flex w-full items-center gap-3 whitespace-nowrap px-4 py-2.5 text-left text-sm transition-colors hover:bg-[var(--kub-surface-3)]",
-                  danger ? "text-[color:var(--kub-danger)]" : "text-[color:var(--kub-text)]"
+                  danger ? "text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-text)]"
                 )}
               >
-                <KubIcon name={icon} size={16} tone={danger ? "danger" : "muted"} />
+                <KubIcon name={icon} size={16} tone={danger ? "currentColor" : "muted"} />
                 {label}
               </button>
             ))}
@@ -1392,10 +1392,10 @@ export function MessageBubble({
         >
 
           {!isMe && isFirstInGroup && actor.kind !== "system" && (
-            <span className="ml-3 mb-0.5 inline-flex min-w-0 items-center gap-1.5 text-xs font-semibold text-[color:var(--kub-cyan)]">
+            <span className="ml-3 mb-0.5 inline-flex min-w-0 items-center gap-1.5 text-xs font-semibold text-[color:var(--kub-accent-text)]">
               <span className="truncate">{actorName}</span>
               {actor.kind === "bot" && (
-                <span className="rounded-sm bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] px-1 py-px text-[9px] font-semibold uppercase text-[color:var(--kub-cyan)]">
+                <span className="rounded-sm bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] px-1 py-px text-[9px] font-semibold uppercase text-[color:var(--kub-accent-text)]">
                   Бот
                 </span>
               )}
@@ -1494,7 +1494,7 @@ export function MessageBubble({
                 >
                   <span className="w-0.5 flex-shrink-0 self-stretch rounded-full bg-[var(--kub-cyan)]" />
                   <span className="min-w-0 flex-1 overflow-hidden">
-                    <span className="block truncate font-semibold leading-tight text-[color:var(--kub-cyan)]">
+                    <span className="block truncate font-semibold leading-tight text-[color:var(--kub-accent-text)]">
                       {replyNameLabel}
                     </span>
                     <span
@@ -1557,7 +1557,7 @@ export function MessageBubble({
                 href={message.media_url}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity text-[color:var(--kub-cyan)]"
+                className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity text-[color:var(--kub-accent-text)]"
               >
                 <KubIcon name="file" size={16} />
                 <span className="truncate max-w-[200px]">{message.content ?? "File"}</span>
@@ -1610,7 +1610,7 @@ export function MessageBubble({
             {message.failed && isMe && (
               <div
                 data-message-send-error="true"
-                className="mt-1 flex max-w-full flex-wrap items-center gap-1.5 border-t border-[color:var(--kub-border-color)]/60 pt-1 text-[11px] leading-none text-[color:var(--kub-danger)]"
+                className="mt-1 flex max-w-full flex-wrap items-center gap-1.5 border-t border-[color:var(--kub-border-color)]/60 pt-1 text-[11px] leading-none text-[color:var(--kub-danger-text)]"
               >
                 <span className="mr-auto min-w-0">
                   {message.send_error ?? "Не удалось отправить"}
@@ -1618,7 +1618,7 @@ export function MessageBubble({
                 {onRetrySend && (
                   <button
                     type="button"
-                    className="inline-flex h-6 items-center rounded-full px-2 font-semibold text-[color:var(--kub-cyan)] hover:bg-[color-mix(in_srgb,var(--kub-cyan)_12%,transparent)]"
+                    className="inline-flex h-6 items-center rounded-full px-2 font-semibold text-[color:var(--kub-accent-text)] hover:bg-[color-mix(in_srgb,var(--kub-cyan)_12%,transparent)]"
                     onClick={(event) => { event.stopPropagation(); onRetrySend(); }}
                   >
                     Повторить
@@ -1636,7 +1636,7 @@ export function MessageBubble({
                 {onDiscardLocalMessage && (
                   <button
                     type="button"
-                    className="inline-flex h-6 items-center rounded-full px-2 font-semibold text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)]"
+                    className="inline-flex h-6 items-center rounded-full px-2 font-semibold text-[color:var(--kub-danger-text)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)]"
                     onClick={(event) => { event.stopPropagation(); onDiscardLocalMessage(); }}
                   >
                     Удалить
@@ -1737,7 +1737,7 @@ function MediaImage({
       <div className="flex max-w-[260px] items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
         <KubIcon name="warning" size={16} />
         <span className="min-w-0 flex-1">Не удалось загрузить изображение.</span>
-        <a href={originalUrl} target="_blank" rel="noreferrer" className="text-[color:var(--kub-cyan)] hover:underline">
+        <a href={originalUrl} target="_blank" rel="noreferrer" className="text-[color:var(--kub-accent-text)] hover:underline">
           Открыть
         </a>
       </div>
@@ -1837,7 +1837,7 @@ function MediaVideo({
       <div className="flex max-w-[280px] items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
         <KubIcon name="warning" size={16} />
         <span className="min-w-0 flex-1">Не удалось загрузить видео.</span>
-        <a href={originalUrl} target="_blank" rel="noreferrer" className="text-[color:var(--kub-cyan)] hover:underline">
+        <a href={originalUrl} target="_blank" rel="noreferrer" className="text-[color:var(--kub-accent-text)] hover:underline">
           Открыть
         </a>
       </div>
@@ -1977,7 +1977,7 @@ function RoundVideoMessage({
       <div className="flex max-w-[240px] items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
         <KubIcon name="warning" size={16} />
         <span className="min-w-0 flex-1">Не удалось загрузить видео.</span>
-        <button type="button" onClick={onOpen} className="text-[color:var(--kub-cyan)] hover:underline">
+        <button type="button" onClick={onOpen} className="text-[color:var(--kub-accent-text)] hover:underline">
           Открыть
         </button>
       </div>

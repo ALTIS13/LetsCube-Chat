@@ -43,7 +43,7 @@ const STATUS_LABELS: Record<UserTicketStatus, string> = {
 function statusTone(status: UserTicketStatus): string {
   if (status === "waiting_user") return "text-[color:var(--kub-warn)]";
   if (status === "resolved" || status === "closed") return "text-[color:var(--kub-muted)]";
-  return "text-[color:var(--kub-cyan)]";
+  return "text-[color:var(--kub-accent-text)]";
 }
 
 function viewportSize() {
@@ -396,7 +396,7 @@ export function SupportWindow() {
               className="mt-1 min-h-[7rem] flex-1 resize-none rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
             />
           </label>
-          {error && <p className="text-xs text-[color:var(--kub-danger)]">{error}</p>}
+          {error && <p className="text-xs text-[color:var(--kub-danger-text)]">{error}</p>}
           <div className="flex shrink-0 gap-2">
             {tickets.length > 0 && (
               <KubButton
@@ -448,7 +448,7 @@ export function SupportWindow() {
                     )}
                   >
                     {!mine && (
-                      <div className="mb-0.5 text-[11px] text-[color:var(--kub-cyan)]">
+                      <div className="mb-0.5 text-[11px] text-[color:var(--kub-accent-text)]">
                         Поддержка
                       </div>
                     )}
@@ -469,7 +469,7 @@ export function SupportWindow() {
                 : undefined
             }
           >
-            {error && <p className="px-1 pb-1 text-xs text-[color:var(--kub-danger)]">{error}</p>}
+            {error && <p className="px-1 pb-1 text-xs text-[color:var(--kub-danger-text)]">{error}</p>}
             {canReply ? (
               <div className="flex items-end gap-2">
                 <textarea

@@ -199,7 +199,7 @@ export function ChatSearchBar({ chatId, currentTopicId, isForum = false, message
           <button
             type="button"
             onClick={() => setAllTopics((value) => !value)}
-            className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 py-1 font-semibold transition hover:border-[color:var(--kub-cyan)] hover:text-[color:var(--kub-cyan)]"
+            className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 py-1 font-semibold transition hover:border-[color:var(--kub-cyan)] hover:text-[color:var(--kub-accent-text)]"
           >
             {allTopics ? "Все темы" : "Текущая тема"}
           </button>

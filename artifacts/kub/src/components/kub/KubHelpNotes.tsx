@@ -63,7 +63,7 @@ export function KubHelpNotes({ id, label, children, className }: KubHelpNotesPro
         aria-expanded={!collapsed}
         className={cn(
           "kub-button kub-interactive inline-flex items-center gap-1.5 rounded-lg px-2 text-xs font-semibold",
-          "text-[color:var(--kub-cyan)] hover:underline",
+          "text-[color:var(--kub-accent-text)] hover:underline",
         )}
       >
         <KubIcon name={collapsed ? "chevronDown" : "chevronUp"} size={13} />

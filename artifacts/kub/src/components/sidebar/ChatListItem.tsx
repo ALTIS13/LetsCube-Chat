@@ -260,7 +260,7 @@ export function ChatListItem({
               <span
                 className={cn(
                   "text-[11px]",
-                  hasUnread ? "text-[color:var(--kub-cyan)] font-semibold" : "text-[color:var(--kub-muted)]"
+                  hasUnread ? "text-[color:var(--kub-accent-text)] font-semibold" : "text-[color:var(--kub-muted)]"
                 )}
               >
                 {formatTime(lastMsg.created_at)}

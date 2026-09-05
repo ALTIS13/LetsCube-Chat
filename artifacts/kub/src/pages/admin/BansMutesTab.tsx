@@ -374,7 +374,7 @@ function RowCard({
       <button
         onClick={onRemove}
         aria-label="Снять ограничение"
-        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold hover:bg-[var(--kub-surface-2)] flex-shrink-0 text-[color:var(--kub-cyan)]"
+        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold hover:bg-[var(--kub-surface-2)] flex-shrink-0 text-[color:var(--kub-accent-text)]"
       >
         <KubIcon name="rotate" size={12} />
         Снять

@@ -229,7 +229,7 @@ export function RegisterForm() {
 
           <KubPanel glow="soft" padded={false} className="overflow-hidden">
             <div className="px-3 py-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/50">
-              <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-cyan)]">
+              <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-accent-text)]">
                 <span className="h-1.5 w-1.5 rounded-full bg-[var(--kub-cyan)] kub-pulse" />
                 Подтверждение
               </div>
@@ -265,7 +265,7 @@ export function RegisterForm() {
                 )}
               </div>
               <div className="min-h-10 px-1 text-xs leading-5" aria-live="polite">
-                {resendError && <p className="text-[color:var(--kub-danger)]">{resendError}</p>}
+                {resendError && <p className="text-[color:var(--kub-danger-text)]">{resendError}</p>}
                 {resendSuccess && <p className="text-[color:var(--kub-online)]">{resendSuccess}</p>}
               </div>
               <div className="grid gap-3 pt-1">
@@ -416,7 +416,7 @@ export function RegisterForm() {
             />
 
             {error && (
-              <p className="text-xs text-[color:var(--kub-danger)] px-1">{error}</p>
+              <p className="text-xs text-[color:var(--kub-danger-text)] px-1">{error}</p>
             )}
 
             <KubButton type="submit" loading={loading} fullWidth size="lg" className="mt-1">
@@ -429,14 +429,14 @@ export function RegisterForm() {
           Уже есть аккаунт?{" "}
           <Link
             href="/login"
-            className="font-semibold text-[color:var(--kub-cyan)] hover:text-[color:var(--kub-cyan-hover)] transition-colors"
+            className="font-semibold text-[color:var(--kub-accent-text)] hover:text-[color:var(--kub-cyan-hover)] transition-colors"
           >
             Войти
           </Link>
           <span className="mx-2 text-[color:var(--kub-muted)]">/</span>
           <Link
             href="/login?reset=1"
-            className="font-semibold text-[color:var(--kub-cyan)] hover:text-[color:var(--kub-cyan-hover)] transition-colors"
+            className="font-semibold text-[color:var(--kub-accent-text)] hover:text-[color:var(--kub-cyan-hover)] transition-colors"
           >
             Восстановить доступ
           </Link>
@@ -445,7 +445,7 @@ export function RegisterForm() {
           Перед созданием аккаунта ознакомьтесь с{" "}
           <Link
             href="/privacy"
-            className="font-semibold text-[color:var(--kub-cyan)] hover:text-[color:var(--kub-cyan-hover)]"
+            className="font-semibold text-[color:var(--kub-accent-text)] hover:text-[color:var(--kub-cyan-hover)]"
           >
             Политикой конфиденциальности
           </Link>

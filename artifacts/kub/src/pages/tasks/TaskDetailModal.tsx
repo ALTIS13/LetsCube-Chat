@@ -368,7 +368,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
         </div>
 
         {taskIsDeleted && (
-          <div className="rounded-xl border border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-danger)]">
+          <div className="rounded-xl border border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] px-3 py-2 text-xs leading-relaxed text-[color:var(--kub-danger-text)]">
             Задача удалена и скрыта из обычных списков.
             {task.delete_reason ? ` Причина: ${task.delete_reason}` : ""}
           </div>
@@ -464,7 +464,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
                     size="sm"
                     loading={actionLoading === "recurrence-stop"}
                     disabled={actionLoading !== null}
-                    className="text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)]"
+                    className="text-[color:var(--kub-danger-text)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)]"
                     onClick={onStopRecurrence}
                   >
                     Остановить
@@ -605,7 +605,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
         {/* Action buttons */}
         {hasTaskActions && (
           <div className="rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-          <div className="w-full text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-cyan)]">
+          <div className="w-full text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
             Действия
           </div>
           {canClaim && (
@@ -710,7 +710,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
               variant="ghost"
               leftIcon={<KubIcon name="ban" size={14} />}
               onClick={() => setSub("cancel")}
-              className="text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)]"
+              className="text-[color:var(--kub-danger-text)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)]"
             >
               Отменить задачу
             </KubButton>
@@ -728,7 +728,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
         )}
 
         {actionError && (
-          <div className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger)] border border-[color:var(--kub-danger)]/30">
+          <div className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger-text)] border border-[color:var(--kub-danger)]/30">
             {actionError}
           </div>
         )}
@@ -740,7 +740,7 @@ export function TaskDetailModal({ taskId, nowMs = Date.now(), onClose, onDeleted
 
         {/* Timeline */}
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider mb-2 text-[color:var(--kub-cyan)]">
+          <div className="text-[10px] font-semibold uppercase tracking-wider mb-2 text-[color:var(--kub-accent-text)]">
             История
           </div>
           <ol className="relative space-y-3 pl-5 before:content-[''] before:absolute before:left-1.5 before:top-1 before:bottom-1 before:w-px before:bg-[color:var(--kub-border-color)]">

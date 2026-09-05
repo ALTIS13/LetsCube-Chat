@@ -110,7 +110,7 @@ export function AdminLayout() {
               href={t.path}
               className={cn(
                 "flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 h-11 text-[11px] sm:text-xs font-semibold uppercase tracking-wide transition-colors whitespace-nowrap relative",
-                active ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
+                active ? "text-[color:var(--kub-accent-text)]" : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
               )}
             >
               <KubIcon name={t.icon} size={14} />

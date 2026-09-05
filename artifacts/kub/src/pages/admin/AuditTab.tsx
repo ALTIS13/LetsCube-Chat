@@ -328,7 +328,7 @@ export function AuditTab() {
           />
           <button
             onClick={refresh}
-            className="kub-button kub-interactive flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-xs font-semibold hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]"
+            className="kub-button kub-interactive flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-xs font-semibold hover:bg-[var(--kub-surface-2)] text-[color:var(--kub-accent-text)]"
             aria-label="Обновить"
           >
             <KubIcon name="rotate" size={13} /> Обновить
@@ -351,7 +351,7 @@ export function AuditTab() {
       <KubPanel className="p-3 mb-3 space-y-2.5">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
           <div className="relative">
-            <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-cyan)]">Действующее лицо</div>
+            <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">Действующее лицо</div>
             {actorPicked ? (
               <div className="flex items-center gap-2 rounded-xl px-3 h-11 bg-[var(--kub-surface-2)] border border-[color:var(--kub-cyan)]/40">
                 <UserAvatar user={actorPicked} size="sm" />
@@ -401,7 +401,7 @@ export function AuditTab() {
           </div>
 
           <div className="relative">
-            <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-cyan)]">Тип события</div>
+            <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">Тип события</div>
             <button
               onClick={() => setActionsOpen((v) => !v)}
               aria-expanded={actionsOpen}
@@ -447,7 +447,7 @@ export function AuditTab() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
           <div>
-            <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-cyan)]">Дата с</div>
+            <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">Дата с</div>
             <input
               type="date"
               value={fromDate}
@@ -456,7 +456,7 @@ export function AuditTab() {
             />
           </div>
           <div>
-            <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-cyan)]">Дата по</div>
+            <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">Дата по</div>
             <input
               type="date"
               value={toDate}
@@ -559,7 +559,7 @@ export function AuditTab() {
                         <KvRow label="Чат" value={r.targetChat.name ?? r.targetChat.id.slice(0, 8)} />
                       )}
                       <div>
-                        <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-cyan)]">
+                        <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">
                           Данные изменения
                         </div>
                         <DiffDetails diff={r.diff} />

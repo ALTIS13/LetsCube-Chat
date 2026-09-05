@@ -199,7 +199,7 @@ export function InvitesTab() {
       <KubPanel className="space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-cyan)]">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-accent-text)]">
               <KubIcon name="lock" size={14} />
               Режим регистрации
             </div>

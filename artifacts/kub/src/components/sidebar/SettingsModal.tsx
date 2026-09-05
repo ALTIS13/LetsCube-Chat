@@ -500,7 +500,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             size="sm"
             onClick={handleRemoveAvatar}
             leftIcon={<KubIcon name="delete" size={12} />}
-            className="shrink-0 text-[color:var(--kub-danger)]"
+            className="shrink-0 text-[color:var(--kub-danger-text)]"
           >
             Удалить фото
           </KubButton>
@@ -508,7 +508,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       </div>
 
       {error && (
-        <div className="mx-3 mt-3 rounded-xl border border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-danger)] sm:mx-4">
+        <div className="mx-3 mt-3 rounded-xl border border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-danger-text)] sm:mx-4">
           {error}
         </div>
       )}
@@ -640,7 +640,7 @@ function TextFieldRow({
         className="min-w-0 truncate text-sm text-[color:var(--kub-text)]"
       >
         {label}
-        {required && <span className="text-[color:var(--kub-danger)]"> *</span>}
+        {required && <span className="text-[color:var(--kub-danger-text)]"> *</span>}
       </label>
       <div className="flex min-w-0 items-center gap-2">
         {counterVisible && (
@@ -772,7 +772,7 @@ function RowNote({ children, tone = "muted" }: { children: ReactNode; tone?: "mu
     <p
       className={cn(
         "px-3 py-2 text-xs leading-snug sm:px-4",
-        tone === "danger" ? "text-[color:var(--kub-danger)]" : "text-[color:var(--kub-muted)]",
+        tone === "danger" ? "text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-muted)]",
       )}
     >
       {children}

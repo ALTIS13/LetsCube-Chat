@@ -192,7 +192,7 @@ export function GlobalSearchPalette() {
                   className={cn(
                     "h-8 shrink-0 rounded-lg px-3 text-xs font-semibold transition-colors",
                     active
-                      ? "bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] text-[color:var(--kub-cyan)]"
+                      ? "bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] text-[color:var(--kub-accent-text)]"
                       : "bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
                   )}
                 >

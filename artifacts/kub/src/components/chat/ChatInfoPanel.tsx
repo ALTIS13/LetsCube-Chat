@@ -1060,7 +1060,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     rowMotionClass,
   );
   const dangerActionRowClass = cn(
-    "inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 text-left text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:cursor-not-allowed disabled:opacity-60",
+    "inline-flex min-w-0 items-center gap-3 w-full py-2 text-sm rounded-xl px-2 text-left text-[color:var(--kub-danger-text)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:cursor-not-allowed disabled:opacity-60",
     rowMotionClass,
   );
 
@@ -1163,7 +1163,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
             </label>
           )}
           {avatarError && (
-            <div className="text-xs text-center text-[color:var(--kub-danger)]">
+            <div className="text-xs text-center text-[color:var(--kub-danger-text)]">
               {avatarError}
             </div>
           )}
@@ -1242,7 +1242,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               onClick={() => setTab(t)}
               className={cn(
                 "relative flex-1 py-2.5 text-xs font-semibold uppercase tracking-wide transition-colors",
-                tab === t ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
+                tab === t ? "text-[color:var(--kub-accent-text)]" : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
               )}
             >
               {t === "members"
@@ -1266,7 +1266,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
             )}
             {!isGroup && otherUser?.bio && (
               <div className="px-4 py-3 border-b border-[color:var(--kub-border-color)]">
-                <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-cyan)]">О себе</div>
+                <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">О себе</div>
                 <div className="text-sm text-[color:var(--kub-text)]">{otherUser.bio}</div>
               </div>
             )}
@@ -1340,7 +1340,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                     </div>
                   )}
                   {invitePolicyError && (
-                    <div className="mt-2 text-xs text-[color:var(--kub-danger)]">
+                    <div className="mt-2 text-xs text-[color:var(--kub-danger-text)]">
                       {invitePolicyError}
                     </div>
                   )}
@@ -1389,7 +1389,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                   <span className="flex-1 text-left">Топики</span>
                   <span className={cn(
                     "text-[10px] uppercase tracking-wide font-semibold",
-                    chat.is_forum ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)]"
+                    chat.is_forum ? "text-[color:var(--kub-accent-text)]" : "text-[color:var(--kub-muted)]"
                   )}>
                     {chat.is_forum ? "Вкл" : "Выкл"}
                   </span>
@@ -1512,7 +1512,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                 <button
                   type="button"
                   onClick={() => setInviteOpen(true)}
-                  className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm font-semibold text-[color:var(--kub-cyan)] transition-colors hover:bg-[var(--kub-surface-3)]"
+                  className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm font-semibold text-[color:var(--kub-accent-text)] transition-colors hover:bg-[var(--kub-surface-3)]"
                 >
                   <KubIcon name="userPlus" size={15} />
                   Пригласить пользователя
@@ -1545,7 +1545,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                       {isSelf && <span className="text-xs flex-shrink-0 text-[color:var(--kub-muted)]">(вы)</span>}
                     </div>
                     {(isMemberOwner || isMemberAdmin) && (
-                      <div className="text-xs text-[color:var(--kub-cyan)]">{roleLabel(member.chat_role)}</div>
+                      <div className="text-xs text-[color:var(--kub-accent-text)]">{roleLabel(member.chat_role)}</div>
                     )}
                   </div>
 
@@ -1597,7 +1597,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               <div className="mt-3 border-t border-[color:var(--kub-border-color)] px-4 pt-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div>
-                    <div className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--kub-cyan)]">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--kub-accent-text)]">
                       Приглашения
                     </div>
                     <div className="text-xs text-[color:var(--kub-muted)]">
@@ -1615,7 +1615,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                 </div>
 
                 {inviteError && (
-                  <div className="mb-2 rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-danger)]">
+                  <div className="mb-2 rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-danger-text)]">
                     {inviteError}
                   </div>
                 )}
@@ -1814,7 +1814,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                 onClick={() => void loadMoreActiveSection()}
                 aria-busy={sectionLoading}
                 data-testid="chat-info-media-sentinel"
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-sm text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-2)]"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-sm text-[color:var(--kub-accent-text)] hover:bg-[var(--kub-surface-2)]"
               >
                 {sectionLoading && <KubStableSkeleton width="0.875rem" height="0.875rem" rounded="full" />}
                 <span>{sectionLoading ? "Загружаем ещё…" : "Загрузить ещё"}</span>
@@ -1856,7 +1856,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         )}
       >
         {destructiveError ? (
-          <div className="rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-danger)]">
+          <div className="rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-danger-text)]">
             {destructiveError}
           </div>
         ) : (
@@ -1897,7 +1897,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         )}
       >
         {destructiveError ? (
-          <div className="rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-danger)]">
+          <div className="rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-danger-text)]">
             {destructiveError}
           </div>
         ) : (
@@ -1938,8 +1938,8 @@ function inviteStatusLabel(status: GroupInviteStatus, isCurrentMember = false): 
 }
 
 function inviteStatusClass(status: GroupInviteStatus): string {
-  if (status === "pending") return "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] text-[color:var(--kub-cyan)]";
-  if (status === "declined") return "bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger)]";
+  if (status === "pending") return "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] text-[color:var(--kub-accent-text)]";
+  if (status === "declined") return "bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger-text)]";
   if (status === "accepted") return "bg-[color-mix(in_srgb,var(--kub-online)_14%,transparent)] text-[color:var(--kub-online)]";
   return "bg-[var(--kub-surface-3)] text-[color:var(--kub-muted)]";
 }

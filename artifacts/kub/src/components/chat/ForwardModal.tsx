@@ -49,7 +49,7 @@ export function ForwardModal({ message, onClose, onForward }: ForwardModalProps)
       contentClassName="px-4 pt-3 pb-2 space-y-3"
     >
       <div className="rounded-xl px-3 py-2 text-xs bg-[var(--kub-surface-2)] border-l-2 border-[color:var(--kub-cyan)]">
-        <div className="font-semibold text-[color:var(--kub-cyan)]">
+        <div className="font-semibold text-[color:var(--kub-accent-text)]">
           {messageActorDisplayName(resolveMessageActor(message))}
         </div>
         <div className="truncate text-[color:var(--kub-muted)]">{preview}</div>
@@ -84,7 +84,7 @@ export function ForwardModal({ message, onClose, onForward }: ForwardModalProps)
                 </div>
               </div>
               {busyId === chat.id && (
-                <span className="text-xs text-[color:var(--kub-cyan)]">отправка…</span>
+                <span className="text-xs text-[color:var(--kub-accent-text)]">отправка…</span>
               )}
             </button>
           ))

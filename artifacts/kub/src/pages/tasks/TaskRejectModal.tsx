@@ -69,7 +69,7 @@ export function TaskRejectModal({ taskId, mode, onClose, onDone }: Props) {
       }
     >
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-cyan)]">
+        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
           {c.label}
         </label>
         <textarea
@@ -83,7 +83,7 @@ export function TaskRejectModal({ taskId, mode, onClose, onDone }: Props) {
       </div>
 
       {error && (
-        <div className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger)] border border-[color:var(--kub-danger)]/30">
+        <div className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger-text)] border border-[color:var(--kub-danger)]/30">
           {error}
         </div>
       )}

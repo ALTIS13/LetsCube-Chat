@@ -145,7 +145,7 @@ export function BotDocsPage() {
                           key={method.name}
                           className="grid gap-2 py-3 text-sm sm:grid-cols-[210px_minmax(0,1fr)] sm:gap-5"
                         >
-                          <code className="break-words font-semibold text-[color:var(--kub-cyan)]">
+                          <code className="break-words font-semibold text-[color:var(--kub-accent-text)]">
                             {method.name}
                           </code>
                           <div className="min-w-0">
@@ -192,7 +192,7 @@ export function BotDocsPage() {
                   Webhook URL обязан использовать HTTPS и не может содержать учетные данные,
                   IP-адрес или ссылаться на loopback, private, link-local и metadata сети. При
                   доставке LETSCUBE передает secret_token в заголовке
-                  <code className="mx-1 break-all text-[color:var(--kub-cyan)]">
+                  <code className="mx-1 break-all text-[color:var(--kub-accent-text)]">
                     X-Letscube-Bot-Webhook-Secret
                   </code>
                   . Сравнивайте его постоянным по времени сравнением до чтения тела запроса.

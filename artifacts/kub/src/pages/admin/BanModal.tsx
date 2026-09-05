@@ -99,7 +99,7 @@ export function BanModal({ target, onClose, onSuccess }: Props) {
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-cyan)]">
+        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
           Причина
         </label>
         <textarea
@@ -112,7 +112,7 @@ export function BanModal({ target, onClose, onSuccess }: Props) {
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-cyan)]">
+        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
           Срок
         </label>
         <div className="grid grid-cols-3 gap-1.5">

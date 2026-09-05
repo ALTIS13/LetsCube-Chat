@@ -392,7 +392,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       />
 
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-cyan)]">
+        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
           Описание
         </label>
         <textarea
@@ -405,7 +405,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-cyan)]">
+        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
           Приоритет
         </label>
         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
@@ -432,7 +432,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-cyan)]">
+        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
           Срок (необязательно)
         </label>
         <input
@@ -446,7 +446,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3">
         <div className="mb-3 flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-cyan)]">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
               Повторение
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
@@ -632,7 +632,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3">
         <div className="mb-3 flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-cyan)]">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
               Маршрутизация по локации
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--kub-muted)]">
@@ -758,7 +758,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       <div>
         <label
           htmlFor="task-chat-select"
-          className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-cyan)]"
+          className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]"
         >
           {visibility === "chat" ? "Связанный чат" : "Связанный чат (необязательно)"}
         </label>
@@ -770,7 +770,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
             className={cn(
               "mb-2 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors",
               chatId === null
-                ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] text-[color:var(--kub-cyan)]"
+                ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] text-[color:var(--kub-accent-text)]"
                 : "text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-3)]",
             )}
           >
@@ -841,7 +841,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       </div>
 
       <div>
-        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-cyan)]">
+        <label className="text-[10px] font-semibold uppercase tracking-wider mb-2 block text-[color:var(--kub-accent-text)]">
           Исполнитель
         </label>
         {assignmentScope !== "user" ? (
@@ -917,7 +917,7 @@ export function TaskFormModal({ task, onClose, onDone }: TaskFormModalProps) {
       </div>
 
       {error && (
-        <div className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger)] border border-[color:var(--kub-danger)]/30">
+        <div className="rounded-xl px-3 py-2 text-xs bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] text-[color:var(--kub-danger-text)] border border-[color:var(--kub-danger)]/30">
           {error}
         </div>
       )}

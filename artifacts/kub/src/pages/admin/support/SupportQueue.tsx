@@ -101,11 +101,11 @@ export function SupportQueue({
           </div>
         ) : error ? (
           <div className="m-2 rounded-lg border border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] p-3">
-            <p className="text-sm text-[color:var(--kub-danger)]">{error}</p>
+            <p className="text-sm text-[color:var(--kub-danger-text)]">{error}</p>
             <button
               type="button"
               onClick={onReload}
-              className="mt-2 text-xs font-semibold text-[color:var(--kub-cyan)]"
+              className="mt-2 text-xs font-semibold text-[color:var(--kub-accent-text)]"
             >
               Повторить
             </button>

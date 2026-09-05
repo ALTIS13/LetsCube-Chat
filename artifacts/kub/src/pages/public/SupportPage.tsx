@@ -171,7 +171,7 @@ export function SupportPage() {
               />
               <p className="border-t border-[color:var(--kub-border-color)] pt-5 text-xs leading-5 text-[color:var(--kub-muted)]">
                 Почта поддержки:{" "}
-                <a className="font-semibold text-[color:var(--kub-cyan)]" href="mailto:support@app.letscube.ru">
+                <a className="font-semibold text-[color:var(--kub-accent-text)]" href="mailto:support@app.letscube.ru">
                   support@app.letscube.ru
                 </a>
               </p>

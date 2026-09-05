@@ -100,10 +100,10 @@ export function BotCreateModal({ open, onOpenChange, onCreated, onUncertain }: P
             <div>
               <label htmlFor="bot-create-description" className="text-xs font-medium uppercase text-[color:var(--kub-muted)]">Описание</label>
               <textarea id="bot-create-description" value={description} onChange={(event) => { setDescription(event.target.value); setFieldErrors((current) => ({ ...current, description: undefined })); }} maxLength={512} rows={4} aria-invalid={Boolean(fieldErrors.description)} aria-describedby={fieldErrors.description ? "bot-create-description-error" : undefined} className="mt-1.5 w-full resize-none rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] aria-[invalid=true]:border-[color:var(--kub-danger)]" />
-              {fieldErrors.description && <p id="bot-create-description-error" className="mt-1 text-xs text-[color:var(--kub-danger)]">{fieldErrors.description}</p>}
+              {fieldErrors.description && <p id="bot-create-description-error" className="mt-1 text-xs text-[color:var(--kub-danger-text)]">{fieldErrors.description}</p>}
               <div className="mt-1 text-right text-xs text-[color:var(--kub-muted)]">{description.length}/512</div>
             </div>
-            {error && <p role="alert" className="text-sm text-[color:var(--kub-danger)]">{error}</p>}
+            {error && <p role="alert" className="text-sm text-[color:var(--kub-danger-text)]">{error}</p>}
             <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
               <KubButton type="button" variant="secondary" className="min-h-11" onClick={() => onOpenChange(false)} disabled={busy}>Отмена</KubButton>
               <KubButton type="submit" variant="primary" className="min-h-11" disabled={busy || uncertain}>{busy ? "Создаём…" : "Создать"}</KubButton>

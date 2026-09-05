@@ -439,7 +439,7 @@ export function TasksPage() {
                 className={cn(
                   "kub-button kub-interactive relative px-4 py-3 text-xs font-semibold uppercase tracking-wider whitespace-nowrap transition-colors",
                   active
-                    ? "text-[color:var(--kub-cyan)]"
+                    ? "text-[color:var(--kub-accent-text)]"
                     : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
                 )}
               >
@@ -449,7 +449,7 @@ export function TasksPage() {
                     className={cn(
                       "ml-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] leading-none",
                       t.id === "urgent"
-                        ? "bg-[color-mix(in_srgb,var(--kub-danger)_18%,transparent)] text-[color:var(--kub-danger)]"
+                        ? "bg-[color-mix(in_srgb,var(--kub-danger)_18%,transparent)] text-[color:var(--kub-danger-text)]"
                         : t.id === "review"
                           ? "bg-[color-mix(in_srgb,var(--kub-warn)_18%,transparent)] text-[color:var(--kub-warn)]"
                           : t.id === "available"
@@ -576,7 +576,7 @@ export function TasksPage() {
                 className={cn(
                   "kub-button kub-interactive inline-flex items-center gap-1 rounded-md px-2.5 text-xs font-semibold transition-colors",
                   viewMode === "cards"
-                    ? "bg-[var(--kub-surface)] text-[color:var(--kub-cyan)]"
+                    ? "bg-[var(--kub-surface)] text-[color:var(--kub-accent-text)]"
                     : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
                 )}
                 aria-pressed={viewMode === "cards"}
@@ -590,7 +590,7 @@ export function TasksPage() {
                 className={cn(
                   "kub-button kub-interactive inline-flex items-center gap-1 rounded-md px-2.5 text-xs font-semibold transition-colors",
                   viewMode === "list"
-                    ? "bg-[var(--kub-surface)] text-[color:var(--kub-cyan)]"
+                    ? "bg-[var(--kub-surface)] text-[color:var(--kub-accent-text)]"
                     : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
                 )}
                 aria-pressed={viewMode === "list"}

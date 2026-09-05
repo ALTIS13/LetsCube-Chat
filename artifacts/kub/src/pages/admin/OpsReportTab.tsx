@@ -55,7 +55,7 @@ export function OpsReportTab() {
     <div className="space-y-4" data-testid="admin-ops-report">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-cyan)]">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-accent-text)]">
             <KubIcon name="activity" size={14} />
             Операционный отчёт
           </div>

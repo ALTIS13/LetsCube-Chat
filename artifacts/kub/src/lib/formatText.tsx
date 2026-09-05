@@ -13,6 +13,16 @@ import React from "react";
  * easier to reason about and faster on long chats.
  */
 
+/**
+ * The accent as a word, not as a shape.
+ *
+ * These are links and mentions inside a message body — letters, held to 4.5:1 —
+ * so they take `--kub-accent-text` rather than the `--tg-accent` alias they used
+ * to read, which resolves to `--kub-cyan` and is also what paints the sidebar
+ * rail. The alias stays where it is; only this reading of it is unwrapped.
+ */
+const LINK_COLOR = "var(--kub-accent-text)";
+
 // Order matters: code first so backticks shield their contents from other rules,
 // then strike / bold / italic, then URLs and mentions.
 const PATTERNS = [
@@ -162,7 +172,7 @@ function renderToken(t: Token, key: number): React.ReactNode {
           target="_blank"
           rel="noopener noreferrer"
           className="inline max-w-full underline [overflow-wrap:anywhere] [word-break:break-word]"
-          style={{ color: "var(--tg-accent)" }}
+          style={{ color: LINK_COLOR }}
         >
           {renderUrlText(t.href)}
         </a>
@@ -171,7 +181,7 @@ function renderToken(t: Token, key: number): React.ReactNode {
       return (
         <React.Fragment key={key}>
           {t.lead}
-          <span className="font-medium" style={{ color: "var(--tg-accent)" }}>@{t.user}</span>
+          <span className="font-medium" style={{ color: LINK_COLOR }}>@{t.user}</span>
         </React.Fragment>
       );
   }
@@ -189,7 +199,7 @@ export function FormattedText({ content }: { content: string }) {
           target="_blank"
           rel="noopener noreferrer"
           className="inline max-w-full underline [overflow-wrap:break-word] [word-break:normal]"
-          style={{ color: "var(--tg-accent)" }}
+          style={{ color: LINK_COLOR }}
         >
           {location.lat.toFixed(5)}, {location.lng.toFixed(5)}
         </a>

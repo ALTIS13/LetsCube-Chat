@@ -47,7 +47,7 @@ export function PublicHomePage() {
           aria-labelledby="public-home-title"
           className="mx-auto w-full max-w-7xl px-4 pt-8 sm:px-6 sm:pt-16 lg:px-8"
         >
-          <p className="text-sm font-semibold uppercase tracking-wide text-[color:var(--kub-cyan)]">LETSCUBE</p>
+          <p className="text-sm font-semibold uppercase tracking-wide text-[color:var(--kub-accent-text)]">LETSCUBE</p>
           <h1
             id="public-home-title"
             className="mt-3 max-w-3xl text-3xl font-bold leading-tight text-[color:var(--kub-text)] sm:text-4xl lg:text-5xl"
@@ -69,7 +69,7 @@ export function PublicHomePage() {
             </Link>
             <Link
               href="/download"
-              className="inline-flex min-h-11 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-cyan)]"
+              className="inline-flex min-h-11 items-center justify-center rounded-lg px-3 text-sm font-semibold text-[color:var(--kub-accent-text)]"
             >
               Все платформы
             </Link>

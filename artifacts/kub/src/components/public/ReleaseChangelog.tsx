@@ -57,10 +57,10 @@ export function ReleaseChangelog({ entry }: { entry: PublicChangelogEntry | null
           aria-expanded={expanded}
           aria-controls={listId}
           onClick={() => setExpanded((open) => !open)}
-          className="mt-4 inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-[color:var(--kub-cyan)]"
+          className="mt-4 inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-[color:var(--kub-accent-text)]"
         >
           {expanded ? "Свернуть" : `Ещё ${entry.highlights.length - VISIBLE_HIGHLIGHTS}`}
-          <KubIcon name={expanded ? "chevronUp" : "chevronDown"} size={16} tone="accent" />
+          <KubIcon name={expanded ? "chevronUp" : "chevronDown"} size={16} tone="currentColor" />
         </button>
       )}
     </section>

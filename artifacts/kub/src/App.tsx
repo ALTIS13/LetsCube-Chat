@@ -160,7 +160,7 @@ function AuthCallback() {
           <form onSubmit={handlePasswordUpdate} className="w-full">
             <KubPanel glow="soft" padded={false} className="w-full overflow-hidden text-left">
               <div className="border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/50 px-3 py-2">
-                <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-cyan)]">
+                <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-accent-text)]">
                   <span className="h-1.5 w-1.5 rounded-full bg-[var(--kub-cyan)] kub-pulse" />
                   Восстановление доступа
                 </div>
@@ -195,7 +195,7 @@ function AuthCallback() {
                   placeholder="Повторите пароль"
                   leftIcon={<KubIcon name="shield" size={16} />}
                 />
-                {error && <p className="text-xs text-[color:var(--kub-danger)]">{error}</p>}
+                {error && <p className="text-xs text-[color:var(--kub-danger-text)]">{error}</p>}
                 <KubButton
                   type="submit"
                   loading={savingPassword}
@@ -269,7 +269,7 @@ function LoadingScreen({
     <div className="min-h-screen flex items-center justify-center kub-grid-bg">
       <div className="flex max-w-sm flex-col items-center gap-4 px-5 text-center">
         <KubLogo size={56} withGlow />
-        <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] font-semibold text-[color:var(--kub-cyan)]">
+        <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] font-semibold text-[color:var(--kub-accent-text)]">
           <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[var(--kub-cyan)] kub-pulse" />
           Загрузка
         </div>

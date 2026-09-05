@@ -57,7 +57,7 @@ export const KubInput = forwardRef<HTMLInputElement, KubInputProps>(
           {rightSlot}
         </div>
         {error ? (
-          <p id={errorId} className="text-xs text-[color:var(--kub-danger)]">{error}</p>
+          <p id={errorId} className="text-xs text-[color:var(--kub-danger-text)]">{error}</p>
         ) : hint ? (
           <p className="text-xs text-[color:var(--kub-muted)]">{hint}</p>
         ) : null}

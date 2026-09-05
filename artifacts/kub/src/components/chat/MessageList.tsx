@@ -706,7 +706,7 @@ export function MessageList({
             disabled={selectedMessages.length === 0 || bulkDeleting}
             className={cn(
               "inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:opacity-40",
-              bulkConfirmAction === "hide" ? "bg-[color-mix(in_srgb,var(--kub-danger)_15%,transparent)] text-[color:var(--kub-danger)]" : "text-[color:var(--kub-danger)]",
+              bulkConfirmAction === "hide" ? "bg-[color-mix(in_srgb,var(--kub-danger)_15%,transparent)] text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-danger-text)]",
             )}
           >
             <KubIcon name="delete" size={14} />
@@ -719,7 +719,7 @@ export function MessageList({
               disabled={selectedMessages.length === 0 || bulkDeleting}
               className={cn(
                 "inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:opacity-40",
-                bulkConfirmAction === "delete" ? "bg-[color-mix(in_srgb,var(--kub-danger)_15%,transparent)] text-[color:var(--kub-danger)]" : "text-[color:var(--kub-danger)]",
+                bulkConfirmAction === "delete" ? "bg-[color-mix(in_srgb,var(--kub-danger)_15%,transparent)] text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-danger-text)]",
               )}
             >
               <KubIcon name="delete" size={14} />
@@ -736,7 +736,7 @@ export function MessageList({
         </div>
       )}
       {bulkError && (
-        <div className="absolute left-3 right-3 top-14 z-20 rounded-xl border border-[color:var(--kub-danger)]/40 bg-[var(--kub-surface)]/95 px-3 py-2 text-xs text-[color:var(--kub-danger)] shadow-lg backdrop-blur">
+        <div className="absolute left-3 right-3 top-14 z-20 rounded-xl border border-[color:var(--kub-danger)]/40 bg-[var(--kub-surface)]/95 px-3 py-2 text-xs text-[color:var(--kub-danger-text)] shadow-lg backdrop-blur">
           {bulkError}
         </div>
       )}

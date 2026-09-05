@@ -72,7 +72,7 @@ export function PublicPageShell({ children, scrollRootRef }: PublicPageShellProp
               href="mailto:privacy@app.letscube.ru"
               // Standalone footer contacts, not links inside a sentence, so they
               // are held to the target size. See D-013.
-              className="inline-flex min-h-11 items-center hover:text-[color:var(--kub-cyan)]"
+              className="inline-flex min-h-11 items-center hover:text-[color:var(--kub-accent-text)]"
             >
               privacy@app.letscube.ru
             </a>
@@ -80,7 +80,7 @@ export function PublicPageShell({ children, scrollRootRef }: PublicPageShellProp
               href="mailto:support@app.letscube.ru"
               // Standalone footer contacts, not links inside a sentence, so they
               // are held to the target size. See D-013.
-              className="inline-flex min-h-11 items-center hover:text-[color:var(--kub-cyan)]"
+              className="inline-flex min-h-11 items-center hover:text-[color:var(--kub-accent-text)]"
             >
               support@app.letscube.ru
             </a>

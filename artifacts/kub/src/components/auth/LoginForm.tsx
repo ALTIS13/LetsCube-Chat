@@ -170,7 +170,7 @@ export function LoginForm() {
 
         <KubPanel glow="soft" padded={false} className="overflow-hidden">
           <div className="px-3 py-2 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/50">
-            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-cyan)]">
+            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--kub-accent-text)]">
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--kub-cyan)] kub-pulse" />
               Авторизация
             </div>
@@ -185,7 +185,7 @@ export function LoginForm() {
                   border: "1px solid color-mix(in srgb, var(--kub-danger) 35%, transparent)",
                 }}
               >
-                <div className="flex items-center gap-2 font-semibold text-sm text-[color:var(--kub-danger)]">
+                <div className="flex items-center gap-2 font-semibold text-sm text-[color:var(--kub-danger-text)]">
                   <KubIcon name="ban" size={14} />
                   Аккаунт заблокирован
                 </div>
@@ -201,7 +201,7 @@ export function LoginForm() {
             )}
 
             {notice && !error && (
-              <p className="text-xs text-[color:var(--kub-cyan)] px-1">{notice}</p>
+              <p className="text-xs text-[color:var(--kub-accent-text)] px-1">{notice}</p>
             )}
 
             <form onSubmit={resetMode ? handlePasswordReset : handleLogin} className="flex flex-col gap-3">
@@ -250,7 +250,7 @@ export function LoginForm() {
               )}
 
               {error && (
-                <p className="text-xs text-[color:var(--kub-danger)] px-1">{error}</p>
+                <p className="text-xs text-[color:var(--kub-danger-text)] px-1">{error}</p>
               )}
 
               <KubButton
@@ -273,7 +273,7 @@ export function LoginForm() {
                 // A standalone action, not a link inside a sentence, so it is
                 // held to the target size. The padding grows the hit area
                 // without changing the type size. See D-013.
-                className="mx-auto inline-flex min-h-11 items-center justify-center px-3 text-xs font-semibold text-[color:var(--kub-cyan)] hover:text-[color:var(--kub-cyan-hover)] transition-colors"
+                className="mx-auto inline-flex min-h-11 items-center justify-center px-3 text-xs font-semibold text-[color:var(--kub-accent-text)] hover:text-[color:var(--kub-cyan-hover)] transition-colors"
               >
                 {resetMode ? "Вернуться ко входу" : "Забыли пароль?"}
               </button>
@@ -285,7 +285,7 @@ export function LoginForm() {
           Нет аккаунта?{" "}
           <Link
             href="/register"
-            className="font-semibold text-[color:var(--kub-cyan)] hover:text-[color:var(--kub-cyan-hover)] transition-colors"
+            className="font-semibold text-[color:var(--kub-accent-text)] hover:text-[color:var(--kub-cyan-hover)] transition-colors"
           >
             Зарегистрироваться
           </Link>
@@ -294,7 +294,7 @@ export function LoginForm() {
           Используя LETSCUBE, вы подтверждаете, что ознакомились с{" "}
           <Link
             href="/privacy"
-            className="font-semibold text-[color:var(--kub-cyan)] hover:text-[color:var(--kub-cyan-hover)]"
+            className="font-semibold text-[color:var(--kub-accent-text)] hover:text-[color:var(--kub-cyan-hover)]"
           >
             Политикой конфиденциальности
           </Link>

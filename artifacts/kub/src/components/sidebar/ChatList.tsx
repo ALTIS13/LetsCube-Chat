@@ -659,14 +659,14 @@ function ChatActionButton({
         "flex w-full min-w-0 items-center gap-3 rounded-lg text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60",
         mobile ? "px-3 py-3" : "px-3 py-2.5",
         action.danger
-          ? "text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)]"
+          ? "text-[color:var(--kub-danger-text)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)]"
           : "text-[color:var(--kub-text)] hover:bg-[var(--kub-surface-3)]",
       )}
     >
       <KubIcon
         name={busy ? "spinner" : action.icon}
         size={17}
-        tone={action.danger ? "danger" : "muted"}
+        tone={action.danger ? "currentColor" : "muted"}
         className={cn("shrink-0", busy && "animate-spin")}
       />
       <span className="min-w-0 flex-1 truncate">{busy ? "Выполняем..." : action.label}</span>

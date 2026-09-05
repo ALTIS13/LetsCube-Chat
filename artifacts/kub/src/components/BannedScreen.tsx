@@ -44,7 +44,7 @@ export function BannedScreen({ ban }: Props) {
         <h1 className="text-xl font-bold mb-1 text-[color:var(--kub-text)]">
           Доступ ограничен
         </h1>
-        <p className="text-[10px] uppercase tracking-[0.18em] mb-6 text-[color:var(--kub-danger)]">
+        <p className="text-[10px] uppercase tracking-[0.18em] mb-6 text-[color:var(--kub-danger-text)]">
           LETSCUBE
         </p>
 
@@ -79,10 +79,10 @@ function Row({ label, value, mono, danger }: {
 }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--kub-cyan)]">
+      <span className="text-[10px] uppercase tracking-[0.15em] text-[color:var(--kub-accent-text)]">
         {label}
       </span>
-      <span className={`${mono ? "font-medium break-words" : "font-medium"} ${danger ? "text-[color:var(--kub-danger)]" : "text-[color:var(--kub-text)]"}`}>
+      <span className={`${mono ? "font-medium break-words" : "font-medium"} ${danger ? "text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-text)]"}`}>
         {value}
       </span>
     </div>

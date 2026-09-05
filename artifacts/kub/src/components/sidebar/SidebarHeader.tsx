@@ -193,9 +193,9 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
                       className={cn(
                         "flex items-center gap-3 w-full px-4 py-2.5 text-sm transition-colors hover:bg-[var(--kub-surface-3)]",
                         danger
-                          ? "text-[color:var(--kub-danger)]"
+                          ? "text-[color:var(--kub-danger-text)]"
                           : accent
-                            ? "text-[color:var(--kub-cyan)]"
+                            ? "text-[color:var(--kub-accent-text)]"
                             : "text-[color:var(--kub-text)]"
                       )}
                       onClick={action}
@@ -205,15 +205,15 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
                         size={16}
                         className={cn(
                           danger
-                            ? "text-[color:var(--kub-danger)]"
+                            ? "text-[color:var(--kub-danger-text)]"
                             : accent
-                              ? "text-[color:var(--kub-cyan)]"
+                              ? "text-[color:var(--kub-accent-text)]"
                               : "text-[color:var(--kub-muted)]"
                         )}
                       />
                       <span className="flex-1 text-left">{label}</span>
                       {note && (
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--kub-cyan)]">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--kub-accent-text)]">
                           {note}
                         </span>
                       )}

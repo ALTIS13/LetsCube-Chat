@@ -117,7 +117,7 @@ export function TaskCard({ task, nowMs, onClick, selected = false, selectionCont
           <div className="flex min-w-0 items-center justify-between gap-2 text-[11px]">
             <span className={cn(
               "flex min-w-0 items-center gap-1.5 font-medium",
-              deadline.isOverdue && "text-[color:var(--kub-danger)]",
+              deadline.isOverdue && "text-[color:var(--kub-danger-text)]",
               deadline.isDueSoon && !deadline.isOverdue && "text-[color:var(--kub-warn)]",
               !deadline.isOverdue && !deadline.isDueSoon && "text-[color:var(--kub-text)]",
             )}>

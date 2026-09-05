@@ -899,7 +899,7 @@ export function MessageInput({
           <div className="flex items-center gap-2 rounded-t-xl px-3 py-2 mb-1 bg-[var(--kub-surface-2)] border-l-2 border-[color:var(--kub-cyan)]">
             <KubIcon name="edit" size={13} tone="accent" className="flex-shrink-0" />
             <div className="flex-1 min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-cyan)]">Редактирование</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">Редактирование</div>
               <div className="text-xs truncate text-[color:var(--kub-muted)]">{editingMessage.content}</div>
             </div>
             <button
@@ -916,7 +916,7 @@ export function MessageInput({
           <div className="flex items-center gap-2 rounded-t-xl px-3 py-2 mb-1 bg-[var(--kub-surface-2)] border-l-2 border-[color:var(--kub-cyan)]">
             <KubIcon name="reply" size={13} tone="accent" className="flex-shrink-0" />
             <div className="flex-1 min-w-0">
-              <div className="text-xs font-semibold text-[color:var(--kub-cyan)]">
+              <div className="text-xs font-semibold text-[color:var(--kub-accent-text)]">
                 {messageActorDisplayName(resolveMessageActor(replyTo))}
               </div>
               <div className="text-xs truncate text-[color:var(--kub-muted)]">{formatReplyMessagePreview(replyTo)}</div>
@@ -1003,7 +1003,7 @@ export function MessageInput({
                 : modeFeedback}
             </span>
             {holdRecorderState?.mode === "voice" && (
-              <span className="ml-auto tabular-nums text-[color:var(--kub-cyan)]">
+              <span className="ml-auto tabular-nums text-[color:var(--kub-accent-text)]">
                 {formatRecorderDuration(voiceHold.durationMs)}
               </span>
             )}
@@ -1449,7 +1449,7 @@ function VideoMessageAttachmentPreview({
         <div className="mt-1 text-[11px] leading-snug text-[color:var(--kub-muted)]">
           Нажмите на круг, чтобы просмотреть перед отправкой.
         </div>
-        <div className={cn("mt-1 truncate text-[11px] text-[color:var(--kub-muted)]", failed && "text-[color:var(--kub-danger)]")}>
+        <div className={cn("mt-1 truncate text-[11px] text-[color:var(--kub-muted)]", failed && "text-[color:var(--kub-danger-text)]")}>
           {attachment.error ?? attachmentStatusLabel(attachment.status)}
         </div>
         <StagedAttachmentTransferProgress attachment={attachment} />
@@ -1477,7 +1477,7 @@ function AttachmentMeta({
             : formatAttachmentSize(attachment.size)}
         </span>
         <span className="shrink-0">·</span>
-        <span className={cn("truncate", failed && "text-[color:var(--kub-danger)]")}>
+        <span className={cn("truncate", failed && "text-[color:var(--kub-danger-text)]")}>
           {attachment.error ?? attachmentStatusLabel(attachment.status)}
         </span>
       </div>
@@ -1561,7 +1561,7 @@ function VoiceAttachmentPreview({
           </span>
         </div>
         <VoicePlaybackProgress progress={progress} />
-        <div className={cn("mt-1 truncate text-[11px] text-[color:var(--kub-muted)]", failed && "text-[color:var(--kub-danger)]")}>
+        <div className={cn("mt-1 truncate text-[11px] text-[color:var(--kub-muted)]", failed && "text-[color:var(--kub-danger-text)]")}>
           {attachment.error ?? attachmentStatusLabel(attachment.status)}
         </div>
         <StagedAttachmentTransferProgress attachment={attachment} />

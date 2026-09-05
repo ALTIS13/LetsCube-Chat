@@ -127,7 +127,7 @@ export function SupportRequestForm({ busy, error, onSubmit }: SupportRequestForm
               ))}
             </select>
             {fieldErrors.category && (
-              <span className="text-xs text-[color:var(--kub-danger)]">
+              <span className="text-xs text-[color:var(--kub-danger-text)]">
                 {fieldErrors.category}
               </span>
             )}
@@ -158,7 +158,7 @@ export function SupportRequestForm({ busy, error, onSubmit }: SupportRequestForm
             aria-invalid={Boolean(fieldErrors.message)}
           />
           <span className="flex justify-between gap-3 text-xs">
-            <span className={fieldErrors.message ? "text-[color:var(--kub-danger)]" : "text-[color:var(--kub-muted)]"}>
+            <span className={fieldErrors.message ? "text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-muted)]"}>
               {fieldErrors.message ?? "Не указывайте пароли, коды подтверждения и платёжные данные."}
             </span>
             <span className="shrink-0 text-[color:var(--kub-muted)]">
@@ -192,13 +192,13 @@ export function SupportRequestForm({ busy, error, onSubmit }: SupportRequestForm
             <Link
               href="/privacy"
               target="_blank"
-              className="font-semibold text-[color:var(--kub-cyan)]"
+              className="font-semibold text-[color:var(--kub-accent-text)]"
             >
               Политикой конфиденциальности
             </Link>{" "}
             и согласен на обработку данных обращения для получения ответа.
             {fieldErrors.privacyAccepted && (
-              <span className="mt-1 block text-[color:var(--kub-danger)]">
+              <span className="mt-1 block text-[color:var(--kub-danger-text)]">
                 {fieldErrors.privacyAccepted}
               </span>
             )}
@@ -214,7 +214,7 @@ export function SupportRequestForm({ busy, error, onSubmit }: SupportRequestForm
           ariaLabel="Проверка защиты формы поддержки"
         />
         {fieldErrors.captchaToken && (
-          <p className="text-xs text-[color:var(--kub-danger)]">
+          <p className="text-xs text-[color:var(--kub-danger-text)]">
             {fieldErrors.captchaToken}
           </p>
         )}
@@ -222,7 +222,7 @@ export function SupportRequestForm({ busy, error, onSubmit }: SupportRequestForm
         {(formError || error) && (
           <p
             role="alert"
-            className="rounded-md border border-[color:var(--kub-danger)]/40 bg-[color:var(--kub-danger)]/10 px-3 py-2 text-xs text-[color:var(--kub-danger)]"
+            className="rounded-md border border-[color:var(--kub-danger)]/40 bg-[color:var(--kub-danger)]/10 px-3 py-2 text-xs text-[color:var(--kub-danger-text)]"
           >
             {formError || error}
           </p>

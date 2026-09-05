@@ -73,7 +73,7 @@ export function KubFilterSummary({
       <button
         type="button"
         onClick={onReset}
-        className="kub-button kub-interactive rounded-lg px-2 font-semibold text-[color:var(--kub-cyan)] hover:underline"
+        className="kub-button kub-interactive rounded-lg px-2 font-semibold text-[color:var(--kub-accent-text)] hover:underline"
       >
         Сбросить всё
       </button>

@@ -73,10 +73,10 @@ export function PinnedMessage({ messages, onJump, onUnpin }: PinnedMessageProps)
         className="relative flex min-w-0 cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors hover:bg-[var(--kub-surface-2)]"
       >
         <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-[var(--kub-cyan)]" />
-        <KubIcon name="pin" size={14} className="flex-shrink-0 text-[color:var(--kub-cyan)]" />
+        <KubIcon name="pin" size={14} className="flex-shrink-0 text-[color:var(--kub-accent-text)]" />
         <div className="min-w-0 flex-1">
           <div className="mb-0.5 flex min-w-0 items-center gap-2">
-            <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-cyan)]">
+            <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
               {isMultiple ? `Закреплено: ${visibleMessages.length}` : "Закреплённое сообщение"}
             </span>
             {isMultiple && (

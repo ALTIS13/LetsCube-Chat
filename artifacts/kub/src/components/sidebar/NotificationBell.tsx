@@ -364,7 +364,7 @@ export function NotificationBell() {
             <button
               onClick={() => void handleMarkVisibleRead()}
               disabled={activeUnreadCount === 0}
-              className="h-8 shrink-0 rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-cyan)] transition-colors hover:bg-[var(--kub-surface-2)] disabled:cursor-not-allowed disabled:text-[color:var(--kub-muted)]"
+              className="h-8 shrink-0 rounded-lg px-3 text-xs font-semibold text-[color:var(--kub-accent-text)] transition-colors hover:bg-[var(--kub-surface-2)] disabled:cursor-not-allowed disabled:text-[color:var(--kub-muted)]"
             >
               Прочитать
             </button>
@@ -391,7 +391,7 @@ export function NotificationBell() {
                   className={cn(
                     "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors",
                     activeTab === tab.id
-                      ? "bg-[color-mix(in_srgb,var(--kub-cyan)_16%,transparent)] text-[color:var(--kub-cyan)]"
+                      ? "bg-[color-mix(in_srgb,var(--kub-cyan)_16%,transparent)] text-[color:var(--kub-accent-text)]"
                       : "text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)]",
                   )}
                 >
@@ -407,7 +407,7 @@ export function NotificationBell() {
           </div>
 
           {error && (
-            <div className="mx-3 mt-3 shrink-0 rounded-xl border border-[color:var(--kub-danger)]/35 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-danger)]">
+            <div className="mx-3 mt-3 shrink-0 rounded-xl border border-[color:var(--kub-danger)]/35 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-xs text-[color:var(--kub-danger-text)]">
               {error}
             </div>
           )}
@@ -545,7 +545,7 @@ function NotificationItem({
                 style={
                   chip.emphasis === "alert"
                     ? {
-                        color: "var(--kub-danger)",
+                        color: "var(--kub-danger-text)",
                         background: "color-mix(in srgb, var(--kub-danger) 16%, transparent)",
                       }
                     : {
@@ -561,7 +561,7 @@ function NotificationItem({
               <span
                 data-testid="notification-attachment"
                 className="inline-flex items-center gap-1 rounded-full bg-[var(--kub-surface)] px-1.5 py-0.5"
-                style={{ color: accent.color }}
+                style={{ color: accent.textColor }}
               >
                 <KubIcon name={accent.attachment.icon as KubIconName} size={11} />
                 {accent.attachment.label}
@@ -690,7 +690,7 @@ function MessageGroupItem({
               <span
                 data-testid="notification-attachment"
                 className="inline-flex items-center gap-1 rounded-full bg-[var(--kub-surface)] px-1.5 py-0.5"
-                style={{ color: accent.color }}
+                style={{ color: accent.textColor }}
               >
                 <KubIcon name={accent.attachment.icon as KubIconName} size={11} />
                 {accent.attachment.label}

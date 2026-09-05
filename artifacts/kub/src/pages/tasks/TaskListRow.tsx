@@ -70,7 +70,7 @@ export function TaskListRow({ task, nowMs, onClick, selected = false, selectionC
           <span
             className={cn(
               "min-w-0 truncate text-[11px] font-medium",
-              deadline.isOverdue && "text-[color:var(--kub-danger)]",
+              deadline.isOverdue && "text-[color:var(--kub-danger-text)]",
               deadline.isDueSoon && !deadline.isOverdue && "text-[color:var(--kub-warn)]",
               !deadline.isOverdue && !deadline.isDueSoon && "text-[color:var(--kub-muted)]",
             )}
@@ -101,7 +101,7 @@ export function TaskListRow({ task, nowMs, onClick, selected = false, selectionC
           <span
             className={cn(
               "min-w-0 truncate font-medium",
-              deadline.isOverdue && "text-[color:var(--kub-danger)]",
+              deadline.isOverdue && "text-[color:var(--kub-danger-text)]",
               deadline.isDueSoon && !deadline.isOverdue && "text-[color:var(--kub-warn)]",
               !deadline.isOverdue && !deadline.isDueSoon && "text-[color:var(--kub-text)]",
             )}

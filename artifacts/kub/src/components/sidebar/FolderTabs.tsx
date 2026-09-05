@@ -110,7 +110,7 @@ export function FolderTabs({ folders, activeFolder, onFolderChange, onCreate, on
               className={cn(
                 "kub-button kub-interactive relative flex items-center gap-1.5 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide whitespace-nowrap transition-colors flex-shrink-0",
                 isActive
-                  ? "text-[color:var(--kub-cyan)]"
+                  ? "text-[color:var(--kub-accent-text)]"
                   : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
               )}
             >
@@ -119,7 +119,7 @@ export function FolderTabs({ folders, activeFolder, onFolderChange, onCreate, on
                 <KubIcon
                   name="group"
                   size={11}
-                  className={isActive ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)]"}
+                  className={isActive ? "text-[color:var(--kub-accent-text)]" : "text-[color:var(--kub-muted)]"}
                   label="Общая папка"
                 />
               )}

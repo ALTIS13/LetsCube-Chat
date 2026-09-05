@@ -517,7 +517,7 @@ export function VideoMessageRecorderModal({
         />
         {statusCopy.title}
         {(status === "recording" || status === "recorded") && (
-          <span className="ml-auto tabular-nums text-[color:var(--kub-cyan)]">{formatDuration(displayDuration)}</span>
+          <span className="ml-auto tabular-nums text-[color:var(--kub-accent-text)]">{formatDuration(displayDuration)}</span>
         )}
       </div>
       <div className="mt-1">{statusCopy.body}</div>
@@ -595,7 +595,7 @@ export function VideoMessageRecorderModal({
             </span>
             <span className="truncate">Видеосообщение</span>
             {(status === "recording" || status === "recorded") && (
-              <span className="shrink-0 tabular-nums text-[color:var(--kub-cyan)]">{formatDuration(displayDuration)}</span>
+              <span className="shrink-0 tabular-nums text-[color:var(--kub-accent-text)]">{formatDuration(displayDuration)}</span>
             )}
           </div>
           <button

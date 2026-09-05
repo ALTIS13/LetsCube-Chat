@@ -220,7 +220,7 @@ export function ProfileDecorationSection() {
         }}
       />
 
-      {error && <p className="text-xs text-[color:var(--kub-danger)]">{error}</p>}
+      {error && <p className="text-xs text-[color:var(--kub-danger-text)]">{error}</p>}
     </div>
   );
 }

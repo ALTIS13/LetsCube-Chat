@@ -161,7 +161,7 @@ export function HumanVerificationCaptcha({
         style={{ colorScheme: config.provider === "yandex-smartcaptcha" ? "light" : resolvedTheme }}
       />
       {error && (
-        <p className="px-1 text-xs text-[color:var(--kub-danger)]">{error}</p>
+        <p className="px-1 text-xs text-[color:var(--kub-danger-text)]">{error}</p>
       )}
     </div>
   );

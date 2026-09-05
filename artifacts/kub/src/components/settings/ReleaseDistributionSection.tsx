@@ -247,7 +247,7 @@ export function ReleaseDistributionSection() {
                 </div>
               )}
               {handoff && (
-                <div className="mt-2 text-[11px] text-[color:var(--kub-cyan)]" role="status">
+                <div className="mt-2 text-[11px] text-[color:var(--kub-accent-text)]" role="status">
                   Загрузка передана системе
                 </div>
               )}

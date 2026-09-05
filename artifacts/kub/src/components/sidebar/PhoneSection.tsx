@@ -248,7 +248,7 @@ export function PhoneSection() {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-1">
-            <span className="text-xs font-semibold text-[color:var(--kub-cyan)]">Телефон</span>
+            <span className="text-xs font-semibold text-[color:var(--kub-accent-text)]">Телефон</span>
             {storedPhone && (
               verified ? (
                 <KubBadge tone="online" dot>Подтверждён</KubBadge>
@@ -286,7 +286,7 @@ export function PhoneSection() {
 
       {stage === "code-sent" && (
         <div className="px-4 pt-0 pb-3 border-t border-[color:var(--kub-border-color)]">
-          <label className="text-[10px] font-semibold uppercase tracking-wider mt-3 mb-1.5 block text-[color:var(--kub-cyan)]">
+          <label className="text-[10px] font-semibold uppercase tracking-wider mt-3 mb-1.5 block text-[color:var(--kub-accent-text)]">
             Код подтверждения (4 цифры)
           </label>
           <input
@@ -310,8 +310,8 @@ export function PhoneSection() {
           className={cn(
             "px-4 py-2 text-xs border-t border-[color:var(--kub-border-color)]",
             error
-              ? "bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] text-[color:var(--kub-danger)]"
-              : "bg-[color-mix(in_srgb,var(--kub-cyan)_10%,transparent)] text-[color:var(--kub-cyan)]",
+              ? "bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] text-[color:var(--kub-danger-text)]"
+              : "bg-[color-mix(in_srgb,var(--kub-cyan)_10%,transparent)] text-[color:var(--kub-accent-text)]",
           )}
         >
           {error ?? info}
@@ -380,7 +380,7 @@ export function PhoneSection() {
             leftIcon={<KubIcon name="delete" size={13} />}
             onClick={removePhone}
             loading={busy === "save"}
-            className="ml-auto text-[color:var(--kub-danger)]"
+            className="ml-auto text-[color:var(--kub-danger-text)]"
           >
             Удалить
           </KubButton>

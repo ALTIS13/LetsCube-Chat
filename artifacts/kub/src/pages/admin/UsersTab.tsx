@@ -1167,7 +1167,7 @@ function ProfilePreviewModal({
           </div>
           {canManageAvatar && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[color:var(--kub-border-color)] px-2 py-1 text-xs text-[color:var(--kub-cyan)] hover:bg-[var(--kub-surface-2)]">
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[color:var(--kub-border-color)] px-2 py-1 text-xs text-[color:var(--kub-accent-text)] hover:bg-[var(--kub-surface-2)]">
                 <KubIcon name={avatarSaving ? "spinner" : "camera"} size={12} />
                 <span>{avatarSaving ? "Сохранение..." : "Сменить аватар"}</span>
                 <input
@@ -1187,7 +1187,7 @@ function ProfilePreviewModal({
                   type="button"
                   disabled={avatarSaving}
                   onClick={() => void handleAvatarReset()}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--kub-danger)]/30 px-2 py-1 text-xs text-[color:var(--kub-danger)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:opacity-60"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--kub-danger)]/30 px-2 py-1 text-xs text-[color:var(--kub-danger-text)] hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:opacity-60"
                 >
                   <KubIcon name="delete" size={12} />
                   <span>Сбросить</span>
@@ -1196,7 +1196,7 @@ function ProfilePreviewModal({
             </div>
           )}
           {avatarError && (
-            <div className="mt-1 text-xs text-[color:var(--kub-danger)]">{avatarError}</div>
+            <div className="mt-1 text-xs text-[color:var(--kub-danger-text)]">{avatarError}</div>
           )}
         </div>
       </div>
@@ -1222,7 +1222,7 @@ function ProfilePreviewModal({
       <ProfileRoleSummary user={user} routing={routing} />
       {user.bio && (
         <div>
-          <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-cyan)]">
+          <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">
             О себе
           </div>
           <div className="text-sm text-[color:var(--kub-text)]">{user.bio}</div>
@@ -1282,7 +1282,7 @@ function Field({ label, value, mono, danger, warn, copyable }: { label: string; 
   };
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wider text-[color:var(--kub-cyan)]">
+      <div className="text-[10px] uppercase tracking-wider text-[color:var(--kub-accent-text)]">
         {label}
       </div>
       <div
@@ -1290,7 +1290,7 @@ function Field({ label, value, mono, danger, warn, copyable }: { label: string; 
         title={copyable && value !== "—" ? "Скопировать" : undefined}
         className={cn(
           mono ? "font-medium break-words text-xs" : "font-medium",
-          danger ? "text-[color:var(--kub-danger)]" : warn ? "text-[color:var(--kub-warn)]" : "text-[color:var(--kub-text)]",
+          danger ? "text-[color:var(--kub-danger-text)]" : warn ? "text-[color:var(--kub-warn)]" : "text-[color:var(--kub-text)]",
           copyable && value !== "—" && "cursor-pointer hover:underline",
         )}
       >
@@ -1319,7 +1319,7 @@ function PhoneField({
   };
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wider text-[color:var(--kub-cyan)]">
+      <div className="text-[10px] uppercase tracking-wider text-[color:var(--kub-accent-text)]">
         Телефон
       </div>
       {phone ? (
@@ -1344,7 +1344,7 @@ function PhoneField({
               leftIcon={<KubIcon name="delete" size={12} />}
               loading={removing}
               onClick={onRemove}
-              className="h-7 px-2 text-[color:var(--kub-danger)]"
+              className="h-7 px-2 text-[color:var(--kub-danger-text)]"
             >
               Удалить номер
             </KubButton>
@@ -1384,7 +1384,7 @@ function SelectField({
 }) {
   return (
     <label className="min-w-0 space-y-1">
-      <span className="block text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-cyan)]">
+      <span className="block text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
         {label}
       </span>
       <select

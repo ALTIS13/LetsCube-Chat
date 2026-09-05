@@ -196,7 +196,7 @@ export function SearchFilterChips({
           data-testid={`search-filter-chip-${chip.key}`}
           onClick={() => onChangeQuery(removeSearchChip(query, chip))}
           className={cn(
-            "inline-flex shrink-0 items-center gap-1 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] font-semibold text-[color:var(--kub-muted)] transition hover:border-[color:var(--kub-cyan)] hover:text-[color:var(--kub-cyan)]",
+            "inline-flex shrink-0 items-center gap-1 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] font-semibold text-[color:var(--kub-muted)] transition hover:border-[color:var(--kub-cyan)] hover:text-[color:var(--kub-accent-text)]",
             compact ? "h-7 px-2 text-[11px]" : "h-8 px-2.5 text-xs",
           )}
           title="Убрать фильтр"

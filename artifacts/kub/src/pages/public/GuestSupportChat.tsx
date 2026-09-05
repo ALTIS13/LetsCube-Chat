@@ -180,14 +180,14 @@ export function GuestSupportChat({
             <KubIcon name="send" size={17} />
           </KubButton>
         </div>
-        {error && <p role="alert" className="mt-2 text-xs text-[color:var(--kub-danger)]">{error}</p>}
+        {error && <p role="alert" className="mt-2 text-xs text-[color:var(--kub-danger-text)]">{error}</p>}
         <div className="mt-3 flex flex-col gap-2 text-[10px] leading-4 text-[color:var(--kub-muted)] sm:flex-row sm:items-center sm:justify-between">
           <p>Доступ на этом устройстве действует при активности до {expiresLabel}.</p>
           <button
             type="button"
             onClick={forget}
             disabled={forgetting}
-            className="self-start font-semibold text-[color:var(--kub-danger)] hover:brightness-110 disabled:opacity-50 sm:self-auto"
+            className="self-start font-semibold text-[color:var(--kub-danger-text)] hover:brightness-110 disabled:opacity-50 sm:self-auto"
           >
             {forgetting ? "Закрываем доступ…" : "Забыть обращение на устройстве"}
           </button>

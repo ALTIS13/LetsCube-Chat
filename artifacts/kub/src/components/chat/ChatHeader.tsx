@@ -280,13 +280,13 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
                     disabled={disabled}
                     className={cn(
                       "flex min-w-0 items-center gap-3 w-full px-4 py-2.5 text-left text-sm whitespace-nowrap transition-colors hover:bg-[var(--kub-surface-3)] disabled:cursor-not-allowed disabled:opacity-60",
-                      danger ? "text-[color:var(--kub-danger)]" : "text-[color:var(--kub-text)]"
+                      danger ? "text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-text)]"
                     )}
                   >
                     <KubIcon
                       name={icon}
                       size={16}
-                      tone={danger ? "danger" : "muted"}
+                      tone={danger ? "currentColor" : "muted"}
                       className="shrink-0"
                     />
                     <span className="min-w-0 flex-1 truncate text-left">
@@ -339,7 +339,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
       )}
     >
       {deleteError ? (
-        <div className="rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-danger)]">
+        <div className="rounded-xl border border-[color:var(--kub-danger)]/40 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-3 py-2 text-sm text-[color:var(--kub-danger-text)]">
           {deleteError}
         </div>
       ) : (
