@@ -29,7 +29,13 @@ export const KubInput = forwardRef<HTMLInputElement, KubInputProps>(
         <div
           className={cn(
             "group flex items-center gap-2 rounded-xl px-3 h-11 transition-all",
-            "bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]",
+            // A field is a well, so it takes the token that means "cut into the
+            // surface" rather than the one that used to sit a step above the
+            // chrome. --kub-surface-2 stopped being a step above anything when
+            // the chrome was raised past it: in the dark theme it composites to
+            // within two values of the panel holding it, so a field rendered as
+            // an outline with no fill.
+            "bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)]",
             "focus-within:border-[color:var(--kub-cyan)]",
             "focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]",
             error && "border-[color:var(--kub-danger)] focus-within:border-[color:var(--kub-danger)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-danger)_18%,transparent)]"
