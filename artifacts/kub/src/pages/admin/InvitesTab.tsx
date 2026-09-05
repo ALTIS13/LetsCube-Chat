@@ -12,13 +12,14 @@ import {
   REGISTRATION_INVITES_REQUIRED_MESSAGE,
   buildRegistrationInviteLink,
 } from "@/lib/registrationInvite";
+import { InfoHint } from "@/components/settings/InfoHint";
 import { getRoleLabel, mapRolesPermissionsError } from "@/lib/rolePermissions";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { DynamicRole, RegistrationInviteListRow, RegistrationInviteModeRow } from "@/types/database";
 
 const selectClassName =
-  "h-11 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none transition-colors focus:border-[color:var(--kub-cyan)]";
+  "h-11 w-full rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none transition-colors focus:border-[color:var(--kub-cyan)]";
 
 export function InvitesTab() {
   const supabase = useMemo(() => createClient(), []);
@@ -211,7 +212,7 @@ export function InvitesTab() {
               смогут создаваться только по коду или ссылке-приглашению из этой вкладки.
             </p>
           </div>
-          <div className="flex shrink-0 items-center justify-between gap-3 rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/70 px-3 py-2">
+          <div className="kub-raise flex shrink-0 items-center justify-between gap-3 rounded-2xl border border-[color:var(--kub-border-color)] px-3 py-2">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-[color:var(--kub-text)]">
                 Только по приглашениям
@@ -234,7 +235,7 @@ export function InvitesTab() {
           </KubNotice>
         )}
         {!systemAccess.checking && !systemAccess.hasPermission("system.manage") && (
-          <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/70 px-3 py-2 text-xs text-[color:var(--kub-muted)]">
+          <div className="kub-raise rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
             Переключать режим регистрации может только пользователь с правом «Управление системой».
           </div>
         )}
@@ -347,11 +348,16 @@ export function InvitesTab() {
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium uppercase tracking-wide text-[color:var(--kub-muted)]">
-              Роль в локации
+          <div className="flex flex-col gap-1.5">
+            <span className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-[color:var(--kub-muted)]">
+              <label htmlFor="invite-location-role">Роль в локации</label>
+              <InfoHint
+                term="Роль в локации"
+                text="Действует только внутри выбранной локации. За её пределами эти права не работают."
+              />
             </span>
             <select
+              id="invite-location-role"
               className={selectClassName}
               value={locationRoleId}
               onChange={(event) => setLocationRoleId(event.target.value)}
@@ -364,12 +370,17 @@ export function InvitesTab() {
                 </option>
               ))}
             </select>
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium uppercase tracking-wide text-[color:var(--kub-muted)]">
-              Основной администратор
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-[color:var(--kub-muted)]">
+              <label htmlFor="invite-primary-admin">Основной администратор</label>
+              <InfoHint
+                term="Основной администратор"
+                text="Сотрудник локации, к которому привязан работник: его задачи и вопросы идут к этому администратору."
+              />
             </span>
             <select
+              id="invite-primary-admin"
               className={selectClassName}
               value={primaryAdminId}
               onChange={(event) => setPrimaryAdminId(event.target.value)}
@@ -382,11 +393,11 @@ export function InvitesTab() {
                 </option>
               ))}
             </select>
-          </label>
+          </div>
         </div>
 
         {(!routingEnabled || routing.error) && (
-          <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/70 px-3 py-2 text-xs text-[color:var(--kub-muted)]">
+          <div className="kub-raise rounded-xl border border-[color:var(--kub-border-color)] px-3 py-2 text-xs text-[color:var(--kub-muted)]">
             {routingEnabled ? routing.error ?? LOCATION_ROUTING_REQUIRED_MESSAGE : LOCATION_ROUTING_REQUIRED_MESSAGE}
             <KubButton
               type="button"
@@ -414,7 +425,7 @@ export function InvitesTab() {
       </KubPanel>
 
       <KubPanel padded={false} className="overflow-hidden">
-        <div className="flex items-center justify-between border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/50 px-4 py-3">
+        <div className="kub-raise flex items-center justify-between border-b border-[color:var(--kub-border-color)] px-4 py-3">
           <div>
             <h3 className="text-sm font-semibold text-[color:var(--kub-text)]">Активные и прошлые инвайты</h3>
             <p className="text-xs text-[color:var(--kub-muted)]">Ссылка копируется в формате /register?invite=CODE.</p>

@@ -66,7 +66,7 @@ export function SupportQueue({
   return (
     <section
       aria-label="Очередь поддержки"
-      className="flex min-h-0 min-w-0 flex-col border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] md:border-b-0 md:border-r"
+      className="flex min-h-0 min-w-0 flex-col border-b border-[color:var(--kub-border-color)] md:border-b-0 md:border-r"
     >
       {/* Wrapping rather than scrolling sideways. In a 350px queue column the
           last filter was sliced mid-word at the panel edge, and a scroller with
@@ -131,7 +131,7 @@ export function SupportQueue({
                   "w-full min-w-0 rounded-lg border p-3 text-left transition-colors",
                   selectedTicketId === ticket.id
                     ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_10%,var(--kub-surface-2))]"
-                    : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] hover:border-[color:var(--kub-cyan)]/50",
+                    : "kub-raise border-[color:var(--kub-border-color)] hover:border-[color:var(--kub-cyan)]/50",
                 )}
               >
                 <span className="flex min-w-0 items-start gap-2">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/app.store";
 import type { AppRole, DynamicRole, LocationRole, Profile } from "@/types/database";
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { BulkSelectControl } from "@/components/ui/BulkSelectControl";
+import { InfoHint } from "@/components/settings/InfoHint";
 import { clearRoleAccessCache, useIsAdmin, usePermissionAccess } from "@/hooks/useRole";
 import { useTaskRouting } from "@/hooks/useTaskRouting";
 import { KubBadge, KubButton, KubFilterButton, KubFilterSummary, KubIcon, KubModal, KubNoResults, KubNotice, KubPanel, KubSkeletonRows, type ActiveFilter } from "@/components/kub";
@@ -558,7 +559,7 @@ export function UsersTab() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-      <div className="kub-field min-w-[220px] flex-1 gap-2 rounded-xl px-3 h-11 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
+      <div className="kub-field min-w-[220px] flex-1 gap-2 rounded-xl px-3 h-11 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
         <KubIcon name="search" size={14} tone="muted" />
         <input
           value={queryRaw}
@@ -602,7 +603,7 @@ export function UsersTab() {
       {isAdmin && filtersOpen && (
         <KubPanel className="space-y-3">
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-            <SelectField label="Глобальная роль" value={globalRoleFilter} onChange={setGlobalRoleFilter}>
+            <SelectField label="Глобальная роль" hint="Действует во всём приложении: пользователи, задачи, локации, чаты и админ-разделы. Не привязана к локации." value={globalRoleFilter} onChange={setGlobalRoleFilter}>
               <option value="">Все роли</option>
               {globalRoleOptions.map((role) => (
                 <option key={role.id} value={role.id}>{getRoleLabel(role)}</option>
@@ -614,13 +615,13 @@ export function UsersTab() {
                 <option key={location.id} value={location.id}>{location.name}</option>
               ))}
             </SelectField>
-            <SelectField label="Роль в локации" value={locationRoleFilter} onChange={setLocationRoleFilter} disabled={!routing.available}>
+            <SelectField label="Роль в локации" hint="Действует только внутри выбранной локации. За её пределами эти права не работают." value={locationRoleFilter} onChange={setLocationRoleFilter} disabled={!routing.available}>
               <option value="">Все роли</option>
               {locationRoleOptions.map((role) => (
                 <option key={role.id} value={role.id}>{getRoleLabel(role)}</option>
               ))}
             </SelectField>
-            <SelectField label="Основной админ" value={primaryAdminFilter} onChange={setPrimaryAdminFilter} disabled={!routing.available}>
+            <SelectField label="Основной админ" hint="Сотрудник локации, к которому привязан работник: его задачи и вопросы идут к этому администратору." value={primaryAdminFilter} onChange={setPrimaryAdminFilter} disabled={!routing.available}>
               <option value="">Любой</option>
               {locationAdmins.map((member) => (
                 <option key={`${member.location_id}:${member.user_id}`} value={member.user_id}>
@@ -663,7 +664,7 @@ export function UsersTab() {
       )}
 
       {isAdmin && selectedUsers.length > 0 && (
-        <KubPanel className="sticky top-2 z-10 space-y-3 border-[color:var(--kub-cyan)]/45 bg-[color-mix(in_srgb,var(--kub-surface)_92%,var(--kub-cyan)_8%)]/95 shadow-lg backdrop-blur">
+        <div className="kub-glass-strong sticky top-2 z-10 space-y-3 rounded-[14px] border border-[color:var(--kub-cyan)]/45 p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               <BulkSelectControl
@@ -691,7 +692,7 @@ export function UsersTab() {
             </div>
           </div>
           <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
-            <SelectField label="Глобальная роль" value={bulkGlobalRoleId} onChange={setBulkGlobalRoleId} disabled={!dynamicRoles.available}>
+            <SelectField label="Глобальная роль" hint="Действует во всём приложении: пользователи, задачи, локации, чаты и админ-разделы. Не привязана к локации." value={bulkGlobalRoleId} onChange={setBulkGlobalRoleId} disabled={!dynamicRoles.available}>
               <option value="">Выберите роль</option>
               {globalRoleOptions.map((role) => (
                 <option key={role.id} value={role.id}>{getRoleLabel(role)}</option>
@@ -711,13 +712,13 @@ export function UsersTab() {
                 <option key={location.id} value={location.id}>{location.name}</option>
               ))}
             </SelectField>
-            <SelectField label="Роль локации" value={bulkLocationRoleId} onChange={setBulkLocationRoleId} disabled={!dynamicRoles.available}>
+            <SelectField label="Роль локации" hint="Действует только внутри выбранной локации. За её пределами эти права не работают." value={bulkLocationRoleId} onChange={setBulkLocationRoleId} disabled={!dynamicRoles.available}>
               <option value="">Выберите роль</option>
               {locationRoleOptions.map((role) => (
                 <option key={role.id} value={role.id}>{getRoleLabel(role)}</option>
               ))}
             </SelectField>
-            <SelectField label="Основной админ" value={bulkPrimaryAdminId} onChange={setBulkPrimaryAdminId} disabled={!bulkLocationId || activeLocationAdmins.length === 0}>
+            <SelectField label="Основной админ" hint="Сотрудник локации, к которому привязан работник: его задачи и вопросы идут к этому администратору." value={bulkPrimaryAdminId} onChange={setBulkPrimaryAdminId} disabled={!bulkLocationId || activeLocationAdmins.length === 0}>
               <option value="">Не назначать</option>
               {activeLocationAdmins.map((member) => (
                 <option key={`${member.location_id}:${member.user_id}`} value={member.user_id}>
@@ -734,7 +735,7 @@ export function UsersTab() {
               {bulkError}
             </KubNotice>
           )}
-        </KubPanel>
+        </div>
       )}
 
       {notice && (
@@ -862,7 +863,7 @@ export function UsersTab() {
                     {locationBadges.length > 0 && (
                       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[color:var(--kub-muted)]">
                         {locationBadges.map((badge) => (
-                          <span key={badge.key} className="rounded-full bg-[var(--kub-surface)] px-2 py-0.5">
+                          <span key={badge.key} className="rounded-full bg-[var(--kub-inset)] px-2 py-0.5">
                             {badge.label}
                             {badge.primaryAdminName ? ` · админ: ${badge.primaryAdminName}` : ""}
                           </span>
@@ -1369,33 +1370,45 @@ const STATUS_FILTER_LABELS: Record<string, string> = {
   no_dynamic_role: "Без динамической роли",
 };
 
+/**
+ * A `<div>` around a `<label htmlFor>` rather than a `<label>` around
+ * everything, because the caption now carries an explanation and a
+ * `<button>` inside a `<label>` is clicked twice: once as itself and once as
+ * the label, which opens the select underneath the tooltip.
+ */
 function SelectField({
   label,
+  hint,
   value,
   onChange,
   disabled,
   children,
 }: {
   label: string;
+  /** Plain-language answer to "what does this word mean", if it needs one. */
+  hint?: string;
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
   children: ReactNode;
 }) {
+  const id = useId();
   return (
-    <label className="min-w-0 space-y-1">
-      <span className="block text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
-        {label}
+    <div className="min-w-0 space-y-1">
+      <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--kub-accent-text)]">
+        <label htmlFor={id}>{label}</label>
+        {hint && <InfoHint term={label} text={hint} side="top" />}
       </span>
       <select
+        id={id}
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-        className="h-9 w-full min-w-0 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 text-xs text-[color:var(--kub-text)] outline-none disabled:opacity-50"
+        className="h-9 w-full min-w-0 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2 text-xs text-[color:var(--kub-text)] outline-none disabled:opacity-50"
       >
         {children}
       </select>
-    </label>
+    </div>
   );
 }
 

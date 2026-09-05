@@ -353,7 +353,7 @@ export function AuditTab() {
           <div className="relative">
             <div className="text-[10px] uppercase tracking-wider mb-1 text-[color:var(--kub-accent-text)]">Действующее лицо</div>
             {actorPicked ? (
-              <div className="flex items-center gap-2 rounded-xl px-3 h-11 bg-[var(--kub-surface-2)] border border-[color:var(--kub-cyan)]/40">
+              <div className="flex items-center gap-2 rounded-xl px-3 h-11 bg-[var(--kub-inset)] border border-[color:var(--kub-cyan)]/40">
                 <UserAvatar user={actorPicked} size="sm" />
                 <span className="flex-1 text-sm truncate text-[color:var(--kub-text)]">
                   {actorPicked.full_name ?? actorPicked.username ?? actorPicked.id.slice(0, 8)}
@@ -367,7 +367,7 @@ export function AuditTab() {
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-2 rounded-xl px-3 h-11 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)]">
+              <div className="flex items-center gap-2 rounded-xl px-3 h-11 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)]">
                 <KubIcon name="search" size={13} tone="muted" />
                 <input
                   value={actorQueryRaw}
@@ -378,7 +378,7 @@ export function AuditTab() {
               </div>
             )}
             {!actorPicked && actorOptions.length > 0 && (
-              <div className="absolute z-10 left-0 right-0 mt-1 rounded-xl py-1 max-h-72 overflow-y-auto bg-[var(--kub-surface)] border border-[color:var(--kub-border-color)] shadow-lg">
+              <div className="kub-glass-strong absolute z-10 left-0 right-0 mt-1 rounded-xl py-1 max-h-72 overflow-y-auto border border-[color:var(--kub-border-color)]">
                 {actorOptions.map((p) => (
                   <button
                     key={p.id}
@@ -405,7 +405,7 @@ export function AuditTab() {
             <button
               onClick={() => setActionsOpen((v) => !v)}
               aria-expanded={actionsOpen}
-              className="w-full flex items-center gap-2 rounded-xl px-3 h-11 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] hover:border-[color:var(--kub-cyan)]/60 text-left"
+              className="w-full flex items-center gap-2 rounded-xl px-3 h-11 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] hover:border-[color:var(--kub-cyan)]/60 text-left"
             >
               <span className="flex-1 text-sm truncate text-[color:var(--kub-text)]">
                 {actionsSel.length === 0
@@ -417,7 +417,7 @@ export function AuditTab() {
               <KubIcon name={actionsOpen ? "chevronUp" : "chevronDown"} size={13} tone="muted" />
             </button>
             {actionsOpen && (
-              <div className="absolute z-10 left-0 right-0 mt-1 rounded-xl py-1 max-h-72 overflow-y-auto bg-[var(--kub-surface)] border border-[color:var(--kub-border-color)] shadow-lg">
+              <div className="kub-glass-strong absolute z-10 left-0 right-0 mt-1 rounded-xl py-1 max-h-72 overflow-y-auto border border-[color:var(--kub-border-color)]">
                 {ACTION_OPTIONS.map((a) => {
                   const checked = actionsSel.includes(a);
                   return (
@@ -452,7 +452,7 @@ export function AuditTab() {
               type="date"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
-              className="w-full rounded-xl px-3 h-11 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] text-sm text-[color:var(--kub-text)] focus:outline-none focus:border-[color:var(--kub-cyan)]"
+              className="w-full rounded-xl px-3 h-11 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] text-sm text-[color:var(--kub-text)] focus:outline-none focus:border-[color:var(--kub-cyan)]"
             />
           </div>
           <div>
@@ -461,7 +461,7 @@ export function AuditTab() {
               type="date"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
-              className="w-full rounded-xl px-3 h-11 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] text-sm text-[color:var(--kub-text)] focus:outline-none focus:border-[color:var(--kub-cyan)]"
+              className="w-full rounded-xl px-3 h-11 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] text-sm text-[color:var(--kub-text)] focus:outline-none focus:border-[color:var(--kub-cyan)]"
             />
           </div>
           <div className="flex items-end">
@@ -521,7 +521,7 @@ export function AuditTab() {
                       {r.actor ? (
                         <UserAvatar user={r.actor} size="sm" />
                       ) : (
-                        <div className="w-9 h-9 rounded-full flex items-center justify-center bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]">
+                        <div className="kub-raise w-9 h-9 rounded-full flex items-center justify-center text-[color:var(--kub-muted)]">
                           <KubIcon name="settings" size={14} />
                         </div>
                       )}
@@ -547,7 +547,7 @@ export function AuditTab() {
                     />
                   </button>
                   {isOpen && (
-                    <div className="mt-3 sm:ml-12 rounded-xl p-3 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)] space-y-1.5 text-xs">
+                    <div className="kub-raise mt-3 sm:ml-12 rounded-xl p-3 border border-[color:var(--kub-border-color)] space-y-1.5 text-xs">
                       <KvRow label="ID записи" value={r.id} mono />
                       <KvRow label="Тип объекта" value={r.target_kind} />
                       <KvRow label="ID объекта" value={r.target_id ?? "—"} mono />
@@ -621,7 +621,7 @@ function KvRow({ label, value, mono }: { label: string; value: string; mono?: bo
 function DiffDetails({ diff }: { diff: Json | null }) {
   if (!diff || typeof diff !== "object" || Array.isArray(diff)) {
     return (
-      <div className="rounded-lg p-2 bg-[var(--kub-surface)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)]">
+      <div className="rounded-lg p-2 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)]">
         Нет дополнительных данных
       </div>
     );
@@ -637,14 +637,14 @@ function DiffDetails({ diff }: { diff: Json | null }) {
 
   if (entries.length === 0) {
     return (
-      <div className="rounded-lg p-2 bg-[var(--kub-surface)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)]">
+      <div className="rounded-lg p-2 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-muted)]">
         Нет дополнительных данных
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg p-2 bg-[var(--kub-surface)] border border-[color:var(--kub-border-color)] space-y-1.5">
+    <div className="rounded-lg p-2 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] space-y-1.5">
       {entries.map((entry) => (
         <KvRow key={entry.key} label={entry.label} value={entry.value} mono={entry.mono} />
       ))}

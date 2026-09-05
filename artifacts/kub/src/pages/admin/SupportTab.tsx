@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Redirect, useLocation } from "wouter";
-import { KubButton, KubIcon, KubSwitch } from "@/components/kub";
+import { KubButton, KubGlassLayer, KubIcon, KubSwitch } from "@/components/kub";
 import { usePermissionAccess } from "@/hooks/useRole";
 import {
   SUPPORT_PERMISSIONS,
@@ -336,112 +336,123 @@ export function SupportTab() {
   if (!canView) return <Redirect to="/admin" />;
 
   return (
+    // The workspace is one card, and the material goes on a sheet BEHIND it
+    // rather than on the card itself: both dialogs below are `position: fixed`
+    // descendants of this box, and a backdrop-filter here would make it their
+    // containing block — they would be laid out inside the card, scrim and
+    // all, and `overflow-hidden` would then clip them too.
     <div
       data-testid="support-operator-workspace"
-      className="flex h-[calc(100dvh-7.75rem)] min-h-[34rem] min-w-0 flex-col overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] shadow-2xl shadow-black/10 sm:h-[calc(100dvh-8.5rem)]"
+      className="relative flex h-[calc(100dvh-7.75rem)] min-h-[34rem] min-w-0 flex-col overflow-hidden rounded-xl border border-[color:var(--kub-border-color)] sm:h-[calc(100dvh-8.5rem)]"
     >
-      <div className="flex flex-shrink-0 items-center gap-3 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-2.5 sm:px-4">
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-base font-bold text-[color:var(--kub-text)]">
-            Поддержка
-          </h1>
-          <p className="truncate text-xs text-[color:var(--kub-muted)]">
-            Приём, переписка и передача обращений
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <KubButton
-            type="button"
-            size="sm"
-            variant="secondary"
-            leftIcon={<KubIcon name="notifications" size={14} />}
-            onClick={() => {
-              setPreferencesDraft(preferences);
-              setPreferencesOpen(true);
-            }}
-          >
-            <span className="hidden sm:inline">Мои уведомления</span>
-            <span className="sm:hidden">Уведомления</span>
-          </KubButton>
-          {canSettings ? (
+      <KubGlassLayer />
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {/* The panes below divide themselves with borders and carry no fill of
+            their own, so the card reads as a single sheet with rules across it
+            instead of as four stacked slabs. */}
+        <div className="flex flex-shrink-0 items-center gap-3 border-b border-[color:var(--kub-border-color)] px-3 py-2.5 sm:px-4">
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-base font-bold text-[color:var(--kub-text)]">
+              Поддержка
+            </h1>
+            <p className="truncate text-xs text-[color:var(--kub-muted)]">
+              Приём, переписка и передача обращений
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
             <KubButton
               type="button"
               size="sm"
               variant="secondary"
-              leftIcon={<KubIcon name="settings" size={14} />}
+              leftIcon={<KubIcon name="notifications" size={14} />}
               onClick={() => {
-                setSettingsDraft(settings);
-                setSettingsOpen(true);
+                setPreferencesDraft(preferences);
+                setPreferencesOpen(true);
               }}
             >
-              Настройки
+              <span className="hidden sm:inline">Мои уведомления</span>
+              <span className="sm:hidden">Уведомления</span>
             </KubButton>
-          ) : null}
-        </div>
-      </div>
-
-      {notice || actionError ? (
-        <div
-          role={actionError ? "alert" : "status"}
-          className={
-            actionError
-              ? "flex-shrink-0 border-b border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-4 py-2 text-sm text-[color:var(--kub-text)]"
-              : "flex-shrink-0 border-b border-[color:var(--kub-online)]/30 bg-[color-mix(in_srgb,var(--kub-online)_10%,transparent)] px-4 py-2 text-sm text-[color:var(--kub-text)]"
-          }
-        >
-          {actionError ?? notice}
-        </div>
-      ) : null}
-
-      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 md:grid-cols-[22rem_minmax(0,1fr)]">
-        <div className={selectedTicketId ? "hidden min-h-0 md:block" : "min-h-0"}>
-          <SupportQueue
-            filter={filter}
-            tickets={tickets}
-            selectedTicketId={selectedTicketId}
-            loading={queueLoading}
-            error={queueError}
-            onFilterChange={(next) => {
-              setFilter(next);
-              setSelectedTicketId(null);
-              setDetails(null);
-              setLocation("/admin/support");
-            }}
-            onSelect={selectTicket}
-            onReload={() => void loadQueue()}
-          />
+            {canSettings ? (
+              <KubButton
+                type="button"
+                size="sm"
+                variant="secondary"
+                leftIcon={<KubIcon name="settings" size={14} />}
+                onClick={() => {
+                  setSettingsDraft(settings);
+                  setSettingsOpen(true);
+                }}
+              >
+                Настройки
+              </KubButton>
+            ) : null}
+          </div>
         </div>
 
-        <div className={selectedTicketId ? "flex min-h-0 min-w-0" : "hidden min-h-0 min-w-0 md:flex"}>
-          {detailsLoading && !visibleDetails ? (
-            <div className="flex flex-1 items-center justify-center gap-2 text-sm text-[color:var(--kub-muted)]">
-              <KubIcon name="spinner" size={20} tone="accent" label="Загрузка обращения" />
-              Загружаем обращение
-            </div>
-          ) : visibleDetails ? (
-            <SupportTicketDetails
-              details={visibleDetails}
-              currentUserId={userId}
-              permissions={permissionKeys}
-              operators={operators}
-              busyAction={busyAction}
-              customerCandidates={customerCandidates}
-              onBack={closeDetails}
-              onReply={sendReply}
-              onAction={runWorkflowAction}
-              onLookupCustomer={lookupCustomer}
+        {notice || actionError ? (
+          <div
+            role={actionError ? "alert" : "status"}
+            className={
+              actionError
+                ? "flex-shrink-0 border-b border-[color:var(--kub-danger)]/30 bg-[color-mix(in_srgb,var(--kub-danger)_10%,transparent)] px-4 py-2 text-sm text-[color:var(--kub-text)]"
+                : "flex-shrink-0 border-b border-[color:var(--kub-online)]/30 bg-[color-mix(in_srgb,var(--kub-online)_10%,transparent)] px-4 py-2 text-sm text-[color:var(--kub-text)]"
+            }
+          >
+            {actionError ?? notice}
+          </div>
+        ) : null}
+
+        <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 md:grid-cols-[22rem_minmax(0,1fr)]">
+          <div className={selectedTicketId ? "hidden min-h-0 md:block" : "min-h-0"}>
+            <SupportQueue
+              filter={filter}
+              tickets={tickets}
+              selectedTicketId={selectedTicketId}
+              loading={queueLoading}
+              error={queueError}
+              onFilterChange={(next) => {
+                setFilter(next);
+                setSelectedTicketId(null);
+                setDetails(null);
+                setLocation("/admin/support");
+              }}
+              onSelect={selectTicket}
+              onReload={() => void loadQueue()}
             />
-          ) : (
-            <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-              <KubIcon name="chatBubble" size={34} tone="muted" />
-              <p className="mt-4 text-sm font-semibold text-[color:var(--kub-text)]">
-                Выберите обращение
-              </p>
-              <p className="mt-1 max-w-sm text-xs text-[color:var(--kub-muted)]">
-                Переписка, контакты и неизменяемая история действий откроются здесь.
-              </p>
-            </div>
-          )}
+          </div>
+
+          <div className={selectedTicketId ? "flex min-h-0 min-w-0" : "hidden min-h-0 min-w-0 md:flex"}>
+            {detailsLoading && !visibleDetails ? (
+              <div className="flex flex-1 items-center justify-center gap-2 text-sm text-[color:var(--kub-muted)]">
+                <KubIcon name="spinner" size={20} tone="accent" label="Загрузка обращения" />
+                Загружаем обращение
+              </div>
+            ) : visibleDetails ? (
+              <SupportTicketDetails
+                details={visibleDetails}
+                currentUserId={userId}
+                permissions={permissionKeys}
+                operators={operators}
+                busyAction={busyAction}
+                customerCandidates={customerCandidates}
+                onBack={closeDetails}
+                onReply={sendReply}
+                onAction={runWorkflowAction}
+                onLookupCustomer={lookupCustomer}
+              />
+            ) : (
+              <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+                <KubIcon name="chatBubble" size={34} tone="muted" />
+                <p className="mt-4 text-sm font-semibold text-[color:var(--kub-text)]">
+                  Выберите обращение
+                </p>
+                <p className="mt-1 max-w-sm text-xs text-[color:var(--kub-muted)]">
+                  Переписка, контакты и неизменяемая история действий откроются здесь.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -526,7 +537,7 @@ function SupportPreferencesDialog({
       aria-labelledby="support-preferences-title"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 backdrop-blur-sm"
     >
-      <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-4 shadow-2xl">
+      <div className="kub-glass-strong max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 id="support-preferences-title" className="text-base font-bold text-[color:var(--kub-text)]">
@@ -544,7 +555,7 @@ function SupportPreferencesDialog({
           {rows.map((row) => (
             <label
               key={row.key}
-              className="flex min-w-0 items-center justify-between gap-4 rounded-lg bg-[var(--kub-surface-2)] p-3"
+              className="kub-raise flex min-w-0 items-center justify-between gap-4 rounded-lg p-3"
             >
               <span className="min-w-0">
                 <span className="block text-sm font-semibold text-[color:var(--kub-text)]">{row.title}</span>
@@ -596,7 +607,7 @@ function SupportSettingsDialog({
       aria-labelledby="support-settings-title"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 backdrop-blur-sm"
     >
-      <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-4 shadow-2xl">
+      <div className="kub-glass-strong max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 id="support-settings-title" className="text-base font-bold text-[color:var(--kub-text)]">
@@ -612,7 +623,7 @@ function SupportSettingsDialog({
         </div>
 
         <div className="mt-4 space-y-3">
-          <label className="flex min-w-0 items-center justify-between gap-4 rounded-lg bg-[var(--kub-surface-2)] p-3">
+          <label className="kub-raise flex min-w-0 items-center justify-between gap-4 rounded-lg p-3">
             <span className="min-w-0">
               <span className="block text-sm font-semibold text-[color:var(--kub-text)]">Приём обращений</span>
               <span className="mt-0.5 block text-xs text-[color:var(--kub-muted)]">Общий режим работы поддержки</span>
@@ -623,7 +634,7 @@ function SupportSettingsDialog({
               aria-label="Включить приём обращений"
             />
           </label>
-          <label className="flex min-w-0 items-center justify-between gap-4 rounded-lg bg-[var(--kub-surface-2)] p-3">
+          <label className="kub-raise flex min-w-0 items-center justify-between gap-4 rounded-lg p-3">
             <span className="min-w-0">
               <span className="block text-sm font-semibold text-[color:var(--kub-text)]">Гостевая форма</span>
               <span className="mt-0.5 block text-xs text-[color:var(--kub-muted)]">Обращения без входа в аккаунт</span>
@@ -641,7 +652,7 @@ function SupportSettingsDialog({
               onChange={(event) => onChange({ ...value, closedMessage: event.target.value })}
               maxLength={500}
               rows={3}
-              className="mt-1 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-sm text-[color:var(--kub-text)]"
+              className="mt-1 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)]"
             />
           </label>
           <div>
@@ -657,7 +668,7 @@ function SupportSettingsDialog({
                   max={50}
                   value={value.ticketLimit15m}
                   onChange={(event) => onChange({ ...value, ticketLimit15m: Number(event.target.value) })}
-                  className="mt-1 h-10 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)]"
+                  className="mt-1 h-10 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)]"
                 />
               </label>
               <label>
@@ -668,7 +679,7 @@ function SupportSettingsDialog({
                   max={500}
                   value={value.ticketLimitDay}
                   onChange={(event) => onChange({ ...value, ticketLimitDay: Number(event.target.value) })}
-                  className="mt-1 h-10 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)]"
+                  className="mt-1 h-10 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)]"
                 />
               </label>
             </div>
@@ -686,7 +697,7 @@ function SupportSettingsDialog({
                   max={200}
                   value={value.messageLimit5m}
                   onChange={(event) => onChange({ ...value, messageLimit5m: Number(event.target.value) })}
-                  className="mt-1 h-10 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)]"
+                  className="mt-1 h-10 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)]"
                 />
               </label>
               <label>
@@ -697,7 +708,7 @@ function SupportSettingsDialog({
                   max={5000}
                   value={value.messageLimitDay}
                   onChange={(event) => onChange({ ...value, messageLimitDay: Number(event.target.value) })}
-                  className="mt-1 h-10 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)]"
+                  className="mt-1 h-10 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)]"
                 />
               </label>
             </div>

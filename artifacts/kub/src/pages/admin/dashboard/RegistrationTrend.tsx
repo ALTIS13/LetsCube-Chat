@@ -27,7 +27,7 @@ export function RegistrationTrend({ series, metrics, error }: {
             <span className="text-[color:var(--kub-muted)]">Пользователи онлайн</span>
             <strong className="tabular-nums text-[color:var(--kub-text)]">{onlinePercent}%</strong>
           </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--kub-surface-3)]">
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--kub-inset)]">
             <div className="h-full rounded-full bg-[var(--kub-online)] transition-[width] duration-500" style={{ width: `${onlinePercent}%` }} />
           </div>
         </div>
@@ -53,7 +53,7 @@ export function RegistrationTrend({ series, metrics, error }: {
                 aria-label={`${point.label}: ${point.value.toLocaleString("ru-RU")} новых пользователей`}
                 title={`${point.label}: ${point.value.toLocaleString("ru-RU")}`}
               >
-                <span className="pointer-events-none absolute bottom-9 z-10 hidden rounded-md border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 py-1 text-[11px] font-semibold text-[color:var(--kub-text)] shadow-lg group-hover:block group-focus-within:block">
+                <span className="kub-glass-strong pointer-events-none absolute bottom-9 z-10 hidden rounded-md border border-[color:var(--kub-border-color)] px-2 py-1 text-[11px] font-semibold text-[color:var(--kub-text)] group-hover:block group-focus-within:block">
                   {point.value.toLocaleString("ru-RU")}
                 </span>
                 <span className="flex h-[calc(100%-1.75rem)] w-full max-w-9 items-end overflow-hidden rounded-t-md bg-[color-mix(in_srgb,var(--kub-cyan)_7%,transparent)]">

@@ -108,7 +108,7 @@ export function MuteModal({ target, onClose, onSuccess }: Props) {
         </>
       }
     >
-      <div className="flex items-center gap-3 rounded-xl px-3 py-2 bg-[var(--kub-surface-2)] border border-[color:var(--kub-border-color)]">
+      <div className="flex items-center gap-3 rounded-xl px-3 py-2 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)]">
         <UserAvatar user={target} size="md" />
         <div className="min-w-0">
           <div className="font-semibold truncate text-[color:var(--kub-text)]">
@@ -136,7 +136,7 @@ export function MuteModal({ target, onClose, onSuccess }: Props) {
                 "px-3 py-2 rounded-lg text-xs font-semibold transition-colors border",
                 scope === o.id
                   ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] border-[var(--kub-cyan)] kub-glow-soft"
-                  : "bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border-[color:var(--kub-border-color)]"
+                  : "bg-[var(--kub-inset)] text-[color:var(--kub-text)] border-[color:var(--kub-border-color)]"
               )}
             >
               {o.label}
@@ -147,7 +147,7 @@ export function MuteModal({ target, onClose, onSuccess }: Props) {
           <select
             value={chatId}
             onChange={(e) => setChatId(e.target.value)}
-            className="mt-2 w-full rounded-xl px-3 py-2 text-sm outline-none bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)]"
+            className="mt-2 w-full rounded-xl px-3 py-2 text-sm outline-none bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)]"
           >
             {chats.length === 0 && <option value="">Нет доступных групп</option>}
             {chats.map((c) => (
@@ -168,7 +168,7 @@ export function MuteModal({ target, onClose, onSuccess }: Props) {
           onChange={(e) => setReason(e.target.value)}
           rows={3}
           placeholder="Например: спам / оскорбления"
-          className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all"
+          className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all"
         />
       </div>
 
@@ -185,7 +185,7 @@ export function MuteModal({ target, onClose, onSuccess }: Props) {
                 "px-3 py-2 rounded-lg text-xs font-semibold transition-colors border",
                 durationKey === d.key
                   ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] border-[var(--kub-cyan)] kub-glow-soft"
-                  : "bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border-[color:var(--kub-border-color)]"
+                  : "bg-[var(--kub-inset)] text-[color:var(--kub-text)] border-[color:var(--kub-border-color)]"
               )}
             >
               {d.label}
@@ -197,7 +197,7 @@ export function MuteModal({ target, onClose, onSuccess }: Props) {
             type="datetime-local"
             value={customAt}
             onChange={(e) => setCustomAt(e.target.value)}
-            className="mt-2 w-full rounded-xl px-3 py-2 text-sm outline-none bg-[var(--kub-surface-2)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)]"
+            className="mt-2 w-full rounded-xl px-3 py-2 text-sm outline-none bg-[var(--kub-inset)] text-[color:var(--kub-text)] border border-[color:var(--kub-border-color)] focus:border-[color:var(--kub-cyan)]"
           />
         )}
       </div>

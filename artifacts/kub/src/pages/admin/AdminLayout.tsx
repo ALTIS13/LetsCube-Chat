@@ -49,15 +49,18 @@ export function AdminLayout() {
 
   if (!currentUser) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[var(--kub-bg)] kub-grid-bg">
+      <div className="flex items-center justify-center h-screen">
         <KubIcon name="spinner" size={24} tone="accent" label="Загрузка" />
       </div>
     );
   }
 
+  // Both waiting states stand on the same ground as the panel they become.
+  // They used to paint their own --kub-bg through `kub-grid-bg`, so the
+  // ambient snapped into place the moment the role check finished.
   if (accessChecking) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[var(--kub-bg)] kub-grid-bg">
+      <div className="flex items-center justify-center h-screen">
         <KubIcon name="spinner" size={24} tone="accent" label="Проверка ролей" />
       </div>
     );
@@ -73,57 +76,75 @@ export function AdminLayout() {
   const supportOnlyOperator = canViewSupport && !isStaff;
 
   return (
-    <div className="flex h-screen min-h-0 flex-col bg-[var(--kub-bg)] text-[color:var(--kub-text)]">
-      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 h-14 flex-shrink-0 bg-[var(--kub-surface)] border-b border-[color:var(--kub-border-color)]">
-        <Link
-          href="/"
-          aria-label="Назад в чат"
-          className="kub-icon-action p-1.5 rounded-lg kub-raise-hover transition-colors text-[color:var(--kub-cyan)] flex-shrink-0"
-        >
-          <KubIcon name="back" size={20} />
-        </Link>
-        <KubLogo size={22} />
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold flex items-center gap-2 text-[color:var(--kub-text)] truncate">
-            Админ-панель
-            <span className="hidden sm:inline text-[10px] uppercase tracking-[0.18em] text-[color:var(--kub-pink)] truncate">
-              LETSCUBE
-            </span>
+    // No fill on the root. --kub-ambient is painted once, on `body`; a shell
+    // that paints --kub-bg over it hands the chrome one flat colour to blur,
+    // and the material collapses back to the paint it replaced.
+    <div data-testid="admin-shell" className="flex h-screen min-h-0 flex-col text-[color:var(--kub-text)]">
+      {/* Title row and tab strip are ONE sheet, not two. Given the material
+          separately, each would carry its own lit top edge and drop its own
+          shadow onto the other, so the chrome would read as two stacked
+          panels rather than as the frame of one tool. The rows keep the
+          border that divides them; the material sits on the box holding
+          them. Nothing `fixed` lives in here, so it wears `kub-glass`
+          directly rather than needing a layer behind it. */}
+      <div data-testid="admin-chrome" className="flex-shrink-0 kub-glass border-b border-[color:var(--kub-border-color)]">
+        <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 h-14 border-b border-[color:var(--kub-border-color)]">
+          <Link
+            href="/"
+            aria-label="Назад в чат"
+            className="kub-icon-action p-1.5 rounded-lg kub-raise-hover transition-colors text-[color:var(--kub-cyan)] flex-shrink-0"
+          >
+            <KubIcon name="back" size={20} />
+          </Link>
+          <KubLogo size={22} />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold flex items-center gap-2 text-[color:var(--kub-text)] truncate">
+              Админ-панель
+              <span className="hidden sm:inline text-[10px] uppercase tracking-[0.18em] text-[color:var(--kub-pink)] truncate">
+                LETSCUBE
+              </span>
+            </div>
+            <div className="text-xs text-[color:var(--kub-muted)] truncate">
+              {isAdmin
+                ? "Администратор"
+                : supportOnlyOperator
+                  ? "Оператор поддержки"
+                  : "Менеджер"}{" "}
+              · {currentUser.full_name ?? "Без имени"}
+            </div>
           </div>
-          <div className="text-xs text-[color:var(--kub-muted)] truncate">
-            {isAdmin
-              ? "Администратор"
-              : supportOnlyOperator
-                ? "Оператор поддержки"
-                : "Менеджер"}{" "}
-            · {currentUser.full_name ?? "Без имени"}
-          </div>
+        </div>
+
+        <div className="flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 overflow-x-auto no-scrollbar">
+          {visibleTabs.map((t) => {
+            const active = location === t.path || location.startsWith(`${t.path}?`);
+            return (
+              <Link
+                key={t.id}
+                href={t.path}
+                className={cn(
+                  "flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 h-11 text-[11px] sm:text-xs font-semibold uppercase tracking-wide transition-colors whitespace-nowrap relative",
+                  active ? "text-[color:var(--kub-accent-text)]" : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
+                )}
+              >
+                <KubIcon name={t.icon} size={14} />
+                {t.label}
+                {active && (
+                  <span className="absolute left-2 right-2 bottom-0 h-[2px] rounded-full bg-[var(--kub-cyan)] kub-glow-soft" />
+                )}
+              </Link>
+            );
+          })}
         </div>
       </div>
 
-      <div className="flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 overflow-x-auto no-scrollbar flex-shrink-0 bg-[var(--kub-surface)] border-b border-[color:var(--kub-border-color)]">
-        {visibleTabs.map((t) => {
-          const active = location === t.path || location.startsWith(`${t.path}?`);
-          return (
-            <Link
-              key={t.id}
-              href={t.path}
-              className={cn(
-                "flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 h-11 text-[11px] sm:text-xs font-semibold uppercase tracking-wide transition-colors whitespace-nowrap relative",
-                active ? "text-[color:var(--kub-accent-text)]" : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
-              )}
-            >
-              <KubIcon name={t.icon} size={14} />
-              {t.label}
-              {active && (
-                <span className="absolute left-2 right-2 bottom-0 h-[2px] rounded-full bg-[var(--kub-cyan)] kub-glow-soft" />
-              )}
-            </Link>
-          );
-        })}
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto kub-grid-subtle">
+      {/* `kub-grid-subtle` also set `background-color: var(--kub-bg)`, and the
+          lattice and the fill cannot be separated from out here. Across the
+          whole work area that fill was the flat colour every panel below
+          blurred, so the panels had no depth to find. The grid goes; the
+          panels stand on the ambient, the way the message feed and the task
+          list do. */}
+      <div data-testid="admin-content" className="min-h-0 flex-1 overflow-y-auto">
         <div
           className={cn(
             "mx-auto p-3 pb-24 sm:p-4 sm:pb-8 md:p-6",

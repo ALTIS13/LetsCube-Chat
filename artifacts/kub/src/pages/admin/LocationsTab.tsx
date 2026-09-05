@@ -238,7 +238,7 @@ export function LocationsTab() {
     return (
       <KubPanel className="space-y-3">
         <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] text-[color:var(--kub-cyan)]">
+          <span className="kub-raise flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--kub-border-color)] text-[color:var(--kub-cyan)]">
             <KubIcon name="mapPin" size={18} />
           </span>
           <div className="min-w-0">
@@ -326,7 +326,7 @@ export function LocationsTab() {
               onChange={(event) => setCreateDescription(event.target.value)}
               rows={3}
               placeholder="Описание"
-              className="w-full resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+              className="w-full resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
             />
             <KubButton
               variant="primary"
@@ -404,7 +404,7 @@ export function LocationsTab() {
                   onChange={(event) => setEditDescription(event.target.value)}
                   rows={3}
                   placeholder="Описание"
-                  className="w-full resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                  className="w-full resize-none rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 py-2 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
                 />
                 <label className="flex items-center gap-2 text-sm text-[color:var(--kub-text)]">
                   <input
@@ -449,7 +449,7 @@ export function LocationsTab() {
                   <select
                     value={assignUserId}
                     onChange={(event) => setAssignUserId(event.target.value)}
-                    className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                    className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
                   >
                     <option value="">Выберите пользователя</option>
                     {availableProfiles.map((profile) => (
@@ -460,7 +460,7 @@ export function LocationsTab() {
                     <select
                       value={assignRoleId}
                       onChange={(event) => setAssignRoleId(event.target.value)}
-                      className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                      className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
                     >
                       {dynamicLocationRoles.map((role) => (
                         <option key={role.id} value={role.id}>{getRoleLabel(role)}</option>
@@ -470,7 +470,7 @@ export function LocationsTab() {
                     <select
                       value={assignRole}
                       onChange={(event) => setAssignRole(event.target.value as LocationRole)}
-                      className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
+                      className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)]"
                     >
                       {LOCATION_ROLES.map((role) => (
                         <option key={role} value={role}>{LOCATION_ROLE_LABEL[role]}</option>
@@ -486,7 +486,7 @@ export function LocationsTab() {
                         : assignRole !== "staff")
                       || locationAdmins.length === 0
                     }
-                    className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] disabled:opacity-50"
+                    className="h-10 min-w-0 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-3 text-sm text-[color:var(--kub-text)] outline-none focus:border-[color:var(--kub-cyan)] disabled:opacity-50"
                   >
                     <option value="">Основной администратор</option>
                     {locationAdmins.map((member) => (
@@ -516,7 +516,7 @@ export function LocationsTab() {
                         {member.profile ? (
                           <UserAvatar user={member.profile} size="sm" />
                         ) : (
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]">
+                          <span className="kub-raise flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[color:var(--kub-muted)]">
                             <KubIcon name="user" size={14} />
                           </span>
                         )}

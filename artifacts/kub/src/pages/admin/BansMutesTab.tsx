@@ -211,7 +211,7 @@ function SanctionsHistory({ audit }: { audit: ReturnType<typeof useAuditLogs> })
             Последние действия по банам и мьютам, включая снятые и истёкшие ограничения
           </div>
         </div>
-        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]">
+        <span className="kub-raise text-[11px] font-semibold px-2 py-0.5 rounded-full text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]">
           {audit.total}
         </span>
       </div>
@@ -266,14 +266,14 @@ function SanctionHistoryRow({ row }: { row: AuditLogWithActor }) {
       {target ? (
         <UserAvatar user={target} size="sm" />
       ) : (
-        <div className="w-9 h-9 rounded-full flex-shrink-0 bg-[var(--kub-surface-2)]" />
+        <div className="kub-raise w-9 h-9 rounded-full flex-shrink-0" />
       )}
       <div className="flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold text-[color:var(--kub-text)]">
             {sanctionActionLabel(row.action as AuditAction)}
           </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]">
+          <span className="kub-raise text-[10px] px-1.5 py-0.5 rounded font-semibold text-[color:var(--kub-muted)]">
             {fmt(row.created_at)}
           </span>
         </div>
@@ -320,7 +320,7 @@ function CollapsibleSection({
         <div className="flex-1 text-sm font-bold text-[color:var(--kub-text)]">
           {title}
         </div>
-        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]">
+        <span className="kub-raise text-[11px] font-semibold px-2 py-0.5 rounded-full text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]">
           {count}
         </span>
       </button>
@@ -352,7 +352,7 @@ function RowCard({
       {user ? (
         <UserAvatar user={user as Profile} size="sm" />
       ) : (
-        <div className="w-9 h-9 rounded-full flex-shrink-0 bg-[var(--kub-surface-2)]" />
+        <div className="kub-raise w-9 h-9 rounded-full flex-shrink-0" />
       )}
       <div className="flex-1 min-w-0">
         <div className="text-sm font-semibold text-[color:var(--kub-text)]">
@@ -363,7 +363,7 @@ function RowCard({
             </span>
           )}
           {expired && (
-            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded font-semibold bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)]">
+            <span className="kub-raise ml-2 text-[10px] px-1.5 py-0.5 rounded font-semibold text-[color:var(--kub-muted)]">
               истёк
             </span>
           )}

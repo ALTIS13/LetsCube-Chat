@@ -91,8 +91,8 @@ export function SupportTicketDetails({
   };
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--kub-bg)]">
-      <header className="flex flex-shrink-0 items-start gap-3 border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-3 py-3 sm:px-4">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <header className="flex flex-shrink-0 items-start gap-3 border-b border-[color:var(--kub-border-color)] px-3 py-3 sm:px-4">
         <button
           type="button"
           onClick={onBack}
@@ -137,13 +137,13 @@ export function SupportTicketDetails({
           onReply={onReply}
         />
 
-        <aside className="min-h-0 overflow-y-auto border-t border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] p-3 lg:border-l lg:border-t-0">
+        <aside className="min-h-0 overflow-y-auto border-t border-[color:var(--kub-border-color)] p-3 lg:border-l lg:border-t-0">
           <section>
             <h3 className="text-xs font-bold uppercase tracking-wide text-[color:var(--kub-muted)]">
               Контакт
             </h3>
             {details.contact ? (
-              <div className="mt-2 space-y-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-3 text-sm">
+              <div className="kub-raise mt-2 space-y-2 rounded-lg border border-[color:var(--kub-border-color)] p-3 text-sm">
                 <p className="font-semibold text-[color:var(--kub-text)]">{details.contact.contactName}</p>
                 <p className="break-all text-[color:var(--kub-text)]">{details.contact.email}</p>
                 <p className="text-[color:var(--kub-text)]">{details.contact.phone}</p>
@@ -230,7 +230,7 @@ export function SupportTicketDetails({
             </div>
 
             {action ? (
-              <div className="mt-3 rounded-lg border border-[color:var(--kub-cyan)]/30 bg-[var(--kub-surface-2)] p-3">
+              <div className="kub-raise mt-3 rounded-lg border border-[color:var(--kub-cyan)]/30 p-3">
                 <p className="text-sm font-semibold text-[color:var(--kub-text)]">
                   {actionTitle(action)}
                 </p>
@@ -240,7 +240,7 @@ export function SupportTicketDetails({
                     <select
                       value={operatorId}
                       onChange={(event) => setOperatorId(event.target.value)}
-                      className="mt-1 h-10 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 text-sm text-[color:var(--kub-text)]"
+                      className="mt-1 h-10 w-full rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2 text-sm text-[color:var(--kub-text)]"
                     >
                       <option value="">Выберите коллегу</option>
                       {activeOperators.map((operator) => (
@@ -261,7 +261,7 @@ export function SupportTicketDetails({
                     onChange={(event) => setComment(event.target.value)}
                     rows={3}
                     maxLength={4_000}
-                    className="mt-1 w-full resize-y rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-2 py-2 text-sm text-[color:var(--kub-text)]"
+                    className="mt-1 w-full resize-y rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2 py-2 text-sm text-[color:var(--kub-text)]"
                   />
                 </label>
                 {action === "return" ? (
@@ -305,7 +305,7 @@ export function SupportTicketDetails({
                   value={lookupQuery}
                   onChange={(event) => setLookupQuery(event.target.value)}
                   placeholder="Телефон, эл. почта или @ник"
-                  className="h-9 min-w-0 flex-1 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] px-2 text-xs text-[color:var(--kub-text)]"
+                  className="h-9 min-w-0 flex-1 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-inset)] px-2 text-xs text-[color:var(--kub-text)]"
                 />
                 <KubButton
                   type="button"
@@ -323,7 +323,7 @@ export function SupportTicketDetails({
                   {customerCandidates.map((candidate) => (
                     <div
                       key={candidate.userId}
-                      className="rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-2 text-xs"
+                      className="kub-raise rounded-lg border border-[color:var(--kub-border-color)] p-2 text-xs"
                     >
                       <p className="font-semibold text-[color:var(--kub-text)]">
                         {candidate.fullName ?? "Пользователь"}

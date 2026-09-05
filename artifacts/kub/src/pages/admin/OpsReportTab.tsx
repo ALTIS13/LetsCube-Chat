@@ -183,7 +183,7 @@ export function OpsReportTab() {
             {controlCards.map((item) => (
               <div
                 key={item.title}
-                className="flex items-start gap-3 rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/60 px-3 py-3"
+                className="kub-raise flex items-start gap-3 rounded-2xl border border-[color:var(--kub-border-color)] px-3 py-3"
               >
                 <KubIcon
                   name={item.ok ? "checkCircle" : "warning"}
@@ -205,7 +205,7 @@ export function OpsReportTab() {
         </KubPanel>
 
         <KubPanel padded={false} className="overflow-hidden" data-testid="admin-ops-events">
-          <div className="border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/50 px-4 py-3">
+          <div className="kub-raise border-b border-[color:var(--kub-border-color)] px-4 py-3">
             <h3 className="text-sm font-semibold text-[color:var(--kub-text)]">
               Последние события авторизации и приглашений
             </h3>
@@ -236,7 +236,7 @@ function MetricCard({
   return (
     <KubPanel padded={false} className="p-4">
       <div className="flex items-center justify-between gap-3">
-        <div className="rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] p-2">
+        <div className="kub-raise rounded-xl border border-[color:var(--kub-border-color)] p-2">
           <KubIcon name={icon} size={16} tone={tone === "muted" ? "muted" : tone === "cyan" ? "accent" : tone} />
         </div>
         {loading && <KubIcon name="spinner" size={14} tone="muted" />}
@@ -265,7 +265,7 @@ function ControlCard({
   detail: string;
 }) {
   return (
-    <div className="rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)]/60 px-3 py-3">
+    <div className="kub-raise rounded-2xl border border-[color:var(--kub-border-color)] px-3 py-3">
       <div className="flex items-center gap-2">
         <KubIcon name={icon} size={15} tone={ok ? "online" : "warn"} />
         <div className="min-w-0 text-xs font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
