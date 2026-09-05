@@ -247,6 +247,43 @@
   --shadow-xl: 0 2px 0 0 rgba(0, 0, 0, 0.25), 0 8px 10px -1px rgba(0, 0, 0, 0.35);
   --shadow-2xl: 0 8px 32px rgba(0, 0, 0, 0.45);
 
+  /* ── Glass ────────────────────────────────────────────────────────────────
+   * The material the application's chrome is made of: the sidebar, headers,
+   * menus, dialogs, toasts and popovers. Content surfaces are NOT made of it
+   * — a message bubble that samples what is behind it costs a blur per bubble
+   * on every scrolled frame, and the thing behind it is the chat background,
+   * so it would pay that to reveal nothing.
+   *
+   * Four values, and every surface uses the same four, so one panel cannot end
+   * up a slightly different substance from the one beside it.
+   *
+   *   --glass-fill         chrome that content sits on: sidebars, headers
+   *   --glass-fill-strong  anything carrying text over other content: menus,
+   *                        dialogs, toasts, tooltips. A menu at panel opacity
+   *                        competes with what it covers.
+   *   --glass-line         the lit top edge; this, not the border, is what
+   *                        makes a panel read as a sheet of something
+   *   --glass-blur         what turns "translucent" into "frosted"
+   *
+   * Translucency only means anything over a background with something in it:
+   * a blur over one flat colour returns that same flat colour. --kub-ambient
+   * below is that something, and the two ship together.
+   */
+  --glass-fill: rgba(11, 33, 58, 0.58);        /* --kub-surface-2 at .58 */
+  --glass-fill-strong: rgba(8, 22, 41, 0.88);  /* --kub-surface at .88 */
+  --glass-line: rgba(255, 255, 255, 0.09);
+  --glass-blur: blur(20px) saturate(122%);
+  --glass-shadow:
+    0 20px 44px -26px rgba(0, 0, 0, 0.9),
+    0 3px 10px -6px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 var(--glass-line);
+  /* Two brand-hue pools and a vignette. Well below the contrast of any content
+     — this is light for the glass to pick up, not decoration. */
+  --kub-ambient:
+    radial-gradient(64% 46% at 16% -6%, rgba(77, 139, 208, 0.16) 0%, rgba(77, 139, 208, 0) 62%),
+    radial-gradient(56% 44% at 92% 8%, rgba(66, 127, 194, 0.12) 0%, rgba(66, 127, 194, 0) 64%),
+    radial-gradient(120% 96% at 50% 60%, rgba(0, 0, 0, 0) 46%, rgba(0, 0, 0, 0.30) 100%);
+
   --tg-bg: var(--kub-bg);
   --tg-sidebar: var(--kub-surface);
   --tg-chat-bg: var(--kub-bg);
@@ -406,6 +443,23 @@
   --shadow-xl: 0 2px 0 0 rgba(7, 17, 31, 0.07), 0 8px 10px -1px rgba(7, 17, 31, 0.12);
   --shadow-2xl: 0 8px 32px rgba(7, 17, 31, 0.16);
 
+  /* See the note in .dark. The values differ because the material does: on a
+     light ground the fill must be lighter than what it covers, or the panel
+     reads as a stain rather than as glass, and the shadow is a fraction of the
+     dark one — the same opacity on a light ground looks like dirt. */
+  --glass-fill: rgba(255, 255, 255, 0.66);
+  --glass-fill-strong: rgba(255, 255, 255, 0.92);
+  --glass-line: rgba(255, 255, 255, 0.75);
+  --glass-blur: blur(20px) saturate(140%);
+  --glass-shadow:
+    0 18px 40px -26px rgba(23, 51, 82, 0.26),
+    0 2px 8px -5px rgba(23, 51, 82, 0.16),
+    inset 0 1px 0 var(--glass-line);
+  --kub-ambient:
+    radial-gradient(64% 46% at 16% -6%, rgba(66, 127, 194, 0.10) 0%, rgba(66, 127, 194, 0) 62%),
+    radial-gradient(56% 44% at 92% 8%, rgba(66, 127, 194, 0.07) 0%, rgba(66, 127, 194, 0) 64%),
+    radial-gradient(120% 96% at 50% 60%, rgba(23, 51, 82, 0) 52%, rgba(23, 51, 82, 0.05) 100%);
+
   --tg-bg: var(--kub-bg);
   --tg-sidebar: var(--kub-surface);
   --tg-chat-bg: var(--kub-bg);
@@ -465,8 +519,45 @@ html, body {
   overflow: hidden;
 }
 
+/* The whole material in two classes. Applied rather than copied, so that
+   changing what the application is made of is one edit and not a search.
+   `isolation` is not optional: a backdrop-filter creates a containing block
+   for fixed descendants and blends against whatever is behind the element, so
+   a panel without its own stacking context can sample its own children.
+
+   Neither class sets a border. A panel's edge belongs to the panel — some
+   carry --tg-border all round, some only a single side — so the surface stays
+   the surface and the edge stays a decision. */
+.kub-glass,
+.kub-glass-strong {
+  isolation: isolate;
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+}
+.kub-glass { background-color: var(--glass-fill); }
+/* For anything that covers content it is not part of: menus, dialogs, toasts,
+   tooltips. At panel opacity these compete with what they cover. */
+.kub-glass-strong { background-color: var(--glass-fill-strong); }
+
+/* A browser that cannot frost has to be given something opaque instead: a
+   translucent panel over unblurred content is unreadable, which is worse than
+   no effect at all. Checked for the unprefixed property, since that is the one
+   that carries the behaviour. */
+@supports not (backdrop-filter: blur(1px)) {
+  .kub-glass { background-color: var(--kub-surface); }
+  .kub-glass-strong { background-color: var(--kub-surface-2); }
+}
+
 body {
-  background: var(--tg-bg);
+  /* Colour and image kept separate on purpose: --tg-bg stays the one flat
+     answer to "what colour is the page", which several components read, while
+     the ambient layer rides on top of it. `fixed` keeps the light still while
+     panels scroll over it — an ambient that scrolls with the content reads as
+     a texture printed on the page instead of as light in the room. */
+  background-color: var(--tg-bg);
+  background-image: var(--kub-ambient);
+  background-attachment: fixed;
   color: var(--tg-text);
   font-family: var(--app-font-sans);
   -webkit-font-smoothing: antialiased;
