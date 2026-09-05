@@ -67,7 +67,15 @@ export function PrivacyPage() {
           </dl>
         </header>
 
-        <div className="grid gap-10 py-8 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-14">
+        {/* `print:grid-cols-1` is not decoration. `public-page-print-hide` takes
+            the table of contents out of the flow, but a `display:none` grid item
+            does not take its *track* with it: the template still declares
+            `240px minmax(0,1fr)`, and auto-placement drops the article into the
+            first free cell — the 240px one. Printed on any paper laid out wider
+            than the `lg` breakpoint (Letter landscape is 1056px, A4 landscape
+            1122px) the whole policy came out as a 240px ribbon. The print layout
+            has one column because it has one child; it should say so. */}
+        <div className="grid gap-10 py-8 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-14 print:grid-cols-1">
           <aside className="public-page-print-hide lg:sticky lg:top-24 lg:self-start">
             <nav aria-label="Оглавление политики">
               <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--kub-muted)]">

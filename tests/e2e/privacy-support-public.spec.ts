@@ -39,6 +39,45 @@ test.describe("public privacy and support surfaces", () => {
     expect(documentSafety.documentWidth).toBeLessThanOrEqual(documentSafety.viewportWidth + 1);
   });
 
+  /**
+   * Hiding the table of contents for print is not the same as removing its
+   * column. `public-page-print-hide` sets `display:none`, which takes the
+   * <aside> out of the flow but leaves the `240px minmax(0,1fr)` template
+   * standing, so auto-placement dropped the whole policy into the 240px track.
+   * Paper laid out wider than the `lg` breakpoint — Letter landscape is 1056
+   * CSS px, A4 landscape 1122 — printed the document as a ribbon.
+   *
+   * The viewport is set here rather than left to the project so the assertion
+   * bites in every matrix entry: below `lg` the template never applies and a
+   * regression would pass unnoticed on the mobile projects.
+   */
+  test("/privacy prints as one column, not into the hidden sidebar's track", async ({ page }) => {
+    await gotoOrSkip(page, "/privacy");
+    await expect(page.getByRole("navigation", { name: "Оглавление политики" })).toBeVisible();
+
+    await page.setViewportSize({ width: 1122, height: 794 });
+    await page.emulateMedia({ media: "print" });
+    try {
+      const printed = await page.locator("article").first().evaluate((node) => {
+        const grid = node.parentElement as HTMLElement;
+        const toc = grid.firstElementChild as HTMLElement;
+        return {
+          tracks: getComputedStyle(grid).gridTemplateColumns.split(/\s+/).filter(Boolean).length,
+          tocDisplay: getComputedStyle(toc).display,
+          article: node.getBoundingClientRect().width,
+          available: (node.closest("main") as HTMLElement).getBoundingClientRect().width,
+        };
+      });
+
+      expect(printed.tocDisplay).toBe("none");
+      expect(printed.tracks).toBe(1);
+      expect(printed.article).toBeGreaterThan(printed.available * 0.9);
+      await expect(page.getByTestId("privacy-print")).toBeHidden();
+    } finally {
+      await page.emulateMedia({ media: null });
+    }
+  });
+
   test("/support validates required fields without contacting the backend", async ({ page }) => {
     let gatewayRequests = 0;
     page.on("request", (request) => {
