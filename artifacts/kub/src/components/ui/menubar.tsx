@@ -41,7 +41,13 @@ const Menubar = React.forwardRef<
   <MenubarPrimitive.Root
     ref={ref}
     className={cn(
-      "flex h-9 items-center space-x-1 rounded-md border bg-background p-1 shadow-sm",
+      // The strong fill, even though a menubar is chrome rather than an
+      // overlay. --glass-fill is sized for a sidebar, whose backdrop is always
+      // the page; a Menubar can be placed over anything, and measured on a
+      // white field it composited to rgb(113,126,141) — 3.86:1 for its own
+      // labels and 1.70:1 for a muted one. The fill is what has to give, not
+      // the 4.5:1.
+      "flex h-9 items-center space-x-1 rounded-md border kub-glass-strong p-1",
       className
     )}
     {...props}
@@ -92,7 +98,7 @@ const MenubarSubContent = React.forwardRef<
   <MenubarPrimitive.SubContent
     ref={ref}
     className={cn(
-      "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-[--radix-menubar-content-transform-origin]",
+      "z-50 min-w-[8rem] overflow-hidden rounded-md border kub-glass-strong p-1 text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-[--radix-menubar-content-transform-origin]",
       className
     )}
     {...props}
@@ -115,7 +121,7 @@ const MenubarContent = React.forwardRef<
         alignOffset={alignOffset}
         sideOffset={sideOffset}
         className={cn(
-          "z-50 min-w-[12rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-[--radix-menubar-content-transform-origin]",
+          "z-50 min-w-[12rem] overflow-hidden rounded-md border kub-glass-strong p-1 text-popover-foreground data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-[--radix-menubar-content-transform-origin]",
           className
         )}
         {...props}

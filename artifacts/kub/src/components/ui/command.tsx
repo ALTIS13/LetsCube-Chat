@@ -15,7 +15,11 @@ const Command = React.forwardRef<
   <CommandPrimitive
     ref={ref}
     className={cn(
-      "flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground",
+      // Deliberately transparent. A Command is never the overlay itself — it
+      // fills a CommandDialog or a PopoverContent, and both of those are
+      // already glass. An opaque fill here would sit on top of that surface
+      // and flatten it.
+      "flex h-full w-full flex-col overflow-hidden rounded-md bg-transparent text-popover-foreground",
       className
     )}
     {...props}
