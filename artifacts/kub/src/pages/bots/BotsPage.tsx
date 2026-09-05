@@ -44,8 +44,12 @@ export function BotsPage() {
     queryClient.refetchQueries({ queryKey: ["bot-management", "list"] });
   const eligibility = list.data?.eligibility;
 
+  // <main> carries no background of its own. Both panes below paint theirs and
+  // fill the row at every breakpoint, so the only place that fill was ever
+  // visible was the strip behind the header — where it cancelled the header's
+  // translucency by putting a flat colour directly behind it.
   return (
-    <main data-testid="bots-page" className="bots-management-surface flex h-[100dvh] min-w-0 flex-col overflow-hidden bg-[var(--kub-bg)] text-[color:var(--kub-text)]">
+    <main data-testid="bots-page" className="bots-management-surface flex h-[100dvh] min-w-0 flex-col overflow-hidden text-[color:var(--kub-text)]">
       <KubHeader
         title={<h1 className="truncate text-sm font-semibold">Мои боты</h1>}
         subtitle={eligibility ? `${eligibility.active_bot_count} из ${eligibility.max_bots}` : "Управление Bot API"}
