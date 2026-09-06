@@ -1,5 +1,175 @@
 # QA Results
 
+## 2026-09-07 - A QA run no longer writes into the owner's notification history
+
+`b3fc04f` moved the QA launch's single-instance identity and deliberately left
+the toast AUMID where it was, because moving it changes notification routing and
+deserved its own task. This is that task.
+
+### What the AUMID actually reaches — measured, not assumed
+
+`WINDOWS_APP_ID` is not a label the process chooses for itself. It is registered
+outside this code, by the installer:
+
+- `windows-tauri/src-tauri/target/release/nsis/x64/utils.nsh` defines
+  `SetLnkAppUserModelId`, which writes `${BUNDLEID}` into `PKEY_AppUserModel_ID`
+  through `IPropertyStore::SetValue`. `installer.nsi` defines
+  `BUNDLEID = ru.letscube.messenger` and inserts that macro after each of the
+  three `CreateShortcut` calls it makes — Start Menu, Start Menu folder, Desktop.
+- Read back on this workstation, both shortcuts that exist
+  (`%APPDATA%\Microsoft\Windows\Start Menu\Programs\LETSCUBE.lnk` and
+  `%USERPROFILE%\Desktop\LETSCUBE.lnk`, each targeting
+  `%LOCALAPPDATA%\LETSCUBE\letscube-windows-tauri.exe`) report
+  `System.AppUserModel.ID = ru.letscube.messenger`.
+- `HKCU\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\ru.letscube.messenger`
+  exists. `HKCU\Software\Classes\AppUserModelId\ru.letscube.messenger` does not —
+  the registration is the shortcut, not a registry class. The separate
+  `HKCU\Software\Classes\letscube-notification` key, written by `installer.nsi`,
+  is the protocol handler and is a different thing.
+
+So the id names the **installed client's** notification stream, and all three
+WinRT calls keyed by it reach into it:
+
+| call site | reached from | effect on the owner's Action Center |
+| --- | --- | --- |
+| `show_windows_notification` | `desktop_notify` | posts as the installed client |
+| `remove_windows_notification` | `desktop_remove_notification` | deletes the installed client's rows |
+| `clear_legacy_windows_message_notifications` | `setup`, every startup | deletes its `messages` group |
+
+The startup clear is the unconditional one. It matches no tag: it empties a
+whole group, so every QA start reached into the installed client's Action Center
+whether or not the two were signed in as the same account. Its blast radius is
+bounded to the literal `messages` group an older shell used, not the
+`message:<hash>` group per chat that replaced it (`nativeNotificationGroup` in
+`artifacts/kub/src/lib/platform/desktopNotifications.ts`).
+
+The removal path is the wider one. A QA run signs in
+(`loadQaCredentials("owner")` in `tests/e2e/windows-tauri-shell.spec.ts` — the
+owner-role QA account) and runs a full `useNotifications`, which calls
+`closeDesktopNotificationForRow` whenever a row becomes read or overflows past
+five per chat (`artifacts/kub/src/hooks/useNotifications.ts:241,257,266`). The
+AUMID picks the stream; the tag and group pick the row. Measured before the
+change, the installed client's history held two rows, both in group
+`message:69ad0854` — current-format rows of exactly the shape that path deletes.
+
+### What does *not* depend on the AUMID
+
+- **Toast click routing.** `windows_notification_xml` emits
+  `activationType="protocol"` with `launch="letscube-notification:…"`. The scheme
+  is a `HKCU\Software\Classes` key the installer writes, and the shell never
+  calls `register_all()`. Activation reaches the app through the protocol; the
+  AUMID has no part in it.
+- **Taskbar and window grouping.** The process never calls
+  `SetCurrentProcessExplicitAppUserModelID` — no occurrence in the crate.
+- **The tray** (per-process), **the updater endpoint and its signing key**.
+
+### The change
+
+`windows_app_id()` answers with `qa_isolated_identifier(WINDOWS_APP_ID)` behind
+the same two gates as the single-instance identity — `#[cfg(debug_assertions)]`
+so the branch does not exist in a release build, and
+`LETSCUBE_TAURI_QA_ISOLATED_IDENTITY`, which only the harness sets, so
+`tauri dev` keeps the shipped stream. In a release build it is
+`Cow::Borrowed(WINDOWS_APP_ID)`; the name is built by `format!`, never written as
+a literal, so the cfg gate has nothing to leave behind.
+
+What Windows does with the suffixed id, measured through the same WinRT API the
+product uses:
+
+- `CreateToastNotifierWithId("ru.letscube.messenger.qa")` **succeeds**, but
+  `notifier.Setting()` returns `HRESULT(0x80070490)` — `ERROR_NOT_FOUND`, because
+  no shortcut carries that id. `show_windows_notification` maps that to
+  `notification_unavailable` before it ever reaches `Show`, and
+  `showDesktopMessageNotification` already turns a rejection into `false`. So a
+  QA toast is **not sent at all** — the wanted outcome, since the harness asserts
+  the in-app notification panel and never a toast.
+- Forced past that guard by a probe, `Show` returned `Ok(())` and the row landed
+  in the QA history (0 → 1) while the installed client's stayed at 2. Even the
+  worst case cannot cross into the owner's stream.
+
+### Verified live
+
+Counts read through `ToastNotificationManager.History.GetHistory(<aumid>)`, tag
+and group only — never a payload.
+
+| | `ru.letscube.messenger` | `ru.letscube.messenger.qa` |
+| --- | --- | --- |
+| before `windows:tauri:qa` | 2 rows (`message:69ad0854`, tags `4152e620`, `21625204`) | 1 row (the probe, group `messages`) |
+| after | **2 rows, same tags** | **0 rows** |
+
+Both halves matter. The installed client's history is untouched, and the QA
+history went to zero because `clear_legacy_windows_message_notifications()` ran
+at QA startup and removed group `messages` — the very call that was the bug,
+executing during the run, against its own stream. The signed-in path ran too:
+the scenario that authenticates inside the native WebView and opens the
+notification panel passed, so `useNotifications` was live while those rows
+survived. Repeated across a second full run: 2 rows before, the same 2 after.
+
+### Gates
+
+- `cargo test`: 56/56 (was 55). `cargo check --release`: clean, so the release
+  profile still compiles the branch out entirely.
+- `node --test tests/unit/*.mjs tests/unit/*.mts`: 1384/1384 (was 1383).
+  `pnpm.cmd windows:tauri:test`: 27/27 (was 26).
+- `pnpm.cmd --filter @workspace/kub run typecheck`: clean.
+  `git diff --check`: clean.
+- `pnpm.cmd windows:tauri:qa`: `baseline` 3/3, `success`, `offline`,
+  `catalog_failure` green; `normal_update` red for a reason that predates this
+  change — see the section below.
+- Mutation-checked, SHA-256 of `windows-tauri/src-tauri/src/lib.rs` before and
+  after. Baseline `f81764c6…`.
+  - All three WinRT sites addressing `WINDOWS_APP_ID` again (`d109af64…`): the
+    new unit contract reddens on `show_windows_notification must ask which
+    history this launch owns`. `cargo test` stays green — that half guards the
+    wiring, not the seam.
+  - The seam always answering with the shipped id (`2ab06d4f…`): `cargo test`
+    reddens on `a QA run must not write into the installed client's toast
+    history`, and the unit contract reddens on `the QA toast identity must sit
+    behind both gates`.
+  - Both reverted; the hash returned to `f81764c6…`.
+
+### Prerequisite that cost time a fourth time
+
+The first run failed at `baseline` scenario 3 on `input[type="email"]`, and the
+page snapshot showed "Подключение к серверу не настроено" — `artifacts/kub/dist`
+had been rebuilt without `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` again.
+Not an app defect and unrelated to this change: that scenario serves the static
+bundle to a Playwright page and never reaches the Rust process. The
+configuration was recovered from the deployed bundle as before — the anon key is
+a public value embedded in `https://app.letscube.ru/assets/index-*.js`, the one
+JWT found there was decoded and confirmed to carry `role: anon`, and the host is
+`https://core.letscube.ru`. Rebuilt and re-run; `baseline` then passed 3/3.
+
+### Open, and not this change: `normal_update` cannot sign in
+
+With the bundle rebuilt, `baseline` 3/3, `success`, `offline` and
+`catalog_failure` all pass, and `normal_update` fails in
+`assertBuiltInterfaceHonoursNativeState` — `getByTestId('desktop-app-shell')`
+never attaches within 25s. The screenshot shows the login form filled and the
+submit button still spinning: the sign-in on the loopback origin never settles.
+The harness stops at the first failing scenario, so `critical_update` was not
+reached.
+
+Not caused by the AUMID change, and not left as a claim:
+
+- **A control run at `b7ef458` with this change reverted fails identically** —
+  same test, same assertion, 27.9s both times. The reverted state was restored
+  from a SHA-256-verified copy afterwards.
+- Auth is healthy: `POST /auth/v1/token?grant_type=password` with a fake address
+  answers `400 invalid_credentials` in 154ms, and the gateway the bundle
+  actually calls, `https://core.letscube.ru/functions/v1/auth-yandex-gateway`,
+  answers `400 bad_request` in 242ms. The deployed bundle resolves the same
+  gateway URL, so the rebuild did not point the build somewhere else.
+- The bundle is not broken: `baseline` scenario 3 signs in on a loopback origin
+  with the *same* bundle and passes. The two differ in the bridge they inject —
+  `baseline` a full one, this scenario a minimal frozen one — but the page boots
+  clean under that minimal bridge (loaded `/login` with it, zero console and page
+  errors), so the stall is after submit rather than at boot.
+
+Left for whoever owns the interface: this scenario passed at `b3fc04f` against a
+`dist/public` that has since been rebuilt, so what it measured then and what it
+measures now are not the same bundle.
+
 ## 2026-09-06 - The Windows QA gate, repaired: it now looks at the build under test, and runs beside the installed client
 
 Two weaknesses found while cutting 0.2.13 and 0.2.14. Neither is in the product;
@@ -75,7 +245,9 @@ What the identifier reaches, checked rather than assumed:
   notifications and `clear_legacy_windows_message_notifications()` are
   unchanged. Left deliberately — a QA build that clears the installed client's
   toast history is a real bleed, but moving the AUMID is a notification-routing
-  change and belongs to its own task.
+  change and belongs to its own task. **That task is the 2026-09-07 entry at the
+  top of this file; the AUMID now takes the same suffix behind the same two
+  gates.**
 - Not the `letscube-notification` scheme: the deep-link plugin only ever names
   the identifier in a registry *description*, and `register_all()` is never
   called — the installer owns that key.

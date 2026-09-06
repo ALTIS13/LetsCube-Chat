@@ -2,6 +2,7 @@ pub mod startup;
 pub mod storage;
 pub mod updater;
 
+use std::borrow::Cow;
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -367,13 +368,53 @@ fn qa_wants_isolated_identity() -> bool {
 /// effect: until this existed every QA run wrote its update channel and its
 /// node-trust record into the installed client's own directory.
 ///
-/// What it does *not* move: the toast AUMID (`WINDOWS_APP_ID`, a separate
-/// constant), the `letscube-notification` scheme (registered by the installer,
-/// never by this process), the updater endpoint and its signing key, and the
-/// tray, which is per-process and never keyed by identifier.
+/// What it does *not* move: the `letscube-notification` scheme (registered by
+/// the installer, never by this process), the updater endpoint and its signing
+/// key, and the tray, which is per-process and never keyed by identifier. The
+/// toast AUMID is a separate constant and moves through `windows_app_id()`.
 #[cfg(debug_assertions)]
 fn qa_isolated_identifier(shipped: &str) -> String {
     format!("{shipped}.qa")
+}
+
+/// The identity Windows files this process's toasts under.
+///
+/// `WINDOWS_APP_ID` is not a label this process picks for itself: it names a
+/// stream that belongs to the *installed* client. The NSIS installer stamps it
+/// as `System.AppUserModel.ID` on the Start Menu and Desktop shortcuts it
+/// creates, and Windows keeps that application's Action Center rows and its
+/// notification setting under that same id. Measured on this workstation: both
+/// shortcuts carry the shipped id, and the installed client's rows are filed
+/// under it.
+///
+/// So every WinRT call keyed by it reaches into that history rather than this
+/// process's own. `clear_legacy_windows_message_notifications()` is the
+/// unconditional one: it runs at every startup and empties a whole group, so a
+/// QA start used to clear the installed client's Action Center whether or not
+/// the two were signed in as the same account. A QA run also signs in and runs
+/// a full `useNotifications`, whose removals were addressed here too — the id
+/// picks the stream, the tag and group pick the row. Under the suffixed id there
+/// is no shortcut and no registration, so a QA launch gets its own empty
+/// stream: its toasts are refused rather than delivered under someone else's
+/// name, and `desktop_notify` already reports a refusal as
+/// `notification_unavailable`, which the frontend already treats as "not
+/// delivered". Not sent is the wanted outcome — the harness asserts the in-app
+/// notification panel, never a toast.
+///
+/// Nothing else is keyed by this id. The process never calls
+/// `SetCurrentProcessExplicitAppUserModelID`, so taskbar grouping does not use
+/// it, and a toast is activated through the `letscube-notification` protocol
+/// the installer registered, never through the AUMID.
+///
+/// The same two gates as the single-instance identity: the branch does not
+/// exist in a release build, and even a debug build takes it only when the
+/// harness asks.
+fn windows_app_id() -> Cow<'static, str> {
+    #[cfg(debug_assertions)]
+    if qa_wants_isolated_identity() {
+        return Cow::Owned(qa_isolated_identifier(WINDOWS_APP_ID));
+    }
+    Cow::Borrowed(WINDOWS_APP_ID)
 }
 
 #[cfg(debug_assertions)]
@@ -874,7 +915,7 @@ fn show_windows_notification(
         .map_err(|_| "notification_unavailable")?;
 
     let notifier =
-        ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(WINDOWS_APP_ID))
+        ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(&*windows_app_id()))
             .map_err(|_| "notification_unavailable")?;
     if notifier.Setting().map_err(|_| "notification_unavailable")? != NotificationSetting::Enabled {
         return Err("notification_disabled");
@@ -898,19 +939,27 @@ fn remove_windows_notification(
         .RemoveGroupedTagWithId(
             &HSTRING::from(tag),
             &HSTRING::from(&notification.group),
-            &HSTRING::from(WINDOWS_APP_ID),
+            &HSTRING::from(&*windows_app_id()),
         )
         .map_err(|_| "notification_unavailable")
 }
 
+/// Drops the toasts an older shell left behind, which grouped every message
+/// under one literal `messages` group instead of the `message:<hash>` group per
+/// chat that replaced it. Still the installed client's own housekeeping, and
+/// unchanged for it: in a release build `windows_app_id()` is `WINDOWS_APP_ID`.
+/// What moved is whose history it is allowed to clean up — a QA launch now
+/// empties its own rather than the owner's.
 #[cfg(windows)]
 fn clear_legacy_windows_message_notifications() {
     use windows::core::HSTRING;
     use windows::UI::Notifications::ToastNotificationManager;
 
     if let Ok(history) = ToastNotificationManager::History() {
-        let _ =
-            history.RemoveGroupWithId(&HSTRING::from("messages"), &HSTRING::from(WINDOWS_APP_ID));
+        let _ = history.RemoveGroupWithId(
+            &HSTRING::from("messages"),
+            &HSTRING::from(&*windows_app_id()),
+        );
     }
 }
 
@@ -1894,6 +1943,37 @@ mod tests {
         assert!(!isolated
             .chars()
             .any(|character| r#"\/:*?"<>|"#.contains(character)));
+    }
+
+    /// The toast id decides whose Action Center this process reads and writes:
+    /// `CreateToastNotifierWithId`, `RemoveGroupedTagWithId` and
+    /// `RemoveGroupWithId` are all keyed by it, and the installed client's
+    /// shortcuts carry `WINDOWS_APP_ID`. So a QA launch has to answer with the
+    /// suffixed name, and every other launch — `tauri dev` included — with the
+    /// shipped one.
+    ///
+    /// The two halves share one test because they share one environment
+    /// variable, and `cargo test` runs its tests as threads of a single
+    /// process.
+    #[test]
+    fn qa_toasts_are_filed_under_the_qa_identity_and_nothing_else_is() {
+        let restore = std::env::var_os("LETSCUBE_TAURI_QA_ISOLATED_IDENTITY");
+
+        std::env::remove_var("LETSCUBE_TAURI_QA_ISOLATED_IDENTITY");
+        assert_eq!(windows_app_id(), WINDOWS_APP_ID);
+
+        std::env::set_var("LETSCUBE_TAURI_QA_ISOLATED_IDENTITY", "1");
+        let isolated = windows_app_id();
+        assert_ne!(
+            isolated, WINDOWS_APP_ID,
+            "a QA run must not write into the installed client's toast history",
+        );
+        assert_eq!(isolated, qa_isolated_identifier(WINDOWS_APP_ID));
+
+        match restore {
+            Some(value) => std::env::set_var("LETSCUBE_TAURI_QA_ISOLATED_IDENTITY", value),
+            None => std::env::remove_var("LETSCUBE_TAURI_QA_ISOLATED_IDENTITY"),
+        }
     }
 
     #[test]

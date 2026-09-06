@@ -1239,8 +1239,9 @@ test("an isolated QA launch runs under its own single-instance identity", () => 
     "only the shell has an identity to move",
   );
 
-  // The shipped identity is what the installer, the toast AUMID and every
-  // installed client already hold; the QA suffix must never reach it.
+  // The shipped identity is what the installer and every installed client
+  // already hold; the QA suffix must never reach it. The toast AUMID takes the
+  // same suffix through `windows_app_id()`, which the next test owns.
   assert.equal(tauriConfig.identifier, "ru.letscube.messenger");
   assert.match(
     libRs,
@@ -1266,6 +1267,68 @@ test("an isolated QA launch runs under its own single-instance identity", () => 
     /\.run\(tauri::generate_context!\(\)\)/,
     "a second context would discard the rename",
   );
+});
+
+test("an isolated QA launch files its toasts away from the installed client", () => {
+  const libRs = readText("windows-tauri/src-tauri/src/lib.rs");
+  const wrapper = readText("scripts/windows-tauri-qa.mjs");
+
+  // The AUMID is registered outside this code: the NSIS installer stamps it as
+  // System.AppUserModel.ID on the Start Menu and Desktop shortcuts, and Windows
+  // keeps the installed client's Action Center rows under it. Every WinRT call
+  // keyed by the bare constant therefore reads and writes the owner's own
+  // notification history — including the clear that runs at every startup.
+  for (const site of [
+    "show_windows_notification",
+    "remove_windows_notification",
+    "clear_legacy_windows_message_notifications",
+  ]) {
+    const body = libRs.match(new RegExp(`fn ${site}[\\s\\S]*?\\n}`))?.[0] ?? "";
+    assert.notEqual(body, "", `${site} must remain the notification seam`);
+    assert.match(
+      body,
+      /HSTRING::from\(&\*windows_app_id\(\)\)/,
+      `${site} must ask which history this launch owns`,
+    );
+    assert.doesNotMatch(
+      body,
+      /WINDOWS_APP_ID/,
+      `${site} must not address the installed client's history directly`,
+    );
+  }
+  assert.doesNotMatch(
+    libRs,
+    /HSTRING::from\(WINDOWS_APP_ID\)/,
+    "no WinRT call may hand the shipped AUMID straight to Windows",
+  );
+
+  // Same two gates as the single-instance identity, and the same suffix, so a
+  // QA run leaves one recognisable name behind rather than two.
+  const seam = libRs.match(/fn windows_app_id\(\)[\s\S]*?\n}/)?.[0] ?? "";
+  assert.match(
+    seam,
+    /#\[cfg\(debug_assertions\)\]\s*if qa_wants_isolated_identity\(\) \{\s*return Cow::Owned\(qa_isolated_identifier\(WINDOWS_APP_ID\)\);/,
+    "the QA toast identity must sit behind both gates and reuse the shipped suffix",
+  );
+  assert.match(seam, /Cow::Borrowed\(WINDOWS_APP_ID\)/, "every other launch keeps the shipped id");
+  assert.doesNotMatch(
+    libRs,
+    /#\[cfg\(not\(debug_assertions\)\)\][\s\S]{0,200}qa_isolated_identifier/,
+    "a release build must not compile a way to move its notifications",
+  );
+
+  // The suffixed name is built, never written down: a literal would survive the
+  // cfg gate into the shipped binary.
+  for (const [name, source] of [
+    ["the shell", libRs],
+    ["the harness", wrapper],
+  ]) {
+    assert.doesNotMatch(
+      source,
+      /ru\.letscube\.messenger\.qa/,
+      `${name} must derive the QA name from the shipped one`,
+    );
+  }
 });
 
 test("Windows lifecycle wrapper owns a profile before either child can exist", () => {
