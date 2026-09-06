@@ -41,17 +41,42 @@ test("font readiness is asked once for the page, not once per message", () => {
 });
 
 test("a resize is observed on the nodes that can change independently, not on every nested one", () => {
-  const observe = source.match(/new ResizeObserver\(schedule\)[\s\S]{0,320}?observe\(node as Element\)\);/);
-  assert.ok(observe, "the resize observation could not be found");
-  // Count the entries in the array, not the refs mentioned: one entry may name
-  // a fallback (`a ?? b`) and that is still one observed node.
-  const list = observe[0].match(/\[([\s\S]*?)\]\s*\.filter/);
-  assert.ok(list, "the observed-node list could not be found");
-  const entries = list[1].split(",").map((entry) => entry.trim()).filter(Boolean);
-  assert.ok(
-    entries.length <= 2,
-    `observing ${entries.length} nested nodes turns one resize into ${entries.length} measurements per message: ${entries.join(" | ")}`,
+  // Every `observe()` the effect makes, not only the ones named in the array.
+  //
+  // This used to read the array literal alone, and a third node added as its
+  // own `observer.observe(textFlowRef.current)` statement beside it left all of
+  // this green — measured, on the whole file. The limit was written down and
+  // not defended.
+  const effect = source.match(/useLayoutEffect\(\(\) => \{[\s\S]*?\}, \[bubbleRef, measure[^\]]*\]\);/);
+  assert.ok(effect, "the measurement effect could not be found");
+  const body = effect[0];
+  assert.equal(
+    (body.match(/new ResizeObserver\(/g) ?? []).length,
+    1,
+    "the measurement keeps exactly one observer; a second one would double every delivery",
   );
+
+  // A site fed from an array contributes that array's entries — one entry may
+  // name a fallback (`a ?? b`) and that is still one observed node. Every other
+  // site contributes the single node it names.
+  const fromArray = [
+    ...body.matchAll(/\[([^[\]]*)\]\s*\.filter\([\s\S]{0,60}?\)\s*\.forEach\(\([\s\S]{0,80}?\.observe\(/g),
+  ];
+  const sites = (body.match(/\.observe\(/g) ?? []).length;
+  assert.ok(sites > 0, "nothing is observed at all, so a bubble that re-wraps later never re-measures");
+
+  const named = fromArray.flatMap((match) =>
+    match[1].split(",").map((entry) => entry.trim()).filter(Boolean),
+  );
+  const direct = sites - fromArray.length;
+  const nodes = named.length + direct;
+  assert.ok(
+    nodes <= 2,
+    `observing ${nodes} nested nodes multiplies every message on screen: ${[...named, `${direct} named outside any array`].join(" | ")}`,
+  );
+
+  // The scan cannot see what the running chat registers, which is why the
+  // number it protects is measured in tests/e2e/message-meta-observer-cost.spec.ts.
 });
 
 test("the measurement is skipped entirely when there is nothing to place", () => {

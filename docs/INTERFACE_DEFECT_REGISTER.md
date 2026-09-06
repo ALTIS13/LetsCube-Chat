@@ -4663,8 +4663,138 @@ treating every cap as exact fails at 1440/1920.
    text" and "three lines of text plus a wrapped reserve" are both four line
    boxes, and the content span is an inline box, which ResizeObserver reports
    nothing for. A single forced re-measure corrected it permanently and it did
-   not oscillate. Observing the paragraph instead of the stack fixes it and was
-   measured doing so — but `tests/unit/message-bubble-measurement-cost.test.mjs`
-   records a deliberate two-node limit, and no test distinguishes the change
-   (the mutation survives the whole matrix), so it was **not** taken. It needs
-   a decision about that recorded limit rather than a change made in passing.
+   not oscillate. It was left alone pending a decision about the two-node limit
+   in `tests/unit/message-bubble-measurement-cost.test.mjs`, because that limit
+   was written down and not defended.
+
+   **Resolved 2026-09-07 by measurement: the limit stays at two, and the freeze
+   does not reproduce.** See the section below.
+
+### The two-node limit, decided by measurement
+
+The freeze above was observed while the two pages of a context were rendering
+in different faces, which is finding 1 and is fixed. Whether it survives that
+fix was measured rather than argued, on the DEV preview fixture against a dev
+server with the real backend, at 390 and 1440, with 120 and 400 messages, three
+repeats each.
+
+**The freeze does not reproduce.** A `resize` event re-measures every bubble
+without moving a single box, so any decision left standing on a layout that had
+gone would change under it. Across every run — including a deliberately late
+webfont that re-wrapped a settled conversation, moving 34 of 120 messages from
+`inline` to `anchored` — the number of placements that changed was **0**.
+
+**A third node could not have caught it anyway.** A second observer, registered
+beside the component's own on all five candidate nodes of every message (600
+watched nodes per viewport), counted the deliveries in which the paragraph's
+box moved and neither node the component watches did:
+
+| phase | deliveries | paragraph moved alone |
+| --- | --- | --- |
+| boot | 1 | 0 |
+| settled, 800ms | 0 | 0 |
+| late webfont swap | 10–11 | **0** |
+| 21 600px of scrolling | 0 | 0 |
+| 30 viewport width steps | 0–73 | **0** |
+| text-size change and back | 7–10 | **0** |
+
+Never once, at either viewport. The paragraph is a block box inside the stack's
+shrink-to-fit chain, so a re-wrap that changes its box changes the stack's box
+in the same layout pass and arrives in the same delivery. The content span
+confirmed the other half of the mechanism: **one** delivery, the mandatory
+first one every newly observed target gets, and nothing afterwards — an inline
+box reports no resize.
+
+**What the third node would cost.** Measured with the paragraph added to the
+observed list, same fixture, 400 messages:
+
+| | two nodes | three nodes |
+| --- | --- | --- |
+| live observation targets | 657 (390) / 578 (1440) | 1057 / 978 |
+| `observe()` calls during mount | 910 / 886 | 1563 / 1527 |
+| entries delivered during mount | ~1400 / ~1360 | ~2452 / ~2260 |
+| `measure()` runs during mount | 1172 / 1148 | 1252 / ~1250 |
+| placements it changed | — | **none, anywhere** |
+
+So +61% live targets, +72% registrations, +75% delivered entries and +7% measure
+runs, for no different answer at any viewport in any scenario.
+
+**Scrolling is free either way, and that is why.** Over 240 frames and 21 600px
+in both directions, the measurement observer delivered **0** callbacks and ran
+**0** measures, in every run of both variants: nothing resizes while a list
+scrolls. Frame gaps were identical — median 16ms, p95 17–18ms — with 657 targets
+and with 1057. The handler itself costs about **0.05ms**: 400 forced
+re-measures totalled 18–22ms of callback time at 390 and 16–28ms at 1440.
+
+The average is below the ceiling in any case. On the mount that matters the
+bubble and stack refs are still null, because React attaches host refs
+child-first, so the first pass observes the footer alone; only a message whose
+placement changes ever reaches two. Measured at rest: **1.62 nodes per message**
+at 390 and **1.46** at 1440.
+
+**The limit is now defended.** `tests/e2e/message-meta-observer-cost.spec.ts`
+counts what the running chat registers, so the form the nodes are named in
+cannot matter, and `tests/unit/message-bubble-measurement-cost.test.mjs` counts
+every `observe()` in the effect rather than only the array entries. Six
+mutations of `MessageBubble.tsx:635`, each with the file's SHA-256 checked before
+and after:
+
+| mutation | e2e spec | unit gate before | unit gate after |
+| --- | --- | --- | --- |
+| third node as its own `observe()` statement | red | **green** | red |
+| third node inside the array | red | red | red |
+| fourth node | red | red | red |
+| observer removed entirely | red | red | red |
+| footer observed, never the stack | red | **green** | green |
+| stack observed, never the footer | red | **green** | green |
+
+The three green cells are what "written down and not defended" meant.
+
+---
+
+## D-070 `[ ]` The width the meta is measured against is one the bubble never reaches
+
+**Severity:** medium. Measured at 390 only, on 6 of 120 and 14 of 400 messages
+of the same fixture; none at 360, 412, 1440 or 1920. Found 2026-09-07 while
+measuring the observed-node limit of D-069.
+
+**Surface:** `artifacts/kub/src/components/chat/MessageBubble.tsx:571`, the
+`canInline` comparison, against the ceiling `getDeclaredContentCap` returns at
+`:421`.
+
+**Defect:** the decision compares the last line and the meta against the width
+the bubble is *allowed* to reach. A text bubble is shrink-to-fit, so it stops at
+the width its longest line needs, which can be less. The spacer that reserves
+room for the meta is an inline box in the same paragraph, so where the gap is
+smaller than the spacer it wraps instead of widening the bubble — and the bubble
+grows a line holding nothing but the timestamp, which is the symptom of D-008
+and D-027 arriving from a third direction.
+
+This is not the frozen measurement of D-069. A `resize` that re-measures all 400
+bubbles reproduces the same answer, at both message counts, in every run: the
+rule is wrong, not stale.
+
+**Reproduction:** the DEV preview fixture at 390 with a message that wraps to
+three lines and ends on a long one —
+
+```
+011. Средней длины сообщение, которое на телефоне переносится на две строки,
+а на широком экране остаётся в одной
+```
+
+| | 390 (defect) | 412 (same message, correct) |
+| --- | --- | --- |
+| stack `max-width` | `min(335.4px, 560px, max(256px, 100% + 0px))` | `min(354.32px, …)` |
+| ceiling the decision uses | 311.4px | 330.3px |
+| last line | 238.3px | 238.3px |
+| meta + 8px gap | 68.4px | 68.4px |
+| the decision: 306.7px fits | **yes → inline** | yes → inline |
+| bubble's actual content width | **304px** | 326px |
+| reserved spacer | 69px, **wrapped** | 69px, on the line |
+| paragraph height | **91px — four line boxes for three lines** | 68.3px — three |
+
+**Consequence:** the message renders as three lines of text and a fourth line
+that is empty except for `09:02` at the right edge. `data-message-meta-placement`
+still reads `inline`, so a check on the attribute or on where the timestamp
+finally sits reports the message as correct; the wasted line is only visible in
+the paragraph's height, or on screen.
