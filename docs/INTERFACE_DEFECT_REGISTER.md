@@ -4598,3 +4598,73 @@ reinstalled at the end; the copy pulled back afterwards has the same hash. A
 debug build cannot be installed over a release one without an uninstall, so the
 application's data was cleared going in and cleared again coming out — the owner
 will need to sign in on the phone again.
+
+## D-069 `[x]` The width the placement was compared against was the width the placement had produced
+
+**Severity:** high on the phone. Every message that does not wrap, at 360 and
+390, on both engines. Found 2026-09-06 while chasing a WebKit-only report that
+the time stayed beside a last line it did not fit on.
+
+**Surface:** `getMaxContentWidth` in
+`artifacts/kub/src/components/chat/MessageBubble.tsx`.
+
+**Defect:** the ceiling was `Math.min(fromRow, cap)`, and `fromRow` is measured
+from the bubble's parent row. That row is shrink-to-fit around this very bubble,
+so for a message that does not wrap it reports the width of the message. It is
+the same feedback loop as D-027, running the other way round: the row answers
+with the placement it was given.
+
+Measured at 390 on the DEV preview fixture, both engines:
+
+| | `Коротко` (one line) | the wrapped message |
+|---|---|---|
+| row reports | **100.4px** | 342px |
+| declared cap | 309.4px | 309.4px |
+| last line + time + 8 | 125.0px | 345.98px |
+| answer it gave | **anchored** — wrong | anchored |
+
+So a one-line message was told it had 100px when the design allows 309px, and
+every short message on the phone grew a row for its timestamp. This is what
+`message-meta-placement.spec.ts:126` had been failing on at 360 and 390 on
+Chromium **and** WebKit, while passing at 1440 where the row happens to be wide
+enough to hide it.
+
+**Fix:** an exactly known cap is the answer and the row is not consulted at all.
+`resolveCssLength` already returns `null` when it cannot resolve a percentage,
+so asking it a second time with no basis says whether the cap contains one.
+
+Where the cap does contain a percentage the row stays, because there the
+percentage is guessed as `Infinity` and an `Infinity` inside a `max()` discards
+the real term beside it: an own bubble at 1440 declares
+`min(1238.4px, 560px, max(256px, 100% - 104px))`, whose true value is the 256px
+the floor contributes and whose guessed value is 560px. Measured, trusting that
+guess put the reserved spacer on a line of its own at 1440 and 1920. Both
+directions are mutation-proven — removing the exact branch fails at 360/390,
+treating every cap as exact fails at 1440/1920.
+
+### Two things found alongside it, and not the same defect
+
+1. **The spec was calibrating on one face and asserting on another.** The
+   font-freezing in `message-meta-first-paint.spec.ts` was a `page.route`
+   abort, and a route is per page: the second page of a context is served the
+   Google Fonts stylesheet out of the cache with no request to intercept.
+   Measured at 390 on WebKit, the same timestamp is **54.5px** wide on the page
+   the text is built against and **60.4px** on the page it is rendered in, so a
+   message crafted to overflow its line by 14px arrived wrapped a line further
+   on with 139px of last line inside a 309px bubble. The link is now removed
+   from the document as well, which no cache can undo. This is why the report
+   read as WebKit-only.
+2. **A measurement can still freeze on a layout that is passing through.** With
+   the fonts diverging as above, one bubble re-wrapped twice after mount —
+   content span 3 lines/301px, then 4 lines/270.8px, then 3 lines/305.1px — and
+   its last measurement was the middle one, which read an 82.4px last line where
+   the settled line is 277.6px. Nothing re-measured it afterwards: the stack and
+   the bubble keep the **same box** across that change, because "four lines of
+   text" and "three lines of text plus a wrapped reserve" are both four line
+   boxes, and the content span is an inline box, which ResizeObserver reports
+   nothing for. A single forced re-measure corrected it permanently and it did
+   not oscillate. Observing the paragraph instead of the stack fixes it and was
+   measured doing so — but `tests/unit/message-bubble-measurement-cost.test.mjs`
+   records a deliberate two-node limit, and no test distinguishes the change
+   (the mutation survives the whole matrix), so it was **not** taken. It needs
+   a decision about that recorded limit rather than a change made in passing.

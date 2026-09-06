@@ -357,9 +357,18 @@ function getTextLineRects(contentEl: HTMLElement): DOMRect[] {
  * A cap that resolves to nothing finite returns `null`, and the caller keeps
  * the row's answer rather than a guess.
  */
-function getDeclaredContentCap(bubbleStyle: CSSStyleDeclaration, stackEl: HTMLElement | null): number | null {
+function getDeclaredContentCap(
+  bubbleStyle: CSSStyleDeclaration,
+  stackEl: HTMLElement | null,
+): { width: number; exact: boolean } | null {
   if (!stackEl) return null;
-  const declared = resolveCssLength(getComputedStyle(stackEl).maxWidth, Number.POSITIVE_INFINITY);
+  const maxWidth = getComputedStyle(stackEl).maxWidth;
+  // Asked twice, and the second answer is the interesting one. With no basis a
+  // percentage cannot be resolved and the whole expression comes back `null`,
+  // so a number here means the cap contains no percentage at all — it is the
+  // ceiling outright, not the ceiling with a term guessed at.
+  const declared = resolveCssLength(maxWidth, Number.POSITIVE_INFINITY);
+  const exact = resolveCssLength(maxWidth, null) !== null;
   if (declared === null || declared <= 0) return null;
 
   // The stack's cap bounds the bubble's BORDER box, so the border comes off as
@@ -370,7 +379,7 @@ function getDeclaredContentCap(bubbleStyle: CSSStyleDeclaration, stackEl: HTMLEl
   const paddingRight = parsePixelValue(bubbleStyle.paddingRight) ?? 0;
   const borderLeft = parsePixelValue(bubbleStyle.borderLeftWidth) ?? 0;
   const borderRight = parsePixelValue(bubbleStyle.borderRightWidth) ?? 0;
-  return declared - paddingLeft - paddingRight - borderLeft - borderRight;
+  return { width: declared - paddingLeft - paddingRight - borderLeft - borderRight, exact };
 }
 
 /**
@@ -388,31 +397,42 @@ function getMaxContentWidth(bubbleEl: HTMLElement, stackEl: HTMLElement | null):
   const paddingLeft = parsePixelValue(bubbleStyle.paddingLeft) ?? 0;
   const paddingRight = parsePixelValue(bubbleStyle.paddingRight) ?? 0;
 
-  // Measured from the ROW, not read from a declared `max-width`. The stack's
-  // cap is a `min()` of three terms, which computes to a string no number
-  // parses — and the fallback was the bubble's CURRENT width, which differs
-  // between the two placements. That is a feedback loop: inline made the bubble
-  // narrow, the narrow bubble said the meta did not fit, anchored made it wide,
-  // and the wide bubble said it did. Measured on production, that flip cost 228
-  // height changes and 1865px of growth on a chat of 100 messages.
+  // An exactly known cap IS the answer, and the row is not consulted at all.
   //
-  // The row's width is the same in both placements, so the answer is stable. It
-  // over-estimates when the design cap is the tighter constraint, and that is
-  // the safe direction: the meta is positioned and its space reserved, so a
-  // slightly generous "it fits" costs a few pixels of bubble width, never an
-  // overlap.
+  // The row used to be asked first, on the grounds that "the row's width is the
+  // same in both placements". Measured at 390, that is not true of a message
+  // that does not wrap: the row is shrink-to-fit around this very bubble, so
+  // for a one-line message it reports the width of the message. `Коротко` was
+  // handed 100.4px against a cap of 309.4px, its 56.6px line plus a 60.4px time
+  // did not fit in the smaller number, and every short message on the phone
+  // took a row of its own. That is D-027's feedback loop running the other way
+  // round — the row answering with the placement it had been given — and a cap
+  // cannot do it, because `min(86vw, 560px, …)` is the viewport's answer rather
+  // than this bubble's and does not move when the placement changes.
   //
-  // What it does NOT over-estimate is the design cap, so that is applied on top
-  // of it. The two together only ever tighten the answer, which is why this
-  // cannot reopen the feedback loop: a narrower answer can turn inline into
-  // anchored, and anchored removes the spacer, which narrows the row further.
+  // Where the cap still has to guess at a percentage, the row stays. There the
+  // guess is `Infinity`, and an `Infinity` inside a `max()` discards the real
+  // term next to it: an own bubble at 1440 declares
+  // `min(1238.4px, 560px, max(256px, 100% - 104px))`, whose true value is the
+  // 256px the floor contributes and whose guessed value is 560px. Measured,
+  // trusting that guess put the reserved spacer on a line of its own. So the
+  // two are kept apart — an exact cap replaces the row, an inexact one only
+  // tightens it, exactly as before.
+  const cap = getDeclaredContentCap(bubbleStyle, stackEl);
+  if (cap?.exact) return cap.width;
+
+  // The row over-estimates when the design cap is the tighter constraint, and
+  // that is the safe direction: the meta is positioned and its space reserved,
+  // so a slightly generous "it fits" costs a few pixels of bubble width, never
+  // an overlap. The cap is applied on top, and the two together only ever
+  // tighten the answer.
+
   const row = (stackEl ?? bubbleEl).parentElement;
   const rowWidth = row?.getBoundingClientRect().width ?? bubbleEl.getBoundingClientRect().width;
   const lane =
     parsePixelValue(getComputedStyle(document.documentElement).getPropertyValue("--kub-action-lane")) ?? 0;
   const fromRow = Math.max(0, rowWidth - lane) - paddingLeft - paddingRight;
-  const cap = getDeclaredContentCap(bubbleStyle, stackEl);
-  return cap === null ? fromRow : Math.min(fromRow, cap);
+  return cap === null ? fromRow : Math.min(fromRow, cap.width);
 }
 
 function getTextRightLimit(textEl: HTMLElement, bubbleEl: HTMLElement, stackEl: HTMLElement | null): number {

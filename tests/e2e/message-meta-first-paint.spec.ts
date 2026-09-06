@@ -82,6 +82,31 @@ async function openCapture(page: Page, fixture: Fixture, withSampler: boolean) {
   // page renders in the fallback throughout, and the text below is calibrated
   // against that same face in the same run.
   await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, (route) => route.abort());
+  // Blocking the request is not enough, and the difference is what made this
+  // spec disagree with itself on WebKit. A route is per page, and the second
+  // page of a context is served the stylesheet out of the cache without a
+  // request for the route to intercept — so the page the text is CALIBRATED on
+  // renders in the system fallback while the page it is ASSERTED on renders in
+  // Inter. Measured at 390: the same timestamp is 54.5px wide on the first page
+  // and 60.4px on the second, and a message built to overflow its line by 14px
+  // arrived there wrapped one line further on, its last line 139px inside a
+  // 309px bubble — no longer the message the test means to be making. Removing
+  // the link from the document is the half no cache can undo, and it is what
+  // makes the comment above true rather than intended.
+  await page.addInitScript(() => {
+    const strip = () => {
+      for (const link of Array.from(document.querySelectorAll("link"))) {
+        const href = link.getAttribute("href") ?? "";
+        if (href.includes("fonts.googleapis.com") || href.includes("fonts.gstatic.com")) link.remove();
+      }
+    };
+    const start = () => {
+      strip();
+      new MutationObserver(strip).observe(document.documentElement, { childList: true, subtree: true });
+    };
+    if (document.documentElement) start();
+    else document.addEventListener("readystatechange", start, { once: true });
+  });
   await page.addInitScript(
     ([key, payload]) => {
       (window as unknown as Record<string, unknown>)[key as string] = payload;

@@ -118,6 +118,16 @@ async function metaPlacement(page: Page, index: number) {
       bubblePaddingRight: Math.round(
         Number.parseFloat(window.getComputedStyle(bubble).paddingRight) || 0,
       ),
+      // How far short of the text's own right edge the last line stops, which
+      // is the room the time would have to sit in. Measured against the
+      // paragraph rather than the bubble because a wrapped bubble is as wide as
+      // its LONGEST line, and that is the width the last line is short of.
+      roomAfterLastLine: (() => {
+        const paragraph = bubble.querySelector("[data-message-text-flow]");
+        if (!paragraph) return null;
+        const width = (paragraph as HTMLElement).clientWidth;
+        return Math.round(width - (lastLine.right - lastLine.left));
+      })(),
     };
   }, index);
 }
@@ -132,13 +142,30 @@ test.describe("message meta placement", () => {
     expect(short?.lineCount, "the first message should not wrap").toBe(1);
     expect(short?.inline, "a short message must keep its time inline").toBe(true);
 
-    const wrapped = await metaPlacement(page, 1);
-    expect(wrapped, "the second bubble was not found").not.toBeNull();
-    expect(wrapped!.lineCount, "the second message should wrap").toBeGreaterThan(1);
+    // D-008, asked of every wrapped message in the fixture rather than of one
+    // by index. A fixed string cannot end "short" at every width in the matrix:
+    // the same message that leaves 164px spare at 390 leaves 53px at 360, which
+    // is less than the 60px time needs, and there anchored is the right answer
+    // rather than the defect. So the premise is measured instead of assumed —
+    // and at least one message must satisfy it, or the check has quietly
+    // stopped checking anything.
+    let shortEnded = 0;
+    for (const index of [1, 2]) {
+      const wrapped = await metaPlacement(page, index);
+      expect(wrapped, `bubble ${index} was not found`).not.toBeNull();
+      expect(wrapped!.lineCount, `message ${index} should wrap`).toBeGreaterThan(1);
+      expect(wrapped!.roomAfterLastLine, `bubble ${index} has no paragraph to measure`).not.toBeNull();
+      if (wrapped!.roomAfterLastLine! < wrapped!.timeWidth + 8) continue;
+      shortEnded += 1;
+      expect(
+        wrapped!.inline,
+        `bubble ${index}: the last line ends ${wrapped!.roomAfterLastLine}px short and the time wants ${wrapped!.timeWidth + 8}px, so it must stay inline rather than grow a row for it`,
+      ).toBe(true);
+    }
     expect(
-      wrapped!.inline,
-      "a wrapped message whose last line ends short must keep its time inline, not grow a row for it",
-    ).toBe(true);
+      shortEnded,
+      "no wrapped message in the fixture ended short enough to leave the time room, so this contract went unchecked at this viewport",
+    ).toBeGreaterThan(0);
   });
 
   test("the time sits at the bubble's right edge, not against the last word", async ({ page }) => {
