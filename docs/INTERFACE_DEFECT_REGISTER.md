@@ -4031,7 +4031,7 @@ the medians are the honest number and a single run is not.
 **Guarded** by `tests/unit/shell-glass.test.mjs`, per chip, found by the
 landmark on its wrapper rather than by a line number.
 
-## D-063 Every action on the confirmation screen is under the fold at 360
+## D-063 `[x]` Every action on the confirmation screen is under the fold at 360
 
 **Severity:** medium. Every phone 360 CSS px wide or narrower, on the screen a
 person reaches immediately after creating an account. Not cosmetic: the screen
@@ -4130,6 +4130,73 @@ prototype, counting the buttons that end on screen at 360x800:
 Recommended to the owner: the actions after the address, which needs no
 floating surface and keeps every paragraph. Decided by the owner on 2026-09-11:
 that option, with the lockup and its «Защищённый мессенджер» caption kept.
+
+### Fixed 2026-09-11
+
+**Measured again before the change**, on entry, at every width the spec claims,
+with the production captcha on the same mocked flow:
+
+| viewport | resend | «Ко входу» | «Указать другой email» |
+| --- | --- | --- | --- |
+| 360x800 | 911..975, 175px past the fold | 987..1031, 231px past | 1043..1087, 287px past |
+| 390x844 | 863..927, 83px past | 939..983, 139px past | 995..1039, 195px past |
+| 412x915 | 863..927, 12px past | 939..983, 68px past | 995..1039, 124px past |
+| 1440x900 | 863..927, 27px past | 939..979, 79px past | 991..1031, 131px past |
+| 1920x1080 | 869..933 | 945..985 | 997..1037, on screen |
+
+Only 1920 had all three on screen. The first table of this entry was taken on
+the default provider, Turnstile, whose plate is 65px; by these numbers the old
+budget of the spec (48px at 360, zero elsewhere) could not have held at 360 or
+390 against production's captcha — computed from the measurements, not run.
+
+**Fix** (`64a7436`, the owner's option): the card body is now the icon, the
+heading alone, the masked address, the captcha with its timer cover, the message
+slot, the three buttons, and then the three paragraphs, word for word. The
+lockup, its caption and all copy are unchanged, and the screen matches the
+render the owner chose from. The heading carries `aria-describedby` pointing at
+the paragraphs, so the explanation is still announced with the heading rather
+than only after the buttons; Chromium's accessibility tree reports the whole
+314-character text as the heading's description. Tab order is unchanged: the
+paragraphs hold nothing focusable.
+
+**Measured after**, on entry, with the production captcha:
+
+| viewport | resend | «Ко входу» | «Указать другой email» | spare below it |
+| --- | --- | --- | --- | --- |
+| 360x800 | 623..687 | 699..743 | 755..799 | 1px |
+| 390x844 | 623..687 | 699..743 | 755..799 | 45px |
+| 412x915 | 623..687 | 699..743 | 755..799 | 116px |
+| 1440x900 | 623..687 | 699..739 | 751..791 | 109px |
+| 1920x1080 | 625..689 | 701..741 | 753..793 | 287px |
+
+With every web font request aborted, the three buttons measure at the same
+offsets at all five widths.
+
+**Cost, recorded rather than hidden:** the explanation is read after the actions
+in linear order, and at 360 nothing on screen says it is there — the fold falls
+directly under the last button; at 390 and wider its first line shows. The card
+is 8px taller (1100 against 1092 at 360), because the paragraphs now sit 16px
+under the buttons where they sat 8px under the heading. The reserved message
+slot — 40px, about 76 with the spacing around it, kept so that a message does
+not move the buttons — now shows as an empty band between the captcha and the
+resend control. And 360x800 has one pixel to spare: a shorter screen, or a top
+safe-area inset larger than the shell's 16px padding, still cuts «Указать другой
+email». An iPhone SE's 375x667 is such a screen: nothing above the buttons
+depends on the viewport's height, and their offsets are identical at 360, 390
+and 412, so there they would run from about 623px down past a 667px fold —
+inferred, not measured; of the six options only the pinned bar keeps them on a
+screen that short. Not checked on a device or in WebKit, and `aria-describedby`
+was read from Chromium's accessibility tree, not heard through a screen reader.
+
+**Guarded** by `tests/e2e/registration-confirmation.spec.ts`. The per-project
+budget is gone: at all five claimed projects the shell must be unscrolled on
+entry, all three buttons must be whole on screen, and the heading's accessible
+description must equal the three paragraphs. The test refuses a dev server that
+is not on the Yandex provider. Before the change it failed at 360, 390, 412 and
+1440 on the fold and at 1920 on the description. Two mutations, each restored
+byte for byte by SHA-256: the paragraphs moved back above the address fail 360,
+390, 412 and 1440 (1920, where the old order fits, stays green); the heading's
+`aria-describedby` removed fails 360 and 1920.
 
 ## D-064 `[x]` The only way out of a conversation is unpaintable on the engine Safari uses
 
