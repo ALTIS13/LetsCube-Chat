@@ -126,7 +126,8 @@ test.describe("what one event costs the chat list and the conversation", () => {
 
     expect.soft(sum(cost, LIST_REFETCH), `the list was refetched for one message: ${JSON.stringify(cost)}`).toBe(0);
     expect.soft(sum(cost, CHAT_DATA), `chat data was fetched for a message that arrived whole: ${JSON.stringify(cost)}`).toBe(0);
-    expect.soft(cost["POST rpc/mark_chat_read"] ?? 0, "the open chat still marks the message read").toBe(1);
+    // A read now reports what was drawn (`mark_chat_read_through`, 20260911141000).
+    expect.soft(cost["POST rpc/mark_chat_read_through"] ?? 0, "the open chat still marks the message read").toBe(1);
     expect.soft(otherKeys(renders, "ChatListItem", [CHAT.A]), `rows other than the open chat's rendered: ${JSON.stringify(renders.byKey.ChatListItem)}`).toEqual([]);
     expect.soft(renders.counts.ChatListItem, "the open chat's row renders for the preview and the read mark at most").toBeLessThanOrEqual(2);
     expect.soft(
@@ -663,12 +664,17 @@ class FixtureBackend {
     if (name === "chat_list_summaries") {
       return json(route, this.summaries((body.p_chat_ids as string[] | null | undefined) ?? null));
     }
-    if (name === "mark_chat_read" || name === "mark_chat_delivered") {
+    if (name === "mark_chat_read" || name === "mark_chat_read_through" || name === "mark_chat_delivered") {
       const membership = this.membership(String(body.p_chat_id), ME);
       if (membership) {
         const now = new Date().toISOString();
-        if (name === "mark_chat_read") membership.last_read_at = later(membership.last_read_at, now);
-        membership.last_delivered_at = later(membership.last_delivered_at, now);
+        // A read through reports what the client drew, never past now.
+        const reported = typeof body.p_read_through === "string" && time(body.p_read_through) < time(now)
+          ? body.p_read_through
+          : now;
+        const mark = name === "mark_chat_read_through" ? reported : now;
+        if (name !== "mark_chat_delivered") membership.last_read_at = later(membership.last_read_at, mark);
+        membership.last_delivered_at = later(membership.last_delivered_at, mark);
         const record = { ...membership };
         setTimeout(() => this.realtime?.emit({ type: "UPDATE", table: "chat_members", record }), 30);
       }
