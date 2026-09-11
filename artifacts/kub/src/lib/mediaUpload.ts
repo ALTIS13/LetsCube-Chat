@@ -1,4 +1,5 @@
 import { DEFAULT_MEDIA_QUALITY, getImageUploadProfile, type MediaQuality } from "./mediaQuality.ts";
+import { ORIGINAL_PREVIEW_MAX_DIMENSION, ORIGINAL_PREVIEW_QUALITY } from "./mediaCompression.ts";
 
 const MAX_AVATAR_UPLOAD_BYTES = 2 * 1024 * 1024;
 const MAX_AVATAR_SOURCE_BYTES = 15 * 1024 * 1024;
@@ -60,6 +61,23 @@ export async function prepareChatImageAttachment(
     quality: profile.quality,
     suffix: "image",
   });
+}
+
+/**
+ * A lighter picture of an original, for the conversation to draw.
+ *
+ * The original itself is never touched; this is a second file uploaded beside
+ * it. Null when the canvas cannot read the original, or when the preview would
+ * be no lighter than the original — then the original is its own preview.
+ */
+export async function prepareOriginalPreview(file: File): Promise<File | null> {
+  if (!canOptimizeRasterImage(file)) return null;
+  const preview = await optimizeRasterImage(file, {
+    maxDimension: ORIGINAL_PREVIEW_MAX_DIMENSION,
+    quality: ORIGINAL_PREVIEW_QUALITY,
+    suffix: "preview",
+  });
+  return preview === file ? null : preview;
 }
 
 export async function readMediaDimensions(file: File): Promise<MediaDimensions | null> {

@@ -78,10 +78,12 @@ export function normalizeMediaQuality(value: unknown): MediaQuality {
 }
 
 export function applyVideoQualityToAttachments<
-  T extends { kind: string; mediaQuality?: MediaQuality },
+  T extends { kind: string; mediaQuality?: MediaQuality; uncompressed?: boolean },
 >(attachments: T[], quality: MediaQuality): T[] {
+  // An original is not compressed at any quality: choosing one for the
+  // compressed videos in the tray must not quietly turn an original into one.
   return attachments.map((attachment) =>
-    attachment.kind === "video" || attachment.kind === "video_message"
+    (attachment.kind === "video" || attachment.kind === "video_message") && attachment.uncompressed !== true
       ? { ...attachment, mediaQuality: quality }
       : attachment
   );

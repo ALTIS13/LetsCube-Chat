@@ -13,6 +13,8 @@ export interface StagedAttachmentUpload {
   bucket: string;
   path: string;
   publicUrl: string;
+  /** Where an original's preview was stored, or null when it did not get there. */
+  previewPath?: string | null;
 }
 
 export interface StagedAttachmentMediaMetadata {
@@ -22,6 +24,12 @@ export interface StagedAttachmentMediaMetadata {
   originalSize?: number;
   originalMimeType?: string;
   mediaQuality?: MediaQuality;
+  /** Sent as picked, with no resize or re-encode. See `lib/mediaCompression.ts`. */
+  uncompressed?: boolean;
+  /** A lighter picture of an original, uploaded beside it for the conversation. */
+  previewFile?: File | null;
+  previewWidth?: number;
+  previewHeight?: number;
 }
 
 export interface StagedAttachment {
@@ -44,6 +52,10 @@ export interface StagedAttachment {
   originalSize?: number;
   originalMimeType?: string;
   mediaQuality?: MediaQuality;
+  uncompressed?: boolean;
+  previewFile?: File | null;
+  previewWidth?: number;
+  previewHeight?: number;
 }
 
 /**
@@ -137,6 +149,10 @@ export function createStagedAttachment(file: File, metadata: StagedAttachmentMed
     originalSize: metadata.originalSize,
     originalMimeType: metadata.originalMimeType,
     mediaQuality: metadata.mediaQuality,
+    uncompressed: metadata.uncompressed,
+    previewFile: metadata.previewFile ?? null,
+    previewWidth: metadata.previewWidth,
+    previewHeight: metadata.previewHeight,
   };
 }
 
