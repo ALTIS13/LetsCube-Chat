@@ -853,7 +853,14 @@ export function MessageBubble({
   const viewportWidth = typeof window === "undefined" ? 1024 : window.innerWidth;
   const viewportHeight = typeof window === "undefined" ? 768 : window.innerHeight;
   const compactContextMenu = viewportWidth < 640;
-  const contextMenuWidth = 256;
+  // A finger needs 44px, and seven quick reactions only reach it in a menu wide
+  // enough to hold them: they measured 30.6x40 in the 256px menu on a phone held
+  // sideways and on a tablet. Asked only while a menu is open, so a bubble at
+  // rest never pays for the query; the `pointer-coarse:` classes ask the same.
+  const coarsePointer = ((actionMenuOpen ?? showContext) || reactionMenuOpen)
+    && typeof window !== "undefined"
+    && window.matchMedia?.("(pointer: coarse)").matches === true;
+  const contextMenuWidth = coarsePointer ? 336 : 256;
   // Every clamp keeps its old 8px or 12px margin and adds the unsafe area on
   // that side. The compact phone menu reads the tokens directly, so it follows
   // the hardware without a measurement; held sideways the desktop shape is used,
@@ -888,7 +895,11 @@ export function MessageBubble({
             }),
       };
   const safeWidth = Math.max(0, viewportWidth - 16 - safe.left - safe.right);
-  const reactionPickerWidth = reactionCatalogOpen ? Math.min(480, safeWidth) : 284;
+  // The quick picker holds seven 32px buttons on a pointer and seven 44px ones
+  // under a finger, and opens 6px above what opened it, so its height is how
+  // far it lifts.
+  const reactionPickerWidth = reactionCatalogOpen ? Math.min(480, safeWidth) : coarsePointer ? 340 : 284;
+  const quickPickerLift = coarsePointer ? 64 : 52;
   const reactionPickerMaxHeight = Math.min(340, viewportHeight - 16 - safe.top - safe.bottom);
   const reactionPickerStyle: CSSProperties = {
     left: Math.min(
@@ -906,9 +917,9 @@ export function MessageBubble({
               Math.min(viewportHeight - reactionPickerMaxHeight - 8 - safe.bottom, reactionPos.y + 36),
             ),
           }
-      : reactionPos.y > 64 + safe.top
-        ? { top: Math.max(8 + safe.top, reactionPos.y - 52) }
-        : { top: Math.min(viewportHeight - 52 - safe.bottom, reactionPos.y + 36) }),
+      : reactionPos.y > quickPickerLift + 12 + safe.top
+        ? { top: Math.max(8 + safe.top, reactionPos.y - quickPickerLift) }
+        : { top: Math.min(viewportHeight - quickPickerLift - safe.bottom, reactionPos.y + 36) }),
   };
   const contextOpen = actionMenuOpen ?? showContext;
   const closeContext = useCallback(() => {
@@ -1412,7 +1423,7 @@ export function MessageBubble({
             onClick={(e) => e.stopPropagation()}
           >
             {canReact && (
-              <div className="mb-1 flex items-center justify-between gap-1 border-b border-[color:var(--kub-rule)] px-2 pb-2 pt-2">
+              <div className="mb-1 flex items-center justify-between gap-1 border-b border-[color:var(--kub-rule)] px-2 pb-2 pt-2 pointer-coarse:gap-0">
                 {EMOJI_QUICK.slice(0, 6).map((emoji) => (
                   <button
                     key={emoji}
@@ -1420,6 +1431,7 @@ export function MessageBubble({
                     className={cn(
                       "kub-interactive flex min-w-0 flex-1 items-center justify-center rounded-full transition-colors kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
                       compactContextMenu ? "h-11 text-2xl" : "h-10 text-xl",
+                      "pointer-coarse:h-11 pointer-coarse:min-w-11 pointer-coarse:text-2xl",
                     )}
                     aria-label={`Поставить реакцию ${emoji}`}
                   >
@@ -1435,6 +1447,7 @@ export function MessageBubble({
                   className={cn(
                     "kub-interactive flex min-w-0 flex-1 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
                     compactContextMenu ? "h-11" : "h-10",
+                    "pointer-coarse:h-11 pointer-coarse:min-w-11",
                   )}
                   aria-label="Больше реакций"
                   title="Больше реакций"
@@ -1496,7 +1509,7 @@ export function MessageBubble({
                 <button
                   key={emoji}
                   onClick={() => { onReaction(emoji); onCloseReactionMenu?.(); }}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-lg transition-all hover:scale-125 kub-raise-hover"
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-lg transition-all hover:scale-125 kub-raise-hover pointer-coarse:h-11 pointer-coarse:w-11 pointer-coarse:text-2xl"
                   aria-label={`Поставить реакцию ${emoji}`}
                 >
                   {emoji}
@@ -1508,7 +1521,7 @@ export function MessageBubble({
                   setSafeInsets(readSafeAreaInsets());
                   setReactionCatalogOpen(true);
                 }}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)] pointer-coarse:h-11 pointer-coarse:w-11"
                 aria-label="Больше реакций"
                 title="Больше реакций"
               >

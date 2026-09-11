@@ -166,7 +166,10 @@ test.describe("LETSCUBE visual style and layout", () => {
     const pickerBox = await requiredBox(picker, "message emoji picker");
     expect(surfaceBox.width - pickerBox.width).toBeLessThanOrEqual(32);
     expect(surfaceBox.width).toBeLessThanOrEqual(500);
-    expect(surfaceBox.height).toBeLessThanOrEqual(320);
+    // A finger gets 44px targets (tests/e2e/emoji-touch-targets.spec.ts), which
+    // makes this picker 336px tall where a cursor sees the dense 288.
+    const coarsePointer = await page.evaluate(() => matchMedia("(pointer: coarse)").matches);
+    expect(surfaceBox.height).toBeLessThanOrEqual(coarsePointer ? 340 : 320);
     const viewport = testInfo.project.use.viewport;
     if (viewport && "width" in viewport && viewport.width >= 768) {
       expect(surfaceBox.width).toBeGreaterThanOrEqual(440);
@@ -199,7 +202,7 @@ test.describe("LETSCUBE visual style and layout", () => {
     await expect(reactionSearch).toBeVisible();
     const reactionPickerBox = await requiredBox(page.getByTestId("reaction-emoji-picker"), "reaction emoji picker");
     expect(reactionPickerBox.width).toBeLessThanOrEqual(480);
-    expect(reactionPickerBox.height).toBeLessThanOrEqual(300);
+    expect(reactionPickerBox.height).toBeLessThanOrEqual(coarsePointer ? 320 : 300);
     await reactionSearch.fill("единорог");
     await expect(page.getByTestId("reaction-emoji-grid").getByRole("button", { name: "Выбрать 🦄" })).toBeVisible();
   });

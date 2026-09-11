@@ -69,7 +69,7 @@ export function TopicCreateModal({ onClose, onCreate }: TopicCreateModalProps) {
           <button
             onClick={() => setEmoji(null)}
             className={cn(
-              "w-8 h-8 rounded-lg flex items-center justify-center text-xs transition-all border",
+              "w-8 h-8 rounded-lg flex items-center justify-center text-xs transition-all border pointer-coarse:h-11 pointer-coarse:w-11",
               emoji === null
                 ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] border-[var(--kub-cyan)]"
                 : "bg-[var(--kub-surface-2)] text-[color:var(--kub-muted)] border-[color:var(--kub-border-color)]"
@@ -82,7 +82,7 @@ export function TopicCreateModal({ onClose, onCreate }: TopicCreateModalProps) {
               key={e}
               onClick={() => setEmoji(e)}
               className={cn(
-                "w-8 h-8 rounded-lg flex items-center justify-center text-base transition-all border",
+                "w-8 h-8 rounded-lg flex items-center justify-center text-base transition-all border pointer-coarse:h-11 pointer-coarse:w-11 pointer-coarse:text-xl",
                 emoji === e
                   ? "bg-[var(--kub-cyan)] border-[var(--kub-cyan)] kub-glow-soft"
                   : "bg-[var(--kub-surface-2)] border-[color:var(--kub-border-color)]"
