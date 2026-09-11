@@ -5452,7 +5452,7 @@ under a finger); that spec signs in and was not run with the change.
 **Not verified on a device.** The folder and topic sizes were measured by a
 scratch script on a mocked backend, not by a committed test.
 
-## D-083 `[ ]` Forwarded media lose their previews
+## D-083 `[x]` Forwarded media lose their previews
 
 **Severity:** medium. Every forwarded photo or video. Found 2026-09-11 while
 fixing D-081; testers' complaint 10 names it beside forwarding several messages.
@@ -5468,13 +5468,29 @@ so the new message finds none. The storage read policy
 chat's folder, which may also deny the object itself to members of the target
 chat; that was read from the migration, not checked against the database.
 
-**Not fixed here:** it belongs to the approved forwarding item — Telegram-style
-forwarding of several messages, tracker queue 21 — which changes how a forward
-is made.
-
 Since D-092 a forward loses more than the variants: an original's `uncompressed`
 flag and its preview are in `media_metadata` too, so a forwarded original is
 drawn from the full file and loses its «Оригинал» mark.
+
+**Fixed** in `0f29b20`, not yet applied to production, and in `6556ba1`, from
+agent L, together with the forwarding item. `forward_message` makes the copy on
+the server from its own row of the source — `media_url`, `media_bucket`,
+`media_path` and the whole `media_metadata` — after the checks a direct insert
+gets, a member of the target who is neither banned nor muted, and two more: the
+caller has to be able to see the source, and a topic has to be the target's. The
+source's ready variants are copied onto the copy, scoped to the target chat and
+pointing at the same files, so the previews appear at once and nothing is
+generated twice; no policy is widened. Where the function is missing, the copy
+the client makes now carries the media fields, so the worker renders its
+previews.
+
+**Regression tests:** `tests/e2e/message-forward-feedback.spec.ts`, whose answers
+are now `forward_message`'s, with the fallback that keeps a photo's media; the
+rehearsal of `20260911144000`, under D-100.
+
+**Not verified:** a forward of an original between two real accounts. A copied
+preview's path still names the source chat and message, which grants no read of
+either.
 
 ## D-084 `[ ]` On a phone, a feedback card covers the top of a full-screen sheet
 
@@ -5923,3 +5939,295 @@ layout; with the call taken out of `stageFiles`, all three runs fail.
 PNG and a WebP keep their metadata; the second image of an MPF JPEG and the video
 appended to a motion photo are not read; an extended XMP packet split across
 segments is checked a segment at a time.
+
+## D-099 `[x]` The details showed when a reader last read the chat, not when they read the message
+
+**Severity:** medium. Every «Прочитано» in a private chat's details and every
+time in «Кто прочитал». The owner asked on 2026-09-11 for exact read times, with
+better read sync, before production.
+
+**Surface:** at `f4f0537`, `MessageList.tsx:607–614`; the private read line, the
+details and the readers view of `MessageActionLayer.tsx`; and
+`groupReadReceipts.ts:37–48`.
+
+**Defect:** a reader has one pointer per chat, `chat_members.last_read_at`, and
+every one of those surfaces showed it: the moment they last read anything in the
+chat, the same for every message they had read.
+
+**Fixed** in `563055f`, not yet applied to production, and in `156236d` and
+`6556ba1`, from agent L. Every advance of a pointer is recorded as an event by a
+trigger, so every path that reads — the new report and an old client's
+`mark_chat_read` alike — produces one, and the database can go out before the
+client. `message_read_times` answers the sender, and only the sender, with each
+other member's time: that of the first event whose pointer reached the message.
+Events are kept seven days, a time is given for the messages of the last seven
+days, and the migration schedules an hourly cleanup with pg_cron, which
+production has. A time is shown only when both the reader and the person asking
+show their presence («Показывать, когда я в сети»), the way Telegram ties read
+times to the last seen; otherwise the details say «Время не показывается», and
+the check marks, which are the pointer, stay. Where the server does not have the
+function, the pointer is shown as before.
+
+**Regression tests:** `tests/unit/message-read-times.test.mts`;
+`tests/e2e/message-read-times.spec.ts`, 7, red on the unwired client; the
+rehearsal of `20260911141000`, under D-100.
+
+**Not verified:** Realtime between two real devices — an open details view asking
+again when a pointer moves is covered by a unit test — and production.
+
+## D-100 `[x]` A late read report marked unseen messages read, and a read mark could move backwards, into the future or on another member's row
+
+**Severity:** medium. Found by agent L while building D-099.
+
+**Surface:** `mark_chat_read` (`20260714090000`), which stores the server's
+`now()`; the policy `chat_members update`
+(`20260504_chats_membership_hardening.sql:339`), which lets a chat administrator
+update any member's row.
+
+**Defect:** a report stored the moment it reached the server, so one that arrived
+late marked read what was sent while it was in flight. A direct PATCH could move
+a mark backwards, or into the future, which zeroes the writer's own unread
+counts, and a chat administrator could write another member's marks and forge
+their read receipt — with D-099, a forged read time.
+
+**Fixed** in `563055f`, not yet applied to production, and in `156236d` and
+`6556ba1`. `mark_chat_read_through` takes the `created_at` of the newest message
+the device drew, and never moves the pointer backwards or past the present. A
+trigger holds every write of both marks to the same rule and keeps them to the
+member alone; a role change by an administrator still goes through. The client
+reports through a scheduler that sends nothing at or behind what it already
+reported, and falls back to `mark_chat_read` where the function is missing.
+
+**Regression tests:** `tests/unit/receipt-scheduler.test.mts` and
+`tests/unit/read-mark-watermark.test.mts`; `tests/server/message-actions-db.test.mjs`,
+9, in PGlite, on a stub of the objects the migrations touch. On a throwaway copy
+of the production schema, as `postgres`, the five migrations of D-099 to D-102 and
+D-083 with their self-checks, their five rehearsal tests, the five rollbacks in
+reverse order, the migrations again and the tests again all passed, once
+`243dd3d` let the tests run there: their users no longer name
+`email_confirmed_at`, which the rehearsal image's `auth.users` lacks, and a ban or
+a mute is made by a session without a user, which production's
+`enforce_sanction_matrix` lets through.
+
+**Known limit, found in review:** the trigger clamps to the start of its
+transaction. A report that waited on the row's lock behind another can bring the
+mark back by that wait, a matter of milliseconds, and the event recorded after it
+can then come out of order and make a read time that much later. Clamping to
+`clock_timestamp()` in the trigger and in the recorder would close it.
+
+## D-101 `[x]` One reaction per person was a rule of the client alone
+
+**Severity:** low. The owner's decision of 2026-09-11, under D-071: one reaction
+per person per message, as in Telegram.
+
+**Surface:** `toggleReaction` in `useMessages.ts` — a lookup, a delete and an
+insert — and `public.reactions`, unique on (message, person, emoji).
+
+**Defect:** the database took a second emoji from the same person, and two devices
+choosing at once could leave two. Read from production on 2026-09-11: 24 people
+hold more than one reaction on a message.
+
+**Fixed** in `0f29b20`, not yet applied to production, and in `6556ba1`. A BEFORE
+INSERT trigger holds every path to the limit under a lock per message and person,
+and `set_message_reaction` makes the toggle in one call and answers with every
+reaction on the message. The limit is one function,
+`private.reaction_limit_per_message`, where a subscription would raise it, and the
+uniqueness on (message, person, emoji) stays for that. Existing duplicates are left
+for their owner's next choice to clear.
+
+**Not applied yet, on purpose:** the client production runs, `0b69e38`, adds a
+second emoji with an insert of its own, which this trigger refuses; the migration
+goes out with the client that replaces a reaction instead.
+
+**Regression tests:** `tests/e2e/message-reaction-rpc.spec.ts`, 2;
+`tests/unit/message-reactions.test.mts`; the rehearsal of `20260911142000`, under
+D-100.
+
+## D-102 `[x]` A private chat could not delete the other person's message for both
+
+**Severity:** medium. Testers' complaint 9, approved by the owner on 2026-09-11 as
+Telegram does it.
+
+**Surface:** at `f4f0537`, the delete dialog (`messageActions.ts:174–187`) offered
+deleting for both for your own messages only, soft-deleted one by one, and another
+person's message could only be hidden (`ChatWindow.tsx:763–778`).
+
+**Defect:** neither person of a private chat could remove a message from both
+sides, and a deleted message left «Сообщение удалено» where Telegram leaves no
+trace.
+
+**Fixed** in `0f29b20`, not yet applied to production, and in `6556ba1`.
+`delete_messages_for_everyone` takes up to 100 messages of one chat, all or
+nothing: in a private chat any message but a system notice, in a group only the
+caller's own. The deletion is soft — `deleted_at` — and each one is recorded in
+`private.message_deletions`, which no API role reads, so a particular deletion can
+be reversed exactly. A private chat draws no deleted message at all, on both
+sides, including those deleted before; a group keeps its placeholder. Where the
+function is missing the dialog does what it did, and stops offering someone else's
+message for both.
+
+**Regression tests:** `tests/e2e/message-delete-for-both.spec.ts`, 5, red on the
+unwired client; `tests/unit/deleted-messages.test.mts`; the rehearsal of
+`20260911143000`, under D-100.
+
+## D-103 `[ ]` A message deleted for everyone leaves its content, its media and its notification preview behind
+
+**Severity:** low; recorded so that nobody assumes otherwise. Found with D-102.
+
+**Defect:** the row keeps its content, which a member of the chat can still select
+through the API, as with the older group soft delete; its media stay in storage,
+since the deletion is reversible; a notification already written keeps its
+160-character preview in `public.notifications`, and a push already delivered stays
+on the device.
+
+## D-104 `[ ]` Every signed-in person can read every reaction, and add one to any message id
+
+**Severity:** medium, for privacy. Found by agent L in the migrations; checked on
+production, read-only, on 2026-09-11.
+
+**Surface:** the policies on `public.reactions`: «Anyone in chat can view
+reactions» is `using (true)`, and «Users can add reactions» checks
+`uid() = user_id` alone. Both apply to every role.
+
+**Defect:** a signed-in person who is a member of no chat reads the reactions of
+every chat — who reacted to which message, with what, and when — and can put a
+reaction on a message of a chat they are not in if they know its id.
+`set_message_reaction` checks the membership; a direct insert does not. The table
+is published to Realtime under the same policy. Without signing in the read is
+refused, but only because the restrictive ban check calls `is_banned`, which
+`anon` may not execute: an accident, not a rule.
+
+## D-105 `[ ]` A global administrator deleting the other person's message in their own private chat is audited as staff
+
+**Severity:** low. Found with D-102.
+
+**Defect:** `trg_audit_messages_admin_delete` records `message_deleted_by_staff`
+whenever a global administrator or manager deletes a message that is not theirs,
+and with D-102 that includes the other person's message in the administrator's
+own private chat.
+
+## D-106 `[ ]` The chat list event-cost spec runs without the flag its count depends on
+
+**Severity:** low; a test defect. Found by agent L.
+
+**Surface:** `tests/e2e/chat-list-event-cost.spec.ts`.
+
+**Defect:** the spec needs `VITE_CHAT_LIST_SUMMARIES_RPC_ENABLED=1`, as production
+has it, and says so in its header, but does not refuse to run without it. On a
+server without the flag the list falls back to separate requests, and its
+"comes back once" check fails on seven fetches of the list.
+
+## D-107 `[ ]` The achievements people have earned can be read without signing in
+
+**Severity:** low, for privacy. Found on 2026-09-11 while checking D-104 on
+production, read-only.
+
+**Surface:** `public.user_achievements`: `anon` holds SELECT, and a permissive
+read policy is `using (true)`.
+
+**Defect:** with the public key the application ships and no account, all 58 rows
+on production are readable — whose achievement each one is. Only the count was
+read. `achievements`, `cosmetics` and `product_milestones` are readable the same
+way and hold catalogue rows, which may well be meant to be public.
+
+## D-108 `[x]` A private chat whose latest messages were deleted drew almost none of them, and never loaded older history
+
+**Severity:** high. Found on 2026-09-11, when the signed-in history-prepend
+contract of `visual-style-layout` failed on the tree with D-102 taken in.
+
+**Surface:** `useMessages.ts`, the first page and every older page: a hundred rows
+by `created_at`, deleted ones included. Since D-102 a private chat draws none of
+the deleted ones (`visibleConversation`).
+
+**Defect:** a page was a hundred rows, not a hundred messages to show. Measured on
+production with a probe that read numbers only: the latest page of a private chat
+held 100 rows, 98 of them deleted, so the conversation drew 2 messages in a list
+856px tall that could not scroll — `scrollHeight` equal to `clientHeight` — while
+it reported more history. Older history is asked for by a scroll to the top, and a
+list that cannot scroll never sends one, so the rest of the chat was out of reach.
+Before D-102 the same rows were drawn as «Сообщение удалено» and the list scrolled.
+
+**Fixed** in `9601f8c`. A private chat asks for its pages with
+`deleted_at is null`, the first page and every older one, so a page is a hundred
+messages it draws; a group still asks for its deleted rows and draws their
+placeholders. The kind of chat is read from the store; before the chat list has
+loaded it is unknown, and the page comes as it always did. The DEV fixture's
+message route now honours `created_at=lt.` and `deleted_at=is.null`, so a spec can
+page through history on it.
+
+**Regression tests:** `tests/e2e/message-history-deleted.spec.ts`, 2, on the
+fixture with the measured shape — 300 messages, the latest hundred all deleted but
+two. Red before the fix on "a private chat asked for the deleted messages it does
+not draw" and "the first page drew 2 messages and did not fill the view"; green
+after, with an older page loaded by a scroll to the top and every page filtered.
+The group keeps its placeholders.
+
+## D-109 `[x]` Loading older history moved the conversation 43px, and a scroll during the load kept it there
+
+**Severity:** medium. A critical contract of `CLAUDE.md` section 11: a history
+prepend preserves the reader's anchor. Found on 2026-09-11 — with D-108 fixed, the
+signed-in contract reached the load and failed at 42.8px.
+
+**Surface:** `MessageList.tsx`, the band «Загружаем историю...»: a row in the flow
+above the oldest message, drawn while a page loads or after one failed.
+
+**Defect:** the band's arrival moved every message down by its height and its
+departure moved them back, both on painted frames. The prepend restore puts the
+anchor back where it was taken, which would have hidden the second; but
+`handleScroll` takes the anchor again on every scroll event during a load, so that
+a reader who keeps scrolling is followed, and the first scroll event after the band
+arrived took it in the moved position. The prepend then restored the moved position,
+and the reader was left the band's height off. Measured on the DEV fixture with a
+probe that logged every write to `scrollTop` and every scroll event, taking the
+steps the signed-in contract takes: the anchor at −44.00px; the band in 4ms after
+the load began, the anchor at −0.67px; 5ms later the scroll event of the contract's
+own `scrollTop = 120`, taking the anchor there; the prepend restoring −0.67px —
+43.73px from where the reader had been. The same in a group and in a private chat,
+with deleted messages and without. On production the contract measured 42.82px,
+and the "worst painted displacement 42px" recorded under D-039 was this band.
+
+**Fixed** in `80e7674`. The band pays for its room: a layout effect gives
+whatever height it adds or removes back to `scrollTop` in the same layout pass, so
+no frame is painted with the messages moved and no scroll event can see them
+there. It is declared before the prepend restore, which is absolute, so a commit
+that prepends and removes the band still lands on the anchor. At the bottom, and
+while the entry holds the reader there, it does nothing: the list follows its
+bottom. The band looks as it did and stays a chip in the flow, as D-062 decided.
+
+**Regression tests:** `tests/e2e/message-history-prepend-anchor.spec.ts`, "the
+message being read does not move on any painted frame of the load, a scroll during
+it included", measured after every paint from the scroll to the top until the
+prepend has settled: red at 43.73px before the fix, green in three runs of three
+after on Chromium, and on WebKit. With it the signed-in contract passed on
+production data again. The source half is in
+`tests/unit/message-history-anchoring.test.mjs`.
+
+## D-110 `[x]` A settle pass of the chat entry could take a reader who had started scrolling up back to the bottom
+
+**Severity:** medium. A critical contract of `CLAUDE.md` section 11: fast upward
+scrolling must not snap to the bottom. Found on 2026-09-11 by the probe of D-109,
+in the first seconds after a chat opened.
+
+**Surface:** `MessageList.tsx`. For 4.2 seconds after a chat opens with nothing
+unread, the entry holds the reader at the bottom, and eight settle passes put them
+back there while it holds; a wheel, a touch, a pointer or a scrolling key lets go.
+
+**Defect:** a settle pass checked the hold when its timer fired, then scrolled a
+frame later through `scrollToBottom` without checking again. A wheel in that frame
+let go of the hold, and the frame took the reader to the bottom all the same. The
+deferred pass after a layout change had the same shape, with its check a frame
+before its scroll. Measured on the DEV fixture: a reader at 120px was put at
+4238px while older history was loading; with the frame held until the reader had
+scrolled up to 2098px, they were put at 4195px.
+
+**Fixed** in `80e7674`. `scrollToBottom` takes what its caller decided on and
+reads it again in the frame that scrolls: for a settle pass, whether the entry
+still holds; for the deferred pass, whether the reader is still at the bottom. The
+button «К последним сообщениям» still asks outright.
+
+**Regression tests:** `tests/e2e/message-history-prepend-anchor.spec.ts`, "a settle
+pass of the entry does not take a reader to the bottom after their wheel let go":
+frames are held until a settle pass has asked for one, the reader's wheel lets go
+and they scroll up, then the frames run. Red before the fix, the reader at 2098px
+put at 4195px; green in three runs of three after. The source half is in
+`tests/unit/message-history-anchoring.test.mjs`.

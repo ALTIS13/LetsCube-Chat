@@ -1,5 +1,112 @@
 # QA Results
 
+## 2026-09-11 - The message-action backend taken in, and rehearsed on a copy of the production schema
+
+Agent L's six commits — five migrations with their rollbacks and rehearsal tests,
+and the client that uses them with a fallback for each — were cherry-picked onto
+`integration/message-actions` as `563055f` to `1afd407` without a conflict. Every
+Playwright run used `KUB_QA_ALLOW_MUTATIONS=0`: the fixture runs on the DEV fixture
+server, the signed-in ones on the public production configuration with
+screenshots, traces and video off.
+
+**The database, on a throwaway copy of the production schema.** Each run of
+`rehearse.sh` took a schema-only dump of production (32,366 lines,
+`supabase/postgres:17.6.1.136`), restored it as `supabase_admin` with its known 33
+restore errors in a container without a network, and removed everything
+afterwards: no container and no temporary directory was left on the server.
+
+| run | migrations | tests | rollbacks and after |
+| --- | --- | --- | --- |
+| the agent's files | 5 applied as `postgres`, self-checks passed | 5 failed before their first check: `email_confirmed_at` is not a column of the rehearsal image's `auth.users` | 5 rollbacks in reverse order, then the 5 migrations again, all passed |
+| the tests without that column | 5 | 2 passed; 3 failed on `enforce_sanction_matrix`, which refuses a ban or a mute made with the claims of the block before it | not run |
+| sanctions made without a user | 5 | 5 passed | not run |
+| the committed files, `243dd3d` | 5 | 5 passed | 5 rollbacks, the 5 migrations again and the 5 tests again, all passed; every input hashed unchanged across the run |
+
+Read from production alongside, read-only: pg_cron is installed and `postgres` may
+schedule; no API role has USAGE on `private`; `chat_members` is keyed on
+(chat_id, user_id); `privacy_preferences` is owned by `postgres` without FORCE;
+the insert policy on `messages` asks for a member who is neither banned nor muted,
+which is what `forward_message` checks; 24 people hold more than one reaction on a
+message; and the production client, `0b69e38`, adds a second emoji with an insert
+of its own, which is why `20260911142000` waits for the new client (D-101).
+Checking D-104 with the `anon` role inside a read-only transaction, counting rows
+and reading none: `reactions` and `profiles` refuse `anon`, which may not execute
+`is_banned`, while `user_achievements` gives 58 rows, `achievements` 7, `cosmetics`
+8 and `product_milestones` 3 (D-107).
+
+**The browser.** The first run, on a fixture server up since 13:46, failed
+`bot-chat-integration`'s bot controls check and both runs of
+`message-render-stability`'s store check, on their premise rather than the product:
+after hot updates the server handed the application
+`app.store.ts?t=1789130622730`, and the tests' own
+`import("/src/store/app.store.ts")` made a second store. With the server restarted,
+and no timestamped import before or after the run — "the three" below being
+chromium-desktop-1440, chromium-mobile-390 and webkit-mobile-390:
+
+| spec | projects | result |
+| --- | --- | --- |
+| `bot-chat-integration`, `message-render-stability` | 1440, 390 | 11 passed, 1 skipped |
+| `message-read-times`, `message-reaction-rpc`, `message-delete-for-both`, `message-forward-feedback` | the three | 51 passed, 3 skipped: the phone's taps run on Chromium only |
+| `chat-list-event-cost` | 1440 | 9 passed |
+| `emoji-touch-targets` | the three | 49 passed, 2 skipped |
+| `media-send-without-compression` | the three | 12 passed, 12 skipped by shape |
+| `message-touch-gestures`, `ios-standalone-safe-area` | 390, webkit-mobile-390, webkit-ios-standalone | 28 passed, 51 skipped |
+| `composer-typing-frames` | 1440, 390 | 2 passed |
+| `chat-entry-scroll`, `chat-glass-layout` and the four `message-meta` observer, first-paint and placement specs | 1440, 390 | 56 passed |
+| `message-meta-spacer-line`, `media-viewer-zoom` | the three | 30 passed |
+| `resumable-media-upload`, `video-transcode-frontend` | 1440 | 23 passed |
+
+The new states were rendered for the owner on the same server, with fictional
+people, in both themes: the desktop menu's read time, a group's readers with a time
+and without one, deleting the other person's message for both, and a phone's
+details with a time and with «Время не показывается». The desktop menu has no
+«Детали», so the two frames that looked for one were not taken. The rule about a
+stale server went into section 5 of `CLAUDE.md`.
+
+**The gate, and what the signed-in run found.** At `1afd153` the production build
+passed, the unit suite after it 1704 of 1704, the PGlite run of the migrations,
+their rollbacks and rehearsals 9 of 9, and the typecheck and `git diff --check`
+were clean. Signed in on the public production configuration, `visual-style-layout`
+failed one check: loading older messages never began. A probe that read numbers only
+showed why. The latest page of the private chat the check chose held 100 rows, 98
+of them deleted, which a private chat no longer draws, so the list showed 2 messages
+and could not scroll (D-108). With a private chat asking for its pages without
+deleted rows, the check reached the load and failed at 42.8px instead: the history
+band moved the conversation, and a scroll event during the load kept it there
+(D-109). A probe on the fixture that logged every write to `scrollTop` found that,
+and a third defect beside it: in a chat's first seconds a settle pass of the entry
+could take back a reader who had started to scroll up (D-110). Each is reproduced on
+the fixture by a new spec, red before its fix and green after.
+
+**On the fixed tree**, with both servers restarted and no timestamped store import
+before or after. Signed in: `visual-style-layout` passed 11 with 9 skipped, the
+prepend contract among the 11; `tasks-filters` and `roles-visibility` 12; `smoke`
+and `unified-interface-chrome` 9 with 5 skipped; no error-context file was written.
+On the fixture:
+
+| spec | projects | result |
+| --- | --- | --- |
+| `message-history-prepend-anchor`, new | 1440, webkit-mobile-390 | 4 passed |
+| `message-history-deleted`, new | 1440 | 2 passed |
+| `bot-chat-integration`, `message-render-stability` | 1440, 390 | 11 passed, 1 skipped |
+| `message-read-times`, `message-reaction-rpc`, `message-delete-for-both`, `message-forward-feedback` | the three | 51 passed, 3 skipped |
+| `chat-list-event-cost` | 1440 | 9 passed |
+| `emoji-touch-targets` | the three | 49 passed, 2 skipped |
+| `media-send-without-compression` | the three | 12 passed, 12 skipped by shape |
+| `message-touch-gestures`, `ios-standalone-safe-area` | 390, webkit-mobile-390, webkit-ios-standalone | 28 passed, 51 skipped |
+| `composer-typing-frames` | 1440, 390 | 2 passed |
+| `chat-entry-scroll`, `chat-glass-layout` and the four `message-meta` observer, first-paint and placement specs | 1440, 390 | 56 passed |
+| `message-meta-spacer-line`, `media-viewer-zoom` | the three | 30 passed |
+| `resumable-media-upload`, `video-transcode-frontend` | 1440 | 23 passed |
+
+It is the set of the first run above with the two new specs added, and every other
+number is the one that run gave.
+
+**The gate on the fixed tree**, after both runs: the production build passed, the
+unit suite after it 1706 of 1706 — the source checks of D-109 and D-110 among them
+— the PGlite run 9 of 9, and the typecheck of every package and `git diff --check`
+were clean. The fixes are `9601f8c` for D-108 and `80e7674` for D-109 and D-110.
+
 ## 2026-09-11 - Sending without compression taken in, and originals and videos without their location
 
 Agent K's four commits for complaint 2 were cherry-picked onto

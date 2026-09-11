@@ -370,6 +370,14 @@ VITE_SUPABASE_ANON_KEY="$(cat "$CFG/.k")" pnpm.cmd --filter @workspace/kub run d
 - Port hygiene: check the port is free first (an orphaned Vite answers 200 with
   stale configuration), then confirm `/src/lib/supabase/client.ts` contains the
   expected host. A server that dies mid-run shows up as skips, not failures.
+- A dev server that has taken hot updates is stale for every spec that imports
+  a module by its URL. Once a module in the store's graph changed, Vite hands
+  the application `app.store.ts?t=<timestamp>`, a bare
+  `import("/src/store/app.store.ts")` in the page makes a second store, and
+  `message-render-stability` and `bot-chat-integration` fail on their premise,
+  not on the product. After a cherry-pick or a branch change, restart the
+  server before the gates: `curl …/src/components/chat/ChatHeader.tsx` must not
+  contain `app.store.ts?t=`. Seen on 2026-09-11.
 - `cmd | tail` returns `tail`'s exit code: use `set -o pipefail`,
   `${PIPESTATUS[0]}`, or redirect to a file.
 - From Git Bash run `node node_modules/@playwright/test/cli.js test …`;
