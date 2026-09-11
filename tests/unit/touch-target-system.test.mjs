@@ -263,7 +263,8 @@ const OPTED_IN = [
   {
     file: "artifacts/kub/src/components/chat/ChatHeader.tsx",
     what: "the chat's back control, which was 36x36 and is the only way back to the list on a phone",
-    expect: [/className="kub-icon-action md:hidden p-2 rounded-lg/],
+    // A 44pt capsule since the chat screen took option C, and still opted in.
+    expect: [/"kub-icon-action kub-interactive group\/capsule relative h-11 min-w-11 rounded-full/],
   },
 ];
 

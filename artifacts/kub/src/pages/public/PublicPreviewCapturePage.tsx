@@ -16,6 +16,7 @@ import {
   copySelectedMessages,
   useChatMessageSelection,
 } from "@/components/chat/MessageSelectionChrome";
+import { PinnedMessage } from "@/components/chat/PinnedMessage";
 import { SidebarHeader } from "@/components/sidebar/SidebarHeader";
 import { KubGlassLayer } from "@/components/kub";
 import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
@@ -40,12 +41,13 @@ import {
  * DEV-only capture surface for the public product previews.
  *
  * Every surface here is a shipping component: `AppTopBar`, `SidebarHeader`,
- * `FolderTabs`, `ChatListItem`, `ChatHeader`, `MessageList` and `MessageInput`.
- * An earlier revision redrew four of them as static markup, and the published
- * images ended up showing states the product cannot produce: a send button on
- * an empty composer, a mobile conversation with no way back, a members subtitle
- * with the wrong plural, and the authentication backdrop behind the chat. Using
- * the real components is what keeps the previews from drifting at all.
+ * `FolderTabs`, `ChatListItem`, `ChatHeader`, `PinnedMessage`, `MessageList`
+ * and `MessageInput`. An earlier revision redrew four of them as static markup,
+ * and the published images ended up showing states the product cannot produce:
+ * a send button on an empty composer, a mobile conversation with no way back, a
+ * members subtitle with the wrong plural, and the authentication backdrop behind
+ * the chat. Using the real components is what keeps the previews from drifting
+ * at all.
  *
  * The layout mirrors `MainLayout`: the top bar spans both panes, the sidebar
  * appears from `md` at the same widths, and a narrow viewport with a chat open
@@ -104,6 +106,12 @@ export default function PublicPreviewCapturePage() {
     () => (fixture?.pendingForward?.comment ? { id: "preview-forward-comment", text: fixture.pendingForward.comment } : null),
     [fixture],
   );
+  // The pinned bar `ChatWindow` shows over the conversation, from the messages
+  // this page holds: every one of them is loaded, so there is nothing to fetch.
+  const pinnedMessages = useMemo(
+    () => messages.filter((message) => message.pinned && !message.deleted_at),
+    [messages],
+  );
 
   useEffect(() => {
     // Defence in depth. The binding in App.tsx already folds away in a
@@ -157,6 +165,14 @@ export default function PublicPreviewCapturePage() {
     setMessages((current) =>
       current.map((message) => (message.id === target.id ? { ...message, pinned: !message.pinned } : message)),
     );
+  }, []);
+
+  // The pinned bar's jump, reduced to what a page holding every message needs:
+  // centred, as the search, reply and pinned jumps in `ChatWindow` are.
+  const jumpToPinned = useCallback((target: MessageWithSender) => {
+    document
+      .querySelector<HTMLElement>(`[data-message-id="${target.id}"]`)
+      ?.scrollIntoView({ behavior: "auto", block: "center" });
   }, []);
 
   const deleteLocally = useCallback(async (targets: MessageWithSender[], forEveryone: boolean) => {
@@ -239,7 +255,9 @@ export default function PublicPreviewCapturePage() {
             </div>
           </div>
 
-          <div className="flex h-full flex-1 overflow-hidden">
+          {/* `ChatWindow`'s root carries the chat screen's tokens; this is
+              where that root stands on this page. */}
+          <div className="kub-chat-screen flex h-full flex-1 overflow-hidden">
             {/* The same three-layer conversation `ChatWindow` builds: the list
                 runs the full height of the column and the chrome frosts over
                 it. Copied rather than abstracted for the same reason the rest
@@ -270,7 +288,13 @@ export default function PublicPreviewCapturePage() {
                 bottomInset={composerHeight}
                 layoutVersion={composerHeight}
               />
-              <div ref={chromeRef} className="absolute inset-x-0 top-0 flex flex-col" data-testid="chat-chrome-stack">
+              <div
+                ref={chromeRef}
+                // The class `ChatWindow`'s chrome stack carries, which paints
+                // the scroll edge behind the capsules.
+                className="kub-chat-chrome-stack absolute inset-x-0 top-0 flex flex-col"
+                data-testid="chat-chrome-stack"
+              >
                 {selection.active ? (
                   <ChatSelectionBar
                     count={selection.selected.length}
@@ -290,11 +314,14 @@ export default function PublicPreviewCapturePage() {
                 ) : (
                   <ChatHeader chatId={activeChat.id} chat={activeChat} />
                 )}
+                {pinnedMessages.length > 0 && (
+                  <PinnedMessage messages={pinnedMessages} onJump={jumpToPinned} onUnpin={togglePin} />
+                )}
               </div>
               <div
                 ref={composerRef}
                 data-testid="chat-composer-dock"
-                className="absolute inset-x-0 bottom-0"
+                className="kub-chat-composer-dock absolute inset-x-0 bottom-0"
                 // The same inset `ChatWindow` gives its dock, so the scroll
                 // contracts measured on this page hold on an iPhone too.
                 style={{ paddingBottom: "max(var(--kub-keyboard-inset, 0px), var(--kub-safe-bottom))" }}

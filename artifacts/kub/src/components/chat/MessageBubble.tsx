@@ -1156,9 +1156,15 @@ export function MessageBubble({
     );
   };
 
+  // The reader's own bubble is the royal blue the owner chose on 2026-09-11,
+  // and `kub-message-own` hands everything inside it the white words and the
+  // darker wells that read on that blue (index.css). Neither bubble draws an
+  // outline any more: the own one stands off the conversation by its fill and
+  // the incoming one by its shape. The border keeps its width and loses its
+  // colour, so no bubble changes size and no measured meta placement moves.
   const bubbleClass = isMe
-    ? "bg-[color-mix(in_srgb,var(--kub-cyan)_22%,var(--kub-surface))] border border-[color:var(--kub-cyan)]/40 text-[color:var(--kub-text)]"
-    : "bg-[var(--kub-message-in)] border border-[color:var(--kub-border-color)] text-[color:var(--kub-text)]";
+    ? "kub-message-own bg-[var(--kub-message-out)] border border-transparent text-[color:var(--kub-text)]"
+    : "bg-[var(--kub-message-in)] border border-transparent text-[color:var(--kub-text)]";
 
   // Soft-delete: render an inert placeholder bubble in the same slot so the
   // surrounding date separators / scroll position stay stable.  No reply
@@ -1251,6 +1257,9 @@ export function MessageBubble({
           <div
             ref={bubbleRef}
             data-message-bubble="true"
+            // Whose it is, for the renders and specs that probe one side. The
+            // colours themselves come from `kub-message-own` in `bubbleClass`.
+            data-message-own={isMe ? "true" : "false"}
             data-message-layout-kind={textLayoutKind}
             data-message-footer-mode={footerMode}
             className={cn(

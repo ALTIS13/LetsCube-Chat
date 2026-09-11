@@ -25,9 +25,14 @@ export type PublicPreviewMessage = {
   reactions?: PublicPreviewReaction[];
   /** The original author of a forwarded message, shown as «Переслано от …». */
   forwardedFrom?: string;
-  /** When the message was edited, as HH:MM today. */
+  /** When the message was edited, as HH:MM on the message's own day. */
   editedAt?: string;
   pinned?: boolean;
+  /**
+   * How many days before the capture clock the message was sent, so a
+   * conversation can cross a date separator. Today when absent.
+   */
+  daysAgo?: number;
 };
 
 export type PublicPreviewFixture = {
@@ -101,6 +106,9 @@ export function isPublicPreviewCaptureEnabled(): boolean {
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+/** A month back is further than any render needs, and far enough to show a dated separator. */
+const MAX_DAYS_AGO = 30;
+
 function fail(reason: string): never {
   throw new Error(`Public preview fixture is invalid: ${reason}.`);
 }
@@ -135,6 +143,13 @@ function asRecord(value: unknown, field: string): Record<string, unknown> {
 
 function requirePositiveInteger(value: unknown, field: string): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) fail(`${field} must be a positive integer`);
+  return value;
+}
+
+function requireDaysAgo(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > MAX_DAYS_AGO) {
+    fail(`${field} must be a whole number of days from 0 to ${MAX_DAYS_AGO}`);
+  }
   return value;
 }
 
@@ -208,6 +223,7 @@ export function parsePublicPreviewFixture(raw: unknown): PublicPreviewFixture {
     const forwardedFrom =
       message.forwardedFrom === undefined ? undefined : requireString(message.forwardedFrom, `${field}.forwardedFrom`);
     const editedAt = message.editedAt === undefined ? undefined : requireDisplayTime(message.editedAt, `${field}.editedAt`);
+    const daysAgo = message.daysAgo === undefined ? undefined : requireDaysAgo(message.daysAgo, `${field}.daysAgo`);
     return {
       sender: requireString(message.sender, `${field}.sender`),
       text: requireString(message.text, `${field}.text`),
@@ -218,6 +234,8 @@ export function parsePublicPreviewFixture(raw: unknown): PublicPreviewFixture {
       ...(forwardedFrom ? { forwardedFrom } : {}),
       ...(editedAt ? { editedAt } : {}),
       ...(message.pinned ? { pinned: true } : {}),
+      // Zero is today, which is what an absent value already means.
+      ...(daysAgo ? { daysAgo } : {}),
     };
   });
 
@@ -307,8 +325,17 @@ const EPOCH = "2026-01-01T00:00:00.000Z";
  * timezone, which is what makes the result reproducible.
  */
 function todayAt(time: string): string {
+  return dayAt(time, 0);
+}
+
+/**
+ * The same, `daysAgo` days back. Only today can be in the future: a stamp on
+ * an earlier day is before the clock whatever its time.
+ */
+function dayAt(time: string, daysAgo: number): string {
   const [hours, minutes] = time.split(":").map(Number);
   const stamp = new Date();
+  stamp.setDate(stamp.getDate() - daysAgo);
   stamp.setHours(hours, minutes, 0, 0);
   // `formatTime` only renders a clock value for today. A stamp in the future
   // makes its day difference negative and it falls through to a weekday name
@@ -462,7 +489,8 @@ export function previewMessages(fixture: PublicPreviewFixture): MessageWithSende
   return fixture.messages.map((message, index) => {
     const authorId = message.own ? PREVIEW_IDS.currentUser : previewPersonId(fixture, message.sender);
     const id = `${PREVIEW_IDS.activeChat}-m${index}`;
-    const createdAt = todayAt(message.time);
+    const daysAgo = message.daysAgo ?? 0;
+    const createdAt = dayAt(message.time, daysAgo);
     // A picture makes an image message whose text is its caption, shaped the
     // way an uploaded photo is: the dimensions reserve the bubble's aspect.
     const image = message.image;
@@ -490,7 +518,7 @@ export function previewMessages(fixture: PublicPreviewFixture): MessageWithSende
       reply_to_id: null,
       forwarded_from_id: message.forwardedFrom ? `${PREVIEW_IDS.activeChat}-f${index}` : null,
       forward_origin: message.forwardedFrom ? { name: message.forwardedFrom } : null,
-      edited_at: message.editedAt ? todayAt(message.editedAt) : null,
+      edited_at: message.editedAt ? dayAt(message.editedAt, daysAgo) : null,
       deleted_at: null,
       pinned: Boolean(message.pinned),
       created_at: createdAt,

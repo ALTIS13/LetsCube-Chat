@@ -58,8 +58,14 @@ export function PinnedMessage({ messages, onJump, onUnpin }: PinnedMessageProps)
   };
 
   return (
-    <div className="relative flex-shrink-0 border-b border-[color:var(--kub-border-color)]">
-      <KubGlassLayer />
+    <div
+      // A capsule floating under the header rather than a band across the
+      // conversation. The scroll edge the chrome stack paints keeps its words
+      // readable over whatever passes under it, and the rim keeps it a surface
+      // against a backdrop nobody chose (rule 11).
+      className="relative flex-shrink-0 mx-2 mt-1 md:mx-4"
+    >
+      <KubGlassLayer className="rounded-[1.375rem] border border-[color:var(--glass-line)]" />
       <div
         role="button"
         tabIndex={0}
@@ -70,9 +76,9 @@ export function PinnedMessage({ messages, onJump, onUnpin }: PinnedMessageProps)
             jumpToMessage(selectedMessage);
           }
         }}
-        className="relative flex min-w-0 cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors kub-raise-hover"
+        className="relative flex min-w-0 cursor-pointer items-center gap-3 rounded-[1.375rem] py-2 pl-5 pr-2 transition-colors kub-raise-hover"
       >
-        <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-[var(--kub-cyan)]" />
+        <span className="absolute inset-y-2.5 left-3 w-[2px] rounded-full bg-[var(--kub-cyan)]" />
         <KubIcon name="pin" size={14} className="flex-shrink-0 text-[color:var(--kub-accent-text)]" />
         <div className="min-w-0 flex-1">
           <div className="mb-0.5 flex min-w-0 items-center gap-2">

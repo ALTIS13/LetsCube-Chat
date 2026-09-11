@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { ruleBody } from "./helpers/css.mjs";
+
 /**
  * The two colours that carry words, held to the threshold words are held to.
  *
@@ -87,14 +89,20 @@ function contrast(a, b) {
  */
 const WORST_FIELD = { dark: "#FFFFFF", light: "#000000" };
 
-/** Every surface the product paints a coloured word on. */
+/**
+ * Every surface the product paints a coloured word on with these two tokens.
+ *
+ * The reader's own bubble left this list on 2026-09-11. It is royal blue since
+ * the chat screen took option C, and nothing inside it paints with the theme's
+ * accent or red any more: `.kub-message-own` hands it words of its own, which
+ * the tests further down hold.
+ */
 const SURFACES = [
   "kub-bg",
   "kub-surface",
   "kub-surface-2",
   "kub-surface-3",
   "kub-message-in",
-  "kub-message-out",
 ];
 
 for (const theme of ["dark", "light"]) {
@@ -128,6 +136,104 @@ for (const theme of ["dark", "light"]) {
     // would otherwise leave every assertion above passing on the same value.
     assert.notEqual(token(block, "kub-danger-text"), token(block, "kub-danger"));
     assert.notEqual(token(block, "kub-accent-text"), token(block, "kub-cyan"));
+  });
+}
+
+/**
+ * The reader's own bubble carries words of its own.
+ *
+ * Royal blue since the owner chose option C for the chat screen on 2026-09-11.
+ * `.kub-message-own` hands everything inside the bubble a white word, a meta
+ * line at .86 white, a rose warning for a failed send, and a darker step of the
+ * blue for every well. The bubble is opaque, so these pairs are exact
+ * arithmetic, and they are read from the rule and the tokens, so moving either
+ * moves the number.
+ *
+ * The grounds are the bubble itself, the well whole — the read-receipt chip —
+ * and the well at every translucent strength `MessageBubble` lays it at, read
+ * from the component: a reply preview, a reaction chip.
+ */
+const ownRule = ruleBody(css, ".kub-message-own");
+const bubbleSource = readFileSync(new URL("components/chat/MessageBubble.tsx", root), "utf8");
+
+function mappedInOwnBubble(block, name) {
+  const found = ownRule.match(new RegExp(`--${name}:\\s*var\\(--([\\w-]+)\\)`));
+  assert.ok(found, `.kub-message-own no longer hands --${name} a token`);
+  return token(block, found[1]);
+}
+
+/** A colour, possibly translucent, laid over an opaque ground given as rgb. */
+function over(colour, ground) {
+  const [r, g, b, a = 1] = rgbOf(colour);
+  return [r * a + ground[0] * (1 - a), g * a + ground[1] * (1 - a), b * a + ground[2] * (1 - a)];
+}
+
+for (const theme of ["dark", "light"]) {
+  test(`the words inside the reader's own bubble are legible in the ${theme} theme`, () => {
+    const block = themeBlock(theme);
+    const bubble = rgbOf(token(block, "kub-message-out")).slice(0, 3);
+    const well = rgbOf(token(block, "kub-message-out-well")).slice(0, 3);
+    const strengths = [...bubbleSource.matchAll(/var\(--kub-surface-2\)_(\d+)%,transparent/g)].map((m) => Number(m[1]));
+    assert.ok(strengths.length >= 2, "the bubble's translucent wells could not be read from the component");
+    const grounds = [
+      ["the bubble", bubble],
+      ["a well", well],
+      ...strengths.map((percent) => [`a well at ${percent}%`, [0, 1, 2].map((i) => (well[i] * percent + bubble[i] * (100 - percent)) / 100)]),
+    ];
+
+    for (const word of ["kub-text", "kub-muted", "kub-accent-text", "kub-danger-text"]) {
+      const colour = mappedInOwnBubble(block, word);
+      for (const [where, ground] of grounds) {
+        const ratio = contrast(over(colour, ground), ground);
+        assert.ok(ratio >= 4.5, `--${word} inside the own bubble (${colour}) on ${where} measures ${ratio.toFixed(2)}:1, under 4.5:1`);
+      }
+    }
+    // Every well is that one blue. A surface token left to the theme is
+    // near-white in the light theme, where the white words over it vanished.
+    for (const surface of ["kub-surface-2", "kub-surface-3", "kub-inset"]) {
+      assert.equal(mappedInOwnBubble(block, surface), token(block, "kub-message-out-well"), `--${surface} inside the own bubble is not its well`);
+    }
+    // The numbers that made the words its own: the theme's accent and red on
+    // the blue. The day either passes, the rule can be revisited — photograph
+    // the bubble before believing it.
+    for (const word of ["kub-accent-text", "kub-danger-text"]) {
+      const ratio = contrast(rgbOf(token(block, word)), bubble);
+      assert.ok(ratio < 4.5, `the theme's --${word} now measures ${ratio.toFixed(2)}:1 on the own bubble`);
+    }
+  });
+}
+
+/**
+ * The chat screen's own grey and accent.
+ *
+ * `.kub-chat-screen` hands the chat pane these as --kub-muted and
+ * --kub-accent-text, because a blue bubble scrolling under the translucent
+ * capsules took the product's pair under the floor. Held here against the flat
+ * grounds they sit on: the conversation's ground, an incoming bubble, and a
+ * covering panel over the worst field. The wallpaper's pattern and pools move
+ * the ground under a word, which only a photograph measures;
+ * scripts/render-chat-chrome-frames.mjs does.
+ */
+const chatScreenRule = ruleBody(css, ".kub-chat-screen");
+
+for (const theme of ["dark", "light"]) {
+  test(`the chat screen's grey and accent are legible in the ${theme} theme`, () => {
+    const block = themeBlock(theme);
+    for (const [word, chatToken] of [
+      ["kub-muted", "kub-chat-muted"],
+      ["kub-accent-text", "kub-chat-accent-text"],
+    ]) {
+      assert.match(chatScreenRule, new RegExp(`--${word}:\\s*var\\(--${chatToken}\\)`), `.kub-chat-screen no longer hands the pane --${chatToken}`);
+      const colour = rgbOf(token(block, chatToken));
+      for (const [where, ground] of [
+        ["the conversation's ground", rgbOf(token(block, "kub-chat-ground"))],
+        ["an incoming bubble", rgbOf(token(block, "kub-message-in"))],
+        ["a covering panel over the worst field", composite(token(block, "glass-fill-strong"), WORST_FIELD[theme])],
+      ]) {
+        const ratio = contrast(colour, ground);
+        assert.ok(ratio >= 4.5, `--${chatToken} on ${where} measures ${ratio.toFixed(2)}:1, under 4.5:1`);
+      }
+    }
   });
 }
 

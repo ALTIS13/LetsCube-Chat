@@ -11,6 +11,8 @@ import { getChatDisplayInfo, memberCountLabel } from "@/lib/chatDisplay";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import { getUserPresenceState } from "@/lib/presence";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
+import { CAPSULE_CONTROL_GLASS, unreadBadgeLabel, unreadElsewhere } from "@/lib/chatChrome";
+import { FOCUS_RING } from "@/lib/controlSurface";
 import { usePresenceNow } from "@/hooks/usePresenceNow";
 import { useAvatarVariantUrls } from "@/hooks/useMediaVariants";
 import type { ChatWithLastMessage } from "@/types/database";
@@ -177,6 +179,9 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
   );
   const avatarVariants = useAvatarVariantUrls(avatarProfileIds);
   const avatarVariant = chat?.other_user?.id ? avatarVariants[chat.other_user.id] : undefined;
+  // Telegram's back button says how much is waiting in the other chats. The
+  // button is drawn only below `md`, where the chat list is not beside it.
+  const unreadLabel = unreadBadgeLabel(unreadElsewhere(chats, chatId));
 
   const menuItems: Array<{ icon: KubIconName; label: string; danger?: boolean; disabled?: boolean; action: () => void }> = [
     { icon: "search", label: "Поиск в чате", action: () => { setShowMenu(false); onSearchOpen?.(); } },
@@ -206,116 +211,149 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
   return (
     <>
       <div
-        // A plain box: the material is the layer below it. The action menu in
-        // this header is `fixed` on a narrow viewport, and a frosted ancestor
-        // would lay it out against the 56px header instead of the screen. The
-        // box itself is untouched — same height, same flex sizing, still
-        // statically positioned in the column the message list measures.
+        // A plain box with no material of its own. The conversation runs under
+        // it, dimmed by the scroll edge the chrome stack paints, and each
+        // control is a capsule carrying its own glass as a leaf. The action
+        // menu in this header is `fixed` on a narrow viewport, and a frosted
+        // ancestor would lay it out against the header instead of the screen
+        // (rule 3).
         //
         // Below `md` the header is the top of the screen, so it pads the status
-        // bar's inset out of its own top: the material runs under the status
-        // bar and the Dynamic Island, the controls start below them, and the
-        // list underneath measures the taller header like any other height.
+        // bar's inset out of its own top: the capsules start below the status
+        // bar and the Dynamic Island, and the list underneath measures the
+        // taller header like any other height.
         className="relative flex flex-shrink-0 flex-col pt-safe md:pt-0"
         data-testid="chat-header-shell"
       >
-        <KubGlassLayer />
-        <div className="relative flex flex-col">
         <div
-          className="flex h-[var(--kub-control-row-height)] items-center gap-1 border-b border-[color:var(--kub-border-color)] px-2"
+          // Centred on the pane rather than on what is left of the row, so the
+          // title stays under the Dynamic Island whatever width the back
+          // button's count gives it: the two side tracks take equal shares of
+          // what the title leaves, and only a title too long for the row pushes
+          // them apart. From `md` the back button is not drawn, its track is
+          // empty, and the title is centred on the chat pane.
+          className="grid h-[var(--kub-control-row-height)] grid-cols-[minmax(max-content,1fr)_minmax(0,max-content)_minmax(max-content,1fr)] items-center gap-2 px-3 md:px-4"
           data-testid="chat-control-row"
         >
-      <button
-        onClick={() => setSelectedChatId(null)}
-        // D-047: 36x36 before this, and it is the only way back to the chat
-        // list on a phone.
-        className="kub-icon-action md:hidden p-2 rounded-lg kub-raise-hover transition-colors flex-shrink-0 text-[color:var(--kub-cyan)]"
-        aria-label="Назад"
-      >
-        <KubIcon name="back" size={20} />
-      </button>
-
-      <button
-        onClick={onInfoOpen}
-        data-testid="chat-header-info-button"
-        className="flex items-center gap-2.5 flex-1 min-w-0 rounded-lg px-1.5 py-1 kub-raise-hover transition-colors"
-      >
-        <ChatAvatar
-          chat={{ id: chatId, name, avatar_url: chat?.avatar_url ?? null, type }}
-          size="sm"
-          showOnline={isOnline}
-          isSaved={display.isSaved}
-          avatarVariant={avatarVariant}
-          profileId={chat?.other_user?.id ?? null}
-        />
-        <div className="text-left min-w-0">
-          <div className="text-sm font-semibold truncate leading-tight text-[color:var(--kub-text)]">
-            {name}
+          <div className="flex justify-start">
+            <button
+              type="button"
+              onClick={() => setSelectedChatId(null)}
+              // D-047: the only way back to the chat list on a phone, so a
+              // full 44pt target, which the capsule is at every pointer.
+              className={cn(
+                "kub-icon-action kub-interactive group/capsule relative h-11 min-w-11 rounded-full px-2.5 text-[color:var(--kub-text)] md:hidden",
+                FOCUS_RING,
+              )}
+              aria-label="Назад"
+            >
+              <KubGlassLayer className={CAPSULE_CONTROL_GLASS} />
+              <span className="relative flex items-center gap-0.5">
+                <KubIcon name="chevronLeft" size={22} />
+                {unreadLabel && (
+                  <span aria-hidden="true" className="pr-1 text-[15px] font-semibold leading-none tabular-nums">
+                    {unreadLabel}
+                  </span>
+                )}
+              </span>
+            </button>
           </div>
-          {subtitle && (
-            <div className={cn(
-              "text-xs truncate leading-tight",
-              isOnline ? "text-[color:var(--kub-online-text)]" : "text-[color:var(--kub-muted)]"
-            )}>
-              {subtitle}
-            </div>
-          )}
-        </div>
-      </button>
 
-      <div className="flex items-center gap-0.5">
-        <div className="relative">
           <button
-            onClick={() => setShowMenu(!showMenu)}
-            className="kub-icon-action kub-interactive rounded-lg kub-raise-hover transition-colors text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]"
-            aria-label="Ещё"
+            type="button"
+            onClick={onInfoOpen}
+            data-testid="chat-header-info-button"
+            className={cn(
+              "kub-interactive group/capsule relative flex h-11 min-w-0 max-w-full items-center gap-2 rounded-full py-1 pl-1 pr-4",
+              FOCUS_RING,
+            )}
           >
-            <KubIcon name="more" size={18} />
+            <KubGlassLayer className={CAPSULE_CONTROL_GLASS} />
+            <span className="relative flex shrink-0">
+              <ChatAvatar
+                chat={{ id: chatId, name, avatar_url: chat?.avatar_url ?? null, type }}
+                size="sm"
+                showOnline={isOnline}
+                isSaved={display.isSaved}
+                avatarVariant={avatarVariant}
+                profileId={chat?.other_user?.id ?? null}
+              />
+            </span>
+            <span className="relative min-w-0 text-left">
+              <span className="block truncate text-[15px] font-semibold leading-tight text-[color:var(--kub-text)]">
+                {name}
+              </span>
+              {subtitle && (
+                <span className={cn(
+                  "block truncate text-xs leading-tight",
+                  isOnline ? "text-[color:var(--kub-online-text)]" : "text-[color:var(--kub-muted)]"
+                )}>
+                  {subtitle}
+                </span>
+              )}
+            </span>
           </button>
-          {showMenu && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-              <div
-                role="menu"
-                data-kub-menu="true"
-                // On a phone the menu is a sheet at the bottom of the screen,
-                // so its 12px are measured from the top of the home indicator:
-                // at a flat 12px its last item, the destructive one, sat on it.
-                className="kub-glass-strong fixed inset-x-3 bottom-[calc(0.75rem+var(--kub-safe-bottom))] z-50 max-h-[min(70vh,480px)] overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] py-1 sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-10 sm:w-60"
+
+          <div className="flex justify-end">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowMenu(!showMenu)}
+                className={cn(
+                  "kub-icon-action kub-interactive group/capsule relative h-11 w-11 rounded-full text-[color:var(--kub-text)]",
+                  FOCUS_RING,
+                )}
+                aria-label="Ещё"
+                aria-expanded={showMenu}
               >
-                {menuItems.map(({ icon, label, danger, disabled, action }) => (
-                  <button
-                    key={label}
-                    onClick={action}
-                    disabled={disabled}
-                    className={cn(
-                      "flex min-w-0 items-center gap-3 w-full px-4 py-2.5 text-left text-sm whitespace-nowrap transition-colors kub-raise-hover disabled:cursor-not-allowed disabled:opacity-60",
-                      danger ? "text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-text)]"
-                    )}
+                <KubGlassLayer className={CAPSULE_CONTROL_GLASS} />
+                {/* iOS lays the three dots across; the product's icon stands them up. */}
+                <KubIcon name="more" size={20} className="relative rotate-90" />
+              </button>
+              {showMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+                  <div
+                    role="menu"
+                    data-kub-menu="true"
+                    // On a phone the menu is a sheet at the bottom of the screen,
+                    // so its 12px are measured from the top of the home indicator:
+                    // at a flat 12px its last item, the destructive one, sat on it.
+                    // From `sm` it drops from the capsule, 4px under its 44px.
+                    className="kub-glass-strong fixed inset-x-3 bottom-[calc(0.75rem+var(--kub-safe-bottom))] z-50 max-h-[min(70vh,480px)] overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] py-1 sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-12 sm:w-60"
                   >
-                    <KubIcon
-                      name={icon}
-                      size={16}
-                      tone={danger ? "currentColor" : "muted"}
-                      className="shrink-0"
-                    />
-                    <span className="min-w-0 flex-1 truncate text-left">
-                      {disabled && label === "Удалить групповой чат" ? "Удаление..." : label}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+                    {menuItems.map(({ icon, label, danger, disabled, action }) => (
+                      <button
+                        key={label}
+                        onClick={action}
+                        disabled={disabled}
+                        className={cn(
+                          "flex min-w-0 items-center gap-3 w-full px-4 py-2.5 text-left text-sm whitespace-nowrap transition-colors kub-raise-hover disabled:cursor-not-allowed disabled:opacity-60",
+                          danger ? "text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-text)]"
+                        )}
+                      >
+                        <KubIcon
+                          name={icon}
+                          size={16}
+                          tone={danger ? "currentColor" : "muted"}
+                          className="shrink-0"
+                        />
+                        <span className="min-w-0 flex-1 truncate text-left">
+                          {disabled && label === "Удалить групповой чат" ? "Удаление..." : label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
         {mediaPlayback && (
           <div data-testid="chat-header-media-playback" className="min-w-0">
             {mediaPlayback}
           </div>
         )}
-        </div>
       </div>
       <KubModal
       open={deleteGroupOpen}

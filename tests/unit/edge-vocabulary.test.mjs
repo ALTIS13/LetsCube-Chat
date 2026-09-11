@@ -79,7 +79,6 @@ const GLASS = /\bkub-glass(-strong)?\b/;
  * an exception has to be argued rather than added.
  */
 const EDGE_BY_HAND = [
-  ["components/chat/ChatHeader.tsx", "h-[var(--kub-control-row-height)] items-center gap-1 border-b"],
   ["components/sidebar/SettingsModal.tsx", "kub-grid-subtle"],
   ["components/sidebar/SettingsModal.tsx", "kub-settings-panel border-t"],
   ["pages/public/GuestSupportChat.tsx", "px-4 py-4 sm:px-6"],
@@ -246,7 +245,10 @@ test("a line between things does not wear the weight of a sheet's edge", () => {
  */
 test("the perimeter count only ever shrinks", () => {
   const total = FILES.reduce((n, f) => n + perimeters(read(f)).length, 0);
-  assert.ok(total <= 204, `perimeters on the sheet-edge colour grew to ${total}; the ceiling is 204`);
+  // 197 since 2026-09-11. The chat screen's option C took the outline off the
+  // incoming bubble and the composer's well, and gave the date, a system notice
+  // and the history band a fill instead of an outline.
+  assert.ok(total <= 197, `perimeters on the sheet-edge colour grew to ${total}; the ceiling is 197`);
 });
 
 /**
