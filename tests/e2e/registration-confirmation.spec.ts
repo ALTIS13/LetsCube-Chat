@@ -12,17 +12,12 @@ const confirmationVisualProjects = new Set([
   "chromium-mobile-360",
 ]);
 
-/**
- * How far below the fold the resend control may start, by project.
- *
- * Zero is the contract and zero is what every entry that is not written here
- * gets. `chromium-mobile-360` is the single exception and it is D-063: the
- * confirmation card is 1053px tall in an 800px viewport, so the control starts
- * 40px past the fold. 48 leaves that measurement eight pixels of room and
- * nothing more — a layout change that pushes the control further down still
- * fails here, and one that pulls it back onto the screen still passes.
- */
-const resendFoldBudget = new Map([["chromium-mobile-360", 48]]);
+/** The explanation under the actions, word for word as the product shows it. */
+const confirmationExplanation = [
+  "Если к этому адресу электронной почты ещё не привязан аккаунт, мы отправим письмо для подтверждения регистрации.",
+  "Если письмо не пришло, проверьте папку «Спам» и правильность указанного адреса. При ошибке вернитесь и зарегистрируйтесь с корректным email.",
+  "Неподтверждённая учётная запись будет удалена автоматически.",
+];
 
 test.describe("Registration confirmation", () => {
   test("shows the approved confirmation copy with a disabled resend control", async ({
@@ -37,26 +32,25 @@ test.describe("Registration confirmation", () => {
     await mockRegistrationInviteMode(page);
     await mockSignupSuccess(page);
     await openRegisterForm(page);
+    // The fold contract below is measured against the captcha production
+    // serves. Yandex's plate is 136px tall and Turnstile's 65, so a dev server
+    // left on the default provider would pass it with 71px the product does not
+    // have.
+    await expect(
+      page.getByTestId("auth-captcha").locator("[data-provider]"),
+      "this test measures the production captcha: the dev server needs VITE_AUTH_CAPTCHA_PROVIDER=yandex",
+    ).toHaveAttribute("data-provider", "yandex-smartcaptcha");
 
     await page.locator('input[autocomplete="name"]').fill("Новый пользователь");
     await page.locator('input[type="email"]').fill("new-user@example.test");
     await page.locator('input[type="password"]').fill("correct-horse-battery");
     await page.getByRole("button", { name: "Создать аккаунт" }).click();
 
-    await expect(page.getByRole("heading", { name: "Проверьте почту", level: 1 })).toBeVisible();
-    await expect(
-      page.getByText(
-        "Если к этому адресу электронной почты ещё не привязан аккаунт, мы отправим письмо для подтверждения регистрации.",
-      ),
-    ).toBeVisible();
-    await expect(
-      page.getByText(
-        "Если письмо не пришло, проверьте папку «Спам» и правильность указанного адреса. При ошибке вернитесь и зарегистрируйтесь с корректным email.",
-      ),
-    ).toBeVisible();
-    await expect(
-      page.getByText("Неподтверждённая учётная запись будет удалена автоматически."),
-    ).toBeVisible();
+    const heading = page.getByRole("heading", { name: "Проверьте почту", level: 1 });
+    await expect(heading).toBeVisible();
+    for (const paragraph of confirmationExplanation) {
+      await expect(page.getByText(paragraph)).toBeVisible();
+    }
     await expect(page.getByText("n***r@example.test")).toBeVisible();
     await expect(page.getByText(/Восстановить пароль|Восстановить доступ/)).toHaveCount(0);
 
@@ -77,31 +71,51 @@ test.describe("Registration confirmation", () => {
       expect(countdownMetrics.scrollHeight).toBeLessThanOrEqual(countdownMetrics.clientHeight);
     }
 
-    // The resend control is this screen's own action, and it belongs on the
-    // screen. `toBeInViewport()` said exactly that, and it holds at every width
-    // in the matrix but one. Measured, on entry, with the card's own height:
+    // D-063, closed by the owner's decision: every way off this screen — the
+    // resend control, «Ко входу», «Указать другой email» — is on it, whole,
+    // when it opens, at every width this spec claims. This was a per-project
+    // budget while the explanation came first: with the captcha production
+    // serves, the three buttons ended 175, 231 and 287px under the fold at
+    // 360x800, and 390, 412 and 1440 clipped them as well; only 1920 fitted.
+    // The actions now come straight after the masked address and the
+    // explanation after them. Measured on entry, the last button ends at 799
+    // of 800 at 360, 799 of 844 at 390, 799 of 915 at 412, 791 of 900 at 1440
+    // and 793 of 1080 at 1920 — one pixel to spare at 360, so anything added
+    // above the buttons there fails here instead of pushing «Указать другой
+    // email» off the screen.
     //
-    //   1440x900   card  997  control 792..856   on screen
-    //   1920x1080  card 1080  control 833..897   on screen
-    //   412x915    card 1005  control 792..856   on screen
-    //   390x844    card 1005  control 792..856   12px of it below the fold
-    //   360x800    card 1053  control 840..904   40px BELOW the fold entirely
-    //
-    // At 360 the reader is given a screen whose every action — resend, "Ко
-    // входу", "Указать другой email" — is under the fold, and nothing says so.
-    // That is D-063, a defect of the layout and not of this test, so it is
-    // written down as a per-project budget rather than deleted: zero everywhere
-    // else, so a regression at any other width still fails here, and closing
-    // D-063 does not.
-    const entry = await resend.evaluate((element) => ({
-      below: Math.round(element.getBoundingClientRect().top) - window.innerHeight,
-    }));
-    expect(
-      entry.below,
-      `the resend control starts ${entry.below}px below the fold on entry`,
-    ).toBeLessThanOrEqual(resendFoldBudget.get(testInfo.project.name) ?? 0);
-
+    // "When it opens" is checked, not assumed: nothing has scrolled the shell,
+    // and the measurement waits for the fonts, although with every web font
+    // refused the three buttons measured at the same offsets.
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
     const authShell = page.locator(".kub-auth-shell");
+    expect(
+      await authShell.evaluate((element) => element.scrollTop),
+      "the shell had already scrolled when the confirmation opened, so this is not the screen a reader is given",
+    ).toBe(0);
+    const offscreen: string[] = [];
+    for (const [name, control] of [
+      ["the resend control", resend],
+      ["«Ко входу»", page.getByRole("button", { name: "Ко входу" })],
+      ["«Указать другой email»", page.getByRole("button", { name: "Указать другой email" })],
+    ] as const) {
+      const box = await control.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return { top: rect.top, bottom: rect.bottom, fold: window.innerHeight };
+      });
+      if (box.top < 0 || box.bottom > box.fold) {
+        offscreen.push(
+          `${name} at ${Math.round(box.top)}..${Math.round(box.bottom)}, ending ${Math.round(box.bottom - box.fold)}px past the ${box.fold}px fold`,
+        );
+      }
+    }
+    expect(offscreen, "every action on the confirmation screen is on it when it opens").toEqual([]);
+
+    // The explanation now reads after the buttons, and it must not be taken
+    // away from the screen it explains: the heading names it as its
+    // description, so a screen reader that lands on the heading hears it there.
+    await expect(heading).toHaveAccessibleDescription(confirmationExplanation.join(" "));
+
     await authShell.evaluate((element) => {
       element.scrollTop = element.scrollHeight;
     });
@@ -135,9 +149,9 @@ test.describe("Registration confirmation", () => {
     }
     // And reachable, which is what the scroll was for. `toContainText` is
     // satisfied by a button parked below the fold; these are the ways out of a
-    // confirmation screen and they have to be on it. The resend control is
-    // asserted here too: D-063 is that it is not reachable *without* scrolling,
-    // and this says it is at least reachable with it.
+    // confirmation screen and they have to be on it. The entry check above says
+    // they are on it before anything scrolls; this says that scrolling the card
+    // to its end, to read the explanation, does not take them off it.
     await expect(resend).toBeInViewport();
     await expect(page.getByRole("button", { name: "Ко входу" })).toBeInViewport();
     await expect(page.getByRole("button", { name: "Указать другой email" })).toBeInViewport();

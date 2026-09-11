@@ -240,16 +240,18 @@ export function RegisterForm() {
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[color-mix(in_srgb,var(--kub-online)_18%,transparent)] border border-[color:var(--kub-online)]/40 text-[color:var(--kub-online)] kub-glow-soft">
                 <KubIcon name="mailCheck" size={28} label="Письмо отправлено" />
               </div>
-              <div>
-                <h1 className="text-xl font-bold text-[color:var(--kub-text)]">
-                  Проверьте почту
-                </h1>
-                <div className="mt-2 space-y-2 text-sm leading-6 text-[color:var(--kub-muted)]">
-                  <p>Если к этому адресу электронной почты ещё не привязан аккаунт, мы отправим письмо для подтверждения регистрации.</p>
-                  <p>Если письмо не пришло, проверьте папку «Спам» и правильность указанного адреса. При ошибке вернитесь и зарегистрируйтесь с корректным email.</p>
-                  <p>Неподтверждённая учётная запись будет удалена автоматически.</p>
-                </div>
-              </div>
+              {/* D-063: the actions come straight after the address, and the
+                  explanation after the actions. With the explanation first the
+                  card was 1092px tall at 360x800 and all three buttons were
+                  under the fold. The heading names the explanation as its
+                  description, so a screen reader still hears it with the
+                  heading rather than only after the buttons. */}
+              <h1
+                aria-describedby="registration-confirmation-explanation"
+                className="text-xl font-bold text-[color:var(--kub-text)]"
+              >
+                Проверьте почту
+              </h1>
               {/* The address is read back, not entered, but it is the same
                   shape as the field it was typed into — so it is cut into the
                   card with --kub-inset rather than raised off it. */}
@@ -294,6 +296,14 @@ export function RegisterForm() {
                 <KubButton type="button" variant="secondary" fullWidth onClick={handleUseDifferentEmail}>
                   Указать другой email
                 </KubButton>
+              </div>
+              <div
+                id="registration-confirmation-explanation"
+                className="space-y-2 text-sm leading-6 text-[color:var(--kub-muted)]"
+              >
+                <p>Если к этому адресу электронной почты ещё не привязан аккаунт, мы отправим письмо для подтверждения регистрации.</p>
+                <p>Если письмо не пришло, проверьте папку «Спам» и правильность указанного адреса. При ошибке вернитесь и зарегистрируйтесь с корректным email.</p>
+                <p>Неподтверждённая учётная запись будет удалена автоматически.</p>
               </div>
             </div>
           </KubPanel>
