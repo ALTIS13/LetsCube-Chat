@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import path from "node:path";
 import { expect } from "@playwright/test";
+import { inspectLocalFrontendBundle } from "../../../scripts/windows-tauri-frontend-bundle.mjs";
 
 /**
  * Serves `artifacts/kub/dist/public` — the bundle *this checkout* builds.
@@ -24,7 +25,11 @@ import { expect } from "@playwright/test";
 export async function startLocalFrontendServer() {
   const publicRoot = path.resolve(process.cwd(), "artifacts", "kub", "dist", "public");
   const indexPath = path.join(publicRoot, "index.html");
-  expect(existsSync(indexPath), "build the local frontend before Tauri QA").toBe(true);
+  // The same check `windows:tauri:qa` makes before it builds anything, so a spec
+  // started without the harness also fails on the reason — an unbuilt,
+  // unconfigured or stale bundle — instead of on a login form that never appears.
+  const bundle = inspectLocalFrontendBundle(process.cwd());
+  expect(bundle.ok, bundle.ok ? "the local bundle is usable" : bundle.message).toBe(true);
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
     const relative = decodeURIComponent(url.pathname).replace(/^\/+/, "") || "index.html";

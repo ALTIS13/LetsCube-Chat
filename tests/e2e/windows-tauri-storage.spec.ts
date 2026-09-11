@@ -39,6 +39,14 @@ test.describe("LETSCUBE Windows storage", () => {
       "the native shell owns its viewport and runs once",
     );
     const cdpUrl = process.env.LETSCUBE_TAURI_CDP_URL;
+    // Outside the harness there is no shell to connect to, so this skips as the
+    // other Windows specs do; it used to throw, which put a red that says nothing
+    // about the product into every ordinary run of the suite. Under the harness a
+    // missing phase or data root is the harness's own fault, and still throws.
+    test.skip(
+      !cdpUrl,
+      "LETSCUBE_TAURI_CDP_URL is not configured; this phase runs through pnpm.cmd windows:tauri:qa:storage",
+    );
     if (!cdpUrl || !phase || !dataRoot || !relocationParent) {
       throw new Error(
         "The storage spec runs only under scripts/windows-tauri-qa.mjs, which supplies the CDP endpoint, the phase and the isolated data root.",

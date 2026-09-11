@@ -1426,6 +1426,27 @@ test("the update interface is measured on the built bundle, not on the deploymen
   assert.match(spec, /data-kub-boot-id/);
 });
 
+test("the Windows QA gate checks the bundle it serves before it builds anything", () => {
+  const wrapper = readText("scripts/windows-tauri-qa.mjs");
+  const helper = readText("tests/e2e/helpers/local-frontend.ts");
+
+  // artifacts/kub/dist/public was rebuilt without the public configuration five
+  // times in a week, and each time the gate ran for minutes before failing on a
+  // login form that was never drawn. The refusal has to come first and has to
+  // end the run: cargo must not be reached with a bundle that cannot sign in.
+  // What counts as unusable is pinned in windows-tauri-frontend-bundle.test.mjs.
+  assert.match(
+    wrapper,
+    /const bundle = inspectLocalFrontendBundle\(root\);\s*if \(!bundle\.ok\) \{[\s\S]*?process\.exit\(1\);[\s\S]*?const build = spawnSync\(cargoPath/,
+    "the bundle must be inspected, and a refusal must end the run, before cargo builds",
+  );
+  assert.match(
+    helper,
+    /inspectLocalFrontendBundle\(process\.cwd\(\)\)/,
+    "a spec started without the harness must refuse for the same reason",
+  );
+});
+
 test("Windows storage QA owns a data root instead of the user's own AppData", () => {
   const wrapper = readText("scripts/windows-tauri-qa.mjs");
   const suite = readText("scripts/windows-tauri-storage-suite.mjs");

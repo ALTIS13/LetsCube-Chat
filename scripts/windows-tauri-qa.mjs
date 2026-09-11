@@ -7,6 +7,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+import { inspectLocalFrontendBundle } from "./windows-tauri-frontend-bundle.mjs";
 import { buildStorageSuite } from "./windows-tauri-storage-suite.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -67,6 +68,21 @@ if (requestedSuite !== "standard" && requestedMode) {
     `A startup mode cannot be combined with the ${requestedSuite} suite.`,
   );
   process.exit(1);
+}
+// The scenarios that sign in against artifacts/kub/dist/public — baseline's
+// third test and the two update modes — are only as good as that bundle. It kept
+// being rebuilt without the public configuration, and the gate then ran for
+// minutes and failed on a login form that was never drawn. Checked before cargo
+// spends any time, and the refusal names what is wrong with the input.
+const servesLocalBundle =
+  requestedSuite === "standard" &&
+  (!requestedMode || requestedMode === "normal_update" || requestedMode === "critical_update");
+if (servesLocalBundle) {
+  const bundle = inspectLocalFrontendBundle(root);
+  if (!bundle.ok) {
+    console.error(`[windows-tauri-qa] Refusing to run: ${bundle.message}`);
+    process.exit(1);
+  }
 }
 if (runningIsolatedQaClient()) {
   console.error(

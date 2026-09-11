@@ -40,6 +40,15 @@ test("covers the injected Windows startup and updater lifecycle", async ({ brows
   test.setTimeout(150_000);
 
   const mode = process.env.LETSCUBE_TAURI_QA_STARTUP_MODE ?? "";
+  // Outside `windows:tauri:qa` there is no shell to connect to, exactly as for
+  // the other Windows specs, which skip on the same condition. This one used to
+  // fail instead, so every ordinary run of the suite carried a red that said
+  // nothing about the product. Under the harness a missing or unknown mode is
+  // the harness's own fault, and that still fails.
+  test.skip(
+    !process.env.LETSCUBE_TAURI_CDP_URL,
+    "LETSCUBE_TAURI_CDP_URL is not configured; this scenario runs through pnpm.cmd windows:tauri:qa",
+  );
   expect(QA_MODES.has(mode), "wrapper must provide a bounded startup QA mode").toBe(true);
   const cdpUrl = validateCdpUrl(process.env.LETSCUBE_TAURI_CDP_URL ?? "");
   const shell = await connectToTauri(cdpUrl);
@@ -289,15 +298,23 @@ async function assertBuiltInterfaceHonoursNativeState(
       },
     );
 
+    const signIn = watchSignInRequests(page);
     await page.goto(`${localFrontend.url}/login`, { waitUntil: "domcontentloaded" });
     await page.locator('input[type="email"]').fill(credentials.email);
     await page.locator('input[type="password"]').fill(credentials.password);
+    signIn.submitted();
     await page.locator('button[type="submit"]').click();
     // `desktop-app-shell` rather than a role query: the critical gate puts
     // `inert` and `aria-hidden` on the shell, which removes the menu button from
     // the accessibility tree while leaving it drawn — that is how the 0.2.13 run
     // called a signed-in client signed out.
-    await expect(page.getByTestId("desktop-app-shell")).toBeAttached({ timeout: 25_000 });
+    try {
+      await expect(page.getByTestId("desktop-app-shell")).toBeAttached({ timeout: 25_000 });
+    } catch (error) {
+      throw new Error(`the local sign-in did not reach the shell within 25s: ${await signIn.describe()}`, {
+        cause: error,
+      });
+    }
     await expect(
       page.locator('[data-testid="app-top-bar"], [data-testid="sidebar-brand-strip"]'),
     ).toBeVisible({ timeout: 20_000 });
@@ -330,6 +347,65 @@ async function assertBuiltInterfaceHonoursNativeState(
     await context.close();
     await localFrontend.close();
   }
+}
+
+/**
+ * Times the requests a password sign-in makes, so that a sign-in which never
+ * settles says where it stopped instead of only that a test id never appeared.
+ *
+ * `normal_update` failed that way run after run — "the button still spinning"
+ * was all the evidence there was. Only the method, the path, the status and the
+ * timing are kept: never a body, a header or a query string.
+ */
+function watchSignInRequests(page: import("@playwright/test").Page) {
+  let submittedAt = 0;
+  const entries: Array<{ label: string; sentAt: number; settledAt?: number; outcome?: string }> = [];
+  const byRequest = new Map<object, (typeof entries)[number]>();
+  page.on("request", (request) => {
+    if (!submittedAt) return;
+    const { pathname } = new URL(request.url());
+    if (!/\/auth\/v1\/|\/rest\/v1\/(bans|profiles)$/.test(pathname)) return;
+    const entry = { label: `${request.method()} ${pathname}`, sentAt: Date.now() };
+    entries.push(entry);
+    byRequest.set(request, entry);
+  });
+  page.on("requestfinished", async (request) => {
+    const entry = byRequest.get(request);
+    if (!entry) return;
+    entry.settledAt = Date.now();
+    entry.outcome = `answered ${(await request.response().catch(() => null))?.status() ?? "?"}`;
+  });
+  page.on("requestfailed", (request) => {
+    const entry = byRequest.get(request);
+    if (!entry) return;
+    entry.settledAt = Date.now();
+    entry.outcome = `failed (${request.failure()?.errorText ?? "no reason given"})`;
+  });
+  return {
+    submitted: () => {
+      submittedAt = Date.now();
+    },
+    describe: async () => {
+      const now = Date.now();
+      const requests = entries.map((entry) =>
+        entry.settledAt === undefined
+          ? `${entry.label} sent at +${entry.sentAt - submittedAt}ms, still pending ${now - entry.sentAt}ms later`
+          : `${entry.label} ${entry.outcome} after ${entry.settledAt - entry.sentAt}ms`,
+      );
+      const messages = await page.locator("form p").allInnerTexts().catch(() => [] as string[]);
+      const submit = await page
+        .locator('button[type="submit"]')
+        .evaluateAll((nodes) =>
+          nodes.map((node) => ({ disabled: (node as HTMLButtonElement).disabled, busy: node.getAttribute("aria-busy") })),
+        )
+        .catch(() => []);
+      return [
+        requests.length > 0 ? requests.join("; ") : "the form sent no sign-in request at all",
+        messages.length > 0 ? `the form says "${messages.join(" | ").slice(0, 200)}"` : "the form shows no message",
+        `submit button ${JSON.stringify(submit)}`,
+      ].join(". ");
+    },
+  };
 }
 
 async function measureStartupGeometry(page: import("@playwright/test").Page) {
