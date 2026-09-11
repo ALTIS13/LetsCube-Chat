@@ -125,6 +125,41 @@ function applyLaneBeforeBoot(lane: string) {
   }
 }
 
+/**
+ * D-071 took the lane out of the product (`932d11e`): a message's cap follows
+ * the viewport now, not the row, and the loop this spec guards against needs a
+ * cap that follows the row. So every capture puts back the rule the product
+ * used to ship — `max(16rem, 100% - lane)` on each message stack from 640px —
+ * and the lane steps drive it as before.
+ *
+ * What that proves changed with the layout, and it was checked rather than
+ * assumed: on 2026-09-11, with the hold switched off in `MessageBubble.tsx`,
+ * the 640 and 768px test still passed. The rows D-071 draws no longer shrink
+ * round the message with its placement, so a cap that follows the row cannot
+ * set the loop off here. This spec is now a guard that the placement settles
+ * under any such cap, not a reproduction of D-080; the hold itself is proved by
+ * `tests/unit/message-meta-hold.test.mts`.
+ */
+function restoreRowCapBeforeBoot() {
+  const css =
+    '@media (min-width: 640px) { :has(> [data-message-bubble="true"]) { max-width: max(16rem, calc(100% - var(--kub-action-lane, 0px))) !important; } }';
+  const apply = () => {
+    const root = document.head ?? document.documentElement;
+    if (!root) return false;
+    const style = document.createElement("style");
+    style.id = "d080-row-cap";
+    style.textContent = css;
+    root.appendChild(style);
+    return true;
+  };
+  if (!apply()) {
+    const observer = new MutationObserver(() => {
+      if (apply()) observer.disconnect();
+    });
+    observer.observe(document, { childList: true });
+  }
+}
+
 type Capture = { page: Page; depthErrors: string[] };
 
 /**
@@ -154,6 +189,7 @@ async function openCapture(context: BrowserContext, width: number, options: { la
     [WINDOW_KEY, FIXTURE] as const,
   );
   await page.addInitScript(installChangeCounter, CHANGES_KEY);
+  await page.addInitScript(restoreRowCapBeforeBoot);
   if (options.lane) await page.addInitScript(applyLaneBeforeBoot, options.lane);
 
   const response = await page.goto(CAPTURE_PATH, { waitUntil: "domcontentloaded" }).catch(() => null);
@@ -383,10 +419,11 @@ test.describe("message meta placement settles", () => {
                 document.head.appendChild(style);
               }
               // The row packs an own message to the end; the stack inside it
-              // inherits the lane.
+              // inherits the lane. Matched by what the row holds rather than
+              // by where it sits, since D-071 changed the rows around it.
               style.textContent =
-                `[data-message-id] > .justify-end { --kub-action-lane: ${ownLane}; }\n` +
-                `[data-message-id] > .justify-start { --kub-action-lane: ${receivedLane}; }`;
+                `.justify-end:has(> * > [data-message-bubble="true"]) { --kub-action-lane: ${ownLane}; }\n` +
+                `.justify-start:has(> * > [data-message-bubble="true"]) { --kub-action-lane: ${receivedLane}; }`;
             },
             [own, received] as const,
           ),

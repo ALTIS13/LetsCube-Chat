@@ -3,8 +3,9 @@
  *
  * `MessageBubble` decides whether a message's time sits inline, beside the last
  * line, or anchored on a row of its own, by measuring the layout it has just
- * rendered. Where the stack's cap is `max(16rem, 100% - var(--kub-action-lane))`
- * and `100%` is a bubble row shrink-wrapped around the message, the two
+ * rendered. Where the stack's cap is `max(16rem, 100% - lane)` — the action lane
+ * the product kept beside every message until D-071 removed it — and `100%` is
+ * a bubble row shrink-wrapped around the message, the two
  * placements lay the message out at different widths, and each can measure its
  * way into the other. Measured on the DEV preview fixture at 768x1024 with a 40px
  * lane, for an own message whose text is 288.8px on one line and whose footer is
