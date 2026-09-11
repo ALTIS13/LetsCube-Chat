@@ -194,7 +194,7 @@ export default function PublicPreviewCapturePage() {
       // --kub-bg here would photograph a product nobody ships.
       // The insets too: the scroll contracts are measured on this page, so it
       // has to be laid out around a notch exactly as `MainLayout` is.
-      className="flex h-[100dvh] w-screen flex-col overflow-hidden px-safe"
+      className="flex h-app w-screen flex-col overflow-hidden px-safe"
       // The capture script waits for this attribute instead of a timeout, so a
       // slow first paint can never produce a half-rendered image.
       {...{ [PUBLIC_PREVIEW_READY_ATTRIBUTE]: "true" }}

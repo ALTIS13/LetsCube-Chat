@@ -178,6 +178,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     return normalizeMediaQuality(window.localStorage.getItem(MEDIA_QUALITY_STORAGE_KEY));
   });
   const [keyboardInset, setKeyboardInset] = useState(0);
+  /** The installed iPhone app with its keyboard up, its shell fitted to what is visible (D-111). */
+  const [shellFitsKeyboard, setShellFitsKeyboard] = useState(false);
   const [isComposerFocused, setIsComposerFocused] = useState(false);
   const stagedAttachmentsRef = useRef<StagedAttachment[]>([]);
   const cancelledAttachmentIdsRef = useRef<Set<string>>(new Set());
@@ -204,10 +206,37 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
   useEffect(() => {
     const visualViewport = window.visualViewport;
+    const root = document.documentElement;
+    // The installed iPhone app. iOS does not resize it for the keyboard; it pans
+    // what is visible up over the page. Lifting the composer by the keyboard's
+    // height put it on the keys but took the chat header off the top of the
+    // screen, and on a shell iOS had already made short it left a band between
+    // the composer and the keys as well (D-111). There, while the keys are up,
+    // the shell is fitted to what is visible and the pan is taken back, so the
+    // header stays at the top and the composer sits on the keys. Phones and
+    // browsers that resize for their keyboard keep the lift below.
+    const installedIos = root.hasAttribute("data-ios-standalone");
+    const releaseShell = () => {
+      root.style.removeProperty("--kub-app-height");
+      setShellFitsKeyboard(false);
+    };
     const updateKeyboardInset = () => {
       const mobile = window.innerWidth < 768;
       const composerHasFocus = Boolean(composerNode?.contains(document.activeElement));
       if (!mobile || !visualViewport || !isComposerFocused || !composerHasFocus) {
+        if (installedIos) releaseShell();
+        setKeyboardInset(0);
+        return;
+      }
+      if (installedIos) {
+        // What the keys cover, whether iOS has panned or not.
+        if (window.innerHeight - visualViewport.height > 80) {
+          root.style.setProperty("--kub-app-height", `${Math.round(visualViewport.height)}px`);
+          setShellFitsKeyboard(true);
+          if (window.scrollY !== 0 || visualViewport.offsetTop !== 0) window.scrollTo(0, 0);
+        } else {
+          releaseShell();
+        }
         setKeyboardInset(0);
         return;
       }
@@ -225,6 +254,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       visualViewport?.removeEventListener("scroll", updateKeyboardInset);
       window.removeEventListener("resize", updateKeyboardInset);
       window.removeEventListener("orientationchange", updateKeyboardInset);
+      if (installedIos) releaseShell();
     };
   }, [composerNode, isComposerFocused]);
 
@@ -961,6 +991,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         className="relative flex h-full w-full min-w-0 overflow-hidden"
         style={{
           "--kub-keyboard-inset": `${keyboardInset}px`,
+          // The keys cover the home indicator, so while they are up in the
+          // installed iPhone app nothing in the conversation pads for it (D-111).
+          ...(shellFitsKeyboard ? { "--kub-safe-bottom": "0px" } : {}),
           "--kub-composer-height": `${composerHeight}px`,
           "--kub-chat-chrome-height": `${chromeHeight}px`,
           "--kub-message-list-bottom-inset": `${messageListBottomInset}px`,

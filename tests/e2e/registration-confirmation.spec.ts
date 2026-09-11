@@ -121,7 +121,7 @@ test.describe("Registration confirmation", () => {
     });
 
     // The shell is the scroller, and the document never is. `.kub-auth-shell`
-    // is `height: 100dvh; overflow-y: auto`, so a card taller than the viewport
+    // is `height: var(--kub-app-height); overflow-y: auto`, so a card taller than the viewport
     // scrolls inside it and the page behind it does not move. That is the
     // contract; "scrollTop ended up above zero" was only ever a proxy for it,
     // and the proxy is wrong wherever the card fits. Measured with the fonts

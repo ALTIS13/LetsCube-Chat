@@ -362,10 +362,10 @@ test("the glass layer is a leaf that carries the material and nothing else", () 
  * moment a file was renamed.
  */
 const transparentShells = [
-  ["components/layout/MainLayout.tsx", "flex flex-col h-[100dvh] w-screen"],
+  ["components/layout/MainLayout.tsx", "flex flex-col h-app w-screen"],
   ["components/chat/ChatWindow.tsx", "relative flex h-full w-full min-w-0"],
   ["components/sidebar/FolderTabs.tsx", "relative flex items-center flex-shrink-0"],
-  ["pages/public/PublicPreviewCapturePage.tsx", "flex h-[100dvh] w-screen flex-col"],
+  ["pages/public/PublicPreviewCapturePage.tsx", "flex h-app w-screen flex-col"],
 ];
 
 for (const [file, needle] of transparentShells) {
@@ -396,7 +396,7 @@ for (const [file, needle] of transparentShells) {
  * --kub-surface in list mode, exactly as the message feed does.
  */
 test("pages/tasks/TasksPage.tsx lets the page ambient through in each of its three states", () => {
-  const roots = read("pages/tasks/TasksPage.tsx").match(/className="flex flex-col h-\[100dvh\][^"]*"/g) ?? [];
+  const roots = read("pages/tasks/TasksPage.tsx").match(/className="flex flex-col h-app[^"]*"/g) ?? [];
   assert.equal(
     roots.length,
     3,

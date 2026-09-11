@@ -179,6 +179,20 @@
   --kub-safe-right: env(safe-area-inset-right, 0px);
   --kub-safe-bottom: env(safe-area-inset-bottom, 0px);
   --kub-safe-left: env(safe-area-inset-left, 0px);
+
+  /* The height of the application's shell, read through `h-app`. `100dvh`
+     follows a phone browser's toolbars as they come and go. The installed
+     iPhone app has no toolbars, and there iOS hands `100dvh` over short from
+     the first frame: on a tester's iPhone 15 Pro Max the composer's field ended
+     about 108pt above the bottom edge, against 46pt for a shell as tall as the
+     screen, and the band was there before anything was typed and stayed after
+     the app was opened again (D-111). `100vh` is right there, so the rule after
+     this block switches to it. */
+  --kub-app-height: 100dvh;
+}
+
+html[data-ios-standalone] {
+  --kub-app-height: 100vh;
 }
 
 .dark {
@@ -1525,7 +1539,7 @@ textarea::placeholder, input::placeholder {
 @layer components {
   .kub-auth-shell {
     position: relative;
-    height: 100dvh;
+    height: var(--kub-app-height);
     min-height: 0;
     align-items: flex-start;
     overflow-x: hidden;
@@ -1936,6 +1950,11 @@ textarea::placeholder, input::placeholder {
 @utility px-safe {
   padding-left: var(--kub-safe-left);
   padding-right: var(--kub-safe-right);
+}
+
+/* The shell's height, from `--kub-app-height` on `:root`. */
+@utility h-app {
+  height: var(--kub-app-height);
 }
 
 /* For a full-screen layer that keeps its content a gap from every edge: the

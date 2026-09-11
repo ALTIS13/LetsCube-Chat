@@ -57,7 +57,7 @@ export function BotsPage() {
   // AND portaled to the body, and the confirm dialog inside BotSettingsPanel is
   // portaled too, so no backdrop-filter here can become their containing block.
   return (
-    <main data-testid="bots-page" className="bots-management-surface flex h-[100dvh] min-w-0 flex-col overflow-hidden px-safe text-[color:var(--kub-text)]">
+    <main data-testid="bots-page" className="bots-management-surface flex h-app min-w-0 flex-col overflow-hidden px-safe text-[color:var(--kub-text)]">
       <KubHeader
         title={<h1 className="truncate text-sm font-semibold">Мои боты</h1>}
         subtitle={eligibility ? `${eligibility.active_bot_count} из ${eligibility.max_bots}` : "Управление Bot API"}

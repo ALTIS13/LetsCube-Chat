@@ -75,7 +75,10 @@ export function MainLayout() {
     // layout, so the sidebar's avatars and the chat's last controls would sit
     // under it. The page ground shows in those two bands, which is what iOS
     // itself paints there for a page that does not ask for the whole screen.
-    <div className="flex flex-col h-[100dvh] w-screen overflow-hidden px-safe">
+    //
+    // `h-app` is `--kub-app-height`: 100dvh, and 100vh in the installed iPhone
+    // app, where iOS hands 100dvh over short from the first frame (D-111).
+    <div className="flex flex-col h-app w-screen overflow-hidden px-safe">
       <DesktopUpdatePill />
       <div
         className="flex min-h-0 flex-1 flex-col overflow-hidden"

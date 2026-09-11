@@ -342,7 +342,7 @@ export function TasksPage() {
 
   if (taskChecking) {
     return (
-      <div className="flex flex-col h-[100dvh] px-safe">
+      <div className="flex flex-col h-app px-safe">
         <KubHeader
           title="Задачи"
           subtitle="Проверяем права доступа"
@@ -366,7 +366,7 @@ export function TasksPage() {
 
   if (!canViewTasks) {
     return (
-      <div className="flex flex-col h-[100dvh] px-safe">
+      <div className="flex flex-col h-app px-safe">
         <KubHeader
           title="Задачи"
           subtitle="Раздел доступен по ролям и правам"
@@ -410,7 +410,7 @@ export function TasksPage() {
   // modals are siblings of both bars at the page root, so no backdrop-filter
   // here can become the containing block of anything fixed.
   return (
-    <div className="flex flex-col h-[100dvh] px-safe">
+    <div className="flex flex-col h-app px-safe">
       <KubHeader
         title="Задачи"
         subtitle={canCreateTasks ? "Управление задачами локации" : "Ваши задачи"}
