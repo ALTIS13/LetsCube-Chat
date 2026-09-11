@@ -6292,6 +6292,34 @@ and is marked fixed in 26.1 (bugs.webkit.org 301857). The shell's `100dvh` and a
 inset read from `innerHeight` are exposed to both. Telling them apart needs the
 tester's iOS version, and whether the band is there before anything has been typed.
 
+**The tester's answers**, the same night through the owner: an iPhone 15 Pro Max on
+the current iOS, the one with Liquid Glass; the app opened from its Home Screen
+icon. In Safari it looks a little better, the tester says, since there it sits
+above Safari's own bar. The band is there straight after launch, before anything
+has been typed, and it stays after the app is closed and opened again.
+
+That rules out the shrink after the keyboard, which is reported to last only until
+the app is quit, and leaves the height the installed app is given from its first
+frame: the shell's `100dvh`, reported wrong in a Home Screen web app on a cold
+start while `100vh` is right.
+
+**Fix** in `12f4393`, not deployed, and not confirmed until the tester's phone says so.
+The shell's height is one token, `--kub-app-height`: `100dvh`, and `100vh` where
+`data-ios-standalone` marks the installed iPhone app; the chat, tasks, bots and
+capture shells read it through `h-app`, the sign-in shell directly. In the
+installed app, while the composer has focus and the keys cover part of the screen,
+the shell is fitted to the visible height, iOS's pan is taken back, and the
+conversation stops padding for the home indicator the keys cover; all of it is
+given back when the keys go. Phones and browsers that resize for their keyboard
+keep the lift they had.
+
+**Regression tests:** `tests/e2e/installed-ios-viewport.spec.ts`, 2 on Chromium and
+WebKit, with the installed app's flag and a `visualViewport` that shrinks only what
+is visible, as iOS's does — the shell as tall as the screen, fitted to the keys and
+given back, the header on screen, the composer on the keys; and a browser that is
+not the installed app still lifting the composer. The source half is
+`tests/unit/installed-ios-viewport.test.mjs`.
+
 ## D-112 `[ ]` In the Windows app the window's own buttons sit over the page's top-right controls, and take most of their clicks
 
 **Severity:** high for the Windows app. Reported by the owner on 2026-09-11 with a
@@ -6342,3 +6370,13 @@ the preview copies are made in to keep storage small, which by itself neither
 stops a zoom nor lowers quality; what the tester sees may be a preview copy where
 the original was expected (compare D-097). The owner's view: the quality should be
 fine, and WebP was chosen for its small size.
+
+## D-117 `[ ]` In the light theme the time in your own message is under the contrast floor
+
+**Severity:** low, for legibility. Found on 2026-09-11 by the assessment of the
+iPhone chat screen against Telegram, photographed on the DEV capture route.
+
+**Defect:** in the light theme the time in an own bubble measures 4.31:1 against the
+bubble at its worst pixel, under the 4.5:1 floor for text; in the dark theme it is
+5.51:1. Options B and C of that assessment, which repaint own bubbles, put it at
+4.75:1 in both themes.
