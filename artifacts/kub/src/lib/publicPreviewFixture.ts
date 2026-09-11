@@ -19,8 +19,17 @@ export type PublicPreviewFixture = {
   // itself, so the fixture cannot invent a string the product never emits.
   activeChat: { name: string; memberCount: number };
   chats: { name: string; preview: string; time: string; unread: number }[];
-  messages: { sender: string; text: string; time: string; own: boolean }[];
+  messages: { sender: string; text: string; time: string; own: boolean; image?: PublicPreviewImage }[];
 };
+
+/**
+ * A picture on a fixture message, for the QA specs that open the photo viewer.
+ *
+ * A `data:image/` address and nothing else, so a fixture cannot point the
+ * viewer at anything on a network — production media least of all. The product
+ * previews carry none.
+ */
+export type PublicPreviewImage = { url: string; width: number; height: number };
 
 declare global {
   interface Window {
@@ -89,6 +98,23 @@ function asRecord(value: unknown, field: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function requirePositiveInteger(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) fail(`${field} must be a positive integer`);
+  return value;
+}
+
+function requireImage(value: unknown, field: string): PublicPreviewImage {
+  const image = asRecord(value, field);
+  const url = requireString(image.url, `${field}.url`);
+  // Refused rather than trusted: only an inline picture can be shown here.
+  if (!url.startsWith("data:image/")) fail(`${field}.url must be a data:image/ URL`);
+  return {
+    url,
+    width: requirePositiveInteger(image.width, `${field}.width`),
+    height: requirePositiveInteger(image.height, `${field}.height`),
+  };
+}
+
 /** Validates the injected payload. Returns null when nothing was injected. */
 export function readPublicPreviewFixture(): PublicPreviewFixture | null {
   if (typeof window === "undefined") return null;
@@ -117,11 +143,13 @@ export function readPublicPreviewFixture(): PublicPreviewFixture | null {
   const messages = requireArray(fixture.messages, "messages").map((entry, index) => {
     const message = asRecord(entry, `messages[${index}]`);
     if (typeof message.own !== "boolean") fail(`messages[${index}].own must be a boolean`);
+    const image = message.image === undefined ? undefined : requireImage(message.image, `messages[${index}].image`);
     return {
       sender: requireString(message.sender, `messages[${index}].sender`),
       text: requireString(message.text, `messages[${index}].text`),
       time: requireDisplayTime(message.time, `messages[${index}].time`),
       own: message.own,
+      ...(image ? { image } : {}),
     };
   });
 
@@ -288,6 +316,9 @@ export function previewChats(fixture: PublicPreviewFixture): ChatWithLastMessage
 export function previewMessages(fixture: PublicPreviewFixture): MessageWithSender[] {
   return fixture.messages.map((message, index) => {
     const authorId = message.own ? PREVIEW_IDS.currentUser : PREVIEW_IDS.otherUser;
+    // A picture makes an image message whose text is its caption, shaped the
+    // way an uploaded photo is: the dimensions reserve the bubble's aspect.
+    const image = message.image;
     return {
       id: `${PREVIEW_IDS.activeChat}-m${index}`,
       chat_id: PREVIEW_IDS.activeChat,
@@ -296,11 +327,11 @@ export function previewMessages(fixture: PublicPreviewFixture): MessageWithSende
       bot_id: null,
       bot_reply_markup: null,
       content: message.text,
-      type: "text",
+      type: image ? "image" : "text",
       media_bucket: null,
       media_path: null,
-      media_url: null,
-      media_metadata: null,
+      media_url: image ? image.url : null,
+      media_metadata: image ? { kind: "image", width: image.width, height: image.height } : null,
       reply_to_id: null,
       forwarded_from_id: null,
       edited_at: null,

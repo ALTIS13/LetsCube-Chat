@@ -4,6 +4,7 @@ import { AppTopBar } from "@/components/layout/AppTopBar";
 import { ChatHeader } from "@/components/chat/ChatHeader";
 import { ChatListItem } from "@/components/sidebar/ChatListItem";
 import { FolderTabs } from "@/components/sidebar/FolderTabs";
+import { MediaViewer, type MediaViewerItem } from "@/components/chat/MediaViewer";
 import { MessageInput } from "@/components/chat/MessageInput";
 import { MessageList } from "@/components/chat/MessageList";
 import { SidebarHeader } from "@/components/sidebar/SidebarHeader";
@@ -47,6 +48,10 @@ export default function PublicPreviewCapturePage() {
   const setChats = useAppStore((state) => state.setChats);
   const setSelectedChatId = useAppStore((state) => state.setSelectedChatId);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  // The photo viewer, opened from a bubble exactly as `ChatWindow` opens it. No
+  // product preview carries a picture, so it never opens during a capture; the
+  // QA specs that zoom a photo inject one.
+  const [openMedia, setOpenMedia] = useState<MediaViewerItem | null>(null);
   const { ref: chromeRef, height: chromeHeight } = useMeasuredHeight<HTMLDivElement>();
   const { ref: composerRef, height: composerHeight } = useMeasuredHeight<HTMLDivElement>();
 
@@ -161,6 +166,7 @@ export default function PublicPreviewCapturePage() {
                 messages={messages}
                 onReply={() => undefined}
                 onReaction={() => undefined}
+                onOpenMedia={setOpenMedia}
                 bottomRef={bottomRef}
                 chatMembers={members}
                 chatType={activeChat.type}
@@ -191,6 +197,7 @@ export default function PublicPreviewCapturePage() {
           </div>
         </div>
       </div>
+      <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
     </div>
   );
 }
