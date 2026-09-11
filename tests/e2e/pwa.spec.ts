@@ -114,9 +114,17 @@ test.describe("LETSCUBE PWA baseline", () => {
       await expect(page.locator("body")).toBeVisible();
     }
 
+    // A load that was cut off is allowed, in each engine's own words. The update
+    // check the page starts at boot fetches /sw.js, and going offline or
+    // navigating away can interrupt it: Chromium reports that as "Failed to load
+    // resource", WebKit as "…/sw.js due to access control checks.". The WebKit
+    // wording is let through for the worker script only, which this test has
+    // already fetched and seen registered above, so a worker that really cannot
+    // load still fails here.
     const unexpectedConsoleErrors = consoleErrors.filter(
       (message) =>
         !message.includes("Failed to load resource") &&
+        !message.endsWith("/sw.js due to access control checks.") &&
         !message.includes("Missing Supabase environment variables"),
     );
     expect(unexpectedConsoleErrors, `Unexpected console errors:\n${unexpectedConsoleErrors.join("\n")}`).toEqual([]);
