@@ -241,6 +241,16 @@ test("the full-screen sheet and the docked panels pad the insets out of themselv
     /style=\{docked \? \{ paddingTop: "max\(0\.5rem, var\(--kub-safe-top\)\)" \} : undefined\}/,
     "the support window's title bar takes the status bar inset in the wrong shape",
   );
+
+  // Both of the docked window's bottoms: the new-request form, which is what
+  // someone with no tickets opens straight into, and the reply footer. The
+  // form was found on the home indicator by the signed-in stand.
+  const bottoms = support.match(/docked\s*\?\s*\{\s*paddingBottom:\s*"max\([^"]*var\(--kub-safe-bottom\)\)"\s*\}/g) ?? [];
+  assert.equal(
+    bottoms.length,
+    2,
+    `the docked support window pads the home indicator out of ${bottoms.length} of its two bottoms, the new-request form and the reply footer`,
+  );
 });
 
 test("the auth shell pads from the tokens", () => {

@@ -379,7 +379,14 @@ export function SupportWindow() {
       )}
 
       {composing ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
+        <div
+          className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3"
+          // Docked, this form runs to the bottom of the phone, so its send
+          // button clears the home indicator the way the reply footer below
+          // does. Found signed in: someone with no tickets yet opens straight
+          // into this form, and its only action sat on the indicator.
+          style={docked ? { paddingBottom: "max(0.75rem, var(--kub-safe-bottom))" } : undefined}
+        >
           <label className="text-xs text-[color:var(--kub-muted)]">
             Тема
             <input
