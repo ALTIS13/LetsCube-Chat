@@ -7,7 +7,7 @@ import { KubGlassLayer, KubModal, KubIcon, type KubIconName } from "@/components
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { prefixError } from "@/lib/errors";
-import { getChatDisplayInfo } from "@/lib/chatDisplay";
+import { getChatDisplayInfo, memberCountLabel } from "@/lib/chatDisplay";
 import { dispatchChatsRefresh } from "@/lib/chatEvents";
 import { getUserPresenceState } from "@/lib/presence";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
@@ -163,7 +163,7 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
     if (!chat) return "";
     if (display.isSaved) return display.subtitle;
     if (type === "channel") return `${(chat.members?.length ?? 0) || "?"} подписчиков`;
-    if (type === "group") return `${chat.members?.length ?? 0} участников`;
+    if (type === "group") return memberCountLabel(chat.members?.length ?? 0);
     return getUserPresenceState(chat.other_user, presenceNow).label;
   };
 

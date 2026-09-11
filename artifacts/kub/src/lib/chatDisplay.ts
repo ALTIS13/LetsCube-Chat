@@ -1,4 +1,5 @@
 import type { ChatMember, ChatWithLastMessage, Profile } from "@/types/database";
+import { selectRussianPluralForm } from "./messageMediaSections.ts";
 
 type DisplayChat = Pick<
   ChatWithLastMessage,
@@ -30,6 +31,11 @@ export function isSavedChat(chat: DisplayChat, currentUserId?: string | null): b
   if (!currentUserId) return members.length <= 1;
   const hasCurrentUser = members.some((member) => member.user_id === currentUserId);
   return chat.created_by === currentUserId || (hasCurrentUser && members.length <= 1);
+}
+
+/** «1 участник», «3 участника», «5 участников»: Russian takes the form from the last two digits. */
+export function memberCountLabel(count: number): string {
+  return `${count} ${selectRussianPluralForm(count, ["участник", "участника", "участников"])}`;
 }
 
 export function getChatDisplayInfo(
@@ -73,7 +79,7 @@ export function getChatDisplayInfo(
   const memberCount = chat.members?.length ?? 0;
   return {
     title: chat.name?.trim() || "Группа без названия",
-    subtitle: chat.description?.trim() || (memberCount > 0 ? `${memberCount} участников` : "Группа"),
+    subtitle: chat.description?.trim() || (memberCount > 0 ? memberCountLabel(memberCount) : "Группа"),
     typeLabel: "Группа",
     isSaved: false,
   };

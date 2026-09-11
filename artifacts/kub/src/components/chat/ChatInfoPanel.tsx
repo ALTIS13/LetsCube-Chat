@@ -8,7 +8,7 @@ import { KubIcon, KubModal, KubStableSkeleton, type KubIconName } from "@/compon
 import { cn } from "@/lib/utils";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { avatarUploadPath, prepareAvatarImage, validateAvatarImage, validateAvatarUploadImage } from "@/lib/mediaUpload";
-import { getChatDisplayInfo } from "@/lib/chatDisplay";
+import { getChatDisplayInfo, memberCountLabel } from "@/lib/chatDisplay";
 import { dispatchChatsRefresh, KUB_CHATS_REFRESH_EVENT, type ChatsRefreshDetail } from "@/lib/chatEvents";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { subscribeByTable } from "@/lib/realtimeTableChannels";
@@ -1227,7 +1227,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
               </div>
             ) : isGroup ? (
               <div className="col-start-2 row-start-2 text-left text-xs text-[color:var(--kub-muted)]">
-                {members.length || chat.members?.length || 0} участников
+                {memberCountLabel(members.length || chat.members?.length || 0)}
               </div>
             ) : otherUser?.username ? (
               // Carried over from the chat-list mini-profile this card replaced:
