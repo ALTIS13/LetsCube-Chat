@@ -182,7 +182,7 @@ for (const [theme, ground] of [["dark", [255, 255, 255]], ["light", [0, 0, 0]]])
   });
 
   test(`${theme}: a browser that cannot frost still gets an opaque overlay`, () => {
-    const fallbacks = atRuleTexts(css, /^@supports not \(backdrop-filter/);
+    const fallbacks = atRuleTexts(css, /^@supports not \(\(backdrop-filter/);
     assert.ok(fallbacks.length > 0, "the no-backdrop-filter fallback is missing");
     const fallback = fallbacks.join("\n");
     const name = fallback.match(/\.kub-glass-strong\s*\{\s*background-color:\s*var\(--([\w-]+)\)/)?.[1];

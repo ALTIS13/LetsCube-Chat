@@ -416,9 +416,18 @@ viewport — the device checklist in the defect register does that.
 
 ## Fallback
 
-`@supports not (backdrop-filter: blur(1px))` gives opaque fills. A translucent
-panel over unblurred content is unreadable, which is worse than no effect at
-all. The fallback cannot match the composited values, so what it preserves is
+`@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter:
+blur(1px)))` gives opaque fills. A translucent panel over unblurred content is
+unreadable, which is worse than no effect at all.
+
+Both spellings, because the fallback is for a browser that frosts through
+neither. Safari before 18 frosts only through the prefixed property, and a
+condition naming the unprefixed one alone would give every iPhone still on iOS
+17 a flat fill over a material that renders. The shipped stylesheet already
+carried both — Lightning CSS adds the prefixed branch for the browsers it
+targets — so this was insurance, not a repair: the source no longer depends on
+the build's target list to say it. `tests/unit/backdrop-fallback-condition.test.mjs`
+holds it. The fallback cannot match the composited values, so what it preserves is
 the **relationship**: strong is the lighter of the two in the dark theme,
 because that is what "above" means there, and a menu must not read as a recess
 in the panel it opens over.

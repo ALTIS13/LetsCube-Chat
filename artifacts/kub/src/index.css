@@ -814,9 +814,16 @@ html, body {
 
   /* A browser that cannot frost has to be given something opaque instead: a
      translucent panel over unblurred content is unreadable, which is worse than
-     no effect at all. Checked for the unprefixed property, since that is the one
-     that carries the behaviour. */
-  @supports not (backdrop-filter: blur(1px)) {
+     no effect at all.
+
+     Both spellings, because "cannot frost" means neither of them works. Safari
+     before 18 frosts only through -webkit-backdrop-filter, so a condition naming
+     the unprefixed property alone hands every iPhone still on iOS 17 a flat fill
+     while the material in the rule above renders perfectly well. The shipped
+     stylesheet already said both — Lightning CSS adds the prefixed branch to an
+     @supports for the browsers it targets — but that is a property of the
+     build's target list, and the source should not lean on it. */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     /* Each falls back to the colour its own fill is made of, not to the other
        one. --glass-fill is --kub-surface-2 at reduced alpha and
        --glass-fill-strong is --kub-surface, so pairing them the other way round
@@ -1305,7 +1312,8 @@ textarea::placeholder, input::placeholder {
     border-radius: 14px;
     position: relative;
   }
-  @supports not (backdrop-filter: blur(1px)) {
+  /* Both spellings; the note on .kub-glass says why. */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     .kub-panel {
       background:
         linear-gradient(180deg, color-mix(in srgb, var(--kub-cyan) 5%, var(--kub-surface)) 0%, var(--kub-surface) 60%);
