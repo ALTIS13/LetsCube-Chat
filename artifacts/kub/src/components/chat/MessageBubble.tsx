@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, type CSSProperties, type ReactNode } from "react";
 import { copyWithFeedback } from "@/lib/actionFeedback";
 import { resolveCssLength } from "@/lib/cssLength";
+import { reachableContentWidth } from "@/lib/messageMetaReach";
 import { createPortal } from "react-dom";
 import type { MessageWithSender } from "@/types/database";
 import { formatFullTime } from "@/lib/format";
@@ -435,6 +436,52 @@ function getMaxContentWidth(bubbleEl: HTMLElement, stackEl: HTMLElement | null):
   return cap === null ? fromRow : Math.min(fromRow, cap.width);
 }
 
+/**
+ * Whether the last line and its spacer fit the width the bubble can actually
+ * reach. `true` whenever that width cannot be known, which leaves the decision
+ * exactly as `getMaxContentWidth` made it.
+ *
+ * D-070; `lib/messageMetaReach.ts` carries the measurements and the reason the
+ * answer cannot oscillate. What this adds is the DOM: the three edges the pure
+ * function needs are read from boxes that do not move with the placement. The
+ * message row is as wide as the list, and the stack's anchored edge — left for a
+ * received message, right for an own one — stays put when the spacer comes or
+ * goes.
+ *
+ * `needed` is the last line plus the spacer at the width it is actually given,
+ * not the footer plus the gap. The line breaks on the spacer, and the spacer is
+ * rounded up and keeps its old width through a change of a pixel — which is
+ * exactly the band in which a ceiling that is otherwise right would still wrap
+ * it.
+ */
+function fitsReachableWidth(needed: number, bubbleEl: HTMLElement, stackEl: HTMLElement | null): boolean {
+  const rowEl = stackEl?.parentElement ?? null;
+  const messageRowEl = rowEl?.closest<HTMLElement>("[data-message-id]") ?? null;
+  if (!stackEl || !rowEl || !messageRowEl) return true;
+
+  // Which edge is anchored is read from the layout that anchors it: an own
+  // message's row packs its stack to the end. A flag passed down beside it
+  // could disagree with the row and nothing would notice.
+  const justify = getComputedStyle(rowEl).justifyContent;
+  const alignEnd = justify === "flex-end" || justify === "end" || justify === "right";
+  const stack = stackEl.getBoundingClientRect();
+  const row = rowEl.getBoundingClientRect();
+  const limit = messageRowEl.getBoundingClientRect();
+  const bubbleStyle = getComputedStyle(bubbleEl);
+  const reachable = reachableContentWidth({
+    maxWidth: getComputedStyle(stackEl).maxWidth,
+    free: alignEnd ? stack.right - limit.left : limit.right - stack.left,
+    rowReach: alignEnd ? row.right - limit.left : limit.right - row.left,
+    occupied: alignEnd ? row.right - stack.right : stack.left - row.left,
+    inset:
+      (parsePixelValue(bubbleStyle.paddingLeft) ?? 0) +
+      (parsePixelValue(bubbleStyle.paddingRight) ?? 0) +
+      (parsePixelValue(bubbleStyle.borderLeftWidth) ?? 0) +
+      (parsePixelValue(bubbleStyle.borderRightWidth) ?? 0),
+  });
+  return reachable === null || needed <= reachable;
+}
+
 function getTextRightLimit(textEl: HTMLElement, bubbleEl: HTMLElement, stackEl: HTMLElement | null): number {
   const textRect = textEl.getBoundingClientRect();
   const bubbleRect = bubbleEl.getBoundingClientRect();
@@ -493,6 +540,9 @@ function MeasuredTextWithMeta({
   // The meta is taken out of the text flow and pinned to the bubble's bottom
   // right, so this is how much room the last line has to leave for it.
   const [footerReserve, setFooterReserve] = useState(0);
+  // The same value, readable inside a measurement before React has rendered it:
+  // the fit test has to use the width the spacer will really be given.
+  const footerReserveRef = useRef(0);
   const textFlowRef = useRef<HTMLParagraphElement | null>(null);
   const textContentRef = useRef<HTMLSpanElement | null>(null);
   const footerRef = useRef<HTMLSpanElement | null>(null);
@@ -548,7 +598,12 @@ function MeasuredTextWithMeta({
     // line and therefore only increase `available` — a message that chose
     // inline never measures its way back out of it.
     const reserve = Math.ceil(footerRect.width + gap);
-    setFooterReserve((current) => (Math.abs(current - reserve) <= 1 ? current : reserve));
+    // A change of a pixel or less is not applied, so sub-pixel jitter in the
+    // footer never re-renders the spacer. The ref follows the state exactly,
+    // which is what lets the fit test below use the width that will be rendered.
+    const reserveInFlow = Math.abs(footerReserveRef.current - reserve) <= 1 ? footerReserveRef.current : reserve;
+    footerReserveRef.current = reserveInFlow;
+    setFooterReserve(reserveInFlow);
 
     // A compound bubble's width is fixed by whatever sits above the text, so
     // for those the room to the right of the last line is the real constraint.
@@ -570,7 +625,14 @@ function MeasuredTextWithMeta({
       if (maxContentWidth < 80) return;
       canInline = lastLine.width + footerRect.width + gap <= maxContentWidth;
     }
-    const next: MetaPlacement = canInline ? "inline" : "anchored";
+    const next: MetaPlacement =
+      canInline && (compound || fitsReachableWidth(lastLine.width + reserveInFlow, bubbleEl, stackEl))
+        ? "inline"
+        : "anchored";
+    // D-070: the width the design allows is not always a width the bubble can
+    // reach, so an inline answer is checked against the second as well. It can
+    // only ever turn inline into anchored, and it asks a question whose answer
+    // is the same in both placements — see `fitsReachableWidth`.
 
     setPlacement((previous) => (previous === next ? previous : next));
   }, [bubbleRef, compound, hasMeta, placement, stackRef]);
@@ -597,6 +659,7 @@ function MeasuredTextWithMeta({
     const isFirstRun = resetKeyRef.current === null;
     resetKeyRef.current = resetKey;
     if (isFirstRun) return;
+    footerReserveRef.current = 0;
     setFooterReserve(0);
     setPlacement(getInitialMetaPlacement(content));
   }, [content, measureKey]);
