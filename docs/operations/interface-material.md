@@ -33,6 +33,10 @@ And two utilities, `.kub-glass` and `.kub-glass-strong`, which carry the whole
 material so that what the application is made of is one edit rather than a
 search. Plus `.kub-raise` / `.kub-raise-hover` for the veil.
 
+The chat screen adds a set of its own — its wallpaper and scroll edge, the chips
+in the conversation, the own bubble's words and wells, and the pane's grey and
+accent. They are recorded under «The chat screen», below the rules.
+
 Colours that carry **words** have their own tokens — `--kub-danger-text` and
 `--kub-accent-text` — because a colour legible as a border or a filled button
 is not necessarily legible as a sentence. Fills, borders and icon shapes keep
@@ -449,6 +453,140 @@ and hiding itself, came to rest in the same engine.
 - **No blank-page reduction reproduced it**, with or without a backdrop filter,
   in a wrapper hidden for one or two frames. The rule is the product's shape that
   failed, kept because nothing about it showed in Chromium.
+
+## The chat screen
+
+On 2026-09-11 the owner put the installed iPhone app beside Telegram on iOS 26,
+and from the assessment that followed chose option C, «Капсулы и цвет» — the
+geometry and the colour together — for every shell: the installed iPhone app,
+Android, the web app and the Windows app. What it is:
+
+- **No band.** Nothing is drawn under the status bar or across the
+  conversation. The header is three capsules in its row: the way back, with the
+  count of what is unread in the other chats, below `md` only, where no chat
+  list is beside it; the avatar and name, centred on the pane; and a round «⋯».
+  The pinned message, the search panel, the topic strip and the selection bar
+  float as capsules under it. The composer is a round attach button, a field
+  capsule and a round microphone.
+- **A scroll edge** behind the chrome and under the composer: the conversation
+  dimmed to 96% of the wallpaper's own colour at the screen's edge and 88% at
+  the chrome's foot, frosted, and let go over 24px.
+- **A wallpaper.** LETSCUBE's own pattern — a cube, a message, a task's check
+  mark, a location pin and a key, with a smaller cube and a few dots — over
+  three pools of the brand's hues and a vertical gradient, painted on the
+  scroller that already painted the chat's ground.
+- **A saturated own bubble**, royal blue `#3B5CCF` in both themes, with white
+  words. Incoming bubbles have no outline. The date, the unread marker, a system
+  notice and the history band are filled chips.
+
+The code is `lib/chatChrome.ts`, the chat screen's tokens in `.dark` and
+`.light`, and the rules under «The chat screen» in `@layer components`. The
+renders and every number below come from `scripts/render-chat-chrome-frames.mjs`.
+
+### What it bends, and why
+
+- **Rule 13, "the material goes under": bent.** Under the status bar there is no
+  material, only the scroll edge. The capsules still start below the inset — the
+  header pads `--kub-safe-top` out of itself, as it did — and the edge runs under
+  the hardware. The light theme keeps its opaque `#3D78B8` band in the installed
+  app: the glyphs' colour is still iOS's to choose, and whether iOS 26 adapts it
+  to what is under it has not been checked on a device.
+- **Rule 1, "never write the material by hand": bent once, in the stylesheet.**
+  The scroll edge writes its own `backdrop-filter`, `--kub-chat-edge-blur` at
+  10px, on two pseudo-elements. It cannot be `.kub-glass`: it is a gradient of
+  the wallpaper's own colour, dense on purpose, and not a panel. No component
+  writes a filter.
+- **Rule 11: kept in spirit, one token over.** A floating capsule keeps its
+  perimeter, as a covering surface does, but the rim is `--glass-line`: a capsule
+  is not a sheet. The bubbles lost their outlines — the own one stands off the
+  ground by its fill, 3.02:1 in the dark theme and 3.49:1 in the light one on a
+  phone, and the incoming one by its shape — and the composer's well lost its
+  perimeter with the band it was cut into. Perimeters in the sheet-edge colour
+  went from 202 to 197, and the ratchet went with them.
+- **D-062: reversed for the chips in the conversation.** They take
+  `--kub-chat-chip`, a flat token fill: still no blur, still no hand-mixed
+  translucent fill, still not the veil. Over a patterned ground a word needs a
+  ground of its own. The light theme's pink unread marker works out at 4.28:1 on
+  the wallpaper's bare ground.
+- **Rule 5's hover moves onto the glass.** A capsule that is itself a control
+  cannot take `.kub-raise-hover`: the veil is painted on the button's own
+  background, under the glass layer that is its first child, where the light
+  theme's .80 fill hides it. The capsule steps its glass instead, with the same
+  two veils laid on the layer through `group-hover/capsule` and
+  `group-active/capsule` (`CAPSULE_CONTROL_GLASS`). The hover is inside
+  `(hover: hover)`, so a finger leaves none behind.
+- **Words scoped to the pane.** `.kub-chat-screen` hands the chat pane its own
+  grey, accent text and accent, and `.kub-message-own` hands the own bubble its
+  own words and wells. They were measured over the wallpaper and under a blue
+  bubble passing beneath the translucent capsules, where the product's grey and
+  accent measured 3.65:1 and 4.05:1. The rest of the product was measured on
+  other grounds and keeps its values. The own bubble's wells — a reply preview, a
+  reaction chip, the read-receipt chip — are a darker step of its blue, because
+  the theme's surface tokens are near-white in the light theme, where the white
+  words over them vanished.
+- **Rule 8: untouched.** `--kub-bg` does not move. The chat's ground is
+  `--kub-chat-ground` on the scroller, so no bootstrap colour changes and a cold
+  start does not flash.
+- **Rule 2: served.** The opaque `.chat-bg` that covered the ambient with one
+  navy became the coloured ground the capsules' glass samples.
+- **Rules 3, 6 and 12: kept.** Every capsule's glass is a `KubGlassLayer` leaf
+  with a positioned control or row over it. The edges are pseudo-elements with no
+  descendants and no pointer. Paint order is still tree order, with no z-index,
+  and nothing that scrolls is blurred. `tests/unit/shell-glass.test.mjs` and
+  `tests/unit/chat-chrome.test.mts` hold these.
+- **The cost.** Blurred layers in a phone chat went from 3 to 9: two edges, the
+  way back, the title, «⋯», the pinned message, attach, the field and the
+  microphone. On a desktop there are 8. That is proven in Chromium and in
+  Playwright's WebKit, not on an iPhone, and not yet on an older one.
+
+### Measured
+
+Photographed, worst pixel, threshold 4.5:1. The conversation at rest, on the
+fictional private chat of the renders:
+
+| Text | iPhone, dark | iPhone, light | Android, dark | Desktop, dark | Desktop, light |
+| --- | --- | --- | --- | --- | --- |
+| Own message | 5.80 | 5.80 | 5.80 | 5.80 | 5.80 |
+| Own message's time | 4.75 | 4.75 | 4.75 | 4.75 | 4.75 |
+| Incoming message | 13.92 | 18.94 | 13.92 | 13.92 | 18.94 |
+| Incoming message's time | 8.19 | 7.55 | 8.19 | 8.19 | 7.55 |
+| Sender's name | 8.84 | 5.35 | 8.76 | 8.71 | 5.15 |
+| Date chip | 9.68 | 17.22 | 10.00 | 9.95 | 17.19 |
+| The way back's count | 15.29 | 18.09 | 14.87 | — | — |
+| Header, name | 14.95 | 17.94 | 14.84 | 15.31 | 17.98 |
+| Header, status | 8.86 | 7.14 | 8.73 | 9.02 | 7.21 |
+| Pinned, label | 9.18 | 9.32 | 9.59 | 9.81 | 9.56 |
+| Pinned, text | 8.73 | 7.10 | 8.88 | 9.00 | 7.22 |
+| Composer, placeholder | 7.11 | 5.43 | 7.11 | 7.10 | 5.43 |
+
+And the chrome's words over the worst field a translucent surface can meet —
+solid white under the dark theme, solid black under the light one — which is
+what bright content passing under the capsules can at most become:
+
+| Chrome text | iPhone, dark | iPhone, light | Android, dark | Desktop, dark | Desktop, light |
+| --- | --- | --- | --- | --- | --- |
+| The way back's count | 13.69 | 17.48 | 14.11 | — | — |
+| Header, name | 13.23 | 17.32 | 13.74 | 12.96 | 17.32 |
+| Header, status | 7.98 | 6.96 | 8.17 | 8.20 | 7.02 |
+| Pinned, label | 8.39 | 9.16 | 8.52 | 8.59 | 9.18 |
+| Pinned, text | 7.60 | 6.90 | 7.67 | 7.68 | 6.90 |
+| Composer, placeholder | 5.86 | 5.21 | 6.00 | 5.68 | 5.16 |
+
+Before this, over the same fields, the dark header's name measured 2.54:1 and
+its status 1.12:1, and the light header's status 3.64:1.
+
+- **D-117.** The light theme's own-bubble time measured 4.31:1 on the old
+  tinted bubble. On the royal blue it is 4.75:1.
+- **The light accent text is two steps darker than the option rendered.**
+  `#2B45A3` held a sender's name at 4.52:1 on a phone and 4.35:1 on a desktop,
+  where the names sit on the violet pool at the left and a pattern stroke over it
+  is the darkest ground a word meets. `#213A94` is 5.15:1 there.
+- **The Windows app.** The window's own buttons are in the application's top
+  bar, 44px across both panes, and the chat pane starts under it, so its capsules
+  are in a different row. Measured at 1360×860: the title and «⋯» are 7px below
+  the buttons with no overlap, and a click at the centre of each capsule and of
+  each window button reaches it. D-112 is about the pages whose own controls sit
+  in the buttons' row; the chat pane is not one of them.
 
 ## Where the material is not used, on purpose
 
