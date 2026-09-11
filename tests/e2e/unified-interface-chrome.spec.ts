@@ -136,7 +136,10 @@ test.describe("LETSCUBE unified interface chrome", () => {
     await expect(page.getByText("Устройства", { exact: true })).toBeVisible();
     await expect(page.locator('input[type="range"]')).toHaveCount(2);
     await expect(page.getByRole("button", { name: "Проверка микрофона" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Чистый голос" })).toBeVisible();
+    // Exact: since f58edfe the «Звук» row names its current value, so its own
+    // accessible name contains «Чистый голос» too, and a substring match found
+    // two buttons — which failed the test and left this mode unchecked.
+    await expect(page.getByRole("button", { name: "Чистый голос", exact: true })).toBeVisible();
     await expect(page.getByText("Слышать свой микрофон")).toBeVisible();
   });
 
