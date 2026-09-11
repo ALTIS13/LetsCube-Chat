@@ -5101,7 +5101,8 @@ over the top inset, in the installed app only (`navigator.standalone`). Rendered
 and shown to the owner before shipping, the grey it made over the light screen
 was rejected. **Re-decided on 2026-09-11:** an opaque band of the brand's blue,
 `#3D78B8` — of two rendered variants, a flat band and a soft-edged one, the
-recommended flat one, applied on the owner's instruction to recolour the grey.
+recommended flat one, applied on the owner's instruction to recolour the grey,
+and confirmed by the owner once shipped ("красиво смотрелся ровный синий").
 Opaque, so it no longer changes with what scrolls under it. Mid-toned,
 because the glyphs' colour is iOS's to choose — the documentation for this style
 says white, while screenshots from the owner's iPhone show dark glyphs over the

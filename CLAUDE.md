@@ -342,8 +342,11 @@ Decode the JWT payload and confirm `role` is `anon`; stop if it is
 BASE_PATH=/ VITE_SUPABASE_URL="$(cat "$CFG/.u")"
 VITE_SUPABASE_ANON_KEY="$(cat "$CFG/.k")" pnpm.cmd --filter @workspace/kub run dev`.
 
-- Start every Playwright run with `KUB_QA_ALLOW_MUTATIONS=0`: the owner's QA
-  file sets it to 1, and the process environment wins. A new spec that writes
+- Start every Playwright run with `KUB_QA_ALLOW_MUTATIONS=0`. The owner's QA file
+  set it to 1 until 2026-09-11, when that line was removed on the owner's
+  instruction; the process environment wins over the file, so `0` keeps a flag
+  that reappears from turning a check into a production write. A run that has to
+  write sets `1` on its own command, for a named spec. A new spec that writes
   asks `qaMutationsAllowed()` from `tests/e2e/helpers/auth.ts`.
 - One server per configuration, each on its own port. The bot specs and the
   configured routing matrix need the fixture; `bot-management` also needs

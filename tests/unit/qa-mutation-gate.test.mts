@@ -9,9 +9,10 @@ import { qaMutationsAllowed } from "../e2e/helpers/auth.ts";
 /**
  * The switch between a spec that writes into production and one that skips.
  *
- * The owner's QA file keeps `KUB_QA_ALLOW_MUTATIONS=1`, so the property that
- * matters most is precedence: a `0` in the process environment has to win over
- * that file, or there is no way to run the suite without writing real messages.
+ * The owner's QA file carried `KUB_QA_ALLOW_MUTATIONS=1` until 2026-09-11, and a
+ * QA file may carry it again, so the property that matters most is precedence: a
+ * `0` in the process environment has to win over the file, or there is no way to
+ * run the suite without writing real messages.
  */
 
 function withQaFile(contents: string | null, env: string | undefined, run: () => void) {

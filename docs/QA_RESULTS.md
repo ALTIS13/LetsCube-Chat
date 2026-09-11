@@ -1,5 +1,31 @@
 # QA Results
 
+## 2026-09-11 - Production test leftovers removed, and the QA file no longer allows writes
+
+Both on the owner's instruction, after the wave below shipped.
+
+**The 28 messages end-to-end specs had left in production chats were
+soft-deleted.** They were the generated shapes only — 14 from
+`realtime-messages`, 8 from `notification-center`, 6 from `composer` — in a
+private chat of two members and a group of one. The script first recorded the
+rows' ids, chat ids and timestamps, and nothing else, locally and on the server
+in `/srv/letscube/backups/data-cleanup/test-leftovers-20260911T052857Z.txt`
+(sha256 `3a70a984…`), and refused to go on unless exactly 28 were recorded. The
+change itself was one transaction that refused to touch anything unless the live
+counts were exactly 14, 8 and 6, and refused to commit unless exactly 28 rows
+changed and none of the shapes stayed live: `soft_deleted=28`, committed at
+2026-09-11T05:28:57Z. It is the same soft delete the app's «Удалить для всех»
+performs, and undoing it is clearing `deleted_at` for the recorded ids.
+
+**`KUB_QA_ALLOW_MUTATIONS=1` is gone from `~/.kub-messenger-qa.env`.** Only that
+line was removed — its value had been `1`; the other eleven lines are
+byte-identical, with the byte-order mark and line endings kept, and no value was
+printed. Nothing in a default run needed it: every spec and script that writes
+(`composer`, `multi-device-sync`, `notification-center`, `privacy-presence-setting`,
+`profile-decoration:46`, `realtime-messages`, `support-window`, `rls:smoke`'s
+fixture mutations, the support ticketing smoke) skips without it, and a run that
+has to write sets it on its own command.
+
 ## 2026-09-11 - The PWA, safe-area and chat wave, merged and validated together, and the worker test that raced
 
 Four tracks were merged onto `codex/bot-platform` and validated as one tree
