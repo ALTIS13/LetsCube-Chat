@@ -1,5 +1,28 @@
 # QA Results
 
+## 2026-09-11 - The chat screen in option C merged onto the working branch, and checked there
+
+Option C of the chat screen — capsules and colour, the owner's choice — was built for
+every shell on `design/chat-chrome-c` and merged into `integration/message-actions` in
+`f1adbbe`; not deployed. The branch's own checks are in its commits: typecheck, the unit
+suite, the build, the browser checks on three engines and the safe-area stand. These are
+the merged tree's.
+
+- One conflict, in `index.css`, where both sides added a token at the end of `:root`;
+  both were kept.
+- Typecheck of `@workspace/kub`: clean.
+- Production build: clean, `sw.js` build `649fe67c24a942d7`.
+- Unit suite, every file under `tests/unit`: 1731 of 1731. A first attempt passed the
+  folder itself to `node --test`, which ran nothing and reported one failure; the suite
+  was run again by file pattern.
+- Browser checks on the fixture server, restarted after the merge and checked to serve
+  the merged `index.css`, `MessageInput.tsx` and `ChatWindow.tsx`: the 23 fixture specs
+  of the chat screen, the composer, message actions, history, media sending and the
+  installed iPhone app, on Chromium 1440, Chromium 390 and WebKit 390 — 297 passed and 96 skipped by the specs' own shape, engine and project filters, none failed or flaky; the installed-iPhone stand on webkit-ios-standalone 22 passed, its 3 CDP cases passing on chromium-mobile-390.
+- Renders of option C on the iPhone, Android, the desktop and the Windows app went to
+  the owner, who approved them the same night («Вариант C хороший»); seven small
+  questions about it remain open.
+
 ## 2026-09-11 - Sending asks for no quality, and a phone's volume is left to the phone (D-118, D-119)
 
 The testers' word through the owner the same evening: a volume slider where the

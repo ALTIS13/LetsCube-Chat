@@ -6335,6 +6335,15 @@ invisible rectangle of theirs covers the upper part of the page's buttons: about
 80% of «+ Новая» does not take a click, and only its lower edge, which the
 rectangle does not reach, does.
 
+**Cleared on the chat screen** 2026-09-11 with option C, merged in `f1adbbe`: the chat
+pane starts under the Windows app's own 44px top bar, which carries the window
+buttons, so none of its capsules reaches them. Measured at 1360×860 with the desktop
+bridge stubbed: no capsule's box meets the buttons' boxes, 7px lie between them, and
+a click at the centre of every capsule and of every window button reaches its target.
+The page the owner photographed, «Задачи», and any other page with controls in that
+corner are not yet checked; they are the navigation work's part of this entry, which
+stays open until they are.
+
 ## D-113 `[ ]` A video does not send
 
 **Severity:** high. Reported by a tester of the production build (`45971c6`) on
@@ -6371,7 +6380,7 @@ stops a zoom nor lowers quality; what the tester sees may be a preview copy wher
 the original was expected (compare D-097). The owner's view: the quality should be
 fine, and WebP was chosen for its small size.
 
-## D-117 `[ ]` In the light theme the time in your own message is under the contrast floor
+## D-117 `[x]` In the light theme the time in your own message is under the contrast floor
 
 **Severity:** low, for legibility. Found on 2026-09-11 by the assessment of the
 iPhone chat screen against Telegram, photographed on the DEV capture route.
@@ -6380,6 +6389,14 @@ iPhone chat screen against Telegram, photographed on the DEV capture route.
 bubble at its worst pixel, under the 4.5:1 floor for text; in the dark theme it is
 5.51:1. Options B and C of that assessment, which repaint own bubbles, put it at
 4.75:1 in both themes.
+
+**Fixed** 2026-09-11 by option C of the chat screen, built on `design/chat-chrome-c`
+and merged in `f1adbbe`, not yet deployed. The own bubble is #3B5CCF in both themes,
+with its meta line in white, and the time in it measures 4.75:1 at its worst pixel
+in both themes, photographed on the iPhone, Android and desktop frames of the DEV
+capture route. The light theme's accent text went darker than the rendered option,
+#213A94 against #2B45A3, so that a sender's name clears the floor on a desktop as
+well: 5.15:1 where the option held 4.35:1.
 
 ## D-118 `[x]` A volume slider on phones, where the phone's own volume governs
 
@@ -6501,3 +6518,7 @@ before it ships. D-119's rules stand inside it — no quality is asked for, and 
 without compression is a named function. A web page cannot show the phone's photo library
 inside itself, so how close the gallery tab can come in the browser and the installed
 iPhone app, and whether the Android app draws a real grid, are part of the assessment.
+
+**The owner's answers** (2026-09-11): the further functions Telegram's sheet carries — a poll, a checklist, a
+contact, music — are wanted. For now they are placeholder tabs, so that the scrolling row of attach functions
+can be judged without waiting for them; each is built for real later, in its turn.
