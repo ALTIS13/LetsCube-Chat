@@ -20,10 +20,11 @@ export type StageIncomingFiles = (files: File[], source: IncomingFilesSource, co
 /**
  * Where files the composer receives go next.
  *
- * On a phone the choice was already made in the attach menu, so the files are
- * staged at once — an original over the limit is refused here, before anything
- * reads it, and the rest of the pick goes on. On a desktop a batch with a photo
- * or a video in it opens the send dialog first, because that is where
+ * A pick from «Файл» already asked for the original, on every device (D-119),
+ * so it is staged at once — a photo or a video over the limit is refused here,
+ * before anything reads it, and the rest of the pick goes on. Otherwise a phone
+ * stages compressed without asking, and on a desktop a batch with a photo or a
+ * video in it opens the send dialog first, because that is where
  * «Сжать изображение» is.
  *
  * `ChatWindow` and the DEV preview page both route through this, so the page the
@@ -50,7 +51,7 @@ export function useIncomingMediaFiles(stage: StageIncomingFiles) {
       const { within, over } = splitByOriginalLimit(files);
       if (over.length) {
         showAppAlert(
-          over.map((file) => originalLimitMessage(file, shape)).filter(Boolean).join("\n"),
+          over.map((file) => originalLimitMessage(file, "menu")).filter(Boolean).join("\n"),
           originalLimitAlertTitle(over.length),
         );
       }

@@ -6,10 +6,11 @@ import sharp from "sharp";
 /**
  * Testers' complaint 2: «фото и видео отправляются только сжатыми».
  *
- * Approved by the owner, as in Telegram: compressed stays the default. A phone
- * offers «Без сжатия» next to «Фото или видео» in the attach menu; a desktop
- * lists the files in a send dialog with «Сжать изображение», checked by
- * default. An original goes as it is — the bytes that were picked are the bytes
+ * Approved by the owner, as in Telegram: compressed stays the default and no
+ * quality is asked for (D-119). «Файл» in the attach menu sends as it is on
+ * every device and says «Без сжатия»; on a desktop «Фото или видео» lists the
+ * files in a send dialog with «Сжать изображение», checked by default. An
+ * original goes as it is — the bytes that were picked are the bytes
  * that are stored, except that a JPEG loses the place it was taken — with a
  * light preview beside it for the conversation, and the viewer opens the
  * original. An original over 50 MB is refused before any upload starts, with a
@@ -62,18 +63,24 @@ test.describe("sending photos without compression", () => {
     await installUploadProbe(page);
   });
 
-  test("a phone offers «Без сжатия» next to the gallery, and sends the original as it is", async ({ page }) => {
+  test("a phone sends the original through «Файл», which says it goes without compression", async ({ page }) => {
     const backend = await installBackend(page);
     await openChat(page);
     test.skip(!(await isCoarsePointer(page)), "the attach menu choice is the phone's shape");
 
     await page.getByRole("button", { name: "Прикрепить" }).click();
     const menu = await attachMenuLabels(page);
-    expect(menu).toContain("Без сжатия");
-    expect(menu.indexOf("Без сжатия"), `the menu reads ${JSON.stringify(menu)}`).toBe(menu.indexOf("Фото или видео") + 1);
+    // No quality is asked for and no second gallery item offered: «Файл» is the
+    // function, as in Telegram, and it says what it does (D-119).
+    expect(menu, `the menu reads ${JSON.stringify(menu)}`).not.toContain("Без сжатия");
+    expect(menu, `the menu reads ${JSON.stringify(menu)}`).toContain("Файл Без сжатия");
+    await expect(
+      page.getByRole("button", { name: "Файл", exact: true }),
+      "the hint describes the item; it does not rename it",
+    ).toHaveAccessibleDescription("Без сжатия");
 
     const facade = await testPhoto("facade.png", 205);
-    await chooseFromMenu(page, "Без сжатия", [facade]);
+    await chooseFromMenu(page, "Файл", [facade]);
     const staged = page.getByTestId("staged-attachment-item");
     await expect(staged).toHaveCount(1);
     await expect(staged).toContainText("без сжатия");
@@ -136,7 +143,7 @@ test.describe("sending photos without compression", () => {
     const panorama = oversizedFile("panorama.jpg");
     const facade = await testPhoto("facade.png", 120);
     await page.getByRole("button", { name: "Прикрепить" }).click();
-    await chooseFromMenu(page, "Без сжатия", [panorama, onDisk(facade)]);
+    await chooseFromMenu(page, "Файл", [panorama, onDisk(facade)]);
 
     const alert = page.getByRole("dialog").filter({ hasText: "Файл больше 50 МБ" });
     await expect(alert).toBeVisible();
@@ -159,7 +166,9 @@ test.describe("sending photos without compression", () => {
     test.skip(await isCoarsePointer(page), "the send dialog is the desktop's shape");
 
     await page.getByRole("button", { name: "Прикрепить" }).click();
-    expect(await attachMenuLabels(page), "a desktop asks in the dialog instead").not.toContain("Без сжатия");
+    const menu = await attachMenuLabels(page);
+    expect(menu, "the menu is the same on every device (D-119)").not.toContain("Без сжатия");
+    expect(menu, `the menu reads ${JSON.stringify(menu)}`).toContain("Файл Без сжатия");
 
     const north = await testPhoto("north.png", 205);
     const south = await testPhoto("south.png", 340);
@@ -259,6 +268,37 @@ test.describe("sending photos without compression", () => {
     ).toEqual([north.buffer.length]);
   });
 
+  test("a desktop's «Файл» stages the originals without asking, and refuses one over 50 MB with the menu's way out", async ({ page }) => {
+    const backend = await installBackend(page);
+    await openChat(page);
+    test.skip(await isCoarsePointer(page), "a phone's «Файл» is pinned above");
+
+    // «Файл» says «Без сжатия» and means it on every device: a send dialog
+    // would only ask again what the item already answered (D-119).
+    const north = await testPhoto("north.png", 250);
+    const panorama = oversizedFile("panorama.jpg");
+    await page.getByRole("button", { name: "Прикрепить" }).click();
+    await chooseFromMenu(page, "Файл", [onDisk(north), panorama]);
+
+    const alert = page.getByRole("dialog").filter({ hasText: "Файл больше 50 МБ" });
+    await expect(alert).toBeVisible();
+    await expect(alert).toContainText("panorama.jpg");
+    await expect(alert, "the way out named is the menu on the screen, not a dialog that never opened").toContainText("«Фото или видео»");
+    await expect(alert).not.toContainText("«Сжать изображение»");
+    await alert.getByRole("button", { name: "Понятно" }).click();
+    await expect(page.getByTestId("media-send-dialog"), "nothing asks about compression").toHaveCount(0);
+
+    const staged = page.getByTestId("staged-attachment-item");
+    await expect(staged).toHaveCount(1);
+    await expect(staged).toContainText("без сжатия");
+    expect(backend.uploads, "nothing is uploaded before the person sends").toHaveLength(0);
+    await page.getByRole("button", { name: "Отправить" }).click();
+
+    await expect.poll(() => backend.inserts.length).toBe(1);
+    await expectOriginalUpload(page, backend, north);
+    expect(backend.inserts[0]).toMatchObject({ media_metadata: { uncompressed: true, optimized: false } });
+  });
+
   test("a phone's original JPEG leaves without the place it was taken, and with nothing else changed", async ({ page }) => {
     const backend = await installBackend(page);
     await openChat(page);
@@ -266,7 +306,7 @@ test.describe("sending photos without compression", () => {
 
     const site = await locatedPhoto("site.jpg");
     await page.getByRole("button", { name: "Прикрепить" }).click();
-    await chooseFromMenu(page, "Без сжатия", [site]);
+    await chooseFromMenu(page, "Файл", [site]);
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(1);
     await page.getByRole("button", { name: "Отправить" }).click();
 
@@ -308,7 +348,8 @@ async function isCoarsePointer(page: Page): Promise<boolean> {
 async function attachMenuLabels(page: Page): Promise<string[]> {
   const menu = page.getByTestId("composer-attach-menu");
   await expect(menu).toBeVisible();
-  return (await menu.getByRole("button").allInnerTexts()).map((label) => label.trim());
+  // A hint under an item reads as a line of its own; one space stands for any break.
+  return (await menu.getByRole("button").allInnerTexts()).map((label) => label.replace(/\s+/g, " ").trim());
 }
 
 async function chooseFromMenu(page: Page, item: string, files: Array<PickedFile | string>) {

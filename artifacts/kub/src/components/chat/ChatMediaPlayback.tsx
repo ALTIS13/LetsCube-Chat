@@ -17,6 +17,7 @@ import { reportError } from "@/lib/monitoring";
 import { clampAudioElementVolume, useAudioSettings } from "@/hooks/useAudioSettings";
 import { cn } from "@/lib/utils";
 import { replacePlaybackItemUrl } from "@/lib/mediaQuality";
+import { coarsePointer } from "@/lib/pointer";
 
 export type ChatMediaPlaybackKind = "voice" | "audio" | "video" | "video_message";
 
@@ -93,7 +94,9 @@ export function ChatMediaPlaybackProvider({
   const [error, setError] = useState<string | null>(null);
   const { settings } = useAudioSettings();
   const playbackRate = playbackSettings.playbackRate;
-  const volume = playbackSettings.volume;
+  // Under a finger there is no slider, so nothing but the device's own volume
+  // may turn it down (D-118).
+  const volume = coarsePointer() ? 1 : playbackSettings.volume;
 
   const playlistIndex = useMemo(() => {
     if (!currentItem || currentItem.isStaged) return -1;
@@ -550,8 +553,10 @@ export function ChatMediaPlaybackBar({ compact = false }: { compact?: boolean } 
             ))}
           </select>
           <label
-            className="flex h-8 items-center gap-1 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-1.5 text-[color:var(--kub-muted)]"
-            title="Р“СЂРѕРјРєРѕСЃС‚СЊ"
+            // A phone's own keys and mixer set how loud it plays, and Telegram draws
+            // no slider there; a desktop keeps one (D-118).
+            className="flex h-8 items-center gap-1 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] px-1.5 text-[color:var(--kub-muted)] pointer-coarse:hidden"
+            title="Громкость"
           >
             <KubIcon name="volume" size={14} />
             <input
@@ -564,7 +569,7 @@ export function ChatMediaPlaybackBar({ compact = false }: { compact?: boolean } 
               onInput={(event) => playback.setVolume(Number(event.currentTarget.value))}
               onChange={(event) => playback.setVolume(Number(event.currentTarget.value))}
               className="h-1.5 w-14 cursor-pointer appearance-none rounded-full bg-[var(--kub-surface-3)] accent-[var(--kub-cyan)] sm:w-16"
-              aria-label="Р“СЂРѕРјРєРѕСЃС‚СЊ РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёСЏ"
+              aria-label="Громкость воспроизведения"
             />
           </label>
           <button

@@ -35,14 +35,7 @@ import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor
 // gallery disagree about the same row.
 import { isRoundVideoMessageContent, isVoiceMessageContent } from "@/lib/messageMediaSections";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
-import {
-  DEFAULT_MEDIA_QUALITY,
-  MEDIA_QUALITY_STORAGE_KEY,
-  applyVideoQualityToAttachments,
-  normalizeMediaQuality,
-  selectVideoPlaybackUrl,
-  type MediaQuality,
-} from "@/lib/mediaQuality";
+import { DEFAULT_MEDIA_QUALITY, selectVideoPlaybackUrl } from "@/lib/mediaQuality";
 import { prepareChatImageAttachment, prepareOriginalPreview, readMediaDimensions } from "@/lib/mediaUpload";
 import {
   buildAttachmentMediaMetadata,
@@ -173,10 +166,6 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const initialUnreadRef = useRef<{ chatId: string; count: number; since: string | null } | null>(null);
   const supabase = createClient();
   const [stagedAttachments, setStagedAttachments] = useState<StagedAttachment[]>([]);
-  const [mediaQuality, setMediaQualityState] = useState<MediaQuality>(() => {
-    if (typeof window === "undefined") return DEFAULT_MEDIA_QUALITY;
-    return normalizeMediaQuality(window.localStorage.getItem(MEDIA_QUALITY_STORAGE_KEY));
-  });
   const [keyboardInset, setKeyboardInset] = useState(0);
   /** The installed iPhone app with its keyboard up, its shell fitted to what is visible (D-111). */
   const [shellFitsKeyboard, setShellFitsKeyboard] = useState(false);
@@ -195,14 +184,6 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   useLayoutEffect(() => {
     stagedAttachmentsRef.current = stagedAttachments;
   }, [stagedAttachments]);
-
-  const setMediaQuality = useCallback((quality: MediaQuality) => {
-    setMediaQualityState(quality);
-    setStagedAttachments((current) => applyVideoQualityToAttachments(current, quality));
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(MEDIA_QUALITY_STORAGE_KEY, quality);
-    }
-  }, []);
 
   useEffect(() => {
     const visualViewport = window.visualViewport;
@@ -372,7 +353,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       let optimized = false;
       if (preparation === "original") {
         // Before anything reads the file: a refused original costs no decode.
-        const limitError = originalLimitMessage(sourceFile, shape);
+        // «Файл» refuses an oversized original before staging, so on a desktop
+        // one can only come from the send dialog, and is told in its words.
+        const limitError = originalLimitMessage(sourceFile, shape === "desktop" ? "dialog" : "menu");
         if (limitError) {
           errors.push(limitError);
           continue;
@@ -442,7 +425,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         optimized,
         originalSize: sourceFile.size,
         originalMimeType: sourceFile.type || undefined,
-        mediaQuality: file.type.startsWith("video/") ? (uncompressed ? "original" : mediaQuality) : undefined,
+        // No quality is chosen any more (D-119): a video goes at the standard one.
+        mediaQuality: file.type.startsWith("video/") ? (uncompressed ? "original" : DEFAULT_MEDIA_QUALITY) : undefined,
         uncompressed,
         previewFile,
         previewWidth: previewSize?.width,
@@ -478,7 +462,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       showAppAlert(errors.slice(0, 3).join("\n"), "Вложения");
     }
     return accepted;
-  }, [mediaQuality, uploadScope]);
+  }, [uploadScope]);
 
   const stageVoiceRecording = useCallback((blob: Blob, durationMs: number, mimeType: string) => {
     const error = validateStagedAttachment(new File([blob], "voice.webm", { type: mimeType || blob.type || "audio/webm" }));
@@ -507,8 +491,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       showAppAlert(`Можно подготовить не больше ${MAX_STAGED_ATTACHMENTS} вложений за раз.`, "Видео-сообщение");
       return;
     }
-    setStagedAttachments((current) => [...current, createStagedVideoMessageAttachment(blob, durationMs, mimeType, mediaQuality)]);
-  }, [mediaQuality, removeStagedAttachment]);
+    setStagedAttachments((current) => [...current, createStagedVideoMessageAttachment(blob, durationMs, mimeType, DEFAULT_MEDIA_QUALITY)]);
+  }, [removeStagedAttachment]);
 
   const uploadStagedAttachment = useCallback(async (
     attachment: StagedAttachment,
@@ -1182,8 +1166,6 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             onSendVideoMessage={handleSendVideoMessage}
             onTyping={sendTyping}
             attachments={stagedAttachments}
-            mediaQuality={mediaQuality}
-            onMediaQualityChange={setMediaQuality}
             onStageFiles={handleIncomingFiles}
             onRemoveAttachment={removeStagedAttachment}
             onRetryAttachment={retryStagedAttachment}

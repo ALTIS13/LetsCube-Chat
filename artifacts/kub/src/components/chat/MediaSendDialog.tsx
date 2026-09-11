@@ -122,7 +122,7 @@ export function MediaSendDialog({ files, onCancel, onSend }: MediaSendDialogProp
 
         {blocked.length > 0 && (
           <KubNotice tone="danger" role="alert" data-testid="media-send-limit-notice">
-            {blocked.map((item) => originalLimitMessage(item.file, "desktop")).join(" ")}
+            {blocked.map((item) => originalLimitMessage(item.file, "dialog")).join(" ")}
           </KubNotice>
         )}
 

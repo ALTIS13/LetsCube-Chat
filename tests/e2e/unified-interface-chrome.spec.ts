@@ -50,14 +50,12 @@ test.describe("LETSCUBE unified interface chrome", () => {
     await expect(page.getByText("Облачная синхронизация", { exact: true })).toHaveCount(0);
   });
 
-  test("composer shows video quality only for a staged video", async ({ page }) => {
+  test("the composer asks for no quality when a video is picked", async ({ page }) => {
     await openFirstChatOrSkip(page);
 
+    // D-119: testers did not want a quality to choose. A video goes at the
+    // standard quality, and the way to an original is «Файл».
     await page.getByRole("button", { name: "Прикрепить" }).click();
-    const selector = page.getByTestId("media-quality-selector");
-    const track = page.getByTestId("media-quality-track");
-
-    await expect(selector).toHaveCount(0);
     const fileChooserPromise = page.waitForEvent("filechooser");
     await page.getByRole("button", { name: "Фото или видео" }).click();
     const fileChooser = await fileChooserPromise;
@@ -66,13 +64,8 @@ test.describe("LETSCUBE unified interface chrome", () => {
       mimeType: "video/mp4",
       buffer: Buffer.from("not-a-real-video"),
     });
-    await expect(selector).toBeVisible();
-    await expect(track).toHaveAttribute("role", "radiogroup");
-    await expect(track.getByRole("radio")).toHaveCount(3);
-
-    await page.getByTestId("media-quality-option-original").click();
-    await expect(page.getByTestId("media-quality-option-original")).toHaveAttribute("aria-checked", "true");
-    await expect(selector).toContainText("Без снижения качества");
+    await page.waitForTimeout(500);
+    await expect(page.getByTestId("media-quality-selector")).toHaveCount(0);
   });
 
   test("settings expose direct sections with notifications first", async ({ page }) => {
@@ -134,7 +127,10 @@ test.describe("LETSCUBE unified interface chrome", () => {
 
     await expect(page.getByText("Звук и голосовые")).toBeVisible();
     await expect(page.getByText("Устройства", { exact: true })).toBeVisible();
-    await expect(page.locator('input[type="range"]')).toHaveCount(2);
+    // A phone's own keys set how loud it plays, so under a finger only the
+    // microphone keeps a slider (D-118).
+    const finger = await page.evaluate(() => window.matchMedia("(pointer: coarse)").matches);
+    await expect(page.locator('input[type="range"]')).toHaveCount(finger ? 1 : 2);
     await expect(page.getByRole("button", { name: "Проверка микрофона" })).toBeVisible();
     // Exact: since f58edfe the «Звук» row names its current value, so its own
     // accessible name contains «Чистый голос» too, and a substring match found

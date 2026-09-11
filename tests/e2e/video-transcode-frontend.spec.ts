@@ -69,8 +69,10 @@ test("wires one batched 720p variant query through persisted quality metadata", 
     ).not.toMatch(leak);
   }
   expect(bubbleSource).toContain("selectVideoPlaybackUrl");
-  expect(inputSource).toContain("Качество видео");
-  expect(inputSource).toContain("MEDIA_QUALITY_OPTIONS");
+  // D-119: a video goes at the standard quality and no quality is asked for;
+  // «Файл» is the way to an original.
+  expect(inputSource).not.toContain("Качество видео");
+  expect(inputSource).not.toContain("MEDIA_QUALITY_OPTIONS");
 });
 
 test("uses one stable cache key for a chat regardless of realtime message IDs", () => {

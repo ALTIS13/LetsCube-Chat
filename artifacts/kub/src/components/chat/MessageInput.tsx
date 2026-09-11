@@ -7,6 +7,7 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useId,
   KeyboardEvent,
   ClipboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -27,8 +28,7 @@ import { KubGlassLayer, KubIcon, type KubIconName } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
-import { DEFAULT_MEDIA_QUALITY, MEDIA_QUALITY_OPTIONS, type MediaQuality } from "@/lib/mediaQuality";
-import { mediaSendShape } from "@/lib/mediaCompression";
+import { DEFAULT_MEDIA_QUALITY } from "@/lib/mediaQuality";
 import { isNativeApp, microphonePermissionHelp } from "@/lib/platform/capabilities";
 import { getMessengerLocationErrorMessage, getMessengerPosition } from "@/lib/platform/geolocation";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
@@ -77,8 +77,6 @@ interface MessageInputProps {
   onSendVideoMessage?: (blob: Blob, durationMs: number, mimeType: string) => void | Promise<void>;
   onTyping?: () => void;
   attachments?: StagedAttachment[];
-  mediaQuality?: MediaQuality;
-  onMediaQualityChange?: (quality: MediaQuality) => void;
   onStageFiles?: (files: File[], source: "picker" | "paste" | "camera", options?: { compress?: boolean }) => void;
   onRemoveAttachment?: (attachmentId: string) => void;
   onRetryAttachment?: (attachmentId: string) => void;
@@ -105,8 +103,6 @@ export function MessageInput({
   onSendVideoMessage,
   onTyping,
   attachments = [],
-  mediaQuality = DEFAULT_MEDIA_QUALITY,
-  onMediaQualityChange,
   onStageFiles,
   onRemoveAttachment,
   onRetryAttachment,
@@ -140,9 +136,11 @@ export function MessageInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // Which menu item opened the picker: «Без сжатия» asks for the originals. Set
-  // by every item that opens a picker, so a cancelled pick cannot carry over.
+  // Which menu item opened the picker: «Файл» sends as it is, as Telegram's file
+  // picker does (D-119). Set by every item that opens a picker, so a cancelled
+  // pick cannot carry over.
   const pickerCompressRef = useRef(true);
+  const attachHintId = useId();
   const modeFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchRecordingStartedRef = useRef(false);
@@ -771,26 +769,20 @@ export function MessageInput({
     );
   }
 
-  // A phone chooses compression here, beside the gallery; a desktop chooses it
-  // in the send dialog the picked files open. Asked only while the menu is open.
-  const attachShape = showAttach && typeof window !== "undefined"
-    ? mediaSendShape(window.matchMedia?.bind(window))
-    : "desktop";
-  const attachItems: Array<{ icon: KubIconName; label: string; tone: string; action: () => void }> = [
+  // As in Telegram: the gallery sends compressed and asks nothing, and «Файл»
+  // sends as it is and says so under its name. Testers did not want a quality to
+  // choose — a stock camera's photo goes compressed without a thought, and the
+  // original is a function a person reaches for (D-119). On a desktop
+  // «Фото или видео» still opens the send dialog with «Сжать изображение»,
+  // Telegram Desktop's own checkbox.
+  const attachItems: Array<{ icon: KubIconName; label: string; hint?: string; tone: string; action: () => void }> = [
     { icon: "image",   label: "Фото или видео", tone: "var(--kub-cyan)",   action: () => {
       pickerCompressRef.current = true;
       delayedAttachmentScopeTokenRef.current = composerSendScope.capture();
       photoInputRef.current?.click();
     } },
-    ...(attachShape === "phone"
-      ? [{ icon: "imageOriginal" as const, label: "Без сжатия", tone: "var(--kub-cyan)", action: () => {
-        pickerCompressRef.current = false;
-        delayedAttachmentScopeTokenRef.current = composerSendScope.capture();
-        photoInputRef.current?.click();
-      } }]
-      : []),
-    { icon: "file",    label: "Файл",            tone: "var(--kub-pink)",   action: () => {
-      pickerCompressRef.current = true;
+    { icon: "file",    label: "Файл", hint: "Без сжатия", tone: "var(--kub-pink)", action: () => {
+      pickerCompressRef.current = false;
       delayedAttachmentScopeTokenRef.current = composerSendScope.capture();
       fileInputRef.current?.click();
     } },
@@ -875,7 +867,7 @@ export function MessageInput({
         key={`video:${chatId}`}
         open={showVideoMessage}
         variant={videoRecorderVariant}
-        mediaQuality={mediaQuality}
+        mediaQuality={DEFAULT_MEDIA_QUALITY}
         autoStart={videoAutoStart}
         autoAddOnStop={videoAutoAddOnStop}
         stopSignal={videoStopSignal}
@@ -911,11 +903,14 @@ export function MessageInput({
         <>
           <div className="fixed inset-0 z-10" onClick={() => setShowAttach(false)} />
           <div data-testid="composer-attach-menu" className="mx-3 mb-2 rounded-2xl relative z-20 overflow-hidden bg-[var(--kub-raised)] border border-[color:var(--kub-border-color)] kub-glow-soft">
-            {attachItems.map(({ icon, label, tone, action }) => (
+            {attachItems.map(({ icon, label, hint, tone, action }) => (
               <button
                 key={label}
                 onClick={action}
                 type="button"
+                // A hint describes its item without renaming it: «Файл» stays «Файл».
+                aria-label={hint ? label : undefined}
+                aria-describedby={hint ? `${attachHintId}-${icon}` : undefined}
                 className="flex items-center gap-3 w-full px-4 py-3 text-sm transition-colors kub-raise-hover text-[color:var(--kub-text)]"
               >
                 <div
@@ -927,7 +922,14 @@ export function MessageInput({
                 >
                   <KubIcon name={icon} size={15} tone="currentColor" />
                 </div>
-                <span>{label}</span>
+                <span className="flex min-w-0 flex-col items-start text-left">
+                  <span>{label}</span>
+                  {hint && (
+                    <span id={`${attachHintId}-${icon}`} className="text-[12px] leading-4 text-[color:var(--kub-muted)]">
+                      {hint}
+                    </span>
+                  )}
+                </span>
               </button>
             ))}
           </div>
@@ -995,12 +997,6 @@ export function MessageInput({
 
         {attachments.length > 0 && (
           <>
-            {onMediaQualityChange && attachments.some((attachment) =>
-              // An original has no quality to choose: it is sent as it is.
-              (attachment.kind === "video" && attachment.uncompressed !== true) || attachment.kind === "video_message"
-            ) && (
-              <MediaQualitySelector value={mediaQuality} onChange={onMediaQualityChange} />
-            )}
             <AttachmentTray
               chatId={chatId}
               attachments={attachments}
@@ -1172,80 +1168,6 @@ export function MessageInput({
         </div>
       </div>
       </div>
-    </div>
-  );
-}
-
-function MediaQualitySelector({
-  value,
-  onChange,
-  compact = false,
-}: {
-  value: MediaQuality;
-  onChange: (quality: MediaQuality) => void;
-  compact?: boolean;
-}) {
-  const selectedOption = MEDIA_QUALITY_OPTIONS.find((option) => option.value === value)
-    ?? MEDIA_QUALITY_OPTIONS[1];
-
-  return (
-    <div
-      data-testid="media-quality-selector"
-      className={cn(
-        "rounded-2xl border border-[color:var(--kub-border-color)] bg-[var(--kub-raised)] px-2 py-2",
-        !compact && "mb-2",
-        compact && "bg-[var(--kub-surface)]",
-      )}
-    >
-      <div className="mb-1.5 flex items-center gap-2 px-1 text-[12px] font-semibold uppercase tracking-wide text-[color:var(--kub-muted)]">
-        <KubIcon name="video" size={13} />
-        <span>Качество видео</span>
-      </div>
-      <div
-        className="relative grid grid-cols-3 gap-1 px-1"
-        role="radiogroup"
-        aria-label="Качество загружаемого видео"
-        data-testid="media-quality-track"
-      >
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute left-[16.67%] right-[16.67%] top-2.5 h-px bg-[var(--kub-border-color)]"
-        />
-        {MEDIA_QUALITY_OPTIONS.map((option) => {
-          const active = option.value === value;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              data-testid={`media-quality-option-${option.value}`}
-              data-state={active ? "active" : "inactive"}
-              onClick={() => onChange(option.value)}
-              className={cn(
-                "group relative z-[1] flex min-w-0 flex-col items-center gap-1 rounded-md px-1 pb-1 pt-0 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--kub-cyan)]",
-                active
-                  ? "text-[color:var(--kub-text)]"
-                  : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)]",
-              )}
-            >
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "h-5 w-5 rounded-full border-2 transition-[border-color,background-color,box-shadow]",
-                  active
-                    ? "border-[color:var(--kub-cyan)] bg-[color:var(--kub-cyan)] shadow-[0_0_0_4px_color-mix(in_srgb,var(--kub-cyan)_16%,transparent)]"
-                    : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] group-hover:border-[color:var(--kub-cyan)]",
-                )}
-              />
-              <span className="block max-w-full truncate text-[12px] font-semibold">{option.label}</span>
-            </button>
-          );
-        })}
-      </div>
-      <p className="mt-1 px-1 text-center text-[12px] leading-4 text-[color:var(--kub-muted)]">
-        {selectedOption.description}
-      </p>
     </div>
   );
 }

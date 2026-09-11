@@ -5,6 +5,7 @@ import { KubIcon } from "@/components/kub";
 import { clampAudioElementVolume, useAudioSettings } from "@/hooks/useAudioSettings";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
 import { reportError } from "@/lib/monitoring";
+import { coarsePointer } from "@/lib/pointer";
 import { cn } from "@/lib/utils";
 import { useChatMediaPlayback, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 
@@ -28,6 +29,9 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
   const durationPrimingRef = useRef(false);
   const { settings } = useAudioSettings();
   const mediaPlayback = useChatMediaPlayback();
+  // Under a finger the settings draw no slider for this, so a volume lowered
+  // before cannot stay lowered with nothing to raise it (D-118).
+  const voicePlaybackVolume = coarsePointer() ? 1 : settings.voicePlaybackVolume;
 
   const stopProgressLoop = useCallback(() => {
     if (rafRef.current !== null) {
@@ -107,9 +111,9 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
 
   useEffect(() => {
     if (audioRef.current) {
-      audioRef.current.volume = clampAudioElementVolume(settings.voicePlaybackVolume);
+      audioRef.current.volume = clampAudioElementVolume(voicePlaybackVolume);
     }
-  }, [settings.voicePlaybackVolume]);
+  }, [voicePlaybackVolume]);
 
   useEffect(() => {
     void applyAudioOutputDevice(audioRef.current, settings.selectedOutputDeviceId);
@@ -129,7 +133,7 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
     if (!audio || !url) return;
 
     audio.preload = "auto";
-    audio.volume = clampAudioElementVolume(settings.voicePlaybackVolume);
+    audio.volume = clampAudioElementVolume(voicePlaybackVolume);
     audio.load();
 
     const syncTimer = window.setTimeout(() => {
@@ -158,7 +162,7 @@ export function AudioMessage({ url, duration = 0, isMe, playbackItem }: AudioMes
       syncFromAudio({ force: true });
     }
     else {
-      audio.volume = clampAudioElementVolume(settings.voicePlaybackVolume);
+      audio.volume = clampAudioElementVolume(voicePlaybackVolume);
       if (audio.ended || (durationSeconds > 0 && audio.currentTime >= durationSeconds)) {
         audio.currentTime = 0;
         setCurrentTime(0);

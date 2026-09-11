@@ -118,8 +118,9 @@ const covers = [
  */
 const raised = [
   // Eight since 2026-09-11: the forward bar joined the reply and edit strips,
-  // on the same composer and nowhere else.
-  ["components/chat/MessageInput.tsx", "bg-[var(--kub-raised)]", 8],
+  // on the same composer and nowhere else. Seven since 2026-09-11: the video
+  // quality selector's panel went with D-119, when sending stopped asking.
+  ["components/chat/MessageInput.tsx", "bg-[var(--kub-raised)]", 7],
   // The active tab pill of the bot settings panel. Radix drives it from
   // `data-[state=active]`, and `.kub-raise` is a plain class rather than a
   // Tailwind utility, so no variant can put the veil behind that attribute —

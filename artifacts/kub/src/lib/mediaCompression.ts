@@ -7,12 +7,14 @@
  * picked — through «Фото или видео», through «Файл», pasted or dropped — so the
  * original never left the device, and «Открыть оригинал» opened the copy.
  *
- * Approved by the owner, as in Telegram: compressed stays the default. A phone
- * offers «Без сжатия» next to «Фото или видео» in the attach menu; a desktop
- * lists the files in a send dialog with «Сжать изображение», checked by
- * default. An original goes as it is — no resize, no re-encode — up to 50 MB a
- * file, with a light preview uploaded beside it so the conversation does not
- * download the original to draw a bubble.
+ * Approved by the owner, as in Telegram: compressed stays the default, and no
+ * quality is ever asked for (D-119). «Файл» in the attach menu sends as it is,
+ * on every device, and says «Без сжатия». On a desktop a photo or a video that
+ * arrives any other way — «Фото или видео», pasted, dropped — opens a send
+ * dialog with «Сжать изображение», checked by default. An original goes as it
+ * is — no resize, no re-encode — up to 50 MB a file, with a light preview
+ * uploaded beside it so the conversation does not download the original to
+ * draw a bubble.
  *
  * Nothing here touches the DOM, the network or React, and the only imports are
  * other modules that import nothing, so `node --test` loads it directly:
@@ -57,6 +59,11 @@ const RECODABLE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"])
 export type MediaSendShape = "phone" | "desktop";
 export type IncomingFilesSource = "picker" | "paste" | "drop" | "camera";
 export type AttachmentPreparation = "compress" | "original" | "as-is";
+/**
+ * Where a person asked for the original: «Файл» in the attach menu, on every
+ * device, or a desktop's send dialog with «Сжать изображение» unticked.
+ */
+export type OriginalChoiceSurface = "menu" | "dialog";
 
 function normalizedType(mimeType: string | null | undefined): string {
   return (mimeType ?? "").trim().toLowerCase();
@@ -90,10 +97,18 @@ export function exceedsOriginalLimit(sizeBytes: number): boolean {
   return sizeBytes > MAX_ORIGINAL_ATTACHMENT_BYTES;
 }
 
-export function splitByOriginalLimit<T extends { size: number }>(files: readonly T[]): { within: T[]; over: T[] } {
+/**
+ * What of a pick asked for as it is can go, and what is refused. Only a photo or
+ * a video has an original to refuse: «Файл» takes any file (D-119), and a
+ * document over its own limit is refused by the check every attachment meets,
+ * in that check's words.
+ */
+export function splitByOriginalLimit<T extends { size: number; type: string }>(files: readonly T[]): { within: T[]; over: T[] } {
   const within: T[] = [];
   const over: T[] = [];
-  for (const file of files) (exceedsOriginalLimit(file.size) ? over : within).push(file);
+  for (const file of files) {
+    (isCompressibleMediaType(file.type) && exceedsOriginalLimit(file.size) ? over : within).push(file);
+  }
   return { within, over };
 }
 
@@ -115,13 +130,13 @@ function controlName(text: string): string {
  * What to tell a person whose original is over the limit, or null when it is not.
  *
  * It names the file and its size, the limit, and the way out that exists on the
- * screen in front of them: on a phone the compressed choice is a menu item, on a
- * desktop it is the box in the dialog. A video that compression cannot rescue
- * either is not offered compression.
+ * screen in front of them: from the menu the compressed choice is the menu's
+ * other item, in the dialog it is the box. A video that compression cannot
+ * rescue either is not offered compression.
  */
 export function originalLimitMessage(
   file: { name: string; size: number; type: string },
-  shape: MediaSendShape,
+  surface: OriginalChoiceSurface,
 ): string | null {
   if (!exceedsOriginalLimit(file.size)) return null;
   const video = normalizedType(file.type).startsWith("video/");
@@ -130,12 +145,12 @@ export function originalLimitMessage(
   // its number: rendered, «— до | 50 МБ» had left the preposition hanging.
   const problem = `${file.name || "Файл"}\u00a0— ${formatSizeRoundedUp(file.size)}. Без сжатия можно отправить файл до\u00a0${MAX_ORIGINAL_ATTACHMENT_SIZE_LABEL}`;
   if (video && file.size > MAX_VIDEO_ATTACHMENT_BYTES) {
-    const remedy = shape === "desktop"
+    const remedy = surface === "dialog"
       ? "Сократите видео или уберите его из списка."
       : "Сократите видео и попробуйте снова.";
     return `${problem}, со сжатием\u00a0— видео до\u00a0${keepTogether(MAX_VIDEO_ATTACHMENT_SIZE_LABEL)}. ${remedy}`;
   }
-  if (shape === "desktop") {
+  if (surface === "dialog") {
     return `${problem}. Включите ${controlName("Сжать изображение")} или уберите ${subject} из списка.`;
   }
   return `${problem}. Отправьте ${subject} со сжатием: ${controlName("Прикрепить")}\u00a0→ ${controlName("Фото или видео")}.`;
@@ -349,7 +364,8 @@ export function mediaSendShape(matchMedia: MatchMedia | null | undefined): Media
  *
  * A desktop asks for every batch with a photo or a video in it, however it
  * arrived — picked, pasted or dropped — because the choice lives in that
- * dialog. A camera shot was already looked at, and a phone asks in its menu.
+ * dialog. A camera shot was already looked at, a phone does not ask, and a pick
+ * from «Файл» never comes here: it already asked for the original (D-119).
  */
 export function shouldConfirmMediaSend(input: {
   shape: MediaSendShape;

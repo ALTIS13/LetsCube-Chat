@@ -127,22 +127,28 @@ test.describe("KUB video recorders", () => {
     await expect(playbackBar).toHaveAttribute("data-current-kind", "video_message");
     await expect(page.getByTestId("chat-media-playback-progress")).toBeVisible();
     await expect(page.getByTestId("chat-media-playback-speed")).toBeVisible();
-    await expect(page.getByTestId("chat-media-playback-volume")).toBeVisible();
+    // A phone's own keys set how loud it plays, so under a finger the bar has
+    // no slider (D-118).
+    const finger = await page.evaluate(() => window.matchMedia("(pointer: coarse)").matches);
+    if (finger) await expect(page.getByTestId("chat-media-playback-volume")).toBeHidden();
+    else await expect(page.getByTestId("chat-media-playback-volume")).toBeVisible();
     await page.getByTestId("chat-media-playback-speed").selectOption("1.5");
     await expect(page.getByTestId("chat-media-playback-speed")).toHaveValue("1.5");
-    await page.getByTestId("chat-media-playback-volume").evaluate((node) => {
-      const input = node as HTMLInputElement;
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-      setter?.call(input, "0.6");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    if (!finger) {
+      await page.getByTestId("chat-media-playback-volume").evaluate((node) => {
+        const input = node as HTMLInputElement;
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        setter?.call(input, "0.6");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    }
     const playbackSettings = await page.evaluate(() => {
       const raw = window.localStorage.getItem("kub.mediaPlayback.v1");
       return raw ? JSON.parse(raw) as { playbackRate?: number; volume?: number } : {};
     });
     expect(playbackSettings.playbackRate).toBe(1.5);
-    expect(playbackSettings.volume).toBeCloseTo(0.6, 1);
+    if (finePointer) expect(playbackSettings.volume).toBeCloseTo(0.6, 1);
     await page.getByTestId("chat-media-playback-close").click();
     await expect(playbackBar).toHaveCount(0);
     await previewToggle.click();
