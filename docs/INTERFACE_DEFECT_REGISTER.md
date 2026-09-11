@@ -5035,6 +5035,43 @@ to reserve, so the wasted line this entry describes goes with it. A concept
 render of that was sent to the owner the same day; the implementation waits for
 the conversation work in `MessageBubble.tsx` to merge.
 
+### The concept was wrong, and a parity assessment replaced it — 2026-09-11
+
+The owner rejected the concept («С действиями в чате неверно») and sent six
+screenshots of Telegram — Android after one tap, the full emoji panel, the
+desktop hover button and its column, the desktop right-click menus for a photo
+and for text — asking for a clear assessment against Telegram before any more
+iterations. The concept had four things wrong: on a phone it opened the menu on
+a long press, where Telegram opens reactions and the menu on one tap and uses
+the long press to select; on a desktop a click on the smiley opened a horizontal
+strip, where hovering Telegram's button opens a column and a click reacts at
+once; one menu served every message, where Telegram's items depend on whether
+it is text or a photo; and the menu had no header of who reacted, no row of
+icons, no «Детали» and no «Копировать ссылку».
+
+The assessment was published to the owner as a page (`Сверка действий с
+Telegram`, https://claude.ai/code/artifact/d6574ef1-c1e9-4b8a-a856-f8cd8b4bb12f),
+built from the owner's screenshots, Telegram's own posts and a read-only
+inventory of the current code at `74d32c2`. Of 26 points, 2 match, 6 match in
+part, 5 work differently, 12 are missing and 1 — the phone's «⋯» beside the
+time — should go. Some findings from the inventory that the entry did not
+carry: a single tap on a bubble does nothing; the long press is 650 ms and docks
+the menu to the bottom of the screen; the quick reactions are a fixed six, not
+the most used; nothing shows who reacted or which reactions are already yours;
+a reaction appears only after the server answers; a photo's «Копировать» copies
+the caption, and the browser's own menu is suppressed inside a message row;
+a message link already works in the app (notifications open it) but no menu
+copies it; a forwarded message carries no «Переслано» label; `myRole` reaches
+the bubble and is never read.
+
+Proposed order: one set of renders for the whole target — phone and desktop,
+text and photo, menus, the reaction column, selection — approved at once, then
+code in stages with no redesign in between: the phone, the desktop, reactions,
+selection with forwarding several and one «Удалить» (complaints 10 and 9), then
+«Детали» and saving. Four owner decisions are open: one reaction per person or
+several, the quick reaction (👍 or ❤️), swipe to reply on a phone, and whether
+this track absorbs complaints 10 and 9.
+
 ## D-072 `[x]` The service worker was never replaced, so its cache was never cleared
 
 **Severity:** high. Every browser and installed-PWA user; on iOS the dead assets
