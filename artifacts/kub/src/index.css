@@ -865,14 +865,21 @@ body {
    and the clock, the signal and the battery disappeared into the header.
 
    The meta tag cannot follow the theme: iOS reads it once, when the app is
-   added to the home screen. So the page darkens exactly the band the glyphs
-   sit in — the top inset, in the light theme, in the installed app. 0.6 of the
-   dark ground is what white needs for 4.5:1 over the worst thing the band can
-   hold, a white field: `tests/unit/ios-status-bar-legibility.test.mjs` does
-   the arithmetic and the WebKit stand photographs the result. Wherever the
-   page is not under the status bar the band is zero pixels tall; outside the
-   installed app it does not exist, which also keeps it off Android, whose
-   status icons are dark in a light theme. */
+   added to the home screen. So the page paints exactly the band the glyphs
+   sit in — the top inset, in the light theme, in the installed app — with an
+   opaque band of the brand's blue.
+
+   Opaque and mid-toned, both on purpose. A translucent veil changes with
+   whatever scrolls under it, and the grey one this replaced read as a defect.
+   And the glyphs' colour is iOS's to choose: the documentation for this style
+   says white, while screenshots from the owner's iPhone show dark glyphs over
+   the light theme. #3D78B8 gives white 4.59:1 and black 4.58:1, within a
+   hundredth of the widest margin any colour can give both, on the brand's own
+   hue: `tests/unit/ios-status-bar-legibility.test.mjs` does the arithmetic and
+   the WebKit stand photographs the result. Wherever the page is not under the
+   status bar the band is zero pixels tall; outside the installed app it does
+   not exist, which also keeps it off Android, whose status icons are dark in a
+   light theme. */
 html.light[data-ios-standalone] body::before {
   content: "";
   position: fixed;
@@ -881,7 +888,7 @@ html.light[data-ios-standalone] body::before {
   left: 0;
   z-index: 2147483647;
   height: var(--kub-safe-top);
-  background-color: rgba(5, 11, 24, 0.6);
+  background-color: #3D78B8;
   pointer-events: none;
 }
 

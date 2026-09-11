@@ -5080,3 +5080,38 @@ cut off with no way to reach it.
 `calc(100dvh - var(--kub-safe-top) - var(--kub-safe-bottom) - 8.5rem)` and
 scrollable. **Regression test:** the landscape scenario "the sidebar's own menu
 and the notification panel" in `tests/e2e/ios-standalone-safe-area.spec.ts`.
+
+## D-079 `[x]` Light theme: the status bar's glyphs vanished into the installed app's header
+
+**Severity:** high on the installed iPhone app in the light theme — the clock,
+the signal and the battery.
+
+**Surface:** `apple-mobile-web-app-status-bar-style` in `artifacts/kub/index.html`,
+and the band `html.light[data-ios-standalone] body::before` in
+`artifacts/kub/src/index.css`.
+
+**Defect:** `black-translucent` draws the status bar over the page, and with
+`viewport-fit=cover` (D-075) the page is under it. In the light theme the
+header's glass is nearly white, and the glyphs disappeared into it. The meta tag
+cannot follow the theme: iOS reads it once, when the app is added to the home
+screen.
+
+**Fixed** first in `98b21ce` with a translucent veil — 0.6 of the dark ground
+over the top inset, in the installed app only (`navigator.standalone`). Rendered
+and shown to the owner before shipping, the grey it made over the light screen
+was rejected. **Re-decided on 2026-09-11:** an opaque band of the brand's blue,
+`#3D78B8` — of two rendered variants, a flat band and a soft-edged one, the
+recommended flat one, applied on the owner's instruction to recolour the grey.
+Opaque, so it no longer changes with what scrolls under it. Mid-toned,
+because the glyphs' colour is iOS's to choose — the documentation for this style
+says white, while screenshots from the owner's iPhone show dark glyphs over the
+light theme — and this colour gives white 4.59:1 and black 4.58:1, within a
+hundredth of the widest margin any colour can give both.
+
+**Regression tests:** `tests/unit/ios-status-bar-legibility.test.mjs` holds the
+premise, the installed-app gate, the band's geometry and both contrasts; the
+WebKit stand photographs the band and measures white against its lightest pixel
+and black against its darkest.
+
+**Not verified on a device.** Which colour iOS gives the glyphs in the installed
+app — in each theme — is the first thing to look at on the iPhone.

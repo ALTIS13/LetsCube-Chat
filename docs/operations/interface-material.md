@@ -391,16 +391,19 @@ phone menu sat 12px from the bottom, on the home indicator.
 - **Which chrome is on top depends on the width.** Below `md` the pane headers are
   the top of the screen and carry the inset; from `md` the application's top bar
   does, and the pane headers do not.
-- **The status bar is iOS's, and its glyphs are white.** `black-translucent` draws
-  them over the page whatever the page is, and over the light theme's glass the
-  clock and the battery disappeared. The meta tag cannot follow the theme — iOS
-  reads it when the app is added to the home screen — so in the light theme the
-  page lays a veil of 0.6 of the dark ground over the top inset, in the installed
-  app only (`data-ios-standalone`, set from `navigator.standalone`). 0.6 is the
-  density white needs for 4.5:1 over a white field; the unit test does that
-  arithmetic and the WebKit stand photographs it. It is a decision with a cost —
-  a dark band over a light screen — and switching the status bar style instead
-  would put a white band over the dark theme and need every icon re-added.
+- **The status bar is iOS's, and so is its glyphs' colour.** `black-translucent`
+  draws the status bar over the page, and over the light theme's glass the clock
+  and the battery disappeared. The meta tag cannot follow the theme — iOS reads it
+  when the app is added to the home screen — so in the light theme the page paints
+  an opaque band of `#3D78B8` over the top inset, in the installed app only
+  (`data-ios-standalone`, set from `navigator.standalone`). Opaque, because a veil
+  changes with what scrolls under it, and the first one, 0.6 of the dark ground,
+  turned the band grey and was rejected when it was shown. Mid-toned, because the
+  documentation says the glyphs are white while screenshots from the owner's
+  iPhone show them dark over the light theme: this blue gives white 4.59:1 and
+  black 4.58:1. The unit test does that arithmetic and the WebKit stand
+  photographs it. Switching the status bar style instead would put a white band
+  over the dark theme and need every icon re-added.
 - **Android is unaffected today and cannot double.** Capacitor 8's `SystemBars`
   hands the insets to the page only when the WebView is 140 or newer *and* the
   viewport has `cover`; otherwise it pads the WebView's parent and gives the page

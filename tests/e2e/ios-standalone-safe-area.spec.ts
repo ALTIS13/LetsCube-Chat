@@ -330,11 +330,12 @@ test.describe("installed iPhone app — WebKit, insets through the tokens", () =
 
       if (orientation === "portrait") {
         test("the status bar stays readable over the light theme", async ({ page }) => {
-          // `black-translucent` draws white glyphs over the page. The glyphs
-          // are iOS's and cannot be drawn here, so what is measured is the band
-          // they sit in, photographed: white against its lightest pixel. The
-          // conversation is left at rest, so the band holds the header's glass
-          // over light message bubbles — the ground the veil was measured for.
+          // `black-translucent` draws the status bar over the page, in a colour
+          // iOS chooses. The glyphs are iOS's and cannot be drawn here, so what
+          // is measured is the band they sit in, photographed: white against its
+          // lightest pixel and black against its darkest. The conversation is
+          // left at rest, with the header's glass over light message bubbles
+          // under the band.
           await page.addInitScript(() => {
             try {
               localStorage.setItem("kub-theme", "light");
@@ -356,15 +357,22 @@ test.describe("installed iPhone app — WebKit, insets through the tokens", () =
             return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
           };
           let lightest = 0;
+          let darkest = 1;
           for (let index = 0; index < data.length; index += info.channels) {
             const value =
               0.2126 * channel(data[index]) + 0.7152 * channel(data[index + 1]) + 0.0722 * channel(data[index + 2]);
             if (value > lightest) lightest = value;
+            if (value < darkest) darkest = value;
           }
-          const ratio = 1.05 / (lightest + 0.05);
+          const white = 1.05 / (lightest + 0.05);
+          const dark = (darkest + 0.05) / 0.05;
           expect(
-            ratio,
-            `white status-bar glyphs would measure ${ratio.toFixed(2)}:1 against the lightest pixel under them`,
+            white,
+            `white status-bar glyphs would measure ${white.toFixed(2)}:1 against the lightest pixel under them`,
+          ).toBeGreaterThanOrEqual(4.5);
+          expect(
+            dark,
+            `dark status-bar glyphs would measure ${dark.toFixed(2)}:1 against the darkest pixel under them`,
           ).toBeGreaterThanOrEqual(4.5);
         });
 
