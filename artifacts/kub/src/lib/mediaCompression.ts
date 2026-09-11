@@ -23,6 +23,7 @@
 
 import { MEDIA_QUALITY_METADATA_KEY, type MediaQuality } from "./mediaQuality.ts";
 import { selectRussianPluralForm } from "./messageMediaSections.ts";
+import { JPEG_TYPE, WEBP_TYPE, isCanvasPhotoCandidate } from "./photoEncoding.ts";
 import {
   MAX_VIDEO_ATTACHMENT_BYTES,
   MAX_VIDEO_ATTACHMENT_SIZE_LABEL,
@@ -46,7 +47,8 @@ export const MAX_ORIGINAL_ATTACHMENT_SIZE_LABEL = "50\u00a0МБ";
  */
 export const ORIGINAL_PREVIEW_MAX_DIMENSION = 1280;
 export const ORIGINAL_PREVIEW_QUALITY = 0.82;
-export const ORIGINAL_PREVIEW_MIME_TYPE = "image/webp";
+/** What a preview is written as. An engine that cannot write WebP writes a JPEG, and the preview says so. */
+export const ORIGINAL_PREVIEW_MIME_TYPE = WEBP_TYPE;
 /** Below this an original small enough to fit is its own preview. */
 export const ORIGINAL_PREVIEW_MIN_SOURCE_BYTES = 512 * 1024;
 
@@ -78,7 +80,9 @@ export function isCompressibleMediaType(mimeType: string | null | undefined): bo
 /**
  * Which way a picked file is prepared.
  *
- * - `compress`: re-encoded on the canvas, as every picture was before.
+ * - `compress`: re-encoded on the canvas, as every picture was before. A HEIC
+ *   is tried too — an iPhone hands its camera photos over as HEIC — and an
+ *   engine that cannot decode one sends it as picked (`lib/photoEncoding.ts`).
  * - `original`: the picked bytes, marked as the original, with nothing taken
  *   out of them but the place they were taken (`lib/mediaLocation.ts`).
  * - `as-is`: untouched because there is nothing to choose — a document, a
@@ -90,7 +94,7 @@ export function planAttachmentPreparation(
 ): AttachmentPreparation {
   const type = normalizedType(mimeType);
   if (!compress) return isCompressibleMediaType(type) ? "original" : "as-is";
-  return RECODABLE_IMAGE_TYPES.has(type) ? "compress" : "as-is";
+  return isCanvasPhotoCandidate(type) ? "compress" : "as-is";
 }
 
 export function exceedsOriginalLimit(sizeBytes: number): boolean {
@@ -195,14 +199,23 @@ export function originalPreviewDimensions(
  * policy lets a person write only inside their own folder, and a reader accepts
  * a preview only at exactly this address — so metadata, which the sender's
  * client writes, cannot point a bubble at anything but the sender's own upload.
+ *
+ * The extension is the preview's real type: `.preview.webp`, or `.preview.jpg`
+ * from an engine that cannot write WebP, whose preview used to be a PNG stored
+ * under `.webp`.
  */
-export function originalPreviewPath(mediaPath: string): string {
+export function originalPreviewPath(mediaPath: string, previewType: string = ORIGINAL_PREVIEW_MIME_TYPE): string {
   const slash = mediaPath.lastIndexOf("/");
   const folder = slash >= 0 ? mediaPath.slice(0, slash + 1) : "";
   const name = mediaPath.slice(slash + 1);
   const dot = name.lastIndexOf(".");
   const stem = dot > 0 ? name.slice(0, dot) : name;
-  return `${folder}${stem}.preview.webp`;
+  return `${folder}${stem}.preview.${normalizedType(previewType) === JPEG_TYPE ? "jpg" : "webp"}`;
+}
+
+/** The type a preview is recorded as: JPEG when it is one, WebP otherwise, as `originalPreviewPath` names it. */
+export function originalPreviewMimeType(previewType: string | null | undefined): string {
+  return normalizedType(previewType) === JPEG_TYPE ? JPEG_TYPE : ORIGINAL_PREVIEW_MIME_TYPE;
 }
 
 function metadataRecord(metadata: unknown): Record<string, unknown> | null {
@@ -247,7 +260,8 @@ export function readOriginalPreview(message: {
   const { path, width, height } = preview;
   if (typeof path !== "string" || path.startsWith("/")) return null;
   if (path.split("/").some((segment) => segment === ".." || segment === ".")) return null;
-  if (path !== originalPreviewPath(message.media_path)) return null;
+  const mediaPath = message.media_path;
+  if (![WEBP_TYPE, JPEG_TYPE].some((type) => path === originalPreviewPath(mediaPath, type))) return null;
   if (!isPositiveDimension(width) || !isPositiveDimension(height)) return null;
   return { path, width, height };
 }
@@ -264,7 +278,7 @@ export interface MediaMetadataSource {
   mediaQuality?: MediaQuality;
   durationMs?: number;
   uncompressed?: boolean;
-  previewFile?: { size: number } | null;
+  previewFile?: { size: number; type?: string } | null;
   previewWidth?: number;
   previewHeight?: number;
 }
@@ -330,7 +344,7 @@ export function buildAttachmentMediaMetadata(
       path: upload.previewPath,
       width: attachment.previewWidth,
       height: attachment.previewHeight,
-      mime_type: ORIGINAL_PREVIEW_MIME_TYPE,
+      mime_type: originalPreviewMimeType(attachment.previewFile.type),
       size_bytes: attachment.previewFile.size,
     };
   }

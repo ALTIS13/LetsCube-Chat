@@ -60,7 +60,10 @@ test("a file takes the compressed path by default and the original path only whe
   assert.equal(planAttachmentPreparation("image/png", true), "compress");
   assert.equal(planAttachmentPreparation("image/webp", true), "compress");
   assert.equal(planAttachmentPreparation("image/gif", true), "as-is", "a GIF would lose its animation");
-  assert.equal(planAttachmentPreparation("image/heic", true), "as-is");
+  // An iPhone's camera photo: tried on the canvas, and sent as picked by an
+  // engine that cannot decode it (`tests/unit/photo-encoding.test.mts`).
+  assert.equal(planAttachmentPreparation("image/heic", true), "compress");
+  assert.equal(planAttachmentPreparation("image/heif", true), "compress");
   assert.equal(planAttachmentPreparation("video/mp4", true), "as-is", "a video is compressed by the server's 720p copy");
   assert.equal(planAttachmentPreparation("application/pdf", true), "as-is");
   assert.equal(planAttachmentPreparation("audio/mpeg", true), "as-is");
@@ -191,6 +194,29 @@ test("the metadata says which way a photo or a video went", () => {
   assert.equal(isUncompressedMedia(original), true);
   assert.equal(isUncompressedMedia(compressed), false);
 
+  // From an engine that cannot write WebP the preview is a JPEG, and says so.
+  const jpegPreview = buildAttachmentMediaMetadata(
+    {
+      kind: "image",
+      mimeType: "image/png",
+      size: 2_400_000,
+      uncompressed: true,
+      width: 1290,
+      height: 2796,
+      previewFile: { size: 210_000, type: "image/jpeg" },
+      previewWidth: 591,
+      previewHeight: 1280,
+    },
+    { path: "u1/c1-a7.png", previewPath: "u1/c1-a7.preview.jpg" },
+  );
+  assert.deepEqual(jpegPreview?.preview, {
+    path: "u1/c1-a7.preview.jpg",
+    width: 591,
+    height: 1280,
+    mime_type: "image/jpeg",
+    size_bytes: 210_000,
+  });
+
   // A preview that did not reach storage is not promised to anyone.
   const withoutPreview = buildAttachmentMediaMetadata(
     { kind: "image", mimeType: "image/png", size: 10, uncompressed: true, previewFile: { size: 5 }, previewWidth: 1, previewHeight: 1 },
@@ -237,6 +263,9 @@ test("a preview sits beside its original and is read from nowhere else", () => {
   assert.equal(originalPreviewPath("u1/c1-a1.png"), "u1/c1-a1.preview.webp");
   assert.equal(originalPreviewPath("u1/c1-a1"), "u1/c1-a1.preview.webp");
   assert.equal(originalPreviewPath("u1.x/c1-a1.jpeg"), "u1.x/c1-a1.preview.webp");
+  // The extension is the preview's real type: a JPEG is never stored under `.webp`.
+  assert.equal(originalPreviewPath("u1/c1-a1.png", "image/webp"), "u1/c1-a1.preview.webp");
+  assert.equal(originalPreviewPath("u1/c1-a1.png", "image/jpeg"), "u1/c1-a1.preview.jpg");
 
   const message = {
     type: "image",
@@ -248,6 +277,11 @@ test("a preview sits beside its original and is read from nowhere else", () => {
     },
   };
   assert.deepEqual(readOriginalPreview(message), { path: "u1/c1-a1.preview.webp", width: 1280, height: 960 });
+  assert.deepEqual(
+    readOriginalPreview({ ...message, media_metadata: { uncompressed: true, preview: { path: "u1/c1-a1.preview.jpg", width: 1280, height: 960 } } }),
+    { path: "u1/c1-a1.preview.jpg", width: 1280, height: 960 },
+    "a JPEG preview, from an engine that cannot write WebP, is read at its own derived address",
+  );
 
   const variants: Array<[string, unknown]> = [
     ["a video", { ...message, type: "video" }],
@@ -256,6 +290,8 @@ test("a preview sits beside its original and is read from nowhere else", () => {
     ["a preview that climbs out", { ...message, media_metadata: { uncompressed: true, preview: { path: "u1/../u2/c1-a1.preview.webp", width: 1280, height: 960 } } }],
     ["a preview with no width", { ...message, media_metadata: { uncompressed: true, preview: { path: "u1/c1-a1.preview.webp", width: 0, height: 960 } } }],
     ["a preview whose width is text", { ...message, media_metadata: { uncompressed: true, preview: { path: "u1/c1-a1.preview.webp", width: "1280", height: 960 } } }],
+    ["a preview at an address no preview is written to", { ...message, media_metadata: { uncompressed: true, preview: { path: "u1/c1-a1.preview.png", width: 1280, height: 960 } } }],
+    ["a JPEG preview in someone else's folder", { ...message, media_metadata: { uncompressed: true, preview: { path: "u2/c1-a1.preview.jpg", width: 1280, height: 960 } } }],
     ["no stored original", { ...message, media_path: null }],
     ["no bucket", { ...message, media_bucket: null }],
     ["metadata that is a list", { ...message, media_metadata: [] }],

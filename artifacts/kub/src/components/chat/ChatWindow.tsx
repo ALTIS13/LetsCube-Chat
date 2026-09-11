@@ -36,7 +36,7 @@ import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor
 import { isRoundVideoMessageContent, isVoiceMessageContent } from "@/lib/messageMediaSections";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import { DEFAULT_MEDIA_QUALITY, selectVideoPlaybackUrl } from "@/lib/mediaQuality";
-import { prepareChatImageAttachment, prepareOriginalPreview, readMediaDimensions } from "@/lib/mediaUpload";
+import { prepareChatImageAttachment, prepareOriginalPreview, readMediaDimensions, type MediaDimensions } from "@/lib/mediaUpload";
 import {
   buildAttachmentMediaMetadata,
   mediaSendShape,
@@ -352,6 +352,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       const preparation = planAttachmentPreparation(sourceFile.type, compress);
       let file = sourceFile;
       let optimized = false;
+      let decodedDimensions: MediaDimensions | null = null;
       if (preparation === "original") {
         // Before anything reads the file: a refused original costs no decode.
         // «Файл» refuses an oversized original before staging, so on a desktop
@@ -371,7 +372,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           accepted.forEach(revokeAttachmentPreview);
           return [];
         }
-        file = prepared.value;
+        file = prepared.value.file;
+        // Measured by the decode that encoded it: the photo is not decoded again to read its size.
+        decodedDimensions = prepared.value.dimensions;
         optimized = file !== sourceFile || file.size !== sourceFile.size || file.type !== sourceFile.type;
       }
       // Whatever is uploaded as it was picked goes without the place it was
@@ -390,16 +393,19 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         errors.push(`${sourceFile.name || file.name || "Файл"}: ${error}`);
         continue;
       }
-      const preparedDimensions = await runScopedStagedPreparation(
-        uploadScope,
-        scopeToken,
-        () => readMediaDimensions(file),
-      );
-      if (preparedDimensions.status === "stale") {
-        accepted.forEach(revokeAttachmentPreview);
-        return [];
+      let dimensions = decodedDimensions;
+      if (!dimensions) {
+        const preparedDimensions = await runScopedStagedPreparation(
+          uploadScope,
+          scopeToken,
+          () => readMediaDimensions(file),
+        );
+        if (preparedDimensions.status === "stale") {
+          accepted.forEach(revokeAttachmentPreview);
+          return [];
+        }
+        dimensions = preparedDimensions.value;
       }
-      const dimensions = preparedDimensions.value;
       const uncompressed = preparation === "original";
       let previewFile: File | null = null;
       let previewSize: { width: number; height: number } | null = null;
@@ -551,7 +557,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       uploadScope.isActive(scopeToken) &&
       !cancelledAttachmentIdsRef.current.has(attachment.id)
     ) {
-      const candidate = originalPreviewPath(uploadedPath);
+      // `.preview.webp`, or `.preview.jpg` from an engine that cannot write WebP.
+      const candidate = originalPreviewPath(uploadedPath, attachment.previewFile.type);
       const { error: previewError } = await supabase.storage
         .from(CHAT_MEDIA_BUCKET)
         .upload(candidate, attachment.previewFile, {

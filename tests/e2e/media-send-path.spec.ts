@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 import sharp from "sharp";
 
@@ -14,9 +15,18 @@ import sharp from "sharp";
  * ones after it and keeps its reason — naming the file, never guessing a limit
  * — and «Повторить»; uploads run side by side while the messages still arrive
  * in pick order, with rising `client_sent_at`; a small upload's bar claims no
- * number; and a chat update that never answers holds nothing. The decisions
- * themselves are unit-tested in `tests/unit/attachment-send-queue.test.mts` and
- * `tests/unit/upload-failure.test.mts`.
+ * number; and a chat update that never answers holds nothing.
+ *
+ * And the iPhone photo path, with the canvas answering a request for WebP with
+ * a PNG, as WebKit on Apple platforms does: a compressed photo goes as a JPEG
+ * named and typed as one, an original's preview is a JPEG at its own address,
+ * a small JPEG that needs no resize goes as picked with no encode, and a HEIC
+ * this engine cannot decode goes as picked. The real iPhone is not here —
+ * Playwright's WebKit on Windows writes WebP and decodes no HEIC.
+ *
+ * The decisions themselves are unit-tested in
+ * `tests/unit/attachment-send-queue.test.mts`, `tests/unit/upload-failure.test.mts`
+ * and `tests/unit/photo-encoding.test.mts`.
  *
  * The backend is a route mock on the fixture host, storage included, and the
  * spec refuses any other configuration and aborts every request to a host that
@@ -51,6 +61,8 @@ type Upload = {
 };
 type Backend = {
   uploads: Upload[];
+  /** What storage kept, by object path, for uploads the page kept the bytes of. */
+  stored: Map<string, { type: string; bytes: Buffer }>;
   inserts: Array<Record<string, unknown>>;
   insertedAt: number[];
   chatUpdates: number;
@@ -76,8 +88,17 @@ test.describe("the send path of photos and videos", () => {
       (url) => (url.protocol === "http:" || url.protocol === "https:") && url.hostname !== "127.0.0.1" && url.hostname !== "localhost",
       (route) => route.abort("blockedbyclient"),
     );
+    await installErrorWatch(page);
     await installSession(page);
     await installUploadProbe(page);
+  });
+
+  test.afterEach(async ({ page }, testInfo) => {
+    const errors = await page
+      .evaluate(() => (window as unknown as { __pageErrors?: string[] }).__pageErrors ?? [])
+      .catch(() => [] as string[]);
+    if (errors.length) testInfo.annotations.push({ type: "page errors", description: errors.join(" | ") });
+    expect(errors.filter((error) => !isResizeObserverLoop(error)), "the page raised no error while sending").toEqual([]);
   });
 
   test("a refused video does not strand the photo picked after it, and says why, naming the file", async ({ page }) => {
@@ -193,6 +214,99 @@ test.describe("the send path of photos and videos", () => {
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
     await backend.release();
   });
+
+  test("where the canvas cannot write WebP, a photo goes as a JPEG, named and typed as one", async ({ page }) => {
+    await answerWebpWithPng(page);
+    const backend = await installBackend(page);
+    await openChat(page);
+
+    const facade = await testPhoto("facade.png", 30);
+    await pickPhotosOrVideos(page, [facade]);
+    await sendPicked(page, 1);
+    await expect.poll(() => backend.inserts.length).toBe(1);
+
+    // Before, these were PNG bytes typed image/webp under «facade-image.webp».
+    expect(backend.uploads.map(({ name, type }) => ({ name, type }))).toEqual([{ name: "facade-image.jpg", type: "image/jpeg" }]);
+    const [upload] = backend.uploads;
+    expect(upload.path.endsWith(".jpg"), upload.path).toBe(true);
+    const stored = backend.stored.get(upload.path);
+    expect(stored, "storage kept the upload").toBeTruthy();
+    const picture = await sharp(stored?.bytes).metadata();
+    expect({ format: picture.format, width: picture.width, height: picture.height }).toEqual({ format: "jpeg", width: 1600, height: 1200 });
+    expect(backend.inserts[0]).toMatchObject({
+      type: "image",
+      media_path: upload.path,
+      media_metadata: { mime_type: "image/jpeg", optimized: true, uncompressed: false, width: 1600, height: 1200, original_mime_type: "image/png" },
+    });
+  });
+
+  test("where the canvas cannot write WebP, an original's preview is a JPEG at its own address", async ({ page }) => {
+    await answerWebpWithPng(page);
+    const backend = await installBackend(page);
+    await openChat(page);
+
+    const facade = await testPhoto("facade.png", 205, 2400, 1800);
+    await pickFiles(page, [facade]);
+    await expect(page.getByTestId("staged-attachment-item")).toContainText("без сжатия");
+    await page.getByRole("button", { name: "Отправить" }).click();
+    await expect.poll(() => backend.inserts.length).toBe(1);
+
+    const original = backend.uploads.find((upload) => upload.name === "facade.png");
+    expect(original, `uploads: ${backend.uploads.map((upload) => upload.name).join(", ")}`).toBeTruthy();
+    const previewPath = `${original?.path.slice(0, original.path.lastIndexOf("."))}.preview.jpg`;
+    const preview = backend.uploads.find((upload) => upload.path === previewPath);
+    expect(preview, `no JPEG preview beside ${original?.path}`).toMatchObject({ name: "facade-preview.jpg", type: "image/jpeg" });
+    const picture = await sharp(backend.stored.get(previewPath)?.bytes).metadata();
+    expect({ format: picture.format, width: picture.width, height: picture.height }).toEqual({ format: "jpeg", width: 1280, height: 960 });
+    expect(backend.inserts[0]).toMatchObject({
+      media_path: original?.path,
+      media_metadata: {
+        uncompressed: true,
+        mime_type: "image/png",
+        preview: { path: previewPath, width: 1280, height: 960, mime_type: "image/jpeg", size_bytes: preview?.size },
+      },
+    });
+    await expect(
+      page.locator('[data-message-bubble="true"] button[aria-label="Открыть фото"] img').last(),
+      "the conversation draws the JPEG preview",
+    ).toHaveAttribute("src", `${PUBLIC_MEDIA}${previewPath}`);
+  });
+
+  test("where the canvas writes only JPEG, a small JPEG that needs no resize goes as picked, with no encode", async ({ page }) => {
+    await answerWebpWithPng(page);
+    const backend = await installBackend(page);
+    await openChat(page);
+
+    const site = await smallJpeg("site.jpg");
+    await pickPhotosOrVideos(page, [site]);
+    await sendPicked(page, 1);
+    await expect.poll(() => backend.inserts.length).toBe(1);
+
+    const [upload] = backend.uploads;
+    expect({ name: upload.name, type: upload.type, size: upload.size }).toEqual({ name: "site.jpg", type: "image/jpeg", size: site.buffer.length });
+    expect(sha256(backend.stored.get(upload.path)?.bytes ?? Buffer.alloc(0)), "the picked bytes, not a second generation").toBe(sha256(site.buffer));
+    expect(await photoEncodes(page), "no photo was drawn to a canvas and encoded").toBe(0);
+    expect(backend.inserts[0]).toMatchObject({
+      media_metadata: { mime_type: "image/jpeg", optimized: false, uncompressed: false, width: 1280, height: 960 },
+    });
+  });
+
+  test("a HEIC this engine cannot decode goes as it was picked", async ({ page }) => {
+    const backend = await installBackend(page);
+    await openChat(page);
+
+    // Safari decodes HEIC and sends it through the canvas; Chromium and
+    // Playwright's WebKit cannot, and keep what happened before.
+    const heic = fakeHeic("IMG_0042.HEIC");
+    await pickPhotosOrVideos(page, [heic]);
+    await sendPicked(page, 1);
+    await expect.poll(() => backend.inserts.length).toBe(1);
+
+    const [upload] = backend.uploads;
+    expect({ name: upload.name, type: upload.type, size: upload.size }).toEqual({ name: "IMG_0042.HEIC", type: "image/heic", size: heic.buffer.length });
+    expect(upload.path.endsWith(".heic"), upload.path).toBe(true);
+    expect(backend.inserts[0]).toMatchObject({ media_metadata: { mime_type: "image/heic", optimized: false, width: null, height: null } });
+  });
 });
 
 // ── the flows ────────────────────────────────────────────────────────────────
@@ -211,10 +325,43 @@ async function isCoarsePointer(page: Page): Promise<boolean> {
 
 /** «Прикрепить» → «Фото или видео»: one place to change when the attach menu becomes a sheet. */
 async function pickPhotosOrVideos(page: Page, files: PickedFile[]) {
+  await chooseFromAttachMenu(page, "Фото или видео", files);
+}
+
+/** «Прикрепить» → «Файл»: originals, without compression, on every device (D-119). */
+async function pickFiles(page: Page, files: PickedFile[]) {
+  await chooseFromAttachMenu(page, "Файл", files);
+}
+
+async function chooseFromAttachMenu(page: Page, item: string, files: PickedFile[]) {
   await page.getByRole("button", { name: "Прикрепить" }).click();
   const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Фото или видео", exact: true }).click();
+  await page.getByRole("button", { name: item, exact: true }).click();
   await (await chooser).setFiles(files);
+}
+
+/**
+ * The canvas as WebKit on Apple platforms has it: asked for WebP, it answers
+ * with a PNG. Every photo drawn larger than the 1x1 encoder probe is counted.
+ */
+async function answerWebpWithPng(page: Page) {
+  await page.addInitScript(() => {
+    const scope = window as unknown as { __photoEncodes: number };
+    scope.__photoEncodes = 0;
+    const toBlob = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function (this: HTMLCanvasElement, callback: BlobCallback, type?: string, quality?: number) {
+      if (this.width > 1 || this.height > 1) scope.__photoEncodes += 1;
+      return toBlob.call(this, callback, type === "image/webp" ? "image/png" : type, quality);
+    };
+  });
+}
+
+async function photoEncodes(page: Page): Promise<number> {
+  return page.evaluate(() => (window as unknown as { __photoEncodes: number }).__photoEncodes);
+}
+
+function sha256(bytes: Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 /** Sends what was picked, compressed as it defaults to: a phone from the composer, a desktop from its send dialog. */
@@ -243,6 +390,38 @@ async function conversationPhotoPaths(page: Page): Promise<string[]> {
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Every error the page raises, by message, for the test to judge afterwards.
+ *
+ * The dev server's runtime-error overlay covers the page on any window error,
+ * and once, on chromium-mobile-390, it came up over the composer mid-test with
+ * «(unknown runtime error)» — an error event carrying no error object, which is
+ * how Chromium reports «ResizeObserver loop completed with undelivered
+ * notifications». That notice is benign by the specification and exists only
+ * in development tooling's eyes, so it is recorded and kept from the overlay.
+ * Anything else still reaches the overlay, and fails the test by name.
+ */
+async function installErrorWatch(page: Page) {
+  await page.addInitScript(() => {
+    const errors: string[] = [];
+    (window as unknown as { __pageErrors: string[] }).__pageErrors = errors;
+    // Registered before any page script, so it runs before the overlay's own listener.
+    window.addEventListener("error", (event) => {
+      const message = event.message || String(event.error ?? "error without a message");
+      errors.push(`error: ${message}`);
+      if (/ResizeObserver loop/i.test(message)) event.stopImmediatePropagation();
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      const reason = event.reason as { message?: unknown } | undefined;
+      errors.push(`unhandled rejection: ${String(reason?.message ?? reason)}`);
+    });
+  });
+}
+
+function isResizeObserverLoop(error: string): boolean {
+  return /ResizeObserver loop/i.test(error);
 }
 
 // ── what the page handed to storage ─────────────────────────────────────────
@@ -302,21 +481,39 @@ async function handedUpload(page: Page, path: string) {
 
 // ── fixtures ─────────────────────────────────────────────────────────────────
 
-/** A 1600x1200 PNG heavy enough that its compressed copy is smaller, so compression really applies. */
-async function testPhoto(name: string, hue: number): Promise<PickedFile> {
-  const lines = Array.from({ length: 17 }, (_, i) => `<line x1="${i * 100}" y1="0" x2="${i * 100 + 240}" y2="1200"/>`).join("");
+/** A PNG, 1600x1200 unless asked, heavy enough that its compressed copy is smaller, so compression really applies. */
+async function testPhoto(name: string, hue: number, width = 1600, height = 1200): Promise<PickedFile> {
+  const lines = Array.from({ length: Math.ceil(width / 100) + 1 }, (_, i) => `<line x1="${i * 100}" y1="0" x2="${i * 100 + 240}" y2="${height}"/>`).join("");
   const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">` +
     `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
     `<stop offset="0" stop-color="hsl(${hue} 55% 62%)"/><stop offset="1" stop-color="hsl(${(hue + 70) % 360} 60% 28%)"/>` +
     `</linearGradient></defs>` +
-    `<rect width="1600" height="1200" fill="url(#g)"/>` +
+    `<rect width="${width}" height="${height}" fill="url(#g)"/>` +
     `<g stroke="hsl(${(hue + 180) % 360} 70% 80%)" stroke-width="5" opacity="0.55">${lines}</g>` +
-    `<circle cx="800" cy="600" r="280" fill="none" stroke="white" stroke-width="22"/>` +
+    `<circle cx="${width / 2}" cy="${height / 2}" r="${Math.round(height / 4)}" fill="none" stroke="white" stroke-width="22"/>` +
     `</svg>`;
   const buffer = await sharp(Buffer.from(svg)).png({ compressionLevel: 6 }).toBuffer();
   expect(buffer.length, "a test photo stays under the resumable threshold").toBeLessThan(6 * 1024 * 1024);
   return { name, mimeType: "image/png", buffer };
+}
+
+/** A 1280x960 JPEG of 2 bits per pixel or less: already as dense as the fallback encoder would write it. */
+async function smallJpeg(name: string): Promise<PickedFile> {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="960">` +
+    `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6d8fb3"/><stop offset="1" stop-color="#c9a36b"/></linearGradient></defs>` +
+    `<rect width="1280" height="960" fill="url(#g)"/><circle cx="640" cy="480" r="240" fill="#f4f6fa" opacity="0.6"/></svg>`;
+  const buffer = await sharp(Buffer.from(svg)).jpeg({ quality: 80 }).toBuffer();
+  expect(buffer.length, "the fixture is within the keep rule").toBeLessThanOrEqual(1280 * 960 * 0.25);
+  return { name, mimeType: "image/jpeg", buffer };
+}
+
+/** Bytes typed as HEIC that neither Chromium nor Playwright's WebKit can decode. */
+function fakeHeic(name: string): PickedFile {
+  const buffer = Buffer.alloc(180 * 1024);
+  for (let at = 0; at < buffer.length; at += 1) buffer[at] = (at * 17 + 3) % 239;
+  return { name, mimeType: "image/heic", buffer };
 }
 
 /** Bytes typed as an MP4 that no engine can decode: staging reads no size from it, and it uploads as picked. */
@@ -358,6 +555,7 @@ async function installBackend(page: Page): Promise<Backend> {
   const stored = new Map<string, { type: string; bytes: Buffer }>();
   const backend: Backend = {
     uploads: [],
+    stored,
     inserts: [],
     insertedAt: [],
     chatUpdates: 0,
