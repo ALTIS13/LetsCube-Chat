@@ -1,5 +1,347 @@
 # QA Results
 
+## 2026-09-11 - Tests and gates that reported success without checking
+
+Seven places where a run could end green, or end red for the wrong reason,
+without the thing it names having been checked. Every fix below was measured
+before and after, and every contract it restores was mutation-checked with the
+SHA-256 of the mutated file taken before, during and after, and returned to the
+original. Every Playwright run here was started with `KUB_QA_ALLOW_MUTATIONS=0`
+in the process environment; the five specs that write to production were not
+run at all.
+
+### 1. Tests Playwright drops are now named, and cannot pass a run silently
+
+Measured on Playwright 1.59.1, reading the runner rather than its output:
+
+- The dispatcher hands every test it drops a result with status `skipped`
+  (`runner/dispatcher.js`, `_failTestWithErrors` with no errors, reached from
+  `_massSkipTestsFromRemaining` for the rest of a `describe.serial` group after
+  a failure and for what is left of a suite whose `beforeAll` threw).
+- The failure tracker counts only `unexpected` outcomes
+  (`runner/failureTracker.js`), and a test whose results are all `skipped` has
+  the outcome `skipped`, which `TestCase.ok()` accepts.
+- The built-in summary prints those tests as a bare count — "6 did not run" —
+  with no names (`reporters/base.js`, `generateSummary`).
+
+**A correction to what was believed.** In the ordinary cascades the run is
+already red, because the test that tripped them is a failure: measured, a
+failing `beforeAll` and a failing test in a serial group both exit 1. The "exit
+0" reported for the earlier full run came from `cmd | tail`, which returns the
+exit code of `tail`. The green case exists, but it needs the trigger itself not
+to count: a `beforeAll` failure absorbed by `test.fail()` tests, one of which
+then raises an error outside any `expect`. The worker stops without an
+unexpected result, the rest of the suite is handed back as dropped, and the run
+ends `2 did not run, 3 passed` with exit code 0.
+
+`tests/e2e/helpers/did-not-run-guard.ts`, registered in `playwright.config.ts`,
+uses exactly the built-in "did not run" rule, prints every such test by
+`[project] file:line > title`, and turns only a run that would otherwise pass
+into a failure. Proven on a throwaway project outside the repository, each shape
+run without and with the reporter:
+
+| shape | without | with the guard |
+| --- | --- | --- |
+| `beforeAll` throws | exit 1, "2 did not run" | exit 1, both named |
+| failure in a serial group | exit 1, "2 did not run" | exit 1, both named |
+| expected failure stops its worker after a setup failure | **exit 0**, "2 did not run, 3 passed" | **exit 1**, both named |
+| runtime `test.skip`, declared skip/fixme, skip thrown from `beforeAll` in a serial group, `describe.skip` | exit 0, "6 skipped" | exit 0, nothing named |
+| Ctrl+C (SIGINT raised in the runner process) | exit 130 | exit 130, not rewritten; the unreached test named |
+| `--max-failures=1` | exit 1, "3 did not run" | exit 1, not rewritten; all three named |
+| `--list` | exit 0 | exit 0, nothing named |
+
+The last row is a regression the first version of the reporter had: `--list`
+reports every test with no result, so it failed the listing and called every
+test "never executed". The reporter now does nothing in a run in which no test
+ended. Found by running it, not by reading it.
+
+`tests/unit/did-not-run-guard.test.mts` (16 tests) feeds each shape through
+Playwright's own `TerminalReporter.generateSummary()` and requires the guard to
+list exactly what that summary counts, so an upgrade that changes the rule
+fails here rather than letting the two disagree. Mutations, each caught:
+
+| mutation (`did-not-run-guard.ts`, `4fa13962…`) | caught by |
+| --- | --- |
+| `expectedStatus !== "skipped"` inverted (`9ea9fb83…`) | 7 tests, including the agreement with the built-in summary |
+| the `interrupted` exclusion removed (`e94f1194…`) | "interrupted by Ctrl+C" agreement, "legitimate skips" |
+| the override removed (`49f4c366…`) | "a run that would pass with a dropped test fails" |
+| the override applied to any non-failed run (`0b7f68a6…`) | "a interrupted run / a timedout run is not rewritten" |
+
+All reverted to `4fa13962…` before the `--list` fix changed the file.
+
+### 2. `profile-decoration.spec.ts` was broken deterministically, and nobody saw
+
+The settings screen moved its sections into collapsed `DisclosureRow`s
+(`f58edfe`, 2026-09-04) whose panel is rendered only while open. The spec
+(`72a9f05`, 2026-09-03) still looked for "Рамка аватара" without opening the
+row. Reproduced: `:20` and `:33` both time out at
+`getByText('Рамка аватара').scrollIntoViewIfNeeded()`. A second break was
+waiting behind the first: `4e87cba` (2026-09-05) changed the progress line from
+"N из M" to "N / M", so `:20`'s regex could never have matched either.
+
+The spec now opens the row by `settings-open-decoration`, waits for
+`settings-section-decoration`, and reads what to expect from the three
+responses the section is drawn from (`achievements`, `cosmetics`,
+`rpc/achievements_sync`) instead of from memory of production data. `:20`
+checks every achievement row and every distance the server reports; `:33`
+checks every unearned, drawable frame is offered, announced unavailable and not
+pressed, then clicks one and proves nothing is selected and no `profile_frame`
+write is attempted — such a request would be aborted by the test before it
+could reach the real profile.
+
+`:46` sends a PATCH to the account's production profile. Refused, it changes
+nothing; accepted — the regression it exists to catch — it changes a decoration
+everyone can see. It now skips unless `KUB_QA_ALLOW_MUTATIONS=1`, takes the
+unearned frame from the server's answer rather than a hard-coded key, reads the
+current frame first and puts it back if the PATCH is ever accepted.
+
+Opening the section at all runs `achievements_sync`, which inserts any
+achievement the account already qualifies for (`on conflict do nothing`). That
+is the write every visit to that screen makes, limited to the account's own
+facts; it is noted, not gated.
+
+Result: `:20` and `:33` pass, `:46` skips with its reason. Mutations of
+`ProfileDecorationSection.tsx` (`051814f5…`), each caught at its own assertion
+and reverted:
+
+| mutation | caught at |
+| --- | --- |
+| `aria-disabled` removed from locked options (`2a77c23d…`) | `:164` "frame_veteran is not earned, so it is announced as unavailable" |
+| the `unlocked &&` guard removed from `onClick` (`0d4c181a…`) | `:189` "choosing a locked frame must not ask the server to wear it" |
+| the distance line hidden (`25c74ec7…`) | `:137` |
+| the distance line reworded to "N из M" (`4473dc00…`) | `:137` |
+
+The first three were rerun: their first attempts failed at sign-in
+(`auth.ts:227`), and a red at the wrong line proves nothing.
+
+### 3. `privacy-support-public.spec.ts:103` could not answer its own captcha
+
+It does not create a ticket in production: every request under
+`/functions/v1/support-gateway` is fulfilled by the test, the app builds exactly
+that URL (`lib/support/supportGateway.ts:72`), and no service worker is
+registered in the dev server (`navigator.serviceWorker.register` is reached only
+from enabling push). The pattern is now `**/functions/v1/support-gateway**`, so
+a request to the gateway's root or an unknown path is caught too.
+
+The cause of the failure at `:234`: with `VITE_AUTH_CAPTCHA_SITE_KEY` set and no
+`VITE_AUTH_CAPTCHA_PROVIDER`, `resolveAuthCaptchaConfig` picks Turnstile, and the
+test faked only SmartCaptcha. The page loaded Cloudflare's real script, the
+callback was never installed, `__supportCaptchaCallback?.(…)` did nothing, and
+the form refused an empty token without sending anything. The fake now answers
+both providers, the test first requires the fake widget to be drawn (naming the
+variable when it is not), and a missing callback fails where it happens.
+
+Result: 4/4 on a dev server with the site key only (Turnstile), 4/4 with
+`VITE_AUTH_CAPTCHA_PROVIDER=yandex`. Mutation: the Turnstile callback removed
+from `HumanVerificationCaptcha.tsx` (`e64f2b9e…` → `bce7f7ef…`) fails at `:246`
+"the captcha widget was drawn but never handed over its callback"; reverted.
+
+Without any site key `:103` still fails, by name, at the widget check. That is
+the dev-server setup, not the product.
+
+### 4. `motion-layout-stability.spec.ts:95` depended on timing
+
+Not reproduced as a flake in isolation (4/4 before the change). Two points in it
+were nevertheless left to timing: nothing established that the routing request
+had been caught by the hold before the dialog was measured, and the menu item
+was counted once, immediately after the click, and skipped when not yet
+rendered. The test now waits until the hold has provably caught a request, waits
+for whichever of the menu or the dialog appears, and after releasing the hold
+requires the loading status to give way — which also lets the held requests
+finish before teardown.
+
+Result: 3/3 alone. Mutations, each caught and reverted:
+
+| mutation | caught at |
+| --- | --- |
+| `locationsUnknown = false` in `ProfileRoleSummary.tsx` (`03b3f29c…` → `753286a4…`) | `:138`, "Локации не назначены" shown while loading |
+| the hold's pattern made to miss (`9497e7d8…` → `900f142e…`) | `:119` "the routing request was never held, so there is no loading state to measure" |
+
+### 5. `multi-device-sync.spec.ts` no longer runs serially
+
+Not run: it writes to production. Read statically, every test needs only what
+`beforeAll` builds and none depends on an earlier test's effects — each sends
+under its own marker and asserts on that — so serial mode only turned one
+failure into up to six silent drops. Removed. What the runner does with shared
+`beforeAll` state in each mode was measured on the throwaway project: serial —
+`1 passed, 1 failed, 1 did not run`; default — the failing worker ran `afterAll`,
+a new worker ran `beforeAll` again, and the test after the failure ran and
+passed. One precondition lives in the data, not in the tests, and is noted in
+the spec: the read-receipt test expects the chat to start with nothing unread.
+
+### 6. `composer.spec.ts` was writing real messages
+
+Found by reading every spec that signs in before running the suite. It holds the
+message POST and then continues it, so it sends `COMPOSER_CLEAR_<time>` into the
+first chat the account can write to — a conversation with real people — and
+nothing removes it. It honoured no gate. It now skips unless
+`KUB_QA_ALLOW_MUTATIONS=1`, through the shared `qaMutationsAllowed()` in
+`tests/e2e/helpers/auth.ts`, whose precedence (a `0` in the environment beats a
+`1` in the QA file; only `"1"` allows) is pinned by
+`tests/unit/qa-mutation-gate.test.mts`. Mutations: the file read before the
+environment (`6fc003b1…` → `25a4d682…`), and any non-empty value accepted
+(`680de2ef…`) — both caught, both reverted.
+
+The rest of the signed-in specs were read the same way and create nothing. They
+do make the writes any session makes: sign-in, presence, delivered and read
+receipts in the chats they open.
+
+### 7. The Windows QA gate checks its own input
+
+`scripts/windows-tauri-frontend-bundle.mjs` answers whether
+`artifacts/kub/dist/public` exists, is configured by the application's own rule
+(a unit test holds it to `resolveSupabaseConfig`), points at a real HTTPS backend
+rather than the routing matrix's loopback fixture, and is not older than the
+sources it is built from. `windows:tauri:qa` asks it before cargo builds anything
+— only when a scenario that serves the bundle is selected — and
+`startLocalFrontendServer` asks it too, so a spec started without the harness
+fails on the reason. Nothing the bundle carries is ever printed.
+
+Measured end to end, with the real harness:
+
+- `index.html` back-dated: exit 1 before cargo, "artifacts/kub/dist/public is
+  older than artifacts/kub/vite.config.ts, so it is not the code in this
+  checkout."
+- the unconfigured build swapped in: exit 1 before cargo, "…was built without
+  VITE_SUPABASE_URL and a key (VITE_SUPABASE_ANON_KEY or
+  VITE_SUPABASE_PUBLISHABLE_KEY), so every page it serves says «Подключение к
+  серверу не настроено» and no QA account can sign in."
+
+`tests/unit/windows-tauri-frontend-bundle.test.mjs` (6 tests) covers missing,
+unconfigured (each half, and empty strings), loopback and plain-HTTP, stale, and
+that no value is echoed; `tests/unit/tauri-shell.test.mjs` pins that the refusal
+comes before `spawnSync(cargoPath…)` and that the helper asks the same question.
+
+`windows-tauri-startup.spec.ts` also skipped nothing outside the harness: run in
+an ordinary suite it failed on "wrapper must provide a bounded startup QA mode".
+It now skips when `LETSCUBE_TAURI_CDP_URL` is absent, as the other Windows specs
+do, and still fails when the harness gives it a bad mode.
+
+### 8. Two things the full run exposed before it could run a test
+
+Recorded, not changed here: both sit outside this change's files, and both are
+the same kind of fault this entry is about.
+
+- **The suite cannot be loaded from the repository root.** The first full
+  attempt exited 1 having executed nothing: `resumable-media-upload.spec.ts:2`
+  imports `react`, which exists only in `artifacts/kub/node_modules`. The root
+  `package.json` does not declare it and the owner's `.worktrees/bot-platform`
+  has no root `react` either, so this is not a local install. One spec that
+  cannot load stops Playwright before any test. The file is excluded from the
+  full run below. Run alone with `NODE_PATH` pointed at the kub modules it
+  passes 15 and fails 1: `:56` expects the TUS metadata
+  `cacheControl: "max-age=31536000, immutable"`, and the code sends `"31536000"`.
+  `mediaCacheControl.ts` says the upload value is a lifetime in seconds, since
+  `3a092e2`/`8e47964` (2026-09-04), so the expectation is the stale side — and
+  nothing reported it, because the file could not be run.
+- **A dead dev server reads as skipped tests.** The second attempt ran after the
+  dev server on 5230 had exited (pnpm reported status 4294967295 for vite; its
+  last log line was an HMR update at 04:33; the cause was not found). Thirteen
+  tests were skipped and none passed before it was stopped. `gotoOrSkip`
+  (`tests/e2e/helpers/auth.ts`) skips whenever navigating to `KUB_BASE_URL`
+  fails, and a skip is not a failure to Playwright or to the did-not-run guard.
+  Changing it would change every spec, so it is proposed rather than done: fail
+  when a base URL was given explicitly and cannot be reached. The server was
+  restarted and its served client module checked for the real configuration
+  before the run below.
+
+### 9. The full run on `chromium-desktop-1440`, with the guard connected
+
+Every spec file except `resumable-media-upload` (§8) and the five that write to
+production, with the unconfigured routing matrix filtered out because it owns
+port 5188, which is not this track's. Dev server with the real public
+configuration, `KUB_QA_ALLOW_MUTATIONS=0`, the configuration's own reporters.
+
+**223 tests in 38.0 min: 154 passed, 33 failed, 36 skipped, 0 did not run.**
+Exit 1. The guard named nothing, in agreement with the built-in summary.
+
+Every failure was rerun alone, on a dev server configured the way that spec
+needs, before being called anything:
+
+| failures | rerun | verdict |
+| --- | --- | --- |
+| 4 at the shared sign-in (`auth.ts:227`): `action-feedback:41`, `admin-user-filters:15` and `:63`, `avatar-preview-sizing:31` | same server | pass — sign-in timing under load |
+| `bot-avatar:75`, `motion-layout-stability:16` | same server | pass |
+| 10 in `bot-management` | routing fixture plus `VITE_BOT_MANAGEMENT_URL=http://127.0.0.1:54322` | 10/10; two needed a second run after `page.goto` timeouts. The spec mocks that origin, and without the variable the app calls `https://api.letscube.ru` |
+| 4 in `bot-chat-integration`, 3 in the configured `public-home-routing` matrix | routing fixture (`http://127.0.0.1:54321`) | both files pass in full — they run on a fake session whose mocks only match the fixture |
+| 3 in `registration-confirmation`, 3 in `letscube-brand-auth-layout`, `privacy-support-public:103` | `VITE_AUTH_CAPTCHA_SITE_KEY` plus `VITE_AUTH_CAPTCHA_PROVIDER=yandex` | the three files pass 18/18 |
+| `windows-tauri-storage:35` | — | threw "runs only under scripts/windows-tauri-qa.mjs" in an ordinary run; changed like the startup spec, now skips outside the harness |
+| `settings-profile-layout:27` | same server | **fails again** at `:50`: two inputs' `x` compared with `toBe`, measured 456.2996 against 455.8954 — a 0.40px sub-pixel difference, not a layout shift |
+| `unified-interface-chrome:122` | same server | **fails again** at `:139`: `getByRole("button", { name: "Чистый голос" })` resolves to two buttons, because since `f58edfe` the audio row's own button carries its value in its name |
+
+No product defect came out of this run. The two failures that survive are
+defects of the tests, in files outside this change, and are recorded for their
+owners: `:50` wants a tolerance, `:139` wants `exact: true` or the section as its
+scope.
+
+Among the 36 skips, the ones this change accounts for are `composer` and
+`profile-decoration:193` (writes to production are not allowed) and the Windows
+specs that need the harness's CDP endpoint (`windows-tauri-shell:15` and `:315`,
+`windows-tauri-startup`, `windows-tauri-long-session`). The rest are the specs'
+own conditions, which the list reporter does not print.
+
+### 10. `windows:tauri:qa`, run in full
+
+Run twice, last and alone, with the installed LETSCUBE left as it was.
+
+- **First run: exit 1.** `baseline` failed at `windows-tauri-shell.spec.ts:115`:
+  `production-startup-overlay` was not visible within 10s of the handover, the
+  other two baseline tests were dropped, and the guard named them. Cleanup then
+  reported the scenario's WebView2 profile still held (`EPERM`) at the 45s bound.
+  The harness stops at the first failing scenario.
+- **Second run: exit 0**, every scenario green:
+
+| scenario | result | proven by what the spec wrote |
+| --- | --- | --- |
+| `baseline` | 3/3 | the startup scene, the connected hold, the registration captcha, the signed-in native shell, the local update pill, settings and critical gate |
+| `success`, `offline`, `catalog_failure` | pass | startup geometry at 1920, 1440 and 960 wide and the production handoff; for `offline`, the retry screens too |
+| `normal_update` | pass | `built-normal-update-pill.png`, written only after the local sign-in reached the shell and the pill and `inert` assertions held |
+| `critical_update` | pass | `built-critical-update-gate.png`, written only after the gate, `inert` and `aria-hidden` held |
+
+The screenshots were counted by name, never opened: the local pages are signed
+in.
+
+**`normal_update`: the recorded stall did not reproduce, and the bridge's shape
+is not its cause.** The entry below records a sign-in on the loopback origin that
+never settled, identically in a control run, and puts the difference from
+`baseline` down to the injected bridge. Measured now:
+
+- The scenario alone through the harness: pass. Inside the full sequence, after
+  `baseline`'s two sign-ins: pass.
+- Outside the harness, the same built bundle signed in under the `normal_update`
+  bridge, the `baseline` bridge and no bridge at all in 339, 362 and 355 ms. One
+  earlier attempt under the `normal_update` bridge took 19.8 s from submit to
+  shell, against the scenario's 25 s budget.
+- During this work the shared sign-in helper failed intermittently for other
+  specs — "neither the login form nor the authenticated shell appeared", and once
+  a submit button already gone at the helper's retry — and each passed when rerun
+  alone. `docs/security/AUTH_RLS_ANTI_ABUSE_PLAN.md` records a per-address throttle
+  on `/auth/v1/*`, shared by every agent on this workstation.
+
+Slow sign-ins under shared load fit all of it, and were not proven to be the
+cause. So the change is to the report rather than a guess: when the local
+sign-in misses its 25 s, the failure now lists that sign-in's own requests with
+status and timing — or that one is still pending, or that none was sent — with
+the form's message and the submit button's state. The next occurrence names
+where it stopped.
+
+### Gates
+
+- `node --test tests/unit/*.mjs tests/unit/*.mts`: 1411/1411, including the new
+  `did-not-run-guard` (16), `qa-mutation-gate` (4) and
+  `windows-tauri-frontend-bundle` (6).
+- `pnpm.cmd --filter @workspace/kub run typecheck`: clean. `git diff --check`:
+  clean.
+- `pnpm.cmd windows:tauri:test`: 28/28. `windows-tauri/**` was not touched, so
+  `cargo test` was not required.
+- Mutations of the bundle check, its wiring into the harness and the helper, and
+  the guard's `--list` rule — seven, each caught by the unit suite and reverted:
+  either half accepted as configured, loopback accepted, staleness ignored, the
+  address echoed in a refusal (`windows-tauri-frontend-bundle.mjs`, `84f9b310…`);
+  the harness no longer asking (`windows-tauri-qa.mjs`, `2e1b77e6…`); the helper
+  no longer asking (`local-frontend.ts`, `b7d9fd90…`); a run in which nothing
+  ended failed anyway (`did-not-run-guard.ts`, `b5559ccf…`).
+
 ## 2026-09-07 - A QA run no longer writes into the owner's notification history
 
 `b3fc04f` moved the QA launch's single-instance identity and deliberately left
