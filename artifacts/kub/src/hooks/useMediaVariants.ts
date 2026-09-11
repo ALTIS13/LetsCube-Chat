@@ -15,6 +15,7 @@ import {
 } from "@/lib/messageVariantRefresh";
 import { createAvatarVariantStore, type AvatarVariantUrls } from "@/lib/avatarVariantStore";
 import { withVersionToken } from "@/lib/mediaCacheControl";
+import { readOriginalPreview } from "@/lib/mediaCompression";
 
 type MessageMediaVariantSource = Pick<MessageWithSender, "id" | "chat_id" | "type" | "media_url" | "deleted_at">;
 
@@ -63,6 +64,26 @@ function getVariantPublicUrl(
   row: Pick<MediaVariant, "variant_bucket" | "variant_path">,
 ): string | null {
   return storage.from(row.variant_bucket).getPublicUrl(row.variant_path).data.publicUrl ?? null;
+}
+
+/**
+ * The address of an original photo's preview, when the message has a valid one.
+ *
+ * The client uploads that preview beside the original, so a conversation can
+ * draw the photo before — or without — the worker's `image_preview`. Only the
+ * path is read from the message, and only the one derived from its own
+ * `media_path`; the URL is built here, in the message's bucket.
+ */
+export function resolveOriginalPreviewUrl(message: {
+  type: string | null;
+  media_bucket: string | null;
+  media_path: string | null;
+  media_metadata: unknown;
+}): { url: string; width: number; height: number } | null {
+  const preview = readOriginalPreview(message);
+  if (!preview || !message.media_bucket) return null;
+  const url = createClient().storage.from(message.media_bucket).getPublicUrl(preview.path).data.publicUrl;
+  return url ? { url, width: preview.width, height: preview.height } : null;
 }
 
 export function useMessageMediaVariantUrls(messages: MessageMediaVariantSource[]): Record<string, MessageMediaVariantUrls> {

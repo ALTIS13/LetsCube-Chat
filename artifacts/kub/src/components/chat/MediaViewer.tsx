@@ -36,6 +36,10 @@ export interface MediaViewerItem {
   type: "image" | "video";
   url: string;
   title?: string;
+  /** Sent without compression: `url` is the original, as it was picked. */
+  original?: boolean;
+  /** A lighter picture to show while an original photo loads. */
+  previewUrl?: string;
 }
 
 interface MediaViewerProps {
@@ -106,10 +110,20 @@ export function MediaViewer({ media, onClose }: MediaViewerProps) {
       >
         <div className="flex h-12 flex-shrink-0 items-center gap-2 border-b border-white/10 bg-black/80 px-3 text-white">
           <KubIcon name={media.type === "image" ? "image" : "video"} size={18} />
-          <div className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</div>
+          {media.original ? (
+            <div className="flex min-w-0 flex-1 items-baseline gap-2">
+              <span className="min-w-0 truncate text-sm font-semibold">{title}</span>
+              <span className="shrink-0 text-xs font-medium text-white/70">Оригинал</span>
+            </div>
+          ) : (
+            <div className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</div>
+          )}
           <button
             type="button"
             onClick={openOriginal}
+            // Below `sm` the words are hidden and only the icon is drawn, which
+            // left the button with no name at all on a phone.
+            aria-label="Открыть оригинал"
             className="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm text-white/80 transition-colors hover:bg-white/10 hover:text-white"
           >
             <KubIcon name="externalLink" size={16} />
@@ -154,7 +168,13 @@ export function MediaViewer({ media, onClose }: MediaViewerProps) {
           ) : media.type === "image" ? (
             // Keyed by the address, so another photo — or the same one opened
             // again after closing — always starts at rest. Closing unmounts it.
-            <ZoomableImage key={media.url} url={media.url} title={title} onError={() => setLoadError(true)} />
+            <ZoomableImage
+              key={media.url}
+              url={media.url}
+              previewUrl={media.previewUrl}
+              title={title}
+              onError={() => setLoadError(true)}
+            />
           ) : (
             <video
               ref={videoRef}
@@ -202,7 +222,22 @@ type StageGeometry = { stage: ZoomSize; picture: ZoomSize; centre: ZoomPoint };
  * propagate — so a swipe on whatever holds the viewer and panning can never
  * both answer the same drag. Zoomed, a drag pans and stops here.
  */
-function ZoomableImage({ url, title, onError }: { url: string; title: string; onError: () => void }) {
+function ZoomableImage({
+  url,
+  previewUrl,
+  title,
+  onError,
+}: {
+  url: string;
+  previewUrl?: string;
+  title: string;
+  onError: () => void;
+}) {
+  // An original can be tens of megabytes. Until it has loaded, the preview the
+  // conversation already drew is laid behind the empty picture — as the stage's
+  // background, so the one `<img>` the zoom measures is still the original and
+  // nothing about the arithmetic changes when it arrives.
+  const [pictureLoaded, setPictureLoaded] = useState(false);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const pictureRef = useRef<HTMLImageElement | null>(null);
   const [zoom, setZoom] = useState<ZoomState>(ZOOM_AT_REST);
@@ -461,6 +496,14 @@ function ZoomableImage({ url, title, onError }: { url: string; title: string; on
       onPointerUp={(event) => handlePointerEnd(event, false)}
       onPointerCancel={(event) => handlePointerEnd(event, true)}
       onDoubleClick={handleDoubleClick}
+      style={previewUrl && !pictureLoaded ? {
+        backgroundImage: `url(${JSON.stringify(previewUrl)})`,
+        backgroundRepeat: "no-repeat",
+        backgroundPosition: "center",
+        backgroundSize: "contain",
+        backgroundOrigin: "content-box",
+        backgroundClip: "content-box",
+      } : undefined}
     >
       <img
         ref={pictureRef}
@@ -469,7 +512,10 @@ function ZoomableImage({ url, title, onError }: { url: string; title: string; on
         draggable={false}
         className="max-h-full max-w-full select-none object-contain"
         style={{ transform: zoomTransform(zoom) }}
-        onLoad={reclamp}
+        onLoad={() => {
+          setPictureLoaded(true);
+          reclamp();
+        }}
         onError={onError}
       />
     </div>

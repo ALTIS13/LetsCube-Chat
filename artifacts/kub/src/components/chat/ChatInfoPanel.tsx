@@ -28,7 +28,8 @@ import type { GroupInviteStatus, InvitePolicy } from "@/lib/groupInvites";
 import type { ChatWithLastMessage, Profile, Message } from "@/types/database";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { CHAT_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
-import { useMessageMediaVariantUrls, type MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
+import { resolveOriginalPreviewUrl, useMessageMediaVariantUrls, type MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
+import { isUncompressedMedia } from "@/lib/mediaCompression";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
 import { currentViewport, type Point, type WindowPlacement } from "@/lib/floatingWindow";
 import { NO_SAFE_AREA_INSETS, readSafeAreaInsets, safeViewport, type SafeAreaInsets } from "@/lib/safeArea";
@@ -1767,6 +1768,12 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
                       type: m.type === "video" ? "video" : "image",
                       url: m.media_url!,
                       title: m.content ?? (m.type === "video" ? "Видео" : "Фото"),
+                      ...(isUncompressedMedia(m.media_metadata)
+                        ? {
+                          original: true,
+                          previewUrl: mediaVariant?.previewUrl ?? resolveOriginalPreviewUrl(m)?.url,
+                        }
+                        : {}),
                     })}
                   >
                     <MediaGalleryTile message={m} mediaVariant={mediaVariant} />
@@ -2048,7 +2055,9 @@ function selectMediaGalleryPreviewUrl(
   const kind = getMediaTileKind(message);
   if (kind === "gif") return null;
   if (kind === "video") return mediaVariant?.videoPosterUrl ?? null;
-  return mediaVariant?.thumbUrl ?? mediaVariant?.previewUrl ?? null;
+  // An original's own preview stands in until the worker's copies exist, so the
+  // grid never downloads a full original to draw a tile.
+  return mediaVariant?.thumbUrl ?? mediaVariant?.previewUrl ?? resolveOriginalPreviewUrl(message)?.url ?? null;
 }
 
 function getMediaTileKind(message: Message): "image" | "gif" | "video" {

@@ -31,6 +31,8 @@ import {
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
 import { getVideoPlaybackFallbackUrl, selectVideoPlaybackUrl } from "@/lib/mediaQuality";
 import { groupReactions, type ReactionGroup } from "@/lib/messageReactions";
+import { isUncompressedMedia } from "@/lib/mediaCompression";
+import { resolveOriginalPreviewUrl } from "@/hooks/useMediaVariants";
 import {
   messageActorDisplayName,
   resolveMessageActor,
@@ -841,8 +843,14 @@ export function MessageBubble({
   const textContent = message.content ?? "";
   const mediaCaption = getVisibleMediaCaption(message);
   const mediaDimensions = getMessageMediaDimensions(message);
+  // Sent without compression: the stored file is the original, and the preview
+  // the sender uploaded beside it is what the conversation draws until the
+  // worker's own copy is ready. The viewer is what opens the original.
+  const uncompressedMedia = (message.type === "image" || message.type === "video")
+    && isUncompressedMedia(message.media_metadata);
+  const originalPreview = message.type === "image" && uncompressedMedia ? resolveOriginalPreviewUrl(message) : null;
   const imageDisplayUrl = message.type === "image"
-    ? mediaVariant?.previewUrl ?? message.media_url
+    ? mediaVariant?.previewUrl ?? originalPreview?.url ?? message.media_url
     : message.media_url;
   const imageDimensions = message.type === "image" && mediaVariant?.previewWidth && mediaVariant?.previewHeight
     ? { width: mediaVariant.previewWidth, height: mediaVariant.previewHeight }
@@ -864,7 +872,11 @@ export function MessageBubble({
    * different rows. Unknown stays unknown, and the caller drops the set.
    */
   const imageDisplayWidth = message.type === "image"
-    ? (mediaVariant?.previewUrl ? mediaVariant.previewWidth ?? null : mediaDimensions?.width ?? null)
+    ? (mediaVariant?.previewUrl
+      ? mediaVariant.previewWidth ?? null
+      : originalPreview
+        ? originalPreview.width
+        : mediaDimensions?.width ?? null)
     : null;
   const videoPosterUrl = message.type === "video" ? mediaVariant?.videoPosterUrl : undefined;
   const videoPlaybackUrl = message.type === "video" && message.media_url
@@ -1340,7 +1352,18 @@ export function MessageBubble({
                   mainWidth={imageDisplayWidth}
                   title={message.content ?? "Фото"}
                   dimensions={imageDimensions}
-                  onOpen={() => onOpenMedia?.({ type: "image", url: message.media_url!, title: message.content ?? "Фото" })}
+                  original={uncompressedMedia}
+                  onOpen={() => onOpenMedia?.({
+                    type: "image",
+                    url: message.media_url!,
+                    title: message.content ?? "Фото",
+                    ...(uncompressedMedia
+                      ? {
+                        original: true,
+                        previewUrl: imageDisplayUrl && imageDisplayUrl !== message.media_url ? imageDisplayUrl : undefined,
+                      }
+                      : {}),
+                  })}
                 />
               </MediaWithCaption>
             ) : message.type === "video" && message.media_url ? (
@@ -1363,7 +1386,12 @@ export function MessageBubble({
                     posterUrl={videoPosterUrl}
                     dimensions={mediaDimensions}
                     playbackItem={createPlaybackItemFromMessage(message, isMe, videoPlaybackUrl ?? message.media_url)}
-                    onOpen={() => onOpenMedia?.({ type: "video", url: message.media_url!, title: message.content ?? "Видео" })}
+                    onOpen={() => onOpenMedia?.({
+                      type: "video",
+                      url: message.media_url!,
+                      title: message.content ?? "Видео",
+                      ...(uncompressedMedia ? { original: true } : {}),
+                    })}
                   />
                 </MediaWithCaption>
               )
@@ -1514,6 +1542,7 @@ function MediaImage({
   mainWidth,
   title,
   dimensions,
+  original = false,
   onOpen,
 }: {
   url: string;
@@ -1523,6 +1552,8 @@ function MediaImage({
   mainWidth?: number | null;
   title: string;
   dimensions: MediaDimensions | null;
+  /** Sent without compression; marked on the photo, as Telegram marks an HD one. */
+  original?: boolean;
   onOpen: () => void;
 }) {
   const [failed, setFailed] = useState(false);
@@ -1586,7 +1617,7 @@ function MediaImage({
     <button
       type="button"
       onClick={onOpen}
-      className="group block max-h-[340px] w-[min(360px,calc(100vw-7.5rem))] max-w-full overflow-hidden rounded-xl text-left sm:max-h-[380px] sm:w-[min(420px,70vw)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+      className="group relative block max-h-[340px] w-[min(360px,calc(100vw-7.5rem))] max-w-full overflow-hidden rounded-xl text-left sm:max-h-[380px] sm:w-[min(420px,70vw)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
       style={aspectStyle}
       aria-label="Открыть фото"
     >
@@ -1603,6 +1634,14 @@ function MediaImage({
         )}
         onError={handleError}
       />
+      {original && (
+        // On the photo, not glass: rule 6 of the interface material keeps blur
+        // out of what scrolls. White on black at 55% holds 4.7:1 even over a
+        // white photograph.
+        <span className="pointer-events-none absolute left-2 top-2 rounded-full bg-black/55 px-2 py-0.5 text-[12px] font-semibold leading-4 text-white">
+          Оригинал
+        </span>
+      )}
     </button>
   );
 }
