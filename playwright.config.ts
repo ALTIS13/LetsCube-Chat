@@ -13,7 +13,13 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   workers: 1,
   outputDir: "output/playwright-test",
-  reporter: [["list"], ["html", { outputFolder: "output/playwright-report", open: "never" }]],
+  reporter: [
+    ["list"],
+    ["html", { outputFolder: "output/playwright-report", open: "never" }],
+    // Names every test the runner dropped instead of ran, and fails a run that
+    // would otherwise pass with some of them. See the reporter for when.
+    ["./tests/e2e/helpers/did-not-run-guard.ts"],
+  ],
   use: {
     baseURL,
     actionTimeout: 10_000,
