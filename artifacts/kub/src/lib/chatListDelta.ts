@@ -35,7 +35,15 @@ import { sameData } from "./structuralSharing.ts";
  * Sorting is left to the caller, whose sort knows about saved and pinned chats.
  */
 
-/** The columns of a `messages` row read here. Realtime sends every column, and the rest are carried through. */
+/**
+ * The columns of a `messages` row read here; the rest are carried through.
+ *
+ * An INSERT carries every column. An UPDATE may not: the chat tables keep the
+ * default replica identity on production (read from `pg_class` on 2026-09-11),
+ * so a column Postgres stored out of line (TOAST, from roughly 2KB) and did not
+ * change can be missing from the new row — a long message's text when only its
+ * pin changed.
+ */
 export interface MessageRowLike {
   id: string;
   chat_id: string;
@@ -240,8 +248,18 @@ export function applyMessageUpdate<T extends ChatLike>(
 
   const last = chat.last_message ?? null;
   if (last && last.id === row.id) {
+    // A column the UPDATE left out keeps the preview's value, and so does one it
+    // sends empty where the preview has a value — the shape an unchanged
+    // out-of-line column may take. Nothing but a deletion turns a message's
+    // column to null, and a deletion is settled by the summary below.
+    const previous = last as unknown as Record<string, unknown>;
     const columns = Object.fromEntries(
-      Object.entries(row).filter(([key, value]) => value !== undefined && !JOINED_KEYS.has(key)),
+      Object.entries(row).filter(
+        ([key, value]) =>
+          value !== undefined &&
+          !JOINED_KEYS.has(key) &&
+          !(value === null && !row.deleted_at && previous[key] !== null && previous[key] !== undefined),
+      ),
     );
     const patched = { ...last, ...columns } as MessageRowLike;
     // The preview is the newest message that is not deleted, so deleting it
