@@ -80,6 +80,7 @@ import {
   type StagedUploadScopeToken,
 } from "@/lib/stagedUploadWorkflow";
 import { describeUploadFailure, uploadFailureFeedback, uploadFailureMessage } from "@/lib/uploadFailure";
+import { ATTACHMENT_UPLOAD_CONCURRENCY, nextClientSentAt, runOrderedSend } from "@/lib/attachmentSendQueue";
 import type { Json, MessageWithSender } from "@/types/database";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
 
@@ -609,108 +610,109 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       sentAny = true;
     }
 
+    // Every attachment of this send is under way from here, the ones waiting for
+    // a free upload too: they read as loading, with no number to freeze (D-114),
+    // and a second send cannot pick them up.
     for (const attachment of targets) {
-      if (
-        cancelledAttachmentIdsRef.current.has(attachment.id) ||
-        !uploadScope.isActive(scopeToken)
-      ) return sentAny;
-      // No number until the upload reports one: a multipart upload never does,
-      // and «0%» sat on its tile until it was over (D-114).
       updateStagedAttachment(attachment.id, (current) => ({
         ...current,
         status: "uploading",
         progress: null,
         error: null,
       }));
+    }
 
-      let uploaded: StagedAttachmentUpload | null = attachment.uploaded;
-      if (!uploaded) {
-        try {
-          uploaded = await uploadStagedAttachment(attachment, scopeToken);
-        } catch (error) {
-          if (
-            cancelledAttachmentIdsRef.current.has(attachment.id) ||
-            !uploadScope.isActive(scopeToken)
-          ) return sentAny;
-          // Why, as the server's answer says it, and the file's name (D-113).
-          // The reason and the status say nothing about what the file holds.
-          const failure = describeUploadFailure(error);
-          const uploadErrorMessage = uploadFailureMessage(attachment.name, failure);
-          console.warn("[attachments] upload failed.", failure.reason, failure.status ?? "no answer");
-          reportError(new Error("attachment_upload_failed"), {
-            category: "attachment_upload_failed",
-            attachmentKind: attachment.kind,
-            mimeType: attachment.mimeType,
-            fileSize: attachment.file.size,
-            reason: failure.reason,
-            status: failure.status,
-            limitBytes: failure.limitBytes,
-          });
-          updateStagedAttachment(attachment.id, (current) => ({
-            ...current,
-            status: "failed",
-            error: uploadErrorMessage,
-          }));
-          const feedback = uploadFailureFeedback([uploadErrorMessage]);
-          if (feedback) showActionFeedback({ kind: "error", key: `attachment-upload:${attachment.id}`, ...feedback });
-          return sentAny;
-        }
-      }
+    const replyToId = replyTo?.id ?? null;
+    const failures: string[] = [];
+    const failureNoticeKey = `attachment-upload:${scopeToken.chatId}:${targets[0].id}`;
+    let previousSentAt: string | null = null;
 
-      if (
-        cancelledAttachmentIdsRef.current.has(attachment.id) ||
-        !uploadScope.isActive(scopeToken)
-      ) return sentAny;
-
-      updateStagedAttachment(attachment.id, (current) => ({
-        ...current,
-        progress: 100,
-        uploaded,
-      }));
-
-      if (!uploadScope.isActive(scopeToken)) return sentAny;
-
-      updateStagedAttachment(attachment.id, (current) => ({
-        ...current,
-        status: "sending",
-        progress: 100,
-        uploaded,
-        error: null,
-      }));
-
-      const content = getStagedAttachmentMessageContent(attachment, sentAny || !captionText ? null : captionText);
-      const sendResult = await runScopedStagedSendAttempt(
-        uploadScope,
-        scopeToken,
-        () => sendMediaMessage({
-          type: getStagedAttachmentMessageType(attachment),
-          content,
-          mediaBucket: uploaded.bucket,
-          mediaPath: uploaded.path,
-          mediaUrl: uploaded.publicUrl,
-          replyToId: replyTo?.id ?? null,
-          clientMessageId: attachment.clientMessageId,
-          mediaMetadata: getStagedAttachmentMediaMetadata(attachment, uploaded),
-        }),
-      );
-
-      if (sendResult.status === "stale") return sentAny;
-      if (sendResult.status === "failed") {
-        reportError(new Error("staged_attachment_send_failed"), {
-          category: "attachment_send_failed",
+    // Three uploads at a time, and the messages inserted in the order the files
+    // were picked. A failure is that attachment's alone: it keeps its reason and
+    // «Повторить», and the attachments after it still go (D-113, D-114). The
+    // order and the concurrency are decided in `lib/attachmentSendQueue.ts`.
+    await runOrderedSend(targets, {
+      concurrency: ATTACHMENT_UPLOAD_CONCURRENCY,
+      isActive: () => uploadScope.isActive(scopeToken),
+      isWanted: (attachment) => !cancelledAttachmentIdsRef.current.has(attachment.id),
+      upload: (attachment) => attachment.uploaded
+        ? Promise.resolve(attachment.uploaded)
+        : uploadStagedAttachment(attachment, scopeToken),
+      onUploaded: (attachment, uploaded) => {
+        updateStagedAttachment(attachment.id, (current) => ({
+          ...current,
+          status: "sending",
+          progress: 100,
+          uploaded,
+          error: null,
+        }));
+      },
+      onUploadFailed: (attachment, error) => {
+        // Why, as the server's answer says it, and the file's name (D-113).
+        // The reason and the status say nothing about what the file holds.
+        const failure = describeUploadFailure(error);
+        const uploadErrorMessage = uploadFailureMessage(attachment.name, failure);
+        console.warn("[attachments] upload failed.", failure.reason, failure.status ?? "no answer");
+        reportError(new Error("attachment_upload_failed"), {
+          category: "attachment_upload_failed",
           attachmentKind: attachment.kind,
           mimeType: attachment.mimeType,
           fileSize: attachment.file.size,
+          reason: failure.reason,
+          status: failure.status,
+          limitBytes: failure.limitBytes,
         });
-        updateStagedAttachment(attachment.id, (current) =>
-          markStagedAttachmentSendFailed(current, uploaded)
+        updateStagedAttachment(attachment.id, (current) => ({
+          ...current,
+          status: "failed",
+          progress: null,
+          error: uploadErrorMessage,
+        }));
+        failures.push(uploadErrorMessage);
+        const feedback = uploadFailureFeedback(failures);
+        if (feedback) showActionFeedback({ kind: "error", key: failureNoticeKey, ...feedback });
+      },
+      insert: async (attachment, uploaded) => {
+        // Later than the message before it, so the conversation keeps the pick
+        // order even when two inserts start within one millisecond.
+        const clientSentAt = nextClientSentAt(previousSentAt, Date.now());
+        previousSentAt = clientSentAt;
+        const content = getStagedAttachmentMessageContent(attachment, sentAny || !captionText ? null : captionText);
+        const sendResult = await runScopedStagedSendAttempt(
+          uploadScope,
+          scopeToken,
+          () => sendMediaMessage({
+            type: getStagedAttachmentMessageType(attachment),
+            content,
+            mediaBucket: uploaded.bucket,
+            mediaPath: uploaded.path,
+            mediaUrl: uploaded.publicUrl,
+            replyToId,
+            clientMessageId: attachment.clientMessageId,
+            clientSentAt,
+            mediaMetadata: getStagedAttachmentMediaMetadata(attachment, uploaded),
+          }),
         );
-        return sentAny;
-      }
 
-      sentAny = true;
-      removeStagedAttachment(attachment.id);
-    }
+        if (sendResult.status === "stale") return false;
+        if (sendResult.status === "failed") {
+          reportError(new Error("staged_attachment_send_failed"), {
+            category: "attachment_send_failed",
+            attachmentKind: attachment.kind,
+            mimeType: attachment.mimeType,
+            fileSize: attachment.file.size,
+          });
+          updateStagedAttachment(attachment.id, (current) =>
+            markStagedAttachmentSendFailed(current, uploaded)
+          );
+          return false;
+        }
+
+        sentAny = true;
+        removeStagedAttachment(attachment.id);
+        return true;
+      },
+    });
 
     if (sentAny) setReplyTo(null);
     return sentAny;
