@@ -6473,3 +6473,31 @@ folders at the top only.
 where Telegram has compact grouped rows.
 
 **Decision:** rebuilt in Telegram's settings idiom inside the parity work of item 30.
+
+## D-122 `[ ]` The attach menu is a list of buttons that open other things, where Telegram's attach sheet does the thing in place
+
+**Severity:** high, for how the product reads. Named by the owner on 2026-09-11, after
+the D-119 renders, with two screenshots of Telegram's attach sheet on Android shown for
+its functions, not its look.
+
+**Surface:** the composer's «Прикрепить» menu — «Фото или видео», «Файл», «Сделать фото»,
+«Голосовое», «Записать видео», «Местоположение» — and what each item opens.
+
+**Defect:** every item is a button that opens something else: a system picker, a camera
+dialog, a recorder dialog, or an immediate send of the location. Telegram's paperclip
+opens a sheet whose tabs work where they are. The gallery grid is the first thing on
+screen, with a camera button, selection circles and an HD badge on every photo; «Файл»
+lists where a file can come from, «Галерея — для отправки изображений без сжатия» among
+them; «Геопозиция» shows a map before anything is sent; a poll or a list is filled in
+inside the sheet. Voice and round video are recorded from the composer's microphone
+button. The D-119 render kept the old list and relabelled one item, and the owner found
+the menu as strange as before.
+
+**Decision** (the owner, 2026-09-11): the functions must be understandable to look at and
+to use exactly as in Telegram, without holding on to the old idea of them; the look stays
+iOS with Liquid Glass on every shell. The attach flow is rebuilt as Telegram's attach
+sheet the D-071 way: an assessment and option renders on real code for the owner's choice
+before it ships. D-119's rules stand inside it — no quality is asked for, and sending
+without compression is a named function. A web page cannot show the phone's photo library
+inside itself, so how close the gallery tab can come in the browser and the installed
+iPhone app, and whether the Android app draws a real grid, are part of the assessment.
