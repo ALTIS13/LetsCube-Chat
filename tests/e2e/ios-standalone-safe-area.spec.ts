@@ -289,13 +289,11 @@ test.describe("installed iPhone app — WebKit, insets through the tokens", () =
       });
 
       test("a message's action menu", async ({ page }) => {
-        // `MessageBubble.tsx` belongs to the parallel D track of this wave, so
-        // it is not changed from here. Its menu is placed in script with no
-        // insets: `bottom: 12` on a phone, which puts the last actions on the
-        // home indicator, and 8px clamps held sideways, which put a menu opened
-        // near the right edge under the notch. The patch is in the wave report;
-        // remove this line when it lands and this scenario holds it.
-        test.fixme(true, "MessageBubble.tsx is track D's in this wave; the inset patch is in the wave report");
+        // The menu is placed in script from the pointer, so it cannot inherit
+        // the tokens through layout. It used to sit at `bottom: 12` on a phone,
+        // which put its last actions on the home indicator, and to clamp at 8px
+        // held sideways, which put a menu opened near the right edge under the
+        // notch. It now reads the unsafe areas when it opens.
         await openFixtureChat(page);
         const own = page.locator("[data-message-id]").last();
         const box = await own.boundingBox();

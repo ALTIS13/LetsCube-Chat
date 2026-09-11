@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, typ
 import { copyWithFeedback } from "@/lib/actionFeedback";
 import { resolveCssLength } from "@/lib/cssLength";
 import { reachableContentWidth } from "@/lib/messageMetaReach";
+import { NO_SAFE_AREA_INSETS, readSafeAreaInsets, type SafeAreaInsets } from "@/lib/safeArea";
 import { createPortal } from "react-dom";
 import type { MessageWithSender } from "@/types/database";
 import { formatFullTime } from "@/lib/format";
@@ -788,6 +789,12 @@ export function MessageBubble({
   const [reactionsExpanded, setReactionsExpanded] = useState(false);
   const [contextPos, setContextPos] = useState({ x: 0, y: 0 });
   const [reactionPos, setReactionPos] = useState({ x: 0, y: 0 });
+  // The action menu and the reaction pickers are placed by hand from the
+  // pointer, so they cannot inherit the --kub-safe-* tokens through layout and
+  // need the unsafe areas as numbers. Read when a menu opens, never during
+  // render: readSafeAreaInsets measures a probe element.
+  const [safeInsets, setSafeInsets] = useState<SafeAreaInsets>(NO_SAFE_AREA_INSETS);
+  const reactionOverflowSafeRef = useRef<SafeAreaInsets>(NO_SAFE_AREA_INSETS);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const stackRef = useRef<HTMLDivElement | null>(null);
@@ -847,31 +854,61 @@ export function MessageBubble({
   const viewportHeight = typeof window === "undefined" ? 768 : window.innerHeight;
   const compactContextMenu = viewportWidth < 640;
   const contextMenuWidth = 256;
-  const contextMenuMaxHeight = Math.max(180, Math.min(480, viewportHeight - 16));
+  // Every clamp keeps its old 8px or 12px margin and adds the unsafe area on
+  // that side. The compact phone menu reads the tokens directly, so it follows
+  // the hardware without a measurement; held sideways the desktop shape is used,
+  // and its clamps now stop at the notch instead of the glass edge.
+  const safe = safeInsets;
+  const contextMenuMaxHeight = Math.max(180, Math.min(480, viewportHeight - 16 - safe.top - safe.bottom));
   const contextMenuOpensUp = !compactContextMenu && contextPos.y > viewportHeight / 2;
   const contextMenuStyle: CSSProperties = compactContextMenu
-    ? { left: 12, right: 12, bottom: 12, maxHeight: "min(65vh, 480px)" }
+    ? {
+        left: "calc(12px + var(--kub-safe-left))",
+        right: "calc(12px + var(--kub-safe-right))",
+        bottom: "calc(12px + var(--kub-safe-bottom))",
+        maxHeight: "min(65vh, 480px)",
+      }
     : {
-        left: Math.min(Math.max(8, contextPos.x), Math.max(8, viewportWidth - contextMenuWidth - 8)),
+        left: Math.min(
+          Math.max(8 + safe.left, contextPos.x),
+          Math.max(8 + safe.left, viewportWidth - contextMenuWidth - 8 - safe.right),
+        ),
         width: contextMenuWidth,
         maxHeight: contextMenuMaxHeight,
         ...(contextMenuOpensUp
-          ? { bottom: Math.max(8, viewportHeight - contextPos.y + 8) }
-          : { top: Math.min(contextPos.y + 8, Math.max(8, viewportHeight - contextMenuMaxHeight - 8)) }),
+          ? { bottom: Math.max(8 + safe.bottom, viewportHeight - contextPos.y + 8) }
+          : {
+              top: Math.max(
+                8 + safe.top,
+                Math.min(
+                  contextPos.y + 8,
+                  Math.max(8 + safe.top, viewportHeight - contextMenuMaxHeight - 8 - safe.bottom),
+                ),
+              ),
+            }),
       };
-  const reactionPickerWidth = reactionCatalogOpen ? Math.min(480, viewportWidth - 16) : 284;
-  const reactionPickerMaxHeight = Math.min(340, viewportHeight - 16);
+  const safeWidth = Math.max(0, viewportWidth - 16 - safe.left - safe.right);
+  const reactionPickerWidth = reactionCatalogOpen ? Math.min(480, safeWidth) : 284;
+  const reactionPickerMaxHeight = Math.min(340, viewportHeight - 16 - safe.top - safe.bottom);
   const reactionPickerStyle: CSSProperties = {
-    left: Math.min(Math.max(8, reactionPos.x - reactionPickerWidth / 2), Math.max(8, viewportWidth - reactionPickerWidth - 8)),
-    width: Math.min(reactionPickerWidth, viewportWidth - 16),
+    left: Math.min(
+      Math.max(8 + safe.left, reactionPos.x - reactionPickerWidth / 2),
+      Math.max(8 + safe.left, viewportWidth - reactionPickerWidth - 8 - safe.right),
+    ),
+    width: Math.min(reactionPickerWidth, safeWidth),
     maxHeight: reactionPickerMaxHeight,
     ...(reactionCatalogOpen
       ? reactionPos.y > viewportHeight / 2
-        ? { bottom: Math.max(8, viewportHeight - reactionPos.y + 8) }
-        : { top: Math.min(viewportHeight - reactionPickerMaxHeight - 8, reactionPos.y + 36) }
-      : reactionPos.y > 64
-        ? { top: Math.max(8, reactionPos.y - 52) }
-        : { top: Math.min(viewportHeight - 52, reactionPos.y + 36) }),
+        ? { bottom: Math.max(8 + safe.bottom, viewportHeight - reactionPos.y + 8) }
+        : {
+            top: Math.max(
+              8 + safe.top,
+              Math.min(viewportHeight - reactionPickerMaxHeight - 8 - safe.bottom, reactionPos.y + 36),
+            ),
+          }
+      : reactionPos.y > 64 + safe.top
+        ? { top: Math.max(8 + safe.top, reactionPos.y - 52) }
+        : { top: Math.min(viewportHeight - 52 - safe.bottom, reactionPos.y + 36) }),
   };
   const contextOpen = actionMenuOpen ?? showContext;
   const closeContext = useCallback(() => {
@@ -935,14 +972,19 @@ export function MessageBubble({
 
     const triggerRect = trigger.getBoundingClientRect();
     const popoverRect = reactionOverflowPopoverRef.current?.getBoundingClientRect();
-    const maxWidth = Math.min(320, window.innerWidth - 16);
+    const safe = reactionOverflowSafeRef.current;
+    const maxWidth = Math.min(320, window.innerWidth - 16 - safe.left - safe.right);
     const width = Math.min(popoverRect?.width ?? 220, maxWidth);
     const height = popoverRect?.height ?? 44;
     const topBelow = triggerRect.bottom + 6;
-    const top = topBelow + height <= window.innerHeight - 8
+    const top = topBelow + height <= window.innerHeight - 8 - safe.bottom
       ? topBelow
-      : Math.max(8, triggerRect.top - height - 6);
-    const left = clampNumber(triggerRect.right - width, 8, Math.max(8, window.innerWidth - width - 8));
+      : Math.max(8 + safe.top, triggerRect.top - height - 6);
+    const left = clampNumber(
+      triggerRect.right - width,
+      8 + safe.left,
+      Math.max(8 + safe.left, window.innerWidth - width - 8 - safe.right),
+    );
 
     setReactionOverflowStyle({
       left,
@@ -976,13 +1018,20 @@ export function MessageBubble({
 
   useLayoutEffect(() => {
     if (!reactionsExpanded || typeof window === "undefined") return;
+    // Measured once per opening and again on resize, never on scroll: the
+    // measurement adds and removes a probe element, and scroll fires per frame.
+    reactionOverflowSafeRef.current = readSafeAreaInsets();
     updateReactionOverflowPosition();
-    const handleViewportChange = () => updateReactionOverflowPosition();
-    window.addEventListener("resize", handleViewportChange);
-    window.addEventListener("scroll", handleViewportChange, true);
+    const handleResize = () => {
+      reactionOverflowSafeRef.current = readSafeAreaInsets();
+      updateReactionOverflowPosition();
+    };
+    const handleScroll = () => updateReactionOverflowPosition();
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("scroll", handleScroll, true);
     return () => {
-      window.removeEventListener("resize", handleViewportChange);
-      window.removeEventListener("scroll", handleViewportChange, true);
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("scroll", handleScroll, true);
     };
   }, [reactionsExpanded, updateReactionOverflowPosition]);
 
@@ -1019,6 +1068,7 @@ export function MessageBubble({
 
   const openContextAt = useCallback((clientX: number, clientY: number) => {
     setContextPos({ x: clientX, y: clientY });
+    setSafeInsets(readSafeAreaInsets());
     setShowContext(true);
     onOpenActionMenu?.();
     onCloseReactionMenu?.();
@@ -1028,12 +1078,14 @@ export function MessageBubble({
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
     setReactionPos({ x: rect.left + rect.width / 2, y: rect.top });
+    setSafeInsets(readSafeAreaInsets());
     closeContext();
     onToggleReactionMenu?.();
   }, [closeContext, onToggleReactionMenu]);
 
   const openFullReactionCatalog = useCallback((anchor?: { x: number; y: number }) => {
     if (anchor) setReactionPos(anchor);
+    setSafeInsets(readSafeAreaInsets());
     setReactionCatalogOpen(true);
     closeContext();
     if (!reactionMenuOpen) onToggleReactionMenu?.();
@@ -1452,7 +1504,10 @@ export function MessageBubble({
               ))}
               <button
                 type="button"
-                onClick={() => setReactionCatalogOpen(true)}
+                onClick={() => {
+                  setSafeInsets(readSafeAreaInsets());
+                  setReactionCatalogOpen(true);
+                }}
                 className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)]"
                 aria-label="Больше реакций"
                 title="Больше реакций"
