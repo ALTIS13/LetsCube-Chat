@@ -82,10 +82,13 @@ test.describe.configure({ timeout: 150_000 });
  * "nothing was tested" while the pictures on screen were perfectly fine: the
  * suite was breaking requests that no longer passed through it.
  *
- * Blocking the worker costs this spec nothing. `sw.js` returns early for every
- * Supabase address (`if (isSupabaseUrl(url)) return;`) and for anything
- * cross-origin, so it never serves, caches or rewrites a media object — the
- * pictures under test take the same path either way.
+ * Blocking the worker costs this spec nothing. `sw.js` answers nothing that is
+ * not this origin's own build (`if (url.origin !== self.location.origin)
+ * return;`), so it never serves, caches or rewrites a media object — the
+ * pictures under test take the same path either way. That is measured rather
+ * than assumed: `pwa-service-worker.spec.ts` loads pictures from a storage-shaped
+ * origin with the built worker active, in both engines, and they paint or fail
+ * exactly as they do with the worker blocked.
  */
 test.use({ serviceWorkers: "block" });
 
