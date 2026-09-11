@@ -255,6 +255,25 @@ test.describe("resumable media upload contracts", () => {
     expect(sendingMarkup).not.toContain("aria-valuenow");
   });
 
+  test("an upload with no progress to report shows a working bar and claims no percentage", async () => {
+    // D-114: a multipart upload of 6 MiB or less reports nothing, and its bar sat
+    // at «0%» until the upload was over.
+    const { StagedAttachmentTransferProgress } = await loadStagedUploadWorkflow();
+    const markup = renderToStaticMarkup(
+      createElement(StagedAttachmentTransferProgress, { attachment: attachmentStub({ status: "uploading", progress: null }) }),
+    );
+
+    expect(markup).toContain('data-testid="staged-attachment-upload-progress"');
+    expect(markup).toContain('role="progressbar"');
+    expect(markup).not.toContain("aria-valuenow");
+    expect(markup).not.toContain("%");
+
+    const staged = renderToStaticMarkup(
+      createElement(StagedAttachmentTransferProgress, { attachment: attachmentStub({ status: "staged", progress: null }) }),
+    );
+    expect(staged).not.toContain("progressbar");
+  });
+
   test("terminates registered uploads and releases only the matching handle", async () => {
     const { createStagedUploadHandleRegistry } = await loadStagedUploadWorkflow();
     const registry = createStagedUploadHandleRegistry();

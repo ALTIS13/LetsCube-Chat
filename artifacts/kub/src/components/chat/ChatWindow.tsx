@@ -614,10 +614,12 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         cancelledAttachmentIdsRef.current.has(attachment.id) ||
         !uploadScope.isActive(scopeToken)
       ) return sentAny;
+      // No number until the upload reports one: a multipart upload never does,
+      // and «0%» sat on its tile until it was over (D-114).
       updateStagedAttachment(attachment.id, (current) => ({
         ...current,
         status: "uploading",
-        progress: 0,
+        progress: null,
         error: null,
       }));
 

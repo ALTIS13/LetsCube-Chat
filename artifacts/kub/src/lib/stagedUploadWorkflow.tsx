@@ -186,8 +186,19 @@ export function markStagedAttachmentSendFailed(
   };
 }
 
+/**
+ * The bar under a staged attachment while it is on its way.
+ *
+ * A percentage only when there is a real one: the resumable path reports its
+ * bytes. An upload of 6 MiB or less goes as one multipart request, and fetch
+ * reports no upload progress, so its bar used to sit at «0%» until the upload
+ * was over (D-114). With `progress: null` an uploading attachment — and one
+ * waiting for a free upload — shows a bar that says it is working and claims no
+ * number: no `aria-valuenow`, no percentage.
+ */
 export function StagedAttachmentTransferProgress({ attachment }: { attachment: StagedAttachment }) {
-  const progress = attachment.status === "uploading" && typeof attachment.progress === "number"
+  const uploading = attachment.status === "uploading";
+  const progress = uploading && typeof attachment.progress === "number"
     ? Math.min(100, Math.max(0, Math.round(attachment.progress)))
     : null;
 
@@ -217,6 +228,23 @@ export function StagedAttachmentTransferProgress({ attachment }: { attachment: S
         `${progress}%`,
       ),
     )
+    : uploading
+      ? createElement(
+        "div",
+        {
+          "data-testid": "staged-attachment-upload-progress",
+          role: "progressbar",
+          className: "flex h-full items-center",
+          "aria-label": "Загрузка вложения",
+        },
+        createElement(
+          "div",
+          { className: "h-1 w-full overflow-hidden rounded-full bg-[var(--kub-surface-3)]" },
+          createElement("div", {
+            className: "h-full w-2/3 animate-pulse rounded-full bg-[var(--kub-cyan)]",
+          }),
+        ),
+      )
     : attachment.status === "sending"
       ? createElement(
         "div",
