@@ -117,3 +117,30 @@ test("a forward waiting above the composer carries its senders", () => {
   assert.deepEqual(draft.map((message) => [message.sender?.full_name, message.content]), [["Лена", "Первое"], ["Олег", "Второе"]]);
   assert.notEqual(draft[0].chat_id, previewChats(parsePublicPreviewFixture(group))[0].id);
 });
+
+test("a message from an earlier day lands on that day, so a conversation can cross a date separator", () => {
+  const fixture = parsePublicPreviewFixture({
+    ...group,
+    messages: [
+      { sender: "Аня", text: "Вчера", time: "23:59", own: false, daysAgo: 1, editedAt: "23:59" },
+      { sender: "Аня", text: "Сегодня", time: "00:00", own: false, daysAgo: 0 },
+    ],
+  });
+  assert.equal(fixture.messages[0].daysAgo, 1);
+  assert.equal("daysAgo" in fixture.messages[1], false, "zero days is today, which an absent value already says");
+
+  const [earlier, later] = previewMessages(fixture);
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  assert.equal(new Date(earlier.created_at).toDateString(), yesterday.toDateString());
+  // 23:59 is later than any clock this test can run at, so a stamp that had
+  // stayed on today would have been refused as being in the future.
+  assert.equal(new Date(earlier.edited_at!).toDateString(), yesterday.toDateString(), "the edit left its message's day");
+  assert.equal(new Date(later.created_at).toDateString(), new Date().toDateString());
+
+  const withDays = (daysAgo: unknown) => () =>
+    parsePublicPreviewFixture({ ...group, messages: [{ sender: "Аня", text: "x", time: "00:00", own: false, daysAgo }] });
+  for (const daysAgo of [-1, 1.5, 31, "1", null]) {
+    assert.throws(withDays(daysAgo), /daysAgo/, `${JSON.stringify(daysAgo)} was accepted`);
+  }
+});
