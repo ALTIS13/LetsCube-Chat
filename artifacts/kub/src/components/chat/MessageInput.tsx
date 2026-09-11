@@ -28,6 +28,7 @@ import { showAppAlert } from "@/lib/appDialogs";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
 import { DEFAULT_MEDIA_QUALITY, MEDIA_QUALITY_OPTIONS, type MediaQuality } from "@/lib/mediaQuality";
+import { mediaSendShape } from "@/lib/mediaCompression";
 import { isNativeApp, microphonePermissionHelp } from "@/lib/platform/capabilities";
 import { getMessengerLocationErrorMessage, getMessengerPosition } from "@/lib/platform/geolocation";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
@@ -78,7 +79,7 @@ interface MessageInputProps {
   attachments?: StagedAttachment[];
   mediaQuality?: MediaQuality;
   onMediaQualityChange?: (quality: MediaQuality) => void;
-  onStageFiles?: (files: File[], source: "picker" | "paste" | "camera") => void;
+  onStageFiles?: (files: File[], source: "picker" | "paste" | "camera", options?: { compress?: boolean }) => void;
   onRemoveAttachment?: (attachmentId: string) => void;
   onRetryAttachment?: (attachmentId: string) => void;
   onCancelAttachment?: (attachmentId: string) => void;
@@ -139,6 +140,9 @@ export function MessageInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Which menu item opened the picker: «Без сжатия» asks for the originals. Set
+  // by every item that opens a picker, so a cancelled pick cannot carry over.
+  const pickerCompressRef = useRef(true);
   const modeFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchRecordingStartedRef = useRef(false);
@@ -284,7 +288,9 @@ export function MessageInput({
     const scopeToken = delayedAttachmentScopeTokenRef.current;
     if (!scopeToken || !composerSendScope.isActive(scopeToken)) return;
     delayedAttachmentScopeTokenRef.current = null;
-    onStageFiles(Array.from(fileList), "picker");
+    const compress = pickerCompressRef.current;
+    pickerCompressRef.current = true;
+    onStageFiles(Array.from(fileList), "picker", { compress });
     setShowAttach(false);
   }, [composerSendScope, onStageFiles]);
 
@@ -765,12 +771,26 @@ export function MessageInput({
     );
   }
 
+  // A phone chooses compression here, beside the gallery; a desktop chooses it
+  // in the send dialog the picked files open. Asked only while the menu is open.
+  const attachShape = showAttach && typeof window !== "undefined"
+    ? mediaSendShape(window.matchMedia?.bind(window))
+    : "desktop";
   const attachItems: Array<{ icon: KubIconName; label: string; tone: string; action: () => void }> = [
     { icon: "image",   label: "Фото или видео", tone: "var(--kub-cyan)",   action: () => {
+      pickerCompressRef.current = true;
       delayedAttachmentScopeTokenRef.current = composerSendScope.capture();
       photoInputRef.current?.click();
     } },
+    ...(attachShape === "phone"
+      ? [{ icon: "imageOriginal" as const, label: "Без сжатия", tone: "var(--kub-cyan)", action: () => {
+        pickerCompressRef.current = false;
+        delayedAttachmentScopeTokenRef.current = composerSendScope.capture();
+        photoInputRef.current?.click();
+      } }]
+      : []),
     { icon: "file",    label: "Файл",            tone: "var(--kub-pink)",   action: () => {
+      pickerCompressRef.current = true;
       delayedAttachmentScopeTokenRef.current = composerSendScope.capture();
       fileInputRef.current?.click();
     } },
@@ -890,7 +910,7 @@ export function MessageInput({
       {showAttach && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setShowAttach(false)} />
-          <div className="mx-3 mb-2 rounded-2xl relative z-20 overflow-hidden bg-[var(--kub-raised)] border border-[color:var(--kub-border-color)] kub-glow-soft">
+          <div data-testid="composer-attach-menu" className="mx-3 mb-2 rounded-2xl relative z-20 overflow-hidden bg-[var(--kub-raised)] border border-[color:var(--kub-border-color)] kub-glow-soft">
             {attachItems.map(({ icon, label, tone, action }) => (
               <button
                 key={label}
@@ -976,7 +996,8 @@ export function MessageInput({
         {attachments.length > 0 && (
           <>
             {onMediaQualityChange && attachments.some((attachment) =>
-              attachment.kind === "video" || attachment.kind === "video_message"
+              // An original has no quality to choose: it is sent as it is.
+              (attachment.kind === "video" && attachment.uncompressed !== true) || attachment.kind === "video_message"
             ) && (
               <MediaQualitySelector value={mediaQuality} onChange={onMediaQualityChange} />
             )}
@@ -1514,7 +1535,9 @@ function AttachmentMeta({
       </div>
       <div className="mt-0.5 flex min-w-0 items-center gap-1 text-[12px] text-[color:var(--kub-muted)]">
         <span className="shrink-0">
-          {attachment.optimized && attachment.originalSize && attachment.originalSize > attachment.size
+          {attachment.uncompressed
+            ? `${formatAttachmentSize(attachment.size)} без сжатия`
+            : attachment.optimized && attachment.originalSize && attachment.originalSize > attachment.size
             ? `${formatAttachmentSize(attachment.size)} после сжатия`
             : formatAttachmentSize(attachment.size)}
         </span>

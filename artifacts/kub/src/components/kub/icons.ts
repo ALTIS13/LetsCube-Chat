@@ -34,6 +34,7 @@ import {
   Eye,
   EyeSlash,
   AirplaneTilt,
+  FileImage,
   FileText,
   Folder,
   FolderOpen,
@@ -150,6 +151,7 @@ export type KubIconName =
   | "heart"
   | "help"
   | "image"
+  | "imageOriginal"
   | "info"
   | "key"
   | "link"
@@ -263,6 +265,8 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   heart: { Icon: Heart },
   help: { Icon: Question },
   image: { Icon: ImageIcon },
+  // A photo as a file: sent as it is, without compression.
+  imageOriginal: { Icon: FileImage },
   info: { Icon: Info },
   key: { Icon: Key },
   link: { Icon: LinkSimple },

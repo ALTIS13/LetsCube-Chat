@@ -35,14 +35,25 @@ import { isRoundVideoMessageContent, isVoiceMessageContent } from "@/lib/message
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import {
   DEFAULT_MEDIA_QUALITY,
-  MEDIA_QUALITY_METADATA_KEY,
   MEDIA_QUALITY_STORAGE_KEY,
   applyVideoQualityToAttachments,
   normalizeMediaQuality,
   selectVideoPlaybackUrl,
   type MediaQuality,
 } from "@/lib/mediaQuality";
-import { prepareChatImageAttachment, readMediaDimensions } from "@/lib/mediaUpload";
+import { prepareChatImageAttachment, prepareOriginalPreview, readMediaDimensions } from "@/lib/mediaUpload";
+import {
+  buildAttachmentMediaMetadata,
+  mediaSendShape,
+  originalLimitMessage,
+  originalPreviewDimensions,
+  originalPreviewPath,
+  planAttachmentPreparation,
+  shouldBuildOriginalPreview,
+  type IncomingFilesSource,
+} from "@/lib/mediaCompression";
+import { useIncomingMediaFiles } from "@/hooks/useIncomingMediaFiles";
+import { MediaSendDialog, type MediaSendChoice } from "./MediaSendDialog";
 import {
   CHAT_MEDIA_BUCKET,
   MAX_STAGED_ATTACHMENTS,
@@ -287,8 +298,22 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     removeStagedAttachment(attachmentId);
   }, [removeStagedAttachment]);
 
-  const stageFiles = useCallback(async (files: File[], _source: "picker" | "paste" | "drop" | "camera") => {
-    if (!files.length) return;
+  /**
+   * Prepares files for the tray and returns the ones it staged.
+   *
+   * `compress: false` is a person asking for the original: the picked file is
+   * staged exactly as it is — no canvas, no WebP — and marked so, with a light
+   * preview made beside it for the conversation. See `lib/mediaCompression.ts`
+   * for every rule this follows.
+   */
+  const stageFiles = useCallback(async (
+    files: File[],
+    _source: IncomingFilesSource,
+    options: { compress?: boolean } = {},
+  ): Promise<StagedAttachment[]> => {
+    if (!files.length) return [];
+    const compress = options.compress !== false;
+    const shape = mediaSendShape(window.matchMedia?.bind(window));
     const scopeToken = uploadScope.capture();
     const existingCount = stagedAttachmentsRef.current.length;
     const availableSlots = Math.max(0, MAX_STAGED_ATTACHMENTS - existingCount);
@@ -297,16 +322,24 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
 
     if (!availableSlots) {
       showAppAlert(`Можно подготовить не больше ${MAX_STAGED_ATTACHMENTS} вложений за раз.`, "Вложения");
-      return;
+      return [];
     }
 
     for (const sourceFile of files.slice(0, availableSlots)) {
       if (!uploadScope.isActive(scopeToken)) {
         accepted.forEach(revokeAttachmentPreview);
-        return;
+        return [];
       }
+      const preparation = planAttachmentPreparation(sourceFile.type, compress);
       let file = sourceFile;
-      if (sourceFile.type.startsWith("image/")) {
+      if (preparation === "original") {
+        // Before anything reads the file: a refused original costs no decode.
+        const limitError = originalLimitMessage(sourceFile, shape);
+        if (limitError) {
+          errors.push(limitError);
+          continue;
+        }
+      } else if (preparation === "compress") {
         const prepared = await runScopedStagedPreparation(
           uploadScope,
           scopeToken,
@@ -314,7 +347,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         );
         if (prepared.status === "stale") {
           accepted.forEach(revokeAttachmentPreview);
-          return;
+          return [];
         }
         file = prepared.value;
       }
@@ -330,16 +363,40 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       );
       if (preparedDimensions.status === "stale") {
         accepted.forEach(revokeAttachmentPreview);
-        return;
+        return [];
       }
       const dimensions = preparedDimensions.value;
+      const uncompressed = preparation === "original";
+      let previewFile: File | null = null;
+      let previewSize: { width: number; height: number } | null = null;
+      if (
+        uncompressed &&
+        dimensions &&
+        shouldBuildOriginalPreview({ mimeType: file.type, width: dimensions.width, height: dimensions.height, size: file.size })
+      ) {
+        const preparedPreview = await runScopedStagedPreparation(
+          uploadScope,
+          scopeToken,
+          () => prepareOriginalPreview(file),
+        );
+        if (preparedPreview.status === "stale") {
+          accepted.forEach(revokeAttachmentPreview);
+          return [];
+        }
+        previewFile = preparedPreview.value;
+        previewSize = previewFile ? originalPreviewDimensions(dimensions.width, dimensions.height) : null;
+      }
       accepted.push(createStagedAttachment(file, {
         width: dimensions?.width,
         height: dimensions?.height,
         optimized: file !== sourceFile || file.size !== sourceFile.size || file.type !== sourceFile.type,
         originalSize: sourceFile.size,
         originalMimeType: sourceFile.type || undefined,
-        mediaQuality: file.type.startsWith("video/") ? mediaQuality : undefined,
+        mediaQuality: file.type.startsWith("video/") ? (uncompressed ? "original" : mediaQuality) : undefined,
+        uncompressed,
+        previewFile,
+        previewWidth: previewSize?.width,
+        previewHeight: previewSize?.height,
       }));
     }
 
@@ -364,12 +421,13 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       );
       if (!committed) {
         accepted.forEach(revokeAttachmentPreview);
-        return;
+        return [];
       }
     }
     if (errors.length && uploadScope.isActive(scopeToken)) {
       showAppAlert(errors.slice(0, 3).join("\n"), "Вложения");
     }
+    return accepted;
   }, [mediaQuality, uploadScope]);
 
   const stageVoiceRecording = useCallback((blob: Blob, durationMs: number, mimeType: string) => {
@@ -447,15 +505,45 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       uploadedPath = data.path;
     }
 
+    // An original's preview goes beside it, at the address a reader derives from
+    // the original's own path. It is small, so a plain upload; and it is only a
+    // lighter picture for the conversation, so a failure costs the bubble a
+    // heavier download and never fails the send.
+    let previewPath: string | null = null;
+    if (
+      attachment.uncompressed &&
+      attachment.previewFile &&
+      uploadScope.isActive(scopeToken) &&
+      !cancelledAttachmentIdsRef.current.has(attachment.id)
+    ) {
+      const candidate = originalPreviewPath(uploadedPath);
+      const { error: previewError } = await supabase.storage
+        .from(CHAT_MEDIA_BUCKET)
+        .upload(candidate, attachment.previewFile, {
+          contentType: attachment.previewFile.type || "image/webp",
+          upsert: false,
+          cacheControl: cacheControlFor(candidate),
+        });
+      if (previewError) console.warn("[attachments] preview upload failed.");
+      else previewPath = candidate;
+    }
+
     const { data: publicData } = supabase.storage.from(CHAT_MEDIA_BUCKET).getPublicUrl(uploadedPath);
     return {
       bucket: CHAT_MEDIA_BUCKET,
       path: uploadedPath,
       publicUrl: publicData.publicUrl,
+      previewPath,
     };
   }, [supabase, updateStagedAttachment, uploadRegistry, uploadScope, userId]);
 
-  const sendStagedAttachments = useCallback(async (caption: string, onlyAttachmentId?: string): Promise<boolean> => {
+  const sendStagedAttachments = useCallback(async (
+    caption: string,
+    onlyAttachmentId?: string,
+    // What the desktop send dialog just staged: sent by itself, and without
+    // waiting for the ref to catch up with the render that added it.
+    explicitTargets?: StagedAttachment[],
+  ): Promise<boolean> => {
     if (!userId) {
       showAppAlert("Войдите в аккаунт, чтобы отправлять файлы.", "Вложения");
       return false;
@@ -464,7 +552,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     const scopeToken = uploadScope.capture();
     const captionText = caption.trim();
     const targets = selectStagedAttachmentsForSend(
-      stagedAttachmentsRef.current,
+      explicitTargets ?? stagedAttachmentsRef.current,
       onlyAttachmentId,
     );
     if (!targets.length) return false;
@@ -558,7 +646,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           mediaUrl: uploaded.publicUrl,
           replyToId: replyTo?.id ?? null,
           clientMessageId: attachment.clientMessageId,
-          mediaMetadata: getStagedAttachmentMediaMetadata(attachment),
+          mediaMetadata: getStagedAttachmentMediaMetadata(attachment, uploaded),
         }),
       );
 
@@ -615,6 +703,28 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     }
     showActionFeedback(forwardFeedback({ ok: true, error: null }, targetName, draft.length));
   }, [chat?.name, chatId, forwardMessage, sendMessage, setPendingForward]);
+  const stageIncomingFiles = useCallback(
+    (files: File[], source: IncomingFilesSource, compress: boolean) => stageFiles(files, source, { compress }),
+    [stageFiles],
+  );
+  const {
+    request: mediaSendRequest,
+    handleIncomingFiles,
+    closeRequest: closeMediaSendRequest,
+  } = useIncomingMediaFiles(stageIncomingFiles);
+
+  // Files picked for one chat are not sent into the next.
+  useLayoutEffect(() => {
+    closeMediaSendRequest();
+  }, [chatId, closeMediaSendRequest]);
+
+  const sendFromMediaDialog = useCallback(async (choice: MediaSendChoice) => {
+    const source = mediaSendRequest?.source ?? "picker";
+    closeMediaSendRequest();
+    const staged = await stageFiles(choice.files, source, { compress: choice.compress });
+    if (!staged.length) return;
+    await sendStagedAttachments(choice.caption, undefined, staged);
+  }, [closeMediaSendRequest, mediaSendRequest?.source, sendStagedAttachments, stageFiles]);
 
   const handleSend = useCallback((content: string) => {
     if (forwardDraft) {
@@ -809,8 +919,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     dragDepthRef.current = 0;
     setDraggingFiles(false);
     const files = filesFromDataTransfer(event.dataTransfer);
-    if (files.length) stageFiles(files, "drop");
-  }, [stageFiles]);
+    if (files.length) handleIncomingFiles(files, "drop");
+  }, [handleIncomingFiles]);
 
   // The conversation runs the full height of the pane, under both pieces of
   // chrome, so its padding is exactly what they cover. Note what this does
@@ -1027,7 +1137,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             attachments={stagedAttachments}
             mediaQuality={mediaQuality}
             onMediaQualityChange={setMediaQuality}
-            onStageFiles={(files, source) => stageFiles(files, source)}
+            onStageFiles={handleIncomingFiles}
             onRemoveAttachment={removeStagedAttachment}
             onRetryAttachment={retryStagedAttachment}
             onCancelAttachment={cancelStagedAttachment}
@@ -1066,6 +1176,14 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         currentUserId={userId}
         onDelete={handleDeleteMessages}
       />
+      {mediaSendRequest && (
+        <MediaSendDialog
+          key={mediaSendRequest.id}
+          files={mediaSendRequest.files}
+          onCancel={closeMediaSendRequest}
+          onSend={(choice) => void sendFromMediaDialog(choice)}
+        />
+      )}
         <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
       </div>
     </ChatMediaPlaybackProvider>
@@ -1098,38 +1216,12 @@ function getStagedAttachmentMessageContent(attachment: StagedAttachment, caption
   return stagedAttachmentTextContent(attachment.kind, caption, attachment.name);
 }
 
-function getStagedAttachmentMediaMetadata(attachment: StagedAttachment): Json | null | undefined {
-  if (attachment.kind === "video_message") {
-    return {
-      kind: "video_message",
-      shape: "round",
-      duration_ms: attachment.durationMs ?? null,
-      mime_type: attachment.mimeType,
-      size_bytes: attachment.size,
-      [MEDIA_QUALITY_METADATA_KEY]: attachment.mediaQuality,
-    };
-  }
-  if (
-    attachment.kind === "image" ||
-    attachment.kind === "video" ||
-    attachment.kind === "audio" ||
-    attachment.kind === "file"
-  ) {
-    return {
-      kind: attachment.kind,
-      mime_type: attachment.mimeType,
-      size_bytes: attachment.size,
-      original_size_bytes: attachment.originalSize ?? attachment.size,
-      original_mime_type: attachment.originalMimeType ?? null,
-      optimized: attachment.optimized ?? false,
-      width: attachment.width ?? null,
-      height: attachment.height ?? null,
-      ...(attachment.kind === "image" || attachment.kind === "video"
-        ? { [MEDIA_QUALITY_METADATA_KEY]: attachment.mediaQuality }
-        : {}),
-    };
-  }
-  return undefined;
+function getStagedAttachmentMediaMetadata(
+  attachment: StagedAttachment,
+  uploaded: StagedAttachmentUpload,
+): Json | null | undefined {
+  // Built in `lib/mediaCompression.ts`, where the unit suite can reach it.
+  return buildAttachmentMediaMetadata(attachment, uploaded) as Json | undefined;
 }
 
 function formatVoiceDurationLabel(durationMs: number): string {
