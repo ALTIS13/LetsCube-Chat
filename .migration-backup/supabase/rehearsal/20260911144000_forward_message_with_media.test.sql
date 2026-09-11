@@ -71,8 +71,9 @@ declare
   v_count integer;
   v_failed boolean;
 begin
-  insert into auth.users (id, aud, role, email, email_confirmed_at, created_at, updated_at)
-  select person.id, 'authenticated', 'authenticated', 'rehearsal-' || person.id::text || '@invalid', v_now, v_now, v_now
+  -- Only columns that the auth.users of production and of the rehearsal image both have.
+  insert into auth.users (id, aud, role, email, created_at, updated_at)
+  select person.id, 'authenticated', 'authenticated', 'rehearsal-' || person.id::text || '@invalid', v_now, v_now
     from pg_catalog.unnest(array[v_alice, v_bob, v_carol, v_stranger]) as person(id);
   insert into public.profiles (id, full_name, username)
   select person.id, 'Rehearsal ' || person.label, 'rh_' || person.label || '_' || pg_catalog.substr(pg_catalog.replace(person.id::text, '-', ''), 1, 8)
@@ -259,6 +260,9 @@ begin
   update public.chat_members set cleared_at = null where chat_id = v_source_chat and user_id = v_alice;
 
   -- (h) Muted in the target: refused, as a direct send would be.
+  -- A sanction is made by a session without a user, which enforce_sanction_matrix lets through.
+  perform pg_catalog.set_config('request.jwt.claim.sub', '', true);
+  perform pg_catalog.set_config('request.jwt.claims', '', true);
   insert into public.mutes (user_id, chat_id, reason) values (v_alice, v_target_chat, 'rehearsal');
   perform pg_catalog.set_config('request.jwt.claim.sub', v_alice::text, true);
   perform pg_catalog.set_config('request.jwt.claims', pg_catalog.json_build_object('sub', v_alice, 'role', 'authenticated')::text, true);
