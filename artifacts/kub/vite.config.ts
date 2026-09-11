@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import { serviceWorkerBuild } from "./serviceWorkerBuildPlugin.ts";
 
 const rawPort = process.env.PORT;
 
@@ -33,6 +34,9 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    // Gives every build's sw.js its own bytes, so a deploy installs a new worker
+    // and the old worker's cache is deleted. Build-only; see the plugin file.
+    serviceWorkerBuild(),
     ...(!isProduction ? [runtimeErrorOverlay()] : []),
     ...(!isProduction &&
     process.env.REPL_ID !== undefined

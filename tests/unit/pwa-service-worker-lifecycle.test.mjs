@@ -87,6 +87,37 @@ test("hidden PWA clients still receive the system push card", async () => {
   assert.equal(worker.shown[0].options.tag, "message:chat:chat-1");
 });
 
+test("a storage address on the production backend host never reaches a push card", async () => {
+  // The worker used to name `.supabase.co/storage` beside the generic path. The
+  // host is irrelevant — production's storage is on its own domain — and the
+  // path is what every Supabase storage address shares, so the path alone has
+  // to be enough.
+  const worker = loadServiceWorker();
+  const pending = [];
+  worker.listeners.get("push")({
+    data: {
+      json() {
+        return {
+          kind: "chat_message",
+          chat_id: "chat-1",
+          message_id: "message-1",
+          title: "Фото",
+          body: "https://core.letscube.ru/storage/v1/object/public/media/variants/messages/a.webp",
+          url: "/storage/v1/object/public/media/variants/messages/a.webp",
+        };
+      },
+    },
+    waitUntil(promise) {
+      pending.push(promise);
+    },
+  });
+  await Promise.all(pending);
+
+  assert.equal(worker.shown.length, 1);
+  assert.equal(worker.shown[0].options.body, "Новое уведомление");
+  assert.equal(worker.shown[0].options.data.url, "/?chat=chat-1&message=message-1");
+});
+
 test("Realtime message delivery does not create a second legacy Notification card", async () => {
   const source = await readFile(
     new URL("../../artifacts/kub/src/hooks/useMessages.ts", import.meta.url),
