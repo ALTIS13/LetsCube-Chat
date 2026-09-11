@@ -6080,7 +6080,7 @@ since the deletion is reversible; a notification already written keeps its
 160-character preview in `public.notifications`, and a push already delivered stays
 on the device.
 
-## D-104 `[ ]` Every signed-in person can read every reaction, and add one to any message id
+## D-104 `[x]` Every signed-in person can read every reaction, and add one to any message id
 
 **Severity:** medium, for privacy. Found by agent L in the migrations; checked on
 production, read-only, on 2026-09-11.
@@ -6096,6 +6096,24 @@ reaction on a message of a chat they are not in if they know its id.
 is published to Realtime under the same policy. Without signing in the read is
 refused, but only because the restrictive ban check calls `is_banned`, which
 `anon` may not execute: an accident, not a rule.
+
+**Fixed** in `6e2f5ed`, not yet applied to production, on the owner's approval of
+2026-09-11. `20260911150000_reactions_visible_to_chat_members` replaces the open
+read with «Chat members can view reactions» — the members of the message's chat,
+through `is_chat_member`, as for the message itself — and the insert check with
+«Chat members can add reactions»: the caller's own reaction, on a live message of a
+chat they are in that is not a notice, which is what `set_message_reaction` checks.
+`anon` loses its privileges on the table. Of the 149 reactions on production none
+was put from outside the message's chat, and the client production runs reads and
+writes reactions only in the reader's own chats, so this may go out before the new
+client.
+
+**Regression tests:** the rehearsal
+`.migration-backup/supabase/rehearsal/20260911150000_reactions_visible_to_chat_members.test.sql`
+— a member reads and adds; a stranger to the chat neither reads nor adds; no one
+reacts in another's name, on a deleted message or on a notice; anon is refused; the
+one-call toggle still works — run in PGlite by
+`tests/server/message-actions-db.test.mjs` and on a copy of production's schema.
 
 ## D-105 `[ ]` A global administrator deleting the other person's message in their own private chat is audited as staff
 
@@ -6117,7 +6135,7 @@ has it, and says so in its header, but does not refuse to run without it. On a
 server without the flag the list falls back to separate requests, and its
 "comes back once" check fails on seven fetches of the list.
 
-## D-107 `[ ]` The achievements people have earned can be read without signing in
+## D-107 `[x]` The achievements people have earned can be read without signing in
 
 **Severity:** low, for privacy. Found on 2026-09-11 while checking D-104 on
 production, read-only.
@@ -6129,6 +6147,20 @@ read policy is `using (true)`.
 on production are readable — whose achievement each one is. Only the count was
 read. `achievements`, `cosmetics` and `product_milestones` are readable the same
 way and hold catalogue rows, which may well be meant to be public.
+
+**Fixed** in `6e2f5ed`, not yet applied to production, on the owner's approval of
+2026-09-11. `20260911151000_user_achievements_signed_in_only` replaces the open
+read with «Signed-in people can view earned achievements», for `authenticated`
+only, and takes `anon`'s privileges on the table away. `achievement_recipients` and
+`achievement_stats` read the table as their caller, so they no longer answer anon
+either; the client reads the second only on signed-in screens. The catalogues stay
+public, and every SECURITY DEFINER path that grants or checks a badge is unchanged.
+
+**Regression tests:** the rehearsal
+`.migration-backup/supabase/rehearsal/20260911151000_user_achievements_signed_in_only.test.sql`
+— a signed-in person reads another's badge and the views; nobody writes a badge by
+hand; anon is refused the table and `achievement_recipients`; the catalogue stays
+readable — run in PGlite and on a copy of production's schema.
 
 ## D-108 `[x]` A private chat whose latest messages were deleted drew almost none of them, and never loaded older history
 
@@ -6231,3 +6263,82 @@ frames are held until a settle pass has asked for one, the reader's wheel lets g
 and they scroll up, then the frames run. Red before the fix, the reader at 2098px
 put at 4195px; green in three runs of three after. The source half is in
 `tests/unit/message-history-anchoring.test.mjs`.
+
+## D-111 `[ ]` The installed iPhone app leaves an empty band under the composer, and it stays when the keyboard opens
+
+**Severity:** high. Reported by the owner on 2026-09-11 with a tester's screenshots,
+on the web build production has run since 07:03 Moscow time that day (`45971c6`);
+nothing was deployed after it.
+
+**Surface:** the conversation in the app installed on an iPhone. `MainLayout` sizes
+the shell `h-[100dvh]`; the composer dock in `ChatWindow` pads
+`max(keyboard inset, --kub-safe-bottom)`, and the keyboard inset is
+`innerHeight − visualViewport.height − visualViewport.offsetTop`.
+
+**Defect:** measured off the screenshots — a phone as wide as a Pro Max, going by
+the Dynamic Island against the screen — the composer's field ends about 108pt above
+the bottom edge, over a flat band of about 93pt; with the keyboard open about 44pt
+stays between the composer and the keyboard's bar, and the chat header has gone off
+the top. The same component in Chromium at 430×932, with a 34pt inset for the home
+indicator, puts the field 46pt above the edge: for a viewport as tall as the screen
+the arithmetic holds, and the missing ~60pt is the viewport the app is given.
+
+**Cause, not confirmed on a device.** Two behaviours of Home Screen web apps are
+reported: `100dvh` wrong on a cold start while `100vh` is right; and `innerHeight`,
+`visualViewport.height` and `100dvh` shrinking once the keyboard has been used —
+932 to 873 on a Pro Max, with a dead band at the bottom — and staying so until the
+app is quit. A WebKit report of that shrink in a web view reproduces on iOS 26.0.1
+and is marked fixed in 26.1 (bugs.webkit.org 301857). The shell's `100dvh` and an
+inset read from `innerHeight` are exposed to both. Telling them apart needs the
+tester's iOS version, and whether the band is there before anything has been typed.
+
+## D-112 `[ ]` In the Windows app the window's own buttons sit over the page's top-right controls, and take most of their clicks
+
+**Severity:** high for the Windows app. Reported by the owner on 2026-09-11 with a
+screenshot, recorded for later; not yet investigated.
+
+**Surface:** the window buttons the Windows shell draws itself — minimise, maximise,
+close — at the top right, and the controls a page puts in that corner. On the
+owner's screenshot of «Задачи» the page's «+ Новая» sits under the window buttons,
+and pointing at it brings up the maximise button's «Развернуть» tooltip.
+
+**Defect:** the window buttons share a plane with the page's header, so an
+invisible rectangle of theirs covers the upper part of the page's buttons: about
+80% of «+ Новая» does not take a click, and only its lower edge, which the
+rectangle does not reach, does.
+
+## D-113 `[ ]` A video does not send
+
+**Severity:** high. Reported by a tester of the production build (`45971c6`) on
+2026-09-11 through the owner, recorded for later; not yet reproduced.
+
+**Defect:** in the tester's words, «видео не отправляется». The platform, the video
+(size, length, codec) and the step at which it stops are not known yet.
+
+## D-114 `[ ]` A 300 KB photo takes a very long time to upload
+
+**Severity:** medium. The same report; not yet reproduced.
+
+**Defect:** «фото 300кб миллион лет грузилось». A file of that size takes seconds on
+a mobile connection, so the time goes somewhere other than the bytes — the
+preparation on the device, the upload's handshake, or waiting for the worker's
+copies — and which one is still to be measured.
+
+## D-115 `[ ]` Photos sent together arrive as separate messages, not as one album
+
+**Severity:** medium. The same report; not yet reproduced.
+
+**Defect:** «отправились не паком, а отдельно»: photos picked and sent together went
+out one message each, where Telegram sends them as one album.
+
+## D-116 `[ ]` A received photo is a WebP that the tester cannot zoom, and it looks poor
+
+**Severity:** to be assessed. The same report; not yet reproduced.
+
+**Defect:** in the tester's words, the photo is WebP, so it does not zoom and its
+quality is poor. Two claims to check apart. Zooming a photo was fixed as D-087 —
+on the build the tester runs, or only since, is to be checked. WebP is the format
+the preview copies are made in to keep storage small, which by itself neither
+stops a zoom nor lowers quality; what the tester sees may be a preview copy where
+the original was expected (compare D-097). The owner's view: the quality should be
+fine, and WebP was chosen for its small size.

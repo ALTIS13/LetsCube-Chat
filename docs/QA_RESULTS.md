@@ -1,5 +1,41 @@
 # QA Results
 
+## 2026-09-11 - Reactions and earned achievements closed to readers who should not have them, rehearsed on a copy of the production schema
+
+On the owner's approval that evening, D-104 and D-107 became two migrations,
+`20260911150000_reactions_visible_to_chat_members` and
+`20260911151000_user_achievements_signed_in_only`. Each has a self-check that
+raises rather than commits a half-applied state, a rollback and a rehearsal. They
+are in `6e2f5ed` and not applied to production: they go out with the rollout, and
+since neither needs the new client they could go before it.
+
+**Read from production first, read-only:** the policies, grants, row-level
+security, publication membership, columns and indexes of `reactions` and
+`user_achievements`; `is_chat_member` and the two views over the achievements,
+both `security_invoker`; and three counts — 149 reactions, none of them put from
+outside the message's chat, and 58 earned achievements.
+
+**PGlite:** with both migrations added to `tests/server/message-actions-db.test.mjs`
+beside the five message-action migrations, 11 of 11 — every migration applied
+twice, every rehearsal, the rollbacks with the policies back as they were, and the
+self-check that refuses a half-applied state. The 19 unit test files that read
+`.migration-backup` passed, 227 tests.
+
+**On a throwaway copy of the production schema** (`rehearse.sh`: 32,366 lines of
+schema, its 33 known restore errors, no network, nothing left behind):
+
+| run | migrations | rehearsals |
+| --- | --- | --- |
+| first | the five message-action migrations applied; `20260911150000` refused at its last self-check, «public.reactions is no longer published to Realtime» | not run |
+| after removing that check | all seven applied | all seven passed |
+| rolled back and applied again | the seven, both rollbacks, then both migrations again | both privacy rehearsals passed |
+
+The refusal was the copy's, not production's: a schema-only dump filtered by
+schema brings the image's `supabase_realtime` publication without its tables,
+while production, read above, publishes `reactions`. The migration never touches
+the publication, so the check guarded nothing and was removed. Every input hashed
+the same before and after the last two runs.
+
 ## 2026-09-11 - The message-action backend taken in, and rehearsed on a copy of the production schema
 
 Agent L's six commits — five migrations with their rollbacks and rehearsal tests,
