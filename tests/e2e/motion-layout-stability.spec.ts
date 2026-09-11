@@ -100,20 +100,36 @@ test.describe("LETSCUBE motion layout stability", () => {
     await loginAsRoleOrSkip(page, role);
 
     // Hold the routing data so the loading state is real rather than a frame
-    // nobody can catch.
+    // nobody can catch — and do not assert anything until the hold has provably
+    // caught it. Nothing used to establish that: whether `locations` was in flight
+    // when the dialog opened was left to timing, and the two ways to lose that
+    // race (a request the pattern never saw, a menu item counted in the instant
+    // before it rendered) both surfaced as an assertion about the interface.
     let release: () => void = () => {};
     const held = new Promise<void>((resolve) => { release = resolve; });
+    let heldRequests = 0;
     await page.route(/\/rest\/v1\/(location_members|locations)\?/, async (route) => {
+      heldRequests += 1;
       await held;
       await route.continue();
     });
 
     await page.goto("/admin/users", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("admin-user-row").first()).toBeVisible();
+    await expect
+      .poll(() => heldRequests, {
+        message: "the routing request was never held, so there is no loading state to measure",
+        timeout: 15_000,
+      })
+      .toBeGreaterThan(0);
+
+    // The row opens a menu first. Wait for whichever of the two appears instead of
+    // counting menu items once, straight after the click, when there may be none.
     await page.getByTestId("admin-user-row").first().getByRole("button").last().click();
     const item = page.getByRole("menuitem").first();
-    if ((await item.count()) > 0) await item.click();
     const dialog = page.locator('[role="dialog"]').first();
+    await expect(item.or(dialog).first()).toBeVisible();
+    if (await item.isVisible()) await item.click();
     await expect(dialog).toBeVisible();
 
     // "Локации не назначены" is a claim, and while the data is in flight the
@@ -122,7 +138,11 @@ test.describe("LETSCUBE motion layout stability", () => {
     await expect(dialog.getByText("Локации не назначены")).toHaveCount(0);
     await expect(dialog.getByRole("status", { name: /Загрузка локаций/ })).toBeVisible();
 
+    // The placeholder is waiting for exactly this data: let it through and it
+    // gives way. That also lets the held requests finish before the page is torn
+    // down, rather than continuing into its teardown.
     release();
+    await expect(dialog.getByRole("status", { name: /Загрузка локаций/ })).toHaveCount(0, { timeout: 15_000 });
   });
 
   test("a confirmation appearing does not move the page under it", async ({ page }) => {
