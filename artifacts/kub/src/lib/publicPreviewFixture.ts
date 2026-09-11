@@ -57,7 +57,14 @@ export type PublicPreviewFixture = {
  * viewer at anything on a network — production media least of all. The product
  * previews carry none.
  */
-export type PublicPreviewImage = { url: string; width: number; height: number };
+export type PublicPreviewImage = {
+  url: string;
+  width: number;
+  height: number;
+  /** Marked as sent without compression, as an original photo's metadata is. */
+  uncompressed?: boolean;
+  sizeBytes?: number;
+};
 
 declare global {
   interface Window {
@@ -143,10 +150,18 @@ function requireImage(value: unknown, field: string): PublicPreviewImage {
   const url = requireString(image.url, `${field}.url`);
   // Refused rather than trusted: only an inline picture can be shown here.
   if (!url.startsWith("data:image/")) fail(`${field}.url must be a data:image/ URL`);
+  if (image.uncompressed !== undefined && typeof image.uncompressed !== "boolean") {
+    fail(`${field}.uncompressed must be a boolean`);
+  }
+  const sizeBytes = image.sizeBytes === undefined
+    ? undefined
+    : requirePositiveInteger(image.sizeBytes, `${field}.sizeBytes`);
   return {
     url,
     width: requirePositiveInteger(image.width, `${field}.width`),
     height: requirePositiveInteger(image.height, `${field}.height`),
+    ...(image.uncompressed === true ? { uncompressed: true } : {}),
+    ...(sizeBytes !== undefined ? { sizeBytes } : {}),
   };
 }
 
@@ -463,7 +478,15 @@ export function previewMessages(fixture: PublicPreviewFixture): MessageWithSende
       media_bucket: null,
       media_path: null,
       media_url: image ? image.url : null,
-      media_metadata: image ? { kind: "image", width: image.width, height: image.height } : null,
+      media_metadata: image
+        ? {
+          kind: "image",
+          width: image.width,
+          height: image.height,
+          ...(image.uncompressed ? { uncompressed: true, optimized: false } : {}),
+          ...(image.sizeBytes ? { size_bytes: image.sizeBytes, original_size_bytes: image.sizeBytes } : {}),
+        }
+        : null,
       reply_to_id: null,
       forwarded_from_id: message.forwardedFrom ? `${PREVIEW_IDS.activeChat}-f${index}` : null,
       forward_origin: message.forwardedFrom ? { name: message.forwardedFrom } : null,

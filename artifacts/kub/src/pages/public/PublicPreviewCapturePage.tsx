@@ -7,6 +7,8 @@ import { ForwardModal } from "@/components/chat/ForwardModal";
 import { ChatListItem } from "@/components/sidebar/ChatListItem";
 import { FolderTabs } from "@/components/sidebar/FolderTabs";
 import { MediaViewer, type MediaViewerItem } from "@/components/chat/MediaViewer";
+import { MediaSendDialog } from "@/components/chat/MediaSendDialog";
+import { useIncomingMediaFiles } from "@/hooks/useIncomingMediaFiles";
 import { MessageInput } from "@/components/chat/MessageInput";
 import { MessageList } from "@/components/chat/MessageList";
 import {
@@ -57,6 +59,15 @@ import {
  * same one-per-person rule the application uses, so a render of a message
  * action shows its real result. Nothing it does leaves the page.
  */
+/**
+ * The page stages nothing: there is no upload behind it. What it does share with
+ * `ChatWindow` is the routing — the phone's limit check and the desktop's send
+ * dialog — so the renders taken here show the decisions the conversation makes.
+ */
+function stageNothing() {
+  return undefined;
+}
+
 export default function PublicPreviewCapturePage() {
   const [fixture, setFixture] = useState<PublicPreviewFixture | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +90,11 @@ export default function PublicPreviewCapturePage() {
   const [messages, setMessages] = useState<MessageWithSender[]>([]);
   const { ref: chromeRef, height: chromeHeight } = useMeasuredHeight<HTMLDivElement>();
   const { ref: composerRef, height: composerHeight } = useMeasuredHeight<HTMLDivElement>();
+  const {
+    request: mediaSendRequest,
+    handleIncomingFiles,
+    closeRequest: closeMediaSendRequest,
+  } = useIncomingMediaFiles(stageNothing);
 
   const chats = useMemo(() => (fixture ? previewChats(fixture) : []), [fixture]);
   const members = useMemo(() => (fixture ? previewMembers(fixture) : []), [fixture]);
@@ -292,6 +308,7 @@ export default function PublicPreviewCapturePage() {
                   forwardDraft={pendingForward?.chatId === activeChat.id ? pendingForward.messages : null}
                   onCancelForward={() => setPendingForward(null)}
                   draftOverride={commentDraft}
+                  onStageFiles={handleIncomingFiles}
                 />
               </div>
             </div>
@@ -319,6 +336,14 @@ export default function PublicPreviewCapturePage() {
         currentUserId={currentUserId}
         onDelete={deleteLocally}
       />
+      {mediaSendRequest && (
+        <MediaSendDialog
+          key={mediaSendRequest.id}
+          files={mediaSendRequest.files}
+          onCancel={closeMediaSendRequest}
+          onSend={closeMediaSendRequest}
+        />
+      )}
       <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
     </div>
   );
