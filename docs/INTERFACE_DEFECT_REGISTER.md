@@ -5889,12 +5889,15 @@ only while the chat holds a video. A new photo is queried before the worker has
 run, and nothing asks again until another message arrives or the chat is
 reopened.
 
-## D-096 `[ ]` A photo picked through «Файл» is still compressed on a phone
+## D-096 `[x]` A photo picked through «Файл» is still compressed on a phone
 
 **Severity:** low; a decision for the owner.
 
 **Defect:** in Telegram «Файл» sends a file as it is. A desktop now asks in the
 send dialog; a phone compresses a picture picked through «Файл».
+
+**Fixed** 2026-09-11 by D-119 in `bce98f3`: a pick from «Файл» is staged as it is on every
+device, and says so under its name. The attach sheet of D-122 keeps the rule.
 
 ## D-097 `[ ]` «Открыть оригинал» on a compressed photo opens the compressed copy
 
@@ -6352,6 +6355,17 @@ stays open until they are.
 **Defect:** in the tester's words, «видео не отправляется». The platform, the video
 (size, length, codec) and the step at which it stops are not known yet.
 
+**Investigated** 2026-09-11, from the code at the deployed build `45971c6` and from WebKit's and
+Apple's sources, not on a device: the cause is not yet known, and the candidates are narrowed. On an iPhone
+WebKit converts a picked video to H.264 before the page gets it, most likely making it larger, so it can meet
+the client's 250 MB limit or a lower server limit whose current value is unknown. A long upload in the
+installed app likely stops when the app goes to the background, and nothing survives a reload. One failed
+attachment silently stops every attachment after it in the same send. None of it has been visible, because
+the client discards the upload's HTTP status and the build has no telemetry. The send path's fixes are in
+progress on `fix/media-send-path`; the server's size limit and bucket rules are still to be read, read-only;
+and the tester has been asked what the tile showed and at which step it stopped. Report:
+`output/audits/2026-09-11-media-reports/report.md`.
+
 ## D-114 `[ ]` A 300 KB photo takes a very long time to upload
 
 **Severity:** medium. The same report; not yet reproduced.
@@ -6361,12 +6375,27 @@ a mobile connection, so the time goes somewhere other than the bytes — the
 preparation on the device, the upload's handshake, or waiting for the worker's
 copies — and which one is still to be measured.
 
+**Investigated** 2026-09-11: most likely the send queue, not the photo. Attachments upload and insert strictly
+one after another, so a photo picked with a video waits for the whole video under «Готово к отправке», and
+its own upload of 6 MiB or less then shows 0% until it ends. Preparing a photo measured 78–430 ms on Chromium
+and on Playwright's WebKit. Found alongside: an iPhone most likely hands the page HEIC photos, which the client
+does not compress, and Safari most likely cannot encode WebP, so a PNG can go up under a `.webp` name. Both
+are being fixed on `fix/media-send-path`; the tester has been asked about the pick order and the tile's file
+name.
+
 ## D-115 `[ ]` Photos sent together arrive as separate messages, not as one album
 
 **Severity:** medium. The same report; not yet reproduced.
 
 **Defect:** «отправились не паком, а отдельно»: photos picked and sent together went
 out one message each, where Telegram sends them as one album.
+
+**Investigated** 2026-09-11: confirmed by design. One picked file becomes one message, and nothing in the
+schema, the send path, the notifications or the bubble groups them. Telegram's model is separate messages
+sharing a group id, sent in one call, with one notification. The scoping — a nullable `media_group_id`, one
+RPC inserting the group in a transaction, a grid, actions on one item or the whole album — is phased at 8–12
+days, with renders for the owner before it is built. Its first phase, the send path, is in progress with D-113
+and D-114.
 
 ## D-116 `[ ]` A received photo is a WebP that the tester cannot zoom, and it looks poor
 
@@ -6379,6 +6408,13 @@ the preview copies are made in to keep storage small, which by itself neither
 stops a zoom nor lowers quality; what the tester sees may be a preview copy where
 the original was expected (compare D-097). The owner's view: the quality should be
 fine, and WebP was chosen for its small size.
+
+**Investigated** 2026-09-11: zoom is not the format. The deployed viewer has no zoom at all, for any picture;
+the zoom of D-087 (`c1a1d2d`) is on this branch and needs a real iPhone before it ships. The poor look is
+most likely size and cropping: a tall screenshot is stored at 886×1920 and previewed at 591×1280, then stretched
+and cropped on a 3× phone, with WebP's 4:2:0 colour a smaller factor. Keeping at least 1080 px on the short side
+is in progress on `fix/media-send-path`; how a tall picture sits in its bubble is a visible change for the
+owner to choose from renders.
 
 ## D-117 `[x]` In the light theme the time in your own message is under the contrast floor
 
@@ -6522,3 +6558,626 @@ iPhone app, and whether the Android app draws a real grid, are part of the asses
 **The owner's answers** (2026-09-11): the further functions Telegram's sheet carries — a poll, a checklist, a
 contact, music — are wanted. For now they are placeholder tabs, so that the scrolling row of attach functions
 can be judged without waiting for them; each is built for real later, in its turn.
+
+## D-123 `[ ]` A location administrator holds management grants for their location but has no screen to use them
+
+**Severity:** high, for the location administrator role. Found by the work-surfaces audit
+from the code and a fixture render; production membership was not checked.
+
+**Surface:** `artifacts/kub/src/hooks/useRole.ts:55-73`, where `useRoleAccess()` decides
+`isStaff` and `isAdmin` from global roles and permissions only;
+`artifacts/kub/src/pages/admin/AdminLayout.tsx:69` (the redirect) and `:164-166` (the
+locations route); `artifacts/kub/src/components/layout/BottomNav.tsx:33` (the «Админка»
+tab); `artifacts/kub/src/pages/admin/LocationsTab.tsx` (owner and technical administrator
+only). Frames `admin-locadmin-phone-01-admin-route.png` and
+`admin-locadmin-desktop-01-admin-route.png`.
+
+**Defect:** the location role `location_admin` grants `location_members.manage`,
+`tasks.manage`, `tasks.assign` and more for its location
+(`20260514_dynamic_roles_permissions.sql:196-203`), but no screen reads those grants. The
+«Админка» tab is hidden, `/admin` sends the person to the chat list without a word, and
+the location page opens only for the owner and the technical administrator. A location
+administrator cannot add a staff member, create an invitation or change a primary
+administrator for their own location.
+
+**Proposed:** a location page for the people who administer that location, with
+«Сотрудники», «Приглашения» and «Задачи», limited to the rows their grants allow and built
+as grouped rows (work-surfaces section 5). Where it is entered from waits on the owner
+(owner summary, question 18). Verify that each server function the page calls accepts a
+location administrator before exposing it.
+
+**Audit rows:** work-surfaces E-10, A-32; top-10 item 2; the audit's owner questions 1
+and 2.
+
+## D-124 `[ ]` Task actions check global staff status, so a location administrator cannot confirm, reject, assign or cancel their location's tasks
+
+**Severity:** high, for location administrators and the staff whose work waits on them.
+Found by the work-surfaces audit from the code; rendered on the fixture.
+
+**Surface:** `artifacts/kub/src/pages/tasks/TaskDetailModal.tsx:62, 150-181`: confirm,
+reject, cancel, assign and edit gate on `useIsManagerOrAdmin()`, which reads global roles
+and permissions; delete and claim already check location grants. The assign dialog,
+`artifacts/kub/src/pages/tasks/TaskAssignModal.tsx:60-155`, is for global staff only.
+Frames `tasks-locadmin-phone-02-detail-waiting-b.png` and
+`tasks-locadmin-desktop-02-detail-waiting-a.png`.
+
+**Defect:** a location administrator holding location `tasks.manage` and `tasks.assign`
+sees only «Редактировать», and only on tasks they created. On a task «На подтверждении»
+there is no «Подтвердить», «Отклонить», «Назначить исполнителя» or «Отменить задачу», so
+in the interface only global staff can move it on.
+
+**Proposed:** gate these actions on `has_location_permission(task.location_id,
+'tasks.manage')` and `'tasks.assign'`, the grants the server functions check, after
+verifying that each server function accepts a location administrator. Independent of
+D-123; it can land first.
+
+**Audit rows:** work-surfaces T-D13 (section 1.2 of the audit calls it T-D14; the table
+row is T-D13); section 4, «Location administrator»; top-10 item 2.
+
+## D-125 `[ ]` A bot's inline keyboard is never drawn, so its question cannot be answered
+
+**Severity:** high, for every chat with a bot. Found by the chat-functions audit from the
+client and the Bot API; rendered on the fixture (frame 32).
+
+**Surface:** `artifacts/kub/src/components/chat/MessageBubble.tsx` (nothing reads
+`bot_reply_markup`); `artifacts/kub/src/types/database.ts:662`;
+`artifacts/api-server/src/bot/schemas.ts:19-29, 81, 142`;
+`artifacts/api-server/src/bot/methods/messages.ts:39-46, 173-175, 195-202`;
+`artifacts/kub/src/pages/public/BotDocsPage.tsx:175`.
+
+**Defect:** a bot can send `reply_markup.inline_keyboard` and answer callbacks through the
+Bot API, the public bot documentation promises callback buttons, and messages store
+`bot_reply_markup`, but the client never renders it. The person sees the question, in the
+fixture «Смена на завтра: 10:00–19:00, точка на Лесной. Подтвердите выход.», and nothing
+to press.
+
+**Proposed:** rows of buttons under the bubble. Pressing shows progress on the button,
+then the bot's answer as a toast, or as an alert when the bot asks for one; URL buttons
+open their link (Telegram: core.telegram.org/bots/features, audit source T61).
+
+**Audit rows:** chat-functions K1; top-10 item 8.
+
+## D-126 `[ ]` A bot's commands are stored but never offered in its chat
+
+**Severity:** medium. Found by the chat-functions audit from the code; not rendered.
+
+**Surface:** `artifacts/api-server/src/bot/methods/commands.ts:10-20` stores the commands
+a bot sets with `setMyCommands`; nothing in `artifacts/kub/src/components/chat/` lists
+them.
+
+**Defect:** a bot registers its commands and nobody can discover them: a bot chat has no
+menu button and no suggestions after «/».
+
+**Proposed:** a «Меню» button by the field in a bot chat, and «/» suggestions with
+descriptions from the bot's stored commands (Telegram: core.telegram.org/bots/features,
+audit source T62).
+
+**Audit rows:** chat-functions K2; top-10 item 8.
+
+## D-127 `[ ]` A bot found in search cannot be opened
+
+**Severity:** high, for bots: search is where people find one, and the result leads
+nowhere. Found by the chat-functions audit; rendered on the fixture (frame 33).
+
+**Surface:** `artifacts/kub/src/components/search/SearchShared.tsx:376-379`.
+
+**Defect:** tapping a bot in the search results opens the modal «Запуск чата с ботом пока
+недоступен.»
+
+**Proposed:** open or create the chat with the bot, with «Запустить» in place of the
+composer until the person starts it, as Telegram's «Start» (audit source T62). Until that
+exists, leave bots out of the results.
+
+**Audit rows:** chat-functions A11, K4; top-10 item 8.
+
+## D-128 `[ ]` A group's member actions appear only under a mouse pointer
+
+**Severity:** high on phones and tablets, where owners and administrators cannot promote,
+demote or remove a member. Found by the chat-functions audit; rendered on the fixture
+(frame 07, with the pointer over one row).
+
+**Surface:** `artifacts/kub/src/components/chat/ChatInfoPanel.tsx:1550-1623`: the promote
+(chevron-up), demote (shield-off) and remove (×) buttons carry
+`opacity-0 group-hover:opacity-100`.
+
+**Defect:** a touchscreen has no hover, so the three buttons are never shown there.
+Removal asks «Удалить участника из чата?» once pressed. Not checked by the audit: whether
+the invisible buttons still take a tap at their position.
+
+**Proposed:** a muted «владелец» or «админ» on the right of the row; a tap opens the
+member's profile; long press, swipe or ⋯ offers «Назначить администратором» and «Удалить
+из группы» (Telegram: iOS swipe actions, Desktop context menu; audit sources T46 to T48).
+
+**Audit rows:** chat-functions B15; top-10 item 7.
+
+## D-129 `[ ]` A round video scrolled under the chrome paints over the header, the pinned bar, the search results and the composer
+
+**Severity:** medium: broken rendering in every chat that holds a round video. Found by
+the chat-functions audit from the code; visible in fixture frames 13, 20 and 28.
+
+**Surface:** `artifacts/kub/src/components/chat/MessageBubble.tsx:1864-1917` (the circle's
+play button `z-10`, its corner button `z-20`);
+`artifacts/kub/src/components/chat/ChatWindow.tsx:1084-1197` (the header, pinned bar and
+search bar above the list and the composer below it, positioned with `z-index: auto`);
+the stacking is explained at
+`artifacts/kub/src/pages/public/PublicPreviewCapturePage.tsx:249-252`. `ChatWindow.tsx`
+changed in `bce98f3`; its lines may have moved.
+
+**Defect:** the circle's own z-indexes lift it above the chrome it scrolls under, so the
+circle and its ↗ button are drawn over the header, the pinned bar, the search results and
+the composer.
+
+**Proposed:** give the chrome stack and the composer dock a stacking level above the
+list, or drop the circle's inner z-indexes. Check option C of the chat screen
+(`design/chat-chrome-c`), which rebuilt that chrome, for the same overlap.
+
+**Audit rows:** chat-functions M8; top-10 item 5.
+
+## D-130 `[ ]` A held recording cannot be cancelled, and releasing parks it in the tray instead of sending
+
+**Severity:** medium, for everyone who records voice or round video. Found by the
+chat-functions audit from the code; the hold state is in frame 22.
+
+**Surface:** `artifacts/kub/src/components/chat/MessageInput.tsx:505-572` (only the upward
+drag is read); `artifacts/kub/src/components/chat/ChatWindow.tsx:803-825, 483-511`
+(release stages the recording); modal alerts at `MessageInput.tsx:356-360, 378-382,
+402-414, 803-807` and `ChatWindow.tsx:808-822`. Both files changed in `bce98f3`; lines may
+have moved.
+
+**Defect:** while the microphone is held, a sideways slide is ignored, so an accidental
+recording cannot be abandoned. Every release either stages the recording in the tray
+(«Готово к отправке»), where it needs «Отправить» or ×, or raises the modal «Запись
+слишком короткая или пустая.». A second recording is refused with another modal until the
+first is sent or removed.
+
+**Proposed:** Telegram's recording line: slide left to cancel on touch, release outside
+the composer to cancel with a mouse; release sends; a lock for hands-free recording with
+pause, listen, delete and send; a short press shows a hint by the button instead of a
+modal (audit sources T19 to T21). Sequenced with the attach sheet (D-122), which leaves
+voice and round video to the microphone button.
+
+**Audit rows:** chat-functions R4, R6, R7 (R5, R9 and R10 follow from them); top-10
+item 2.
+
+## D-131 `[ ]` «Местоположение» sends exact coordinates on one tap, with no map and no confirmation
+
+**Severity:** high, for privacy: a mistaken tap tells the chat where a person is. Found by
+the chat-functions audit from the code; the resulting bubble is in frames 12 and 32.
+
+**Surface:** `artifacts/kub/src/components/chat/MessageInput.tsx:574-591` (changed in
+`bce98f3`; lines may have moved); `artifacts/kub/src/lib/formatText.tsx:112-206`.
+
+**Defect:** the item reads the position and at once sends the text «📍 Местоположение:
+https://maps.google.com/?q=…», drawn as «📍 55.75124, 37.61842» with a link to Google
+Maps. Nothing shows what will be sent, and nothing asks.
+
+**Proposed:** now, a confirmation that shows what will be sent. Then Telegram's location
+tab inside the attach sheet (D-122): a map preview with «Отправить моё местоположение»,
+and a bubble with a small map and the address. The map provider is the owner's choice
+(owner summary, question 7).
+
+**Audit rows:** chat-functions S6; the audit's owner question 7.
+
+## D-132 `[ ]` Errors and unavailable features show server, database and build internals
+
+**Severity:** medium. Found by all three audits from the code; most of these states need a
+failing server and were not rendered.
+
+**Surface:**
+
+- Starting a chat: `artifacts/kub/src/hooks/useCreateChat.ts:18, 39-44` and
+  `artifacts/kub/src/components/sidebar/NewChatModal.tsx:61-66`: «Not logged in», the
+  server's English message, or a JSON dump (chat-functions A3).
+- Saving a username: `artifacts/kub/src/lib/profileValidation.ts` and
+  `artifacts/kub/src/lib/errors.ts`, shown by
+  `artifacts/kub/src/components/sidebar/SettingsModal.tsx`: a taken name reads «Такая
+  запись уже существует.», only after «Сохранить», in a box under the header
+  (settings-profile C4, B5).
+- Phone verification: `artifacts/kub/src/components/sidebar/PhoneSection.tsx`: «Сервис
+  доставки кода не настроен. Обратитесь к администратору.» (settings-profile D5).
+- Android push: `artifacts/kub/src/hooks/usePush.ts`,
+  `artifacts/kub/src/lib/platform/nativePush.ts` and
+  `artifacts/kub/src/lib/platform/capabilities.ts`: «…нужны локальный
+  google-services.json, применённая migration user_push_devices и backend FCM
+  credentials.» (settings-profile F2).
+- Search: `artifacts/kub/src/components/chat/ChatSearchBar.tsx:207-209`,
+  `artifacts/kub/src/components/search/SidebarSearchResults.tsx:96-106` and
+  `artifacts/kub/src/components/search/GlobalSearchPalette.tsx:213-237`: «Поиск сейчас
+  выполняется по загруженным сообщениям.», «Поиск по всей истории требует обновления базы
+  данных…» (chat-functions P3, O1).
+- Tasks: `artifacts/kub/src/pages/tasks/TaskFormModal.tsx:625-629, 751-755`,
+  `artifacts/kub/src/lib/recurringTasks.ts:4` and
+  `artifacts/kub/src/lib/locationRouting.ts:4`: «Повторяемые задачи требуют обновления
+  базы данных…» (work-surfaces T-F7).
+- Administration: `artifacts/kub/src/pages/admin/LocationsTab.tsx:237-279` (A-31);
+  `artifacts/kub/src/pages/admin/InvitesTab.tsx:232-236` with
+  `artifacts/kub/src/lib/registrationInvite.ts:6, 8`: «Примените SQL-предложение
+  20260622_registration_invite_codes.sql.» (A-34);
+  `artifacts/kub/src/pages/admin/RolesPermissionsTab.tsx:472-496` (A-47);
+  `artifacts/kub/src/pages/admin/OpsReportTab.tsx:142-162`, which names the function
+  `admin_ops_security_report` (A-54).
+
+**Defect:** when a call fails or a database object is missing, the cause reaches the
+screen as it is: English server text, a JSON dump, migration file names, function names
+and build prerequisites. Nobody reading them can act on them, and the chat and settings
+ones reach every signed-in person.
+
+**Proposed:** one plain Russian sentence per failure, beside the control that failed
+(«Не удалось открыть чат. Попробуйте ещё раз.», «Это имя пользователя уже занято», «Не
+удалось отправить код. Попробуйте позже.», «Приглашения временно недоступны»); the cause
+goes to the log. A feature whose database object is missing is hidden and reported to
+operators, not explained on screen.
+
+**Audit rows:** chat-functions A3, P3, O1; settings-profile B5, C4, D5, F2; work-surfaces
+T-F7, A-31, A-34, A-47, A-54.
+
+## D-133 `[ ]` Destructive and far-reaching actions run on one tap, with no confirmation
+
+**Severity:** high in administration, where three of these are P1 in the audit; medium
+elsewhere. Found by the work-surfaces and settings audits from the code; a missing
+confirmation cannot be pictured.
+
+**Surface:**
+
+- `artifacts/kub/src/pages/admin/UsersTab.tsx:880-916, 200-210`: «Снять блокировку» and
+  «Снять мьют» (work-surfaces A-18; see D-134).
+- `artifacts/kub/src/pages/admin/RolesPermissionsTab.tsx:988-1090, 439-450`: «Снять» on a
+  global role assignment (A-45).
+- `artifacts/kub/src/pages/admin/BansMutesTab.tsx:132-188, 340-381`: «Снять», offered on
+  expired rows too (A-49).
+- `artifacts/kub/src/pages/admin/UsersTab.tsx:666-745`: bulk «Назначить роль» and
+  «Назначить локацию»; «Снять роль» already asks (A-16).
+- `artifacts/kub/src/pages/admin/LocationsTab.tsx:384-439`: «Архивировать» (A-28); and
+  `:511-557`: «Убрать» a member (A-30).
+- `artifacts/kub/src/pages/admin/InvitesTab.tsx:200-242`: the registration-mode switch,
+  which can open registration to everyone (A-33); and `:427-536`: «Отозвать», still
+  enabled on expired links (A-38).
+- `artifacts/kub/src/pages/admin/RolesPermissionsTab.tsx:872-977`: «Сохранить права»
+  replaces the role's whole set (A-44).
+- `artifacts/kub/src/pages/admin/SupportTab.tsx:604-738`: turning support intake off
+  (A-69).
+- `artifacts/kub/src/components/bots/BotSettingsPanel.tsx:90-106, 120-163`: «Убрать» the
+  bot's picture (B-08); `:201-211`: «Удалить webhook» (B-12); `:236-244`: removing a
+  developer (B-15).
+- `artifacts/kub/src/components/sidebar/SettingsModal.tsx`: «Удалить фото» in the settings
+  header (settings-profile C2).
+- `artifacts/kub/src/components/sidebar/PhoneSection.tsx`: «Удалить» a verified number,
+  through the gateway (settings-profile D4).
+
+**Defect:** each acts the moment it is pressed. Several change what other people can do:
+registration, support intake, a role's permissions, a person's access.
+
+**Proposed:** Telegram's alert: a title, one line saying what will stop working, a red
+confirm, and focus on «Отмена». Make it one shared component for tasks, administration,
+bots and settings (work-surfaces B-18). Where the audit moves an action into a row menu
+or a profile page, the alert moves with it.
+
+**Audit rows:** work-surfaces A-16, A-18, A-28, A-30, A-33, A-38, A-44, A-45, A-49, A-69,
+B-08, B-12, B-15 (top-10 item 10); settings-profile C2, D4.
+
+## D-134 `[ ]` Lifting a ban or a mute deletes the person's whole sanction history
+
+**Severity:** high, for moderation records. Found by the work-surfaces audit from the
+code; not reproduced.
+
+**Surface:** `artifacts/kub/src/pages/admin/UsersTab.tsx:880-916, 200-210`: the row menu
+«Действия», items «Снять блокировку» and «Снять мьют». Frame
+`admin-owner-desktop-04-users-row-menu.png` shows the menu.
+
+**Defect:** both items act at once and delete every ban or mute row for that person,
+expired history included, instead of ending the current restriction. The audit did not
+check whether the separate action log keeps a trace.
+
+**Proposed:** lift only the active restriction, after an alert (D-133), and keep past
+restrictions for a «История» section and the action log (work-surfaces A-48). Check that
+«Снять» in «Блокировки» (A-49), which the audit does not describe as deleting history,
+does not delete it either.
+
+**Audit rows:** work-surfaces A-18.
+
+## D-135 `[ ]` Sign-out ends the session on one tap
+
+**Severity:** medium. Found by the settings audit from the code; not rendered, because
+signing out would have ended the fixture session.
+
+**Surface:** the avatar menu in `artifacts/kub/src/components/sidebar/SidebarHeader.tsx`,
+calling `auth.signOut()` through `artifacts/kub/src/hooks/useUser.ts`. The menu is in
+frames `settings-profile-frame-p02.png` and `settings-profile-frame-d01.png`.
+
+**Defect:** «Выйти», the last item of the menu that opens from a person's own avatar,
+signs out immediately.
+
+**Proposed:** «Выйти» at the end of Настройки, always followed by «Вы действительно хотите
+выйти?» (Telegram Desktop's `lng_sure_logout`; iOS and Android confirm as well; audit
+sources [Desk-main], [TR], [iOS-logout], [And-logout]).
+
+**Audit rows:** settings-profile A5; top-10 item 7.
+
+## D-136 `[ ]` Closing settings throws away a typed name, username or bio without asking
+
+**Severity:** medium. Found by the settings audit from the code; the footer is in every
+settings frame.
+
+**Surface:** the footer of `artifacts/kub/src/components/sidebar/SettingsModal.tsx`,
+inside `artifacts/kub/src/components/kub/KubModal.tsx`.
+
+**Defect:** «Сохранить» saves only «Имя», «Никнейм» and «О себе»; every other control on
+the same screen saves at once. ✕, «Закрыть», Escape and a click on the backdrop all close
+the window and drop unsaved text without a word, so a person who flipped a switch and then
+typed a bio can reasonably believe both were kept.
+
+**Proposed:** Telegram's model: switches apply at once, and profile text is edited on its
+own «Изменить профиль» screen with «Готово» and «Отмена». Until that screen exists,
+closing with unsaved text asks whether to discard it.
+
+**Audit rows:** settings-profile B4; top-10 items 1 and 5.
+
+## D-137 `[ ]` Notification category switches look on and do nothing until device push is enabled
+
+**Severity:** medium. Found by the settings audit; rendered (frames p05, l01, a01).
+
+**Surface:** `artifacts/kub/src/components/kub/KubSwitch.tsx` (the disabled state);
+`artifacts/kub/src/components/sidebar/SettingsModal.tsx` and
+`artifacts/kub/src/hooks/usePush.ts` (the switches «Сообщения», «Задачи» and
+«Приглашения», stored in `notification_preferences`).
+
+**Defect:** until «Push-уведомления» is on, the three switches are disabled, but their
+track and thumb keep the enabled look on a dark 44 px square (pale blue in the light
+theme). They read as on and tappable, and a tap does nothing. A person cannot choose which
+notifications they want before granting the device permission.
+
+**Proposed:** let the categories be set before the device switch is on, since they are
+stored preferences, and draw a disabled switch dimmed, with no box. Part of the
+«Уведомления и звуки» screen in the parity work.
+
+**Audit rows:** settings-profile B6, F3; top-10 item 6.
+
+## D-138 `[ ]` The phone code step looks already filled in, and calls the number confirmed while it is being changed
+
+**Severity:** medium. Found by the settings audit; rendered (frame p09).
+
+**Surface:** `artifacts/kub/src/components/sidebar/PhoneSection.tsx`, the code step after
+«Изменить номер».
+
+**Defect:** the code field's placeholder is «1234», as long as a real code, so it reads as
+a code already entered; the old number's badge «Подтверждён» stays on screen; and
+«Удалить» sits among «Подтвердить», «Отмена» and «Повторно через 2:00». The screen does
+not say which number is confirmed, or whether a code went in.
+
+**Proposed:** a code screen with four digit cells and auto-submit, no placeholder digits,
+«Отправить код повторно через 1:59» as text, and the old badge and «Удалить» hidden during
+the step.
+
+**Audit rows:** settings-profile D3 (with D2); top-10 item 8.
+
+## D-139 `[ ]` A location found in search, and a ban notification, lead to a refusal or a bounce
+
+**Severity:** medium. Found by the work-surfaces audit from the code.
+
+**Surface:** `artifacts/kub/src/components/search/SearchShared.tsx:407-420` and
+`artifacts/kub/src/hooks/useGlobalSearch.ts:639-681` (location results);
+`artifacts/kub/src/components/sidebar/NotificationBell.tsx:213-243, 1008-1051`
+(notification routing).
+
+**Defect:** search returns locations to anyone the database lets read them, but a
+location result opens `/admin/locations`, so everyone except global staff gets «Нет
+доступа» and «Локация недоступна для вашего профиля.». A `ban_issued` notification opens
+`/admin`, which sends anyone who is not staff, including the person the notice is about,
+back to `/`.
+
+**Proposed:** show location results only to people who can open a location, and open the
+location's own page (D-123) instead of the admin tab. Stop routing a ban notice to
+`/admin`.
+
+**Audit rows:** work-surfaces E-08, E-09.
+
+## D-140 `[ ]` In «Блокировки» a failed load reads as "no bans", and every realtime reload blanks the tab
+
+**Severity:** medium, for moderation: an administrator can conclude that nobody is
+restricted. Found by the work-surfaces audit from the code.
+
+**Surface:** `artifacts/kub/src/pages/admin/BansMutesTab.tsx:50-113, 64-68, 219-222`.
+
+**Defect:** a failed fetch renders the empty states «Активных банов нет» and «История
+санкций пока пуста», and every realtime reload replaces the whole tab with a spinner.
+
+**Proposed:** keep the content during reloads, and show a real error state with
+«Повторить».
+
+**Audit rows:** work-surfaces A-50.
+
+## D-141 `[ ]` The users search invites «@username», and a leading «@» finds nobody
+
+**Severity:** low. Found by the work-surfaces audit from the code.
+
+**Surface:** `artifacts/kub/src/pages/admin/UsersTab.tsx:562-578, 104-130, 266-281`.
+
+**Defect:** the placeholder «Поиск по имени, @никнейму или ID» suggests typing «@olga»,
+but the «@» is never stripped, so that query matches nobody. Queries also match raw IDs.
+
+**Proposed:** strip a leading «@», and make the placeholder «Имя или @имя пользователя».
+
+**Audit rows:** work-surfaces A-13.
+
+## D-142 `[ ]` Administration forms offer what they then refuse, and drop what was entered
+
+**Severity:** medium. Found by the work-surfaces audit from the code; the invitation form
+is rendered (frames `admin-owner-*-10-invites-*`).
+
+**Surface:** `artifacts/kub/src/pages/admin/InvitesTab.tsx:87-90, 574` (A-37) and
+`:281-423` (A-36); `artifacts/kub/src/pages/admin/LocationsTab.tsx:442-504` (A-29).
+
+**Defect:**
+
+- The invitation form offers «Владелец» and «Тех. администратор» in «Глобальная роль» to
+  every administrator, and only after submit refuses with «Критические роли может выдавать
+  только тех. администратор.»
+- In the same form, «Автоматически» in «Роль в локации» snaps back to a role the moment it
+  is chosen, so it cannot stay selected.
+- Location assignment clears its selects when «Назначить» is pressed, even when the call
+  fails, so a failed assignment has to be entered again.
+
+**Proposed:** offer only the roles the person can grant; make «Автоматически» a real
+choice or remove it; keep the form's values when the call fails.
+
+**Audit rows:** work-surfaces A-29, A-36, A-37.
+
+## D-143 `[ ]` On a phone the support workspace can leave the screen and the address disagreeing, and a failed ticket load has no way back
+
+**Severity:** medium, for support operators on phones. Found by the work-surfaces audit;
+the stacked headers are rendered (frame `admin-owner-phone-17-support-ticket-a.png`), the
+back behaviour is inferred from the code.
+
+**Surface:** `artifacts/kub/src/pages/admin/SupportTab.tsx:68-70, 346, 407-453`;
+`artifacts/kub/src/pages/admin/support/SupportTicketDetails.tsx:96-103, 130-140`.
+
+**Defect:** the selected ticket is read from the URL only on mount, so browser or Android
+back can leave the URL and the screen disagreeing (inferred, not reproduced). A failed
+ticket load shows «Выберите обращение» with no way back to the queue. Five header bands
+stack above an open ticket, and the conversation and the details share one column that
+scroll separately.
+
+**Proposed:** route `/admin/support/:ticket` as a pushed page with a back arrow in its
+header; the details become that ticket's info page.
+
+**Audit rows:** work-surfaces A-70.
+
+## D-144 `[ ]` Support ticket actions hide their rules and misstate the ticket
+
+**Severity:** low to medium, for support operators. Found by the work-surfaces audit from
+the code; the action grid is rendered (frames `admin-owner-*-17-support-ticket-*`).
+
+**Surface:** `artifacts/kub/src/pages/admin/support/SupportTicketDetails.tsx:167-289`
+(A-65) and `:343-425` (A-67);
+`artifacts/kub/src/pages/admin/support/SupportConversation.tsx:41-141` (A-63);
+`artifacts/kub/src/pages/admin/support/SupportQueue.tsx:139-175` (A-60);
+`artifacts/kub/src/pages/admin/SupportTab.tsx:604-738` (A-69).
+
+**Defect:**
+
+- «Подтвердить» in the inline transfer and resolve editor stays disabled until three
+  characters are typed, with no hint (A-65); «Сохранить» in «Настройки поддержки» is
+  disabled without saying why (A-69).
+- The composer notice «Сначала примите обращение или откройте назначенное вам
+  обращение.» also appears on closed tickets, and «Для ответа требуется право «Ответы
+  поддержки».» names a permission that is labelled «Отвечать в обращениях» (A-63).
+- The ticket history lists events without who acted (A-67), and a queue row says
+  «Назначено оператору» without naming the operator (A-60).
+
+**Proposed:** show the minimum beside the field and say why a save is unavailable; on a
+closed ticket, say that it is closed; use the permission's real name; put the actor on
+every event and the operator's name on the row.
+
+**Audit rows:** work-surfaces A-60, A-63, A-65, A-67, A-69.
+
+## D-145 `[ ]` Bot settings save silently, need the secret retyped to save the webhook, and the list ignores the bot's picture
+
+**Severity:** low, for bot owners and developers. Found by the work-surfaces audit from
+the code; the pages are rendered (frames `bots-owner-*`).
+
+**Surface:** `artifacts/kub/src/components/bots/BotSettingsPanel.tsx:44-52, 108` (B-19)
+and `:201-211` (B-12); `artifacts/kub/src/pages/bots/BotsPage.tsx:127-130` (B-03).
+
+**Defect:** no save shows a success message, and errors appear in one banner above the
+tabs, far from the section that failed. In «Webhook» the signing secret, which is not
+shown after saving, must be typed again before anything in that section saves. The list
+draws a robot tile for every bot and ignores its `avatar_url`.
+
+**Proposed:** a toast «Сохранено», and errors beside their section; decide whether a
+stored secret can be kept when other webhook fields change; draw the bot's own picture in
+the list.
+
+**Audit rows:** work-surfaces B-03, B-12, B-19.
+
+## D-146 `[ ]` Administration shows a legacy role that contradicts a person's real role
+
+**Severity:** medium, for administrators reading who may do what. Found by the
+work-surfaces audit from the code and the 2026-09-04 migration notes; the profile dialog
+is rendered (frames `admin-owner-*-05-users-profile-a.png`).
+
+**Surface:** `artifacts/kub/src/pages/admin/UsersTab.tsx:996-1234` with
+`artifacts/kub/src/components/profile/ProfileRoleSummary.tsx:114-216` (the profile
+dialog); `artifacts/kub/src/pages/admin/dashboard/RecentActivity.tsx:15-35` (the
+dashboard's «Новые пользователи»).
+
+**Defect:** the profile dialog shows «Базовая роль: Пользователь», from the legacy
+`profiles.role`, beside «Глобальные роли: Владелец» for the same person, and the dashboard
+labels new people from the same legacy field. The migration notes name two accounts that
+are owners by assignment. A global manager sees only the legacy labels (A-17).
+
+**Proposed:** label people from their global roles everywhere, and drop «Базовая роль».
+
+**Audit rows:** work-surfaces A-09, A-21 (A-17 for the manager's view).
+
+## D-147 `[ ]` «Открыть оригинал» opens the raw file address in a browser tab, which takes a person out of the Windows and Android apps
+
+**Severity:** medium, for the installed apps. Found by the chat-functions audit from the
+code; the button is in frame 16.
+
+**Surface:** `artifacts/kub/src/components/chat/MediaViewer.tsx:121-131, 159-166`.
+
+**Defect:** the viewer's «Открыть оригинал» opens the stored file's address in a new
+browser tab; in the Windows and Android shells that leaves the app. For a compressed photo
+it also opens the compressed copy, which is D-097.
+
+**Proposed:** «Сохранить» in the viewer's ⋯ menu, downloading the stored file inside the
+app, as Telegram Desktop's «Save As…» and Android's «Save to Gallery» (audit sources T27
+and T14); no raw address.
+
+**Audit rows:** chat-functions M5; top-10 item 6.
+
+## D-148 `[ ]` «На весь экран» in the video viewer wears the external-link icon and has no name on a phone
+
+**Severity:** low, for accessibility. Found by the chat-functions audit; rendered (frame
+17, where a phone shows two identical icons side by side).
+
+**Surface:** `artifacts/kub/src/components/chat/MediaViewer.tsx:132-141`.
+
+**Defect:** the fullscreen button is drawn with the same external-link icon as «Открыть
+оригинал» beside it; below 640 px its word is hidden and the button has no accessible
+name. D-094 fixed the same gap on «Открыть оригинал».
+
+**Proposed:** a fullscreen icon inside drawn video controls, with an accessible name.
+
+**Audit rows:** chat-functions M6 (with V4).
+
+## D-149 `[ ]` Two stored playback volumes override each other
+
+**Severity:** low. Found by the chat-functions audit from the code at `f979ec9`, before
+D-118.
+
+**Surface:** `artifacts/kub/src/components/chat/AudioMessage.tsx:108-112, 132, 161`;
+`artifacts/kub/src/components/chat/ChatMediaPlayback.tsx:249-265, 312-316`. Both files
+changed in `bce98f3`; lines may have moved.
+
+**Defect:** the sound settings' `voicePlaybackVolume` is written to a voice bubble's
+`<audio>`, and the player's own saved volume (`kub.mediaPlayback.v1`) overwrites it on
+`activate` or `play`, so the volume that applies depends on how playback started. D-118
+plays both at full volume under a finger; on a desktop, where both controls remain, this
+is to be checked against `bce98f3`.
+
+**Proposed:** one source of volume: none under a finger, the player's own on a desktop;
+delete the other.
+
+**Audit rows:** chat-functions V6 (V2 for the settings slider).
+
+## D-150 `[ ]` A group's owner cannot leave it, only delete it for everyone
+
+**Severity:** low. Found by the chat-functions audit from the code; the delete
+confirmation is in frame 11.
+
+**Surface:** `artifacts/kub/src/components/chat/ChatInfoPanel.tsx:1504, 1517-1531,
+1902-1942`.
+
+**Defect:** the owner gets no «Покинуть группу», only «Удалить групповой чат», and
+ownership cannot be transferred. The confirmation says the same thing twice («Чат и
+история исчезнут у всех участников.», «После удаления группа исчезнет у всех
+участников.»). An owner who wants out can only end the group for everyone.
+
+**Proposed:** Telegram's model since February 2026: an owner can leave, choosing a new
+owner in the confirmation, otherwise an administrator inherits after a week; ownership
+can be transferred at any time; «Удалить группу» moves into «Управление группой» with one
+sentence (audit source T50). The audit put this to the owner; the owner summary states it
+as the default under the standing rule.
+
+**Audit rows:** chat-functions B14; top-10 item 7.
