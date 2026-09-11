@@ -136,9 +136,12 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
     await mockRegistrationInviteMode(page, true);
 
     await gotoOrSkip(page, "/register");
-    await expect(
-      page.getByText("Регистрация сейчас доступна только по приглашению."),
-    ).toBeVisible();
+    // One label in a pill since cdcdbcd and 7c067cb: the title-and-sentence
+    // banner did not fit the card and came out truncated, and the field's own
+    // label and hint already say where the code comes from.
+    await expect(page.getByTestId("registration-invite-only-banner")).toHaveText(
+      "Регистрация только по приглашению",
+    );
     await expect(page.getByPlaceholder("Например STAFF-2026")).toBeVisible();
 
     await fillRegistration(page);
@@ -222,22 +225,27 @@ test.describe("Yandex SmartCaptcha auth gateway", () => {
           colorScheme: styles.colorScheme,
           height: rect.height,
           optionsTheme: window.__lastSmartCaptchaOptions?.theme,
-          overflow: styles.overflow,
-          paddingBottom: styles.paddingBottom,
-          paddingTop: styles.paddingTop,
           themeAttribute: node.getAttribute("data-theme"),
+          topGap: fakeRect ? fakeRect.top - rect.top : null,
         };
       });
 
-    expect(layout.height).toBeGreaterThanOrEqual(102);
+    // The plate holds the widget with room around it (61f56b0): at least the
+    // 136px production's widget needs, with the widget wholly inside. Padding
+    // and overflow are how that is done, not what is promised, so they are no
+    // longer pinned.
+    expect(layout.height).toBeGreaterThanOrEqual(136);
+    expect(layout.topGap).not.toBeNull();
+    expect(layout.topGap as number).toBeGreaterThanOrEqual(0);
     expect(layout.bottomGap).not.toBeNull();
     expect(layout.bottomGap as number).toBeGreaterThanOrEqual(0);
-    expect(layout.paddingTop).toBe("0px");
-    expect(layout.paddingBottom).toBe("0px");
-    expect(layout.overflow).toBe("hidden");
+    // The resolved theme still reaches the provider and the plate records it,
+    // but the plate itself is light on purpose (cdcdbcd): Yandex's checkbox
+    // renders light whatever theme it is given, and a dark plate around a white
+    // widget reads as a mistake.
     expect(layout.themeAttribute).toBe("dark");
-    expect(layout.colorScheme).toContain("dark");
     expect(layout.optionsTheme).toBe("dark");
+    expect(layout.colorScheme).toBe("light");
   });
 
   test("/register enables the supported SmartCaptcha WebView mode inside Windows", async ({
