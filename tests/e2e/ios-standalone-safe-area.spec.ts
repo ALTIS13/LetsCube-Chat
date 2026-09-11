@@ -5,6 +5,7 @@ import {
   IPHONE_14_PRO,
   emulateInstalledIosApp,
   emulateSafeAreaWithCdp,
+  expectClearOfHardware,
   findSafeAreaViolations,
   formatViolations,
   resolvedSafeAreaTokens,
@@ -153,21 +154,6 @@ async function installAuthStandIns(page: Page) {
       body: JSON.stringify([{ invite_only_enabled: false }]),
     }),
   );
-}
-
-/**
- * The assertion, with its two preconditions. The emulated insets must have
- * reached the layout — otherwise an empty result proves nothing — and the
- * screen must actually contain the surface under test, which the caller checks
- * before calling this.
- */
-async function expectClearOfHardware(page: Page, insets: Insets, where: string) {
-  expect(
-    await resolvedSafeAreaTokens(page),
-    "the emulated insets never reached the layout, so an empty result would prove nothing",
-  ).toEqual(insets);
-  const violations = await findSafeAreaViolations(page, insets, { revealText: true });
-  expect(violations, `${where}: under the hardware\n${formatViolations(violations)}`).toEqual([]);
 }
 
 async function scrollToEnd(page: Page, selector: string, end: "start" | "end") {

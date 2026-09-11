@@ -92,11 +92,12 @@ export default defineConfig({
       // home-screen app does. The Chromium half of the same file overrides the
       // insets at the source instead and runs on `chromium-mobile-390`.
       //
-      // Scoped to its own spec: every other contract already has
+      // Scoped to its own specs: every other contract already has
       // `webkit-mobile-390`, and running the whole suite twice under one engine
-      // would buy time, not coverage.
+      // would buy time, not coverage. The `.signed-in` file is opt-in and skips
+      // itself unless it is pointed at a dev server on the real backend.
       name: "webkit-ios-standalone",
-      testMatch: /ios-standalone-safe-area\.spec\.ts$/,
+      testMatch: /ios-standalone-safe-area(\.signed-in)?\.spec\.ts$/,
       use: {
         ...devices["iPhone 14 Pro"],
         viewport: { width: 393, height: 852 },

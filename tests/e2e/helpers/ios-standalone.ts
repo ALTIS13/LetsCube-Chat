@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
 /**
  * An installed iPhone web app, reproduced as far as a desktop machine can.
@@ -415,6 +415,26 @@ export async function findSafeAreaViolations(
     },
     { insets, revealText: options.revealText ?? false },
   );
+}
+
+/**
+ * The assertion every scenario makes, with its precondition. The emulated
+ * insets must have reached the layout — otherwise an empty result proves
+ * nothing — and the caller checks, before this, that the screen really holds
+ * the surface under test.
+ */
+export async function expectClearOfHardware(
+  page: Page,
+  insets: Insets,
+  where: string,
+  options: { revealText?: boolean } = {},
+): Promise<void> {
+  expect(
+    await resolvedSafeAreaTokens(page),
+    "the emulated insets never reached the layout, so an empty result would prove nothing",
+  ).toEqual(insets);
+  const violations = await findSafeAreaViolations(page, insets, { revealText: options.revealText ?? true });
+  expect(violations, `${where}: under the hardware\n${formatViolations(violations)}`).toEqual([]);
 }
 
 /** One line per violation, for an assertion message a person can act on. */
