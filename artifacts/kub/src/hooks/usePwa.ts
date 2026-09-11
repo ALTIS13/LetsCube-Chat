@@ -5,6 +5,12 @@ import { reportError } from "@/lib/monitoring";
 import { getCurrentDistributionTarget, isNativeApp, supportsPwaInstall } from "@/lib/platform/capabilities";
 import { isDesktopApp } from "@/lib/platform/desktop";
 import type { DistributionTarget } from "@/lib/platform/distribution";
+import {
+  nextHandoffDelay,
+  pageEntryPath,
+  requestHandoff,
+  shouldAnnounceWaitingWorker,
+} from "@/lib/pwa/serviceWorkerHandoff";
 
 export const KUB_SW_UPDATE_READY_EVENT = "kub:sw-update-ready";
 export const KUB_SW_CONTROLLER_CHANGED_EVENT = "kub:sw-controller-changed";
@@ -58,7 +64,7 @@ export function usePwaServiceWorker() {
       .register(swUrl, { scope })
       .then((registration) => {
         if (registration.waiting && navigator.serviceWorker.controller) {
-          dispatchUpdateReady(registration);
+          void settleWaitingWorker(registration);
         }
 
         registration.addEventListener("updatefound", () => {
@@ -66,7 +72,7 @@ export function usePwaServiceWorker() {
           if (!worker) return;
           worker.addEventListener("statechange", () => {
             if (worker.state === "installed" && navigator.serviceWorker.controller) {
-              dispatchUpdateReady(registration);
+              void settleWaitingWorker(registration);
             }
           });
         });
@@ -152,6 +158,39 @@ export function usePwaInstall() {
 export function requestPwaServiceWorkerUpdate(registration: ServiceWorkerRegistration | null) {
   registration?.waiting?.postMessage({ type: KUB_SW_SKIP_WAITING_MESSAGE });
 }
+
+/**
+ * Every deploy now installs a new worker, and it waits while the previous one
+ * controls a page. That page is often already running the new build — any
+ * first launch after a deploy loads it from the network — and must not be
+ * asked to update to what it already runs. So the waiting worker is asked
+ * first; only a page on a different build, or one that gets no answer, is told
+ * an update is ready. See `lib/pwa/serviceWorkerHandoff.ts`.
+ */
+async function settleWaitingWorker(registration: ServiceWorkerRegistration) {
+  // The newest call owns the conversation; an older one still sleeping between
+  // questions stops rather than asking a second time in parallel.
+  const generation = ++settleGeneration;
+  for (let attempt = 0; generation === settleGeneration; attempt += 1) {
+    const waiting = registration.waiting;
+    if (!waiting) return;
+    const scripts = Array.from(
+      document.querySelectorAll<HTMLScriptElement>('script[type="module"][src]'),
+      (script) => script.src,
+    );
+    const entry = pageEntryPath(scripts, window.location.origin);
+    const result = entry ? await requestHandoff(waiting, entry) : null;
+    if (shouldAnnounceWaitingWorker(result)) {
+      dispatchUpdateReady(registration);
+      return;
+    }
+    const delay = nextHandoffDelay(result, attempt);
+    if (delay === null) return;
+    await new Promise((resolve) => window.setTimeout(resolve, delay));
+  }
+}
+
+let settleGeneration = 0;
 
 function dispatchUpdateReady(registration: ServiceWorkerRegistration) {
   window.dispatchEvent(
