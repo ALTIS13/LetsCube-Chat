@@ -55,6 +55,27 @@ export function getGroupReadReceiptInfo(
   };
 }
 
+/**
+ * Whether two receipts draw the same thing on a message: the same people out of
+ * the same total.
+ *
+ * Neither the readers' profiles nor their read marks are compared. A bubble
+ * shows the count; the list of names and times is built fresh when it is
+ * opened. A reader's mark is the member's `last_read_at`, the same for every
+ * message that reader has read, so comparing it called one read a change to all
+ * of them — measured on the fixture, a receipt that moved one of my 14 messages
+ * rendered all 14 — and comparing profiles did the same for every heartbeat.
+ */
+export function sameGroupReadReceiptFace(
+  a: GroupReadReceiptInfo | null | undefined,
+  b: GroupReadReceiptInfo | null | undefined,
+): boolean {
+  if (!a || !b) return !a && !b;
+  if (a.readCount !== b.readCount || a.totalRecipients !== b.totalRecipients || a.allRead !== b.allRead) return false;
+  const readers = new Set(a.readers.map((reader) => reader.userId));
+  return b.readers.every((reader) => readers.has(reader.userId));
+}
+
 export function getReceiptDisplayName(reader: GroupReadReceiptUser): string {
   return reader.profile?.full_name ?? reader.profile?.username ?? "Без имени";
 }

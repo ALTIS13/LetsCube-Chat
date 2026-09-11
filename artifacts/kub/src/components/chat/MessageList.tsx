@@ -15,7 +15,13 @@ import {
   resolveMessageActor,
 } from "@/lib/messageActor";
 import { getMessageDeliveryState, type MessageDeliveryState } from "@/lib/messageDelivery";
-import { getGroupReadReceiptInfo, getReceiptDisplayName, type GroupReadReceiptInfo } from "@/lib/groupReadReceipts";
+import {
+  getGroupReadReceiptInfo,
+  getReceiptDisplayName,
+  sameGroupReadReceiptFace,
+  type GroupReadReceiptInfo,
+} from "@/lib/groupReadReceipts";
+import { sameData } from "@/lib/structuralSharing";
 import { requestAppConfirm } from "@/lib/appDialogs";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { formatFullTime } from "@/lib/format";
@@ -447,15 +453,37 @@ export function MessageList({
     hasHideForMe, hasJumpToReply, hasOpenMedia, hasRetrySend, hasTogglePin,
   ]);
 
+  // Rebuilt whenever a message or a member's read mark changes, which is every
+  // new message and every receipt. Each receipt is kept as the object it was
+  // whenever it draws the same thing, so a row renders when its own receipt
+  // moved: one receipt, or one new message, used to hand every message you had
+  // sent a new object and render all of them (D-088).
+  const previousReceiptsRef = useRef<{
+    delivery: Map<string, MessageDeliveryState | null>;
+    groupRead: Map<string, GroupReadReceiptInfo | null>;
+  } | null>(null);
   const receiptsByMessageId = React.useMemo(() => {
     const context = { currentUserId: userId, chatType, members: chatMembers, isSavedChat };
+    const previous = previousReceiptsRef.current;
     const delivery = new Map<string, MessageDeliveryState | null>();
     const groupRead = new Map<string, GroupReadReceiptInfo | null>();
     for (const message of sortedMessages) {
-      delivery.set(message.id, getMessageDeliveryState(message, context));
-      groupRead.set(message.id, getGroupReadReceiptInfo(message, context));
+      const nextDelivery = getMessageDeliveryState(message, context);
+      const priorDelivery = previous?.delivery.get(message.id);
+      delivery.set(
+        message.id,
+        priorDelivery !== undefined && sameData(priorDelivery, nextDelivery) ? priorDelivery : nextDelivery,
+      );
+      const nextGroupRead = getGroupReadReceiptInfo(message, context);
+      const priorGroupRead = previous?.groupRead.get(message.id);
+      groupRead.set(
+        message.id,
+        priorGroupRead !== undefined && sameGroupReadReceiptFace(priorGroupRead, nextGroupRead) ? priorGroupRead : nextGroupRead,
+      );
     }
-    return { delivery, groupRead };
+    const receipts = { delivery, groupRead };
+    previousReceiptsRef.current = receipts;
+    return receipts;
   }, [chatMembers, chatType, isSavedChat, sortedMessages, userId]);
 
   const handleBulkHideForMe = useCallback(async () => {
@@ -668,7 +696,17 @@ export function MessageList({
   const scrollToBottomAfterLayout = useCallback((smooth = false) => {
     let innerFrame = 0;
     const outerFrame = requestAnimationFrame(() => {
-      innerFrame = requestAnimationFrame(() => scrollToBottom(smooth));
+      innerFrame = requestAnimationFrame(() => {
+        // Two frames after the commit that asked for it, the reader may no
+        // longer be meant to be at the bottom. When a list mounts, the inset
+        // pass below schedules this before the entry, in the same commit, puts
+        // a reader with unread messages on the first of them — and when the
+        // header and the composer were already measured, no inset changes
+        // afterwards to cancel it. It then arrived a frame later and put the
+        // reader at the bottom. Measured on a reopened chat with 24 unread:
+        // placed on the first one at 209ms, at the bottom at 288ms (D-089).
+        if (isAtBottomRef.current) scrollToBottom(smooth);
+      });
     });
     return () => {
       cancelAnimationFrame(outerFrame);

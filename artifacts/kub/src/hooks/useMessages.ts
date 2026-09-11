@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { createClient, getRealtimeClient } from "@/lib/supabase/client";
 import type { Json, MessageWithSender, Profile } from "@/types/database";
 import { useAppStore } from "@/store/app.store";
@@ -20,6 +20,11 @@ import { MESSAGE_SELECT_WITH_JOINS } from "@/lib/messageProjection";
 import { attachKnownSender } from "@/lib/realtimeMessage";
 import { applyProfileToChats } from "@/lib/chatProfilePatch";
 import {
+  createResumeRevalidationGate,
+  RESUME_REVALIDATE_AFTER_HIDDEN_MS,
+  RESUME_REVALIDATE_MIN_INTERVAL_MS,
+} from "@/lib/resumeRevalidation";
+import {
   actorClientMessageKey,
   isIncomingMessage,
 } from "@/lib/messageActor";
@@ -31,10 +36,78 @@ type SendableMessageType = Extract<MessageWithSender["type"], "text" | "image" |
 
 type FetchMessagesOptions = {
   background?: boolean;
+  /**
+   * Show the loading state although messages are cached, because the cache is
+   * known to lack what the reader has to land on: the chat has unread messages
+   * that arrived while it was closed. Placing the reader from the cache put them
+   * at the bottom, past the first unread message, before the fetch landed.
+   */
+  cacheIsStale?: boolean;
 };
 
 const ACTIVE_CHAT_RECONCILE_DELAY_MS = 600;
 const ACTIVE_CHAT_RECONNECT_DELAY_MS = 900;
+/**
+ * How long a reopened chat waits for its channel before revalidating anyway.
+ * The channel normally answers in well under a second; this is for a Realtime
+ * that does not answer at all.
+ */
+const REOPENED_CHAT_REVALIDATE_FALLBACK_MS = 2_500;
+
+/** One empty list for every chat without messages, so a selector for one returns the same value. */
+const EMPTY_MESSAGES: MessageWithSender[] = [];
+
+/**
+ * The chats (and topics) whose messages a full fetch has brought into the store
+ * during this session. Reopening one renders from the store at once.
+ */
+const fetchedMessageScopes = new Set<string>();
+
+/** In-flight `cleared_at` reads, so the message and pinned fetches of one chat share one request. */
+const clearedAtRequests = new Map<string, Promise<string | null>>();
+/** `cleared_at` reads answered a moment ago. */
+const clearedAtAnswers = new Map<string, { value: string | null; at: number }>();
+/**
+ * How long an answer is reused. A reopened chat reads the mark for its pinned
+ * messages as it opens, and read it again for its history when the channel
+ * joined, well under a second later. Nothing delivers a change to the mark to
+ * this hook in between, so the second read only repeated the first. Clearing
+ * the history here forgets the answer.
+ */
+const CLEARED_AT_REUSE_MS = 3_000;
+
+function loadClearedAt(
+  supabase: ReturnType<typeof createClient>,
+  chatId: string,
+  userId: string,
+): Promise<string | null> {
+  const key = `${chatId}:${userId}`;
+  const pending = clearedAtRequests.get(key);
+  if (pending) return pending;
+  const answer = clearedAtAnswers.get(key);
+  if (answer && Date.now() - answer.at < CLEARED_AT_REUSE_MS) return Promise.resolve(answer.value);
+  const request = (async () => {
+    const { data: membership, error } = await supabase
+      .from("chat_members")
+      .select("cleared_at")
+      .eq("chat_id", chatId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    const value = membership?.cleared_at ?? null;
+    if (!error) clearedAtAnswers.set(key, { value, at: Date.now() });
+    return value;
+  })().finally(() => {
+    clearedAtRequests.delete(key);
+  });
+  clearedAtRequests.set(key, request);
+  return request;
+}
+
+function forgetClearedAt(chatId: string) {
+  for (const key of Array.from(clearedAtAnswers.keys())) {
+    if (key.startsWith(`${chatId}:`)) clearedAtAnswers.delete(key);
+  }
+}
 
 interface SendMessageInput {
   type: SendableMessageType;
@@ -84,7 +157,10 @@ export function useMessages(
   // setMessages/addMessage/replaceMessage в zustand стабильны по ссылке.
   // NB: removeMessage intentionally not used — soft-deletes keep the row
   // in store so the bubble can render a "сообщение удалено" placeholder.
-  const messages = useAppStore((s) => s.messages);
+  //
+  // Only this chat's messages: a store holding every chat's history used to
+  // render this hook, and the conversation with it, for a change to any chat.
+  const chatMessages = useAppStore((s) => (chatId ? s.messages[chatId] : undefined) ?? EMPTY_MESSAGES);
   const setMessages = useAppStore((s) => s.setMessages);
   const addMessage = useAppStore((s) => s.addMessage);
   const replaceMessage = useAppStore((s) => s.replaceMessage);
@@ -119,9 +195,13 @@ export function useMessages(
   useEffect(() => { topicIdRef.current = topicId; }, [topicId]);
   const generalTopicIdsRef = useRef(generalTopicIds);
   useEffect(() => { generalTopicIdsRef.current = generalTopicIds; }, [generalTopicIds]);
+  /** The chat whose message channel has joined, so a reopened chat knows its revalidation is on the way. */
+  const subscribedChatIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setPinnedMessages([]);
+    // Each of these is a render of the conversation when it changes value, so
+    // one that already holds its reset value is left alone.
+    setPinnedMessages((current) => (current.length ? [] : current));
     setPinnedReady(false);
     setPinnedKey(null);
     setClearedAt(null);
@@ -136,7 +216,7 @@ export function useMessages(
   }, [chatId, topicId]);
 
   useEffect(() => {
-    setHiddenMessageIds(new Set());
+    setHiddenMessageIds((current) => (current.size ? new Set() : current));
   }, [chatId]);
 
   const rememberHiddenMessageIds = useCallback((ids: Iterable<string>) => {
@@ -167,18 +247,12 @@ export function useMessages(
       messageBelongsToTopic(message, topicId, generalTopicIds)
     );
     bumpFetch("useMessages");
-    if (!background) setLoading(!hasCachedMessages);
+    if (!background) setLoading(options.cacheIsStale === true || !hasCachedMessages);
     try {
       let localClearedAt: string | null = null;
       const user = currentUserRef.current;
       if (user) {
-        const { data: membership } = await supabase
-          .from("chat_members")
-          .select("cleared_at")
-          .eq("chat_id", chatId)
-          .eq("user_id", user.id)
-          .maybeSingle();
-        localClearedAt = membership?.cleared_at ?? null;
+        localClearedAt = await loadClearedAt(supabase, chatId, user.id);
         setClearedAt(localClearedAt);
       }
       // NB: we do NOT filter out `deleted_at IS NOT NULL` here.  Soft-deleted
@@ -229,6 +303,7 @@ export function useMessages(
           return new Date(message.created_at).getTime() > new Date(localClearedAt).getTime();
         }), effectiveHiddenIds);
         setMessages(chatId, mergeMessagesById(visibleFetched, visibleExisting));
+        fetchedMessageScopes.add(getPinnedKey(chatId, topicId));
         if (user) {
           const latestVisible = visibleFetched[visibleFetched.length - 1] ?? visibleExisting[visibleExisting.length - 1] ?? null;
           const latestIncoming = [...visibleFetched].reverse().find((message) =>
@@ -249,7 +324,40 @@ export function useMessages(
     }
   }, [chatId, topicId, generalTopicIds, supabase, setMessages, rememberHiddenMessageIds, shouldMarkDeliveredForPrivateChat]);
 
-  useEffect(() => { fetchMessages(); }, [fetchMessages]);
+  // Opening a chat. One this session has already fetched renders from the
+  // store and is revalidated once, when its channel has joined (the handler
+  // below): fetching here as well brought the same history down twice, and a
+  // fetch that lands before the join cannot see what arrives in between anyway.
+  // A chat opened for the first time has nothing to show, so it fetches now and
+  // is reconciled again once the channel is live (D-089).
+  useEffect(() => {
+    if (!chatId) return;
+    const scope = getPinnedKey(chatId, topicId);
+    const cached = (useAppStore.getState().messages[chatId] ?? []).some((message) =>
+      messageBelongsToTopic(message, topicId, generalTopicIds)
+    );
+    // Messages that arrived while the chat was closed are not in the store, and
+    // the reader has to land on the first of them (CLAUDE.md section 11). This
+    // effect runs before the chat window zeroes the count, so the count still
+    // says whether there are any.
+    const unreadWhileClosed = (useAppStore.getState().chats.find((item) => item.id === chatId)?.unread_count ?? 0) > 0;
+    if (fetchedMessageScopes.has(scope) && cached && !unreadWhileClosed) {
+      setLoading(false);
+      if (subscribedChatIdRef.current === chatId) {
+        // Same chat, channel already live: a topic switch, or new general topic ids.
+        void fetchMessages({ background: true });
+        return undefined;
+      }
+      const fallback = window.setTimeout(() => {
+        if (chatIdRef.current === chatId && subscribedChatIdRef.current !== chatId) {
+          void fetchMessages({ background: true });
+        }
+      }, REOPENED_CHAT_REVALIDATE_FALLBACK_MS);
+      return () => window.clearTimeout(fallback);
+    }
+    void fetchMessages({ cacheIsStale: cached && unreadWhileClosed });
+    return undefined;
+  }, [fetchMessages]);
 
   const refreshMessageById = useCallback(async (messageId: string) => {
     const activeChatId = chatIdRef.current;
@@ -449,9 +557,19 @@ export function useMessages(
     };
   }, [chatId, fetchMessageById, fetchMessages]);
 
+  // Coming back. Back online always reconciles — that is a real reconnect, and
+  // it is one handler now rather than two timers fetching the same history. A
+  // visibility change reconciles only after the page was away long enough for
+  // its socket to have been suspended; a socket that dropped reports
+  // `SUBSCRIBED` again when it rejoins, and that reconciles on its own.
   useEffect(() => {
     if (!chatId) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    const gate = createResumeRevalidationGate({
+      minHiddenMs: RESUME_REVALIDATE_AFTER_HIDDEN_MS,
+      minIntervalMs: RESUME_REVALIDATE_MIN_INTERVAL_MS,
+    });
+    if (document.visibilityState === "hidden") gate.hidden();
     const scheduleReconcile = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
@@ -460,14 +578,21 @@ export function useMessages(
         void fetchMessages({ background: true });
       }, ACTIVE_CHAT_RECONNECT_DELAY_MS);
     };
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") scheduleReconcile();
+    const handleOnline = () => {
+      if (gate.online()) scheduleReconcile();
     };
-    window.addEventListener("online", scheduleReconcile);
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        gate.hidden();
+        return;
+      }
+      if (gate.visible()) scheduleReconcile();
+    };
+    window.addEventListener("online", handleOnline);
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       if (timer) clearTimeout(timer);
-      window.removeEventListener("online", scheduleReconcile);
+      window.removeEventListener("online", handleOnline);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [chatId, fetchMessages]);
@@ -481,16 +606,10 @@ export function useMessages(
     }
     setPinnedReady(false);
     const fetchKey = getPinnedKey(chatId, topicId);
-    let localClearedAt = clearedAt;
+    let localClearedAt = clearedAtRef.current;
     const user = currentUserRef.current;
     if (user) {
-      const { data: membership } = await supabase
-        .from("chat_members")
-        .select("cleared_at")
-        .eq("chat_id", chatId)
-        .eq("user_id", user.id)
-        .maybeSingle();
-      localClearedAt = membership?.cleared_at ?? null;
+      localClearedAt = await loadClearedAt(supabase, chatId, user.id);
       setClearedAt(localClearedAt);
     }
     let query = supabase
@@ -524,7 +643,10 @@ export function useMessages(
     )));
     setPinnedKey(fetchKey);
     setPinnedReady(true);
-  }, [chatId, topicId, generalTopicIds, supabase, clearedAt, rememberHiddenMessageIds]);
+    // `clearedAt` is read through its ref: as a dependency, the message fetch
+    // setting it made this whole fetch run a second time for any chat that had
+    // ever been cleared.
+  }, [chatId, topicId, generalTopicIds, supabase, rememberHiddenMessageIds]);
 
   useEffect(() => { fetchPinnedMessages(); }, [fetchPinnedMessages]);
 
@@ -622,6 +744,13 @@ export function useMessages(
               scheduleMarkChatDelivered(supabase, payload.new.chat_id, payload.new.created_at);
             }
           }
+          // The joined row adds only what the provisional one cannot know: a
+          // bot, the message replied to, or a sender with nothing on screen.
+          // A plain message from someone already in the conversation is
+          // complete as it arrived, and a new message cannot be hidden yet, so
+          // asking for it again cost two requests per message and a second
+          // render of its bubble for nothing.
+          if (!needsJoinedRow(provisional)) return;
           const { data } = await supabase
             .from("messages")
             .select(MESSAGE_SELECT_WITH_JOINS)
@@ -675,11 +804,16 @@ export function useMessages(
       .subscribe((status: string) => {
         if (import.meta.env.DEV) console.debug("[messages:chat]", chatId, status);
         if (status === "SUBSCRIBED") {
+          // For a reopened chat this is its one revalidation; for a new one it
+          // closes the gap between its first fetch and the join; after a
+          // reconnect it brings back whatever the outage cost.
+          subscribedChatIdRef.current = chatId;
           window.setTimeout(() => {
             if (chatIdRef.current === chatId) void fetchMessages({ background: true });
           }, ACTIVE_CHAT_RECONCILE_DELAY_MS);
         }
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          if (subscribedChatIdRef.current === chatId) subscribedChatIdRef.current = null;
           window.setTimeout(() => {
             if (chatIdRef.current === chatId) void fetchMessages({ background: true });
           }, ACTIVE_CHAT_RECONNECT_DELAY_MS);
@@ -688,6 +822,7 @@ export function useMessages(
     registerChannel(channelName);
 
     return () => {
+      if (subscribedChatIdRef.current === chatId) subscribedChatIdRef.current = null;
       rt.removeChannel(channel);
       unregisterChannel(channelName);
     };
@@ -733,23 +868,6 @@ export function useMessages(
       unregisterChannel(channelName);
     };
   }, [chatId, userId, rt, fetchMessages, refreshMessageById]);
-
-  useEffect(() => {
-    if (!chatId || !userId) return;
-    let reconnectTimer: number | null = null;
-    const handleOnline = () => {
-      if (reconnectTimer) window.clearTimeout(reconnectTimer);
-      reconnectTimer = window.setTimeout(() => {
-        reconnectTimer = null;
-        void fetchMessages({ background: true });
-      }, 500);
-    };
-    window.addEventListener("online", handleOnline);
-    return () => {
-      if (reconnectTimer) window.clearTimeout(reconnectTimer);
-      window.removeEventListener("online", handleOnline);
-    };
-  }, [chatId, userId, fetchMessages]);
 
   useEffect(() => {
     if (!chatId || !userId) return;
@@ -1224,6 +1342,7 @@ export function useMessages(
       return { ok: false, error: mapPgError(error) };
     }
     const nextClearedAt = new Date().toISOString();
+    forgetClearedAt(chatId);
     setClearedAt(nextClearedAt);
     setMessages(chatId, []);
     setPinnedMessages([]);
@@ -1232,14 +1351,29 @@ export function useMessages(
     return { ok: true, error: null };
   }, [chatId, supabase, setMessages]);
 
-  return {
-    messages: sanitizeHiddenReplies((messages[chatId ?? ""] ?? []).filter((message) =>
+  // The same list while nothing it is made from has changed. A new array on
+  // every render of this hook rendered the conversation for any render of the
+  // chat window — a chat list update, a composer resize — though no message
+  // had changed.
+  const visibleMessages = useMemo(() => {
+    const scoped = chatMessages.filter((message) =>
       !hiddenMessageIds.has(message.id) && messageBelongsToTopic(message, topicId, generalTopicIds)
-    ), hiddenMessageIds),
-    pinnedMessages: pinnedKey === getPinnedKey(chatId, topicId)
-      ? sanitizeHiddenReplies(pinnedMessages.filter((message) => !hiddenMessageIds.has(message.id)), hiddenMessageIds)
-      : [],
-    pinnedReady: pinnedKey === getPinnedKey(chatId, topicId) && pinnedReady,
+    );
+    if (scoped.length === chatMessages.length && !hiddenMessageIds.size) return chatMessages;
+    return sanitizeHiddenReplies(scoped, hiddenMessageIds);
+  }, [chatMessages, generalTopicIds, hiddenMessageIds, topicId]);
+
+  const currentPinnedKey = getPinnedKey(chatId, topicId);
+  const visiblePinnedMessages = useMemo(() => {
+    if (pinnedKey !== currentPinnedKey) return EMPTY_MESSAGES;
+    if (!hiddenMessageIds.size) return pinnedMessages;
+    return sanitizeHiddenReplies(pinnedMessages.filter((message) => !hiddenMessageIds.has(message.id)), hiddenMessageIds);
+  }, [currentPinnedKey, hiddenMessageIds, pinnedKey, pinnedMessages]);
+
+  return {
+    messages: visibleMessages,
+    pinnedMessages: visiblePinnedMessages,
+    pinnedReady: pinnedKey === currentPinnedKey && pinnedReady,
     loading, loadingOlder, hasMoreOlder, olderError, isTyping,
     sendMessage, sendMediaMessage, sendTyping, toggleReaction,
     retryMessageSend, discardLocalMessage,
@@ -1295,15 +1429,26 @@ function buildRealtimeMessage(row: MessageWithSender): MessageWithSender {
   // Receiver path: render voice bubbles from the realtime INSERT row
   // immediately. The richer REST refetch below upserts the same id with
   // sender/reactions, so this temporary row only covers the first paint.
+  //
+  // Shaped like the joined row wherever the insert already says what the join
+  // would: no bot and no reply come back as `null`. A later revalidation then
+  // finds the same data and keeps the bubble instead of rendering it again.
+  // The local send states are left absent, as a fetched row has them.
   return {
     ...row,
     media_url: row.media_url ?? null,
     content: row.content ?? null,
     reactions: row.reactions ?? [],
-    pending: false,
-    checking: false,
-    failed: false,
+    bot: row.bot ?? null,
+    reply_to: row.reply_to ?? (row.reply_to_id ? undefined : (null as unknown as undefined)),
   };
+}
+
+/** Whether a realtime row still needs the joined fetch to render correctly. */
+function needsJoinedRow(message: MessageWithSender): boolean {
+  if (message.bot_id) return true;
+  if (message.reply_to_id) return true;
+  return Boolean(message.user_id && !message.sender);
 }
 
 function isTimeoutResult<T>(value: T | TimeoutResult): value is TimeoutResult {
