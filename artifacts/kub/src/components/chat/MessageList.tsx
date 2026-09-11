@@ -24,6 +24,9 @@ import {
   type GroupReadReceiptInfo,
 } from "@/lib/groupReadReceipts";
 import { sameData } from "@/lib/structuralSharing";
+import { visibleConversation } from "@/lib/deletedMessages";
+import { groupReadInfoWithTimes, readMarksSignature, type ReadTimesLoader } from "@/lib/messageReadTimes";
+import { useMessageReadTimes } from "@/hooks/useMessageReadTimes";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { formatFullTime } from "@/lib/format";
 import { copyWithFeedback } from "@/lib/actionFeedback";
@@ -91,6 +94,11 @@ interface MessageListProps {
   chatId?: string;
   /** The six beside ❤️, when something other than this device's ranking decides them. */
   quickReactions?: readonly string[];
+  /**
+   * Asks the server when each person read a message of yours. Without it the
+   * menus show the read pointer, as they did — the DEV capture page's case.
+   */
+  loadReadTimes?: ReadTimesLoader;
 }
 
 function compareMessagesForRender(a: MessageWithSender, b: MessageWithSender): number {
@@ -213,13 +221,17 @@ export function MessageList({
   initialUnreadCount = 0,
   chatId,
   quickReactions: quickReactionsOverride,
+  loadReadTimes,
 }: MessageListProps) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  // A private chat draws no deleted message: delete for both leaves no trace
+  // there, as in Telegram (`lib/deletedMessages.ts`). A group keeps its
+  // «Сообщение удалено».
   const sortedMessages = React.useMemo(
-    () => [...messages].sort(compareMessagesForRender),
-    [messages],
+    () => [...visibleConversation(messages, chatType)].sort(compareMessagesForRender),
+    [chatType, messages],
   );
 
   const messagesMap = React.useMemo(() => {
@@ -501,6 +513,25 @@ export function MessageList({
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [peopleSignature]);
+  // The members' full profiles, for the readers the server names.
+  const readerProfiles = React.useMemo(() => {
+    const map = new Map<string, Profile | null>();
+    for (const member of chatMembers ?? []) map.set(member.user_id, member.profile ?? null);
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [peopleSignature]);
+  // Moves with any other member's read pointer, so open details ask again.
+  const readSignature = readMarksSignature(chatMembers, userId);
+  const readReceiptsOwn = Boolean(readReceiptsMessage && canUseHumanMessageControls(readReceiptsMessage, userId));
+  const readReceiptsTimes = useMessageReadTimes(
+    loadReadTimes,
+    readReceiptsOwn && readReceiptsMessage ? readReceiptsMessage.id : null,
+    readSignature,
+  );
+  const readReceiptsWithTimes = React.useMemo(
+    () => groupReadInfoWithTimes(readReceiptsInfo, readReceiptsTimes, readerProfiles),
+    [readReceiptsInfo, readReceiptsTimes, readerProfiles],
+  );
 
   const actionsContext = React.useMemo<MessageActionsContextValue>(() => ({
     quickReactions,
@@ -604,9 +635,9 @@ export function MessageList({
     const own = canUseHumanMessageControls(menuMessage, userId);
     const kind = messageActionKind(menuMessage);
     const localSend = menuMessage.id.startsWith("tmp:") || Boolean(menuMessage.pending || menuMessage.checking || menuMessage.failed);
-    // A private chat's other person has read up to their last read time. That
-    // is the time they last read the chat, not this message — the exact time
-    // per message needs the backend.
+    // A private chat's other person has read this message when their pointer
+    // reaches it. When they read it is asked of the server by the menu
+    // (`loadReadTimes`); the pointer is only the fallback.
     const recipient = chatType === "private" ? chatMembers?.find((member) => member.user_id !== userId) : undefined;
     const readAt = own && recipient?.last_read_at &&
       new Date(recipient.last_read_at).getTime() >= new Date(menuMessage.created_at).getTime()
@@ -616,6 +647,7 @@ export function MessageList({
       own,
       kind,
       readAt,
+      recipientId: recipient?.user_id ?? null,
       hasText: kind === "text" ? Boolean(menuMessage.content?.trim()) : Boolean(getVisibleMediaCaption(menuMessage)),
       captionEditable: kind === "photo" || kind === "file" || (kind === "video" && !isRoundVideoMessage(menuMessage)),
       groupReadInfo: receiptsByMessageId.groupRead.get(menuMessage.id) ?? null,
@@ -1212,9 +1244,9 @@ export function MessageList({
         </button>
       )}
 
-      {readReceiptsMessage && readReceiptsInfo && (
+      {readReceiptsMessage && readReceiptsWithTimes && (
         <GroupReadReceiptsModal
-          info={readReceiptsInfo}
+          info={readReceiptsWithTimes}
           onClose={() => setReadReceiptsMessageId(null)}
         />
       )}
@@ -1228,6 +1260,10 @@ export function MessageList({
           chatType={chatType}
           privateReadAt={menuContext.readAt}
           groupReadInfo={menuContext.groupReadInfo}
+          loadReadTimes={loadReadTimes}
+          readSignature={readSignature}
+          recipientId={menuContext.recipientId}
+          readerProfiles={readerProfiles}
           currentUserId={userId}
           people={people}
           quickReactions={quickReactions}
@@ -1806,7 +1842,9 @@ function GroupReadReceiptsModal({
                 <UserAvatar user={avatarProfile} size="sm" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold text-[color:var(--kub-text)]">{name}</div>
-                  <div className="text-xs text-[color:var(--kub-muted)]">{formatFullTime(reader.readAt)}</div>
+                  {reader.readAt && (
+                    <div className="text-xs text-[color:var(--kub-muted)]">{formatFullTime(reader.readAt)}</div>
+                  )}
                 </div>
               </div>
             );

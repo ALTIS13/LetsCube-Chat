@@ -16,7 +16,9 @@ import { EmojiCategoryPicker } from "@/components/ui/EmojiCategoryPicker";
 import { FOCUS_RING, FOCUS_RING_INSET, PRESS_SINK } from "@/lib/controlSurface";
 import { MESSAGE_EMOJI_CATEGORIES, MESSAGE_EMOJI_SEARCH_TERMS } from "@/lib/emojiCatalog";
 import { formatFullTime, formatMessageMoment } from "@/lib/format";
-import { getReceiptDisplayName, type GroupReadReceiptInfo } from "@/lib/groupReadReceipts";
+import { useMessageReadTimes } from "@/hooks/useMessageReadTimes";
+import { getReceiptDisplayName, type GroupReadReceiptInfo, type GroupReadReceiptUser } from "@/lib/groupReadReceipts";
+import { groupReadInfoWithTimes, privateReadDisplay, type ReadTimesLoader } from "@/lib/messageReadTimes";
 import {
   MESSAGE_ACTION_LABELS,
   desktopMessageActions,
@@ -105,6 +107,8 @@ const DANGER: ReadonlySet<MessageActionId> = new Set(["delete", "discard"]);
 const TOUCH_CELL = 44;
 const POINTER_CELL = 36;
 
+const NO_PROFILES: ReadonlyMap<string, GroupReadReceiptUser["profile"]> = new Map();
+
 function edgesOf(element: Element): BoxEdges {
   const rect = element.getBoundingClientRect();
   return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right };
@@ -175,6 +179,10 @@ export function MessageActionLayer({
   chatType,
   privateReadAt,
   groupReadInfo,
+  loadReadTimes,
+  readSignature,
+  recipientId,
+  readerProfiles,
   currentUserId,
   people,
   quickReactions,
@@ -191,9 +199,20 @@ export function MessageActionLayer({
   message: MessageWithSender;
   own: boolean;
   chatType: string | null | undefined;
-  /** When the other person of a private chat read this message, if they have. */
+  /**
+   * The other person's chat-wide read pointer when it reaches this message —
+   * that it was read. When it was read comes from `loadReadTimes`.
+   */
   privateReadAt: string | null;
   groupReadInfo: GroupReadReceiptInfo | null;
+  /** Asks the server when each person read this message; without it the pointer is shown, as before. */
+  loadReadTimes?: ReadTimesLoader;
+  /** Changes when another member's read pointer moves, so open details ask again. */
+  readSignature?: string;
+  /** The other person of a private chat. */
+  recipientId?: string | null;
+  /** Who is who, for the readers the server names. */
+  readerProfiles?: ReadonlyMap<string, GroupReadReceiptUser["profile"]>;
   currentUserId: string | null;
   people: ReadonlyMap<string, ReactionPerson>;
   quickReactions: readonly string[];
@@ -223,6 +242,22 @@ export function MessageActionLayer({
   const viewportWidth = typeof window === "undefined" ? 390 : window.innerWidth;
   const mine = myReaction(message.reactions, currentUserId);
   const reactable = !(message.id.startsWith("tmp:") || message.pending || message.checking || message.failed);
+
+  // When each person read this message: asked for where it is shown — a
+  // private chat's read line, the details, the readers — and asked again when
+  // a reader's pointer moves while it is open (`readSignature`).
+  const wantsReadTimes = own && Boolean(loadReadTimes) &&
+    ((chatType === "private" && Boolean(privateReadAt)) || view === "details" || view === "readers");
+  const readTimes = useMessageReadTimes(loadReadTimes, wantsReadTimes ? message.id : null, readSignature ?? "");
+  const privateRead = privateReadDisplay(privateReadAt, recipientId, readTimes);
+  const readInfo = groupReadInfoWithTimes(groupReadInfo, readTimes, readerProfiles ?? NO_PROFILES);
+  const privateReadLabel = !privateRead.read
+    ? "Ещё не прочитано"
+    : privateRead.readAt
+      ? formatMessageMoment(privateRead.readAt)
+      : privateRead.pending
+        ? "…"
+        : "Время не показывается";
 
   const context: MessageActionContext = {
     kind,
@@ -498,7 +533,9 @@ export function MessageActionLayer({
                 size="sm"
               />
               <span className="min-w-0 flex-1 truncate text-sm text-[color:var(--kub-text)]">{name}</span>
-              <span className="shrink-0 text-[12px] tabular-nums text-[color:var(--kub-muted)]">{formatFullTime(reader.readAt)}</span>
+              {reader.readAt && (
+                <span className="shrink-0 text-[12px] tabular-nums text-[color:var(--kub-muted)]">{formatFullTime(reader.readAt)}</span>
+              )}
             </li>
           );
         })}
@@ -523,15 +560,14 @@ export function MessageActionLayer({
         <dl className="grid gap-3 px-4 py-3" data-message-details="true">
           {detailRow("clock", "Отправлено", formatMessageMoment(message.created_at))}
           {message.edited_at && detailRow("edit", "Изменено", formatMessageMoment(message.edited_at))}
-          {own && chatType === "private" &&
-            detailRow("doubleCheck", "Прочитано", privateReadAt ? formatMessageMoment(privateReadAt) : "Ещё не прочитано")}
+          {own && chatType === "private" && detailRow("doubleCheck", "Прочитано", privateReadLabel)}
         </dl>
-        {own && groupReadInfo && (
+        {own && readInfo && (
           <div className="border-t border-[color:var(--kub-rule)]">
             <div className="px-4 pb-1 pt-2.5 text-[12px] font-semibold text-[color:var(--kub-muted)]">
-              Кто прочитал · {groupReadInfo.readCount} из {groupReadInfo.totalRecipients}
+              Кто прочитал · {readInfo.readCount} из {readInfo.totalRecipients}
             </div>
-            {readersList(groupReadInfo)}
+            {readersList(readInfo)}
           </div>
         )}
       </>
@@ -557,11 +593,11 @@ export function MessageActionLayer({
         </ul>
       </>
     );
-  } else if (view === "readers" && groupReadInfo) {
+  } else if (view === "readers" && readInfo) {
     cardContent = (
       <>
-        {backRow(`Прочитали · ${groupReadInfo.readCount} из ${groupReadInfo.totalRecipients}`)}
-        {readersList(groupReadInfo)}
+        {backRow(`Прочитали · ${readInfo.readCount} из ${readInfo.totalRecipients}`)}
+        {readersList(readInfo)}
       </>
     );
   } else if (phone) {
@@ -598,8 +634,8 @@ export function MessageActionLayer({
       </>
     );
   } else {
-    const groupRead = own && groupReadInfo && (chatType === "group" || chatType === "channel");
-    const privateRead = own && chatType === "private" && privateReadAt;
+    const groupRead = own && readInfo && (chatType === "group" || chatType === "channel");
+    const privateReadLine = own && chatType === "private" && privateRead.read;
     cardContent = (
       <>
         {groupRead && (
@@ -615,14 +651,16 @@ export function MessageActionLayer({
             )}
           >
             <KubIcon name="doubleCheck" size={18} tone="muted" className="shrink-0" />
-            <span className="min-w-0 flex-1 truncate">Прочитали: {groupReadInfo.readCount}</span>
+            <span className="min-w-0 flex-1 truncate">Прочитали: {readInfo.readCount}</span>
             <KubIcon name="chevronRight" size={16} tone="muted" className="shrink-0" />
           </button>
         )}
-        {privateRead && (
+        {privateReadLine && (
           <div className="flex min-h-9 items-center gap-3 border-b border-[color:var(--kub-rule)] px-4 py-1.5 text-sm text-[color:var(--kub-muted)]">
             <KubIcon name="doubleCheck" size={18} tone="accent" className="shrink-0" />
-            <span className="min-w-0 flex-1 truncate">Прочитано в {formatFullTime(privateReadAt)}</span>
+            <span className="min-w-0 flex-1 truncate">
+              {privateRead.readAt ? `Прочитано в ${formatFullTime(privateRead.readAt)}` : "Прочитано"}
+            </span>
           </div>
         )}
         {desktopMessageActions(context).map(menuItem)}

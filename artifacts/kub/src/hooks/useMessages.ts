@@ -15,9 +15,9 @@ import {
   getMessageAckUserMessage,
   sanitizeMessageAckError,
 } from "@/lib/messageAckError";
-import type { ForwardMessageResult } from "@/lib/messageForward";
+import { FORWARD_RPC, forwardInsertPayload, forwardRpcArgs, type ForwardMessageResult } from "@/lib/messageForward";
 import { MESSAGE_SELECT_WITH_JOINS } from "@/lib/messageProjection";
-import { applyReactionPlan, planReactionToggle } from "@/lib/messageReactions";
+import { SET_REACTION_RPC, applyReactionPlan, parseReactionRows, planReactionToggle } from "@/lib/messageReactions";
 import { rememberReactionUse } from "@/lib/recentReactions";
 import { attachKnownSender } from "@/lib/realtimeMessage";
 import { applyProfileToChats } from "@/lib/chatProfilePatch";
@@ -26,8 +26,16 @@ import {
   RESUME_REVALIDATE_AFTER_HIDDEN_MS,
   RESUME_REVALIDATE_MIN_INTERVAL_MS,
 } from "@/lib/resumeRevalidation";
-import { isIncomingMessage } from "@/lib/messageActor";
+import { canUseHumanMessageControls, isIncomingMessage } from "@/lib/messageActor";
 import { mergeMessagesById } from "@/lib/messageMerge";
+import { isMissingRpcError, rpcAvailability } from "@/lib/rpcAvailability";
+import {
+  DELETE_FOR_EVERYONE_RPC,
+  deletionBatches,
+  markMessagesDeleted,
+  parseDeletedIds,
+  splitForPreviousDeletion,
+} from "@/lib/deletedMessages";
 
 const MESSAGE_PAGE_SIZE = 100;
 const SEND_ACK_TIMEOUT_MS = 12_000;
@@ -1243,6 +1251,74 @@ export function useMessages(
     return { ok: true, error: null, failed: 0 };
   }, [chatId, rememberHiddenMessageIds, removeMessage, supabase, updateChat]);
 
+  // ── Delete for everyone ─────────────────────────────────────────────────
+  // «Удалить» with its box ticked. `delete_messages_for_everyone`
+  // (20260911143000) deletes up to 100 messages of one chat per call: in a
+  // private chat anyone's, in a group the reader's own. The deletion shows at
+  // once — gone in a private chat, «Сообщение удалено» in a group — and the
+  // Realtime UPDATE that follows brings the server's copy. Where the function is
+  // not deployed, what the dialog did before: own messages get the soft delete,
+  // anyone else's are hidden for the reader.
+  const deleteMessagesForEveryone = useCallback(async (items: MessageWithSender[]) => {
+    const activeChatId = chatIdRef.current;
+    const user = currentUserRef.current;
+    if (!activeChatId || !user) return { ok: false, error: "Чат не выбран." };
+    const batches = deletionBatches(items.map((item) => item.id));
+    if (!batches.length) return { ok: true, error: null };
+
+    const deleteAsBefore = async () => {
+      const { own, others } = splitForPreviousDeletion(items, (message) => canUseHumanMessageControls(message, user.id));
+      const failures: string[] = [];
+      for (const message of own) {
+        const result = await deleteMessage(message.id);
+        if (!result.ok) failures.push(result.error ?? "Не удалось удалить сообщение.");
+      }
+      if (others.length) {
+        const hidden = await hideMessagesForMe(others.map((message) => message.id));
+        if (!hidden.ok) failures.push(hidden.error ?? "Не удалось скрыть сообщения.");
+      }
+      if (!failures.length) return { ok: true, error: null };
+      return {
+        ok: false,
+        error: items.length > 1 ? `Не удалось удалить ${failures.length} из ${items.length}.` : failures[0],
+      };
+    };
+
+    const showDeleted = (ids: Set<string>) => {
+      if (!ids.size) return;
+      const current = useAppStore.getState().messages[activeChatId] ?? [];
+      const next = markMessagesDeleted(current, ids, new Date().toISOString());
+      if (next !== current) setMessages(activeChatId, next);
+      setPinnedMessages((pinned) =>
+        pinned.some((message) => ids.has(message.id)) ? pinned.filter((message) => !ids.has(message.id)) : pinned,
+      );
+      const chat = useAppStore.getState().chats.find((item) => item.id === activeChatId);
+      if (chat?.last_message && ids.has(chat.last_message.id)) {
+        dispatchChatsRefresh({ reason: "message-hidden", chatId: activeChatId });
+      }
+    };
+
+    if (!rpcAvailability.shouldTry(DELETE_FOR_EVERYONE_RPC)) return deleteAsBefore();
+
+    const deleted = new Set<string>();
+    for (const [index, batch] of batches.entries()) {
+      const { data, error } = await supabase.rpc(DELETE_FOR_EVERYONE_RPC, { p_message_ids: batch });
+      if (error) {
+        if (index === 0 && isMissingRpcError(error)) {
+          rpcAvailability.markMissing(DELETE_FOR_EVERYONE_RPC);
+          return deleteAsBefore();
+        }
+        showDeleted(deleted);
+        console.error("Delete for everyone error:", error);
+        return { ok: false, error: mapPgError(error) };
+      }
+      rpcAvailability.markPresent(DELETE_FOR_EVERYONE_RPC);
+      for (const id of parseDeletedIds(data) ?? batch) deleted.add(id);
+    }
+    showDeleted(deleted);
+    return { ok: true, error: null };
+  }, [deleteMessage, hideMessagesForMe, setMessages, supabase]);
+
   // ── Pin / unpin ─────────────────────────────────────────────────────────
   const togglePin = useCallback(async (messageId: string, currentlyPinned: boolean) => {
     if (!chatId) return { ok: false, error: "Чат не выбран." };
@@ -1271,8 +1347,11 @@ export function useMessages(
   }, [chatId, supabase, setMessages]);
 
   // ── Forward ─────────────────────────────────────────────────────────────
-  // Insert a copy of the message into a target chat.  We carry over content,
-  // type and media_url, and link back via forwarded_from_id.
+  // The server makes the copy (`forward_message`, 20260911144000): from its own
+  // row of the source, with the media fields and the source's previews, into a
+  // chat the sender may write to (D-083). Where that function is not deployed
+  // the client inserts the copy, as it did, now with the media fields too, so
+  // the variant worker renders the copy's previews.
   //
   // It answers with what happened, not with the row or null. A refusal used to
   // go no further than the console, and the caller closed the dialog without
@@ -1284,28 +1363,38 @@ export function useMessages(
   ): Promise<ForwardMessageResult> => {
     const user = currentUserRef.current;
     if (!user) return { ok: false, error: "Войдите в аккаунт, чтобы пересылать сообщения." };
-    const clientMessageId = crypto.randomUUID();
-    const clientSentAt = new Date().toISOString();
-    const { data, error } = await supabase
-      .from("messages")
-      .insert({
-        chat_id: targetChatId,
-        user_id: user.id,
-        content: src.content,
-        type: src.type,
-        media_url: src.media_url,
-        forwarded_from_id: src.id,
-        client_message_id: clientMessageId,
-        client_sent_at: clientSentAt,
-      })
-      .select(MESSAGE_SELECT_WITH_JOINS)
-      .single();
-    if (error || !data) {
-      console.error("Forward error:", error);
-      return { ok: false, error: mapPgError(error) };
+    const target = {
+      chatId: targetChatId,
+      userId: user.id,
+      clientMessageId: crypto.randomUUID(),
+      clientSentAt: new Date().toISOString(),
+    };
+    let forwarded: { created_at: string } | null = null;
+    if (rpcAvailability.shouldTry(FORWARD_RPC)) {
+      const { data, error } = await supabase.rpc(FORWARD_RPC, forwardRpcArgs(src, target));
+      if (!error && data) {
+        rpcAvailability.markPresent(FORWARD_RPC);
+        forwarded = data as unknown as { created_at: string };
+      } else if (error && isMissingRpcError(error)) {
+        rpcAvailability.markMissing(FORWARD_RPC);
+      } else {
+        console.error("Forward error:", error);
+        return { ok: false, error: mapPgError(error) };
+      }
     }
-    const forwarded = data as unknown as MessageWithSender;
-    // Ordering only. The message is delivered once the insert returns, so the
+    if (!forwarded) {
+      const { data, error } = await supabase
+        .from("messages")
+        .insert(forwardInsertPayload(src, target))
+        .select(MESSAGE_SELECT_WITH_JOINS)
+        .single();
+      if (error || !data) {
+        console.error("Forward error:", error);
+        return { ok: false, error: mapPgError(error) };
+      }
+      forwarded = data as unknown as MessageWithSender;
+    }
+    // Ordering only. The message is delivered once the copy exists, so the
     // answer to this bump must not turn a delivered forward into a failure.
     await supabase.from("chats").update({ updated_at: forwarded.created_at }).eq("id", targetChatId);
     return { ok: true, error: null };
@@ -1313,14 +1402,14 @@ export function useMessages(
 
   // ── Reactions ───────────────────────────────────────────────────────────
   // One reaction per person, as in Telegram (the owner's decision of
-  // 2026-09-11): another emoji replaces yours, yours again removes it. The rule
-  // is kept here, in the client, because the database still accepts a second
-  // row — a constraint is a separate, approved migration. Until then two
-  // clients racing each other can leave two rows, and the next toggle from
-  // either clears them.
+  // 2026-09-11): another emoji replaces yours, yours again removes it. The
+  // database holds the rule (20260911142000): `set_message_reaction` makes the
+  // whole toggle in one call under a lock and answers with every reaction on the
+  // message, which is shown as it is. Where that function is not deployed the
+  // toggle is the three requests it was, and a refetch settles the result.
   //
-  // The result is shown before the server answers and replaced by what the
-  // server holds once it has: a reaction used to appear only after the refetch.
+  // The guess is shown before the server answers either way: a reaction used to
+  // appear only after the refetch.
   const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
     const user = currentUserRef.current;
     if (!user) return;
@@ -1328,42 +1417,65 @@ export function useMessages(
     const shown = activeChatId
       ? (useAppStore.getState().messages[activeChatId] ?? []).find((message) => message.id === messageId)
       : undefined;
-
-    let mine = shown?.reactions?.filter((reaction) => reaction.user_id === user.id) ?? null;
-    if (!mine) {
-      const { data, error: lookupError } = await supabase.from("reactions")
-        .select("id,message_id,user_id,emoji,created_at")
-        .eq("message_id", messageId).eq("user_id", user.id);
-      if (lookupError) {
-        console.error("Reaction lookup error:", lookupError);
-        return;
-      }
-      mine = (data ?? []) as NonNullable<MessageWithSender["reactions"]>;
-    }
-
-    const plan = planReactionToggle(mine, user.id, emoji);
-    if (shown && activeChatId) {
-      const optimistic = applyReactionPlan(shown.reactions, user.id, plan, {
-        messageId,
-        createdAt: new Date().toISOString(),
-      });
+    const showReactions = (reactions: unknown) => {
+      if (!activeChatId) return;
       const current = useAppStore.getState().messages[activeChatId] ?? [];
       setMessages(activeChatId, current.map((message) =>
-        message.id === messageId ? { ...message, reactions: optimistic as MessageWithSender["reactions"] } : message,
+        message.id === messageId ? { ...message, reactions: reactions as MessageWithSender["reactions"] } : message,
       ));
-    }
-    if (plan.add) rememberReactionUse(plan.add);
+    };
 
-    if (plan.remove.length) {
-      // Every row of this person on this message, not only the ones on screen:
-      // that is what keeps a stray second row from outliving the next choice.
-      const { error } = await supabase.from("reactions").delete()
-        .eq("message_id", messageId).eq("user_id", user.id);
-      if (error) console.error("Reaction removal error:", error);
+    if (shown) {
+      const guess = planReactionToggle(shown.reactions, user.id, emoji);
+      showReactions(applyReactionPlan(shown.reactions, user.id, guess, { messageId, createdAt: new Date().toISOString() }));
+      if (guess.add) rememberReactionUse(guess.add);
     }
-    if (plan.add) {
-      const { error } = await supabase.from("reactions").insert({ message_id: messageId, user_id: user.id, emoji: plan.add });
-      if (error) console.error("Reaction insert error:", error);
+
+    const toggleAsBefore = async () => {
+      let mine = shown?.reactions?.filter((reaction) => reaction.user_id === user.id) ?? null;
+      if (!mine) {
+        const { data, error: lookupError } = await supabase.from("reactions")
+          .select("id,message_id,user_id,emoji,created_at")
+          .eq("message_id", messageId).eq("user_id", user.id);
+        if (lookupError) {
+          console.error("Reaction lookup error:", lookupError);
+          return;
+        }
+        mine = (data ?? []) as NonNullable<MessageWithSender["reactions"]>;
+      }
+      const plan = planReactionToggle(mine, user.id, emoji);
+      if (!shown && plan.add) rememberReactionUse(plan.add);
+      if (plan.remove.length) {
+        // Every row of this person on this message, not only the ones on
+        // screen: that is what keeps a stray second row from outliving the next
+        // choice.
+        const { error } = await supabase.from("reactions").delete()
+          .eq("message_id", messageId).eq("user_id", user.id);
+        if (error) console.error("Reaction removal error:", error);
+      }
+      if (plan.add) {
+        const { error } = await supabase.from("reactions").insert({ message_id: messageId, user_id: user.id, emoji: plan.add });
+        if (error) console.error("Reaction insert error:", error);
+      }
+    };
+
+    if (rpcAvailability.shouldTry(SET_REACTION_RPC)) {
+      const { data, error } = await supabase.rpc(SET_REACTION_RPC, { p_message_id: messageId, p_emoji: emoji });
+      if (!error) {
+        rpcAvailability.markPresent(SET_REACTION_RPC);
+        const rows = parseReactionRows(data);
+        if (rows) {
+          showReactions(rows);
+          return;
+        }
+      } else if (isMissingRpcError(error)) {
+        rpcAvailability.markMissing(SET_REACTION_RPC);
+        await toggleAsBefore();
+      } else {
+        console.error("Reaction error:", error);
+      }
+    } else {
+      await toggleAsBefore();
     }
 
     const { data: updatedMsg } = await supabase.from("messages")
@@ -1418,7 +1530,7 @@ export function useMessages(
     loading, loadingOlder, hasMoreOlder, olderError, isTyping,
     sendMessage, sendMediaMessage, sendTyping, toggleReaction,
     retryMessageSend, discardLocalMessage,
-    editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, togglePin, forwardMessage,
+    editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, deleteMessagesForEveryone, togglePin, forwardMessage,
     clearChatForMe,
     loadOlderMessages,
     ensureMessageLoaded: fetchMessageById,

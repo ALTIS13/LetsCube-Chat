@@ -30,15 +30,15 @@ const REASON_UNKNOWN = "Попробуйте ещё раз.";
 
 export const FORWARD_RPC = "forward_message";
 
-/** What a forward reads from the message it forwards. */
-export interface ForwardSource {
+/** What a forward reads from the message it forwards. Generic so the copy keeps the row's own types. */
+export interface ForwardSource<Type = string, Metadata = unknown> {
   id: string;
   content: string | null;
-  type: string;
+  type: Type;
   media_url: string | null;
   media_bucket?: string | null;
   media_path?: string | null;
-  media_metadata?: unknown;
+  media_metadata?: Metadata;
 }
 
 export interface ForwardTarget {
@@ -70,7 +70,7 @@ export function forwardRpcArgs(source: Pick<ForwardSource, "id">, target: Forwar
  * viewer have what they need, and the variant worker renders the copy's
  * previews on its next pass.
  */
-export function forwardInsertPayload(source: ForwardSource, target: ForwardTarget) {
+export function forwardInsertPayload<Type, Metadata>(source: ForwardSource<Type, Metadata>, target: ForwardTarget) {
   const payload = {
     chat_id: target.chatId,
     user_id: target.userId,

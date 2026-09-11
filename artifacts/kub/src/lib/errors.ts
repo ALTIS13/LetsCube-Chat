@@ -74,6 +74,27 @@ export function mapPgError(err: AnyErr): string {
       return "Задача недоступна.";
     if (lowerMessage.includes("task_deleted"))
       return "Задача удалена.";
+    // Message actions (20260911142000–20260911144000).
+    if (lowerMessage.includes("reaction_limit_reached"))
+      return "На это сообщение больше реакций поставить нельзя.";
+    if (lowerMessage.includes("message_not_reactable"))
+      return "На это сообщение нельзя поставить реакцию.";
+    if (lowerMessage.includes("invalid_emoji"))
+      return "Такую реакцию поставить нельзя.";
+    if (lowerMessage.includes("message_not_deletable"))
+      return "Это сообщение нельзя удалить у всех.";
+    if (lowerMessage.includes("messages_span_chats"))
+      return "Сообщения из разных чатов удаляются по отдельности.";
+    if (lowerMessage.includes("too_many_messages"))
+      return "За один раз можно удалить не больше 100 сообщений.";
+    if (lowerMessage.includes("message_not_forwardable"))
+      return "Это сообщение нельзя переслать.";
+    if (lowerMessage.includes("user_muted"))
+      return "Вам временно нельзя писать в этот чат.";
+    if (lowerMessage.includes("invalid_topic"))
+      return "Эта тема относится к другому чату.";
+    if (lowerMessage.includes("message_not_found"))
+      return "Сообщение не найдено или уже удалено.";
   }
 
   // 1. Известные SQLSTATE коды Postgres / PostgREST.

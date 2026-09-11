@@ -37,7 +37,10 @@ export type ReadTimesState =
   | { status: "loading"; previous: MessageReadTime[] | null }
   | { status: "ready"; times: MessageReadTime[] };
 
-export type ReadTimesLoader = (messageId: string) => Promise<MessageReadTime[] | null>;
+export type ReadTimesLoader = ((messageId: string) => Promise<MessageReadTime[] | null>) & {
+  /** False while the server is known not to have the function: nothing to wait for. */
+  available?: () => boolean;
+};
 
 export function parseMessageReadTimes(data: unknown): MessageReadTime[] | null {
   if (!Array.isArray(data)) return null;
@@ -62,7 +65,7 @@ export function createReadTimesLoader(deps: {
   availability: RpcAvailability;
   isMissingRpc: (error: unknown) => boolean;
 }): ReadTimesLoader {
-  return async (messageId) => {
+  const load = async (messageId: string) => {
     if (!deps.availability.shouldTry(READ_TIMES_RPC)) return null;
     try {
       const { data, error } = await deps.rpc(READ_TIMES_RPC, { p_message_id: messageId });
@@ -76,6 +79,7 @@ export function createReadTimesLoader(deps: {
       return null;
     }
   };
+  return Object.assign(load, { available: () => deps.availability.shouldTry(READ_TIMES_RPC) });
 }
 
 /** What a private chat says about the other person reading one message. */

@@ -1808,6 +1808,41 @@ export interface Database {
         Args: { p_chat_id: string }
         Returns: void
       }
+      // 20260911141000: a read that says what was read. Returns the pointer.
+      mark_chat_read_through: {
+        Args: { p_chat_id: string; p_read_through: string | null }
+        Returns: string | null
+      }
+      // 20260911141000: for the sender, when each other member read the message.
+      message_read_times: {
+        Args: { p_message_id: string }
+        Returns: { reader_id: string; has_read: boolean; read_at: string | null }[]
+      }
+      // 20260911142000: the caller's one reaction, toggled atomically.
+      set_message_reaction: {
+        Args: { p_message_id: string; p_emoji: string }
+        Returns: Reaction[]
+      }
+      reaction_limit_per_message: {
+        Args: Record<string, never>
+        Returns: number
+      }
+      // 20260911143000: delete for both in a private chat, own messages in a group.
+      delete_messages_for_everyone: {
+        Args: { p_message_ids: string[] }
+        Returns: string[]
+      }
+      // 20260911144000: the copy with its media and previews (D-083).
+      forward_message: {
+        Args: {
+          p_source_message_id: string
+          p_target_chat_id: string
+          p_client_message_id?: string | null
+          p_client_sent_at?: string | null
+          p_topic_id?: string | null
+        }
+        Returns: Message
+      }
       unhide_message_for_me: {
         Args: { p_message_id: string }
         Returns: void

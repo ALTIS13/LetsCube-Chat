@@ -23,6 +23,8 @@ import { KubEmptyState, KubIcon } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
 import { showActionFeedback } from "@/lib/actionFeedback";
 import { mapPgError } from "@/lib/errors";
+import { visibleConversation } from "@/lib/deletedMessages";
+import { readTimesLoader } from "@/hooks/useMessageReadTimes";
 import { forwardFeedback } from "@/lib/messageForward";
 import { KUB_CHAT_MESSAGE_JUMP_EVENT, requestChatMessageJump, type ChatMessageJumpDetail } from "@/lib/chatJumpEvents";
 import { getChatDisplayInfo, isSavedChat } from "@/lib/chatDisplay";
@@ -133,12 +135,16 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     messages, pinnedMessages, pinnedReady, loading, loadingOlder, hasMoreOlder, olderError, isTyping,
     sendMessage, sendMediaMessage, sendTyping, toggleReaction,
     retryMessageSend, discardLocalMessage,
-    editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, togglePin, forwardMessage, clearChatForMe,
+    editMessage, deleteMessage, hideMessageForMe, hideMessagesForMe, deleteMessagesForEveryone, togglePin, forwardMessage, clearChatForMe,
     loadOlderMessages, ensureMessageLoaded,
   } = useMessages(chatId, messageTopicId, messageGeneralTopicIds);
 
   useEffect(() => { markChatRead(chatId); }, [chatId, markChatRead]);
-  const selection = useChatMessageSelection(chatId, messages);
+  // What the conversation shows: a private chat draws no deleted message, since
+  // delete for both leaves no trace there (lib/deletedMessages.ts). The same
+  // array when nothing is taken out, so the list does not render for nothing.
+  const conversation = useMemo(() => visibleConversation(messages, chat?.type), [chat?.type, messages]);
+  const selection = useChatMessageSelection(chatId, conversation);
   const forwardDraft = pendingForward?.chatId === chatId ? pendingForward.messages : null;
 
   const [replyTo, setReplyTo] = useState<MessageWithSender | null>(null);
@@ -696,8 +702,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
    * the ones not yet delivered back above the composer, which is where the
    * next attempt starts, and says why.
    *
-   * Each message goes through `forwardMessage`, which copies its text and its
-   * address but not its media fields — D-083, which needs the backend.
+   * Each message goes through `forwardMessage`, which has the server copy it
+   * with its media and its previews (D-083).
    */
   const sendForwardDraft = useCallback(async (comment: string, draft: MessageWithSender[]) => {
     setPendingForward(null);
@@ -880,27 +886,19 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   /**
    * What the one «Удалить» dialog does.
    *
-   * With its box ticked, own messages get the soft delete the product already
-   * had, so the other side sees a «Сообщение удалено» stub rather than nothing;
-   * removing a message for both without a trace needs the backend. Unticked,
-   * or for anyone else's message, it hides them for the reader only.
+   * Unticked, it hides the messages for the reader only. Ticked, it deletes
+   * them for everyone through `delete_messages_for_everyone`: in a private chat
+   * anyone's message, leaving no trace; in a group the reader's own, which leave
+   * «Сообщение удалено». Where the server lacks that function, own messages get
+   * the soft delete they always had and anyone else's are hidden for the reader.
    */
   const handleDeleteMessages = useCallback(async (items: MessageWithSender[], forEveryone: boolean) => {
     if (!forEveryone) {
       const result = await hideMessagesForMe(items.map((item) => item.id));
       return { ok: result.ok, error: result.error };
     }
-    const failures: string[] = [];
-    for (const item of items) {
-      const result = await deleteMessage(item.id);
-      if (!result?.ok) failures.push(result?.error ?? "Не удалось удалить сообщение.");
-    }
-    if (!failures.length) return { ok: true, error: null };
-    return {
-      ok: false,
-      error: items.length > 1 ? `Не удалось удалить ${failures.length} из ${items.length}.` : failures[0],
-    };
-  }, [deleteMessage, hideMessagesForMe]);
+    return deleteMessagesForEveryone(items);
+  }, [deleteMessagesForEveryone, hideMessagesForMe]);
 
   const handleEditFailedSend = useCallback((msg: MessageWithSender) => {
     if (msg.type !== "text") return;
@@ -986,7 +984,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           <div className="flex-1 flex items-center justify-center chat-bg">
             <KubIcon name="spinner" size={28} className="text-[color:var(--kub-cyan)]" />
           </div>
-        ) : messages.length === 0 ? (
+        ) : conversation.length === 0 ? (
           <div className="flex-1 flex items-center justify-center chat-bg">
             <KubEmptyState
               icon={<KubIcon name="chatRect" size={24} />}
@@ -997,7 +995,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         ) : (
           <MessageList
             chatId={chatId}
-            messages={messages}
+            messages={conversation}
+            loadReadTimes={readTimesLoader()}
             onReply={handleReply}
             onJumpToReply={handleJumpToReply}
             onReaction={toggleReaction}
@@ -1103,7 +1102,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
               chatId={chatId}
               currentTopicId={messageTopicId}
               isForum={isForum}
-              messages={messages}
+              messages={conversation}
               onClose={() => setShowSearch(false)}
               onJumpTo={handleSearchJump}
             />
@@ -1184,7 +1183,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       )}
       <MessageDeleteDialogHost
         chatId={chatId}
-        messages={messages}
+        messages={conversation}
         chatType={chat?.type}
         isSavedChat={savedChat}
         otherName={chat?.type === "private" ? getChatDisplayInfo(chat, userId).title : null}

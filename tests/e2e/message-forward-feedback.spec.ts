@@ -22,6 +22,12 @@ import { expect, test, type Locator, type Page, type Route } from "@playwright/t
  * nothing is pinned too — a forward that went out on the click would pass the
  * rest of this file.
  *
+ * 2026-09-11, D-083: the send calls `forward_message` (20260911144000), which
+ * makes the copy on the server with its media and its previews. The answers
+ * this file pins are now that function's; where it is not deployed the client
+ * inserts the copy itself, as before, and the copy now carries the media fields
+ * a photo needs — the last test.
+ *
  * The backend is a route mock on the fixture host, so the dev server has to be
  * started with `VITE_SUPABASE_URL=http://127.0.0.1:54321`. The spec refuses to
  * run against any other configuration, and aborts every request to a host that
@@ -39,8 +45,14 @@ const NOW = "2026-09-03T12:00:00.000Z";
 const SOURCE_NAME = "Команда проекта";
 const TARGET_NAME = "Архив задач";
 const MESSAGE_TEXT = "План на пятницу: созвон в десять";
+const PHOTO_ID = "55555555-5555-4555-8555-5555555555f3";
+const PHOTO_CAPTION = "Схема зала на субботу";
+const PHOTO_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+const PHOTO_PATH = `${OTHER_ID}/hall-plan.png`;
+const PHOTO_METADATA = { kind: "image", width: 1, height: 1, uncompressed: true, preview_path: `${OTHER_ID}/hall-plan.preview.webp` };
 
-type ServerAnswer = "deliver" | "refuse" | "unreachable";
+/** How `forward_message` answers; `missing` is a server it has not reached yet. */
+type ServerAnswer = "deliver" | "refuse" | "unreachable" | "missing";
 
 test.describe("forwarding a message says what happened", () => {
   test.beforeEach(async ({ page, request }) => {
@@ -73,9 +85,9 @@ test.describe("forwarding a message says what happened", () => {
 
     expect(forwards).toHaveLength(1);
     expect(forwards[0]).toMatchObject({
-      chat_id: TARGET_CHAT_ID,
-      user_id: USER_ID,
-      forwarded_from_id: SOURCE_MESSAGE_ID,
+      via: "rpc",
+      p_source_message_id: SOURCE_MESSAGE_ID,
+      p_target_chat_id: TARGET_CHAT_ID,
     });
   });
 
@@ -107,18 +119,45 @@ test.describe("forwarding a message says what happened", () => {
     await expect(feedback.getByRole("status")).toHaveCount(0);
     await expect(draft).toBeVisible();
   });
+
+  test("where the server has no forward_message, the photo is forwarded as before and keeps its media (D-083)", async ({ page }) => {
+    const forwards = await installBackend(page, "missing");
+    const { draft } = await forwardFromSourceChat(page, forwards, PHOTO_CAPTION, null);
+
+    const feedback = page.getByTestId("kub-feedback-viewport");
+    await expect(feedback.getByRole("status")).toContainText("Сообщение переслано");
+    await expect(feedback.getByRole("alert")).toHaveCount(0);
+    await expect(draft).toHaveCount(0);
+
+    expect(forwards).toHaveLength(2);
+    expect(forwards[0]).toMatchObject({ via: "rpc", p_source_message_id: PHOTO_ID, p_target_chat_id: TARGET_CHAT_ID });
+    expect(forwards[1]).toMatchObject({
+      via: "insert",
+      chat_id: TARGET_CHAT_ID,
+      user_id: USER_ID,
+      type: "image",
+      forwarded_from_id: PHOTO_ID,
+      media_url: PHOTO_URL,
+      media_bucket: "media",
+      media_path: PHOTO_PATH,
+      media_metadata: PHOTO_METADATA,
+    });
+  });
 });
 
 async function forwardFromSourceChat(
   page: Page,
   forwards: Array<Record<string, unknown>>,
+  bubbleText = MESSAGE_TEXT,
+  /** What the waiting draft quotes, or null to check only its title. */
+  draftText: string | null = MESSAGE_TEXT,
 ): Promise<{ draft: Locator }> {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   const row = page.getByTestId("chat-list-item").filter({ hasText: SOURCE_NAME });
   await expect(row).toBeVisible();
   await row.click();
 
-  const bubble = page.locator('[data-message-bubble="true"]').filter({ hasText: MESSAGE_TEXT });
+  const bubble = page.locator('[data-message-bubble="true"]').filter({ hasText: bubbleText });
   await expect(bubble).toBeVisible();
   await bubble.click({ button: "right" });
   await page.locator("[data-action-menu]").getByRole("menuitem", { name: "Переслать", exact: true }).click();
@@ -132,7 +171,7 @@ async function forwardFromSourceChat(
   await expect(dialog).toHaveCount(0);
   const draft = page.getByTestId("composer-forward-draft");
   await expect(draft).toContainText("Переслать сообщение");
-  await expect(draft).toContainText(MESSAGE_TEXT);
+  if (draftText) await expect(draft).toContainText(draftText);
   expect(forwards, "choosing the chat already sent the forward").toHaveLength(0);
 
   await page.getByRole("button", { name: "Отправить", exact: true }).click();
@@ -178,6 +217,14 @@ async function installBackend(page: Page, answer: ServerAnswer): Promise<Array<R
   ];
   const messages = [
     message(SOURCE_MESSAGE_ID, SOURCE_CHAT_ID, OTHER_ID, MESSAGE_TEXT, "2026-09-03T11:30:00.000Z", anya),
+    {
+      ...message(PHOTO_ID, SOURCE_CHAT_ID, OTHER_ID, PHOTO_CAPTION, "2026-09-03T11:20:00.000Z", anya),
+      type: "image",
+      media_url: PHOTO_URL,
+      media_bucket: "media",
+      media_path: PHOTO_PATH,
+      media_metadata: PHOTO_METADATA,
+    },
   ];
 
   await page.route(`${FIXTURE_HOST}/**`, async (route) => {
@@ -212,9 +259,37 @@ async function installBackend(page: Page, answer: ServerAnswer): Promise<Array<R
       const id = eq("id");
       return json(route, one(chats.filter((row) => !id || row.id === id)));
     }
+    if (url.pathname.endsWith("/rest/v1/rpc/forward_message")) {
+      const body = (request.postDataJSON() ?? {}) as Record<string, unknown>;
+      forwards.push({ via: "rpc", ...body });
+      if (answer === "unreachable") return route.abort("internetdisconnected");
+      if (answer === "missing") {
+        return json(route, {
+          code: "PGRST202",
+          details: null,
+          hint: null,
+          message: "Could not find the function public.forward_message in the schema cache",
+        }, 404);
+      }
+      if (answer === "refuse") {
+        return json(route, {
+          code: "42501",
+          details: null,
+          hint: null,
+          message: 'new row violates row-level security policy for table "messages"',
+        }, 403);
+      }
+      const source = messages.find((row) => row.id === body.p_source_message_id);
+      return json(route, {
+        ...message(FORWARDED_MESSAGE_ID, String(body.p_target_chat_id), USER_ID, String(source?.content ?? ""), NOW, me),
+        forwarded_from_id: body.p_source_message_id ?? null,
+        client_message_id: body.p_client_message_id ?? null,
+        client_sent_at: body.p_client_sent_at ?? null,
+      });
+    }
     if (url.pathname.endsWith("/rest/v1/messages") && method === "POST") {
       const body = (request.postDataJSON() ?? {}) as Record<string, unknown>;
-      forwards.push(body);
+      forwards.push({ via: "insert", ...body });
       if (answer === "unreachable") return route.abort("internetdisconnected");
       if (answer === "refuse") {
         return json(route, {

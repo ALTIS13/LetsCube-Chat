@@ -3,6 +3,8 @@
 import { useEffect, useMemo } from "react";
 
 import { copyWithFeedback, showActionFeedback } from "@/lib/actionFeedback";
+import { DELETE_FOR_EVERYONE_RPC } from "@/lib/deletedMessages";
+import { rpcAvailability } from "@/lib/rpcAvailability";
 import { formatFullTime } from "@/lib/format";
 import { copiedMessagesText, deleteDialogOption } from "@/lib/messageActions";
 import { canUseHumanMessageControls, messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
@@ -111,7 +113,16 @@ export function MessageDeleteDialogHost({
   if (!request || request.chatId !== chatId || targets.length === 0) return null;
 
   const allOwn = targets.every((message) => canUseHumanMessageControls(message, currentUserId));
-  const option = deleteDialogOption({ count: targets.length, allOwn, chatType, isSavedChat, otherName });
+  // Someone else's message goes for both in a private chat only where the
+  // server can do it; once it has told this client it cannot, not offered.
+  const option = deleteDialogOption({
+    count: targets.length,
+    allOwn,
+    chatType,
+    isSavedChat,
+    otherName,
+    othersForBoth: rpcAvailability.shouldTry(DELETE_FOR_EVERYONE_RPC),
+  });
 
   return (
     <MessageDeleteDialog
