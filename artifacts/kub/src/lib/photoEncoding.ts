@@ -4,7 +4,7 @@
  *
  * WebKit hands a page a picked photo in its original format, so on an iPhone a
  * camera photo arrives as HEIC and a screenshot as PNG. The compressed path went
- * wrong there in three ways:
+ * wrong there in three ways, and in a fourth everywhere:
  *
  * - It asked the canvas for WebP. An engine that cannot write a type returns a
  *   PNG instead, as the HTML standard requires, and Safari on Apple platforms
@@ -15,11 +15,15 @@
  * - It re-encoded a small JPEG and then kept the JPEG it started from, because
  *   the result was no smaller — an encode for nothing — and it decoded every
  *   photo twice, once to encode it and once more to measure it.
+ * - A tall screenshot came out thin: 1290x2796 became 886x1920, and a phone at
+ *   3x stretched that across the viewer.
  *
  * So the engine is asked once whether it really writes WebP, and JPEG at 0.85
  * is used where it does not; the output is named and typed from the bytes the
  * engine wrote; a HEIC goes through the canvas wherever the engine can decode
- * it; and a small JPEG that needs no resize is not re-encoded into JPEG.
+ * it; a small JPEG that needs no resize is not re-encoded into JPEG; and the
+ * long side is capped as before, but not by taking the short side under
+ * 1080 px when the source had that much.
  *
  * Imports nothing, so `node --test` loads it directly:
  * `tests/unit/photo-encoding.test.mts`.
@@ -31,6 +35,16 @@ export const PNG_TYPE = "image/png";
 
 /** What a photo is written as where the engine has no WebP encoder. */
 export const JPEG_FALLBACK_QUALITY = 0.85;
+
+/** A compressed photo keeps at least this much of its short side, when the source has it. */
+export const PHOTO_MIN_SHORT_SIDE = 1080;
+
+/**
+ * Whatever the short side asks for, the long side stops here. A scrolling
+ * capture 1080x20000 would otherwise go up whole, and a canvas that large is
+ * past what an iPhone will allocate.
+ */
+export const PHOTO_MAX_LONG_SIDE = 4096;
 
 /**
  * A JPEG at or under this many bytes per pixel — 2 bits — is already about as
@@ -96,15 +110,25 @@ export interface PhotoSize {
 }
 
 /**
- * The size a compressed photo comes out at: the long side capped at
- * `maxLongSide`, and never enlarged. It starts from the one decode's size, so
- * staging has no reason to decode the photo a second time to measure it.
+ * The size a compressed photo comes out at, from the one decode's size.
+ *
+ * The long side is capped at `maxLongSide`, as it always was — unless that
+ * would take the short side under `PHOTO_MIN_SHORT_SIDE`. Then the short side
+ * keeps 1080 px, or all of itself when the source has less, and the long side
+ * follows it up to `PHOTO_MAX_LONG_SIDE`. A photo is never enlarged.
+ *
+ * 4032x3024 -> 1920x1440, as before. 1290x2796 -> 1080x2341, not 886x1920.
  */
 export function compressedPhotoSize(width: number, height: number, maxLongSide: number): PhotoSize {
   if (!(width > 0) || !(height > 0) || !Number.isFinite(width) || !Number.isFinite(height)) {
     return { width: Math.max(1, Math.round(width) || 1), height: Math.max(1, Math.round(height) || 1), resized: false };
   }
-  const scale = Math.min(1, maxLongSide / Math.max(width, height));
+  const longSide = Math.max(width, height);
+  const shortSide = Math.min(width, height);
+  const capped = maxLongSide / longSide;
+  const keepsShortSide = Math.min(1, PHOTO_MIN_SHORT_SIDE / shortSide);
+  const ceiling = Math.max(maxLongSide, PHOTO_MAX_LONG_SIDE) / longSide;
+  const scale = Math.min(1, Math.max(capped, keepsShortSide), ceiling);
   const nextWidth = Math.max(1, Math.round(width * scale));
   const nextHeight = Math.max(1, Math.round(height * scale));
   return {

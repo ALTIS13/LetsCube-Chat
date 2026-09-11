@@ -291,6 +291,37 @@ test.describe("the send path of photos and videos", () => {
     });
   });
 
+  test("a tall screenshot keeps 1080 px across instead of coming out 886 wide", async ({ page }) => {
+    const backend = await installBackend(page);
+    await openChat(page);
+
+    await pickPhotosOrVideos(page, [await tallScreenshot("screenshot.png")]);
+    await sendPicked(page, 1);
+    await expect.poll(() => backend.inserts.length).toBe(1);
+
+    const [upload] = backend.uploads;
+    const picture = await sharp(backend.stored.get(upload.path)?.bytes).metadata();
+    expect({ width: picture.width, height: picture.height }, "1290x2796 used to come out 886x1920").toEqual({ width: 1080, height: 2341 });
+    expect(backend.inserts[0]).toMatchObject({ media_metadata: { optimized: true, uncompressed: false, width: 1080, height: 2341 } });
+  });
+
+  test("where the canvas cannot write WebP, a tall screenshot goes as a 1080x2341 JPEG", async ({ page }) => {
+    await answerWebpWithPng(page);
+    const backend = await installBackend(page);
+    await openChat(page);
+
+    await pickPhotosOrVideos(page, [await tallScreenshot("screenshot.png")]);
+    await sendPicked(page, 1);
+    await expect.poll(() => backend.inserts.length).toBe(1);
+
+    // Before, an iPhone sent this PNG as picked, or a PNG of 886x1920 labelled WebP.
+    const [upload] = backend.uploads;
+    expect({ name: upload.name, type: upload.type }).toEqual({ name: "screenshot-image.jpg", type: "image/jpeg" });
+    const picture = await sharp(backend.stored.get(upload.path)?.bytes).metadata();
+    expect({ format: picture.format, width: picture.width, height: picture.height }).toEqual({ format: "jpeg", width: 1080, height: 2341 });
+    expect(backend.inserts[0]).toMatchObject({ media_metadata: { mime_type: "image/jpeg", width: 1080, height: 2341 } });
+  });
+
   test("a HEIC this engine cannot decode goes as it was picked", async ({ page }) => {
     const backend = await installBackend(page);
     await openChat(page);
@@ -507,6 +538,44 @@ async function smallJpeg(name: string): Promise<PickedFile> {
   const buffer = await sharp(Buffer.from(svg)).jpeg({ quality: 80 }).toBuffer();
   expect(buffer.length, "the fixture is within the keep rule").toBeLessThanOrEqual(1280 * 960 * 0.25);
   return { name, mimeType: "image/jpeg", buffer };
+}
+
+/**
+ * A 1290x2796 PNG: an iPhone 15 Pro Max screenshot of a conversation, bubbles
+ * and lines of text around a photograph, heavy enough that its compressed copy
+ * is smaller.
+ */
+async function tallScreenshot(name: string): Promise<PickedFile> {
+  const rows: string[] = [];
+  for (let index = 0, y = 180; y < 2600; index += 1) {
+    const own = index % 3 === 1;
+    const width = 560 + ((index * 131) % 480);
+    const x = own ? 1290 - width - 48 : 48;
+    const lines = 1 + (index % 3);
+    const height = 48 + lines * 54;
+    rows.push(`<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="34" fill="${own ? "#3b5ccf" : "#ffffff"}"/>`);
+    for (let line = 0; line < lines; line += 1) {
+      const lineWidth = width - 72 - (((index + line) * 37) % 160);
+      rows.push(`<rect x="${x + 36}" y="${y + 30 + line * 54}" width="${lineWidth}" height="26" rx="8" fill="${own ? "#dfe6fb" : "#3a4452"}"/>`);
+    }
+    y += height + 26;
+  }
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="1290" height="2796">` +
+    `<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#dfe7f2"/><stop offset="1" stop-color="#b9c8e0"/></linearGradient></defs>` +
+    `<rect width="1290" height="2796" fill="url(#bg)"/>${rows.join("")}</svg>`;
+  const photograph = await sharp({
+    create: { width: 1100, height: 820, channels: 3, noise: { type: "gaussian", mean: 128, sigma: 48 } },
+  })
+    .blur(1.2)
+    .png()
+    .toBuffer();
+  const buffer = await sharp(Buffer.from(svg))
+    .composite([{ input: photograph, left: 95, top: 1180 }])
+    .png({ compressionLevel: 6 })
+    .toBuffer();
+  expect(buffer.length, "the screenshot stays under the resumable threshold").toBeLessThan(6 * 1024 * 1024);
+  return { name, mimeType: "image/png", buffer };
 }
 
 /** Bytes typed as HEIC that neither Chromium nor Playwright's WebKit can decode. */

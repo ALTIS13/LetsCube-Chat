@@ -5,6 +5,8 @@ import {
   JPEG_FALLBACK_QUALITY,
   JPEG_TYPE,
   KEEP_JPEG_MAX_BYTES_PER_PIXEL,
+  PHOTO_MAX_LONG_SIDE,
+  PHOTO_MIN_SHORT_SIDE,
   PNG_TYPE,
   WEBP_TYPE,
   compressedPhotoEncoding,
@@ -63,17 +65,33 @@ test("a file is named and typed from the bytes the engine wrote, never from what
   assert.equal(extensionForImageType(WEBP_TYPE), "webp");
 });
 
-test("a photo's long side is capped at the profile's size, and a photo is never enlarged", () => {
+test("a tall picture keeps 1080 px on its short side, and everything else is capped as before", () => {
   const size = (width: number, height: number) => {
     const result = compressedPhotoSize(width, height, 1920);
     return [result.width, result.height, result.resized];
   };
 
+  // A camera photo is capped on its long side, exactly as before.
   assert.deepEqual(size(4032, 3024), [1920, 1440, true]);
   assert.deepEqual(size(3024, 4032), [1440, 1920, true]);
   assert.deepEqual(size(2000, 2000), [1920, 1920, true]);
-  assert.deepEqual(size(1290, 2796), [886, 1920, true]);
+
+  // The iPhone 15 Pro Max screenshot from the report came out 886x1920.
+  assert.deepEqual(size(1290, 2796), [1080, 2341, true]);
+  assert.deepEqual(size(2796, 1290), [2341, 1080, true], "held sideways, the same");
+  assert.deepEqual(size(1170, 2532), [1080, 2337, true]);
+
+  // Already 1080 across, or less: nothing is taken, and nothing is enlarged.
+  assert.deepEqual(size(1080, 2400), [1080, 2400, false]);
+  assert.deepEqual(size(900, 3000), [900, 3000, false]);
   assert.deepEqual(size(1280, 960), [1280, 960, false]);
+
+  // The ceiling: a scrolling capture does not go up whole.
+  assert.deepEqual(size(1080, 20000), [221, 4096, true]);
+  assert.deepEqual(size(6000, 1200), [4096, 819, true]);
+
+  assert.equal(PHOTO_MIN_SHORT_SIDE, 1080);
+  assert.equal(PHOTO_MAX_LONG_SIDE, 4096);
   assert.deepEqual(size(0, 100), [1, 100, false], "a size that makes no sense is not resized");
   assert.deepEqual(size(Number.NaN, 100), [1, 100, false]);
 });
