@@ -5472,6 +5472,10 @@ chat; that was read from the migration, not checked against the database.
 forwarding of several messages, tracker queue 21 — which changes how a forward
 is made.
 
+Since D-092 a forward loses more than the variants: an original's `uncompressed`
+flag and its preview are in `media_metadata` too, so a forwarded original is
+drawn from the full file and loses its «Оригинал» mark.
+
 ## D-084 `[ ]` On a phone, a feedback card covers the top of a full-screen sheet
 
 **Severity:** low. The card can be dismissed and leaves by itself after five
@@ -5774,3 +5778,138 @@ both phone widths pass.
 
 **Not verified on a device.** Whether Safari on an iPad or a Mac draws the menu
 invisible is not known; the fix removes the shape either way.
+
+## D-092 `[x]` A photo or a video could only be sent compressed
+
+**Severity:** medium. Every photo from every shell, however it was picked.
+Testers' complaint 2, 2026-09-11.
+
+**Surface:** `stageFiles` in `artifacts/kub/src/components/chat/ChatWindow.tsx`,
+281–364 at `65475f6`; `prepareChatImageAttachment` and `optimizeRasterImage` in
+`artifacts/kub/src/lib/mediaUpload.ts`, 52–63 and 146–180; the attach menu in
+`MessageInput.tsx`, 748–783; «Открыть оригинал» in `MediaViewer.tsx`, 71–73.
+
+**Defect:** every JPEG, PNG and WebP was re-encoded on the canvas to a WebP of at
+most 1920px at 0.84 before upload — picked, pasted or dropped — and nothing let a
+person opt out. The original never left the device, so «Открыть оригинал» opened
+the copy.
+
+**Fixed** in `5f5a5b7`, `43419f0`, `b3efbc8` and `5e6989c`, taken onto the
+integration branch from agent K's `8ea11bb`, `0ef5690`, `ba2f5f3` and `c657115`.
+Its six conflicts with the D-071 message actions were each two additions in one
+place; a script kept both sides and would have refused a block where one side
+had removed a line the other kept.
+
+- The decisions are in `lib/mediaCompression.ts`, and compressed stays the
+  default.
+- A phone offers «Без сжатия» under «Фото или видео». A desktop opens a send
+  dialog for any batch with a photo or a video in it, «Сжать изображение»
+  checked.
+- An original is uploaded as picked, less the place it was taken (D-098), and
+  refused above 50 MB before anything reads it.
+- A 1280px WebP preview is stored at a path derived from the original's, and the
+  metadata carries `uncompressed` and `preview`; a preview is read from that
+  derived path and nowhere else.
+- The bubble draws the preview and marks the photo «Оригинал». The viewer zooms
+  the original, and an original video plays the original.
+
+**Regression tests:** `tests/unit/media-compression.test.mts`, 8.
+`tests/e2e/media-send-without-compression.spec.ts` was 6 red before the change,
+and is 12 passed and 12 skipped by shape on chromium-desktop-1440,
+chromium-mobile-390 and webkit-mobile-390 since `e3d0b93` let it run on
+WebKit. There its own harness had failed the phone's three checks: it aborted the
+`blob:` load that decodes a picked photo, and it read upload bytes WebKit does not
+hand an intercepted request. The agent's 17 mutations were each caught, every
+file hashed before, during and after. `video-transcode-frontend.spec.ts` kept
+looking for the metadata key in `ChatWindow.tsx` after it moved, and follows it
+now, in the same commit.
+
+**Not verified:** devices, real storage and TUS, the worker on an original, a
+whole video original, paste and drop into the dialog, the dark theme. For the
+backend, in tracker queue 21: the bucket's `file_size_limit` and Storage's global
+`FILE_SIZE_LIMIT` must admit 52 428 800 bytes, and 262 144 000 for the videos the
+client already allows; `allowed_mime_types` must admit the originals' types and
+`image/webp`; the worker can skip `video_720p` for an uncompressed video; it
+decodes a source whole, so a 50 MB photo is a new load on its memory; and a
+deleted message's `{stem}.preview.webp` is not in `media_variants`, so it would
+be left behind.
+
+## D-093 `[ ]` A group of two to four members reads «4 участников»
+
+**Severity:** low. **Surface:** `artifacts/kub/src/lib/chatDisplay.ts:76`.
+
+**Defect:** the count is always written in the form for many.
+`selectRussianPluralForm` in `lib/messageMediaSections.ts` already answers the
+question.
+
+## D-094 `[x]` «Открыть оригинал» had no name on a phone
+
+**Severity:** low. **Surface:** `MediaViewer.tsx`, 110–117 at `65475f6`.
+
+**Defect:** the button's words are `hidden sm:inline`, so below 640px it was an
+icon without a name.
+
+**Fixed** in `b3efbc8` with an `aria-label`. **Regression tests:** taking it out
+failed the D-092 spec in the agent's mutation run.
+
+## D-095 `[ ]` A new photo's worker copies do not reach an open chat without videos
+
+**Severity:** low. Read from the source, not reproduced.
+
+**Surface:** `artifacts/kub/src/hooks/useMediaVariants.ts`, 68–96 and 136–151.
+
+**Defect:** variants are queried when the chat's message ids change, and polled
+only while the chat holds a video. A new photo is queried before the worker has
+run, and nothing asks again until another message arrives or the chat is
+reopened.
+
+## D-096 `[ ]` A photo picked through «Файл» is still compressed on a phone
+
+**Severity:** low; a decision for the owner.
+
+**Defect:** in Telegram «Файл» sends a file as it is. A desktop now asks in the
+send dialog; a phone compresses a picture picked through «Файл».
+
+## D-097 `[ ]` «Открыть оригинал» on a compressed photo opens the compressed copy
+
+**Severity:** low; wording.
+
+**Defect:** for a compressed photo no original exists on the server, so the label
+promises something that is not there.
+
+## D-098 `[x]` An original photo, and every video, left with the place it was taken
+
+**Severity:** high, for privacy. Every video ever sent, because a video is always
+uploaded as picked, and every original photo since D-092, which is not deployed.
+Found 2026-09-11 while taking D-092 in: the agent's report kept EXIF «as in
+Telegram» and held that it could not be removed without re-encoding.
+
+**Surface:** `stageFiles` in `ChatWindow.tsx`. Nothing in the client or the
+worker took EXIF, XMP or a movie's metadata out of a stored original.
+
+**Defect:** what the camera wrote went into the public `media` bucket with the
+file, and to everyone holding its link: a JPEG's GPS directory, an XMP packet's
+address fields, and a QuickTime or MP4 file's location items — `©xyz`, `loci`
+and `com.apple.quicktime.location.*`.
+
+**Fixed** in `0c0d15e`, as the owner was offered on 2026-09-11 — take out the
+place, keep the orientation — with their word on it still to come.
+`lib/mediaLocation.ts` changes the file in place and keeps its length, so no
+offset in it moves. A JPEG's GPS directory is emptied — entries, coordinates and
+count — with its pointer left; the XMP fields that name a place are blanked with
+spaces; a movie's location items become padding of the same size. EXIF that
+cannot be walked is blanked whole, orientation with it. `stageFiles` runs it on
+everything uploaded as picked — an original, a video, and a picture the canvas
+could not make smaller — and the metadata's `optimized` is now set by the
+compression alone.
+
+**Regression tests:** `tests/unit/media-location.test.mts`, 11, on files built
+byte by byte; ten mutations, each red. In `media-send-without-compression.spec.ts`
+a phone and a desktop send a real JPEG carrying a GPS directory, and the upload
+has to hash to that file with exactly the directory zeroed, worked out from the
+layout; with the call taken out of `stageFiles`, all three runs fail.
+
+**Not handled, and not verified on a device:** a HEIC keeps its location, as a
+PNG and a WebP keep their metadata; the second image of an MPF JPEG and the video
+appended to a motion photo are not read; an extended XMP packet split across
+segments is checked a segment at a time.

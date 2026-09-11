@@ -1,5 +1,53 @@
 # QA Results
 
+## 2026-09-11 - Sending without compression taken in, and originals and videos without their location
+
+Agent K's four commits for complaint 2 were cherry-picked onto
+`integration/message-actions` after the D-071 message actions. A merge preview
+found six conflicts in four files — `ChatWindow.tsx`, `MessageBubble.tsx`,
+`icons.ts` and `PublicPreviewCapturePage.tsx` — each two additions in one place.
+A script resolved them as both sides and would have refused a block where one
+side removed a line the other kept; every resolved region was read before going
+on. Every Playwright run used `KUB_QA_ALLOW_MUTATIONS=0` on the DEV fixture
+server, and nothing signed in.
+
+| check | result |
+| --- | --- |
+| typecheck of the application, after the four commits | clean |
+| unit suite without the build-dependent asset test, after them | 1623/1623 |
+| `media-send-without-compression.spec.ts` as the agent left it, on chromium-desktop-1440, chromium-mobile-390 and webkit-mobile-390 | 6 passed, 9 skipped, 3 failed: all three of the phone's checks on WebKit, at an empty tray |
+| the same spec with `e3d0b93` and `0c0d15e` | 12 passed, 12 skipped by shape |
+| its two new location checks with the call taken out of `stageFiles` | 3 failed on the byte-for-byte hash, 3 skipped; `ChatWindow.tsx` restored by hash |
+| `video-transcode-frontend.spec.ts` and `resumable-media-upload.spec.ts`, chromium-desktop-1440 | before `e3d0b93` 1 failed, a source scan for the metadata key in `ChatWindow.tsx`; after it 23 passed |
+| `media-viewer-zoom.spec.ts` on the three projects | 24 passed |
+| `emoji-touch-targets.spec.ts` on the three projects | 49 passed, 2 skipped |
+| `message-forward-feedback`, `message-touch-gestures`, `bot-chat-integration`, `ios-standalone-safe-area` | 6 passed; 3 passed, 1 skipped; 4 passed; 25 passed, 25 skipped |
+| `composer-typing-frames`, `message-render-stability` | 6 passed |
+| `chat-entry-scroll`, `chat-glass-layout`, `message-meta-observer-cost`, `message-meta-first-paint`, `message-meta-placement` and `message-meta-placement-settles`, at 1440 and 390 | 56 passed |
+| `message-meta-spacer-line.spec.ts` on the three projects | 6 passed |
+| `tests/unit/media-location.test.mts` | 11/11; ten mutations of the module each red, the module hashed before, during and after each and restored |
+| build, the whole unit suite, typecheck of every package and `git diff --check`, on the final tree | built; 1646/1646; clean; clean |
+
+The browser regressions from `media-viewer-zoom` down ran on the tree with the
+four commits, before the location removal; that change touches only staging,
+and the specs that stage a file ran again after it.
+
+How WebKit failed the agent's spec, each step a probe removed after its run with
+the spec restored byte for byte:
+
+- With the page's console, errors and failed requests recorded, the pick made
+  one failed request: the `blob:` load that decodes the photo, aborted by the
+  spec's own rule for hosts that are not this machine. Nothing was staged.
+- With that rule limited to http and https the photo was staged and sent, and
+  the check failed further on, on an empty preview: WebKit hands an intercepted
+  request no bytes for a blob part.
+- `canvas.toBlob` does encode WebP in this WebKit, 26.4, so the preview itself
+  was not at fault.
+
+Not run in this wave: the specs that sign in (`visual-style-layout`,
+`tasks-filters`, `roles-visibility`), which belong to the gate before
+production.
+
 ## 2026-09-11 - WebKit: the desktop message menu ended its entrance invisible (D-091)
 
 Found when `emoji-touch-targets.spec.ts` failed on `webkit-mobile-390` alone
