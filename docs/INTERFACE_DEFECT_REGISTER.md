@@ -5718,3 +5718,59 @@ reactions stand until the next reaction event.
 held copy wins" turns the edit, deletion and reaction cases red. The bot client
 contract checks that `useMessages` delegates to the module and that the module
 matches sends by actor.
+
+## D-091 `[x]` In WebKit a desktop message menu finished opening invisible
+
+**Severity:** high, never released. Wherever the message menu keeps its desktop
+shape in Safari's engine — an iPad, a Mac, an iPhone held sideways — the
+reaction bar and the action card ended their entrance at opacity 0 and stayed
+there. Found 2026-09-11, when `emoji-touch-targets.spec.ts` failed on WebKit
+alone after the D-071 message actions were integrated.
+
+**Surface:** the desktop branch of
+`artifacts/kub/src/components/chat/MessageActionLayer.tsx`: the column
+`[data-message-menu="desktop"]` holding the bar and the card.
+
+**Defect:** the column was hidden until placed — its own `visibility` flipped
+from hidden to visible — and both surfaces inside it open with `kub-menu-in`. On
+WebKit 26.4 at 844x390 under a finger the animation itself ran: its progress
+read 0, .35, .57 and .79, and `animationend` fired at about 250 ms. The style
+WebKit computed for both surfaces never left the first keyframe, opacity 0 and
+`matrix(0.98, 0, 0, 0.98, 0, 4)`, and was still there 1.1 s later. The quick
+reactions measured 43.12 px, which is 44 at .98, and that is how it surfaced.
+A screenshot restyles the page: taken at that moment, it showed both surfaces
+at rest, so a check by picture would have passed.
+
+Overriding one property at a time in the running page left it stuck with the
+backdrop filter taken off the bar or the card, the card's animation off, every
+transition off, the bar's shadow off, the column as a block, absolutely
+positioned or without its z-index, the full-screen click catcher gone,
+`isolation` taken off both surfaces, or `will-change` or `isolation` put on the
+column — thirteen runs in all. Forcing the column visible was
+the only change after which both came to rest. Reductions to a blank page — a
+surface with or without a backdrop filter or `will-change`, in a fixed wrapper
+hidden for one or two frames and then placed — all animated normally, so what is
+recorded is the product's shape, not a minimal case. In the same engine the
+phone shape, where each surface is fixed and hides itself, came to rest by
+325 ms; the hover column, which also hides itself, came late, at opacity .99
+from 180 to 700 ms. Chromium 147 animated every shape smoothly.
+
+The spec's own wait had waited for nothing: it finished the animations the
+document listed, and WebKit listed none.
+
+**Fixed** in `b6eb2e0`. The column keeps only its position, and the bar and the
+card each carry their own visibility until it is placed (`shownOncePlaced`), as
+a phone's surfaces already did. The rule is 14 in
+`docs/operations/interface-material.md`.
+
+**Regression tests:** `tests/e2e/emoji-touch-targets.spec.ts` now waits for
+every `kub-menu-in` surface to reach opacity 1 with no transform, read from the
+computed style, and fails naming any that does not: 49 passed and 2 skipped (the
+two inset checks only Chromium drives) on webkit-mobile-390,
+chromium-desktop-1440 and chromium-mobile-390. With the column flipping its own
+visibility again, WebKit fails at 844x390 and 820x1180 with "an entrance did not
+come to rest", naming «Реакции» and «Действия с сообщением» at opacity 0, while
+both phone widths pass.
+
+**Not verified on a device.** Whether Safari on an iPad or a Mac draws the menu
+invisible is not known; the fix removes the shape either way.

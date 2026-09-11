@@ -1,5 +1,42 @@
 # QA Results
 
+## 2026-09-11 - WebKit: the desktop message menu ended its entrance invisible (D-091)
+
+Found when `emoji-touch-targets.spec.ts` failed on `webkit-mobile-390` alone
+after the D-071 message actions were integrated. Every run below used
+`KUB_QA_ALLOW_MUTATIONS=0` against the DEV preview fixture on its own port;
+nothing signed in, and no screenshot of a real account was taken.
+
+| check | result |
+| --- | --- |
+| `emoji-touch-targets.spec.ts` before `b6eb2e0`, on webkit-mobile-390 | 3 failed: the menu's quick reactions 43.12 px at 844x390 and 820x1180, the hover column's reactions short of 36 px at 1440 |
+| the same spec after it, on webkit-mobile-390, chromium-desktop-1440 and chromium-mobile-390 | 49 passed, 2 skipped (the inset checks only Chromium drives) |
+| after it, with only the column flipping its own visibility again, on webkit-mobile-390 | 2 failed at 844x390 and 820x1180 with "an entrance did not come to rest", naming «Реакции» and «Действия с сообщением» at opacity 0; both phone widths passed |
+| `ios-standalone-safe-area.spec.ts`, webkit-ios-standalone and chromium-mobile-390 | 25 passed, 25 skipped, as in the wave run before it |
+| `message-forward-feedback.spec.ts`, chromium-desktop-1440, chromium-mobile-390 and webkit-mobile-390 | 9 passed |
+| `message-touch-gestures.spec.ts`, chromium-mobile-390 and webkit-mobile-390 | 3 passed, 1 skipped |
+| `bot-chat-integration.spec.ts`, chromium-desktop-1440 and webkit-mobile-390 | 7 passed, 1 skipped |
+| `@workspace/kub` typecheck; `shell-glass` and `admin-glass` unit tests | clean; 115/115 |
+
+How the cause was found, each step a temporary probe removed after its run and
+the spec compared byte for byte afterwards:
+
+- In the running page on WebKit 26.4 the animation's progress reached its end
+  and `animationend` fired at about 250 ms, while the computed opacity of the bar
+  and the card stayed 0 for 1.1 s. `requestAnimationFrame` ran 18 times in
+  700 ms, so the page itself was not frozen, and the pinned clock was not the
+  cause: without it the result was the same.
+- A screenshot hid the defect: the opacity read 1 immediately after one.
+- Thirteen stylesheet overrides, one per run, left it stuck; forcing the column
+  visible was the only one that let both surfaces come to rest.
+- Blank pages with a surface animating in a hidden-then-placed wrapper, with and
+  without a backdrop filter, animated normally in both engines, so there is no
+  minimal case; the product's shape is what rule 14 of
+  `docs/operations/interface-material.md` records.
+
+Not run: `visual-style-layout.spec.ts`, which signs in against production and
+opens the menu. It belongs to the gate before production.
+
 ## 2026-09-11 - The rest of queue item 22: three test defects fixed, one not reproduced
 
 Taken while the owner decides on the message actions. Each defect was run

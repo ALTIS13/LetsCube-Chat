@@ -39,7 +39,7 @@ is not necessarily legible as a sentence. Fills, borders and icon shapes keep
 `--kub-danger` and `--kub-cyan`: those answer a 3:1 requirement they already
 meet.
 
-## The thirteen rules
+## The fourteen rules
 
 ### 1. Never write the material by hand
 
@@ -417,6 +417,38 @@ and Chromium with the insets overridden inside the engine, so `env()` itself
 reports them (on `chromium-mobile-390`). Both assert that nothing a person can
 see or tap is inside an unsafe area. Neither proves what iOS does with the
 viewport — the device checklist in the defect register does that.
+
+### 14. A surface that animates in hides itself, never its container
+
+A surface placed in script is laid out once invisibly, measured, and moved to
+where it belongs; `visibility: hidden` covers that one pass. When the hidden
+element is a container and the surfaces opening with `kub-menu-in` are inside
+it, **WebKit can end their entrance without ever applying it**: the animation
+runs and finishes, and the style computed for the surfaces stays on the first
+keyframe — opacity 0 at .98 — until something else restyles the page.
+
+Measured on WebKit 26.4 with the desktop message menu (D-091). The column that
+holds the reaction bar and the action card flipped its visibility; the
+animation reached its end and fired `animationend`, and both surfaces still read
+opacity 0 more than a second later. Taking off the backdrop filters, the
+transitions, the shadow, the positioning or the card's animation changed
+nothing; forcing the column visible fixed it. The phone's surfaces, each fixed
+and hiding itself, came to rest in the same engine.
+
+- **The visibility goes on the surface.** A container that only positions keeps
+  its `top` and `left`, and every surface in it that animates carries its own
+  `visibility` until placed — `hiddenUntilPlaced` and `shownOncePlaced` in
+  `MessageActionLayer.tsx` are the two shapes.
+- **A screenshot does not see it.** Taking one restyles the page, and the picture
+  showed both surfaces at rest. Read the computed style: `settleAnimations` in
+  `tests/e2e/emoji-touch-targets.spec.ts` waits for every `kub-menu-in` surface to
+  reach opacity 1 with no transform, and names one that does not.
+- **Nor does the document's list of animations.** WebKit drops an animation from
+  `getAnimations()` when it ends, and the computed style can trail it: the hover
+  column read .99 until 700 ms after an end at 480, and the menu never caught up.
+- **No blank-page reduction reproduced it**, with or without a backdrop filter,
+  in a wrapper hidden for one or two frames. The rule is the product's shape that
+  failed, kept because nothing about it showed in Chromium.
 
 ## Where the material is not used, on purpose
 

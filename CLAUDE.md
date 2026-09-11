@@ -167,8 +167,8 @@ is in `HEAD` before pushing it — pushing `HEAD:main` without reading the log
 once carried three other agents' unreviewed commits into `main` in this project.
 
 Interface material: the product's surfaces were rebuilt as one translucent
-material during this stage. The contract, and the thirteen rules behind it —
-seven of which were learned by breaking something — are in
+material during this stage. The contract, and the fourteen rules behind it —
+eight of which were learned by breaking something — are in
 `docs/operations/interface-material.md`. Read it before touching a surface.
 
 ## 3. Sources Of Truth
