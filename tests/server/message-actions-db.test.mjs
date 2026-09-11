@@ -2,9 +2,11 @@
  * The message-action migrations, their rollbacks and their rehearsals, run in a
  * real PostgreSQL.
  *
- * The five migrations of 20260911140000–20260911144000 are written to be applied
- * to production by the main session after a rehearsal on a throwaway copy of
- * production's schema. That rehearsal is `.migration-backup/supabase/rehearsal/`.
+ * The five message-action migrations of 20260911140000–20260911144000, and the
+ * two after them that close who reads reactions and earned achievements
+ * (20260911150000, 20260911151000), are written to be applied to production by
+ * the main session after a rehearsal on a throwaway copy of production's schema.
+ * That rehearsal is `.migration-backup/supabase/rehearsal/`.
  * This file does not replace it and cannot: it runs the same SQL in PGlite —
  * PostgreSQL in process, no Docker — over a STUB of production's objects, copied
  * from the migrations in `.migration-backup` rather than from the database. So
@@ -35,6 +37,8 @@ const MIGRATIONS = [
   "20260911142000_one_reaction_per_person",
   "20260911143000_delete_messages_for_everyone",
   "20260911144000_forward_message_with_media",
+  "20260911150000_reactions_visible_to_chat_members",
+  "20260911151000_user_achievements_signed_in_only",
 ];
 
 const read = (relative) => readFileSync(path.join(root, relative), "utf8");
@@ -163,6 +167,27 @@ create table public.reactions (
   emoji text not null,
   created_at timestamptz not null default now(),
   unique (message_id, user_id, emoji)
+);
+
+-- 20260903210000_profile_achievements_cosmetics.sql, with the evidence column of 20260903230000
+create table public.achievements (
+  key text primary key,
+  title text not null,
+  description text not null,
+  icon text not null default 'crown',
+  grant_kind text not null default 'auto' check (grant_kind in ('auto', 'manual')),
+  sort_order integer not null default 100,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create table public.user_achievements (
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  achievement_key text not null references public.achievements(key) on delete cascade,
+  granted_at timestamptz not null default now(),
+  granted_by uuid references public.profiles(id) on delete set null,
+  evidence jsonb not null default '{}'::jsonb,
+  primary key (user_id, achievement_key)
 );
 
 create table public.message_hidden_for_users (
@@ -355,6 +380,12 @@ create policy "block banned writes (insert)" on public.reactions as restrictive 
 create policy "block banned writes (delete)" on public.reactions as restrictive for delete
   using (not public.is_banned(auth.uid()));
 
+alter table public.achievements enable row level security;
+create policy "achievements readable" on public.achievements for select using (true);
+alter table public.user_achievements enable row level security;
+create policy "user achievements readable" on public.user_achievements for select using (true);
+grant select on public.achievements, public.user_achievements to anon, authenticated;
+
 alter table public.message_hidden_for_users enable row level security;
 create policy "message_hidden_for_users select own" on public.message_hidden_for_users for select to authenticated
   using (user_id = (select auth.uid()));
@@ -452,7 +483,15 @@ test("each rollback removes its migration, and the migrations apply again afterw
         to_regclass('private.message_deletions') is null as deletions_gone,
         (select count(*)::int from pg_trigger where not tgisinternal and tgname in (
           'trg_guard_chat_member_read_marks', 'trg_record_message_read_event', 'trg_enforce_reaction_limit'
-        )) as triggers_left
+        )) as triggers_left,
+        exists (
+          select 1 from pg_policies
+           where schemaname = 'public' and tablename = 'reactions' and policyname = 'Anyone in chat can view reactions'
+        ) as reactions_open_again,
+        exists (
+          select 1 from pg_policies
+           where schemaname = 'public' and tablename = 'user_achievements' and policyname = 'user achievements readable'
+        ) as achievements_open_again
     `);
     assert.deepEqual(rows[0], {
       read_through_gone: true,
@@ -463,6 +502,8 @@ test("each rollback removes its migration, and the migrations apply again afterw
       events_gone: true,
       deletions_gone: true,
       triggers_left: 0,
+      reactions_open_again: true,
+      achievements_open_again: true,
     });
     for (const name of MIGRATIONS) await execOrRollback(scratch, migrationSql(name));
   } finally {
