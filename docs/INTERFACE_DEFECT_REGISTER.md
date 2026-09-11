@@ -5373,6 +5373,16 @@ resolved before it is read.
 a sidebar toggle without a resize; replies; the new spec on WebKit with a
 non-zero lane; devices.
 
+**After D-071, 2026-09-11.** The message actions removed the lane: a stack's cap
+now follows the viewport, and the room for the hover ❤️ is padding on the row.
+The settle spec drove `--kub-action-lane` and checked that the caps took it, so
+on that layout it failed its own premise. It now injects the rule the product
+used to ship. With that rule it passes — and it also passed with the hold
+switched off in `MessageBubble.tsx`, because the new rows no longer shrink round
+the message with its placement, so the loop cannot start. The spec is kept as a
+guard that the placement settles under any cap that follows the row, and says
+so; the hold's regression proof is `tests/unit/message-meta-hold.test.mts`.
+
 ## D-081 `[x]` Forwarding a message said nothing, whatever the server answered
 
 **Severity:** high. Every forward in every shell: a refused forward and a
