@@ -4102,6 +4102,34 @@ The options, none chosen — this is the owner's decision:
 - the captcha plate moved after the timer (81px);
 - a scroll cue.
 
+### Production's captcha is taller than the one measured, so the defect is larger
+
+The budget above was measured with a 65px captcha plate. Production loads
+Yandex SmartCaptcha (`smartcaptcha.cloud.yandex.ru`), and its container is
+136px tall at 360 — checked on the live register page as a guest, 2026-09-11.
+Measured again at 360x800 with that provider on the DEV server, the card is,
+top to bottom: 16px of shell padding, the lockup 137 plus a 32 gap, the strip
+35, then inside the card body the icon 56, the heading and three paragraphs 316,
+the masked address 38, the captcha 136, the empty feedback slot 40 and the three
+buttons 180, with 16px between blocks. The resend control starts 110px past the
+fold and ends 175px past it; «Ко входу» ends 231px past, «Указать другой email»
+287px past.
+
+Rendered for the owner on 2026-09-11, each option laid onto the real screen as a
+prototype, counting the buttons that end on screen at 360x800:
+
+| option | buttons on screen |
+| --- | --- |
+| as it is | 0 of 3 |
+| actions straight after the address, the explanation below them | 3 of 3 |
+| no lockup and no envelope icon | 2 of 3 (the last ends 46px past) |
+| one paragraph and a «Письмо не пришло?» link | 0 of 3 (resend ends 23px past) |
+| the actions pinned to the bottom of the screen | 3 of 3 |
+| the captcha shown only once the timer ends | 0 of 3 (resend ends 23px past) |
+
+Recommended to the owner: the actions after the address, which needs no
+floating surface and keeps every paragraph. Decision pending.
+
 ## D-064 `[x]` The only way out of a conversation is unpaintable on the engine Safari uses
 
 **Severity:** critical, and it was live. A person on an installed PWA could open
@@ -4905,6 +4933,33 @@ message that ends on a long word between the two placements on every pass. It
 needs the action lane itself decided — what the lane is at tablet width beside
 the sidebar — rather than a sharper rule. That is an owner decision.
 
+### Rendered for the owner, 2026-09-11
+
+At 768x1024 beside the sidebar, on the 120-message fixture, the hover actions in
+three arrangements laid onto the real page as prototypes, with the lines holding
+nothing but a time counted the way `tests/e2e/message-meta-spacer-line.spec.ts`
+counts them:
+
+| arrangement | messages whose time sits on a line of its own |
+| --- | --- |
+| as it is: 104px kept beside every message | 11 of 120 |
+| no lane; the actions over the message's top corner while it is hovered | 0 |
+| no lane; the actions above the message while it is hovered | 0 |
+
+Without the lane the cap no longer follows a shrink-wrapped row, and every
+message settles with its time on its last line. The cost is what the actions
+cover while a message is hovered: over the corner they sit on the time of the
+message above; above the message they sit on the end of its last line. Either
+needs the row to stop clipping — the row wrapper
+`div.flex.w-full.min-w-0.items-center.gap-1.5.overflow-hidden` clips whatever
+the actions put outside the row's box, and in the prototype it had to be opened
+before they showed at all.
+
+A fourth arrangement, a 40px lane holding only «Ещё», was dropped: at 768 it
+sends the placement into an endless loop and takes the whole interface down —
+D-080. Recommended to the owner: the actions over the top corner. Decision
+pending.
+
 ## D-072 `[x]` The service worker was never replaced, so its cache was never cleared
 
 **Severity:** high. Every browser and installed-PWA user; on iOS the dead assets
@@ -5116,3 +5171,39 @@ and black against its darkest.
 
 **Not verified on a device.** Which colour iOS gives the glyphs in the installed
 app — in each theme — is the first thing to look at on the iPhone.
+
+## D-080 `[ ]` The time placement can loop until React gives up, and the whole interface falls over
+
+**Severity:** high when it happens — every screen is replaced by «Произошла
+ошибка интерфейса». Not seen with the layout as shipped; reproduced at once by
+changing one length. Found 2026-09-11 while rendering the D-071 options.
+
+**Surface:** the placement state in
+`artifacts/kub/src/components/chat/MessageBubble.tsx:540`, decided at
+`:613`–`:638` and re-measured from the layout effect at `:668`.
+
+**Defect:** the decision measures boxes that the decision itself resizes, and
+nothing bounds how often it may change its mind. At a 40px action lane at least
+one message never settles: every commit sets a new placement, until React stops
+with "Maximum update depth exceeded" and the error boundary takes the interface
+down. The likely mechanism is the one D-071 describes — a cap that follows a row
+shrink-wrapped around the message — turned from a wasted line into a loop.
+
+**Reproduction:** the DEV preview fixture with the 120-message conversation of
+`message-meta-spacer-line.spec.ts`, at 768x1024, then
+`--kub-action-lane: 2.5rem` and nothing else. Within three seconds the console
+reports "Maximum update depth exceeded" and the application renders its error
+screen. Hiding two of the three hover buttons without touching the lane does not
+do it; the lane width alone does.
+
+**With the layout as shipped:** on the same fixture, every viewport width from
+640px to 1280px in 5px steps — 129 widths, each with the whole conversation
+rendered — settled with no error screen and no application error, as did 640px
+to 1100px in 20px steps before it. That covers viewport widths on one fixture,
+not every message text or every chat-pane width a resizable window can produce.
+
+**Fix direction:** make the decision unable to oscillate — decide against widths
+that do not move with the placement, as D-070 did for the reach, or keep the
+first anchored answer for a given content and container width — and add a
+regression test that applies the 40px lane and requires the conversation to
+settle without an error.
