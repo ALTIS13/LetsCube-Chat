@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, type CSSProperties, type ReactNode } from "react";
-import { copyWithFeedback } from "@/lib/actionFeedback";
 import { resolveCssLength } from "@/lib/cssLength";
 import { reachableContentWidth } from "@/lib/messageMetaReach";
 import {
@@ -20,10 +19,9 @@ import { AudioMessage } from "./AudioMessage";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app.store";
 import { FormattedText, isLocationPreviewMessage } from "@/lib/formatText";
-import { KubIcon, type KubIconName } from "@/components/kub";
+import { KubIcon } from "@/components/kub";
 import type { MediaViewerItem } from "./MediaViewer";
 import { useChatMediaPlayback, VideoCircleProgressRing, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
-import { requestAppConfirm } from "@/lib/appDialogs";
 import type { MessageDeliveryState } from "@/lib/messageDelivery";
 import {
   getGroupReadReceiptAriaLabel,
@@ -32,25 +30,26 @@ import {
 } from "@/lib/groupReadReceipts";
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
 import { getVideoPlaybackFallbackUrl, selectVideoPlaybackUrl } from "@/lib/mediaQuality";
-import { EmojiCategoryPicker } from "@/components/ui/EmojiCategoryPicker";
-import { MESSAGE_EMOJI_CATEGORIES, MESSAGE_EMOJI_SEARCH_TERMS } from "@/lib/emojiCatalog";
+import { groupReactions, type ReactionGroup } from "@/lib/messageReactions";
 import {
   messageActorDisplayName,
   resolveMessageActor,
 } from "@/lib/messageActor";
-
-const EMOJI_QUICK = ["👍", "❤️", "😂", "😮", "😢", "🔥", "👏", "🎉"];
-
-interface ContextItem {
-  icon: KubIconName;
-  label: string;
-  danger?: boolean;
-  action: () => void;
-}
+import { QuickReactionButton, ReactionChip } from "./MessageReactions";
 
 type TextLayoutKind = "short" | "regular" | "link" | "longToken" | "preformatted" | "media";
 type MetaPlacement = "inline" | "anchored";
 
+/**
+ * What a message draws and nothing it does not.
+ *
+ * The menus, the long press, the double tap and the swipe used to live here,
+ * one copy per message. They are the list's now (`MessageList` and
+ * `MessageActionLayer`): a message reports what was asked of it and draws the
+ * result. What stays is what belongs to the bubble itself — its content, its
+ * time, its reactions, and the ❤️ that appears beside it under a hovering
+ * pointer.
+ */
 interface MessageBubbleProps {
   message: MessageWithSender;
   /** Arrived while the list was on screen. History does not animate. */
@@ -58,26 +57,13 @@ interface MessageBubbleProps {
   isMe: boolean;
   isFirstInGroup: boolean;
   isLastInGroup: boolean;
-  onReply: () => void;
   onJumpToReply?: (messageId: string) => void;
+  /** Puts or takes back a reaction; the one-per-person rule is applied above. */
   onReaction: (emoji: string) => void;
-  onEdit?: () => void;
-  onDelete?: () => void;
-  onHideForMe?: () => void;
-  onStartSelection?: () => void;
-  onTogglePin?: () => void;
-  onForward?: () => void;
   onRetrySend?: () => void;
   onEditFailedSend?: () => void;
   onDiscardLocalMessage?: () => void;
   onOpenMedia?: (media: MediaViewerItem) => void;
-  reactionMenuOpen?: boolean;
-  onToggleReactionMenu?: () => void;
-  onCloseReactionMenu?: () => void;
-  actionMenuOpen?: boolean;
-  onOpenActionMenu?: () => void;
-  onCloseActionMenu?: () => void;
-  selected?: boolean;
   isSelectionMode?: boolean;
   messagesMap?: Record<string, MessageWithSender>;
   mediaVariant?: MessageMediaVariantUrls;
@@ -85,8 +71,6 @@ interface MessageBubbleProps {
   deliveryState?: MessageDeliveryState | null;
   groupReadInfo?: GroupReadReceiptInfo | null;
   onOpenGroupReadReceipts?: () => void;
-  myRole?: "owner" | "admin" | "member" | null;
-  isSavedChat?: boolean;
 }
 
 function getMessageTextLayoutKind(type: MessageWithSender["type"], content: string): TextLayoutKind {
@@ -121,11 +105,27 @@ function getMessageTextLayoutKind(type: MessageWithSender["type"], content: stri
   return "short";
 }
 
+/**
+ * How wide a message may grow: fixed lengths, and nothing resolved against the row.
+ *
+ * Every cap here used to end in `max(16rem, 100% - lane)`, the lane being 104px
+ * kept clear beside each message for the hover cluster. `100%` was a row
+ * shrink-wrapped around the message, so how far a bubble could reach depended
+ * on the placement it had been given: D-071's wasted line, and at a 40px lane
+ * D-080's loop. The cluster went with the owner's decision of 2026-09-11, and
+ * the lane with it.
+ *
+ * The one control a hovered message still shows — the ❤️ beside its time — has
+ * its width kept free by padding on the message's open side
+ * (`.kub-message-reserve-*` in `index.css`). Padding binds only where a narrow
+ * window has left no room outside the bubble; a bubble held by its own cap has
+ * room to spare and is not touched.
+ */
 function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: string; text: string } {
   switch (kind) {
     case "link":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(64vw,580px,max(16rem,calc(100%-var(--kub-action-lane))))] md:max-w-[min(52vw,580px,max(16rem,calc(100%-var(--kub-action-lane))))]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(64vw,580px)] md:max-w-[min(52vw,580px)]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
@@ -137,63 +137,40 @@ function getMessageWidthClasses(kind: TextLayoutKind): { stack: string; bubble: 
       };
     case "longToken":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(60vw,580px,max(16rem,calc(100%-var(--kub-action-lane))))] md:max-w-[min(52vw,580px,max(16rem,calc(100%-var(--kub-action-lane))))]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(60vw,580px)] md:max-w-[min(52vw,580px)]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:anywhere] [word-break:break-word]",
       };
     case "regular":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(70vw,560px,max(16rem,calc(100%-var(--kub-action-lane))))] md:max-w-[min(56vw,560px,max(16rem,calc(100%-var(--kub-action-lane))))]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(70vw,560px)] md:max-w-[min(56vw,560px)]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:break-word] [word-break:normal]",
       };
     case "short":
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px,max(16rem,calc(100%-var(--kub-action-lane))))] md:max-w-[min(65vw,680px,max(16rem,calc(100%-var(--kub-action-lane))))]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px)] md:max-w-[min(65vw,680px)]",
         bubble: "w-fit max-w-full min-w-0",
         text: "[overflow-wrap:break-word] [word-break:normal]",
       };
     case "media":
     default:
       return {
-        stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px,max(16rem,calc(100%-var(--kub-action-lane))))] md:max-w-[min(65vw,680px,max(16rem,calc(100%-var(--kub-action-lane))))]",
+        stack: "w-fit max-w-[86vw] sm:max-w-[min(72vw,680px)] md:max-w-[min(65vw,680px)]",
         bubble: "w-fit",
         text: "[overflow-wrap:break-word] [word-break:normal]",
       };
   }
 }
 
-/**
- * The inline cap, which beats the class one — so it carries the same reserve.
- *
- * `calc(100% - 6.5rem)` keeps a lane clear beside the bubble for the hover
- * actions. The row hides its overflow, so without it a bubble at full width
- * left the action cluster nothing: measured on a 1024px window it started at
- * x=347 against a clip edge of x=396, with 49px cut off.
- */
-/**
- * The lane, floored.
- *
- * `100%` here is the message row, and the row is not its final width for the
- * first frames after a chat opens. Measured on a chat of 1368 messages: the row
- * was 142px at one sample, which took the lane term to 38px, wrapped a short
- * message into thirteen lines and made the whole list 26,366px tall — against
- * 10,464px once it settled. The view is scrolled to the bottom against that
- * tall version, which is the lurch on entry.
- *
- * The floor means a momentarily narrow row falls back to the other terms rather
- * than collapsing the bubble to nothing. On a real layout `100% - lane` is far
- * above the floor and still governs.
- */
-const ACTION_LANE = "max(16rem, calc(100% - var(--kub-action-lane)))";
-
+/** The inline cap, which beats the class one. */
 function getMessageStackStyle(kind: TextLayoutKind): CSSProperties | undefined {
   switch (kind) {
     case "link":
     case "longToken":
-      return { maxWidth: `min(86vw, 580px, ${ACTION_LANE})` };
+      return { maxWidth: "min(86vw, 580px)" };
     case "regular":
-      return { maxWidth: `min(86vw, 560px, ${ACTION_LANE})` };
+      return { maxWidth: "min(86vw, 560px)" };
     default:
       return undefined;
   }
@@ -437,9 +414,7 @@ function getMaxContentWidth(bubbleEl: HTMLElement, stackEl: HTMLElement | null):
 
   const row = (stackEl ?? bubbleEl).parentElement;
   const rowWidth = row?.getBoundingClientRect().width ?? bubbleEl.getBoundingClientRect().width;
-  const lane =
-    parsePixelValue(getComputedStyle(document.documentElement).getPropertyValue("--kub-action-lane")) ?? 0;
-  const fromRow = Math.max(0, rowWidth - lane) - paddingLeft - paddingRight;
+  const fromRow = Math.max(0, rowWidth) - paddingLeft - paddingRight;
   return cap === null ? fromRow : Math.min(fromRow, cap.width);
 }
 
@@ -474,11 +449,18 @@ function fitsReachableWidth(needed: number, bubbleEl: HTMLElement, stackEl: HTML
   const stack = stackEl.getBoundingClientRect();
   const row = rowEl.getBoundingClientRect();
   const limit = messageRowEl.getBoundingClientRect();
+  // The far edge is the message row's, less the room kept free on the open
+  // side for the hover ❤️ (`.kub-message-reserve-*`). Padding is no placement:
+  // it is the same whichever placement the meta has, so the edge still does
+  // not move with the answer it feeds.
+  const rowStyle = getComputedStyle(rowEl);
+  const farLeft = limit.left + (parsePixelValue(rowStyle.paddingLeft) ?? 0);
+  const farRight = limit.right - (parsePixelValue(rowStyle.paddingRight) ?? 0);
   const bubbleStyle = getComputedStyle(bubbleEl);
   const reachable = reachableContentWidth({
     maxWidth: getComputedStyle(stackEl).maxWidth,
-    free: alignEnd ? stack.right - limit.left : limit.right - stack.left,
-    rowReach: alignEnd ? row.right - limit.left : limit.right - row.left,
+    free: alignEnd ? stack.right - farLeft : farRight - stack.left,
+    rowReach: alignEnd ? row.right - farLeft : farRight - row.left,
     occupied: alignEnd ? row.right - stack.right : stack.left - row.left,
     inset:
       (parsePixelValue(bubbleStyle.paddingLeft) ?? 0) +
@@ -821,13 +803,11 @@ function MeasuredTextWithMeta({
 
 export function MessageBubble({
   message, isEntering = false, isMe, isFirstInGroup, isLastInGroup,
-  onReply, onJumpToReply, onReaction, onEdit, onDelete, onHideForMe, onStartSelection, onTogglePin, onForward, onOpenMedia,
+  onJumpToReply, onReaction, onOpenMedia,
   onRetrySend, onEditFailedSend, onDiscardLocalMessage,
-  reactionMenuOpen = false, onToggleReactionMenu, onCloseReactionMenu,
-  actionMenuOpen, onOpenActionMenu, onCloseActionMenu, selected = false, isSelectionMode = false,
-  messagesMap = {}, mediaVariant, senderAvatarVariant, deliveryState, groupReadInfo, onOpenGroupReadReceipts, isSavedChat,
+  isSelectionMode = false,
+  messagesMap = {}, mediaVariant, senderAvatarVariant, deliveryState, groupReadInfo, onOpenGroupReadReceipts,
 }: MessageBubbleProps) {
-  const [showContext, setShowContext] = useState(false);
   // D-046. `.msg-appear` carries `will-change: opacity, transform` under a
   // comment saying the hint is dropped when the animation ends. Nothing dropped
   // it: measured, a hundred rows still held the class and the hint eighteen
@@ -835,18 +815,11 @@ export function MessageBubble({
   // flag only ever goes from false to true for this mount, a later render can
   // no longer put the class back and replay the fade on a settled bubble.
   const [entranceSettled, setEntranceSettled] = useState(false);
-  const [reactionCatalogOpen, setReactionCatalogOpen] = useState(false);
   const [reactionsExpanded, setReactionsExpanded] = useState(false);
-  const [contextPos, setContextPos] = useState({ x: 0, y: 0 });
-  const [reactionPos, setReactionPos] = useState({ x: 0, y: 0 });
-  // The action menu and the reaction pickers are placed by hand from the
-  // pointer, so they cannot inherit the --kub-safe-* tokens through layout and
-  // need the unsafe areas as numbers. Read when a menu opens, never during
-  // render: readSafeAreaInsets measures a probe element.
-  const [safeInsets, setSafeInsets] = useState<SafeAreaInsets>(NO_SAFE_AREA_INSETS);
+  // The overflow popover is placed by hand from its trigger, so it cannot
+  // inherit the --kub-safe-* tokens through layout; it reads the unsafe areas
+  // as numbers when it opens, never during render.
   const reactionOverflowSafeRef = useRef<SafeAreaInsets>(NO_SAFE_AREA_INSETS);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const stackRef = useRef<HTMLDivElement | null>(null);
   const bubbleRef = useRef<HTMLDivElement | null>(null);
   const reactionsLayerRef = useRef<HTMLDivElement | null>(null);
@@ -904,118 +877,12 @@ export function MessageBubble({
   const textLayoutKind = getMessageTextLayoutKind(message.type, textContent);
   const widthClasses = getMessageWidthClasses(textLayoutKind);
   const stackStyle = getMessageStackStyle(textLayoutKind);
-  const viewportWidth = typeof window === "undefined" ? 1024 : window.innerWidth;
-  const viewportHeight = typeof window === "undefined" ? 768 : window.innerHeight;
-  const compactContextMenu = viewportWidth < 640;
-  // A finger needs 44px, and seven quick reactions only reach it in a menu wide
-  // enough to hold them: they measured 30.6x40 in the 256px menu on a phone held
-  // sideways and on a tablet. Asked only while a menu is open, so a bubble at
-  // rest never pays for the query; the `pointer-coarse:` classes ask the same.
-  const coarsePointer = ((actionMenuOpen ?? showContext) || reactionMenuOpen)
-    && typeof window !== "undefined"
-    && window.matchMedia?.("(pointer: coarse)").matches === true;
-  const contextMenuWidth = coarsePointer ? 336 : 256;
-  // Every clamp keeps its old 8px or 12px margin and adds the unsafe area on
-  // that side. The compact phone menu reads the tokens directly, so it follows
-  // the hardware without a measurement; held sideways the desktop shape is used,
-  // and its clamps now stop at the notch instead of the glass edge.
-  const safe = safeInsets;
-  const contextMenuMaxHeight = Math.max(180, Math.min(480, viewportHeight - 16 - safe.top - safe.bottom));
-  const contextMenuOpensUp = !compactContextMenu && contextPos.y > viewportHeight / 2;
-  const contextMenuStyle: CSSProperties = compactContextMenu
-    ? {
-        left: "calc(12px + var(--kub-safe-left))",
-        right: "calc(12px + var(--kub-safe-right))",
-        bottom: "calc(12px + var(--kub-safe-bottom))",
-        maxHeight: "min(65vh, 480px)",
-      }
-    : {
-        left: Math.min(
-          Math.max(8 + safe.left, contextPos.x),
-          Math.max(8 + safe.left, viewportWidth - contextMenuWidth - 8 - safe.right),
-        ),
-        width: contextMenuWidth,
-        maxHeight: contextMenuMaxHeight,
-        ...(contextMenuOpensUp
-          ? { bottom: Math.max(8 + safe.bottom, viewportHeight - contextPos.y + 8) }
-          : {
-              top: Math.max(
-                8 + safe.top,
-                Math.min(
-                  contextPos.y + 8,
-                  Math.max(8 + safe.top, viewportHeight - contextMenuMaxHeight - 8 - safe.bottom),
-                ),
-              ),
-            }),
-      };
-  const safeWidth = Math.max(0, viewportWidth - 16 - safe.left - safe.right);
-  // The quick picker holds seven 32px buttons on a pointer and seven 44px ones
-  // under a finger, and opens 6px above what opened it, so its height is how
-  // far it lifts.
-  const reactionPickerWidth = reactionCatalogOpen ? Math.min(480, safeWidth) : coarsePointer ? 340 : 284;
-  const quickPickerLift = coarsePointer ? 64 : 52;
-  const reactionPickerMaxHeight = Math.min(340, viewportHeight - 16 - safe.top - safe.bottom);
-  const reactionPickerStyle: CSSProperties = {
-    left: Math.min(
-      Math.max(8 + safe.left, reactionPos.x - reactionPickerWidth / 2),
-      Math.max(8 + safe.left, viewportWidth - reactionPickerWidth - 8 - safe.right),
-    ),
-    width: Math.min(reactionPickerWidth, safeWidth),
-    maxHeight: reactionPickerMaxHeight,
-    ...(reactionCatalogOpen
-      ? reactionPos.y > viewportHeight / 2
-        ? { bottom: Math.max(8 + safe.bottom, viewportHeight - reactionPos.y + 8) }
-        : {
-            top: Math.max(
-              8 + safe.top,
-              Math.min(viewportHeight - reactionPickerMaxHeight - 8 - safe.bottom, reactionPos.y + 36),
-            ),
-          }
-      : reactionPos.y > quickPickerLift + 12 + safe.top
-        ? { top: Math.max(8 + safe.top, reactionPos.y - quickPickerLift) }
-        : { top: Math.min(viewportHeight - quickPickerLift - safe.bottom, reactionPos.y + 36) }),
-  };
-  const contextOpen = actionMenuOpen ?? showContext;
-  const closeContext = useCallback(() => {
-    setShowContext(false);
-    onCloseActionMenu?.();
-  }, [onCloseActionMenu]);
 
-  // Belt-and-suspenders cleanup: if the bubble unmounts mid-touch (e.g. user
-  // navigates away during a long-press), clear the pending timer so it
-  // doesn't try to setShowContext on a torn-down component.
+  // If the bubble unmounts while the overflow is closing, the pending timer
+  // must not set state on a torn-down component.
   useEffect(() => () => {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current);
     if (reactionOverflowCloseTimer.current) clearTimeout(reactionOverflowCloseTimer.current);
-    setBodySelectionSuppressed(false);
   }, []);
-
-  useEffect(() => {
-    if (!contextOpen) setBodySelectionSuppressed(false);
-  }, [contextOpen]);
-
-  useEffect(() => {
-    if (!reactionMenuOpen) {
-      setReactionCatalogOpen(false);
-      return;
-    }
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onCloseReactionMenu?.();
-    };
-    const handleOutsidePointer = (event: PointerEvent | MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("[data-reaction-menu], [data-reaction-trigger]")) return;
-      onCloseReactionMenu?.();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("pointerdown", handleOutsidePointer, true);
-    window.addEventListener("contextmenu", handleOutsidePointer, true);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("pointerdown", handleOutsidePointer, true);
-      window.removeEventListener("contextmenu", handleOutsidePointer, true);
-    };
-  }, [onCloseReactionMenu, reactionMenuOpen]);
 
   useEffect(() => {
     if (!reactionsExpanded) return;
@@ -1100,15 +967,14 @@ export function MessageBubble({
     };
   }, [reactionsExpanded, updateReactionOverflowPosition]);
 
-  const reactionGroups = (message.reactions ?? []).reduce<Record<string, { count: number; mine: boolean }>>(
-    (acc, r) => {
-      if (!acc[r.emoji]) acc[r.emoji] = { count: 0, mine: false };
-      acc[r.emoji].count++;
-      if (r.user_id === currentUserId) acc[r.emoji].mine = true;
-      return acc;
-    }, {}
-  );
-  const reactionEntries = Object.entries(reactionGroups);
+  const reactionEntries = groupReactions(message.reactions, currentUserId);
+  // Which emoji were already under the message at the last commit, so a chip
+  // that appears afterwards — a double tap, a click, a choice from a menu — can
+  // pop, and a conversation merely loading does not.
+  const knownEmojiRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    knownEmojiRef.current = new Set(reactionEntries.map((group) => group.emoji));
+  });
   const isVeryShortReactionText =
     message.type === "text" &&
     textLayoutKind === "short" &&
@@ -1117,161 +983,25 @@ export function MessageBubble({
   const visibleReactionLimit = Math.min(isVeryShortReactionText ? 1 : 2, reactionEntries.length);
   const visibleReactionEntries = reactionEntries.slice(0, visibleReactionLimit);
   const overflowReactionEntries = reactionEntries.slice(visibleReactionLimit);
-  const hiddenReactionCount = reactionEntries
-    .slice(visibleReactionLimit)
-    .reduce((total, [, { count }]) => total + count, 0);
+  const hiddenReactionCount = overflowReactionEntries.reduce((total, group) => total + group.count, 0);
   const hasReactions = reactionEntries.length > 0;
   const isLocalSend = message.id.startsWith("tmp:") || Boolean(message.pending || message.checking || message.failed);
   const canReact = !isLocalSend;
 
-  const clearLongPressTimer = useCallback(() => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-  }, []);
-
-  const openContextAt = useCallback((clientX: number, clientY: number) => {
-    setContextPos({ x: clientX, y: clientY });
-    setSafeInsets(readSafeAreaInsets());
-    setShowContext(true);
-    onOpenActionMenu?.();
-    onCloseReactionMenu?.();
-  }, [onCloseReactionMenu, onOpenActionMenu]);
-
-  const handleToggleReactionMenu = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-    const rect = event.currentTarget.getBoundingClientRect();
-    setReactionPos({ x: rect.left + rect.width / 2, y: rect.top });
-    setSafeInsets(readSafeAreaInsets());
-    closeContext();
-    onToggleReactionMenu?.();
-  }, [closeContext, onToggleReactionMenu]);
-
-  const openFullReactionCatalog = useCallback((anchor?: { x: number; y: number }) => {
-    if (anchor) setReactionPos(anchor);
-    setSafeInsets(readSafeAreaInsets());
-    setReactionCatalogOpen(true);
-    closeContext();
-    if (!reactionMenuOpen) onToggleReactionMenu?.();
-  }, [closeContext, onToggleReactionMenu, reactionMenuOpen]);
-
-  const openContext = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    if (isSelectionMode) return;
-    openContextAt(e.clientX, e.clientY);
-  }, [isSelectionMode, openContextAt]);
-
-  const handleTouchStart = useCallback((event: React.TouchEvent) => {
-    if (isSelectionMode) return;
-    const target = event.target as HTMLElement | null;
-    if (target?.closest("button,a,input,textarea,select,video,audio,[role='slider']")) return;
-    const touch = event.touches[0];
-    if (!touch) return;
-    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
-    clearLongPressTimer();
-    setBodySelectionSuppressed(true);
-    longPressTimer.current = setTimeout(() => {
-      openContextAt(touch.clientX, touch.clientY);
-      longPressTimer.current = null;
-    }, 650);
-  }, [clearLongPressTimer, isSelectionMode, openContextAt]);
-  const handleTouchMove = useCallback((event: React.TouchEvent) => {
-    const touch = event.touches[0];
-    const start = touchStartRef.current;
-    if (!touch || !start) return;
-    const moved = Math.hypot(touch.clientX - start.x, touch.clientY - start.y);
-    if (moved > 10) {
-      clearLongPressTimer();
-      setBodySelectionSuppressed(false);
-    }
-  }, [clearLongPressTimer]);
-  const handleTouchEnd = useCallback(() => {
-    clearLongPressTimer();
-    touchStartRef.current = null;
-    if (!contextOpen) setBodySelectionSuppressed(false);
-  }, [clearLongPressTimer, contextOpen]);
-
-  const regularContextItems: ContextItem[] = [
-    { icon: "reply", label: "Ответить", action: () => { onReply(); closeContext(); } },
-    ...(groupReadInfo && onOpenGroupReadReceipts ? [
-      { icon: "eye" as KubIconName, label: "Кто прочитал", action: () => { onOpenGroupReadReceipts(); closeContext(); } },
-    ] : []),
-    { icon: "copy",  label: "Копировать", action: () => { void copyWithFeedback(message.content ?? "", { success: "Сообщение скопировано", error: "Не удалось скопировать сообщение", key: "message" }); closeContext(); } },
-    ...(isMe && message.type === "text" && onEdit ? [
-      { icon: "edit" as KubIconName, label: "Изменить", action: () => { onEdit(); closeContext(); } },
-    ] : []),
-    ...(onTogglePin ? [{
-      icon: (message.pinned ? "pinOff" : "pin") as KubIconName,
-      label: message.pinned ? "Открепить" : "Закрепить",
-      action: () => { onTogglePin(); closeContext(); },
-    }] : []),
-    ...(onForward ? [
-      { icon: "forward" as KubIconName, label: "Переслать", action: () => { onForward(); closeContext(); } },
-    ] : []),
-    ...(onStartSelection ? [
-      { icon: "check" as KubIconName, label: "Выбрать сообщения", action: () => {
-        setBodySelectionSuppressed(false);
-        onCloseReactionMenu?.();
-        onStartSelection();
-        closeContext();
-      } },
-    ] : []),
-    ...(onHideForMe ? [
-      { icon: "delete" as KubIconName, label: "Удалить у себя", danger: true, action: () => {
-          void requestAppConfirm({
-            title: "Удалить сообщение у себя?",
-            description: "Сообщение исчезнет только у вас. У других участников оно останется.",
-            confirmLabel: "Удалить у себя",
-            tone: "danger",
-            icon: "delete",
-          }).then((confirmed) => {
-            if (confirmed) onHideForMe();
-          });
-          closeContext();
-        } },
-    ] : []),
-    ...(isMe && onDelete && !isSavedChat ? [
-      { icon: "delete" as KubIconName, label: "Удалить для всех", danger: true, action: () => {
-          void requestAppConfirm({
-            title: "Удалить сообщение для всех?",
-            description: "Это действие нельзя отменить. Сообщение будет заменено компактной плашкой удаления.",
-            confirmLabel: "Удалить для всех",
-            tone: "danger",
-            icon: "delete",
-          }).then((confirmed) => {
-            if (confirmed) onDelete();
-          });
-          closeContext();
-        } },
-    ] : []),
-  ];
-  const localSendContextItems: ContextItem[] = [
-    ...(onRetrySend ? [
-      { icon: "rotate" as KubIconName, label: "Повторить", action: () => { onRetrySend(); closeContext(); } },
-    ] : []),
-    ...(message.type === "text" && onEditFailedSend ? [
-      { icon: "edit" as KubIconName, label: "Изменить", action: () => { onEditFailedSend(); closeContext(); } },
-    ] : []),
-    { icon: "copy", label: "Копировать", action: () => { void copyWithFeedback(message.content ?? "", { success: "Сообщение скопировано", error: "Не удалось скопировать сообщение", key: "message" }); closeContext(); } },
-    ...(onDiscardLocalMessage ? [
-      { icon: "delete" as KubIconName, label: "Удалить", danger: true, action: () => { onDiscardLocalMessage(); closeContext(); } },
-    ] : []),
-  ];
-  const contextItems = isLocalSend ? localSendContextItems : regularContextItems;
   const canUseCompactReplyInline = canRenderCompactReplyInline(message, textLayoutKind, hasReactions);
   const canUseMeasuredTextMeta = message.type === "text" && textLayoutKind !== "preformatted" && !message.failed && !canUseCompactReplyInline;
   const footerMode = hasReactions ? "bottom-layer-reactions" : canUseCompactReplyInline ? "compact-reply-inline" : canUseMeasuredTextMeta ? "measured" : "meta-row";
   const showGroupReadIndicator = Boolean(groupReadInfo && groupReadInfo.readCount > 0);
   const groupReadLabel = groupReadInfo ? getGroupReadReceiptCompactLabel(groupReadInfo) : "";
   const groupReadAriaLabel = groupReadInfo ? getGroupReadReceiptAriaLabel(groupReadInfo) : "";
+  // The footer is the same at every width now — the phone's «⋯» beside the
+  // time is gone — so the width is no longer part of what re-measures it.
   const footerMeasureKey = [
     textContent,
     message.edited_at ?? "",
     message.pinned ? "pinned" : "",
     groupReadLabel,
     groupReadAriaLabel,
-    compactContextMenu ? "mobile-actions" : "desktop-actions",
   ].join("|");
   const renderFooterContent = () => (
     <>
@@ -1344,38 +1074,15 @@ export function MessageBubble({
           <span className="tabular-nums">{groupReadLabel}</span>
         </button>
       )}
-      <button
-        type="button"
-        className="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-[color:var(--kub-muted)] kub-raise-hover sm:hidden"
-        aria-label="Действия сообщения"
-        onClick={(event) => {
-          event.stopPropagation();
-          const rect = event.currentTarget.getBoundingClientRect();
-          openContextAt(rect.left, rect.bottom + 4);
-        }}
-      >
-        <KubIcon name="more" size={13} />
-      </button>
     </>
   );
-  const renderReactionChip = ([emoji, { count, mine }]: [string, { count: number; mine: boolean }], keyPrefix = "reaction") => (
-    <button
-      key={`${keyPrefix}-${emoji}`}
-      type="button"
-      onClick={(event) => {
-        event.stopPropagation();
-        onReaction(emoji);
-      }}
-      className={cn(
-        "inline-flex h-[22px] items-center gap-1 rounded-full border px-2 text-[12px] leading-none transition-all hover:scale-105 active:scale-95",
-        mine
-          ? "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] border-[color-mix(in_srgb,var(--kub-cyan)_72%,transparent)] text-[color:var(--kub-accent-text)]"
-          : "bg-[color-mix(in_srgb,var(--kub-surface-2)_72%,transparent)] border-[color-mix(in_srgb,var(--kub-border-color)_72%,transparent)] text-[color:var(--kub-muted)]"
-      )}
-    >
-      <span className="text-sm leading-none">{emoji}</span>
-      {count > 1 && <span className="tabular-nums">{count}</span>}
-    </button>
+  const renderReactionChip = (group: ReactionGroup) => (
+    <ReactionChip
+      key={group.emoji}
+      group={group}
+      isNew={knownEmojiRef.current !== null && !knownEmojiRef.current.has(group.emoji)}
+      onToggle={onReaction}
+    />
   );
 
   const renderReactionsRow = (mode: "standalone" | "bottom-layer" = "standalone") => {
@@ -1468,124 +1175,6 @@ export function MessageBubble({
 
   return (
     <>
-      {contextOpen && (
-        <div className="fixed inset-0 z-50" onClick={closeContext}>
-          <div
-            data-action-menu="true"
-            className="absolute z-50 min-w-60 overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] py-1 kub-glow-soft"
-            style={contextMenuStyle}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {canReact && (
-              <div className="mb-1 flex items-center justify-between gap-1 border-b border-[color:var(--kub-rule)] px-2 pb-2 pt-2 pointer-coarse:gap-0">
-                {EMOJI_QUICK.slice(0, 6).map((emoji) => (
-                  <button
-                    key={emoji}
-                    onClick={() => { onReaction(emoji); closeContext(); }}
-                    className={cn(
-                      "kub-interactive flex min-w-0 flex-1 items-center justify-center rounded-full transition-colors kub-raise-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
-                      compactContextMenu ? "h-11 text-2xl" : "h-10 text-xl",
-                      "pointer-coarse:h-11 pointer-coarse:min-w-11 pointer-coarse:text-2xl",
-                    )}
-                    aria-label={`Поставить реакцию ${emoji}`}
-                  >
-                    {emoji}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    openFullReactionCatalog({ x: rect.left + rect.width / 2, y: rect.top });
-                  }}
-                  className={cn(
-                    "kub-interactive flex min-w-0 flex-1 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]",
-                    compactContextMenu ? "h-11" : "h-10",
-                    "pointer-coarse:h-11 pointer-coarse:min-w-11",
-                  )}
-                  aria-label="Больше реакций"
-                  title="Больше реакций"
-                >
-                  {/* A plus, not the vertical ellipsis this used to show. That
-                      glyph already means "more actions" on the button beside
-                      every message, so using it here said the wrong thing about
-                      what the control opens. */}
-                  <KubIcon name="create" size={15} />
-                </button>
-              </div>
-            )}
-            {contextItems.map(({ icon, label, danger, action }) => (
-              <button
-                key={label}
-                onClick={action}
-                className={cn(
-                  "flex w-full items-center gap-3 whitespace-nowrap px-4 py-2.5 text-left text-sm transition-colors kub-raise-hover",
-                  danger ? "text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-text)]"
-                )}
-              >
-                <KubIcon name={icon} size={16} tone={danger ? "currentColor" : "muted"} />
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {canReact && reactionMenuOpen && (!compactContextMenu || reactionCatalogOpen) && (
-        <div
-          data-reaction-menu="true"
-          className={cn(
-            "fixed z-[55] max-w-[calc(100vw-16px)] border border-[color:var(--kub-border-color)] bg-[var(--kub-surface-2)] kub-glow-soft",
-            reactionCatalogOpen
-              ? "overflow-hidden rounded-xl p-2"
-              : "flex items-center justify-center gap-0.5 rounded-full px-2 py-1.5",
-          )}
-          style={reactionPickerStyle}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {reactionCatalogOpen ? (
-            <EmojiCategoryPicker
-              categories={MESSAGE_EMOJI_CATEGORIES}
-              searchTerms={MESSAGE_EMOJI_SEARCH_TERMS}
-              onSelect={(value) => {
-                if (!value) return;
-                onReaction(value);
-                onCloseReactionMenu?.();
-              }}
-              testIdPrefix="reaction-emoji"
-              searchable
-              scrollable
-              compact
-            />
-          ) : (
-            <>
-              {EMOJI_QUICK.slice(0, 6).map((emoji) => (
-                <button
-                  key={emoji}
-                  onClick={() => { onReaction(emoji); onCloseReactionMenu?.(); }}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-lg transition-all hover:scale-125 kub-raise-hover pointer-coarse:h-11 pointer-coarse:w-11 pointer-coarse:text-2xl"
-                  aria-label={`Поставить реакцию ${emoji}`}
-                >
-                  {emoji}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => {
-                  setSafeInsets(readSafeAreaInsets());
-                  setReactionCatalogOpen(true);
-                }}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)] pointer-coarse:h-11 pointer-coarse:w-11"
-                aria-label="Больше реакций"
-                title="Больше реакций"
-              >
-                <KubIcon name="more" size={16} />
-              </button>
-            </>
-          )}
-        </div>
-      )}
-
       {hiddenReactionCount > 0 && reactionsExpanded && typeof document !== "undefined" && createPortal(
         <div
           ref={reactionOverflowPopoverRef}
@@ -1598,7 +1187,7 @@ export function MessageBubble({
           onBlur={closeReactionOverflowSoon}
           onClick={(event) => event.stopPropagation()}
         >
-          {overflowReactionEntries.map((entry) => renderReactionChip(entry, "overflow-reaction"))}
+          {overflowReactionEntries.map((entry) => renderReactionChip(entry))}
         </div>,
         document.body
       )}
@@ -1607,22 +1196,20 @@ export function MessageBubble({
         className={cn(
           "flex gap-1.5 mb-0.5 group relative",
           isEntering && !entranceSettled && "msg-appear",
-          "max-w-full min-w-0",
-          isMe ? "justify-end" : "justify-start",
+          // As wide as the conversation, so where a bubble can reach does not
+          // depend on where it is placed; the stack inside is packed to its
+          // sender's side, and the open side keeps the hover ❤️'s width free.
+          "w-full max-w-full min-w-0",
+          isMe ? "justify-end kub-message-reserve-left" : "justify-start kub-message-reserve-right",
         )}
         onAnimationEnd={(event) => {
           // Named, because the subtree runs other animations — a spinner, a
-          // recording bar — and any of them would otherwise clear the flag
-          // before the entrance had played.
+          // recording bar, a reaction popping — and any of them would
+          // otherwise clear the flag before the entrance had played.
           if (event.animationName !== "msg-appear") return;
           if (event.target !== event.currentTarget) return;
           setEntranceSettled(true);
         }}
-        onContextMenu={openContext}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onTouchCancel={handleTouchEnd}
       >
         {!isMe && (
           <div className="flex-shrink-0 self-end mb-1 w-8">
@@ -1667,52 +1254,31 @@ export function MessageBubble({
               !isMe && isLastInGroup ? "rounded-bl-none" : "",
               message.pending && "opacity-70",
               message.failed && "opacity-60",
-              selected && "ring-2 ring-[color:var(--kub-cyan)]/55 bg-[color-mix(in_srgb,var(--kub-cyan)_10%,var(--kub-message-in))]",
               isSelectionMode && "cursor-pointer [&_a]:pointer-events-none [&_audio]:pointer-events-none [&_button]:pointer-events-none [&_input]:pointer-events-none [&_video]:pointer-events-none",
             )}
           >
-            <div
-              className={cn(
-                // Anchored to the bubble's edge rather than offset by a guessed
-                // number. `-right-20` put the group's right edge 80px past the
-                // bubble while the group itself is about 92px wide, so it
-                // actually overlapped the message by roughly 12px — the "icons
-                // pressed against the message" in the report.
-                "absolute top-1/2 z-10 hidden -translate-y-1/2 items-center gap-0.5 rounded-full border border-[color:var(--kub-border-color)]",
-                "bg-[var(--kub-surface-2)] p-0.5 opacity-0 shadow-sm transition-opacity sm:flex",
-                "group-hover:opacity-100 focus-within:opacity-100",
-                isMe ? "right-full mr-2" : "left-full ml-2",
-              )}
-            >
-              {canReact && (
-                <button
-                  onClick={handleToggleReactionMenu}
-                  data-reaction-trigger="true"
-                  aria-label="Реакция"
-                  className="kub-interactive flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
-                >
-                  <KubIcon name="smile" size={14} />
-                </button>
-              )}
-              <button
-                onClick={onReply}
-                aria-label="Ответить"
-                className="kub-interactive flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
+            {/* Telegram Desktop's reaction button: beside the time, outside the
+                bubble, for a hovering pointer only. It replaced the three-button
+                cluster and the 104px lane kept free beside every message for it
+                (D-071). Not in selection mode, where a click selects. */}
+            {canReact && !isSelectionMode && (
+              <QuickReactionButton messageId={message.id} placement={isMe ? "left" : "right"} onReact={onReaction} />
+            )}
+
+            {message.forwarded_from_id && (
+              <div
+                data-message-forwarded="true"
+                className="mb-1 min-w-0 max-w-full truncate text-[12px] leading-snug text-[color:var(--kub-accent-text)]"
               >
-                <KubIcon name="reply" size={14} />
-              </button>
-              <button
-                onClick={(event) => {
-                  event.stopPropagation();
-                  const rect = event.currentTarget.getBoundingClientRect();
-                  openContextAt(rect.left, rect.bottom + 4);
-                }}
-                aria-label="Действия сообщения"
-                className="kub-interactive flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--kub-muted)] transition-colors kub-raise-hover hover:text-[color:var(--kub-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"
-              >
-                <KubIcon name="more" size={14} />
-              </button>
-            </div>
+                {message.forward_origin?.name ? (
+                  <>
+                    Переслано от <span className="font-semibold">{message.forward_origin.name}</span>
+                  </>
+                ) : (
+                  "Переслано"
+                )}
+              </div>
+            )}
 
             {message.reply_to_id && (() => {
               const replyMsg = messagesMap[message.reply_to_id] ?? message.reply_to ?? null;
@@ -1841,7 +1407,9 @@ export function MessageBubble({
                 bubbleRef={bubbleRef}
                 stackRef={stackRef}
                 measureKey={footerMeasureKey}
-                compound={Boolean(message.reply_to_id)}
+                // Something above the text sets the bubble's width — a reply
+                // preview, or a «Переслано от» label longer than the text.
+                compound={Boolean(message.reply_to_id || message.forwarded_from_id)}
               />
             ) : (
               <p
@@ -1914,14 +1482,6 @@ export function MessageBubble({
       </div>
     </>
   );
-}
-
-function setBodySelectionSuppressed(suppressed: boolean) {
-  if (typeof document === "undefined") return;
-  document.body.style.userSelect = suppressed ? "none" : "";
-  document.body.style.webkitUserSelect = suppressed ? "none" : "";
-  document.documentElement.classList.toggle("kub-selection-suppressed", suppressed);
-  if (suppressed) window.getSelection()?.removeAllRanges();
 }
 
 interface MediaDimensions {
@@ -2379,7 +1939,7 @@ function getMediaMetadataNumberFromItem(item: ChatMediaPlaybackItem | null): num
   return item?.durationMs && item.durationMs > 0 ? item.durationMs : 0;
 }
 
-function isRoundVideoMessage(message: MessageWithSender): boolean {
+export function isRoundVideoMessage(message: MessageWithSender): boolean {
   return message.type === "video" && (
     getMediaMetadataString(message, "kind") === "video_message" ||
     getMediaMetadataString(message, "shape") === "round" ||
@@ -2396,7 +1956,7 @@ function isVoiceMessage(message: MessageWithSender): boolean {
   return content.includes("голосовое") || content.includes("voice");
 }
 
-function getVisibleMediaCaption(message: MessageWithSender): string | null {
+export function getVisibleMediaCaption(message: MessageWithSender): string | null {
   if (message.type !== "image" && message.type !== "video") return null;
   const content = message.content?.trim();
   if (!content) return null;

@@ -1,22 +1,33 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AppTopBar } from "@/components/layout/AppTopBar";
 import { ChatHeader } from "@/components/chat/ChatHeader";
+import { ChatSelectionBar } from "@/components/chat/ChatSelectionBar";
+import { ForwardModal } from "@/components/chat/ForwardModal";
 import { ChatListItem } from "@/components/sidebar/ChatListItem";
 import { FolderTabs } from "@/components/sidebar/FolderTabs";
 import { MediaViewer, type MediaViewerItem } from "@/components/chat/MediaViewer";
 import { MessageInput } from "@/components/chat/MessageInput";
 import { MessageList } from "@/components/chat/MessageList";
+import {
+  MessageDeleteDialogHost,
+  copySelectedMessages,
+  useChatMessageSelection,
+} from "@/components/chat/MessageSelectionChrome";
 import { SidebarHeader } from "@/components/sidebar/SidebarHeader";
 import { KubGlassLayer } from "@/components/kub";
 import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
+import { getChatDisplayInfo } from "@/lib/chatDisplay";
+import { applyReactionPlan, planReactionToggle } from "@/lib/messageReactions";
 import { useAppStore } from "@/store/app.store";
 import { cn } from "@/lib/utils";
+import type { MessageWithSender } from "@/types/database";
 import {
   isPublicPreviewCaptureEnabled,
   PUBLIC_PREVIEW_READY_ATTRIBUTE,
   previewChats,
   previewCurrentUser,
+  previewForwardDraft,
   previewMembers,
   previewMessages,
   readPublicPreviewFixture,
@@ -40,6 +51,11 @@ import {
  *
  * Only the data is fictional, and it arrives by injection rather than by
  * import, so nothing here can carry demo content into a production bundle.
+ *
+ * The conversation answers what is done to it — a reaction, a pin, a
+ * deletion, a selection, a reply — locally, through the same components and the
+ * same one-per-person rule the application uses, so a render of a message
+ * action shows its real result. Nothing it does leaves the page.
  */
 export default function PublicPreviewCapturePage() {
   const [fixture, setFixture] = useState<PublicPreviewFixture | null>(null);
@@ -47,18 +63,31 @@ export default function PublicPreviewCapturePage() {
   const setCurrentUser = useAppStore((state) => state.setCurrentUser);
   const setChats = useAppStore((state) => state.setChats);
   const setSelectedChatId = useAppStore((state) => state.setSelectedChatId);
+  const setEditingMessage = useAppStore((state) => state.setEditingMessage);
+  const forwardingMessages = useAppStore((state) => state.forwardingMessages);
+  const setForwardingMessages = useAppStore((state) => state.setForwardingMessages);
+  const pendingForward = useAppStore((state) => state.pendingForward);
+  const setPendingForward = useAppStore((state) => state.setPendingForward);
+  const setMessageDeleteRequest = useAppStore((state) => state.setMessageDeleteRequest);
+  const currentUserId = useAppStore((state) => state.currentUser?.id ?? null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   // The photo viewer, opened from a bubble exactly as `ChatWindow` opens it. No
   // product preview carries a picture, so it never opens during a capture; the
   // QA specs that zoom a photo inject one.
   const [openMedia, setOpenMedia] = useState<MediaViewerItem | null>(null);
+  const [replyTo, setReplyTo] = useState<MessageWithSender | null>(null);
+  const [messages, setMessages] = useState<MessageWithSender[]>([]);
   const { ref: chromeRef, height: chromeHeight } = useMeasuredHeight<HTMLDivElement>();
   const { ref: composerRef, height: composerHeight } = useMeasuredHeight<HTMLDivElement>();
 
   const chats = useMemo(() => (fixture ? previewChats(fixture) : []), [fixture]);
-  const messages = useMemo(() => (fixture ? previewMessages(fixture) : []), [fixture]);
   const members = useMemo(() => (fixture ? previewMembers(fixture) : []), [fixture]);
   const activeChat = chats[0];
+  const selection = useChatMessageSelection(activeChat?.id ?? "", messages);
+  const commentDraft = useMemo(
+    () => (fixture?.pendingForward?.comment ? { id: "preview-forward-comment", text: fixture.pendingForward.comment } : null),
+    [fixture],
+  );
 
   useEffect(() => {
     // Defence in depth. The binding in App.tsx already folds away in a
@@ -75,6 +104,7 @@ export default function PublicPreviewCapturePage() {
         return;
       }
       setCurrentUser(previewCurrentUser(injected));
+      setMessages(previewMessages(injected));
       setFixture(injected);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -87,7 +117,49 @@ export default function PublicPreviewCapturePage() {
     if (!activeChat) return;
     setChats(chats);
     setSelectedChatId(activeChat.id);
-  }, [activeChat, chats, setChats, setSelectedChatId]);
+    // A fixture may open with messages already waiting to be forwarded here —
+    // the one state of that flow a single page can show.
+    if (fixture?.pendingForward) {
+      setPendingForward({ chatId: activeChat.id, messages: previewForwardDraft(fixture) });
+    }
+  }, [activeChat, chats, fixture, setChats, setPendingForward, setSelectedChatId]);
+
+  const react = useCallback((messageId: string, emoji: string) => {
+    if (!currentUserId) return;
+    setMessages((current) => current.map((message) => {
+      if (message.id !== messageId) return message;
+      const plan = planReactionToggle(message.reactions, currentUserId, emoji);
+      const reactions = applyReactionPlan(message.reactions, currentUserId, plan, {
+        messageId,
+        createdAt: new Date().toISOString(),
+      });
+      return { ...message, reactions: reactions as MessageWithSender["reactions"] };
+    }));
+  }, [currentUserId]);
+
+  const togglePin = useCallback((target: MessageWithSender) => {
+    setMessages((current) =>
+      current.map((message) => (message.id === target.id ? { ...message, pinned: !message.pinned } : message)),
+    );
+  }, []);
+
+  const deleteLocally = useCallback(async (targets: MessageWithSender[], forEveryone: boolean) => {
+    const ids = new Set(targets.map((message) => message.id));
+    const now = new Date().toISOString();
+    setMessages((current) =>
+      forEveryone
+        ? current.map((message) => (ids.has(message.id) ? { ...message, deleted_at: now } : message))
+        : current.filter((message) => !ids.has(message.id)),
+    );
+    return { ok: true };
+  }, []);
+
+  const editLocally = useCallback(async (messageId: string, content: string) => {
+    const now = new Date().toISOString();
+    setMessages((current) =>
+      current.map((message) => (message.id === messageId ? { ...message, content, edited_at: now } : message)),
+    );
+  }, []);
 
   if (error) {
     return (
@@ -163,20 +235,45 @@ export default function PublicPreviewCapturePage() {
                   is the one that paints on top. `ChatWindow` orders them the
                   same way and for the same reason — see the note there. */}
               <MessageList
+                chatId={activeChat.id}
                 messages={messages}
-                onReply={() => undefined}
-                onReaction={() => undefined}
+                onReply={setReplyTo}
+                onReaction={react}
+                onEdit={(message) => setEditingMessage(message)}
+                onDelete={() => undefined}
+                onHideForMe={() => undefined}
+                onTogglePin={togglePin}
+                onForward={(message) => setForwardingMessages([message])}
                 onOpenMedia={setOpenMedia}
                 bottomRef={bottomRef}
                 chatMembers={members}
                 chatType={activeChat.type}
                 myRole="owner"
+                quickReactions={fixture.recentReactions}
                 topInset={chromeHeight}
                 bottomInset={composerHeight}
                 layoutVersion={composerHeight}
               />
               <div ref={chromeRef} className="absolute inset-x-0 top-0 flex flex-col" data-testid="chat-chrome-stack">
-                <ChatHeader chatId={activeChat.id} chat={activeChat} />
+                {selection.active ? (
+                  <ChatSelectionBar
+                    count={selection.selected.length}
+                    canForward
+                    canCopy
+                    canDelete
+                    onForward={() => setForwardingMessages(selection.selected)}
+                    onCopy={() => {
+                      copySelectedMessages(selection.selected, currentUserId);
+                      selection.clear();
+                    }}
+                    onDelete={() =>
+                      setMessageDeleteRequest({ chatId: activeChat.id, ids: selection.selected.map((message) => message.id) })
+                    }
+                    onCancel={selection.clear}
+                  />
+                ) : (
+                  <ChatHeader chatId={activeChat.id} chat={activeChat} />
+                )}
               </div>
               <div
                 ref={composerRef}
@@ -188,15 +285,40 @@ export default function PublicPreviewCapturePage() {
               >
                 <MessageInput
                   chatId={activeChat.id}
-                  replyTo={null}
-                  onCancelReply={() => undefined}
+                  replyTo={replyTo}
+                  onCancelReply={() => setReplyTo(null)}
                   onSend={() => undefined}
+                  onEdit={editLocally}
+                  forwardDraft={pendingForward?.chatId === activeChat.id ? pendingForward.messages : null}
+                  onCancelForward={() => setPendingForward(null)}
+                  draftOverride={commentDraft}
                 />
               </div>
             </div>
           </div>
         </div>
       </div>
+      {forwardingMessages && (
+        <ForwardModal
+          messages={forwardingMessages}
+          onClose={() => setForwardingMessages(null)}
+          onForward={() => {
+            // One page, one chat: the forward waits above this composer.
+            setPendingForward({ chatId: activeChat.id, messages: forwardingMessages });
+            setForwardingMessages(null);
+            selection.clear();
+          }}
+        />
+      )}
+      <MessageDeleteDialogHost
+        chatId={activeChat.id}
+        messages={messages}
+        chatType={activeChat.type}
+        isSavedChat={false}
+        otherName={activeChat.type === "private" ? getChatDisplayInfo(activeChat, currentUserId).title : null}
+        currentUserId={currentUserId}
+        onDelete={deleteLocally}
+      />
       <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
     </div>
   );

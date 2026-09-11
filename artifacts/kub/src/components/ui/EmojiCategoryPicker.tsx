@@ -17,6 +17,13 @@ interface EmojiCategoryPickerProps {
   searchTerms?: EmojiSearchTerms;
   scrollable?: boolean;
   compact?: boolean;
+  /**
+   * A «Недавние» row above the search and the categories — the reaction panel's,
+   * as in Telegram. Omitted, the picker is exactly what it was.
+   */
+  recent?: readonly string[];
+  /** Utilities for the emoji grid itself, merged after its own. */
+  gridClassName?: string;
 }
 
 /**
@@ -43,6 +50,8 @@ export function EmojiCategoryPicker({
   searchTerms = {},
   scrollable = false,
   compact = false,
+  recent,
+  gridClassName,
 }: EmojiCategoryPickerProps) {
   const initialCategory = categories.find((category) =>
     selected ? category.emojis.includes(selected) : false,
@@ -74,6 +83,30 @@ export function EmojiCategoryPicker({
 
   return (
     <div data-testid={`${testIdPrefix}-picker`} className={cn(compact ? "space-y-1.5" : "space-y-2", className)}>
+      {recent && recent.length > 0 && (
+        <div data-testid={`${testIdPrefix}-recent`} className="space-y-1">
+          <div className="px-0.5 text-[12px] font-semibold text-[color:var(--kub-muted)]">Недавние</div>
+          <div
+            role="group"
+            aria-label="Недавние"
+            className="grid grid-cols-8 gap-1 pointer-coarse:grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))]"
+          >
+            {recent.map((emoji) => (
+              <EmojiOption
+                key={emoji}
+                label={`Выбрать ${emoji}`}
+                active={selected === emoji}
+                disabled={disabled}
+                onClick={() => onSelect(emoji)}
+                compact={compact}
+              >
+                {emoji}
+              </EmojiOption>
+            ))}
+          </div>
+        </div>
+      )}
+
       {searchable && (
         <label className={cn(
           "flex items-center gap-2 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] px-2.5 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[color:var(--kub-cyan)]",
@@ -152,6 +185,7 @@ export function EmojiCategoryPicker({
           // sideways keeps the picker on screen with two rows to scroll.
           scrollable && (compact ? "max-h-40 pointer-coarse:max-h-[min(10rem,25dvh)]" : "max-h-52"),
           scrollable && "overflow-y-auto overscroll-contain pr-1",
+          gridClassName,
         )}
         aria-label={`Эмодзи: ${activeCategory.label}`}
       >
@@ -202,6 +236,7 @@ function EmojiOption({ label, active, disabled, onClick, children, compact }: Em
     <button
       type="button"
       aria-label={label}
+      aria-pressed={active || undefined}
       title={label}
       onClick={onClick}
       disabled={disabled}

@@ -7,7 +7,9 @@ import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { ChatSearchBar } from "./ChatSearchBar";
 import { ChatInfoPanel } from "./ChatInfoPanel";
+import { ChatSelectionBar } from "./ChatSelectionBar";
 import { ForwardModal } from "./ForwardModal";
+import { MessageDeleteDialogHost, copySelectedMessages, useChatMessageSelection } from "./MessageSelectionChrome";
 import { MediaViewer, type MediaViewerItem } from "./MediaViewer";
 import { ChatMediaPlaybackBar, ChatMediaPlaybackProvider, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 import { TopicStrip } from "./TopicStrip";
@@ -23,7 +25,7 @@ import { showActionFeedback } from "@/lib/actionFeedback";
 import { mapPgError } from "@/lib/errors";
 import { forwardFeedback } from "@/lib/messageForward";
 import { KUB_CHAT_MESSAGE_JUMP_EVENT, requestChatMessageJump, type ChatMessageJumpDetail } from "@/lib/chatJumpEvents";
-import { isSavedChat } from "@/lib/chatDisplay";
+import { getChatDisplayInfo, isSavedChat } from "@/lib/chatDisplay";
 import { reportError } from "@/lib/monitoring";
 import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
 // One copy of "is this a voice note / a round video", shared with the profile
@@ -95,8 +97,13 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
   const markChatRead = useAppStore((s) => s.markChatRead);
   const setEditingMessage = useAppStore((s) => s.setEditingMessage);
-  const setForwardingMessage = useAppStore((s) => s.setForwardingMessage);
-  const forwardingMessage = useAppStore((s) => s.forwardingMessage);
+  const setForwardingMessages = useAppStore((s) => s.setForwardingMessages);
+  const forwardingMessages = useAppStore((s) => s.forwardingMessages);
+  const pendingForward = useAppStore((s) => s.pendingForward);
+  const setPendingForward = useAppStore((s) => s.setPendingForward);
+  const setMessageSelection = useAppStore((s) => s.setMessageSelection);
+  const setMessageDeleteRequest = useAppStore((s) => s.setMessageDeleteRequest);
+  const setSelectedChatId = useAppStore((s) => s.setSelectedChatId);
   const selectedTopicId = useAppStore((s) => s.selectedTopicId);
   const setSelectedTopicId = useAppStore((s) => s.setSelectedTopicId);
   const chatPanelRequest = useAppStore((s) => s.chatPanelRequest);
@@ -119,6 +126,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   } = useMessages(chatId, messageTopicId, messageGeneralTopicIds);
 
   useEffect(() => { markChatRead(chatId); }, [chatId, markChatRead]);
+  const selection = useChatMessageSelection(chatId, messages);
+  const forwardDraft = pendingForward?.chatId === chatId ? pendingForward.messages : null;
 
   const [replyTo, setReplyTo] = useState<MessageWithSender | null>(null);
   const [replyFocusKey, setReplyFocusKey] = useState(0);
@@ -579,7 +588,39 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     void sendStagedAttachments("", attachmentId);
   }, [sendStagedAttachments]);
 
+  /**
+   * The send that forwards what waits above the composer: the comment first,
+   * as Telegram sends it, then the messages in their order. A refusal puts
+   * the ones not yet delivered back above the composer, which is where the
+   * next attempt starts, and says why.
+   *
+   * Each message goes through `forwardMessage`, which copies its text and its
+   * address but not its media fields — D-083, which needs the backend.
+   */
+  const sendForwardDraft = useCallback(async (comment: string, draft: MessageWithSender[]) => {
+    setPendingForward(null);
+    if (comment.trim()) await sendMessage(comment.trim());
+    // The messages go to the chat on screen, so its name is the one this
+    // window already reads — not the whole list, which D-088 took this window
+    // off so that every list change stopped rendering the open chat.
+    const targetName = chat?.name;
+    for (let index = 0; index < draft.length; index += 1) {
+      const result = await forwardMessage(draft[index], chatId)
+        .catch((cause: unknown) => ({ ok: false as const, error: mapPgError(cause) }));
+      if (!result.ok) {
+        setPendingForward({ chatId, messages: draft.slice(index) });
+        showActionFeedback(forwardFeedback(result, targetName));
+        return;
+      }
+    }
+    showActionFeedback(forwardFeedback({ ok: true, error: null }, targetName, draft.length));
+  }, [chat?.name, chatId, forwardMessage, sendMessage, setPendingForward]);
+
   const handleSend = useCallback((content: string) => {
+    if (forwardDraft) {
+      void sendForwardDraft(content, forwardDraft);
+      return true;
+    }
     if (stagedAttachmentsRef.current.length) {
       return sendStagedAttachments(content);
     }
@@ -591,7 +632,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     void sendMessage(content, replyToId);
     setReplyTo(null);
     return true;
-  }, [replyTo?.id, sendMessage, sendStagedAttachments, userId]);
+  }, [forwardDraft, replyTo?.id, sendForwardDraft, sendMessage, sendStagedAttachments, userId]);
 
   const handleReply = useCallback((msg: MessageWithSender) => {
     setReplyTo(msg);
@@ -711,23 +752,30 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     }
   }, [hideMessageForMe]);
 
-  const handleBulkHideForMe = useCallback(async (items: MessageWithSender[]) => {
-    const result = await hideMessagesForMe(items.map((item) => item.id));
-    if (!result.ok) {
-      throw new Error(result.error ?? "Не удалось скрыть выбранные сообщения.");
+  /**
+   * What the one «Удалить» dialog does.
+   *
+   * With its box ticked, own messages get the soft delete the product already
+   * had, so the other side sees a «Сообщение удалено» stub rather than nothing;
+   * removing a message for both without a trace needs the backend. Unticked,
+   * or for anyone else's message, it hides them for the reader only.
+   */
+  const handleDeleteMessages = useCallback(async (items: MessageWithSender[], forEveryone: boolean) => {
+    if (!forEveryone) {
+      const result = await hideMessagesForMe(items.map((item) => item.id));
+      return { ok: result.ok, error: result.error };
     }
-  }, [hideMessagesForMe]);
-
-  const handleBulkDeleteForEveryone = useCallback(async (items: MessageWithSender[]) => {
     const failures: string[] = [];
     for (const item of items) {
       const result = await deleteMessage(item.id);
       if (!result?.ok) failures.push(result?.error ?? "Не удалось удалить сообщение.");
     }
-    if (failures.length) {
-      throw new Error(`Не удалось удалить ${failures.length} из ${items.length} сообщений.`);
-    }
-  }, [deleteMessage]);
+    if (!failures.length) return { ok: true, error: null };
+    return {
+      ok: false,
+      error: items.length > 1 ? `Не удалось удалить ${failures.length} из ${items.length}.` : failures[0],
+    };
+  }, [deleteMessage, hideMessagesForMe]);
 
   const handleEditFailedSend = useCallback((msg: MessageWithSender) => {
     if (msg.type !== "text") return;
@@ -823,17 +871,16 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           </div>
         ) : (
           <MessageList
+            chatId={chatId}
             messages={messages}
             onReply={handleReply}
             onJumpToReply={handleJumpToReply}
             onReaction={toggleReaction}
             onEdit={(msg) => setEditingMessage(msg)}
-            onDelete={(msg) => deleteMessage(msg.id)}
+            onDelete={savedChat ? undefined : (msg) => deleteMessage(msg.id)}
             onHideForMe={handleHideForMe}
-            onBulkHideForMe={handleBulkHideForMe}
-            onBulkDeleteForEveryone={savedChat ? undefined : handleBulkDeleteForEveryone}
             onTogglePin={userId ? handleTogglePin : undefined}
-            onForward={(msg) => setForwardingMessage(msg)}
+            onForward={(msg) => setForwardingMessages([msg])}
             onRetrySend={(msg) => void retryMessageSend(msg)}
             onEditFailedSend={handleEditFailedSend}
             onDiscardLocalMessage={(msg) => discardLocalMessage(msg.id)}
@@ -891,14 +938,32 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           className="absolute inset-x-0 top-0 flex flex-col"
           data-testid="chat-chrome-stack"
         >
-          <ChatHeader
-            chatId={chatId}
-            chat={chat}
-            onSearchOpen={() => setShowSearch(true)}
-            onInfoOpen={() => setShowInfo(true)}
-            onClearForMe={clearChatForMe}
-            mediaPlayback={<ChatMediaPlaybackBar compact />}
-          />
+          {/* While messages are selected their bar stands where the header
+              was, at the header's height, so nothing under it moves. */}
+          {selection.active ? (
+            <ChatSelectionBar
+              count={selection.selected.length}
+              canForward
+              canCopy
+              canDelete
+              onForward={() => setForwardingMessages(selection.selected)}
+              onCopy={() => {
+                copySelectedMessages(selection.selected, userId);
+                selection.clear();
+              }}
+              onDelete={() => setMessageDeleteRequest({ chatId, ids: selection.selected.map((message) => message.id) })}
+              onCancel={selection.clear}
+            />
+          ) : (
+            <ChatHeader
+              chatId={chatId}
+              chat={chat}
+              onSearchOpen={() => setShowSearch(true)}
+              onInfoOpen={() => setShowInfo(true)}
+              onClearForMe={clearChatForMe}
+              mediaPlayback={<ChatMediaPlaybackBar compact />}
+            />
+          )}
 
           {isForum && (
             <TopicStrip
@@ -969,30 +1034,38 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             draftOverride={draftRestore}
             focusRequestKey={replyFocusKey}
             onFocusChange={setIsComposerFocused}
+            forwardDraft={forwardDraft}
+            onCancelForward={() => setPendingForward(null)}
           />
         </div>
       </div>
       {showInfo && chat && (
         <ChatInfoPanel chat={chat} onClose={() => setShowInfo(false)} onClearForMe={clearChatForMe} />
       )}
-      {forwardingMessage && (
+      {forwardingMessages && (
         <ForwardModal
-          message={forwardingMessage}
-          onClose={() => setForwardingMessage(null)}
-          onForward={async (targetChatId) => {
-            // What happens next depends on the answer. This used to close the
-            // dialog without reading it, so a refusal looked exactly like a
-            // delivery and nothing on screen said which one had happened.
-            const target = useAppStore.getState().chats.find((candidate) => candidate.id === targetChatId);
-            const result = await forwardMessage(forwardingMessage, targetChatId)
-              .catch((cause: unknown) => ({ ok: false as const, error: mapPgError(cause) }));
-            showActionFeedback(forwardFeedback(result, target?.name));
-            // A refused forward leaves the dialog open: the choice is where
-            // the next attempt starts.
-            if (result.ok) setForwardingMessage(null);
+          messages={forwardingMessages}
+          onClose={() => setForwardingMessages(null)}
+          onForward={(targetChatId) => {
+            // Telegram's order: the chat first. Nothing is sent here — the chat
+            // opens with the messages waiting above its composer, a comment
+            // can be added, and the send forwards them (`sendForwardDraft`).
+            setPendingForward({ chatId: targetChatId, messages: forwardingMessages });
+            setForwardingMessages(null);
+            setMessageSelection(null);
+            if (targetChatId !== chatId) setSelectedChatId(targetChatId);
           }}
         />
       )}
+      <MessageDeleteDialogHost
+        chatId={chatId}
+        messages={messages}
+        chatType={chat?.type}
+        isSavedChat={savedChat}
+        otherName={chat?.type === "private" ? getChatDisplayInfo(chat, userId).title : null}
+        currentUserId={userId}
+        onDelete={handleDeleteMessages}
+      />
         <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
       </div>
     </ChatMediaPlaybackProvider>

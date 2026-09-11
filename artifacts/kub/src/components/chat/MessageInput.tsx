@@ -51,12 +51,20 @@ import {
 import { EmojiCategoryPicker } from "@/components/ui/EmojiCategoryPicker";
 import { MESSAGE_EMOJI_CATEGORIES, MESSAGE_EMOJI_SEARCH_TERMS } from "@/lib/emojiCatalog";
 import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
+import { forwardDraftTitle } from "@/lib/messageActions";
 
 const DRAFT_PREFIX = "kub:draft:";
 const draftKey = (chatId: string) => `${DRAFT_PREFIX}${chatId}`;
 const MOBILE_RECORDER_LONG_PRESS_MS = 320;
 const RECORDER_TAP_MOVE_PX = 10;
 const RECORDER_LOCK_DRAG_PX = 72;
+
+/** «Аня, Максим: Привет! Макет…» — who is being forwarded, and the first of it. */
+function forwardDraftSummary(messages: MessageWithSender[]): string {
+  const names = [...new Set(messages.map((message) => messageActorDisplayName(resolveMessageActor(message))))];
+  const who = names.length > 2 ? `${names.slice(0, 2).join(", ")} и ещё ${names.length - 2}` : names.join(", ");
+  return `${who}: ${formatReplyMessagePreview(messages[0])}`;
+}
 
 interface MessageInputProps {
   chatId: string;
@@ -77,6 +85,13 @@ interface MessageInputProps {
   draftOverride?: { id: string; text: string } | null;
   focusRequestKey?: number;
   onFocusChange?: (focused: boolean) => void;
+  /**
+   * Messages waiting to be forwarded into this chat with the next send, as in
+   * Telegram: the chat is picked first, then a comment can be added. A send
+   * with nothing typed still forwards them.
+   */
+  forwardDraft?: MessageWithSender[] | null;
+  onCancelForward?: () => void;
 }
 
 export function MessageInput({
@@ -98,6 +113,8 @@ export function MessageInput({
   draftOverride,
   focusRequestKey = 0,
   onFocusChange,
+  forwardDraft = null,
+  onCancelForward,
 }: MessageInputProps) {
   const [text, setText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
@@ -135,6 +152,7 @@ export function MessageInput({
   const recorderPointerIdRef = useRef<number | null>(null);
   const hasText = text.trim().length > 0;
   const hasAttachments = attachments.length > 0;
+  const hasForwardDraft = Boolean(forwardDraft && forwardDraft.length > 0);
   const hasStagedVoice = attachments.some((item) => item.kind === "voice");
   const hasStagedVideoMessage = attachments.some((item) => item.kind === "video_message");
   const isAttachmentBusy = attachments.some((item) => item.status === "uploading" || item.status === "sending");
@@ -570,7 +588,9 @@ export function MessageInput({
     const sendToken = composerSendScope.capture();
     const currentText = textareaRef.current?.value ?? text;
     const trimmed = currentText.trim();
-    if (!trimmed && !hasAttachments) return;
+    // Messages waiting to be forwarded are sent by the send itself, with or
+    // without a comment typed beside them.
+    if (!trimmed && !hasAttachments && !hasForwardDraft) return;
     if (isEditing && editingMessage && onEdit) {
       if (!trimmed) return;
       await onEdit(editingMessage.id, trimmed);
@@ -615,7 +635,7 @@ export function MessageInput({
     if (textareaRef.current) {
       textareaRef.current.focus();
     }
-  }, [text, hasAttachments, onSend, isEditing, editingMessage, onEdit, setEditingMessage, chatId, composerSendScope]);
+  }, [text, hasAttachments, hasForwardDraft, onSend, isEditing, editingMessage, onEdit, setEditingMessage, chatId, composerSendScope]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Escape") {
@@ -631,7 +651,7 @@ export function MessageInput({
     }
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !isComposing) {
       e.preventDefault();
-      if (!isAttachmentBusy && (hasText || hasAttachments)) void handleSend();
+      if (!isAttachmentBusy && (hasText || hasAttachments || hasForwardDraft)) void handleSend();
       return;
     }
     onTyping?.();
@@ -912,6 +932,28 @@ export function MessageInput({
           </div>
         )}
 
+        {!isEditing && forwardDraft && hasForwardDraft && (
+          // Telegram's forward bar: what will be forwarded with the next send.
+          <div
+            data-testid="composer-forward-draft"
+            className="flex items-center gap-2 rounded-t-xl px-3 py-2 mb-1 bg-[var(--kub-raised)] border-l-2 border-[color:var(--kub-cyan)]"
+          >
+            <KubIcon name="forward" size={13} tone="accent" className="flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-semibold text-[color:var(--kub-accent-text)]">{forwardDraftTitle(forwardDraft.length)}</div>
+              <div className="text-xs truncate text-[color:var(--kub-muted)]">{forwardDraftSummary(forwardDraft)}</div>
+            </div>
+            <button
+              type="button"
+              onClick={onCancelForward}
+              aria-label="Отменить пересылку"
+              className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg kub-raise-hover flex-shrink-0 text-[color:var(--kub-muted)]"
+            >
+              <KubIcon name="close" size={16} />
+            </button>
+          </div>
+        )}
+
         {!isEditing && replyTo && (
           <div className="flex items-center gap-2 rounded-t-xl px-3 py-2 mb-1 bg-[var(--kub-raised)] border-l-2 border-[color:var(--kub-cyan)]">
             <KubIcon name="reply" size={13} tone="accent" className="flex-shrink-0" />
@@ -1063,7 +1105,7 @@ export function MessageInput({
             <KubIcon name="smile" size={20} />
           </button>
 
-          {hasText || hasAttachments ? (
+          {hasText || hasAttachments || hasForwardDraft ? (
             <button
               onClick={handleSend}
               disabled={isAttachmentBusy}

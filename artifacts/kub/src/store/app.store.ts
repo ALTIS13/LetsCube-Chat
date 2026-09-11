@@ -70,9 +70,25 @@ interface AppState {
   setReplyToMessage: (msg: MessageWithSender | null) => void
   editingMessage: MessageWithSender | null
   setEditingMessage: (msg: MessageWithSender | null) => void
-  /** When set, ForwardModal opens to pick a destination chat for this message. */
-  forwardingMessage: MessageWithSender | null
-  setForwardingMessage: (msg: MessageWithSender | null) => void
+  /** When set, ForwardModal opens to pick a destination chat for these messages. */
+  forwardingMessages: MessageWithSender[] | null
+  setForwardingMessages: (messages: MessageWithSender[] | null) => void
+  /**
+   * Messages waiting above a chat's composer, forwarded there with the next
+   * send, Telegram's way: the chat is picked first and a comment can be added.
+   */
+  pendingForward: { chatId: string; messages: MessageWithSender[] } | null
+  setPendingForward: (forward: { chatId: string; messages: MessageWithSender[] } | null) => void
+  /**
+   * Selection mode. Kept here rather than in the list because the bar that
+   * replaces the chat header lives outside the list. Scoped to one chat, so
+   * switching chats can never act on messages that are no longer on screen.
+   */
+  messageSelection: { chatId: string; ids: string[] } | null
+  setMessageSelection: (selection: { chatId: string; ids: string[] } | null) => void
+  /** The messages the one «Удалить» dialog is open for. */
+  messageDeleteRequest: { chatId: string; ids: string[] } | null
+  setMessageDeleteRequest: (request: { chatId: string; ids: string[] } | null) => void
 
   // Mute
   mutedChatIds: string[]
@@ -298,8 +314,17 @@ export const useAppStore = create<AppState>((set) => ({
   setReplyToMessage: (msg) => set({ replyToMessage: msg }),
   editingMessage: null,
   setEditingMessage: (msg) => set({ editingMessage: msg }),
-  forwardingMessage: null,
-  setForwardingMessage: (msg) => set({ forwardingMessage: msg }),
+  forwardingMessages: null,
+  setForwardingMessages: (messages) => set({ forwardingMessages: messages && messages.length ? messages : null }),
+  pendingForward: null,
+  setPendingForward: (forward) =>
+    set({ pendingForward: forward && forward.messages.length ? forward : null }),
+  messageSelection: null,
+  setMessageSelection: (selection) =>
+    set({ messageSelection: selection && selection.ids.length ? selection : null }),
+  messageDeleteRequest: null,
+  setMessageDeleteRequest: (request) =>
+    set({ messageDeleteRequest: request && request.ids.length ? request : null }),
 
   mutedChatIds: typeof window !== 'undefined'
     ? JSON.parse(localStorage.getItem('ng_muted') ?? '[]')

@@ -29,6 +29,7 @@ import {
   Copy,
   Crown,
   DotsThreeVertical,
+  DownloadSimple,
   Envelope,
   Eye,
   EyeSlash,
@@ -43,6 +44,7 @@ import {
   Image as ImageIcon,
   Info,
   Lightning,
+  LinkSimple,
   List,
   ListChecks,
   Lock,
@@ -123,6 +125,7 @@ export type KubIconName =
   | "dashboard"
   | "delete"
   | "doubleCheck"
+  | "download"
   | "edit"
   | "externalLink"
   | "eye"
@@ -139,6 +142,7 @@ export type KubIconName =
   | "image"
   | "info"
   | "key"
+  | "link"
   | "lock"
   | "logout"
   | "mail"
@@ -228,6 +232,7 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   dashboard: { Icon: SquaresFour },
   delete: { Icon: Trash },
   doubleCheck: { Icon: Checks },
+  download: { Icon: DownloadSimple },
   edit: { Icon: PencilSimple },
   externalLink: { Icon: ArrowSquareOut },
   eye: { Icon: Eye },
@@ -244,6 +249,7 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   image: { Icon: ImageIcon },
   info: { Icon: Info },
   key: { Icon: Key },
+  link: { Icon: LinkSimple },
   lock: { Icon: Lock },
   logout: { Icon: SignOut },
   mail: { Icon: Envelope },

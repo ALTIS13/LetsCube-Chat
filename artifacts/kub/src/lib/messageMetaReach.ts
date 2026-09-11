@@ -27,12 +27,14 @@ import { resolveCssLength } from "./cssLength.ts";
  * It returns `null` — and the caller keeps the rule exactly as it was — where no
  * such number exists. That is the case when the cap carries a term resolved
  * against a row that is shrink-wrapped around the message:
- * `max(16rem, 100% - var(--kub-action-lane))` once the lane is 104px, which is
- * every width from 640px up. There the reach of a bubble depends on whether the
- * spacer is in the row, so the inline layout cannot be predicted from the
- * anchored one, and a constant would let a message with a long last word flip
- * on every pass. Measured at 768, 11 of 120 own messages still wrap their spacer
- * for that reason; closing it needs the lane decided, not a sharper guess.
+ * `max(16rem, 100% - lane)` while the hover cluster kept a 104px lane beside
+ * every message from 640px up. There the reach of a bubble depended on whether
+ * the spacer was in the row, so the inline layout could not be predicted from
+ * the anchored one, and a constant would have let a message with a long last
+ * word flip on every pass. Measured at 768, 11 of 120 own messages wrapped
+ * their spacer for that reason (D-071). The lane went with the cluster on
+ * 2026-09-11, so every cap is a length again; this branch stays for any
+ * percentage cap that comes back.
  */
 export interface MessageReachGeometry {
   /** The stack's computed `max-width`, as `getComputedStyle` reports it. */

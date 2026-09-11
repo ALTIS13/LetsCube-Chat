@@ -13,13 +13,41 @@ export const PUBLIC_PREVIEW_CAPTURE_PATH = "/__qa/public-preview";
 export const PUBLIC_PREVIEW_WINDOW_KEY = "__letscubePublicPreviewFixture";
 export const PUBLIC_PREVIEW_READY_ATTRIBUTE = "data-public-preview-ready";
 
+/** One emoji on a message, and the people who put it — by the names they have in the fixture. */
+export type PublicPreviewReaction = { emoji: string; users: string[] };
+
+export type PublicPreviewMessage = {
+  sender: string;
+  text: string;
+  time: string;
+  own: boolean;
+  image?: PublicPreviewImage;
+  reactions?: PublicPreviewReaction[];
+  /** The original author of a forwarded message, shown as «Переслано от …». */
+  forwardedFrom?: string;
+  /** When the message was edited, as HH:MM today. */
+  editedAt?: string;
+  pinned?: boolean;
+};
+
 export type PublicPreviewFixture = {
   currentUser: { name: string; username: string };
   // A count, never a rendered subtitle. `ChatHeader` composes the wording
   // itself, so the fixture cannot invent a string the product never emits.
-  activeChat: { name: string; memberCount: number };
+  activeChat: {
+    name: string;
+    memberCount: number;
+    /** A group unless it says otherwise. A private chat is the reader and the first other sender. */
+    type?: "group" | "private";
+    /** When the others read the conversation, as HH:MM today. Anyone not named has read it all. */
+    readers?: { name: string; time: string }[];
+  };
   chats: { name: string; preview: string; time: string; unread: number }[];
-  messages: { sender: string; text: string; time: string; own: boolean; image?: PublicPreviewImage }[];
+  messages: PublicPreviewMessage[];
+  /** The six reactions beside ❤️, in this order, instead of this device's ranking. */
+  recentReactions?: string[];
+  /** Messages waiting above the composer to be forwarded, and the comment typed with them. */
+  pendingForward?: { messages: { sender: string; text: string }[]; comment?: string };
 };
 
 /**
@@ -103,6 +131,13 @@ function requirePositiveInteger(value: unknown, field: string): number {
   return value;
 }
 
+/** An emoji is a short string; anything longer is a sentence smuggled into a chip. */
+function requireEmoji(value: unknown, field: string): string {
+  const emoji = requireString(value, field);
+  if (emoji.length > 16) fail(`${field} must be a single emoji`);
+  return emoji;
+}
+
 function requireImage(value: unknown, field: string): PublicPreviewImage {
   const image = asRecord(value, field);
   const url = requireString(image.url, `${field}.url`);
@@ -115,12 +150,20 @@ function requireImage(value: unknown, field: string): PublicPreviewImage {
   };
 }
 
-/** Validates the injected payload. Returns null when nothing was injected. */
-export function readPublicPreviewFixture(): PublicPreviewFixture | null {
-  if (typeof window === "undefined") return null;
-  const raw = window[PUBLIC_PREVIEW_WINDOW_KEY];
-  if (raw === undefined) return null;
+function requireReactions(value: unknown, field: string): PublicPreviewReaction[] {
+  return requireArray(value, field).map((entry, index) => {
+    const reaction = asRecord(entry, `${field}[${index}]`);
+    return {
+      emoji: requireEmoji(reaction.emoji, `${field}[${index}].emoji`),
+      users: requireArray(reaction.users, `${field}[${index}].users`).map((user, userIndex) =>
+        requireString(user, `${field}[${index}].users[${userIndex}]`),
+      ),
+    };
+  });
+}
 
+/** Validates a payload. Throws on anything the page could not render faithfully. */
+export function parsePublicPreviewFixture(raw: unknown): PublicPreviewFixture {
   const fixture = asRecord(raw, "fixture");
 
   const currentUser = asRecord(fixture.currentUser, "currentUser");
@@ -140,18 +183,62 @@ export function readPublicPreviewFixture(): PublicPreviewFixture | null {
     };
   });
 
-  const messages = requireArray(fixture.messages, "messages").map((entry, index) => {
+  const messages = requireArray(fixture.messages, "messages").map((entry, index): PublicPreviewMessage => {
     const message = asRecord(entry, `messages[${index}]`);
-    if (typeof message.own !== "boolean") fail(`messages[${index}].own must be a boolean`);
-    const image = message.image === undefined ? undefined : requireImage(message.image, `messages[${index}].image`);
+    const field = `messages[${index}]`;
+    if (typeof message.own !== "boolean") fail(`${field}.own must be a boolean`);
+    if (message.pinned !== undefined && typeof message.pinned !== "boolean") fail(`${field}.pinned must be a boolean`);
+    const image = message.image === undefined ? undefined : requireImage(message.image, `${field}.image`);
+    const reactions = message.reactions === undefined ? undefined : requireReactions(message.reactions, `${field}.reactions`);
+    const forwardedFrom =
+      message.forwardedFrom === undefined ? undefined : requireString(message.forwardedFrom, `${field}.forwardedFrom`);
+    const editedAt = message.editedAt === undefined ? undefined : requireDisplayTime(message.editedAt, `${field}.editedAt`);
     return {
-      sender: requireString(message.sender, `messages[${index}].sender`),
-      text: requireString(message.text, `messages[${index}].text`),
-      time: requireDisplayTime(message.time, `messages[${index}].time`),
+      sender: requireString(message.sender, `${field}.sender`),
+      text: requireString(message.text, `${field}.text`),
+      time: requireDisplayTime(message.time, `${field}.time`),
       own: message.own,
       ...(image ? { image } : {}),
+      ...(reactions ? { reactions } : {}),
+      ...(forwardedFrom ? { forwardedFrom } : {}),
+      ...(editedAt ? { editedAt } : {}),
+      ...(message.pinned ? { pinned: true } : {}),
     };
   });
+
+  const type = activeChat.type;
+  if (type !== undefined && type !== "group" && type !== "private") fail('activeChat.type must be "group" or "private"');
+  const readers = activeChat.readers === undefined
+    ? undefined
+    : requireArray(activeChat.readers, "activeChat.readers").map((entry, index) => {
+        const reader = asRecord(entry, `activeChat.readers[${index}]`);
+        return {
+          name: requireString(reader.name, `activeChat.readers[${index}].name`),
+          time: requireDisplayTime(reader.time, `activeChat.readers[${index}].time`),
+        };
+      });
+
+  const recentReactions = fixture.recentReactions === undefined
+    ? undefined
+    : requireArray(fixture.recentReactions, "recentReactions").map((emoji, index) =>
+        requireEmoji(emoji, `recentReactions[${index}]`),
+      );
+  if (recentReactions && recentReactions.length > 12) fail("recentReactions holds at most 12 emoji");
+
+  let pendingForward: PublicPreviewFixture["pendingForward"];
+  if (fixture.pendingForward !== undefined) {
+    const forward = asRecord(fixture.pendingForward, "pendingForward");
+    pendingForward = {
+      messages: requireArray(forward.messages, "pendingForward.messages").map((entry, index) => {
+        const message = asRecord(entry, `pendingForward.messages[${index}]`);
+        return {
+          sender: requireString(message.sender, `pendingForward.messages[${index}].sender`),
+          text: requireString(message.text, `pendingForward.messages[${index}].text`),
+        };
+      }),
+      ...(forward.comment === undefined ? {} : { comment: requireString(forward.comment, "pendingForward.comment") }),
+    };
+  }
 
   return {
     currentUser: {
@@ -161,10 +248,22 @@ export function readPublicPreviewFixture(): PublicPreviewFixture | null {
     activeChat: {
       name: requireString(activeChat.name, "activeChat.name"),
       memberCount: requireMemberCount(activeChat.memberCount),
+      ...(type ? { type } : {}),
+      ...(readers ? { readers } : {}),
     },
     chats,
     messages,
+    ...(recentReactions ? { recentReactions } : {}),
+    ...(pendingForward ? { pendingForward } : {}),
   };
+}
+
+/** Validates the injected payload. Returns null when nothing was injected. */
+export function readPublicPreviewFixture(): PublicPreviewFixture | null {
+  if (typeof window === "undefined") return null;
+  const raw = window[PUBLIC_PREVIEW_WINDOW_KEY];
+  if (raw === undefined) return null;
+  return parsePublicPreviewFixture(raw);
 }
 
 // Stable identifiers so repeated captures produce identical DOM and pixels.
@@ -225,6 +324,34 @@ function previewProfile(id: string, name: string, username: string | null): Prof
   };
 }
 
+/**
+ * Everyone the conversation names, the reader first and then in order of
+ * appearance: senders, then people who only reacted, then people who only read.
+ * A name keeps one id everywhere it appears, which is what lets a reaction, a
+ * read receipt and a message agree about who someone is.
+ */
+function previewPeople(fixture: PublicPreviewFixture): string[] {
+  const names = [fixture.currentUser.name];
+  const add = (name: string) => {
+    if (!names.includes(name)) names.push(name);
+  };
+  for (const message of fixture.messages) add(message.sender);
+  for (const message of fixture.messages) for (const reaction of message.reactions ?? []) reaction.users.forEach(add);
+  for (const reader of fixture.activeChat.readers ?? []) add(reader.name);
+  return names;
+}
+
+function personIdAt(index: number): string {
+  if (index === 0) return PREVIEW_IDS.currentUser;
+  if (index === 1) return PREVIEW_IDS.otherUser;
+  return previewMemberId(index);
+}
+
+function previewPersonId(fixture: PublicPreviewFixture, name: string): string {
+  const index = previewPeople(fixture).indexOf(name);
+  return index < 0 ? PREVIEW_IDS.otherUser : personIdAt(index);
+}
+
 export function previewCurrentUser(fixture: PublicPreviewFixture): Profile {
   return previewProfile(PREVIEW_IDS.currentUser, fixture.currentUser.name, fixture.currentUser.username);
 }
@@ -232,24 +359,25 @@ export function previewCurrentUser(fixture: PublicPreviewFixture): Profile {
 /** Members of the open group, so `ChatHeader` composes its own subtitle and
  * `MessageList` can derive real delivery state from `last_read_at`. */
 export function previewMembers(fixture: PublicPreviewFixture): (ChatMember & { profile: Profile })[] {
-  const names = [fixture.currentUser.name, ...fixture.messages.map((message) => message.sender)];
-  const unique: string[] = [];
-  for (const name of names) {
-    if (!unique.includes(name)) unique.push(name);
-  }
-  while (unique.length < fixture.activeChat.memberCount) unique.push(`—${unique.length}`);
+  const isPrivate = fixture.activeChat.type === "private";
+  const people = previewPeople(fixture);
+  const named = isPrivate ? people.slice(0, 2) : [...people];
+  while (!isPrivate && named.length < fixture.activeChat.memberCount) named.push(`—${named.length}`);
+  const readAt = new Map((fixture.activeChat.readers ?? []).map((reader) => [reader.name, todayAt(reader.time)]));
 
-  return unique.slice(0, fixture.activeChat.memberCount).map((name, index) => {
+  return named.map((name, index) => {
     const isCurrent = index === 0;
-    const id = isCurrent ? PREVIEW_IDS.currentUser : index === 1 ? PREVIEW_IDS.otherUser : previewMemberId(index);
+    const id = personIdAt(index);
+    // Everyone has read the conversation unless the fixture says when, which
+    // is what the open chat state actually is, so own messages render their
+    // real read receipt.
+    const lastRead = !isCurrent && readAt.has(name) ? readAt.get(name)! : new Date().toISOString();
     return {
       chat_id: PREVIEW_IDS.activeChat,
       user_id: id,
       role: isCurrent ? "owner" : "member",
       joined_at: EPOCH,
-      // Everyone has read the conversation, which is what the open chat state
-      // actually is, so own messages render their real read receipt.
-      last_read_at: new Date().toISOString(),
+      last_read_at: lastRead,
       last_delivered_at: new Date().toISOString(),
       hidden_at: null,
       cleared_at: null,
@@ -263,12 +391,14 @@ export function previewMembers(fixture: PublicPreviewFixture): (ChatMember & { p
 
 export function previewChats(fixture: PublicPreviewFixture): ChatWithLastMessage[] {
   const members = previewMembers(fixture);
+  const isPrivate = fixture.activeChat.type === "private";
   return fixture.chats.map((chat, index) => {
     const isActive = index === 0;
     const chatId = previewChatId(index);
+    const other = isActive && isPrivate ? members[1]?.profile : undefined;
     return {
       id: chatId,
-      type: isActive ? "group" : "private",
+      type: isActive ? (isPrivate ? "private" : "group") : "private",
       // `useChats` resolves a display name onto every row, including private
       // chats, and the avatar reads it. Matching that keeps the preview faithful.
       name: chat.name,
@@ -284,7 +414,7 @@ export function previewChats(fixture: PublicPreviewFixture): ChatWithLastMessage
       unread_count: isActive ? 0 : chat.unread,
       members: isActive ? members : undefined,
       other_user: isActive
-        ? undefined
+        ? other
         : previewProfile(PREVIEW_IDS.otherUser, chat.name, null),
       last_message: {
         id: `${chatId}-last`,
@@ -315,12 +445,14 @@ export function previewChats(fixture: PublicPreviewFixture): ChatWithLastMessage
 
 export function previewMessages(fixture: PublicPreviewFixture): MessageWithSender[] {
   return fixture.messages.map((message, index) => {
-    const authorId = message.own ? PREVIEW_IDS.currentUser : PREVIEW_IDS.otherUser;
+    const authorId = message.own ? PREVIEW_IDS.currentUser : previewPersonId(fixture, message.sender);
+    const id = `${PREVIEW_IDS.activeChat}-m${index}`;
+    const createdAt = todayAt(message.time);
     // A picture makes an image message whose text is its caption, shaped the
     // way an uploaded photo is: the dimensions reserve the bubble's aspect.
     const image = message.image;
     return {
-      id: `${PREVIEW_IDS.activeChat}-m${index}`,
+      id,
       chat_id: PREVIEW_IDS.activeChat,
       topic_id: null,
       user_id: authorId,
@@ -333,18 +465,58 @@ export function previewMessages(fixture: PublicPreviewFixture): MessageWithSende
       media_url: image ? image.url : null,
       media_metadata: image ? { kind: "image", width: image.width, height: image.height } : null,
       reply_to_id: null,
-      forwarded_from_id: null,
-      edited_at: null,
+      forwarded_from_id: message.forwardedFrom ? `${PREVIEW_IDS.activeChat}-f${index}` : null,
+      forward_origin: message.forwardedFrom ? { name: message.forwardedFrom } : null,
+      edited_at: message.editedAt ? todayAt(message.editedAt) : null,
       deleted_at: null,
-      pinned: false,
-      created_at: todayAt(message.time),
+      pinned: Boolean(message.pinned),
+      created_at: createdAt,
       client_message_id: null,
       client_sent_at: null,
+      reactions: (message.reactions ?? []).flatMap((reaction, reactionIndex) =>
+        reaction.users.map((name, userIndex) => ({
+          id: `${id}-r${reactionIndex}-${userIndex}`,
+          message_id: id,
+          user_id: name === fixture.currentUser.name ? PREVIEW_IDS.currentUser : previewPersonId(fixture, name),
+          emoji: reaction.emoji,
+          created_at: createdAt,
+        })),
+      ),
       sender: previewProfile(
         authorId,
         message.sender,
         message.own ? fixture.currentUser.username : null,
       ),
+    };
+  });
+}
+
+/** The messages a fixture has waiting above the composer, shaped like rows from another chat. */
+export function previewForwardDraft(fixture: PublicPreviewFixture): MessageWithSender[] {
+  return (fixture.pendingForward?.messages ?? []).map((message, index) => {
+    const senderId = `00000000-0000-4000-8000-0000000000${(0x81 + index).toString(16)}`;
+    return {
+      id: `00000000-0000-4000-8000-0000000000${(0x91 + index).toString(16)}`,
+      chat_id: previewChatId(1),
+      topic_id: null,
+      user_id: senderId,
+      bot_id: null,
+      bot_reply_markup: null,
+      content: message.text,
+      type: "text",
+      media_bucket: null,
+      media_path: null,
+      media_url: null,
+      media_metadata: null,
+      reply_to_id: null,
+      forwarded_from_id: null,
+      edited_at: null,
+      deleted_at: null,
+      pinned: false,
+      created_at: EPOCH,
+      client_message_id: null,
+      client_sent_at: null,
+      sender: previewProfile(senderId, message.sender, null),
     };
   });
 }

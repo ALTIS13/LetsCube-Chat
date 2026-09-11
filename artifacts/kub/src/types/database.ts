@@ -1987,4 +1987,11 @@ export interface MessageWithSender extends Message {
   failed?: boolean
   /** Local UI: friendly failed-send reason. Not persisted. */
   send_error?: string | null
+  /**
+   * Local UI: who wrote the original of a forwarded message, when the client
+   * knows. Nothing on the server carries it yet — the source row can sit in a
+   * chat the reader is not a member of — so a forwarded message from the
+   * server reads «Переслано» without a name until it does.
+   */
+  forward_origin?: { name: string } | null
 }

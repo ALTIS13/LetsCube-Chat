@@ -31,12 +31,14 @@ const REASON_UNKNOWN = "Попробуйте ещё раз.";
 export function forwardFeedback(
   result: ForwardMessageResult,
   targetChatName: string | null | undefined,
+  /** How many were forwarded together, since several now go with one send. */
+  count = 1,
 ): ActionFeedbackInput {
   if (result.ok) {
     const name = targetChatName?.trim();
     return {
       kind: "success",
-      title: "Сообщение переслано",
+      title: count > 1 ? "Сообщения пересланы" : "Сообщение переслано",
       detail: name ? `В чат «${name}»` : undefined,
       key: FORWARD_FEEDBACK_KEY,
     };

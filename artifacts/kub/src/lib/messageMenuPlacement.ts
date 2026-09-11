@@ -113,6 +113,12 @@ export interface PointMenuInput {
   safe: Insets;
   point: { x: number; y: number };
   size: { width: number; height: number };
+  /**
+   * The message the menu is for. A menu that has to open upwards stops above
+   * the message rather than above the pointer, so it never lies over the top
+   * of the very message it acts on.
+   */
+  avoid?: { top: number };
 }
 
 /**
@@ -120,13 +126,14 @@ export interface PointMenuInput {
  * flipped up where it does not, and never past the screen's safe edges.
  */
 export function placeAtPoint(input: PointMenuInput): { top: number; left: number } {
-  const { viewport, safe, point, size } = input;
+  const { viewport, safe, point, size, avoid } = input;
   const minLeft = safe.left + VERTICAL_MARGIN;
   const maxLeft = viewport.width - safe.right - VERTICAL_MARGIN - size.width;
   const minTop = safe.top + VERTICAL_MARGIN;
   const maxTop = viewport.height - safe.bottom - VERTICAL_MARGIN - size.height;
   const below = point.y + 4;
-  const above = point.y - 4 - size.height;
+  const aboveMessage = avoid ? avoid.top - 6 - size.height : Number.NEGATIVE_INFINITY;
+  const above = aboveMessage >= minTop ? aboveMessage : point.y - 4 - size.height;
   const top = below <= maxTop ? below : above >= minTop ? above : clamp(below, minTop, maxTop);
   return { top: Math.round(top), left: Math.round(clamp(point.x, minLeft, maxLeft)) };
 }

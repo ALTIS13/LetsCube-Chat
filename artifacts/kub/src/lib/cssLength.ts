@@ -2,7 +2,7 @@
  * Resolving a *computed* CSS length expression to pixels.
  *
  * `getComputedStyle(el).maxWidth` does not hand back a number. For a declared
- * cap like `min(86vw, 560px, max(16rem, calc(100% - var(--kub-action-lane))))`
+ * cap like `min(86vw, 560px, max(16rem, calc(100% - 6.5rem)))`
  * it hands back the expression with every unit already made absolute — `86vw`
  * arrives as `1238.4px`, `16rem` as `256px`, the custom property already
  * substituted — and only percentages left standing, because a percentage

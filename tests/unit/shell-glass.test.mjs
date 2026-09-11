@@ -117,7 +117,9 @@ const covers = [
  * absolute token could not have moved the menu item at all.
  */
 const raised = [
-  ["components/chat/MessageInput.tsx", "bg-[var(--kub-raised)]", 7],
+  // Eight since 2026-09-11: the forward bar joined the reply and edit strips,
+  // on the same composer and nowhere else.
+  ["components/chat/MessageInput.tsx", "bg-[var(--kub-raised)]", 8],
   // The active tab pill of the bot settings panel. Radix drives it from
   // `data-[state=active]`, and `.kub-raise` is a plain class rather than a
   // Tailwind utility, so no variant can put the veil behind that attribute —
@@ -152,18 +154,27 @@ const veiled = [
   ["components/kub/KubFilterChip.tsx", 1],
   ["components/kub/KubFeedbackViewport.tsx", 1],
   ["components/chat/ChatHeader.tsx", 5],
-  ["components/chat/MessageInput.tsx", 8],
+  ["components/chat/MessageInput.tsx", 9],
   ["components/chat/ChatInfoPanel.tsx", 20],
-  ["components/chat/MessageBubble.tsx", 11],
+  // Two, down from eleven on 2026-09-11: the hover cluster, the per-message
+  // context menu and its reaction pickers left the bubble for
+  // `MessageActionLayer` and `MessageReactions`, which are counted below.
+  ["components/chat/MessageBubble.tsx", 2],
   ["components/chat/PinnedMessage.tsx", 7],
   ["components/chat/ChatSearchBar.tsx", 4],
   ["components/chat/ChatMediaPlayback.tsx", 3],
   ["components/chat/VideoMessageRecorderModal.tsx", 2],
   ["components/chat/VoiceRecorder.tsx", 1],
   ["components/chat/TopicStrip.tsx", 1],
-  ["components/chat/MessageList.tsx", 1],
+  // None: its one hover was the bulk selection bar's «Отмена», and that bar
+  // is `ChatSelectionBar` now. Kept at zero so the leftover checks still run.
+  ["components/chat/MessageList.tsx", 0],
   ["components/chat/GroupInviteModal.tsx", 1],
   ["components/chat/ForwardModal.tsx", 1],
+  ["components/chat/MessageActionLayer.tsx", 7],
+  ["components/chat/MessageReactions.tsx", 3],
+  ["components/chat/ChatSelectionBar.tsx", 3],
+  ["components/chat/MessageDeleteDialog.tsx", 1],
   // Six, not seven. The user row was written as a card on a phone and a bare
   // line on a desktop, so it carried two hovers, one per ground —
   // `hover:bg-[var(--kub-surface-3)] sm:hover:bg-[var(--kub-surface-2)]`. The

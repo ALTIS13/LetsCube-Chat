@@ -17,6 +17,8 @@ import {
 } from "@/lib/messageAckError";
 import type { ForwardMessageResult } from "@/lib/messageForward";
 import { MESSAGE_SELECT_WITH_JOINS } from "@/lib/messageProjection";
+import { applyReactionPlan, planReactionToggle } from "@/lib/messageReactions";
+import { rememberReactionUse } from "@/lib/recentReactions";
 import { attachKnownSender } from "@/lib/realtimeMessage";
 import { applyProfileToChats } from "@/lib/chatProfilePatch";
 import {
@@ -1309,26 +1311,67 @@ export function useMessages(
     return { ok: true, error: null };
   }, [supabase]);
 
+  // ── Reactions ───────────────────────────────────────────────────────────
+  // One reaction per person, as in Telegram (the owner's decision of
+  // 2026-09-11): another emoji replaces yours, yours again removes it. The rule
+  // is kept here, in the client, because the database still accepts a second
+  // row — a constraint is a separate, approved migration. Until then two
+  // clients racing each other can leave two rows, and the next toggle from
+  // either clears them.
+  //
+  // The result is shown before the server answers and replaced by what the
+  // server holds once it has: a reaction used to appear only after the refetch.
   const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
     const user = currentUserRef.current;
     if (!user) return;
-    const { data: existing, error: lookupError } = await supabase.from("reactions").select("id")
-      .eq("message_id", messageId).eq("user_id", user.id).eq("emoji", emoji).maybeSingle();
-    if (lookupError) {
-      console.error("Reaction lookup error:", lookupError);
-      return;
+    const activeChatId = chatId;
+    const shown = activeChatId
+      ? (useAppStore.getState().messages[activeChatId] ?? []).find((message) => message.id === messageId)
+      : undefined;
+
+    let mine = shown?.reactions?.filter((reaction) => reaction.user_id === user.id) ?? null;
+    if (!mine) {
+      const { data, error: lookupError } = await supabase.from("reactions")
+        .select("id,message_id,user_id,emoji,created_at")
+        .eq("message_id", messageId).eq("user_id", user.id);
+      if (lookupError) {
+        console.error("Reaction lookup error:", lookupError);
+        return;
+      }
+      mine = (data ?? []) as NonNullable<MessageWithSender["reactions"]>;
     }
-    if (existing) {
-      await supabase.from("reactions").delete().eq("id", existing.id);
-    } else {
-      await supabase.from("reactions").insert({ message_id: messageId, user_id: user.id, emoji });
+
+    const plan = planReactionToggle(mine, user.id, emoji);
+    if (shown && activeChatId) {
+      const optimistic = applyReactionPlan(shown.reactions, user.id, plan, {
+        messageId,
+        createdAt: new Date().toISOString(),
+      });
+      const current = useAppStore.getState().messages[activeChatId] ?? [];
+      setMessages(activeChatId, current.map((message) =>
+        message.id === messageId ? { ...message, reactions: optimistic as MessageWithSender["reactions"] } : message,
+      ));
     }
+    if (plan.add) rememberReactionUse(plan.add);
+
+    if (plan.remove.length) {
+      // Every row of this person on this message, not only the ones on screen:
+      // that is what keeps a stray second row from outliving the next choice.
+      const { error } = await supabase.from("reactions").delete()
+        .eq("message_id", messageId).eq("user_id", user.id);
+      if (error) console.error("Reaction removal error:", error);
+    }
+    if (plan.add) {
+      const { error } = await supabase.from("reactions").insert({ message_id: messageId, user_id: user.id, emoji: plan.add });
+      if (error) console.error("Reaction insert error:", error);
+    }
+
     const { data: updatedMsg } = await supabase.from("messages")
       .select(MESSAGE_SELECT_WITH_JOINS)
       .eq("id", messageId).single();
-    if (updatedMsg && chatId) {
-      const current = useAppStore.getState().messages[chatId] ?? [];
-      setMessages(chatId, current.map((m) => m.id === messageId ? (updatedMsg as MessageWithSender) : m));
+    if (updatedMsg && activeChatId) {
+      const current = useAppStore.getState().messages[activeChatId] ?? [];
+      setMessages(activeChatId, current.map((m) => m.id === messageId ? (updatedMsg as MessageWithSender) : m));
     }
   }, [chatId, supabase, setMessages]);
 

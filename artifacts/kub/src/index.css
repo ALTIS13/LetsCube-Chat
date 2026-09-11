@@ -445,6 +445,16 @@
     radial-gradient(58% 46% at 94% 4%, rgba(66, 127, 194, 0.09) 0%, rgba(66, 127, 194, 0) 64%),
     radial-gradient(52% 42% at 78% 104%, rgba(77, 139, 208, 0.06) 0%, rgba(77, 139, 208, 0) 60%),
     radial-gradient(120% 96% at 50% 58%, rgba(0, 0, 0, 0) 44%, rgba(0, 0, 0, 0.34) 100%);
+  /* What dims the conversation behind a tapped message's menu on a phone. Dark
+     in both themes: the light theme's modal wash is a lightening, and a menu
+     over a washed-out chat reads as the chat fading rather than as focus. */
+  --kub-scrim: rgba(1, 5, 14, 0.62);
+  /* And softens it, in both themes. The bar and the card open over the
+     messages either side of the tapped one, and the message is lifted over its
+     neighbour when the card needs the room; neighbours left sharp read as cut
+     off by those edges rather than as lying behind them. A few pixels push them
+     back without erasing the conversation the menu belongs to. */
+  --kub-scrim-blur: blur(4px);
 
   --tg-bg: var(--kub-bg);
   --tg-sidebar: var(--kub-surface);
@@ -697,6 +707,11 @@
   --tg-text-secondary: var(--kub-muted);
   --tg-border: var(--kub-border-color);
   --tg-hover: var(--kub-surface-2);
+  /* The phone menu's dim. Darker than the dark theme's in alpha terms only:
+     over a light conversation 0.38 of the navy already reads as a clear step. */
+  --kub-scrim: rgba(8, 20, 38, 0.38);
+  /* The same softening as the dark theme's, for the same reason. */
+  --kub-scrim-blur: blur(4px);
   --tg-active: rgba(0, 143, 204, 0.14);
   --tg-online: var(--kub-online);
   --tg-unread: var(--kub-cyan);
@@ -1126,17 +1141,115 @@ textarea::placeholder, input::placeholder {
   }
 }
 
-/* Room beside a message for the hover action cluster.
-   Zero on a touch layout, where there is no hover and the cluster is not
-   rendered at all — reserving 104px of a 390px screen there would cost the
-   message most of its width for nothing. */
-:root {
-  --kub-action-lane: 0px;
+/* Message actions, Telegram's way (D-071, the owner's decision of 2026-09-11).
+
+   There is no hover cluster and no lane reserved beside every message for one.
+   A hovered message shows one round ❤️ beside its time, outside the bubble, and
+   only for a pointer that can hover, from 640px. It is `display: none`
+   everywhere else, so a phone or a tablet under a finger never lays it out.
+
+   Where it is shown it is transparent until the message is hovered — not
+   removed — so the keyboard can still reach it and `:focus-visible` shows it.
+   The two reserve classes keep its width free on the bubble's open side, and
+   only bind where a narrow window has left no room there: a bubble capped by
+   its own maximum has room to spare and the padding changes nothing about it. */
+@layer components {
+  .kub-message-react-button {
+    display: none;
+  }
+
+  @media (min-width: 640px) and (hover: hover) and (pointer: fine) {
+    .kub-message-react-button {
+      display: inline-flex;
+      opacity: 0;
+      pointer-events: none;
+      transition-property: opacity;
+      transition-duration: var(--kub-motion-fast);
+      transition-timing-function: var(--kub-ease-standard);
+    }
+
+    .group:hover .kub-message-react-button,
+    .kub-message-react-button:focus-visible,
+    .kub-message-react-button[aria-expanded="true"] {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .kub-message-reserve-right {
+      padding-right: 2.25rem;
+    }
+
+    .kub-message-reserve-left {
+      padding-left: 2.25rem;
+    }
+  }
+
+  /* The dim behind a tapped message on a phone. The message itself is lifted
+     above it rather than cut out of it, so it stays the live element. The
+     scrim has no children, so its backdrop filter becomes nobody's containing
+     block (rule 3); where the filter is unsupported it is simply a dim. */
+  .kub-message-scrim {
+    background-color: var(--kub-scrim);
+    -webkit-backdrop-filter: var(--kub-scrim-blur);
+    backdrop-filter: var(--kub-scrim-blur);
+    animation: kub-modal-overlay-in var(--kub-motion-standard) var(--kub-ease-standard);
+  }
+
+  /* A menu, a bar or a popover opening in place: opacity and a small lift,
+     nothing that has a size. */
+  .kub-menu-in {
+    animation: kub-menu-in var(--kub-motion-standard) var(--kub-ease-emphasis);
+  }
+
+  /* A reaction becoming yours. A transform, so the chip's box never changes
+     size and the bubble around it never re-lays out. */
+  .kub-reaction-pop {
+    animation: kub-reaction-pop var(--kub-motion-emphasis) var(--kub-ease-emphasis) both;
+  }
+
+  /* The full-width band behind a selected message. */
+  .kub-message-selected-band {
+    background-color: color-mix(in srgb, var(--kub-cyan) 16%, transparent);
+    transform-origin: center;
+    animation: kub-message-selected-in var(--kub-motion-standard) var(--kub-ease-standard) both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .kub-menu-in,
+    .kub-reaction-pop,
+    .kub-message-selected-band,
+    .kub-message-scrim {
+      animation: none;
+    }
+  }
 }
 
-@media (min-width: 640px) {
-  :root {
-    --kub-action-lane: 6.5rem;
+@keyframes kub-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+
+@keyframes kub-reaction-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.22);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes kub-message-selected-in {
+  from {
+    opacity: 0;
+    transform: scaleX(0.96);
   }
 }
 

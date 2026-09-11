@@ -196,3 +196,27 @@ export function forwardDraftTitle(count: number): string {
 export function selectionCountLabel(count: number): string {
   return `Выделено: ${count}`;
 }
+
+export interface CopiedMessage {
+  name: string;
+  time: string;
+  text: string;
+}
+
+/**
+ * What «Копировать» puts on the clipboard for several selected messages.
+ *
+ * One author's messages are their texts, a blank line apart, the way a person
+ * would paste their own words. A conversation keeps who said what and when —
+ * «Аня, [09:20]» over each text — as Telegram Desktop does, because without it
+ * a pasted exchange cannot be read. Messages with nothing to copy are skipped.
+ */
+export function copiedMessagesText(messages: readonly CopiedMessage[]): string {
+  const withText = messages.filter((message) => message.text.trim().length > 0);
+  if (withText.length === 0) return "";
+  if (withText.length === 1) return withText[0].text;
+  const oneAuthor = withText.every((message) => message.name === withText[0].name);
+  return withText
+    .map((message) => (oneAuthor ? message.text : `${message.name}, [${message.time}]\n${message.text}`))
+    .join("\n\n");
+}

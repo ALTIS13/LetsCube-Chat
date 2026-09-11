@@ -236,6 +236,17 @@ test("a menu at the pointer flips up near the bottom and never leaves the safe s
   });
 });
 
+test("a menu that has to open upwards stops above its message, not above the pointer", () => {
+  const screen = { width: 1440, height: 900 };
+  const size = { width: 256, height: 360 };
+  // Right click in the middle of a message whose top is at 606.
+  assert.equal(placeAtPoint({ viewport: screen, safe: none, point: { x: 1000, y: 626 }, size, avoid: { top: 606 } }).top, 606 - 6 - 360);
+  // Without the message it would have covered the message's top 16px.
+  assert.equal(placeAtPoint({ viewport: screen, safe: none, point: { x: 1000, y: 626 }, size }).top, 626 - 4 - 360);
+  // A message too close to the top to fit the menu above it falls back to the pointer.
+  assert.equal(placeAtPoint({ viewport: screen, safe: none, point: { x: 1000, y: 700 }, size, avoid: { top: 200 } }).top, 700 - 4 - 360);
+});
+
 test("a popover opens where it was asked to, and on the other side when it does not fit", () => {
   const screen = { width: 800, height: 600 };
   const anchor = { top: 300, bottom: 328, left: 400, right: 428 };

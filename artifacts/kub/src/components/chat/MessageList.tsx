@@ -2,7 +2,9 @@
 
 import React, { RefObject, useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import { KubIcon, KubModal } from "@/components/kub";
-import { MessageBubble } from "./MessageBubble";
+import { MessageBubble, getVisibleMediaCaption, isRoundVideoMessage } from "./MessageBubble";
+import { MessageActionLayer, type MessageMenuRequest } from "./MessageActionLayer";
+import { MessageActionsContext, type MessageActionsContextValue, type ReactionPerson } from "./messageActionsContext";
 import type { MediaViewerItem } from "./MediaViewer";
 import { TypingIndicator } from "./TypingIndicator";
 import type { ChatMember, MessageWithSender, Profile } from "@/types/database";
@@ -22,9 +24,18 @@ import {
   type GroupReadReceiptInfo,
 } from "@/lib/groupReadReceipts";
 import { sameData } from "@/lib/structuralSharing";
-import { requestAppConfirm } from "@/lib/appDialogs";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { formatFullTime } from "@/lib/format";
+import { copyWithFeedback } from "@/lib/actionFeedback";
+import { messageActionKind, type MessageActionId } from "@/lib/messageActions";
+import { messageLink } from "@/lib/messageLink";
+import { copyImageToClipboard, mediaDownloadName, saveMediaAs } from "@/lib/messageMediaActions";
+import { QUICK_REACTION } from "@/lib/messageReactions";
+import {
+  RECENT_REACTIONS_EVENT,
+  quickReactionRow,
+  readStoredRecentReactions,
+} from "@/lib/recentReactions";
 import {
   useAvatarVariantUrls,
   useMessageMediaVariantUrls,
@@ -44,10 +55,10 @@ interface MessageListProps {
   onJumpToReply?: (messageId: string) => void;
   onReaction: (messageId: string, emoji: string) => void;
   onEdit?: (msg: MessageWithSender) => void;
+  /** Deletes an own message for everyone; the delete dialog decides when. */
   onDelete?: (msg: MessageWithSender) => void;
+  /** Hides a message for the reader; offering it is what puts «Удалить» in the menus. */
   onHideForMe?: (msg: MessageWithSender) => void;
-  onBulkHideForMe?: (messages: MessageWithSender[]) => Promise<void> | void;
-  onBulkDeleteForEveryone?: (messages: MessageWithSender[]) => Promise<void> | void;
   onTogglePin?: (msg: MessageWithSender) => void;
   onForward?: (msg: MessageWithSender) => void;
   onRetrySend?: (msg: MessageWithSender) => void;
@@ -76,6 +87,10 @@ interface MessageListProps {
   layoutVersion?: number;
   initialUnreadSince?: string | null;
   initialUnreadCount?: number;
+  /** The chat these messages belong to. Selection and the delete dialog are scoped to it. */
+  chatId?: string;
+  /** The six beside ❤️, when something other than this device's ranking decides them. */
+  quickReactions?: readonly string[];
 }
 
 function compareMessagesForRender(a: MessageWithSender, b: MessageWithSender): number {
@@ -172,8 +187,6 @@ export function MessageList({
   onEdit,
   onDelete,
   onHideForMe,
-  onBulkHideForMe,
-  onBulkDeleteForEveryone,
   onTogglePin,
   onForward,
   onRetrySend,
@@ -188,7 +201,6 @@ export function MessageList({
   chatMembers,
   chatType,
   isSavedChat,
-  myRole,
   onLoadOlder,
   hasMoreOlder = false,
   loadingOlder = false,
@@ -199,6 +211,8 @@ export function MessageList({
   layoutVersion = 0,
   initialUnreadSince = null,
   initialUnreadCount = 0,
+  chatId,
+  quickReactions: quickReactionsOverride,
 }: MessageListProps) {
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -246,13 +260,21 @@ export function MessageList({
   const senderAvatarVariants = useAvatarVariantUrls(senderAvatarProfileIds);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [newCount, setNewCount] = useState(0);
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkError, setBulkError] = useState<string | null>(null);
-  const [bulkConfirmAction, setBulkConfirmAction] = useState<"hide" | "delete" | null>(null);
-  const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [openReactionMessageId, setOpenReactionMessageId] = useState<string | null>(null);
-  const [openActionMessageId, setOpenActionMessageId] = useState<string | null>(null);
+  // Selection lives in the store, because the bar that replaces the chat
+  // header while it lasts is not part of this list. Scoped to one chat.
+  const selectionScope = chatId ?? layoutKey ?? null;
+  const selectionScopeRef = useRef(selectionScope);
+  useLayoutEffect(() => { selectionScopeRef.current = selectionScope; }, [selectionScope]);
+  const messageSelection = useAppStore((state) => state.messageSelection);
+  const selectionMode = Boolean(messageSelection && selectionScope && messageSelection.chatId === selectionScope);
+  const selectedIds = React.useMemo(
+    () => new Set(selectionMode && messageSelection ? messageSelection.ids : []),
+    [messageSelection, selectionMode],
+  );
+  /** The one menu open in this conversation, remounted for every request. */
+  const [menu, setMenu] = useState<(MessageMenuRequest & { key: number }) | null>(null);
+  /** How far the phone menu has lifted its message. */
+  const [menuLift, setMenuLift] = useState(0);
   const [readReceiptsMessageId, setReadReceiptsMessageId] = useState<string | null>(null);
   const isAtBottomRef = useRef(true);
   const prevMessageCountRef = useRef(sortedMessages.length);
@@ -301,23 +323,6 @@ export function MessageList({
     return first?.id ?? null;
   }, [initialUnreadCount, initialUnreadSince, sortedMessages, userId]);
 
-  const selectableMessages = React.useMemo(
-    () => sortedMessages.filter((message) => !message.deleted_at),
-    [sortedMessages],
-  );
-  const selectedMessages = React.useMemo(
-    () => selectableMessages.filter((message) => selectedIds.has(message.id)),
-    [selectableMessages, selectedIds],
-  );
-  const selectedCanDeleteForEveryone = React.useMemo(
-    () => Boolean(
-      onBulkDeleteForEveryone &&
-      !isSavedChat &&
-      selectedMessages.length > 0 &&
-      selectedMessages.every((message) => canUseHumanMessageControls(message, userId))
-    ),
-    [isSavedChat, onBulkDeleteForEveryone, selectedMessages, userId],
-  );
   const readReceiptsMessage = React.useMemo(
     () => readReceiptsMessageId ? sortedMessages.find((message) => message.id === readReceiptsMessageId) ?? null : null,
     [readReceiptsMessageId, sortedMessages],
@@ -334,22 +339,19 @@ export function MessageList({
     [chatMembers, chatType, isSavedChat, readReceiptsMessage, userId],
   );
 
+  /**
+   * One message into the selection or out of it, and the last one out ends it —
+   * Telegram's rule. Read from the store at the moment of the tap rather than
+   * from a render, so this stays one function for the life of the list and the
+   * rows' memo holds.
+   */
   const toggleSelected = useCallback((messageId: string) => {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      if (next.has(messageId)) next.delete(messageId);
-      else next.add(messageId);
-      return next;
-    });
-  }, []);
-
-  const cancelSelection = useCallback(() => {
-    setSelectionMode(false);
-    setSelectedIds(new Set());
-    setBulkConfirmAction(null);
-    setBulkDeleting(false);
-    setOpenReactionMessageId(null);
-    setOpenActionMessageId(null);
+    const { messageSelection: current, setMessageSelection } = useAppStore.getState();
+    if (!current) return;
+    const ids = current.ids.includes(messageId)
+      ? current.ids.filter((id) => id !== messageId)
+      : [...current.ids, messageId];
+    setMessageSelection(ids.length ? { chatId: current.chatId, ids } : null);
   }, []);
 
   /**
@@ -388,40 +390,39 @@ export function MessageList({
 
   const rowActions = React.useMemo<MessageRowActions>(() => ({
     reply: (message) => {
-      setOpenActionMessageId(null);
-      setOpenReactionMessageId(null);
+      setMenu(null);
+      setMenuLift(0);
       handlersRef.current.onReply(message);
     },
     jumpToReply: (messageId) => handlersRef.current.onJumpToReply?.(messageId),
     reaction: (messageId, emoji) => handlersRef.current.onReaction(messageId, emoji),
-    edit: (message) => handlersRef.current.onEdit?.(message),
-    remove: (message) => handlersRef.current.onDelete?.(message),
-    hideForMe: (message) => handlersRef.current.onHideForMe?.(message),
     retrySend: (message) => handlersRef.current.onRetrySend?.(message),
     editFailedSend: (message) => handlersRef.current.onEditFailedSend?.(message),
     discardLocalMessage: (message) => handlersRef.current.onDiscardLocalMessage?.(message),
-    togglePin: (message) => handlersRef.current.onTogglePin?.(message),
-    forward: (message) => handlersRef.current.onForward?.(message),
     openMedia: (media) => handlersRef.current.onOpenMedia?.(media),
+    // The shape is decided when the menu opens, by the width: below 640px the
+    // phone's, from 640px the desktop's — whichever pointer asked for it.
+    openMenu: (messageId, point, source) => {
+      setMenuLift(0);
+      setMenu((current) => ({
+        messageId,
+        point,
+        shape: typeof window !== "undefined" && window.innerWidth < 640 ? "phone" : "desktop",
+        fromKeyboard: source === "keyboard",
+        key: (current?.key ?? 0) + 1,
+      }));
+    },
+    closeMenu: () => {
+      setMenu(null);
+      setMenuLift(0);
+    },
     startSelection: (messageId) => {
-      setBulkError(null);
-      setBulkConfirmAction(null);
-      setSelectionMode(true);
-      setSelectedIds(new Set([messageId]));
-      setOpenReactionMessageId(null);
-      setOpenActionMessageId(null);
+      setMenu(null);
+      setMenuLift(0);
+      const scope = selectionScopeRef.current;
+      if (scope) useAppStore.getState().setMessageSelection({ chatId: scope, ids: [messageId] });
     },
     toggleSelected,
-    toggleReactionMenu: (messageId) => {
-      setOpenActionMessageId(null);
-      setOpenReactionMessageId((current) => current === messageId ? null : messageId);
-    },
-    closeReactionMenu: () => setOpenReactionMessageId(null),
-    openActionMenu: (messageId) => {
-      setOpenReactionMessageId(null);
-      setOpenActionMessageId(messageId);
-    },
-    closeActionMenu: () => setOpenActionMessageId(null),
     openGroupReadReceipts: (messageId) => setReadReceiptsMessageId(messageId),
   }), [toggleSelected]);
 
@@ -429,7 +430,6 @@ export function MessageList({
   const hasEdit = Boolean(onEdit);
   const hasDelete = Boolean(onDelete);
   const hasHideForMe = Boolean(onHideForMe);
-  const hasBulkHideForMe = Boolean(onBulkHideForMe);
   const hasRetrySend = Boolean(onRetrySend);
   const hasEditFailedSend = Boolean(onEditFailedSend);
   const hasDiscardLocalMessage = Boolean(onDiscardLocalMessage);
@@ -441,7 +441,6 @@ export function MessageList({
     edit: hasEdit,
     remove: hasDelete,
     hideForMe: hasHideForMe,
-    bulkHideForMe: hasBulkHideForMe,
     retrySend: hasRetrySend,
     editFailedSend: hasEditFailedSend,
     discardLocalMessage: hasDiscardLocalMessage,
@@ -449,7 +448,7 @@ export function MessageList({
     forward: hasForward,
     openMedia: hasOpenMedia,
   }), [
-    hasBulkHideForMe, hasDelete, hasDiscardLocalMessage, hasEdit, hasEditFailedSend, hasForward,
+    hasDelete, hasDiscardLocalMessage, hasEdit, hasEditFailedSend, hasForward,
     hasHideForMe, hasJumpToReply, hasOpenMedia, hasRetrySend, hasTogglePin,
   ]);
 
@@ -486,53 +485,179 @@ export function MessageList({
     return receipts;
   }, [chatMembers, chatType, isSavedChat, sortedMessages, userId]);
 
-  const handleBulkHideForMe = useCallback(async () => {
-    if (!onBulkHideForMe || selectedMessages.length === 0) return;
-    const confirmed = await requestAppConfirm({
-      title: "Удалить выбранные сообщения у себя?",
-      description: "Сообщения исчезнут только у вас. У других участников они останутся.",
-      confirmLabel: "Удалить у себя",
-      tone: "danger",
-      icon: "delete",
-    });
-    if (!confirmed) return;
-    setBulkConfirmAction("hide");
-    setBulkDeleting(true);
-    setBulkError(null);
-    try {
-      await onBulkHideForMe(selectedMessages);
-      cancelSelection();
-    } catch (error) {
-      setBulkError(error instanceof Error ? error.message : "Не удалось скрыть выбранные сообщения.");
-      setBulkDeleting(false);
-    }
-  }, [cancelSelection, onBulkHideForMe, selectedMessages]);
+  const quickReactions = useQuickReactions(quickReactionsOverride);
 
-  const handleBulkDeleteForEveryone = useCallback(async () => {
-    if (!onBulkDeleteForEveryone || !selectedCanDeleteForEveryone) return;
-    const confirmed = await requestAppConfirm({
-      title: "Удалить выбранные сообщения для всех?",
-      description: "Это действие нельзя отменить. Сообщения будут заменены плашками удаления.",
-      confirmLabel: "Удалить для всех",
-      tone: "danger",
-      icon: "delete",
-    });
-    if (!confirmed) return;
-    setBulkConfirmAction("delete");
-    setBulkDeleting(true);
-    setBulkError(null);
-    try {
-      await onBulkDeleteForEveryone(selectedMessages);
-      cancelSelection();
-    } catch (error) {
-      setBulkError(error instanceof Error ? error.message : "Не удалось удалить выбранные сообщения для всех.");
-      setBulkDeleting(false);
+  // Who is who, for «who reacted» and the list of reactions. Keyed on what a
+  // name is made of rather than on the members array, which is a new array on
+  // every read receipt and would otherwise rebuild this for nothing.
+  const peopleSignature = (chatMembers ?? [])
+    .map((member) => [member.user_id, member.profile?.full_name ?? "", member.profile?.username ?? "", member.profile?.avatar_url ?? ""].join(""))
+    .join("");
+  const people = React.useMemo(() => {
+    const map = new Map<string, ReactionPerson>();
+    for (const member of chatMembers ?? []) {
+      if (member.profile) map.set(member.user_id, member.profile);
     }
-  }, [cancelSelection, onBulkDeleteForEveryone, selectedCanDeleteForEveryone, selectedMessages]);
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [peopleSignature]);
 
+  const actionsContext = React.useMemo<MessageActionsContextValue>(() => ({
+    quickReactions,
+    people,
+    currentUserId: userId,
+    openEmojiPanel: (messageId, anchor) => {
+      setMenuLift(0);
+      setMenu((current) => ({
+        messageId,
+        point: { x: anchor.left, y: anchor.top },
+        shape: window.innerWidth < 640 ? "phone" : "desktop",
+        emojiAnchor: anchor,
+        key: (current?.key ?? 0) + 1,
+      }));
+    },
+    openMenuAt: (messageId, anchor) =>
+      rowActions.openMenu(messageId, { x: anchor.left, y: anchor.bottom }, "keyboard"),
+  }), [people, quickReactions, rowActions, userId]);
+
+  /** What a menu item does. The menu has already been asked to close. */
+  const runMenuAction = useCallback((action: MessageActionId, message: MessageWithSender) => {
+    setMenu(null);
+    setMenuLift(0);
+    const handlers = handlersRef.current;
+    const scope = selectionScopeRef.current;
+    const text = message.type === "text" ? message.content ?? "" : getVisibleMediaCaption(message) ?? "";
+    const copyText = () =>
+      void copyWithFeedback(text, {
+        success: "Сообщение скопировано",
+        error: "Не удалось скопировать сообщение",
+        key: "message",
+      });
+    switch (action) {
+      case "reply":
+        handlers.onReply(message);
+        return;
+      case "edit":
+      case "editCaption":
+        handlers.onEdit?.(message);
+        return;
+      case "pin":
+      case "unpin":
+        handlers.onTogglePin?.(message);
+        return;
+      case "copy":
+        if (messageActionKind(message) === "photo" && message.media_url) void copyImageToClipboard(message.media_url);
+        else copyText();
+        return;
+      case "copyText":
+        copyText();
+        return;
+      case "copyImage":
+        if (message.media_url) void copyImageToClipboard(message.media_url);
+        return;
+      case "saveAs":
+        if (message.media_url) {
+          void saveMediaAs(
+            message.media_url,
+            mediaDownloadName({
+              type: message.type,
+              content: message.content,
+              mimeType: mediaMimeType(message),
+              createdAt: message.created_at,
+            }),
+          );
+        }
+        return;
+      case "copyLink":
+        void copyWithFeedback(messageLink(message.chat_id, message.id, window.location.origin), {
+          success: "Ссылка на сообщение скопирована",
+          error: "Не удалось скопировать ссылку",
+          key: "message-link",
+        });
+        return;
+      case "forward":
+        handlers.onForward?.(message);
+        return;
+      case "delete":
+        if (scope) useAppStore.getState().setMessageDeleteRequest({ chatId: scope, ids: [message.id] });
+        return;
+      case "select":
+        if (scope) useAppStore.getState().setMessageSelection({ chatId: scope, ids: [message.id] });
+        return;
+      case "retry":
+        handlers.onRetrySend?.(message);
+        return;
+      case "editFailed":
+        handlers.onEditFailedSend?.(message);
+        return;
+      case "discard":
+        handlers.onDiscardLocalMessage?.(message);
+        return;
+      case "details":
+        return;
+    }
+  }, []);
+
+  const menuMessage = menu ? messagesMap[menu.messageId] ?? null : null;
+  const menuContext = React.useMemo(() => {
+    if (!menuMessage) return null;
+    const own = canUseHumanMessageControls(menuMessage, userId);
+    const kind = messageActionKind(menuMessage);
+    const localSend = menuMessage.id.startsWith("tmp:") || Boolean(menuMessage.pending || menuMessage.checking || menuMessage.failed);
+    // A private chat's other person has read up to their last read time. That
+    // is the time they last read the chat, not this message — the exact time
+    // per message needs the backend.
+    const recipient = chatType === "private" ? chatMembers?.find((member) => member.user_id !== userId) : undefined;
+    const readAt = own && recipient?.last_read_at &&
+      new Date(recipient.last_read_at).getTime() >= new Date(menuMessage.created_at).getTime()
+      ? recipient.last_read_at
+      : null;
+    return {
+      own,
+      kind,
+      readAt,
+      hasText: kind === "text" ? Boolean(menuMessage.content?.trim()) : Boolean(getVisibleMediaCaption(menuMessage)),
+      captionEditable: kind === "photo" || kind === "file" || (kind === "video" && !isRoundVideoMessage(menuMessage)),
+      groupReadInfo: receiptsByMessageId.groupRead.get(menuMessage.id) ?? null,
+      capabilities: {
+        reply: !localSend,
+        edit: own && rowCapabilities.edit,
+        pin: rowCapabilities.togglePin,
+        forward: rowCapabilities.forward,
+        delete: rowCapabilities.hideForMe || (own && rowCapabilities.remove),
+        select: !menuMessage.deleted_at,
+        retry: rowCapabilities.retrySend && Boolean(menuMessage.failed),
+        editFailed: rowCapabilities.editFailedSend && Boolean(menuMessage.failed),
+        discard: rowCapabilities.discardLocalMessage && localSend,
+      },
+    };
+  }, [chatMembers, chatType, menuMessage, receiptsByMessageId, rowCapabilities, userId]);
+
+  // A menu belongs to a message on screen in this chat: it closes when the
+  // message goes, and when the conversation does.
   useEffect(() => {
-    setBulkConfirmAction(null);
-  }, [selectedIds]);
+    if (menu && !menuMessage) {
+      setMenu(null);
+      setMenuLift(0);
+    }
+  }, [menu, menuMessage]);
+  useEffect(() => {
+    setMenu(null);
+    setMenuLift(0);
+  }, [selectionScope]);
+
+  // Escape leaves selection mode. A dialog open over the conversation takes
+  // its own Escape first.
+  useEffect(() => {
+    if (!selectionMode) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (document.querySelector('[aria-modal="true"]')) return;
+      useAppStore.getState().setMessageSelection(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectionMode]);
 
   const releaseOlderScrollPreservation = useCallback(() => {
     if (olderReleaseFrameRef.current !== null) {
@@ -922,6 +1047,7 @@ export function MessageList({
   const resolvedTopInset = Math.max(0, topInset);
 
   return (
+    <MessageActionsContext.Provider value={actionsContext}>
     <div
       className="relative flex-1 min-h-0 min-w-0 overflow-hidden"
       style={{
@@ -955,51 +1081,6 @@ export function MessageList({
         "--kub-list-bottom-inset": `${resolvedBottomInset}px`,
       } as React.CSSProperties}
     >
-      {onBulkHideForMe && selectionMode && (
-        <div className="fixed bottom-[calc(4.75rem+var(--kub-safe-bottom))] left-3 right-3 z-[70] flex items-center justify-between gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]/95 p-2 shadow-lg backdrop-blur sm:absolute sm:bottom-auto sm:left-auto sm:right-3 sm:top-[calc(var(--kub-list-top-inset,0px)+0.5rem)] sm:w-auto sm:justify-start sm:p-1.5">
-          <span className="px-2 text-xs font-semibold text-[color:var(--kub-muted)]">
-            Выбрано: {selectedMessages.length}
-          </span>
-          <button
-            type="button"
-            onClick={handleBulkHideForMe}
-            disabled={selectedMessages.length === 0 || bulkDeleting}
-            className={cn(
-              "inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:opacity-40",
-              bulkConfirmAction === "hide" ? "bg-[color-mix(in_srgb,var(--kub-danger)_15%,transparent)] text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-danger-text)]",
-            )}
-          >
-            <KubIcon name="delete" size={14} />
-            {bulkDeleting && bulkConfirmAction === "hide" ? "Удаляем..." : "Удалить у себя"}
-          </button>
-          {selectedCanDeleteForEveryone && (
-            <button
-              type="button"
-              onClick={handleBulkDeleteForEveryone}
-              disabled={selectedMessages.length === 0 || bulkDeleting}
-              className={cn(
-                "inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold hover:bg-[color-mix(in_srgb,var(--kub-danger)_12%,transparent)] disabled:opacity-40",
-                bulkConfirmAction === "delete" ? "bg-[color-mix(in_srgb,var(--kub-danger)_15%,transparent)] text-[color:var(--kub-danger-text)]" : "text-[color:var(--kub-danger-text)]",
-              )}
-            >
-              <KubIcon name="delete" size={14} />
-              {bulkDeleting && bulkConfirmAction === "delete" ? "Удаляем..." : "Удалить для всех"}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={cancelSelection}
-            className="inline-flex h-8 items-center justify-center rounded-lg px-2 text-xs font-semibold text-[color:var(--kub-muted)] kub-raise-hover"
-          >
-            Отмена
-          </button>
-        </div>
-      )}
-      {bulkError && (
-        <div className="absolute left-3 right-3 top-[calc(var(--kub-list-top-inset,0px)+3.5rem)] z-20 rounded-xl border border-[color:var(--kub-danger)]/40 bg-[var(--kub-surface)]/95 px-3 py-2 text-xs text-[color:var(--kub-danger-text)] shadow-lg backdrop-blur">
-          {bulkError}
-        </div>
-      )}
       <div
         ref={containerRef}
         data-testid="message-scroll-container"
@@ -1017,13 +1098,6 @@ export function MessageList({
         // down. Every other pointing device released it; the keyboard did not.
         onKeyDown={(event) => {
           if (SCROLLING_KEYS.has(event.key)) releaseScrollControl();
-        }}
-        onClickCapture={(event) => {
-          const target = event.target as HTMLElement | null;
-          if (target?.closest("[data-reaction-menu], [data-reaction-trigger]")) return;
-          if (target?.closest("[data-action-menu]")) return;
-          if (openReactionMessageId) setOpenReactionMessageId(null);
-          if (openActionMessageId) setOpenActionMessageId(null);
         }}
         className="chat-bg h-full min-w-0 overflow-y-auto overflow-x-hidden px-3 py-2 pb-6 [overflow-anchor:none] sm:px-4"
         // Padding and scroll-padding move together, on both edges.
@@ -1098,15 +1172,13 @@ export function MessageList({
               isEntering={enteringKeys.has(messageEntranceKey(msg))}
               selectionMode={selectionMode}
               selected={selectionMode && selectedIds.has(msg.id)}
-              reactionMenuOpen={openReactionMessageId === msg.id}
-              actionMenuOpen={openActionMessageId === msg.id}
+              focused={menu?.shape === "phone" && menu.messageId === msg.id}
+              lift={menu?.shape === "phone" && menu.messageId === msg.id ? menuLift : 0}
               replyTarget={msg.reply_to_id ? messagesMap[msg.reply_to_id] : undefined}
               mediaVariant={messageMediaVariants[msg.id]}
               senderAvatarVariant={msg.sender?.id ? senderAvatarVariants[msg.sender.id] : undefined}
               deliveryState={receiptsByMessageId.delivery.get(msg.id) ?? null}
               groupReadInfo={receiptsByMessageId.groupRead.get(msg.id) ?? null}
-              isSavedChat={isSavedChat}
-              myRole={myRole}
               messageRefs={messageRefs}
               capabilities={rowCapabilities}
               actions={rowActions}
@@ -1146,8 +1218,62 @@ export function MessageList({
           onClose={() => setReadReceiptsMessageId(null)}
         />
       )}
+
+      {menu && menuMessage && menuContext && (
+        <MessageActionLayer
+          key={menu.key}
+          request={menu}
+          message={menuMessage}
+          own={menuContext.own}
+          chatType={chatType}
+          privateReadAt={menuContext.readAt}
+          groupReadInfo={menuContext.groupReadInfo}
+          currentUserId={userId}
+          people={people}
+          quickReactions={quickReactions}
+          capabilities={menuContext.capabilities}
+          captionEditable={menuContext.captionEditable}
+          hasText={menuContext.hasText}
+          kind={menuContext.kind}
+          onClose={rowActions.closeMenu}
+          onLift={setMenuLift}
+          onAction={(action) => runMenuAction(action, menuMessage)}
+          onReact={(emoji) => rowActions.reaction(menuMessage.id, emoji)}
+        />
+      )}
     </div>
+    </MessageActionsContext.Provider>
   );
+}
+
+/**
+ * The six beside ❤️: this device's ranking, or what the caller decided instead.
+ * Re-ranked when a reaction is recorded, in this tab or in another one.
+ */
+function useQuickReactions(override: readonly string[] | undefined): readonly string[] {
+  const [entries, setEntries] = useState(() => readStoredRecentReactions());
+  useEffect(() => {
+    const refresh = () => setEntries(readStoredRecentReactions());
+    window.addEventListener(RECENT_REACTIONS_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(RECENT_REACTIONS_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+  return React.useMemo(
+    () => (override && override.length > 0
+      ? override.filter((emoji) => emoji !== QUICK_REACTION).slice(0, 6)
+      : quickReactionRow(entries)),
+    [entries, override],
+  );
+}
+
+function mediaMimeType(message: MessageWithSender): string | null {
+  const metadata = message.media_metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const value = (metadata as Record<string, unknown>).mime_type;
+  return typeof value === "string" ? value : null;
 }
 
 /** Everything a row can ask the list to do. One object for the life of the list. */
@@ -1155,29 +1281,22 @@ interface MessageRowActions {
   reply: (message: MessageWithSender) => void;
   jumpToReply: (messageId: string) => void;
   reaction: (messageId: string, emoji: string) => void;
-  edit: (message: MessageWithSender) => void;
-  remove: (message: MessageWithSender) => void;
-  hideForMe: (message: MessageWithSender) => void;
   retrySend: (message: MessageWithSender) => void;
   editFailedSend: (message: MessageWithSender) => void;
   discardLocalMessage: (message: MessageWithSender) => void;
-  togglePin: (message: MessageWithSender) => void;
-  forward: (message: MessageWithSender) => void;
   openMedia: (media: MediaViewerItem) => void;
+  openMenu: (messageId: string, point: { x: number; y: number }, source: "tap" | "pointer" | "keyboard") => void;
+  closeMenu: () => void;
   startSelection: (messageId: string) => void;
   toggleSelected: (messageId: string) => void;
-  toggleReactionMenu: (messageId: string) => void;
-  closeReactionMenu: () => void;
-  openActionMenu: (messageId: string) => void;
-  closeActionMenu: () => void;
   openGroupReadReceipts: (messageId: string) => void;
 }
 
 /**
  * Which optional handlers the list was given.
  *
- * Presence decides what a bubble offers — no `onEdit`, no «Изменить» — so it has
- * to reach the row. As booleans it compares by value, where the handlers
+ * Presence decides what a message offers — no `onEdit`, no «Изменить» — so it
+ * has to reach the row. As booleans it compares by value, where the handlers
  * themselves are new arrows on every render of the caller.
  */
 interface MessageRowCapabilities {
@@ -1185,7 +1304,6 @@ interface MessageRowCapabilities {
   edit: boolean;
   remove: boolean;
   hideForMe: boolean;
-  bulkHideForMe: boolean;
   retrySend: boolean;
   editFailedSend: boolean;
   discardLocalMessage: boolean;
@@ -1206,21 +1324,21 @@ interface MessageRowProps {
   isEntering: boolean;
   selectionMode: boolean;
   selected: boolean;
-  reactionMenuOpen: boolean;
-  actionMenuOpen: boolean;
+  /** The phone menu is open for this message, which stays lit above the dim. */
+  focused: boolean;
+  /** How far the phone menu has lifted it, in pixels; up is positive. */
+  lift: number;
   replyTarget: MessageWithSender | undefined;
   mediaVariant: MessageMediaVariantUrls | undefined;
   senderAvatarVariant: AvatarVariantUrls | undefined;
   deliveryState: MessageDeliveryState | null;
   groupReadInfo: GroupReadReceiptInfo | null;
-  isSavedChat: boolean | undefined;
-  myRole: "owner" | "admin" | "member" | null | undefined;
   messageRefs: React.MutableRefObject<Record<string, HTMLDivElement>> | undefined;
   capabilities: MessageRowCapabilities;
   actions: MessageRowActions;
 }
 
-/** A local send offers no reply and no reaction. One function, so it compares equal. */
+/** A local send offers no reaction. One function, so it compares equal. */
 const NOOP = () => undefined;
 
 const EMPTY_MESSAGES_MAP: Record<string, MessageWithSender> = {};
@@ -1228,14 +1346,59 @@ const EMPTY_MESSAGES_MAP: Record<string, MessageWithSender> = {};
 /**
  * The bubble, memoised. `MessageRow` below already skips a render that changes
  * nothing about its message; this also skips one that changes only the row
- * around the bubble — a date label, the jump highlight, the unread separator.
+ * around the bubble — a date label, the jump highlight, the unread separator,
+ * a swipe, a selection band.
  */
 const MemoizedMessageBubble = React.memo(MessageBubble);
+
+/**
+ * The touch gestures, in Telegram for Android's terms: a tap opens the menu, a
+ * double tap puts ❤️, a long press selects, a swipe left replies.
+ *
+ * The tap waits out the double tap before opening anything, which is the price
+ * of having both — Telegram pays it too. Timings come from the event's own
+ * clock, not `Date`, so a test that pins the wall clock cannot fold two taps a
+ * second apart into one double tap.
+ */
+const LONG_PRESS_MS = 420;
+/** Android's own double-tap timeout, so a double tap here feels like one anywhere else on the phone. */
+const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_SLOP = 32;
+const MOVE_TOLERANCE = 10;
+const SWIPE_START = 12;
+const SWIPE_MAX = 64;
+const SWIPE_TRIGGER = 48;
+/** A context menu this soon after a touch is the long press's, not a right click. */
+const TOUCH_CONTEXT_MENU_MS = 1500;
+
+/** A photo, a link, a player: a tap there opens the content, not the menu. */
+function isContentControl(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest("button, a, input, textarea, select, video, audio, [role='slider']"));
+}
+
+/** A control whose own long press means something to the browser. */
+function isNativeControl(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest("input, textarea, select, video, audio, [role='slider']"));
+}
+
+interface TouchGesture {
+  pointerId: number;
+  x: number;
+  y: number;
+  moved: boolean;
+  swiping: boolean;
+  longPressed: boolean;
+  content: boolean;
+}
 
 /**
  * One message of the conversation, memoised on props that stay `Object.is`
  * equal while the message and what it may do are unchanged — see `rowActions`
  * in `MessageList` for how the list keeps them that way.
+ *
+ * The row, not the bubble, reads the gestures: the band a selection draws and
+ * the arrow a swipe reveals both run the full width of the conversation, which
+ * is wider than any bubble.
  */
 const MessageRow = React.memo(function MessageRow({
   msg,
@@ -1249,45 +1412,35 @@ const MessageRow = React.memo(function MessageRow({
   isEntering,
   selectionMode,
   selected,
-  reactionMenuOpen,
-  actionMenuOpen,
+  focused,
+  lift,
   replyTarget,
   mediaVariant,
   senderAvatarVariant,
   deliveryState,
   groupReadInfo,
-  isSavedChat,
-  myRole,
   messageRefs,
   capabilities,
   actions,
 }: MessageRowProps) {
   const isSystemMessage = msg.type === "system";
-  const canUseHumanControls = canUseHumanMessageControls(msg, userId);
   const canSelect = !msg.deleted_at && !isSystemMessage;
   const isLocalSend = msg.id.startsWith("tmp:") || Boolean(msg.pending || msg.checking || msg.failed);
+  const canReply = canSelect && !isLocalSend;
   const hasGroupReadInfo = groupReadInfo !== null;
+  void userId;
 
   // Once per message rather than once per render, so the bubble's memo sees the
   // same functions until the message, or what it may do, changes.
   const handlers = React.useMemo(() => ({
-    onReply: isLocalSend ? NOOP : () => actions.reply(msg),
     onReaction: isLocalSend ? NOOP : (emoji: string) => actions.reaction(msg.id, emoji),
-    onEdit: !isLocalSend && canUseHumanControls && capabilities.edit ? () => actions.edit(msg) : undefined,
-    onDelete: !isLocalSend && canUseHumanControls && capabilities.remove ? () => actions.remove(msg) : undefined,
-    onHideForMe: !isLocalSend && capabilities.hideForMe ? () => actions.hideForMe(msg) : undefined,
     onRetrySend: capabilities.retrySend && msg.failed ? () => actions.retrySend(msg) : undefined,
     onEditFailedSend: capabilities.editFailedSend && msg.failed ? () => actions.editFailedSend(msg) : undefined,
     onDiscardLocalMessage: capabilities.discardLocalMessage && isLocalSend
       ? () => actions.discardLocalMessage(msg)
       : undefined,
-    onStartSelection: capabilities.bulkHideForMe && canSelect ? () => actions.startSelection(msg.id) : undefined,
-    onTogglePin: !isLocalSend && capabilities.togglePin ? () => actions.togglePin(msg) : undefined,
-    onForward: !isLocalSend && capabilities.forward ? () => actions.forward(msg) : undefined,
-    onToggleReactionMenu: () => actions.toggleReactionMenu(msg.id),
-    onOpenActionMenu: () => actions.openActionMenu(msg.id),
     onOpenGroupReadReceipts: hasGroupReadInfo ? () => actions.openGroupReadReceipts(msg.id) : undefined,
-  }), [actions, canSelect, canUseHumanControls, capabilities, hasGroupReadInfo, isLocalSend, msg]);
+  }), [actions, capabilities, hasGroupReadInfo, isLocalSend, msg]);
 
   // The one entry a reply preview reads. The whole map is rebuilt whenever any
   // message changes, and handing it down re-rendered every row on each arrival.
@@ -1296,14 +1449,221 @@ const MessageRow = React.memo(function MessageRow({
     [msg.reply_to_id, replyTarget],
   );
 
+  const gestureRef = useRef<TouchGesture | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const tapTimerRef = useRef<number | null>(null);
+  const lastTapRef = useRef<{ at: number; x: number; y: number } | null>(null);
+  const lastTouchAtRef = useRef(Number.NEGATIVE_INFINITY);
+  const suppressClickRef = useRef(false);
+  /** Set by a double tap: its touch's end is cancelled, so no click follows it. */
+  const cancelTouchClickRef = useRef(false);
+  const swipeRef = useRef(0);
+  const [swipe, setSwipe] = useState({ dx: 0, dragging: false, settling: false });
+
+  const clearLongPress = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+  const clearTap = () => {
+    if (tapTimerRef.current !== null) {
+      window.clearTimeout(tapTimerRef.current);
+      tapTimerRef.current = null;
+    }
+  };
+  useEffect(() => () => {
+    if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
+    if (tapTimerRef.current !== null) window.clearTimeout(tapTimerRef.current);
+  }, []);
+
+  const moveSwipe = (dx: number, dragging: boolean) => {
+    swipeRef.current = dx;
+    setSwipe({ dx, dragging, settling: !dragging });
+  };
+
+  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    // A click the gesture already answered is swallowed once, and only until
+    // the next press: a long press the browser follows with no click at all
+    // must not eat the tap after it.
+    suppressClickRef.current = false;
+    cancelTouchClickRef.current = false;
+    if (!canSelect || event.pointerType === "mouse" || !event.isPrimary) return;
+    lastTouchAtRef.current = event.timeStamp;
+    gestureRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      moved: false,
+      swiping: false,
+      longPressed: false,
+      content: isContentControl(event.target),
+    };
+    if (selectionMode || isNativeControl(event.target)) return;
+    clearLongPress();
+    longPressTimerRef.current = window.setTimeout(() => {
+      longPressTimerRef.current = null;
+      const gesture = gestureRef.current;
+      if (!gesture || gesture.moved || gesture.swiping) return;
+      gesture.longPressed = true;
+      suppressClickRef.current = true;
+      clearTap();
+      lastTapRef.current = null;
+      navigator.vibrate?.(12);
+      actions.startSelection(msg.id);
+    }, LONG_PRESS_MS);
+  };
+
+  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    const dx = event.clientX - gesture.x;
+    const dy = event.clientY - gesture.y;
+    if (!gesture.moved && Math.hypot(dx, dy) > MOVE_TOLERANCE) {
+      gesture.moved = true;
+      clearLongPress();
+    }
+    if (selectionMode || !canReply || gesture.longPressed) return;
+    // Horizontal and to the left, clearly more than it is vertical. The row
+    // lets the browser keep vertical panning (`touch-action: pan-y`), so a
+    // scroll never reaches here as a swipe.
+    if (!gesture.swiping && dx < -SWIPE_START && Math.abs(dx) > Math.abs(dy) * 1.4) {
+      gesture.swiping = true;
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // A pointer that has already gone cannot be captured; the swipe still ends on pointerup.
+      }
+    }
+    if (gesture.swiping) moveSwipe(Math.max(-SWIPE_MAX, Math.min(0, dx + SWIPE_START)), true);
+  };
+
+  const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    gestureRef.current = null;
+    clearLongPress();
+    if (gesture.swiping) {
+      const reached = swipeRef.current <= -SWIPE_TRIGGER;
+      moveSwipe(0, false);
+      suppressClickRef.current = true;
+      if (reached) {
+        navigator.vibrate?.(8);
+        actions.reply(msg);
+      }
+      return;
+    }
+    if (gesture.longPressed || gesture.moved || selectionMode || gesture.content) return;
+    if (focused) {
+      suppressClickRef.current = true;
+      actions.closeMenu();
+      return;
+    }
+    const point = { x: event.clientX, y: event.clientY };
+    const last = lastTapRef.current;
+    if (
+      !isLocalSend &&
+      last &&
+      event.timeStamp - last.at < DOUBLE_TAP_MS &&
+      Math.hypot(point.x - last.x, point.y - last.y) < DOUBLE_TAP_SLOP
+    ) {
+      clearTap();
+      lastTapRef.current = null;
+      // The reaction grows the bubble by a row of chips, and a conversation
+      // held at its bottom moves up by that row — so the click the browser
+      // sends after this touch landed on the ❤️ chip that had just moved under
+      // the finger, and took the reaction straight back off. The touch's end
+      // is cancelled so that no click follows, and the row swallows one should
+      // it come anyway.
+      cancelTouchClickRef.current = true;
+      suppressClickRef.current = true;
+      actions.reaction(msg.id, QUICK_REACTION);
+      return;
+    }
+    lastTapRef.current = { at: event.timeStamp, ...point };
+    clearTap();
+    tapTimerRef.current = window.setTimeout(() => {
+      tapTimerRef.current = null;
+      lastTapRef.current = null;
+      actions.openMenu(msg.id, point, "tap");
+    }, isLocalSend ? 0 : DOUBLE_TAP_MS);
+  };
+
+  const onPointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    gestureRef.current = null;
+    clearLongPress();
+    if (gesture.swiping) moveSwipe(0, false);
+  };
+
+  // `touchend` follows `pointerup`, and cancelling it is what stops the browser
+  // synthesising a click after the touch. React listens for it actively, not
+  // passively, so the cancel is honoured.
+  const onTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (!cancelTouchClickRef.current) return;
+    cancelTouchClickRef.current = false;
+    if (event.cancelable) event.preventDefault();
+  };
+
+  const onContextMenu =(event: React.MouseEvent<HTMLDivElement>) => {
+    if (!canSelect) return;
+    event.preventDefault();
+    if (selectionMode) return;
+    if (event.timeStamp - lastTouchAtRef.current < TOUCH_CONTEXT_MENU_MS) return;
+    // The menu key arrives with no coordinates; the bubble stands in for them.
+    const fromKeyboard = event.clientX === 0 && event.clientY === 0;
+    const bubble = event.currentTarget.querySelector('[data-message-bubble="true"]')?.getBoundingClientRect();
+    const point = fromKeyboard && bubble ? { x: bubble.left, y: bubble.bottom } : { x: event.clientX, y: event.clientY };
+    actions.openMenu(msg.id, point, fromKeyboard ? "keyboard" : "pointer");
+  };
+
+  const onClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (!selectionMode) return;
+    // In selection mode a click anywhere on a message toggles it, and never
+    // opens what it landed on.
+    event.preventDefault();
+    event.stopPropagation();
+    if (canSelect) actions.toggleSelected(msg.id);
+  };
+
+  const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!selectionMode || !canSelect || event.target !== event.currentTarget) return;
+    if (event.key === " " || event.key === "Enter") {
+      event.preventDefault();
+      actions.toggleSelected(msg.id);
+    }
+  };
+
+  const swipeProgress = Math.min(1, -swipe.dx / SWIPE_TRIGGER);
+  const selectable = selectionMode && canSelect;
+
   return (
     <div
       data-message-id={msg.id}
+      data-message-focused={focused ? "true" : undefined}
       ref={(el) => { if (el && messageRefs) messageRefs.current[msg.id] = el; }}
       className={cn(
         highlighted &&
           "transition-colors duration-500 rounded-lg bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]"
       )}
+      // Lifted above the dim while its phone menu is open, and moved only as
+      // far as the menu needs. A transform, so nothing in the conversation is
+      // laid out again and no scroll anchor moves.
+      style={focused
+        ? {
+            position: "relative",
+            zIndex: 51,
+            transform: lift ? `translateY(${-lift}px)` : undefined,
+            transition: "transform var(--kub-motion-standard) var(--kub-ease-emphasis)",
+          }
+        : undefined}
     >
       {dateLabel !== null && (
         <div className="flex justify-center my-3" data-message-date-separator={getMessageDayKey(msg.created_at)}>
@@ -1327,86 +1687,82 @@ const MessageRow = React.memo(function MessageRow({
       {isSystemMessage ? (
         <SystemMessageNotice message={msg} />
       ) : (
-      <div className={cn("flex w-full min-w-0 items-center gap-1.5 overflow-hidden", isMe ? "justify-end" : "justify-start")}>
-        {selectionMode && canSelect && (
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              actions.toggleSelected(msg.id);
-            }}
-            className={cn(
-              "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors",
-              selected
-                ? "border-[var(--kub-cyan)] bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
-                : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] text-[color:var(--kub-muted)]"
-            )}
-            aria-label={selected ? "Снять выбор" : "Выбрать сообщение"}
-          >
-            {selected && <KubIcon name="check" size={14} />}
-          </button>
-        )}
         <div
-          className={cn(
-            "min-w-0 max-w-full",
-            selectionMode && canSelect ? "cursor-pointer rounded-xl" : "",
-            selectionMode && canSelect && "max-w-[calc(100%-2.25rem)]"
-          )}
-          onClickCapture={(event) => {
-            if (!selectionMode) return;
-            const target = event.target as HTMLElement | null;
-            const isInteractive = Boolean(target?.closest("button,a,input,textarea,select,video,audio,[role='slider']"));
-            if (!canSelect) {
-              if (isInteractive) {
-                event.preventDefault();
-                event.stopPropagation();
-              }
-              return;
-            }
-            event.preventDefault();
-            event.stopPropagation();
-            actions.toggleSelected(msg.id);
-          }}
-          aria-disabled={selectionMode && !canSelect}
+          data-message-row="true"
+          data-message-selected={selected ? "true" : undefined}
+          className="relative [-webkit-touch-callout:none] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+          style={{ touchAction: "pan-y" }}
+          role={selectable ? "checkbox" : undefined}
+          aria-checked={selectable ? selected : undefined}
+          aria-label={selectable ? "Выделить сообщение" : undefined}
+          tabIndex={selectable ? 0 : undefined}
+          aria-disabled={selectionMode && !canSelect ? true : undefined}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerCancel}
+          onTouchEnd={onTouchEnd}
+          onContextMenu={onContextMenu}
+          onClickCapture={onClickCapture}
+          onKeyDown={onKeyDown}
         >
-          <MemoizedMessageBubble
-            message={msg}
-            isEntering={isEntering}
-            isMe={isMe}
-            isFirstInGroup={isFirstInGroup}
-            isLastInGroup={isLastInGroup}
-            onReply={handlers.onReply}
-            onJumpToReply={capabilities.jumpToReply ? actions.jumpToReply : undefined}
-            onReaction={handlers.onReaction}
-            onEdit={handlers.onEdit}
-            onDelete={handlers.onDelete}
-            onHideForMe={handlers.onHideForMe}
-            onRetrySend={handlers.onRetrySend}
-            onEditFailedSend={handlers.onEditFailedSend}
-            onDiscardLocalMessage={handlers.onDiscardLocalMessage}
-            onStartSelection={handlers.onStartSelection}
-            onTogglePin={handlers.onTogglePin}
-            onForward={handlers.onForward}
-            onOpenMedia={capabilities.openMedia ? actions.openMedia : undefined}
-            reactionMenuOpen={reactionMenuOpen}
-            onToggleReactionMenu={handlers.onToggleReactionMenu}
-            onCloseReactionMenu={actions.closeReactionMenu}
-            actionMenuOpen={actionMenuOpen}
-            onOpenActionMenu={handlers.onOpenActionMenu}
-            onCloseActionMenu={actions.closeActionMenu}
-            selected={selected}
-            isSelectionMode={selectionMode}
-            messagesMap={replyMap}
-            mediaVariant={mediaVariant}
-            senderAvatarVariant={senderAvatarVariant}
-            deliveryState={deliveryState}
-            groupReadInfo={groupReadInfo}
-            onOpenGroupReadReceipts={handlers.onOpenGroupReadReceipts}
-            isSavedChat={isSavedChat}
-            myRole={myRole}
-          />
+          {selected && (
+            // Across the whole width of the conversation at the message's
+            // height, into the list's own side padding, as Telegram draws it.
+            <span
+              aria-hidden="true"
+              data-message-selected-band="true"
+              className="kub-message-selected-band pointer-events-none absolute inset-y-0 -left-3 -right-3 sm:-left-4 sm:-right-4"
+            />
+          )}
+          <div
+            className={cn(
+              "relative flex w-full min-w-0 items-center overflow-hidden",
+              isMe ? "justify-end" : "justify-start",
+              selectable && "cursor-pointer",
+            )}
+            style={swipe.dx !== 0 || swipe.dragging || swipe.settling
+              ? {
+                  transform: `translateX(${swipe.dx}px)`,
+                  transition: swipe.dragging ? "none" : "transform var(--kub-motion-standard) var(--kub-ease-standard)",
+                }
+              : undefined}
+            onTransitionEnd={() => {
+              if (swipe.settling && swipe.dx === 0) setSwipe({ dx: 0, dragging: false, settling: false });
+            }}
+          >
+            <MemoizedMessageBubble
+              message={msg}
+              isEntering={isEntering}
+              isMe={isMe}
+              isFirstInGroup={isFirstInGroup}
+              isLastInGroup={isLastInGroup}
+              onJumpToReply={capabilities.jumpToReply ? actions.jumpToReply : undefined}
+              onReaction={handlers.onReaction}
+              onRetrySend={handlers.onRetrySend}
+              onEditFailedSend={handlers.onEditFailedSend}
+              onDiscardLocalMessage={handlers.onDiscardLocalMessage}
+              onOpenMedia={capabilities.openMedia ? actions.openMedia : undefined}
+              isSelectionMode={selectionMode}
+              messagesMap={replyMap}
+              mediaVariant={mediaVariant}
+              senderAvatarVariant={senderAvatarVariant}
+              deliveryState={deliveryState}
+              groupReadInfo={groupReadInfo}
+              onOpenGroupReadReceipts={handlers.onOpenGroupReadReceipts}
+            />
+          </div>
+          {swipe.dx < 0 && (
+            <span
+              aria-hidden="true"
+              data-message-swipe-reply="true"
+              className="pointer-events-none absolute right-2 top-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--kub-cyan)_22%,transparent)] text-[color:var(--kub-cyan)]"
+              style={{ opacity: swipeProgress, transform: `translateY(-50%) scale(${0.6 + 0.4 * swipeProgress})` }}
+            >
+              <KubIcon name="reply" size={18} />
+            </span>
+          )}
         </div>
-      </div>
       )}
     </div>
   );
