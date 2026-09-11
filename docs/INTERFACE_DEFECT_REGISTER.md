@@ -4072,6 +4072,36 @@ appearing at another width fails, this one growing fails, and closing it passes.
 The same test also asserts that the control is reachable once the shell is
 scrolled, which is the part that does hold today.
 
+### The height budget, measured 2026-09-11
+
+Measured at 360x800 with Inter loaded, so the layout decision can be taken from
+numbers rather than from a screenshot. The card's content is 1053px:
+
+| part | px |
+| --- | --- |
+| lockup | 137, plus a 32 gap |
+| strip | 35 |
+| icon | 56 |
+| heading | 28 |
+| the three paragraphs | 96, 120, 48 |
+| masked address | 38 |
+| captcha plate | 65 |
+| empty feedback slot | 40 |
+
+The resend control sits at 840..904 and «Ко входу» at 916..960. Putting the
+resend control on screen at all needs 40px, the whole control 104px, «Ко входу»
+160px. Tightening the vertical rhythm alone at 360 and below returns 60px; 104px
+is reachable only by also setting the explanation at a 20px line height.
+
+The options, none chosen — this is the owner's decision:
+
+- the actions first on narrow screens;
+- a smaller or hidden lockup and icon (257px between them);
+- the second paragraph collapsed or shortened;
+- a sticky action bar;
+- the captcha plate moved after the timer (81px);
+- a scroll cue.
+
 ## D-064 `[x]` The only way out of a conversation is unpaintable on the engine Safari uses
 
 **Severity:** critical, and it was live. A person on an installed PWA could open
@@ -4230,7 +4260,8 @@ what settles it. Re-measured one at a time against a server on
    controller the same request was reported by `page.on("request")` and never
    handed to the route. Chromium intercepted both. Every interception-based
    case therefore has to run with `test.use({ serviceWorkers: "block" })`, which
-   costs nothing because `sw.js` returns early for every Supabase address.
+   costs nothing because `sw.js` never answers a backend request — true, though
+   not for the reason first written here: see D-074.
 3. *`.first().or(...)` narrows the wrong side.* Written that way it only
    narrowed the left-hand locator, so the moment the user list had drawn more
    than one avatar the union resolved to eight elements and the case died of a
@@ -4261,8 +4292,9 @@ has read WebP since 14; `onerror` semantics for a failed `srcset` candidate,
 whether 404, aborted, malformed by a comma, or with every candidate missing
 (identical in both engines, and the error fires in all of them, so the product's
 fallback runs); recovery after a failure by dropping `srcset` and repointing
-`src` (identical); the service worker as a *product* path — it returns early for
-every Supabase address and never touches a media object.
+`src` (identical); the service worker as a *product* path — it never touches a
+media object, though not for the reason first given here (see D-074), and it is
+now also measured with the worker active (below).
 
 **What is still unexplained, and where to look next.** The owner's picture has
 not been reproduced, and the QA conversation is too small to hunt in — five
@@ -4279,6 +4311,19 @@ message rather than guessed at:
   never starts or never finishes. Worth checking against a real iOS device
   rather than Playwright's WebKit, which does not carry iOS's decoded-image
   limits.
+
+**2026-09-11: the service worker is excluded, measured with it active.** Until
+then every picture case here ran with the worker blocked, so its own path had
+never been exercised. On the QA conversation with a built bundle and the
+production storage addresses, with the legacy worker and with the new one
+(D-072), in Chromium and WebKit: 1 of 1 pictures painted, 0 unpainted in the
+viewport, and Cache Storage held 0 cross-origin, 0 opaque and 0 partial (206)
+responses. Against a synthetic storage origin, in three worker modes and both
+engines: a normal or a slow answer loads; a 404, an abort, an HTML body and a
+reset all reach the error path; identical in every mode. The one state that
+leaves a reserved box with neither pixels nor an error is a request that never
+answers, and it is the same with no worker at all — which leaves the two
+device-side hypotheses above.
 
 ## D-068 `[x]` Width descriptors that were never measured
 
@@ -4752,7 +4797,7 @@ The three green cells are what "written down and not defended" meant.
 
 ---
 
-## D-070 `[ ]` The width the meta is measured against is one the bubble never reaches
+## D-070 `[x]` The width the meta is measured against is one the bubble never reaches
 
 **Severity:** medium. Measured at 390 only, on 6 of 120 and 14 of 400 messages
 of the same fixture; none at 360, 412, 1440 or 1920. Found 2026-09-07 while
@@ -4798,3 +4843,240 @@ that is empty except for `09:02` at the right edge. `data-message-meta-placement
 still reads `inline`, so a check on the attribute or on where the timestamp
 finally sits reports the message as correct; the wasted line is only visible in
 the paragraph's height, or on screen.
+
+### Closed at phone widths, 2026-09-11 — `0279d71`
+
+The ceiling was the width the design allows, and a received message never
+reaches it: its row also holds the 32px avatar lane and a 6px gap. Measured on
+the DEV preview fixture over 120 messages, wrapped spacers before and after:
+
+| project | before | after | ceiling | reach |
+| --- | --- | --- | --- | --- |
+| `chromium-mobile-360` | 4 | 0 | 283.6px | 272px |
+| `chromium-mobile-390` | 5 | 0 | 309.4px | 302px |
+| `webkit-mobile-390` | 4 | 0 | 309.4px | 298px |
+| 412, 1440, 1920, 3840 | 0 | 0 | | |
+
+**Fix:** an inline answer is also checked against the width the bubble can
+actually reach, in `artifacts/kub/src/lib/messageMetaReach.ts` — read from the
+`[data-message-id]` row, the stack's anchored edge taken from the row's
+`justify-content`, and the cap resolved at full reach — with the spacer at its
+rendered width. None of those boxes moves with the placement, so the same number
+comes back in both placements and the check can only turn inline into anchored.
+Where the cap follows a row shrink-wrapped around the message (the action lane,
+640px and up) no such number exists and the rule is unchanged; that remainder is
+D-071. Placements diffed message by message at the seven matrix projects and at
+640, 768 and 1024: 13 changes, every one a wrapped spacer, each message one line
+box shorter. The observed-node count is unchanged.
+
+**Regression tests:** `tests/e2e/message-meta-spacer-line.spec.ts` asserts line
+boxes rather than the attribute over a 120-message conversation, and the reverse
+as well — no wrapped message is refused room it has;
+`tests/unit/message-meta-reach.test.mts`. Five mutations, each with the file's
+SHA-256 checked before, after and on restore, all red: the reach check disabled,
+the anchored side swapped, the footer used instead of the rendered spacer, the
+free space ignored, and the shrink-wrap guard removed.
+
+**Harness note:** WebKit reports Inter loaded from the first sample yet re-lays
+the conversation about 1.3s after the ready signal (1317–1383ms over six runs),
+so the spec waits for 2.5s of stable layout. Settled, a forced re-measure changes
+0 of 120 messages in three runs: the D-069 freeze does not reproduce on WebKit
+either.
+
+## D-071 `[ ]` Where the action lane binds, the spacer still wraps
+
+**Severity:** low. Tablet width with the sidebar open: 11 of 120 own messages at
+768; none at 640 or 1024. Found 2026-09-11 while closing D-070.
+
+**Surface:** the stack cap `ACTION_LANE` in
+`artifacts/kub/src/components/chat/MessageBubble.tsx:182`, used by the `sm:` and
+`md:` stack widths at `:122`–`:153`. `artifacts/kub/src/lib/messageMetaReach.ts:30`
+records why the reach check of D-070 stays out of it.
+
+**Defect:** `max(16rem, 100% - var(--kub-action-lane))` resolves against a row
+that is shrink-wrapped around the message, spacer included, so how far a bubble
+can reach depends on the placement it is given, and no constant predicts it. One
+message measured at 768: row 376px, cap 272px, content 246px, while the decision
+compared against 352px. The reserved spacer wraps onto a line of its own — the
+symptom of D-070.
+
+**Not fixed, on purpose.** Tightening the rule where the lane binds can flip a
+message that ends on a long word between the two placements on every pass. It
+needs the action lane itself decided — what the lane is at tablet width beside
+the sidebar — rather than a sharper rule. That is an owner decision.
+
+## D-072 `[x]` The service worker was never replaced, so its cache was never cleared
+
+**Severity:** high. Every browser and installed-PWA user; on iOS the dead assets
+count against the origin's storage quota.
+
+**Surface:** `artifacts/kub/public/sw.js`, and the web build that serves it.
+
+**Defect:** the cache name was the constant `kub-app-shell-v2`, unchanged for 429
+commits, and production served a byte-identical `sw.js` (SHA-256 `3e9303db…`)
+through every deploy since July. A browser installs a new worker only when those
+bytes change, so `activate` — the only code that deletes a cache — never ran
+again, and every deploy's hashed assets stayed in Cache Storage beside the
+previous ones.
+
+**Fixed** in `7381bed` and `9321dcf`. `vite build` stamps a build record into the
+emitted worker (`artifacts/kub/serviceWorkerBuildPlugin.ts`, read at `sw.js:19`):
+a digest of every emitted file, the module entry and the files the offline shell
+boots. The cache is named by that digest, so every deploy installs a new worker
+whose `activate` deletes every other cache (`sw.js:65`), `kub-app-shell-v2`
+included. With a new worker on every deploy, the page now asks a waiting worker
+first (`artifacts/kub/src/lib/pwa/serviceWorkerHandoff.ts`, called from
+`usePwa.ts`): the worker takes over at once only for a page already running its
+build that is the origin's only window; any other page is offered the update as
+before, and nothing reloads by itself. Replaying the rollout on real builds in
+Chromium and WebKit: a first launch is taken over in 2.1s and 2.3s with no reload
+and `v2` deleted; an open old tab reloads exactly once after accepting; a second
+tab is neither prompted nor reloaded.
+
+**Regression tests:** `tests/unit/pwa-service-worker-build.test.mts`,
+`pwa-service-worker-cache.test.mjs`, `pwa-service-worker-handoff.test.mts` and
+`pwa-service-worker-lifecycle.test.mjs`; `tests/e2e/pwa-service-worker.spec.ts`,
+which builds the application itself, serves three deploys from it the way
+`docs/deploy/nginx.conf` does, and keeps the legacy worker pinned byte for byte
+as its control. Mutation-proved.
+
+**After every web deploy:** `curl https://app.letscube.ru/sw.js` must show the
+`@kub-sw-build` line with a 16-character id. Each client's first launch after
+this one deletes `kub-app-shell-v2`.
+
+## D-073 `[x]` A failed build-file request was answered with the offline page
+
+**Severity:** medium. Offline or on a flaky network, every engine.
+
+**Surface:** the cache-first path in `artifacts/kub/public/sw.js:168`.
+
+**Defect:** on a network failure with a cache miss, `staleWhileRevalidate`
+answered every request — scripts, stylesheets, images — with `offline.html`.
+Measured: `fetch` of a dropped `/icons/…` or `/assets/…` returned
+`200 text/html` in Chromium and in WebKit.
+
+**Fixed** in `7381bed`: `offline.html` answers navigations only (`sw.js:164`); a
+build file that cannot be fetched fails the way the network failed. Pinned in
+both engines, beside a control that shows the legacy worker producing the HTML
+answer.
+
+## D-074 `[x]` The backend was kept out of the cache by a host production does not use
+
+**Severity:** low, latent.
+
+**Surface:** the request filter in `artifacts/kub/public/sw.js:138` and `:145`.
+
+**Defect:** `isSupabaseUrl` matched `.supabase.co`, and production's backend is
+`core.letscube.ru`, so only the origin check below it kept storage out of the
+cache. Two statements in D-067 leaned on the host test and were right only
+because of that check.
+
+**Fixed** in `7381bed`, with no host list at all: the worker answers only this
+origin's navigations and an explicit list of build files (`isBuildFile`,
+`sw.js:205`), and everything else — another origin, or a backend path proxied
+onto this one — reaches the network untouched. Only a complete 200 that is not
+the SPA fallback page is stored; range and cache-bypassing requests pass
+through.
+
+## D-075 `[x]` The installed iPhone app had no documented placement, and nothing pinned to an edge read the insets
+
+**Severity:** high on the installed iPhone app. Every screen, in both
+orientations.
+
+**Surface:** the viewport meta in `artifacts/kub/index.html`; the `--kub-safe-*`
+tokens on `:root` in `artifacts/kub/src/index.css`;
+`artifacts/kub/src/lib/safeArea.ts`; and every surface pinned to an edge, among
+them `AppTopBar.tsx:64`, `KubHeader.tsx:27`, `AppUpdateBanner.tsx:93`,
+`ChatHeader.tsx:284`, `BottomNav.tsx:64`, `SupportWindow.tsx:58`,
+`ChatList.tsx:102`, `NotificationBell.tsx:110`, `ChatInfoPanel.tsx:198` and the
+message menus in `MessageBubble.tsx:866` and `:1071`.
+
+**Defect:** without `viewport-fit=cover` iOS placed the installed app by a
+guess, so nothing could rely on where the page's edges were — and nothing tried
+to: four places read the top inset, five the bottom and none the sides. The chat
+header, the chat-list header and the top bar sat under the status bar and the
+Dynamic Island; the update banner under the island; the chat header's phone menu
+on the home indicator; held sideways, the sidebar and the composer under the
+notch. A message's action menu sat at `bottom: 12` on a phone, over the home
+indicator, and held sideways clamped 8px from the glass, under the notch.
+
+**Fixed** in `ea89851`; the message menus in `2fda578`. `viewport-fit=cover`
+makes the placement a documented contract. The four tokens read `env()` once and
+everything else reads the tokens; a unit test fails on any other
+`env(safe-area-inset-*)`, because Playwright's WebKit reports every inset as 0
+and only a token can be given a value there. Headers, sheets and bars pad the
+inset out of themselves, so the material runs under the hardware while the rows
+start clear of it; shells pad the sides; the support window, the contact card,
+the notification panel and the chat list's menu are placed in the safe viewport.
+The message menus read the insets when they open — not during render, and not on
+every scroll. Rule 13 of `docs/operations/interface-material.md` is the
+contract.
+
+**Regression tests:** `tests/e2e/ios-standalone-safe-area.spec.ts` on the new
+`webkit-ios-standalone` project, insets through the tokens, portrait and
+landscape (22/22), plus a Chromium half on `chromium-mobile-390` that overrides
+the insets inside the engine; the opt-in signed-in half
+`ios-standalone-safe-area.signed-in.spec.ts`, which switches screenshots, traces
+and video off and submits nothing (11/11 once, on a QA account);
+`tests/unit/safe-area-insets.test.mjs` and `safe-area-geometry.test.mts`. The
+menu fix: three mutations, each red on exactly the orientation it belongs to.
+
+**Not verified on a device.** Playwright's WebKit on Windows lays the page out
+but neither reports insets nor paints `backdrop-filter`, so these are layout
+proofs. The Android APK is unaffected for now: Capacitor 8.3.4 hands the insets
+to the page only on a WebView of 140 or later and only with `cover`, and the
+owner's phone runs WebView 137. An APK that meets a WebView of 140 or later
+becomes edge to edge on the same tokens, and needs an on-device pass before it
+ships.
+
+## D-076 `[x]` The composer summed the keyboard and the home indicator
+
+**Severity:** medium. The installed iPhone app, every conversation, whenever the
+keyboard is open.
+
+**Surface:** the composer's bottom padding in
+`artifacts/kub/src/components/chat/ChatWindow.tsx:945`.
+
+**Defect:** the composer padded the keyboard's inset plus the home indicator's,
+but with the keyboard up the home indicator is behind the keys. The sum left a
+34px strip of empty glass between the composer and the keyboard.
+
+**Fixed** in `ea89851`: `max(var(--kub-keyboard-inset, 0px), var(--kub-safe-bottom))`
+— the larger of the two, never both. **Regression test:**
+`tests/unit/safe-area-insets.test.mjs:214`.
+
+## D-077 `[x]` The docked support window put its close button under the island and its send button on the home indicator
+
+**Severity:** medium. The support window on a phone: its close button, and, for
+someone with no tickets, its only action.
+
+**Surface:** `artifacts/kub/src/components/support/SupportWindow.tsx:318`, the
+docked header, and `:511`, the new-request form.
+
+**Defect:** the status-bar padding was applied to the floating shape, which is
+never under the status bar, instead of the docked one, which is — so docked on a
+phone the close button sat under the Dynamic Island. Separately, someone with no
+tickets opens the window straight into the new-request form, which docked runs to
+the bottom of the screen with 12px of padding and so put its send button on the
+home indicator; the reply footer below it already cleared the inset. The second
+half was found by the signed-in stand, which the fixture screens cannot reach.
+
+**Fixed** in `ea89851` (the header) and `a76af25` (the form). **Regression
+test:** `tests/unit/safe-area-insets.test.mjs:245` holds both of the docked
+window's bottoms.
+
+## D-078 `[x]` Held sideways, the sidebar menu was taller than the phone and could not scroll
+
+**Severity:** medium. A phone in landscape: «Выйти», the menu's last item, was
+cut off with no way to reach it.
+
+**Surface:** the sidebar header's menu in
+`artifacts/kub/src/components/sidebar/SidebarHeader.tsx:187`.
+
+**Defect:** the menu was `overflow-hidden` with no height cap, so on a screen
+393px tall it ran past the bottom edge and clipped its last items.
+
+**Fixed** in `ea89851`: capped at
+`calc(100dvh - var(--kub-safe-top) - var(--kub-safe-bottom) - 8.5rem)` and
+scrollable. **Regression test:** the landscape scenario "the sidebar's own menu
+and the notification panel" in `tests/e2e/ios-standalone-safe-area.spec.ts`.
