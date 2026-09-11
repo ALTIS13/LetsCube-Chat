@@ -111,9 +111,10 @@ test("the entry still anchors where the contract says", () => {
  *     millisecond later.
  *
  * These two guards are why the mechanism is the shape it is. They are source
- * scans and weaker than they look; the frame-level proof cannot live in CI,
- * because a prepend needs a signed-in chat with real history and the e2e suite
- * is unauthenticated.
+ * scans and weaker than they look. The frame-level proof used to need a
+ * signed-in chat with real history; since D-109 it also runs on the DEV fixture,
+ * in `tests/e2e/message-history-prepend-anchor.spec.ts`, and the 42px above
+ * turned out to be the history band, which that entry closes.
  */
 test("the older-history hold corrects in the frame it sees the growth", () => {
   const hold = messageList.slice(messageList.indexOf("const hold = () => {"));
@@ -188,5 +189,44 @@ test("the scrollport is observed as well as the content", () => {
     effect,
     /const shouldKeepBottom = isAtBottomRef\.current \|\| isInitialBottomLocked\(\);/,
     "the correction no longer asks whether the reader was at the bottom",
+  );
+});
+
+/**
+ * D-109: the history band gives back the room it takes, before the prepend
+ * restore runs.
+ *
+ * «Загружаем историю...» is a row above the oldest message. Measured on the DEV
+ * fixture on 2026-09-11, its arrival moved the conversation 43px down on a
+ * painted frame, and a scroll event during the load took the anchor again in
+ * that position, so the prepend left the reader 43px off; the signed-in
+ * contract in `visual-style-layout` failed at 42.8px. It is also the "worst
+ * painted displacement 42px" recorded under D-039 above. The frame-level proof
+ * is `tests/e2e/message-history-prepend-anchor.spec.ts`; this is the source half.
+ */
+test("the history band gives its height back to the scroll position before the prepend restore", () => {
+  const compensation = messageList.indexOf("historyBandHeightRef.current = height;");
+  const restore = messageList.indexOf("const prepended = sortedMessages.length > olderStartMessageCountRef.current");
+  assert.ok(compensation > 0, "nothing gives the band's height back to the scroll position");
+  assert.ok(
+    restore > compensation,
+    "the band is compensated after the prepend restore, which is absolute, so a commit that does both is left off by the band",
+  );
+  assert.match(messageList, /el\.scrollTop \+= change;/);
+  assert.match(messageList, /<div ref=\{historyBandRef\}[^>]*data-message-history-status>/, "the band is no longer measured");
+});
+
+/**
+ * D-110: a scroll to the bottom decided a frame earlier is decided again in the
+ * frame that does it. Measured on the DEV fixture, the entry's settle pass put a
+ * reader who had let go and scrolled up to 2098px back at 4195px.
+ */
+test("a bottom scroll that runs a frame late asks again whether it is still wanted", () => {
+  assert.match(messageList, /if \(stillWanted && !stillWanted\(\)\) return;\s*\n\s*applyBottomNow\(smooth\);/);
+  assert.match(messageList, /scrollToBottom\(false, stillHeld\)/, "the entry's settle pass goes to the bottom without asking again");
+  assert.match(
+    messageList,
+    /scrollToBottom\(smooth, \(\) => isAtBottomRef\.current\)/,
+    "the deferred pass after a layout change goes to the bottom without asking again",
   );
 });

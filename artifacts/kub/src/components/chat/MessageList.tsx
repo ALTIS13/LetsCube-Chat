@@ -305,6 +305,9 @@ export function MessageList({
   const olderReleaseFrameRef = useRef<number | null>(null);
   const olderSafetyTimeoutRef = useRef<number | null>(null);
   const releaseOlderScrollPreservationRef = useRef<(() => void) | null>(null);
+  /** The band «Загружаем историю...», and the height it took in the last commit (D-109). */
+  const historyBandRef = useRef<HTMLDivElement>(null);
+  const historyBandHeightRef = useRef(0);
   /**
    * True only while the hold loop is actually correcting the scroll position.
    *
@@ -764,6 +767,30 @@ export function MessageList({
     ) void loadOlderAtTop();
   }, [initialScrollKey, isInitialBottomLocked, loadOlderAtTop]);
 
+  // The history band pays for its own room.
+  //
+  // «Загружаем историю...» is a row in the flow above the oldest message. Its
+  // arrival moved every message down by its height and its departure moved them
+  // back, and both were painted: 43px at the start of every load and at its end.
+  // A scroll event during the load then took the anchor again in the moved
+  // position, the prepend restored that, and the reader was left 43px off — the
+  // signed-in contract failed at 42.8px (D-109). Whatever height the band adds
+  // or removes is now given back to `scrollTop` in the same layout pass, so no
+  // frame is painted with the messages moved and no scroll event can see them
+  // there. Declared before the prepend restore, which is absolute and so still
+  // lands right when both happen in one commit.
+  //
+  // Not at the bottom, which the list follows on its own, and where the browser
+  // has already clamped `scrollTop` to the new end.
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    const height = historyBandRef.current?.getBoundingClientRect().height ?? 0;
+    const change = height - historyBandHeightRef.current;
+    historyBandHeightRef.current = height;
+    if (!el || Math.abs(change) < 0.5 || isAtBottomRef.current || isInitialBottomLocked()) return;
+    el.scrollTop += change;
+  }, [isInitialBottomLocked, loadingOlder, olderError]);
+
   useLayoutEffect(() => {
     if (!preservingOlderScrollRef.current || !olderScrollAnchorRef.current) return;
     const prepended = sortedMessages.length > olderStartMessageCountRef.current
@@ -846,8 +873,21 @@ export function MessageList({
     setShowScrollBtn(false);
   }, []);
 
-  const scrollToBottom = useCallback((smooth = true) => {
-    requestAnimationFrame(() => applyBottomNow(smooth));
+  /**
+   * The bottom, a frame from now — if `stillWanted` still says so then.
+   *
+   * A pass that decided on the bottom and went a frame later went after whatever
+   * happened in that frame, a reader's wheel included. The entry's settle pass,
+   * asked while the entry held the reader at the bottom, took back a reader who
+   * had let go and scrolled up: measured on the fixture, from 2098px to 4195px
+   * (D-110). A caller that decided on a state passes it, and it is read again
+   * where the scroll happens. The button asks for the bottom outright.
+   */
+  const scrollToBottom = useCallback((smooth = true, stillWanted?: () => boolean) => {
+    requestAnimationFrame(() => {
+      if (stillWanted && !stillWanted()) return;
+      applyBottomNow(smooth);
+    });
   }, [applyBottomNow]);
 
   const scrollToBottomAfterLayout = useCallback((smooth = false) => {
@@ -862,7 +902,7 @@ export function MessageList({
         // afterwards to cancel it. It then arrived a frame later and put the
         // reader at the bottom. Measured on a reopened chat with 24 unread:
         // placed on the first one at 209ms, at the bottom at 288ms (D-089).
-        if (isAtBottomRef.current) scrollToBottom(smooth);
+        if (isAtBottomRef.current) scrollToBottom(smooth, () => isAtBottomRef.current);
       });
     });
     return () => {
@@ -1063,10 +1103,10 @@ export function MessageList({
     initialBottomLockUntilRef.current = Date.now() + 4200;
     applyBottomNow();
     const cancelFrame = scrollToBottomAfterLayout(false);
+    const stillHeld = () => initialScrollAppliedRef.current === initialScrollKey && isInitialBottomLocked();
     const scheduleBottomSettle = (delay: number) => window.setTimeout(() => {
-      if (initialScrollAppliedRef.current !== initialScrollKey) return;
-      if (!isInitialBottomLocked()) return;
-      scrollToBottom(false);
+      if (!stillHeld()) return;
+      scrollToBottom(false, stillHeld);
     }, delay);
     [120, 320, 680, 1200, 1750, 2600, 3600, 4150].forEach(scheduleBottomSettle);
     releaseInitialScrollGuard(initialScrollKey, 4300);
@@ -1150,7 +1190,7 @@ export function MessageList({
       >
         <div ref={contentRef} className="[overflow-anchor:none]">
           {(loadingOlder || olderError) && (
-            <div className="flex justify-center py-2" data-message-history-status>
+            <div ref={historyBandRef} className="flex justify-center py-2" data-message-history-status>
               <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--kub-border-color)] px-3 py-1 text-xs text-[color:var(--kub-muted)]">
                 {loadingOlder && <KubIcon name="spinner" size={12} />}
                 {olderError ?? "Загружаем историю..."}
