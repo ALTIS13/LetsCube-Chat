@@ -151,8 +151,10 @@ export async function openFixture(page: Page, options: FixtureOptions): Promise<
       requests.filter((entry) => entry.resource === resource && (!method || entry.method === method)),
   };
 
+  // Only the network. WebKit routes a `blob:` load as well, and with the load
+  // that decodes a picked file aborted, staging never finishes on it.
   await page.route(
-    (url) => url.hostname !== "127.0.0.1" && url.hostname !== "localhost",
+    (url) => (url.protocol === "http:" || url.protocol === "https:") && url.hostname !== "127.0.0.1" && url.hostname !== "localhost",
     (route) => route.abort("blockedbyclient"),
   );
   await page.addInitScript(({ user, now }) => {
