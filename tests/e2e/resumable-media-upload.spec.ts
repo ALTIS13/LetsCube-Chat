@@ -1,6 +1,7 @@
+import { createRequire } from "node:module";
+import path from "node:path";
 import { expect, test } from "@playwright/test";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { IMMUTABLE_PATH_MAX_AGE_SECONDS } from "../../artifacts/kub/src/lib/mediaCacheControl";
 import {
   buildResumableUploadEndpoint,
   normalizeUploadProgress,
@@ -16,6 +17,15 @@ import {
   chatAttachmentUploadPath,
   type StagedAttachment,
 } from "../../artifacts/kub/src/lib/stagedAttachments";
+
+// React belongs to artifacts/kub, not to the repository root, so a bare
+// `import "react"` resolved only when a run started inside that package. From
+// the root this file failed to load and took the whole run down before a single
+// test executed. Resolving from the package that owns React also gives this
+// file the same React instance the components under test import.
+const requireFromKub = createRequire(path.resolve(__dirname, "../../artifacts/kub/package.json"));
+const { createElement } = requireFromKub("react") as typeof import("react");
+const { renderToStaticMarkup } = requireFromKub("react-dom/server") as typeof import("react-dom/server");
 
 const FILE_SIZE = RESUMABLE_UPLOAD_THRESHOLD_BYTES + 1;
 
@@ -100,8 +110,11 @@ test.describe("resumable media upload contracts", () => {
         objectName: "user-456/chat-123-attachment-789.mp4",
         contentType: "video/mp4",
         // The new upload asks for the current lifetime while resuming a
-        // fingerprint that carries the old one. Both facts belong here.
-        cacheControl: "max-age=31536000, immutable",
+        // fingerprint that carries the old one. Both facts belong here. The
+        // lifetime is a TTL in seconds rather than a header — a storage upload
+        // cannot add `immutable` — and an attachment's path is never reused,
+        // so it is the immutable one.
+        cacheControl: IMMUTABLE_PATH_MAX_AGE_SECONDS,
       },
     });
     expect(harness.getSessionCalls).toBe(1);
