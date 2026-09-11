@@ -31,6 +31,7 @@ import { CHAT_NAME_MAX_LENGTH, limitText } from "@/lib/entityLimits";
 import { useMessageMediaVariantUrls, type MessageMediaVariantUrls } from "@/hooks/useMediaVariants";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
 import { currentViewport, type Point, type WindowPlacement } from "@/lib/floatingWindow";
+import { NO_SAFE_AREA_INSETS, readSafeAreaInsets, safeViewport, type SafeAreaInsets } from "@/lib/safeArea";
 import {
   profileDragPosition,
   profileWindowFrame,
@@ -170,6 +171,10 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   // Every rule about where it may sit is in `@/lib/profileWindow`, on top of the
   // geometry the support window already uses — what is left here is wiring.
   const [viewport, setViewport] = useState(currentViewport);
+  // The notch and the home indicator. The card is placed in the part of the
+  // screen they leave alone and drawn offset by them, so every rule that keeps
+  // it on screen keeps it off the hardware too — see `safeViewport`.
+  const [insets, setInsets] = useState<SafeAreaInsets>(NO_SAFE_AREA_INSETS);
   const [placement, setPlacement] = useState<WindowPlacement>(() =>
     resolveProfileWindowPlacement(readProfileWindowPlacement(), currentViewport()),
   );
@@ -182,7 +187,7 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
     placementRef.current = next;
     setPlacement(next);
   }, []);
-  const frame = profileWindowFrame(placement, viewport);
+  const frame = profileWindowFrame(placement, viewport, { x: insets.left, y: insets.top });
   const docked = frame.docked;
   const rootTitle = isSaved ? "Избранное" : isGroup ? "Информация о группе" : "Профиль пользователя";
 
@@ -190,7 +195,9 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
   // breakpoint has to put it back into the column it came from.
   useEffect(() => {
     const onResize = () => {
-      const next = currentViewport();
+      const nextInsets = readSafeAreaInsets();
+      const next = safeViewport(currentViewport(), nextInsets);
+      setInsets(nextInsets);
       setViewport(next);
       applyPlacement(resolveProfileWindowPlacement(placementRef.current, next));
     };
@@ -267,7 +274,9 @@ export function ChatInfoPanel({ chat, onClose, onClearForMe }: ChatInfoPanelProp
         drag,
         { x: event.clientX, y: event.clientY },
         current.size,
-        currentViewport(),
+        // The safe viewport the resize effect keeps current, so a drag stops
+        // at the notch rather than at the glass.
+        viewport,
       ),
     });
   };

@@ -56,7 +56,10 @@ function ConnectionStatusBanner() {
       role="status"
       aria-live="polite"
       className={cn(
-        "fixed bottom-4 left-1/2 z-[85] w-[calc(100vw-24px)] max-w-sm -translate-x-1/2 rounded-2xl border px-4 py-3 shadow-2xl sm:bottom-5",
+        // Above the home indicator rather than on it: the offset is measured
+        // from the top of the unsafe area, which is the screen edge wherever
+        // there is none.
+        "fixed bottom-[calc(1rem+var(--kub-safe-bottom))] left-1/2 z-[85] w-[calc(100vw-24px)] max-w-sm -translate-x-1/2 rounded-2xl border px-4 py-3 shadow-2xl sm:bottom-[calc(1.25rem+var(--kub-safe-bottom))]",
         offline
           ? "border-[color:var(--kub-danger)]/35 bg-[color-mix(in_srgb,var(--kub-danger)_16%,var(--kub-surface))]"
           : "border-[color:var(--kub-cyan)]/35 bg-[color-mix(in_srgb,var(--kub-cyan)_16%,var(--kub-surface))]",

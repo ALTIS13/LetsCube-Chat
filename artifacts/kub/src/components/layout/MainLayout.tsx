@@ -69,7 +69,13 @@ export function MainLayout() {
     // it, and that ambient is the only thing the chrome's blur has to pick up:
     // an opaque shell here would hand every panel one flat colour to sample and
     // the glass would come back as paint. See the Glass note in index.css.
-    <div className="flex flex-col h-[100dvh] w-screen overflow-hidden">
+    //
+    // `px-safe` is the notch held sideways. An iPhone in landscape keeps 59px
+    // of each long edge, and at that width this is already the two-pane
+    // layout, so the sidebar's avatars and the chat's last controls would sit
+    // under it. The page ground shows in those two bands, which is what iOS
+    // itself paints there for a page that does not ask for the whole screen.
+    <div className="flex flex-col h-[100dvh] w-screen overflow-hidden px-safe">
       <DesktopUpdatePill />
       <div
         className="flex min-h-0 flex-1 flex-col overflow-hidden"

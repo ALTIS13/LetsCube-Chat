@@ -801,7 +801,7 @@ export function MessageList({
       } as React.CSSProperties}
     >
       {onBulkHideForMe && selectionMode && (
-        <div className="fixed bottom-[4.75rem] left-3 right-3 z-[70] flex items-center justify-between gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]/95 p-2 shadow-lg backdrop-blur sm:absolute sm:bottom-auto sm:left-auto sm:right-3 sm:top-[calc(var(--kub-list-top-inset,0px)+0.5rem)] sm:w-auto sm:justify-start sm:p-1.5">
+        <div className="fixed bottom-[calc(4.75rem+var(--kub-safe-bottom))] left-3 right-3 z-[70] flex items-center justify-between gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]/95 p-2 shadow-lg backdrop-blur sm:absolute sm:bottom-auto sm:left-auto sm:right-3 sm:top-[calc(var(--kub-list-top-inset,0px)+0.5rem)] sm:w-auto sm:justify-start sm:p-1.5">
           <span className="px-2 text-xs font-semibold text-[color:var(--kub-muted)]">
             Выбрано: {selectedMessages.length}
           </span>

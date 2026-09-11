@@ -56,7 +56,12 @@ export function AppTopBar() {
         // stacking context that every dialog in the product then has to beat,
         // and being positioned is already enough to put its shadow over the
         // panes below.
-        "kub-glass relative hidden h-[var(--kub-app-topbar-height)] shrink-0 select-none items-center border-b border-[color:var(--kub-border-color)] md:flex",
+        //
+        // From `md` this is the top of the screen, which on an iPad is under
+        // the status bar. The inset is added to the height and padded out of
+        // the top, so the material runs under the status bar and the row keeps
+        // its 44px; wherever there is no inset the sum is the old height.
+        "kub-glass relative hidden h-[calc(var(--kub-app-topbar-height)+var(--kub-safe-top))] shrink-0 select-none items-center border-b border-[color:var(--kub-border-color)] pt-safe md:flex",
         desktop ? "pl-3" : "px-3",
       )}
       data-testid="app-top-bar"

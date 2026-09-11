@@ -124,7 +124,11 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
   ];
 
   return (
-    <div className="flex-shrink-0 border-b border-[color:var(--kub-border-color)]">
+    // Below `md` this is the top of the screen — under the status bar and the
+    // Dynamic Island of the installed iPhone app — so it pads that inset out
+    // of its own top and the column's material runs under both. From `md` the
+    // application's top bar is above it and carries the inset instead.
+    <div className="flex-shrink-0 border-b border-[color:var(--kub-border-color)] pt-safe md:pt-0">
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {showNewGroup && <NewGroupModal onClose={() => setShowNewGroup(false)} onRefetch={onRefetch} />}
 
@@ -172,7 +176,15 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
                   // `-strong`, because this covers the chat list it opens over.
                   // The glow and shadow-2xl are gone: both set box-shadow, and
                   // whichever won would have replaced the material's own.
-                  className="kub-glass-strong absolute left-0 top-12 w-64 rounded-xl z-50 py-1 overflow-hidden border border-[color:var(--kub-border-color)]"
+                  //
+                  // Held sideways a phone is 393px tall and this menu is
+                  // taller, and with `overflow-hidden` its last item — «Выйти» —
+                  // was cut off on the home indicator with no way to reach it.
+                  // It is capped to the screen the hardware leaves, less the
+                  // 8.5rem above it at its lowest (the top bar, the row, the
+                  // 48px drop), and scrolls; on a desktop the cap is far taller
+                  // than the menu and changes nothing.
+                  className="kub-glass-strong absolute left-0 top-12 w-64 rounded-xl z-50 py-1 max-h-[calc(100dvh-var(--kub-safe-top)-var(--kub-safe-bottom)-8.5rem)] overflow-y-auto border border-[color:var(--kub-border-color)]"
                 >
                   {currentUser && (
                     <div className="flex items-center gap-3 px-4 py-3 mb-1 border-b border-[color:var(--kub-rule)]">

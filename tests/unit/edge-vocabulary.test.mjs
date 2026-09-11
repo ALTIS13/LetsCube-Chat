@@ -365,7 +365,10 @@ test("the rule guarantee does not fire on chrome, which keeps the edge", () => {
   assert.equal(ruleWearingTheEdgeColour(file.rel, text).length, 0);
   // The same line without the marker that makes it chrome is a rule again, and
   // is then reported: the exemption is the class list, not the file.
-  const broken = text.replace(/kub-glass relative hidden h-\[var\(--kub-app-topbar-height\)\] shrink-0/, "relative hidden");
+  const broken = text.replace(
+    /kub-glass relative hidden h-\[calc\(var\(--kub-app-topbar-height\)\+var\(--kub-safe-top\)\)\] shrink-0/,
+    "relative hidden",
+  );
   assert.notEqual(broken, text, "the AppTopBar anchor moved");
   assert.equal(ruleWearingTheEdgeColour(file.rel, broken).length, 1);
 });

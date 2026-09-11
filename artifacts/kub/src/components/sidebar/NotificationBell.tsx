@@ -10,6 +10,7 @@ import { safeOpenChat } from "@/lib/safeOpenChat";
 import { requestChatMessageJump } from "@/lib/chatJumpEvents";
 import { showAppAlert } from "@/lib/appDialogs";
 import { cn } from "@/lib/utils";
+import { readSafeAreaInsets } from "@/lib/safeArea";
 import {
   accentBorder,
   accentSurface,
@@ -102,39 +103,47 @@ export function NotificationBell() {
     const viewportHeight = viewport?.height ?? window.innerHeight;
     const viewportLeft = viewport?.offsetLeft ?? 0;
     const viewportTop = viewport?.offsetTop ?? 0;
+    // The panel is placed by hand, so it is told where the hardware is. Held
+    // sideways an iPhone keeps 59px of each long edge for the notch and 21px of
+    // the bottom for the home indicator; on a screen with neither these are all
+    // zero and every line below reads as it did.
+    const safe = readSafeAreaInsets();
     const anchorRect = anchor.getBoundingClientRect();
     const isMobile = viewportWidth < 640;
-    const safeWidth = Math.max(0, viewportWidth - PANEL_MARGIN * 2);
+    const safeWidth = Math.max(0, viewportWidth - PANEL_MARGIN * 2 - safe.left - safe.right);
     const width = Math.min(Math.max(MIN_PANEL_WIDTH, isMobile ? safeWidth : DESKTOP_PANEL_WIDTH), safeWidth);
 
     const desiredLeft = isMobile
-      ? viewportLeft + PANEL_MARGIN
+      ? viewportLeft + PANEL_MARGIN + safe.left
       : viewportLeft + anchorRect.right - width;
-    const minLeft = viewportLeft + PANEL_MARGIN;
-    const maxLeft = viewportLeft + viewportWidth - width - PANEL_MARGIN;
+    const minLeft = viewportLeft + PANEL_MARGIN + safe.left;
+    const maxLeft = viewportLeft + viewportWidth - width - PANEL_MARGIN - safe.right;
     const left = Math.min(Math.max(desiredLeft, minLeft), Math.max(minLeft, maxLeft));
 
     const preferredTop = viewportTop + anchorRect.bottom + 8;
-    const spaceBelow = viewportTop + viewportHeight - preferredTop - PANEL_MARGIN;
+    const spaceBelow = viewportTop + viewportHeight - safe.bottom - preferredTop - PANEL_MARGIN;
     const canFlipAbove = spaceBelow < 260 && anchorRect.top > viewportHeight / 2;
-    const desiredMaxHeight = Math.min(MAX_PANEL_HEIGHT, viewportHeight - PANEL_MARGIN * 2);
+    const desiredMaxHeight = Math.min(
+      MAX_PANEL_HEIGHT,
+      viewportHeight - safe.top - safe.bottom - PANEL_MARGIN * 2,
+    );
     let top = preferredTop;
     let maxHeight = Math.min(desiredMaxHeight, spaceBelow);
 
     if (canFlipAbove) {
-      maxHeight = Math.min(desiredMaxHeight, anchorRect.top - PANEL_MARGIN * 2);
+      maxHeight = Math.min(desiredMaxHeight, anchorRect.top - safe.top - PANEL_MARGIN * 2);
       top = viewportTop + anchorRect.top - maxHeight - 8;
     }
 
     if (maxHeight < MIN_PANEL_HEIGHT) {
-      top = viewportTop + PANEL_MARGIN;
-      maxHeight = Math.min(desiredMaxHeight, viewportHeight - PANEL_MARGIN * 2);
+      top = viewportTop + PANEL_MARGIN + safe.top;
+      maxHeight = desiredMaxHeight;
     }
 
     const resolvedHeight = Math.max(MIN_PANEL_HEIGHT, maxHeight);
     setPanelStyle({
       left,
-      top: Math.max(viewportTop + PANEL_MARGIN, top),
+      top: Math.max(viewportTop + PANEL_MARGIN + safe.top, top),
       width,
       height: resolvedHeight,
       maxHeight: resolvedHeight,

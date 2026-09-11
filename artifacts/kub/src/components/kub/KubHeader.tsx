@@ -20,7 +20,11 @@ export function KubHeader({
   return (
     <header
       className={cn(
-        "flex items-center gap-3 px-4 h-14 flex-shrink-0",
+        // A page header is the top of its screen — the tasks and bots pages
+        // are the only users — so the status bar's inset is added to its 56px
+        // and padded out of its top, and the material runs under the status
+        // bar while the row stays the height it was.
+        "flex items-center gap-3 px-4 h-[calc(3.5rem+var(--kub-safe-top))] pt-safe flex-shrink-0",
         // `relative`, no z-index: positioned is enough to lay the shadow over
         // what follows, and a z-index would make this a stacking context that
         // the page's own dialogs would then have to out-rank.

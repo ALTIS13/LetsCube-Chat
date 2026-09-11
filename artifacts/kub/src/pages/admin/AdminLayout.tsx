@@ -79,15 +79,19 @@ export function AdminLayout() {
     // No fill on the root. --kub-ambient is painted once, on `body`; a shell
     // that paints --kub-bg over it hands the chrome one flat colour to blur,
     // and the material collapses back to the paint it replaced.
-    <div data-testid="admin-shell" className="flex h-screen min-h-0 flex-col text-[color:var(--kub-text)]">
+    <div data-testid="admin-shell" className="flex h-screen min-h-0 flex-col px-safe text-[color:var(--kub-text)]">
       {/* Title row and tab strip are ONE sheet, not two. Given the material
           separately, each would carry its own lit top edge and drop its own
           shadow onto the other, so the chrome would read as two stacked
           panels rather than as the frame of one tool. The rows keep the
           border that divides them; the material sits on the box holding
-          them. Nothing `fixed` lives in here, so it wears `kub-glass`
-          directly rather than needing a layer behind it. */}
-      <div data-testid="admin-chrome" className="flex-shrink-0 kub-glass border-b border-[color:var(--kub-border-color)]">
+          them. Nothing `fixed` lives in here, so it wears the material
+          directly rather than needing a layer behind it.
+
+          The sheet is the top of the screen, so it pads the status bar's
+          inset out of its own top, and the shell pads the notch off both
+          sides when the phone is held sideways. */}
+      <div data-testid="admin-chrome" className="flex-shrink-0 kub-glass border-b border-[color:var(--kub-border-color)] pt-safe">
         <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 h-14 border-b border-[color:var(--kub-border-color)]">
           <Link
             href="/"

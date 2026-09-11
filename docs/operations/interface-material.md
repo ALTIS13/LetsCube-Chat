@@ -39,7 +39,7 @@ is not necessarily legible as a sentence. Fills, borders and icon shapes keep
 `--kub-danger` and `--kub-cyan`: those answer a 3:1 requirement they already
 meet.
 
-## The twelve rules
+## The thirteen rules
 
 ### 1. Never write the material by hand
 
@@ -345,6 +345,65 @@ Three things follow.
   `playwright.config.ts`; with the pre-fix source restored exactly, all seven
   Chromium checks pass and WebKit fails two, which is the proof that the engine
   is the variable and no width of Chromium substitutes for it.
+
+### 13. The page is drawn under the hardware, and every edge reads how much
+
+`index.html` asks for `viewport-fit=cover`. The installed iPhone app is then
+drawn from edge to edge — under the status bar, the Dynamic Island and the home
+indicator in portrait, and under the notch on both long edges in landscape —
+and `env(safe-area-inset-*)` reports how much of each edge the hardware takes.
+
+Without `cover` iOS decides where an installed web app goes, and it does not
+document that decision: the owner's two screenshots of one build did not agree
+with each other. With `cover` the placement is documented and the work moves to
+us, because every surface pinned to an edge has to read the insets. Before this
+rule four places read the top inset, five the bottom and none the sides; the
+chat header, the list header and the top bar read nothing, the update banner
+sat 12px from the top of the screen — under the island — and the chat header's
+phone menu sat 12px from the bottom, on the home indicator.
+
+- **One source.** `--kub-safe-top`, `-right`, `-bottom` and `-left` on `:root`
+  take `env(…, 0px)` once, and everything else reads the tokens — including the
+  surfaces that place themselves in script, through `lib/safeArea.ts`, which
+  measures them as a computed padding. `tests/unit/safe-area-insets.test.mjs`
+  fails on any other `env(safe-area-inset-*)`. That is not tidiness: Playwright's
+  WebKit reports every inset as `0px`, so a surface reading `env()` cannot be
+  checked in Safari's engine at all, and a token can be given a value there.
+- **The material goes under; controls and text do not.** A header, a sheet or a
+  bar pads the inset out of itself, so its glass runs under the status bar or
+  the home indicator and its row starts clear of them. The height grows by the
+  inset instead of the row shrinking by it — boxes are `border-box`, and padding
+  beside a fixed height comes out of the row, which is D-065 again.
+- **A sum when the gap is from the hardware, `max()` when it is from the
+  edge.** A banner 12px below the status bar is `calc(0.75rem + inset)`; a dialog
+  that keeps 16px from every edge is `p-safe-gap` with `[--kub-safe-gap:1rem]`.
+  Either way a screen without insets gets exactly the geometry it had.
+- **The keyboard covers the home indicator.** The composer pads the larger of the
+  two, never their sum; the sum left a strip of the inset's height between the
+  composer and the keys.
+- **Held sideways, the notch is on the sides.** The shells pad `px-safe`, and the
+  page ground shows in the two bands, which is what iOS paints there for a page
+  that does not ask for the whole screen. The hand-placed surfaces — the support
+  window, the contact card, the notification panel, the chat list's menu — are
+  placed in the part of the screen the hardware leaves alone and drawn offset by
+  the insets, so the clamping they already had keeps them off the notch without
+  knowing there is one.
+- **Which chrome is on top depends on the width.** Below `md` the pane headers are
+  the top of the screen and carry the inset; from `md` the application's top bar
+  does, and the pane headers do not.
+- **Android is unaffected today and cannot double.** Capacitor 8's `SystemBars`
+  hands the insets to the page only when the WebView is 140 or newer *and* the
+  viewport has `cover`; otherwise it pads the WebView's parent and gives the page
+  zero. It never does both. On a WebView older than 140 the shell keeps padding
+  as it does now; on a newer one the next APK draws edge to edge and depends on
+  exactly this rule.
+
+The stand is `tests/e2e/ios-standalone-safe-area.spec.ts`: WebKit at iPhone 14
+Pro size with the insets injected through the tokens (`webkit-ios-standalone`),
+and Chromium with the insets overridden inside the engine, so `env()` itself
+reports them (on `chromium-mobile-390`). Both assert that nothing a person can
+see or tap is inside an unsafe area. Neither proves what iOS does with the
+viewport — the device checklist in the defect register does that.
 
 ## Where the material is not used, on purpose
 

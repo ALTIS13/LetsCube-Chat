@@ -935,8 +935,14 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           // in the column's markup for the same reason it was: nothing about
           // the composer's own box changes, so the camera, the video recorder
           // and the attachment backdrop still lay out against the viewport.
+          //
+          // The larger of the keyboard and the home indicator, never their
+          // sum. An open keyboard covers the home indicator, so adding the two
+          // left a strip of the inset's height between the composer and the
+          // keys on an iPhone; with the keyboard closed the inset is all that
+          // is left, and on a device without one this is the keyboard alone.
           className="absolute inset-x-0 bottom-0 transition-[padding-bottom] duration-150 ease-out"
-          style={{ paddingBottom: "calc(var(--kub-keyboard-inset, 0px) + env(safe-area-inset-bottom))" }}
+          style={{ paddingBottom: "max(var(--kub-keyboard-inset, 0px), var(--kub-safe-bottom))" }}
         >
           <MessageInput
             chatId={chatId}

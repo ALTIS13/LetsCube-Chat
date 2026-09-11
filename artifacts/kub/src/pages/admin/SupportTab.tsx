@@ -535,7 +535,7 @@ function SupportPreferencesDialog({
       role="dialog"
       aria-modal="true"
       aria-labelledby="support-preferences-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-safe-gap backdrop-blur-sm [--kub-safe-gap:0.75rem]"
     >
       <div className="kub-glass-strong max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] p-4">
         <div className="flex items-center justify-between gap-3">
@@ -605,7 +605,7 @@ function SupportSettingsDialog({
       role="dialog"
       aria-modal="true"
       aria-labelledby="support-settings-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-safe-gap backdrop-blur-sm [--kub-safe-gap:0.75rem]"
     >
       <div className="kub-glass-strong max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] p-4">
         <div className="flex items-center justify-between gap-3">

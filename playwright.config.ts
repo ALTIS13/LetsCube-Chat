@@ -80,5 +80,27 @@ export default defineConfig({
         viewport: { width: 390, height: 844 },
       },
     },
+    {
+      // The installed iPhone app, around its hardware. `viewport-fit=cover`
+      // draws the page under the status bar, the Dynamic Island and the home
+      // indicator, and this project checks that nothing a person reads or taps
+      // ends up there — in portrait and held sideways.
+      //
+      // WebKit cannot report `env(safe-area-inset-*)`, so the helper injects
+      // the insets through the four tokens the application reads, and answers
+      // `navigator.standalone` and `(display-mode: standalone)` the way the
+      // home-screen app does. The Chromium half of the same file overrides the
+      // insets at the source instead and runs on `chromium-mobile-390`.
+      //
+      // Scoped to its own spec: every other contract already has
+      // `webkit-mobile-390`, and running the whole suite twice under one engine
+      // would buy time, not coverage.
+      name: "webkit-ios-standalone",
+      testMatch: /ios-standalone-safe-area\.spec\.ts$/,
+      use: {
+        ...devices["iPhone 14 Pro"],
+        viewport: { width: 393, height: 852 },
+      },
+    },
   ],
 });

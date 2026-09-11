@@ -67,7 +67,10 @@ export const PROFILE_WINDOW_DRAG_IGNORE_SELECTOR =
  * asked the question at the wrong width.
  */
 const DOCKED_CLASS =
-  "kub-glass-strong absolute inset-0 z-[60] flex min-h-0 flex-col";
+  // `pt-safe pb-safe`: docked, the sheet is the whole phone, so its material
+  // runs under the status bar and the home indicator while its title bar and
+  // its last row stay clear of both.
+  "kub-glass-strong absolute inset-0 z-[60] flex min-h-0 flex-col pt-safe pb-safe";
 
 /**
  * `min-h-0` and `flex-col` are load-bearing: the media grid inside scrolls
@@ -106,6 +109,12 @@ export interface ProfileWindowFrame {
 export function profileWindowFrame(
   placement: WindowPlacement,
   viewport: Viewport,
+  /**
+   * Where the viewport the placement was resolved in begins on the screen.
+   * Given the safe viewport that is the left and top insets, and the card is
+   * drawn clear of the notch without the geometry knowing a notch exists.
+   */
+  origin: Point = { x: 0, y: 0 },
 ): ProfileWindowFrame {
   if (isDocked(viewport)) {
     return { docked: true, className: DOCKED_CLASS, style: undefined };
@@ -114,8 +123,8 @@ export function profileWindowFrame(
     docked: false,
     className: FLOATING_CLASS,
     style: {
-      left: `${placement.position.x}px`,
-      top: `${placement.position.y}px`,
+      left: `${placement.position.x + origin.x}px`,
+      top: `${placement.position.y + origin.y}px`,
       width: `${placement.size.width}px`,
       height: `${placement.size.height}px`,
     },

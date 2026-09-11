@@ -2,9 +2,17 @@
 <html lang="ru" class="h-full">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      viewport-fit=cover: the installed iPhone app is drawn edge to edge, under
+      the status bar, the Dynamic Island and the home indicator. Without it iOS
+      decides where the page goes and does not document the decision for an
+      installed app; with it the placement is documented and every surface
+      pinned to an edge reads the insets through --kub-safe-* in src/index.css.
+      See docs/operations/interface-material.md, rule 13.
+    -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
     <meta name="theme-color" content="#050B18" />
     <title>LETSCUBE</title>

@@ -16,6 +16,7 @@ import {
   type Point,
   type WindowPlacement,
 } from "@/lib/floatingWindow";
+import { NO_SAFE_AREA_INSETS, readSafeAreaInsets, safeViewport, type SafeAreaInsets } from "@/lib/safeArea";
 import {
   OPEN_TICKET_STATUSES,
   SUPPORT_CATEGORIES,
@@ -46,9 +47,15 @@ function statusTone(status: UserTicketStatus): string {
   return "text-[color:var(--kub-accent-text)]";
 }
 
+/**
+ * The part of the window the hardware leaves alone. The window is placed in
+ * these coordinates and drawn offset by the insets, so all the geometry that
+ * keeps it on screen — clamping, docking, a stored position — keeps it off the
+ * notch and the home indicator too, without having to know either exists.
+ */
 function viewportSize() {
   if (typeof window === "undefined") return { width: 1280, height: 800 };
-  return { width: window.innerWidth, height: window.innerHeight };
+  return safeViewport({ width: window.innerWidth, height: window.innerHeight }, readSafeAreaInsets());
 }
 
 function formatWhen(iso: string): string {
@@ -81,6 +88,7 @@ export function SupportWindow() {
     resolvePlacement(readStoredPlacement(), viewportSize()),
   );
   const [docked, setDocked] = useState(() => isDocked(viewportSize()));
+  const [insets, setInsets] = useState<SafeAreaInsets>(NO_SAFE_AREA_INSETS);
   const [tickets, setTickets] = useState<UserSupportTicket[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<UserSupportMessage[]>([]);
@@ -101,10 +109,13 @@ export function SupportWindow() {
     return () => window.removeEventListener(KUB_SUPPORT_WINDOW_OPEN_EVENT, onOpen);
   }, []);
 
-  // A resize or a rotation can strand the window off screen; put it back.
+  // A resize or a rotation can strand the window off screen; put it back. A
+  // rotation also moves the notch from the top to the sides, so the insets are
+  // read again with it.
   useEffect(() => {
     if (!open) return;
     const onResize = () => {
+      setInsets(readSafeAreaInsets());
       const viewport = viewportSize();
       setDocked(isDocked(viewport));
       setPlacement((current) => resolvePlacement(current, viewport));
@@ -265,8 +276,8 @@ export function SupportWindow() {
   const frameStyle = docked
     ? undefined
     : {
-        left: `${placement.position.x}px`,
-        top: `${placement.position.y}px`,
+        left: `${placement.position.x + insets.left}px`,
+        top: `${placement.position.y + insets.top}px`,
         width: `${placement.size.width}px`,
         height: `${placement.size.height}px`,
       };
@@ -300,7 +311,11 @@ export function SupportWindow() {
           "kub-raise flex shrink-0 items-center gap-2 border-b border-[color:var(--kub-border-color)] px-3 py-2",
           docked ? "" : "cursor-grab active:cursor-grabbing select-none",
         )}
-        style={docked ? undefined : { paddingTop: "max(0.5rem, env(safe-area-inset-top))" }}
+        // Docked, this bar is the top of the phone, so it clears the status
+        // bar and the Dynamic Island; floating, its top is wherever the window
+        // was put. It used to be the other way round, which left the docked
+        // window's close button under the island.
+        style={docked ? { paddingTop: "max(0.5rem, var(--kub-safe-top))" } : undefined}
       >
         <KubIcon name="help" size={16} className="text-[color:var(--kub-cyan)]" />
         <div className="min-w-0 flex-1">
@@ -486,7 +501,7 @@ export function SupportWindow() {
             className="shrink-0 border-t border-[color:var(--kub-border-color)] p-2"
             style={
               docked
-                ? { paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }
+                ? { paddingBottom: "max(0.5rem, var(--kub-safe-bottom))" }
                 : undefined
             }
           >

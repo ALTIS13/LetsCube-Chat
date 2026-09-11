@@ -211,7 +211,12 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
         // would lay it out against the 56px header instead of the screen. The
         // box itself is untouched — same height, same flex sizing, still
         // statically positioned in the column the message list measures.
-        className="relative flex flex-shrink-0 flex-col"
+        //
+        // Below `md` the header is the top of the screen, so it pads the status
+        // bar's inset out of its own top: the material runs under the status
+        // bar and the Dynamic Island, the controls start below them, and the
+        // list underneath measures the taller header like any other height.
+        className="relative flex flex-shrink-0 flex-col pt-safe md:pt-0"
         data-testid="chat-header-shell"
       >
         <KubGlassLayer />
@@ -273,7 +278,10 @@ export function ChatHeader({ chatId, chat, onSearchOpen, onInfoOpen, onClearForM
               <div
                 role="menu"
                 data-kub-menu="true"
-                className="kub-glass-strong fixed inset-x-3 bottom-3 z-50 max-h-[min(70vh,480px)] overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] py-1 sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-10 sm:w-60"
+                // On a phone the menu is a sheet at the bottom of the screen,
+                // so its 12px are measured from the top of the home indicator:
+                // at a flat 12px its last item, the destructive one, sat on it.
+                className="kub-glass-strong fixed inset-x-3 bottom-[calc(0.75rem+var(--kub-safe-bottom))] z-50 max-h-[min(70vh,480px)] overflow-y-auto rounded-xl border border-[color:var(--kub-border-color)] py-1 sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-10 sm:w-60"
               >
                 {menuItems.map(({ icon, label, danger, disabled, action }) => (
                   <button

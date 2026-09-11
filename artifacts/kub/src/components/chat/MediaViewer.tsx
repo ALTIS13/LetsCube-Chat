@@ -60,7 +60,10 @@ export function MediaViewer({ media, onClose }: MediaViewerProps) {
   // viewer out of that context and lets its own z-index mean what it says.
   return createPortal(
     <div
-      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 p-3 backdrop-blur-sm sm:p-6"
+      // The frame keeps its 12px (24px from `sm`) from every edge, or the inset
+      // where the hardware takes more, so its close button is never under the
+      // Dynamic Island.
+      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 p-safe-gap backdrop-blur-sm [--kub-safe-gap:0.75rem] sm:[--kub-safe-gap:1.5rem]"
       role="dialog"
       aria-modal="true"
       aria-label={title}

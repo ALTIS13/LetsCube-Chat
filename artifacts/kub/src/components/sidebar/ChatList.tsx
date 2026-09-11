@@ -12,6 +12,7 @@ import { comparePinnedOrder, sortChatsForSidebar } from "@/lib/chatSort";
 import { mapPgError, prefixError } from "@/lib/errors";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { cn } from "@/lib/utils";
+import { readSafeAreaInsets } from "@/lib/safeArea";
 import { usePresenceNow } from "@/hooks/usePresenceNow";
 import { useAvatarVariantUrls } from "@/hooks/useMediaVariants";
 import type { ChatWithLastMessage } from "@/types/database";
@@ -23,7 +24,7 @@ interface ChatListProps {
 }
 
 type ChatMenuState =
-  | { chatId: string; mode: "menu"; left: number; y: number; openUp: boolean }
+  | { chatId: string; mode: "menu"; left: number; y: number; openUp: boolean; safeTop: number; safeBottom: number }
   | { chatId: string; mode: "sheet" };
 
 interface ChatAction {
@@ -95,16 +96,22 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
   const openDesktopMenu = useCallback((chatId: string, position: { x: number; y: number }) => {
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
+    // Read where the pointer opened it: on an iPad, or an iPhone held
+    // sideways, the edges this menu is kept inside are the notch and the home
+    // indicator, not the glass. Zero everywhere else.
+    const safe = readSafeAreaInsets();
     const left = Math.min(
-      Math.max(12, position.x),
-      Math.max(12, viewportWidth - DESKTOP_MENU_WIDTH - 12),
+      Math.max(12 + safe.left, position.x),
+      Math.max(12 + safe.left, viewportWidth - DESKTOP_MENU_WIDTH - 12 - safe.right),
     );
     setOpenMenu({
       chatId,
       mode: "menu",
       left,
       y: position.y,
-      openUp: position.y > viewportHeight - DESKTOP_MENU_HEIGHT_ESTIMATE,
+      openUp: position.y > viewportHeight - safe.bottom - DESKTOP_MENU_HEIGHT_ESTIMATE,
+      safeTop: safe.top,
+      safeBottom: safe.bottom,
     });
   }, []);
 
@@ -511,6 +518,8 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
           left={openMenu.left}
           y={openMenu.y}
           openUp={openMenu.openUp}
+          safeTop={openMenu.safeTop}
+          safeBottom={openMenu.safeBottom}
           busyActionId={busyActionId}
           onClose={closeMenu}
           onRun={runAction}
@@ -536,6 +545,8 @@ function ChatDesktopContextMenu({
   left,
   y,
   openUp,
+  safeTop,
+  safeBottom,
   busyActionId,
   onClose,
   onRun,
@@ -545,13 +556,15 @@ function ChatDesktopContextMenu({
   left: number;
   y: number;
   openUp: boolean;
+  safeTop: number;
+  safeBottom: number;
   busyActionId: string | null;
   onClose: () => void;
   onRun: (action: ChatAction) => void | Promise<void>;
 }) {
   const style = openUp
-    ? { left, bottom: Math.max(12, window.innerHeight - y) }
-    : { left, top: Math.min(y, window.innerHeight - 12) };
+    ? { left, bottom: Math.max(12 + safeBottom, window.innerHeight - y) }
+    : { left, top: Math.max(12 + safeTop, Math.min(y, window.innerHeight - 12 - safeBottom)) };
 
   return (
     <>
@@ -597,7 +610,7 @@ function ChatMobileActionSheet({
         role="dialog"
         aria-modal="true"
         data-chat-context-menu="mobile"
-        className="kub-glass-strong max-h-[82vh] w-full overflow-hidden rounded-t-2xl border-t border-[color:var(--kub-border-color)] pb-safe"
+        className="kub-glass-strong max-h-[82vh] w-full overflow-hidden rounded-t-2xl border-t border-[color:var(--kub-border-color)] pb-safe px-safe"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mx-auto mt-2 h-1.5 w-11 rounded-full bg-[var(--kub-surface-3)]" />

@@ -97,7 +97,11 @@ export function Sidebar() {
     // cover it. Everything inside stays flat — the list rows in particular, a
     // blur each on a list that scrolls is the one place this material costs
     // real frames.
-    <div className="relative flex h-full w-full flex-col">
+    //
+    // From `md` the tab bar is gone and this column runs to the bottom of the
+    // screen, so it keeps the home indicator's inset clear itself; below `md`
+    // the tab bar underneath does that.
+    <div className="relative flex h-full w-full flex-col md:pb-safe">
       <KubGlassLayer />
       {/* One in-flow child, sized exactly as the four used to be, so the layer
           has a sibling to sit behind and the column's own layout is unchanged.

@@ -67,7 +67,7 @@ export function IframeAuthBanner() {
     // so the frosting was inert and the material was written by hand. The
     // warning is carried by the edge and the icon, both of which answer a 3:1
     // requirement rather than a 4.5:1 one.
-    <div className="kub-glass-strong fixed top-0 inset-x-0 z-[9999] px-4 py-2.5 flex items-center gap-3 justify-center text-xs font-medium text-[color:var(--kub-text)] border-b-2 border-[color:var(--kub-warn)]">
+    <div className="kub-glass-strong fixed top-0 inset-x-0 z-[9999] px-4 pb-2.5 pt-[calc(0.625rem+var(--kub-safe-top))] flex items-center gap-3 justify-center text-xs font-medium text-[color:var(--kub-text)] border-b-2 border-[color:var(--kub-warn)]">
       <KubIcon name="warning" size={14} tone="warn" className="flex-shrink-0" />
       <span className="text-center">
         Превью Replit запущено в iframe — браузер может блокировать сессию.

@@ -57,7 +57,7 @@ export function BotsPage() {
   // AND portaled to the body, and the confirm dialog inside BotSettingsPanel is
   // portaled too, so no backdrop-filter here can become their containing block.
   return (
-    <main data-testid="bots-page" className="bots-management-surface flex h-[100dvh] min-w-0 flex-col overflow-hidden text-[color:var(--kub-text)]">
+    <main data-testid="bots-page" className="bots-management-surface flex h-[100dvh] min-w-0 flex-col overflow-hidden px-safe text-[color:var(--kub-text)]">
       <KubHeader
         title={<h1 className="truncate text-sm font-semibold">Мои боты</h1>}
         subtitle={eligibility ? `${eligibility.active_bot_count} из ${eligibility.max_bots}` : "Управление Bot API"}
@@ -84,7 +84,7 @@ export function BotsPage() {
       <div className="grid min-h-0 flex-1 md:grid-cols-[22rem_minmax(0,1fr)]">
         <section data-testid="bots-list-pane" aria-label="Список ботов" className={cn("kub-glass min-h-0 min-w-0 border-r border-[color:var(--kub-border-color)]", selectedId ? "hidden md:flex" : "flex", "flex-col")}>
           {!eligibility?.can_create && eligibility && <EligibilityNotice eligibility={eligibility} />}
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 pb-[calc(0.75rem+var(--kub-safe-bottom))]">
             {list.isLoading && <BotListSkeleton />}
             {list.isError && <div role="alert" className="rounded-md border border-[color:var(--kub-danger)]/40 p-4 text-sm"><div>Не удалось загрузить список ботов.</div><KubButton variant="secondary" size="sm" className="mt-3 min-h-11" onClick={() => void list.refetch()}>Повторить</KubButton></div>}
             {list.data?.bots.length === 0 && <KubEmptyState icon={<KubIcon name="bot" size={28} />} title="У вас пока нет ботов" description="Создайте бота, чтобы подключить его к чатам через Bot API." action={eligibility?.can_create ? <KubButton className="min-h-11" onClick={() => setCreateOpen(true)}>Создать бота</KubButton> : undefined} />}
@@ -101,7 +101,7 @@ export function BotsPage() {
               <div className="flex h-12 shrink-0 items-center gap-2 border-b border-[color:var(--kub-border-color)] px-3 md:hidden">
                 <button type="button" onClick={() => select(null)} className="flex h-11 min-w-11 items-center gap-2 rounded-md px-2 text-sm text-[color:var(--kub-muted)] kub-raise-hover" aria-label="Назад к списку"><KubIcon name="back" size={18} />К списку</button>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-safe">
                 {detail.isLoading && <DetailSkeleton />}
                 {detail.isError && <div role="alert" className="m-4 rounded-md border border-[color:var(--kub-danger)]/40 p-4 text-sm sm:m-6"><div>Не удалось загрузить настройки бота.</div><KubButton variant="secondary" className="mt-3 min-h-11" onClick={() => void detail.refetch()}>Повторить</KubButton></div>}
                 {detail.data && <BotSettingsPanel detail={detail.data} onToken={(token) => tokenDialog.current?.show(token)} />}

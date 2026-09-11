@@ -58,10 +58,10 @@ export function BottomNav() {
       // safe-area padding this bar asks for would have been taken out of the
       // tabs rather than added below them — six labels and their icons into
       // 22px on an iPhone. The height carries the inset so the padding has
-      // somewhere to go; both read `env()` with a `0px` fallback, so on a
-      // phone without an inset, on Android and in the desktop shell this is
-      // the same 56px bar it was.
-      style={{ height: "calc(56px + env(safe-area-inset-bottom, 0px))" }}
+      // somewhere to go; both read the `--kub-safe-bottom` token, which is 0px
+      // on a phone without an inset, on Android and in the desktop shell, so
+      // there this is the same 56px bar it was.
+      style={{ height: "calc(56px + var(--kub-safe-bottom))" }}
     >
       {tabs.map(({ id, label, icon }) => {
         const isActive =

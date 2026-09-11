@@ -33,13 +33,20 @@ export function BannedScreen({ ban }: Props) {
   return (
     // `kub-grid-bg` already sets --kub-bg as its own background-colour, so the
     // fill that used to sit here was a second copy of it.
-    <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 kub-grid-bg text-[color:var(--kub-text)]">
+    //
+    // The card is centred by its own `my-auto` rather than by the container:
+    // the two are the same while it fits, and when a phone held sideways is
+    // shorter than the card, auto margins fall back to the top so the card
+    // scrolls instead of losing its head and its sign-out button off both
+    // ends. The padding keeps it clear of the status bar, the home indicator
+    // and the notch; on a screen without insets it centres where it did.
+    <div className="fixed inset-0 z-[100] flex justify-center overflow-y-auto pt-[calc(2rem+var(--kub-safe-top))] pb-[calc(2rem+var(--kub-safe-bottom))] pl-[max(1rem,var(--kub-safe-left))] pr-[max(1rem,var(--kub-safe-right))] kub-grid-bg text-[color:var(--kub-text)]">
       {/* This is a full-screen state rather than an overlay, so the question is
           whether there is anything under the card worth showing — and there is:
           the shell paints the lattice and both radial glows behind it. The card
           is `-strong` because it covers them, and it drops `shadow-2xl` because
           --glass-shadow is already one. */}
-      <div className="kub-glass-strong relative w-full max-w-md rounded-2xl p-8 text-center border border-[color:var(--kub-danger)]/40 kub-cut">
+      <div className="kub-glass-strong relative w-full max-w-md rounded-2xl p-8 text-center border border-[color:var(--kub-danger)]/40 kub-cut my-auto">
         <div className="absolute -top-6 left-1/2 -translate-x-1/2 opacity-50">
           <KubLogo size={28} />
         </div>

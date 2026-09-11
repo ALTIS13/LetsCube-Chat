@@ -160,6 +160,25 @@
   --spacing: 0.25rem;
   --kub-app-topbar-height: 2.75rem;
   --kub-control-row-height: 3.5rem;
+
+  /* The unsafe areas: the status bar and the Dynamic Island along the top of a
+     phone, the home indicator along the bottom, and the notch on both long
+     edges once it is held sideways. `index.html` asks for `viewport-fit=cover`,
+     so the page is drawn under all of them, and these four are how every
+     surface pinned to an edge learns how much of that edge it cannot use.
+
+     Declared here and nowhere else, and nothing reads env() for them directly
+     — `tests/unit/safe-area-insets.test.mjs` fails if anything does. That is
+     not tidiness. Playwright's WebKit reports every inset as 0px, so a surface
+     reading env() cannot be checked in Safari's engine at all; a custom
+     property can be given a value there, which is how
+     `tests/e2e/ios-standalone-safe-area.spec.ts` lays the real engine out
+     around a notch. The 0px fallback keeps Android, Windows and every desktop
+     browser exactly where they were. */
+  --kub-safe-top: env(safe-area-inset-top, 0px);
+  --kub-safe-right: env(safe-area-inset-right, 0px);
+  --kub-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --kub-safe-left: env(safe-area-inset-left, 0px);
 }
 
 .dark {
@@ -1355,7 +1374,7 @@ textarea::placeholder, input::placeholder {
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior-y: contain;
-    padding-block: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-bottom));
+    padding-block: max(1rem, var(--kub-safe-top)) max(1rem, var(--kub-safe-bottom));
     isolation: isolate;
   }
 
@@ -1551,7 +1570,10 @@ textarea::placeholder, input::placeholder {
 @layer components {
   .desktop-update-pill {
     position: fixed;
-    top: calc(var(--kub-app-topbar-height) + max(0.75rem, env(safe-area-inset-top)));
+    /* Below the top bar, which now carries the status bar's inset in its own
+       height; on the Windows shell, with no inset, this is the 44px + 12px it
+       always was. */
+    top: calc(var(--kub-app-topbar-height) + var(--kub-safe-top) + 0.75rem);
     right: 0.75rem;
     z-index: 30;
     display: flex;
@@ -1732,17 +1754,40 @@ textarea::placeholder, input::placeholder {
   }
 }
 
-/* The bottom safe area, as a utility, because it was already being written as
-   one. `pb-safe` appeared on three surfaces that dock to the bottom edge of a
-   phone — the tab bar, a full-screen modal and the chat-list sheet — and no
-   such utility exists in Tailwind. It compiled to nothing: `pb-safe` occurs
-   zero times in the 219 kB production stylesheet, so all three sat on the home
-   indicator.
+/* The unsafe areas as utilities, every one of them reading the four tokens on
+   `:root` and never env() itself — the note on those tokens says why that is
+   the only channel a test can drive.
 
-   `@utility`, not `@layer utilities`, so Tailwind sorts it with the rest and a
-   `pb-*` written beside it still wins. The fallback keeps every other platform
-   where it was: `env()` resolves to `0px` off an inset-aware device, and the
-   second argument covers the browsers that do not know the variable at all. */
+   `pb-safe` came first, and its history is worth keeping. It appeared on three
+   surfaces that dock to the bottom edge of a phone — the tab bar, a full-screen
+   modal and the chat-list sheet — and no such utility exists in Tailwind. It
+   compiled to nothing: `pb-safe` occurred zero times in the 219 kB production
+   stylesheet, so all three sat on the home indicator (D-065).
+
+   `@utility`, not `@layer utilities`, so Tailwind sorts them with the rest and
+   a longhand written beside one still wins. On a device without insets every
+   one of them is `0px`, so on Android, on Windows and in a desktop browser
+   nothing they are applied to moves. */
+@utility pt-safe {
+  padding-top: var(--kub-safe-top);
+}
+
 @utility pb-safe {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: var(--kub-safe-bottom);
+}
+
+@utility px-safe {
+  padding-left: var(--kub-safe-left);
+  padding-right: var(--kub-safe-right);
+}
+
+/* For a full-screen layer that keeps its content a gap from every edge: the
+   gap, or the inset wherever the hardware takes more. The gap is set beside it
+   with `[--kub-safe-gap:1rem]`. `max()` rather than a sum, so on a screen
+   without insets the layer keeps exactly the padding it had. */
+@utility p-safe-gap {
+  padding-top: max(var(--kub-safe-gap, 0px), var(--kub-safe-top));
+  padding-right: max(var(--kub-safe-gap, 0px), var(--kub-safe-right));
+  padding-bottom: max(var(--kub-safe-gap, 0px), var(--kub-safe-bottom));
+  padding-left: max(var(--kub-safe-gap, 0px), var(--kub-safe-left));
 }

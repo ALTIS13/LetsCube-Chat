@@ -257,7 +257,9 @@ test("the panel component takes its frame from the window rules, and announces i
   // the shell's own Escape handler reads to decide whether to close the chat.
   const panel = readFileSync("artifacts/kub/src/components/chat/ChatInfoPanel.tsx", "utf8");
   assert.ok(panel.includes('from "@/lib/profileWindow"'), "the panel no longer uses the window rules");
-  assert.ok(panel.includes("profileWindowFrame(placement, viewport)"));
+  // Drawn offset by the left and top insets: the placement is resolved in the
+  // part of the screen the notch and the home indicator leave alone.
+  assert.ok(panel.includes("profileWindowFrame(placement, viewport, { x: insets.left, y: insets.top })"));
   assert.ok(panel.includes("style={frame.style}"), "the resolved position is not applied");
   assert.ok(panel.includes("cn(frame.className"), "the resolved frame classes are not applied");
   assert.ok(panel.includes('role="dialog"'), "the shell will keep closing the chat on Escape");

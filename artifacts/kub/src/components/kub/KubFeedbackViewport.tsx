@@ -66,8 +66,11 @@ export function KubFeedbackViewport() {
         // a 45px navigation strip, so anything above 101px sits on top of the
         // tabs. 108px clears the tallest chrome in the product; on the messenger,
         // whose bar ends at 44px, the card simply floats a little lower.
-        "pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+6.75rem)] z-[70]",
-        "flex flex-col items-center gap-2 px-3",
+        "pointer-events-none fixed inset-x-0 top-[calc(var(--kub-safe-top)+6.75rem)] z-[70]",
+        // The sides are the notch held sideways, added to the 12px the cards
+        // always kept: in landscape an iPhone keeps 59px of each long edge, and
+        // a right-aligned card would put its close button under it.
+        "flex flex-col items-center gap-2 pl-[calc(0.75rem+var(--kub-safe-left))] pr-[calc(0.75rem+var(--kub-safe-right))]",
         "sm:inset-x-auto sm:right-4 sm:items-end",
       )}
     >

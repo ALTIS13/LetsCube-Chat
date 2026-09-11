@@ -70,7 +70,7 @@ const covers = [
   ["components/BannedScreen.tsx", "relative w-full max-w-md rounded-2xl p-8"],
   // The two banners pinned over the top of the application.
   ["components/IframeAuthBanner.tsx", "fixed top-0 inset-x-0"],
-  ["components/AppUpdateBanner.tsx", "fixed left-1/2 top-3 z-[80]"],
+  ["components/AppUpdateBanner.tsx", "fixed left-1/2 top-[calc(0.75rem+var(--kub-safe-top))] z-[80]"],
   // The support window, floating over the conversation or covering the screen.
   ["components/support/SupportWindow.tsx", "fixed z-[70] flex flex-col"],
 ];

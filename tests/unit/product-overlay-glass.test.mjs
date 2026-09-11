@@ -53,7 +53,7 @@ const surfaces = [
   // The support window: floating over the conversation, or covering the screen.
   ["components/support/SupportWindow.tsx", "fixed z-[70] flex flex-col", "kub-glass-strong"],
   // The update toast.
-  ["components/AppUpdateBanner.tsx", "fixed left-1/2 top-3 z-[80]", "kub-glass-strong"],
+  ["components/AppUpdateBanner.tsx", "fixed left-1/2 top-[calc(0.75rem+var(--kub-safe-top))] z-[80]", "kub-glass-strong"],
   // The three dialogs that reach past the primitives to Radix.
   ["components/bots/BotCreateModal.tsx", "z-[71] max-h-[92dvh]", "kub-glass-strong"],
   ["components/bots/BotSettingsPanel.tsx", "z-[76] w-[calc(100%-2rem)]", "kub-glass-strong"],

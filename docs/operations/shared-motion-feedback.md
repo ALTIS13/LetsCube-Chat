@@ -52,7 +52,8 @@ wraps the clipboard, including the failure branch.
 
 ### Safe area
 
-The viewport sits at `calc(env(safe-area-inset-top) + 6.75rem)`, which clears
+The viewport sits at `calc(var(--kub-safe-top) + 6.75rem)` — the status bar's
+inset, read through its token (rule 13 of the interface material), which clears
 the tallest chrome in the product: the staff area stacks a 56px header on a 45px
 navigation strip. The first attempt used 52px and covered the last tab. What the
 e2e pins is the **overlap with the navigation**, not the offset — the number
@@ -102,9 +103,9 @@ second feedback protocol.
   the same five semantic durations rather than inventing their own.
 - Reduced motion maps to `UIAccessibility.isReduceMotionEnabled`; keep the same
   rule — shorten feedback, never remove it, and never shorten an error.
-- The feedback viewport's safe-area rule is `env(safe-area-inset-top)` plus the
-  app chrome; on iOS that is the status bar plus whatever navigation the screen
-  carries.
+- The feedback viewport's safe-area rule is `--kub-safe-top` (the web's
+  `env(safe-area-inset-top)`) plus the app chrome; on iOS that is the status bar
+  plus whatever navigation the screen carries.
 - `role="status"` / `role="alert"` map to `UIAccessibility.post(notification:)`
   with `.announcement` for success and `.screenChanged` for an error a person
   must act on.

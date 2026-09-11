@@ -99,7 +99,9 @@ export default function PublicPreviewCapturePage() {
       // Mirrors MainLayout, background included: the shell is transparent so
       // the chrome blurs the page ambient. A capture that painted an opaque
       // --kub-bg here would photograph a product nobody ships.
-      className="flex h-[100dvh] w-screen flex-col overflow-hidden"
+      // The insets too: the scroll contracts are measured on this page, so it
+      // has to be laid out around a notch exactly as `MainLayout` is.
+      className="flex h-[100dvh] w-screen flex-col overflow-hidden px-safe"
       // The capture script waits for this attribute instead of a timeout, so a
       // slow first paint can never produce a half-rendered image.
       {...{ [PUBLIC_PREVIEW_READY_ATTRIBUTE]: "true" }}
@@ -114,7 +116,7 @@ export default function PublicPreviewCapturePage() {
               // mount — it composes the column from the same parts, so it also
               // copies how `Sidebar` wears the material: a layer, not a filter
               // on the box, because `SidebarHeader` opens dialogs from in here.
-              "relative h-full flex-shrink-0 flex-col border-r border-[color:var(--kub-border-color)]",
+              "relative h-full flex-shrink-0 flex-col border-r border-[color:var(--kub-border-color)] md:pb-safe",
               "md:flex md:w-[360px] lg:w-[380px] xl:w-[400px]",
               // A chat is open, so a narrow viewport shows the conversation
               // alone, which is what MainLayout does.
@@ -170,7 +172,14 @@ export default function PublicPreviewCapturePage() {
               <div ref={chromeRef} className="absolute inset-x-0 top-0 flex flex-col" data-testid="chat-chrome-stack">
                 <ChatHeader chatId={activeChat.id} chat={activeChat} />
               </div>
-              <div ref={composerRef} data-testid="chat-composer-dock" className="absolute inset-x-0 bottom-0">
+              <div
+                ref={composerRef}
+                data-testid="chat-composer-dock"
+                className="absolute inset-x-0 bottom-0"
+                // The same inset `ChatWindow` gives its dock, so the scroll
+                // contracts measured on this page hold on an iPhone too.
+                style={{ paddingBottom: "max(var(--kub-keyboard-inset, 0px), var(--kub-safe-bottom))" }}
+              >
                 <MessageInput
                   chatId={activeChat.id}
                   replyTo={null}

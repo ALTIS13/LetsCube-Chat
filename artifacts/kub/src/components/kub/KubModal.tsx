@@ -67,9 +67,12 @@ export function KubModal({
     <div
       className={cn(
         "kub-modal-overlay fixed inset-0 z-50 flex bg-[color:var(--kub-bg)]/75 backdrop-blur-sm",
+        // A centred dialog keeps at least its 16px from every edge, and more
+        // wherever the hardware takes more — `max()`, so on a screen without
+        // insets it keeps exactly the padding it had.
         mobileSheet
-          ? "items-stretch justify-stretch p-0 sm:items-center sm:justify-center sm:p-4"
-          : "items-center justify-center p-4"
+          ? "items-stretch justify-stretch p-0 sm:items-center sm:justify-center sm:p-safe-gap sm:[--kub-safe-gap:1rem]"
+          : "items-center justify-center p-safe-gap [--kub-safe-gap:1rem]"
       )}
       onPointerDown={(e) => {
         pointerStartedInsideRef.current = e.target !== e.currentTarget;
@@ -89,8 +92,11 @@ export function KubModal({
           // `shadow-2xl` and `kub-glow-soft` are dropped: each sets box-shadow,
           // and the material already carries its own.
           "kub-modal-panel kub-glass-strong w-full flex flex-col border-[color:var(--kub-border-color)]",
+          // The full-screen sheet is the whole phone, so it pads both insets
+          // out of itself: its material runs under the status bar and the home
+          // indicator, and its header and footer start and end clear of them.
           mobileSheet
-            ? "h-full max-h-screen rounded-none border-0 pb-safe sm:h-auto sm:max-h-[85vh] sm:rounded-2xl sm:border sm:pb-0"
+            ? "h-full max-h-screen rounded-none border-0 pt-safe pb-safe sm:h-auto sm:max-h-[85vh] sm:rounded-2xl sm:border sm:pt-0 sm:pb-0"
             : "rounded-2xl border max-h-[85vh]",
           sizeClass[size],
           className

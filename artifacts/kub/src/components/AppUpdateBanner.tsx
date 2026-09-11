@@ -86,7 +86,11 @@ export function AppUpdateBanner() {
   if (!showUpdate) return null;
 
   return (
-    <div className="kub-glass-strong fixed left-1/2 top-3 z-[80] w-[calc(100vw-24px)] max-w-sm -translate-x-1/2 rounded-2xl border border-[color:var(--kub-border-color)] p-3 sm:top-4 sm:w-[calc(100%-2rem)] sm:max-w-md">
+    // Offset from the bottom of the status bar, not from the top of the
+    // screen. At a flat 12px it sat under the Dynamic Island of the installed
+    // iPhone app, and it is the one surface that moves a person onto a new
+    // build: a button nobody can press leaves them on the old one.
+    <div className="kub-glass-strong fixed left-1/2 top-[calc(0.75rem+var(--kub-safe-top))] z-[80] w-[calc(100vw-24px)] max-w-sm -translate-x-1/2 rounded-2xl border border-[color:var(--kub-border-color)] p-3 sm:top-[calc(1rem+var(--kub-safe-top))] sm:w-[calc(100%-2rem)] sm:max-w-md">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="flex min-w-0 items-start gap-3 sm:items-center">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)] text-[color:var(--kub-cyan)]">
