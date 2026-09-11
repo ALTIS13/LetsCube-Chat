@@ -5215,3 +5215,105 @@ that do not move with the placement, as D-070 did for the reach, or keep the
 first anchored answer for a given content and container width — and add a
 regression test that applies the 40px lane and requires the conversation to
 settle without an error.
+
+## D-081 `[x]` Forwarding a message said nothing, whatever the server answered
+
+**Severity:** high. Every forward in every shell: a refused forward and a
+delivered one looked identical. Testers' complaint 5, 2026-09-11.
+
+**Surface:** `forwardMessage` in `artifacts/kub/src/hooks/useMessages.ts:1163`,
+the `ForwardModal` handler in `artifacts/kub/src/components/chat/ChatWindow.tsx`,
+and the new `artifacts/kub/src/lib/messageForward.ts`.
+
+**Defect:** choosing a chat closed the dialog and nothing else happened.
+`forwardMessage` sent a refusal to the console and returned null, and its caller
+closed the dialog without reading the answer. Against route mocks, delivered,
+refused (42501) and unreachable produced the same screen.
+
+**Fixed** in `68130ef`. `forwardMessage` answers `{ ok, error }` with the reason
+mapped by `mapPgError`, as `togglePin` and `hideMessageForMe` already do. The
+action-feedback viewport shows a status card naming the chat and closes the
+dialog on delivery; a refusal or a network failure is an alert carrying its
+reason, and the dialog stays open, because the choice is where the next attempt
+starts. One feedback key, so a successful retry replaces the failure.
+
+**Regression tests:** `tests/e2e/message-forward-feedback.spec.ts`, on route
+mocks of the fixture host — it refuses any other configuration and aborts every
+non-local request — was 3/3 red before the change and is 6/6 green on
+`chromium-desktop-1440` and `chromium-mobile-390` after it.
+`tests/unit/message-forward-feedback.test.mts` is 5/5. Seven mutations each
+turned red on the assertion aimed at them and were restored byte for byte.
+
+## D-082 `[x]` Emoji targets were 28px tall under a finger
+
+**Severity:** medium. Every phone and tablet: the composer's emoji picker, the
+reaction catalog, both quick-reaction rows, the folder and topic icon pickers.
+Testers' complaint 7, 2026-09-11.
+
+**Surface:** `artifacts/kub/src/components/ui/EmojiCategoryPicker.tsx`; the
+quick row and the quick picker in
+`artifacts/kub/src/components/chat/MessageBubble.tsx`;
+`artifacts/kub/src/components/chat/TopicCreateModal.tsx`.
+
+**Defect:** one dense size for every pointer. Under a finger on the DEV fixture:
+a composer cell was 39.5x28 at 390 and 35.8x28 at 360, a catalog cell 40.5x28,
+the category tabs 28 tall with 9px labels, the search field 32. The menu's quick
+reactions were 42 wide at 360, and 30.6x40 wherever the 256px desktop menu opens
+under a finger (a phone held sideways, a tablet); the hover quick picker was
+32x32, the folder icon picker 40.3x36, the topic icons 32x32.
+
+**Fixed** in `04258ee`, on the bargain D-015 made for buttons. Under
+`(pointer: coarse)` every target is at least 44x44: `auto-fill` columns of 44px
+instead of eight fixed ones, the glyph from 18 to 24px, the compact tab label
+from 9 to 12px, the grid's window bounded by `min(10rem, 25dvh)` so a phone held
+sideways keeps the picker on screen, the menu 336px wide and the quick picker
+340px, lifted clear of its trigger by its taller height. They are written as
+`pointer-coarse:` utilities beside the ones they replace, because a
+component-layer rule would lose to them (rule 10 of
+`docs/operations/interface-material.md`). A cursor keeps 28px cells in eight
+columns, a 256px menu and 32px quick reactions, measured identical before and
+after.
+
+**Regression tests:** `tests/e2e/emoji-touch-targets.spec.ts` — a finger at
+390x844, 360x800, 844x390 and 820x1180, a cursor at 1440x900 — was red on 13 of
+its 17 checks before the change and is 17/17 on Chromium after it; on WebKit 15
+pass and 2 skip, the two inset checks only Chromium can drive. Ten mutations each
+turned red on their own assertion. The picker bounds in
+`tests/e2e/visual-style-layout.spec.ts` now follow the pointer (336 and 318px
+under a finger); that spec signs in and was not run with the change.
+
+**Not verified on a device.** The folder and topic sizes were measured by a
+scratch script on a mocked backend, not by a committed test.
+
+## D-083 `[ ]` Forwarded media lose their previews
+
+**Severity:** medium. Every forwarded photo or video. Found 2026-09-11 while
+fixing D-081; testers' complaint 10 names it beside forwarding several messages.
+
+**Surface:** the insert in `forwardMessage`,
+`artifacts/kub/src/hooks/useMessages.ts:1173`–`:1182`; the variant lookup in
+`artifacts/kub/src/hooks/useMediaVariants.ts:193`.
+
+**Defect:** the copy carries `media_url` only — not `media_bucket`, `media_path`
+or `media_metadata` — and preview variants are keyed by the source message's id,
+so the new message finds none. The storage read policy
+(`20260506_secure_chat_media_access.sql:90`–`:98`) is scoped to the source
+chat's folder, which may also deny the object itself to members of the target
+chat; that was read from the migration, not checked against the database.
+
+**Not fixed here:** it belongs to the approved forwarding item — Telegram-style
+forwarding of several messages, tracker queue 21 — which changes how a forward
+is made.
+
+## D-084 `[ ]` On a phone, a feedback card covers the top of a full-screen sheet
+
+**Severity:** low. The card can be dismissed and leaves by itself after five
+seconds. Found 2026-09-11 while fixing D-081.
+
+**Surface:** the viewport's position in
+`artifacts/kub/src/components/kub/KubFeedbackViewport.tsx:69`,
+`fixed inset-x-0 top-[calc(var(--kub-safe-top)+6.75rem)] z-[70]`.
+
+**Defect:** at 390 a refused forward's error card, about 131px tall, sits over
+the forward sheet's preview and its chat search — exactly where the next attempt
+starts.
