@@ -169,6 +169,23 @@ test("while a second window is open the new worker waits; once it closes, the re
   const first = await context.newPage();
   await first.goto(`${APP}/`, { waitUntil: "domcontentloaded" });
   await becomeControlled(first);
+  // The first window checks for an update as it boots, and that check has to be
+  // answered by the deploy the window booted from. Answered after the switch
+  // below, it fetches the new worker while this is still the origin's only
+  // window — a window already running that worker's build, since the legacy
+  // deploy differs from the current one only in sw.js — and the worker is handed
+  // over at once. That is the product doing its job, not the case under test,
+  // and it decided this test by which request reached the server first:
+  // measured on WebKit, the first window's /sw.js arrived before the second
+  // window's /, and the second window found the new cache already the only one.
+  await first.waitForFunction(
+    () => (window as unknown as { __kubUpdateChecks: Promise<unknown>[] }).__kubUpdateChecks.length > 0,
+    undefined,
+    { timeout: 20_000 },
+  );
+  await first.evaluate(() =>
+    Promise.all((window as unknown as { __kubUpdateChecks: Promise<unknown>[] }).__kubUpdateChecks).then(() => undefined),
+  );
 
   app.root = deploys.current;
   const second = await context.newPage();
@@ -300,15 +317,27 @@ test("control: the worker production ran until now answered those same files wit
 
 // ---------------------------------------------------------------- page helpers
 
-/** Runs in every page before its scripts: counts loads per tab and update prompts. */
+/**
+ * Runs in every page before its scripts: counts loads per tab and update
+ * prompts, and keeps every update check the page starts, so a test can wait for
+ * the checks a page has already made to be answered.
+ */
 function trackPage() {
   const loads = Number(sessionStorage.getItem("kub-e2e-loads") ?? "0") + 1;
   sessionStorage.setItem("kub-e2e-loads", String(loads));
-  const tracked = window as unknown as { __kubUpdateReady: number };
+  const tracked = window as unknown as { __kubUpdateReady: number; __kubUpdateChecks: Promise<unknown>[] };
   tracked.__kubUpdateReady = 0;
+  tracked.__kubUpdateChecks = [];
   window.addEventListener("kub:sw-update-ready", () => {
     tracked.__kubUpdateReady += 1;
   });
+  if (typeof ServiceWorkerRegistration === "undefined") return;
+  const update = ServiceWorkerRegistration.prototype.update;
+  ServiceWorkerRegistration.prototype.update = function (this: ServiceWorkerRegistration) {
+    const check = update.call(this);
+    tracked.__kubUpdateChecks.push(check.catch(() => undefined));
+    return check;
+  };
 }
 
 async function becomeControlled(page: Page) {
