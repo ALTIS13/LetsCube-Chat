@@ -52,6 +52,7 @@ import {
   shouldBuildOriginalPreview,
   type IncomingFilesSource,
 } from "@/lib/mediaCompression";
+import { removeLocation } from "@/lib/mediaLocation";
 import { useIncomingMediaFiles } from "@/hooks/useIncomingMediaFiles";
 import { MediaSendDialog, type MediaSendChoice } from "./MediaSendDialog";
 import {
@@ -302,9 +303,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
    * Prepares files for the tray and returns the ones it staged.
    *
    * `compress: false` is a person asking for the original: the picked file is
-   * staged exactly as it is — no canvas, no WebP — and marked so, with a light
-   * preview made beside it for the conversation. See `lib/mediaCompression.ts`
-   * for every rule this follows.
+   * staged as it is — no canvas, no WebP, only the place it was taken removed —
+   * and marked so, with a light preview made beside it for the conversation.
+   * See `lib/mediaCompression.ts` for every rule this follows.
    */
   const stageFiles = useCallback(async (
     files: File[],
@@ -332,6 +333,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       }
       const preparation = planAttachmentPreparation(sourceFile.type, compress);
       let file = sourceFile;
+      let optimized = false;
       if (preparation === "original") {
         // Before anything reads the file: a refused original costs no decode.
         const limitError = originalLimitMessage(sourceFile, shape);
@@ -350,7 +352,19 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           return [];
         }
         file = prepared.value;
+        optimized = file !== sourceFile || file.size !== sourceFile.size || file.type !== sourceFile.type;
       }
+      // Whatever is uploaded as it was picked goes without the place it was
+      // taken: an original, a video, and a picture the canvas could not make
+      // smaller. A JPEG's GPS directory and a movie's location items are
+      // emptied in place and nothing else about the file changes; a picture
+      // the canvas re-encoded has none left. See `lib/mediaLocation.ts`.
+      const located = await runScopedStagedPreparation(uploadScope, scopeToken, () => removeLocation(file));
+      if (located.status === "stale") {
+        accepted.forEach(revokeAttachmentPreview);
+        return [];
+      }
+      file = located.value.file;
       const error = validateStagedAttachment(file);
       if (error) {
         errors.push(`${sourceFile.name || file.name || "Файл"}: ${error}`);
@@ -389,7 +403,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       accepted.push(createStagedAttachment(file, {
         width: dimensions?.width,
         height: dimensions?.height,
-        optimized: file !== sourceFile || file.size !== sourceFile.size || file.type !== sourceFile.type,
+        optimized,
         originalSize: sourceFile.size,
         originalMimeType: sourceFile.type || undefined,
         mediaQuality: file.type.startsWith("video/") ? (uncompressed ? "original" : mediaQuality) : undefined,
@@ -703,6 +717,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     }
     showActionFeedback(forwardFeedback({ ok: true, error: null }, targetName, draft.length));
   }, [chat?.name, chatId, forwardMessage, sendMessage, setPendingForward]);
+
   const stageIncomingFiles = useCallback(
     (files: File[], source: IncomingFilesSource, compress: boolean) => stageFiles(files, source, { compress }),
     [stageFiles],

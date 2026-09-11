@@ -72,7 +72,8 @@ export function isCompressibleMediaType(mimeType: string | null | undefined): bo
  * Which way a picked file is prepared.
  *
  * - `compress`: re-encoded on the canvas, as every picture was before.
- * - `original`: the picked bytes, untouched, marked as the original.
+ * - `original`: the picked bytes, marked as the original, with nothing taken
+ *   out of them but the place they were taken (`lib/mediaLocation.ts`).
  * - `as-is`: untouched because there is nothing to choose — a document, a
  *   sound, a GIF, or a video, which the server compresses with its 720p copy.
  */

@@ -10,9 +10,10 @@ import sharp from "sharp";
  * offers «Без сжатия» next to «Фото или видео» in the attach menu; a desktop
  * lists the files in a send dialog with «Сжать изображение», checked by
  * default. An original goes as it is — the bytes that were picked are the bytes
- * that are stored — with a light preview beside it for the conversation, and
- * the viewer opens the original. An original over 50 MB is refused before any
- * upload starts, with a message that says what to do.
+ * that are stored, except that a JPEG loses the place it was taken — with a
+ * light preview beside it for the conversation, and the viewer opens the
+ * original. An original over 50 MB is refused before any upload starts, with a
+ * message that says what to do.
  *
  * What is pinned, on each shape: the choice is offered where it was approved;
  * an original's stored bytes hash to the picked file; its preview and its
@@ -257,6 +258,37 @@ test.describe("sending photos without compression", () => {
       "one original went, and it is the photo",
     ).toEqual([north.buffer.length]);
   });
+
+  test("a phone's original JPEG leaves without the place it was taken, and with nothing else changed", async ({ page }) => {
+    const backend = await installBackend(page);
+    await openChat(page);
+    test.skip(!(await isCoarsePointer(page)), "the attach menu choice is the phone's shape");
+
+    const site = await locatedPhoto("site.jpg");
+    await page.getByRole("button", { name: "Прикрепить" }).click();
+    await chooseFromMenu(page, "Без сжатия", [site]);
+    await expect(page.getByTestId("staged-attachment-item")).toHaveCount(1);
+    await page.getByRole("button", { name: "Отправить" }).click();
+
+    await expect.poll(() => backend.inserts.length).toBe(1);
+    await expectLocationRemoved(page, backend, site);
+  });
+
+  test("a desktop's original JPEG leaves without the place it was taken, and with nothing else changed", async ({ page }) => {
+    const backend = await installBackend(page);
+    await openChat(page);
+    test.skip(await isCoarsePointer(page), "the send dialog is the desktop's shape");
+
+    const site = await locatedPhoto("site.jpg");
+    await page.getByRole("button", { name: "Прикрепить" }).click();
+    await chooseFromMenu(page, "Фото или видео", [site]);
+    const dialog = sendDialog(page, "Отправить фото");
+    await dialog.getByRole("checkbox", { name: "Сжать изображение" }).uncheck();
+    await dialog.getByRole("button", { name: "Отправить" }).click();
+
+    await expect.poll(() => backend.inserts.length).toBe(1);
+    await expectLocationRemoved(page, backend, site);
+  });
 });
 
 // ── the flows ────────────────────────────────────────────────────────────────
@@ -418,6 +450,26 @@ async function expectPreviewUpload(backend: Backend, originalPath: string, size:
   return preview!;
 }
 
+type LocatedFile = PickedFile & { withoutLocation: Buffer };
+
+async function expectLocationRemoved(page: Page, backend: Backend, file: LocatedFile) {
+  const originals = (await probedUploads(page)).filter((upload) => !upload.path.endsWith(".preview.webp"));
+  expect(
+    originals,
+    `one original went; handed: ${originals.map((upload) => `${upload.path} ${upload.type} ${upload.size}`).join(", ")}`,
+  ).toHaveLength(1);
+  const [upload] = originals;
+  expect(upload.size, "not a byte was added or taken away").toBe(file.buffer.length);
+  expect(upload.sha256, "the picked bytes did not go as they were").not.toBe(sha256(file.buffer));
+  expect(upload.sha256, "what went is the picked file with its GPS directory emptied, byte for byte").toBe(
+    sha256(file.withoutLocation),
+  );
+  expect(backend.inserts[0]).toMatchObject({
+    media_path: upload.path,
+    media_metadata: { uncompressed: true, optimized: false, mime_type: "image/jpeg", size_bytes: file.buffer.length },
+  });
+}
+
 async function expectCompressedUpload(page: Page, backend: Backend, file: PickedFile) {
   const handed = await probedUploads(page);
   expect(handed, "one object: the compressed photo, and no preview").toHaveLength(1);
@@ -448,6 +500,52 @@ async function testPhoto(name: string, hue: number): Promise<PickedFile> {
   const buffer = await sharp(Buffer.from(svg)).png({ compressionLevel: 6 }).toBuffer();
   expect(buffer.length, "the test photo must stay under the resumable threshold").toBeLessThan(6 * 1024 * 1024);
   return { name, mimeType: "image/png", buffer };
+}
+
+/**
+ * A real JPEG with the EXIF a phone writes, placed after its JFIF segment:
+ * Orientation 1 and a GPS directory holding a latitude and a longitude.
+ * `withoutLocation` is the same file with that directory and the coordinates it
+ * points to zeroed, worked out here from the layout rather than by the module
+ * under test.
+ */
+async function locatedPhoto(name: string): Promise<LocatedFile> {
+  const picture = await sharp({ create: { width: 2400, height: 1800, channels: 3, background: { r: 61, g: 120, b: 184 } } })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+  const at = picture[2] === 0xff && picture[3] === 0xe0 ? 4 + picture.readUInt16BE(4) : 2;
+  const buffer = Buffer.concat([picture.subarray(0, at), gpsExifSegment(), picture.subarray(at)]);
+  const withoutLocation = Buffer.from(buffer);
+  const tiff = at + 4 + 6;
+  withoutLocation.fill(0, tiff + 56, tiff + 158);
+  return { name, mimeType: "image/jpeg", buffer, withoutLocation };
+}
+
+/** An APP1 EXIF segment: IFD0 at 8 with Orientation and the GPS pointer, the GPS directory at 56, its values up to 158. */
+function gpsExifSegment(): Buffer {
+  const tiff = Buffer.alloc(158);
+  const entry = (at: number, tag: number, type: number, count: number, value: number) => {
+    tiff.writeUInt16LE(tag, at);
+    tiff.writeUInt16LE(type, at + 2);
+    tiff.writeUInt32LE(count, at + 4);
+    tiff.writeUInt32LE(value, at + 8);
+  };
+  tiff.write("II", 0, "latin1");
+  tiff.writeUInt16LE(42, 2);
+  tiff.writeUInt32LE(8, 4);
+  tiff.writeUInt16LE(2, 8);
+  entry(10, 0x0112, 3, 1, 1);
+  entry(22, 0x8825, 4, 1, 56);
+  tiff.writeUInt16LE(4, 56);
+  entry(58, 0x0000, 1, 4, 0x0302);
+  entry(70, 0x0001, 2, 2, 0x4e);
+  entry(82, 0x0002, 5, 3, 110);
+  entry(94, 0x0004, 5, 3, 134);
+  [55, 1, 45, 1, 2088, 100].forEach((value, index) => tiff.writeUInt32LE(value, 110 + index * 4));
+  [37, 1, 37, 1, 1234, 100].forEach((value, index) => tiff.writeUInt32LE(value, 134 + index * 4));
+  const identifier = Buffer.from([0x45, 0x78, 0x69, 0x66, 0x00, 0x00]);
+  const length = 2 + identifier.length + tiff.length;
+  return Buffer.concat([Buffer.from([0xff, 0xe1, length >> 8, length & 0xff]), identifier, tiff]);
 }
 
 /** One byte over the limit, on disk: a buffer this size cannot cross the protocol. */
