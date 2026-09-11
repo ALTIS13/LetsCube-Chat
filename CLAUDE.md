@@ -136,13 +136,39 @@ and the first apply attempt had to be repeated as `supabase_admin` because
 `postgres` does not own that function. Verify against the database, not against
 a description of it.
 
+Two more production database changes were applied on 2026-09-11, on the owner's
+approval, each with a verified schema backup taken first, each one transaction
+with a self-check that raises rather than committing a half-applied state, and
+each recorded byte-identical in `.migration-backup/supabase/migrations/`:
+
+- `20260911120000_private_chat_owner_delete_repair.sql` (`7c6482f`) — whoever
+  opens a private chat becomes its owner, and `Chat owners delete chat` let an
+  owner delete any chat they own, so either participant could delete a private
+  conversation, messages and media included, for both sides by calling the API
+  directly; the interface only offers hiding it for yourself. 24 private chats
+  carried such an owner row. The policy now requires `type <> 'private'`. No
+  rehearsal database with this schema exists, so the before/after proof was
+  taken read-only on production: `EXPLAIN` without `ANALYZE`, inside a read-only
+  transaction, shows the RLS filter a DELETE would get without running it.
+- `20260911130000_revoke_unfiltered_table_privileges.sql` (`dc0d39c`) — `anon`
+  and `authenticated` held TRUNCATE, TRIGGER and REFERENCES, which RLS never
+  filters, on 36 tables in `public`, and the default privileges re-granted them
+  on every new table. Not reachable through PostgREST or pg_graphql, so
+  hardening rather than a live hole; every row-filtered grant was checked
+  unchanged afterwards.
+
+A read-only security audit taken alongside found RLS on 61 of 61 tables in
+`public`, no view readable without `security_invoker`, and every "block banned"
+policy restrictive. Backups, hashes and measurements are in the tracker under
+Priority 2; the rollback for the second change is listed in its own header.
+
 Never push directly to `main` without complete validation, and check what else
 is in `HEAD` before pushing it — pushing `HEAD:main` without reading the log
 once carried three other agents' unreviewed commits into `main` in this project.
 
 Interface material: the product's surfaces were rebuilt as one translucent
-material during this stage. The contract, and the ten rules behind it — six of
-which were learned by breaking something — are in
+material during this stage. The contract, and the thirteen rules behind it —
+seven of which were learned by breaking something — are in
 `docs/operations/interface-material.md`. Read it before touching a surface.
 
 ## 3. Sources Of Truth
@@ -299,6 +325,55 @@ configuration source and the unconfigured state is reproducible.
 Existing build warnings about Vite sourcemaps, mixed Supabase imports, and chunk
 size are known warnings, not automatic permission to ignore new errors.
 
+### Running specs that sign in, and the other servers the suite needs
+
+The dev-server command above is for the routing matrix only:
+`http://127.0.0.1:54321` is a fixture no QA account exists in. A spec that signs
+in needs the real public configuration the deployed bundle carries. Keep it in
+files outside the repository and never print it:
+
+    js=$(curl -s https://app.letscube.ru/ | grep -o '/assets/index-[A-Za-z0-9_-]*\.js' | head -1)
+    bundle=$(curl -s "https://app.letscube.ru$js")
+    printf '%s' "$bundle" | grep -oE 'https://core\.letscube\.ru' | head -1 > "$CFG/.u"
+    printf '%s' "$bundle" | grep -oE 'eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}' | head -1 > "$CFG/.k"
+
+Decode the JWT payload and confirm `role` is `anon`; stop if it is
+`service_role`. From Git Bash: `MSYS2_ENV_CONV_EXCL=BASE_PATH PORT=<port>
+BASE_PATH=/ VITE_SUPABASE_URL="$(cat "$CFG/.u")"
+VITE_SUPABASE_ANON_KEY="$(cat "$CFG/.k")" pnpm.cmd --filter @workspace/kub run dev`.
+
+- Start every Playwright run with `KUB_QA_ALLOW_MUTATIONS=0`: the owner's QA
+  file sets it to 1, and the process environment wins. A new spec that writes
+  asks `qaMutationsAllowed()` from `tests/e2e/helpers/auth.ts`.
+- One server per configuration, each on its own port. The bot specs and the
+  configured routing matrix need the fixture; `bot-management` also needs
+  `VITE_BOT_MANAGEMENT_URL=http://127.0.0.1:54322`. `registration-confirmation`,
+  `letscube-brand-auth-layout` and `privacy-support-public` need
+  `VITE_AUTH_CAPTCHA_SITE_KEY` (any value) with
+  `VITE_AUTH_CAPTCHA_PROVIDER=yandex`; do not put the captcha key on the server
+  the signed-in specs use. `ios-standalone-safe-area.spec.ts` and
+  `message-meta-spacer-line.spec.ts` need `VITE_PUBLIC_PREVIEW_FIXTURE=1` on a
+  fixture server. `pwa-service-worker.spec.ts` needs no server: it builds the
+  application itself.
+- Port hygiene: check the port is free first (an orphaned Vite answers 200 with
+  stale configuration), then confirm `/src/lib/supabase/client.ts` contains the
+  expected host. A server that dies mid-run shows up as skips, not failures.
+- `cmd | tail` returns `tail`'s exit code: use `set -o pipefail`,
+  `${PIPESTATUS[0]}`, or redirect to a file.
+- From Git Bash run `node node_modules/@playwright/test/cli.js test …`;
+  `pnpm.cmd exec playwright` fails on "C:\Program". A full run from the root
+  currently stops at load on `resumable-media-upload.spec.ts`; pass explicit
+  files.
+- Playwright's "N did not run" is now followed by names, and a run that would
+  pass with such tests fails. A `--reporter` given on the command line replaces
+  the configured reporters, so name the guard there too:
+  `--reporter=list,./tests/e2e/helpers/did-not-run-guard.ts`.
+- Build before the unit suite: `tests/unit/public-product-assets.test.mjs`
+  refuses a `dist/public` older than its sources.
+- `windows:tauri:qa` refuses an unbuilt, unconfigured, loopback or stale
+  `artifacts/kub/dist/public`, and the validation build above produces exactly
+  such a bundle.
+
 ## 6. Completed Production Baseline Not To Rebuild
 
 The project is a production-oriented LETSCUBE messenger with:
@@ -329,6 +404,11 @@ Do not expose bot tokens, owner IDs, or service credentials in reports.
 - Android package ID remains `com.kub.messenger`.
 - iPhone/iPad PWA and native iOS work are owned by another agent. Do not modify
   iOS/PWA-specific behavior in this track. Shared contracts and handoff docs are OK.
+  **Superseded for the PWA on 2026-09-11:** the owner directed this track to fix
+  the installed iPhone app's problems without a device, and no parallel Apple
+  track existed on the remote. PWA fixes are in scope here; native iOS is not,
+  and anything that needs the device stays recorded as unverified until it is
+  checked on one.
 - This track owns backend/shared web, Windows, and Android work.
 - Browser is the universal fallback. PWA install UI is for iPhone/iPad only.
 - Do not restore Electron; Windows uses Tauri and EXE installer distribution.
