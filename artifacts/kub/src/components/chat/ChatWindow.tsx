@@ -72,7 +72,6 @@ import {
   createStagedUploadScope,
   clearStagedAttachmentChat,
   commitPreparedStagedAttachments,
-  getAttachmentUploadErrorMessage,
   markStagedAttachmentSendFailed,
   runScopedStagedPreparation,
   runScopedStagedSendAttempt,
@@ -80,6 +79,7 @@ import {
   transitionStagedAttachmentChat,
   type StagedUploadScopeToken,
 } from "@/lib/stagedUploadWorkflow";
+import { describeUploadFailure, uploadFailureFeedback, uploadFailureMessage } from "@/lib/uploadFailure";
 import type { Json, MessageWithSender } from "@/types/database";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
 
@@ -630,19 +630,27 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             cancelledAttachmentIdsRef.current.has(attachment.id) ||
             !uploadScope.isActive(scopeToken)
           ) return sentAny;
-          const uploadErrorMessage = getAttachmentUploadErrorMessage(error, attachment.kind);
-          console.warn("[attachments] upload failed.");
+          // Why, as the server's answer says it, and the file's name (D-113).
+          // The reason and the status say nothing about what the file holds.
+          const failure = describeUploadFailure(error);
+          const uploadErrorMessage = uploadFailureMessage(attachment.name, failure);
+          console.warn("[attachments] upload failed.", failure.reason, failure.status ?? "no answer");
           reportError(new Error("attachment_upload_failed"), {
             category: "attachment_upload_failed",
             attachmentKind: attachment.kind,
             mimeType: attachment.mimeType,
             fileSize: attachment.file.size,
+            reason: failure.reason,
+            status: failure.status,
+            limitBytes: failure.limitBytes,
           });
           updateStagedAttachment(attachment.id, (current) => ({
             ...current,
             status: "failed",
             error: uploadErrorMessage,
           }));
+          const feedback = uploadFailureFeedback([uploadErrorMessage]);
+          if (feedback) showActionFeedback({ kind: "error", key: `attachment-upload:${attachment.id}`, ...feedback });
           return sentAny;
         }
       }

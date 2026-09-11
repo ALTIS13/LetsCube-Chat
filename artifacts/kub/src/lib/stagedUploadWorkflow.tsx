@@ -2,8 +2,6 @@ import type { StagedAttachment, StagedAttachmentUpload } from "./stagedAttachmen
 import { createElement } from "react";
 
 const SEND_FAILED_MESSAGE = "Не удалось отправить сообщение.";
-const ATTACHMENT_SIZE_LABEL = "50 МБ";
-const VIDEO_ATTACHMENT_SIZE_LABEL = "250 МБ";
 
 export interface StagedUploadScopeToken {
   readonly chatId: string;
@@ -186,34 +184,6 @@ export function markStagedAttachmentSendFailed(
     uploaded,
     error: SEND_FAILED_MESSAGE,
   };
-}
-
-export function getAttachmentUploadErrorMessage(
-  error: unknown,
-  kind: StagedAttachment["kind"],
-): string {
-  const status = typeof error === "object" && error
-    ? String((error as { status?: unknown; statusCode?: unknown }).status ?? (error as { statusCode?: unknown }).statusCode ?? "")
-    : "";
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  const details = `${status} ${message}`.toLowerCase();
-  if (
-    details.includes("413") ||
-    details.includes("payload") ||
-    details.includes("too large") ||
-    details.includes("file size") ||
-    details.includes("size limit") ||
-    details.includes("exceeded")
-  ) {
-    const maxLabel = kind === "video" || kind === "video_message"
-      ? VIDEO_ATTACHMENT_SIZE_LABEL
-      : ATTACHMENT_SIZE_LABEL;
-    return `Файл слишком большой для загрузки. Максимум ${maxLabel}.`;
-  }
-  if (details.includes("network") || details.includes("fetch") || details.includes("timeout")) {
-    return "Не удалось загрузить файл. Проверьте соединение и попробуйте снова.";
-  }
-  return "Не удалось загрузить файл. Попробуйте ещё раз.";
 }
 
 export function StagedAttachmentTransferProgress({ attachment }: { attachment: StagedAttachment }) {
