@@ -1,5 +1,118 @@
 # QA Results
 
+## 2026-09-11 - The PWA, safe-area and chat wave, merged and validated together, and the worker test that raced
+
+Four tracks were merged onto `codex/bot-platform` and validated as one tree
+before shipping: the service worker (D-072 to D-074), the installed iPhone app's
+placement (D-075 to D-078), the inline time's reach (D-070) and the tests and
+gates that reported success without checking (the section below this one). Every
+Playwright run here was started with `KUB_QA_ALLOW_MUTATIONS=0` in the process
+environment, and nothing wrote to production.
+
+### How it was merged
+
+- The eight test-and-gate commits were cherry-picked clean (`5f5609f`..`23743c0`).
+  The only files both sides had touched — `playwright.config.ts` (the
+  `webkit-ios-standalone` project beside the guard reporter) and
+  `tests/e2e/motion-layout-stability.spec.ts` (`:128` beside `:95`) — merged
+  automatically, and both halves of each were checked present afterwards.
+- The message menus were the one piece of the safe-area work left in
+  `MessageBubble.tsx`, a file another track owned; applied in `2fda578`.
+
+### Gates on the merged tree
+
+| gate | result |
+| --- | --- |
+| `pnpm.cmd run typecheck` — libraries, every artifact, scripts | clean |
+| `node --test tests/unit/*.mjs tests/unit/*.mts` | 1478/1478 (see the note) |
+| production build | clean; the emitted `sw.js` carries a 16-character build id and `index.html` carries `viewport-fit=cover` |
+| `git diff --check` over the wave | clean |
+
+The first unit run reported 1477/1478: the suite ran before the build, and
+`tests/unit/public-product-assets.test.mjs:257` refuses a `dist/public` older
+than its sources. Re-run after the build, 12/12. The order — build, then the
+unit suite — is now written into CLAUDE.md §5.
+
+### The installed iPhone app
+
+`ios-standalone-safe-area.spec.ts` on `webkit-ios-standalone`: 22 passed and 3
+skipped — the skips are the Chromium half, which runs on `chromium-mobile-390` —
+including "a message's action menu" in both orientations, a `fixme` until
+`2fda578`. The menu fix was mutation-checked, the file restored byte for byte
+after every mutant (SHA-256 `8132bd0e…`):
+
+| mutant | portrait | landscape |
+| --- | --- | --- |
+| the whole patch reverted | fails | fails |
+| the action menu no longer reads the insets | passes | fails |
+| the compact menu back at `bottom: 12` | fails | passes |
+| restored | passes | passes |
+
+### The rest of the merged-tree Playwright
+
+| spec | projects | result |
+| --- | --- | --- |
+| `public-home-routing.spec.ts` | `chromium-desktop-1440`, `webkit-mobile-390` | 15/15 on `chromium-desktop-1440`; the 15 on `webkit-mobile-390` skip by design — the matrix runs on one project |
+| `pwa.spec.ts` | `chromium-mobile-390`, `webkit-mobile-390` | 4/4 |
+| `message-meta-spacer-line.spec.ts` | `chromium-mobile-360`, `chromium-mobile-390`, `webkit-mobile-390`, `chromium-desktop-1440` | 8/8 |
+| `pwa-service-worker.spec.ts` | `chromium-mobile-390`, `webkit-mobile-390` | 11/12 on the first run — below |
+
+### The second-window worker test raced; the worker did not
+
+`pwa-service-worker.spec.ts:164` — "while a second window is open the new worker
+waits; once it closes, the remaining window is taken over without a prompt or a
+reload" — failed on WebKit on the merged tree, then 3 of 3 when repeated, then
+again at `b3369e8`, before any of the safe-area commits, and again in the worker
+track's own clean worktree, where 12/12 on both engines had been recorded. Every
+time it was the same line: the second window's poll for a waiting worker read
+`false` for 45 seconds.
+
+Measured, not argued:
+
+1. **Replayed outside the runner** — the same built deploys, the same WebKit and
+   device, the spec's port and the spec's own `pageState` — with the new worker
+   instrumented to report its install, its activation and every handoff
+   question: eight replays on WebKit, and the worker waited in every one. At every handoff
+   it listed both windows and answered `activated: false`, on WebKit exactly as
+   on Chromium. Neither the instrumentation, nor the page-tracking init script,
+   nor tracing and video, nor the port changed that.
+2. **Inside the runner, with the spec's poll logged**, a failing run showed the
+   whole sequence. The first window's own boot-time update check reached the
+   server *after* the test had switched deploys, so it fetched the new worker
+   while that window was still the origin's only one. The legacy deploy differs
+   from the current one only in `sw.js`, so that window was already running the
+   new worker's build — and was handed the worker at once, as D-072 intends. The
+   second window's first poll found `kub-app-shell-v2` already deleted. The same
+   test, unmodified, passed on the run straight before it.
+
+The product was right; the test's premise depended on which request reached the
+server first. Fixed in the test: `trackPage` keeps every update check a page
+starts, and the test waits for the first window's checks to be answered before
+it switches deploys.
+
+Verified on this machine:
+
+| check | result |
+| --- | --- |
+| the fixed test, repeated | 6/6 on `webkit-mobile-390`, 3/3 on `chromium-mobile-390` |
+| the race forced — every update check held 1.5s, the second window opened 3s after the switch — on the test as it was | fails, exactly as the flaky runs did |
+| the same forced race on the fixed test | passes |
+| the whole worker spec on both engines | 12/12 |
+| a product mutant that hands the worker over while another window is open, against the fixed test | fails on both engines; `sw.js` restored byte for byte |
+
+### Corrections to what was reported during the wave
+
+- **The QA file's byte-order mark hides nothing.** `~/.kub-messenger-qa.env`
+  does start with U+FEFF, glued to its first key, but `loadQaEnvValues` trims
+  every line and `String.prototype.trim` removes U+FEFF (checked on Node
+  24.15.0), and every other reader of that file trims as well. The planned
+  "strip the BOM" change was dropped. What the file really lacks is the
+  default role: `KUB_QA_EMAIL` and `KUB_QA_PASSWORD` are absent, while all five
+  role-specific pairs are present (key names checked, no value read).
+- **"12/12 on both engines" did not hold on this machine** for the worker spec;
+  see above. It held when the first window's check happened to be answered
+  before the switch, which is why it was once seen green.
+
 ## 2026-09-11 - Tests and gates that reported success without checking
 
 Seven places where a run could end green, or end red for the wrong reason,
