@@ -99,7 +99,20 @@ export function hasSavedAuthState(name: QaAuthStateName = "default"): boolean {
 }
 
 export async function gotoOrSkip(page: Page, pathName: string) {
-  const response = await page.goto(pathName, { waitUntil: "domcontentloaded" }).catch(() => null);
+  const outcome: { error?: unknown } = {};
+  const response = await page.goto(pathName, { waitUntil: "domcontentloaded" }).catch((error: unknown) => {
+    outcome.error = error;
+    return null;
+  });
+  // A run that names its server has said where the answers must come from.
+  // Skipping there turned a dead dev server into a green run — 13 skipped and
+  // 0 passed was observed — so an explicit KUB_BASE_URL that cannot be loaded
+  // fails. Without one, the default address may simply have no server, and the
+  // test still skips.
+  if (outcome.error !== undefined && process.env.KUB_BASE_URL) {
+    const reason = outcome.error instanceof Error ? outcome.error.message.split("\n")[0] : String(outcome.error);
+    throw new Error(`KUB_BASE_URL=${process.env.KUB_BASE_URL} was given, but ${pathName} could not be loaded: ${reason}`);
+  }
   test.skip(!response, `KUB_BASE_URL is not reachable: ${test.info().project.use.baseURL}`);
 }
 
