@@ -87,7 +87,11 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     bumpMount("ChatWindow");
     return () => bumpUnmount("ChatWindow");
   }, []);
-  const chats = useAppStore((s) => s.chats);
+  // This chat, not the list: every message, receipt and read anywhere in the
+  // sidebar replaced the list, and the whole conversation rendered with it. The
+  // store keeps an unchanged chat as the same object, so this only changes when
+  // this chat does.
+  const chat = useAppStore((s) => s.chats.find((c) => c.id === chatId));
   const userId = useAppStore((s) => s.currentUser?.id ?? null);
   const markChatRead = useAppStore((s) => s.markChatRead);
   const setEditingMessage = useAppStore((s) => s.setEditingMessage);
@@ -97,7 +101,6 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   const setSelectedTopicId = useAppStore((s) => s.setSelectedTopicId);
   const chatPanelRequest = useAppStore((s) => s.chatPanelRequest);
   const clearChatPanelRequest = useAppStore((s) => s.clearChatPanelRequest);
-  const chat = chats.find((c) => c.id === chatId);
   const savedChat = chat ? isSavedChat(chat, userId) : false;
   const isForum = !!chat?.is_forum;
   const { topics, createTopic } = useTopics(chatId, isForum);
@@ -980,7 +983,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             // What happens next depends on the answer. This used to close the
             // dialog without reading it, so a refusal looked exactly like a
             // delivery and nothing on screen said which one had happened.
-            const target = chats.find((candidate) => candidate.id === targetChatId);
+            const target = useAppStore.getState().chats.find((candidate) => candidate.id === targetChatId);
             const result = await forwardMessage(forwardingMessage, targetChatId)
               .catch((cause: unknown) => ({ ok: false as const, error: mapPgError(cause) }));
             showActionFeedback(forwardFeedback(result, target?.name));

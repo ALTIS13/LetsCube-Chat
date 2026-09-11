@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
 import { sortChatsForSidebar } from '@/lib/chatSort'
-import { sameChatList } from '@/lib/chatListChange'
+import { shareChatList } from '@/lib/chatListChange'
+import { clearUnread, samePreviewMessage } from '@/lib/chatListDelta'
+import { sameData, shareById } from '@/lib/structuralSharing'
 import type { Profile, ChatWithLastMessage, MessageWithSender } from '@/types/database'
 import { sameActorClientMessage } from '@/lib/messageActor'
 import { isHeartbeatOnlyProfileChange } from '@/lib/profileChange'
@@ -172,19 +174,37 @@ export const useAppStore = create<AppState>((set) => ({
   setSelectedTopicId: (id) => set({ selectedTopicId: id }),
 
   chats: [],
-  setChats: (chats) => set((state) => (
-    sameChatList(state.chats, chats) ? state : { chats }
-  )),
+  // Every chat whose data did not change stays the object it was, so a row
+  // renders only for its own change, and a list that did not change at all
+  // wakes nobody (D-088). See `shareChatList`.
+  setChats: (chats) => set((state) => {
+    const next = shareChatList(state.chats, chats)
+    return next === state.chats ? state : { chats: next }
+  }),
   updateChat: (chat) =>
-    set((state) => ({
-      chats: state.chats.map((c) => (c.id === chat.id ? { ...c, ...chat } : c)),
-    })),
+    set((state) => {
+      let changed = false
+      const chats = state.chats.map((c) => {
+        if (c.id !== chat.id) return c
+        const merged = { ...c, ...chat }
+        if (sameData(merged, c)) return c
+        changed = true
+        return merged
+      })
+      return changed ? { chats } : state
+    }),
   updateChatLastMessage: (chatId, message) =>
     set((state) => {
       let changed = false;
       const nextChats = state.chats.map((chat) => {
         if (chat.id !== chatId) return chat;
         if (!shouldReplaceLastMessage(chat.last_message, message)) return chat;
+        // Another copy of the message the row already shows — the Realtime
+        // row, the provisional one, the joined one — draws the same row, and
+        // replacing it anyway rendered the row once per copy.
+        if (isSameLogicalMessage(chat.last_message, message) && samePreviewMessage(chat.last_message, message)) {
+          return chat;
+        }
         changed = true;
         return {
           ...chat,
@@ -197,16 +217,28 @@ export const useAppStore = create<AppState>((set) => ({
     }),
 
   messages: {},
+  // A revalidation that brings back what is already on screen keeps every
+  // message the object it was, and wakes nobody when nothing changed. Reopening
+  // a chat used to render its history twice: from the store, and again when the
+  // identical fetch landed (D-089).
   setMessages: (chatId, msgs) =>
-    set((state) => ({ messages: { ...state.messages, [chatId]: sortMessages(msgs) } })),
+    set((state) => {
+      const existing = state.messages[chatId]
+      const sorted = sortMessages(msgs)
+      const next = existing ? shareById(existing, sorted, (m) => m.id) : sorted
+      if (next === existing) return state
+      return { messages: { ...state.messages, [chatId]: next } }
+    }),
   addMessage: (chatId, message) =>
     set((state) => {
       const existing = state.messages[chatId] || []
       const idx = existing.findIndex((m) => m.id === message.id || sameActorClientMessage(m, message))
       // Upsert: if a message with this id is already in the store (e.g. optimistic copy
       // already replaced with real data, then realtime echo arrives), replace it in place
-      // rather than appending a duplicate.
-      const next = idx === -1 ? [...existing, message] : existing.map((m, i) => (i === idx ? message : m))
+      // rather than appending a duplicate. A copy with the same data keeps the object.
+      const next = idx === -1
+        ? [...existing, message]
+        : existing.map((m, i) => (i === idx && !sameData(m, message) ? message : m))
       const sorted = sortMessages(next)
       if (
         sorted.length === existing.length &&
@@ -217,14 +249,16 @@ export const useAppStore = create<AppState>((set) => ({
       return { messages: { ...state.messages, [chatId]: sorted } }
     }),
   updateMessage: (chatId, message) =>
-    set((state) => ({
-      messages: {
-        ...state.messages,
-        [chatId]: (state.messages[chatId] || []).map((m) =>
-          m.id === message.id ? message : m
-        ),
-      },
-    })),
+    set((state) => {
+      const existing = state.messages[chatId] || []
+      let changed = false
+      const next = existing.map((m) => {
+        if (m.id !== message.id || sameData(m, message)) return m
+        changed = true
+        return message
+      })
+      return changed ? { messages: { ...state.messages, [chatId]: next } } : state
+    }),
   replaceMessage: (chatId, oldId, message) =>
     set((state) => {
       const existing = state.messages[chatId] || []
@@ -233,15 +267,21 @@ export const useAppStore = create<AppState>((set) => ({
       const next = idx === -1
         ? [...withoutOld, message]
         : withoutOld.map((m, i) => (i === idx ? message : m))
-      return { messages: { ...state.messages, [chatId]: sortMessages(next) } }
+      const sorted = shareById(existing, sortMessages(next), (m) => m.id)
+      if (sorted === existing) return state
+      return { messages: { ...state.messages, [chatId]: sorted } }
     }),
   removeMessage: (chatId, id) =>
-    set((state) => ({
-      messages: {
-        ...state.messages,
-        [chatId]: (state.messages[chatId] || []).filter((m) => m.id !== id),
-      },
-    })),
+    set((state) => {
+      const existing = state.messages[chatId]
+      if (!existing?.some((m) => m.id === id)) return state
+      return {
+        messages: {
+          ...state.messages,
+          [chatId]: existing.filter((m) => m.id !== id),
+        },
+      }
+    }),
 
   activeFolderId: null,
   setActiveFolderId: (id) => set({ activeFolderId: id }),
@@ -275,10 +315,13 @@ export const useAppStore = create<AppState>((set) => ({
       return { mutedChatIds: next };
     }),
 
+  // Opening a chat with nothing unread used to rebuild the whole list anyway,
+  // which rendered every row of the sidebar on every chat switch.
   markChatRead: (chatId) =>
-    set((state) => ({
-      chats: state.chats.map((c) => c.id === chatId ? { ...c, unread_count: 0 } : c),
-    })),
+    set((state) => {
+      const chats = clearUnread(state.chats, chatId)
+      return chats === state.chats ? state : { chats }
+    }),
 
   chatPanelRequest: null,
   requestChatPanel: (chatId, panel) =>

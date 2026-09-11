@@ -1,9 +1,14 @@
+import { shareById } from "./structuralSharing.ts";
+
 /**
  * Whether a freshly fetched chat list differs from the one on screen.
  *
- * `setChats` returns the previous state when this says "same", which discards
- * the fetched rows entirely. So anything the interface renders and this does
- * not compare is a field that can go stale and stay stale until a reload.
+ * `setChats` used to return the previous state when this said "same", which
+ * discarded the fetched rows entirely. So anything the interface renders and
+ * this did not compare was a field that could go stale and stay stale until a
+ * reload. The store now keeps rows through `shareChatList` at the end of this
+ * file, which compares all of a chat's data; the signature below remains the
+ * record of what a row renders, and of how leaving a field out went wrong.
  *
  * That is not hypothetical: presence was exactly this bug. The signature
  * covered `last_read_at` and `last_delivered_at` but not `online_at`, so a
@@ -110,4 +115,20 @@ export function sameChatList(a: readonly ChatSnapshot[], b: readonly ChatSnapsho
     const next = b[index];
     return next !== undefined && sameChat(chat, next);
   });
+}
+
+/**
+ * The list the store holds after a fetch.
+ *
+ * When `sameChatList` said "changed", the store took the fetched list whole —
+ * every chat a new object — so one chat's new message, one receipt or one focus
+ * refetch rendered every row of the sidebar (D-088). This keeps each chat whose
+ * data did not change as the object it was, and hands back the previous array
+ * when nothing changed at all, so the store can wake nobody.
+ *
+ * It compares all of a chat's data rather than the fields above, so no field
+ * can go stale behind it the way presence once did.
+ */
+export function shareChatList<T extends { id: string }>(previous: readonly T[], next: readonly T[]): T[] {
+  return shareById(previous, next, (chat) => chat.id);
 }

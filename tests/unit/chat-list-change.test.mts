@@ -6,11 +6,13 @@ import {
   chatMemberSignature,
   sameChat,
   sameChatList,
+  shareChatList,
   type ChatSnapshot,
 } from "../../artifacts/kub/src/lib/chatListChange.ts";
 import { getUserPresenceState, USER_ONLINE_THRESHOLD_MS } from "../../artifacts/kub/src/lib/presence.ts";
 
 const PEER = "1532baab-41d9-480e-96a7-3260c99ececd";
+const FRESH = "2026-09-04T18:00:00Z";
 
 function chat(overrides: Partial<ChatSnapshot> = {}): ChatSnapshot {
   return {
@@ -117,11 +119,33 @@ test("a shorter or longer list is a change", () => {
   assert.equal(sameChatList([], [chat()]), false);
 });
 
+test("a fetch that changes one chat keeps every other chat's object", () => {
+  // D-088: taking the fetched list whole rendered every row for one change.
+  const previous = [chat({ id: "a" }), chat({ id: "b" }), chat({ id: "c" })];
+  const fetched = [chat({ id: "a" }), chat({ id: "b", unread_count: 3 }), chat({ id: "c" })];
+  const kept = shareChatList(previous, fetched);
+  assert.notEqual(kept, previous);
+  assert.equal(kept[0], previous[0]);
+  assert.equal(kept[1], fetched[1]);
+  assert.equal(kept[2], previous[2]);
+  assert.equal(shareChatList(previous, [chat({ id: "a" }), chat({ id: "b" }), chat({ id: "c" })]), previous);
+});
+
+test("a field the signature does not name still counts as a change", () => {
+  // The presence bug in general form: the store no longer judges a row by a
+  // list of fields, so a field outside the list cannot be thrown away.
+  const previous = [chat({ id: "a", other_user: { online_at: FRESH, avatar_url: "old.webp" } as ChatSnapshot["other_user"] })];
+  const fetched = [chat({ id: "a", other_user: { online_at: FRESH, avatar_url: "new.webp" } as ChatSnapshot["other_user"] })];
+  assert.equal(sameChatList(previous, fetched), true, "the signature cannot see an avatar");
+  assert.equal(shareChatList(previous, fetched)[0], fetched[0], "but the store must take it");
+});
+
 test("the store defers to this module rather than keeping its own copy", () => {
   // The bug was a hand-maintained field list drifting from what is rendered.
-  // One copy, and it is this one.
+  // One copy, and it is this one — and since D-088 it compares all the data.
   const store = readFileSync("artifacts/kub/src/store/app.store.ts", "utf8");
-  assert.match(store, /import \{ sameChatList \} from '@\/lib\/chatListChange'/);
+  assert.match(store, /import \{ shareChatList \} from '@\/lib\/chatListChange'/);
+  assert.match(store, /shareChatList\(state\.chats, chats\)/, "setChats no longer keeps unchanged chats");
   assert.ok(
     !/function sameChatList\(/.test(store),
     "app.store.ts has grown its own chat comparison again",

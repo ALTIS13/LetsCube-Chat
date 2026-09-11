@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type DragEvent } from "react";
+import { memo, useRef, type DragEvent } from "react";
 import type { ChatWithLastMessage } from "@/types/database";
 import { formatTime } from "@/lib/format";
 import { ChatAvatar } from "@/components/ui/ChatAvatar";
@@ -19,6 +19,16 @@ import {
   getGroupReadReceiptInfo,
 } from "@/lib/groupReadReceipts";
 
+/**
+ * One row of the chat list, memoised.
+ *
+ * A row renders when its own chat changes and not when the list does. The list
+ * renders on every message, receipt and read anywhere in it, so every value a
+ * row is given has to compare equal while its chat has not changed: the chat
+ * object itself (the store keeps unchanged chats as the same objects), booleans
+ * rather than the whole mute list or a shared clock, and callbacks that take
+ * the chat's id instead of an arrow made per row per render (D-088).
+ */
 interface ChatListItemProps {
   chat: ChatWithLastMessage & {
     is_pinned?: boolean;
@@ -26,24 +36,34 @@ interface ChatListItemProps {
     is_verified?: boolean;
   };
   isSelected: boolean;
-  onClick: () => void;
-  onContextMenuOpen?: (position: { x: number; y: number }) => void;
-  onLongPressOpen?: () => void;
+  /** Notifications are off for this chat. Falls back to `chat.is_muted`. */
+  isMuted?: boolean;
+  /**
+   * The other person in a private chat is online. The list works this out from
+   * one clock for every row, so a tick of that clock renders only the rows whose
+   * answer changed. Falls back to `presenceNow`.
+   */
+  isOtherOnline?: boolean;
+  onClick: (chatId: string) => void;
+  onContextMenuOpen?: (chatId: string, position: { x: number; y: number }) => void;
+  onLongPressOpen?: (chatId: string) => void;
   isReorderable?: boolean;
   isDragging?: boolean;
   isDragOver?: boolean;
-  onPinnedDragStart?: () => void;
-  onPinnedDragEnter?: () => void;
+  onPinnedDragStart?: (chatId: string) => void;
+  onPinnedDragEnter?: (chatId: string) => void;
   onPinnedDragOver?: (event: DragEvent<HTMLButtonElement>) => void;
-  onPinnedDrop?: () => void;
+  onPinnedDrop?: (chatId: string) => void;
   onPinnedDragEnd?: () => void;
   presenceNow?: number;
   avatarVariant?: AvatarVariantUrls;
 }
 
-export function ChatListItem({
+export const ChatListItem = memo(function ChatListItem({
   chat,
   isSelected,
+  isMuted: isMutedProp,
+  isOtherOnline: isOtherOnlineProp,
   onClick,
   onContextMenuOpen,
   onLongPressOpen,
@@ -55,7 +75,7 @@ export function ChatListItem({
   onPinnedDragOver,
   onPinnedDrop,
   onPinnedDragEnd,
-  presenceNow = Date.now(),
+  presenceNow,
   avatarVariant,
 }: ChatListItemProps) {
   const currentUserId = useAppStore((s) => s.currentUser?.id ?? null);
@@ -79,9 +99,10 @@ export function ChatListItem({
   });
   const showGroupReadIndicator = Boolean(groupReadInfo && groupReadInfo.readCount > 0);
   const hasUnread = (chat.unread_count ?? 0) > 0;
-  const isMuted = chat.is_muted;
+  const isMuted = isMutedProp ?? chat.is_muted;
   const isPinned = chat.is_pinned;
-  const isOtherOnline = chat.type === "private" && isUserOnline(chat.other_user, presenceNow);
+  const isOtherOnline = isOtherOnlineProp
+    ?? (chat.type === "private" && isUserOnline(chat.other_user, presenceNow ?? Date.now()));
 
   const clearLongPressTimer = () => {
     touchStartRef.current = null;
@@ -108,7 +129,7 @@ export function ChatListItem({
           suppressClickRef.current = false;
           return;
         }
-        onClick();
+        onClick(chat.id);
       }}
       onContextMenu={(event) => {
         event.preventDefault();
@@ -118,7 +139,7 @@ export function ChatListItem({
         if (isRecentTouch || isCoarsePointer) return;
         if (!onContextMenuOpen) return;
         if (suppressClickRef.current) return;
-        onContextMenuOpen({ x: event.clientX, y: event.clientY });
+        onContextMenuOpen(chat.id, { x: event.clientX, y: event.clientY });
       }}
       onPointerDown={(event) => {
         if (event.pointerType !== "touch" || !onLongPressOpen) return;
@@ -127,7 +148,7 @@ export function ChatListItem({
         touchStartRef.current = { x: event.clientX, y: event.clientY };
         longPressTimerRef.current = window.setTimeout(() => {
           suppressClickRef.current = true;
-          onLongPressOpen();
+          onLongPressOpen(chat.id);
         }, 520);
       }}
       onPointerMove={(event) => {
@@ -141,7 +162,7 @@ export function ChatListItem({
       onDragEnter={(event) => {
         if (!isReorderable) return;
         event.preventDefault();
-        onPinnedDragEnter?.();
+        onPinnedDragEnter?.(chat.id);
       }}
       onDragOver={(event) => {
         if (!isReorderable) return;
@@ -150,7 +171,7 @@ export function ChatListItem({
       onDrop={(event) => {
         if (!isReorderable) return;
         event.preventDefault();
-        onPinnedDrop?.();
+        onPinnedDrop?.(chat.id);
       }}
       data-testid="chat-list-item"
       data-chat-id={chat.id}
@@ -188,7 +209,7 @@ export function ChatListItem({
             event.stopPropagation();
             event.dataTransfer.effectAllowed = "move";
             event.dataTransfer.setData("text/plain", chat.id);
-            onPinnedDragStart?.();
+            onPinnedDragStart?.(chat.id);
           }}
           onDragEnd={(event) => {
             event.stopPropagation();
@@ -309,4 +330,4 @@ export function ChatListItem({
       </div>
     </button>
   );
-}
+});

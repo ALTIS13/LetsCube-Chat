@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { ChatListItem } from "./ChatListItem";
 import { useAppStore } from "@/store/app.store";
 import { KubEmptyState, KubIcon, type KubIconName } from "@/components/kub";
@@ -13,6 +13,7 @@ import { mapPgError, prefixError } from "@/lib/errors";
 import { requestAppConfirm, showAppAlert } from "@/lib/appDialogs";
 import { cn } from "@/lib/utils";
 import { readSafeAreaInsets } from "@/lib/safeArea";
+import { isUserOnline } from "@/lib/presence";
 import { usePresenceNow } from "@/hooks/usePresenceNow";
 import { useAvatarVariantUrls } from "@/hooks/useMediaVariants";
 import type { ChatWithLastMessage } from "@/types/database";
@@ -76,19 +77,21 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
     if (!chats.some((chat) => chat.id === openMenu.chatId)) setOpenMenu(null);
   }, [chats, openMenu]);
 
-  const chatsWithMute = useMemo(
-    () => chats.map((chat) => ({ ...chat, is_muted: mutedChatIds.includes(chat.id) })),
-    [chats, mutedChatIds],
-  );
+  // The rows are handed the chats as the store keeps them — one object per chat
+  // for as long as it is unchanged — and whether each is muted as a boolean.
+  // This used to copy every chat into a new object with `is_muted` on it, on
+  // every render of the list, which is what made every row render for a change
+  // to any one of them (D-088).
+  const mutedSet = useMemo(() => new Set(mutedChatIds), [mutedChatIds]);
   const avatarProfileIds = useMemo(() => {
     const ids = new Set<string>();
-    for (const chat of chatsWithMute) {
+    for (const chat of chats) {
       if (chat.type !== "private") continue;
       if (!chat.other_user?.id || !chat.other_user.avatar_url) continue;
       ids.add(chat.other_user.id);
     }
     return Array.from(ids).sort();
-  }, [chatsWithMute]);
+  }, [chats]);
   const avatarVariants = useAvatarVariantUrls(avatarProfileIds);
 
   const closeMenu = useCallback(() => setOpenMenu(null), []);
@@ -125,9 +128,14 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
   }, [currentUser?.id, setChats]);
 
   const orderedPinnedChatIds = useMemo(
-    () => getOrderedPinnedChats(chatsWithMute, currentUser?.id ?? null).map((chat) => chat.id),
-    [chatsWithMute, currentUser?.id],
+    () => getOrderedPinnedChats(chats, currentUser?.id ?? null).map((chat) => chat.id),
+    [chats, currentUser?.id],
   );
+  // The drag handlers are handed to every row, so they read what changes while
+  // a drag is under way from refs and stay the same functions throughout.
+  const orderedPinnedChatIdsRef = useRef(orderedPinnedChatIds);
+  orderedPinnedChatIdsRef.current = orderedPinnedChatIds;
+  const draggedPinnedChatIdRef = useRef<string | null>(null);
 
   const persistPinnedOrder = useCallback(async (reorderedIds: string[], sourceChatId: string) => {
     const previousChats = useAppStore.getState().chats;
@@ -155,11 +163,12 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
   }, [orderedPinnedChatIds, persistPinnedOrder]);
 
   const handlePinnedDragStart = useCallback((chatId: string) => {
-    if (!orderedPinnedChatIds.includes(chatId)) return;
+    if (!orderedPinnedChatIdsRef.current.includes(chatId)) return;
     setOpenMenu(null);
+    draggedPinnedChatIdRef.current = chatId;
     setDraggedPinnedChatId(chatId);
     setDragOverPinnedChatId(null);
-  }, [orderedPinnedChatIds]);
+  }, []);
 
   const handlePinnedDragOver = useCallback((event: DragEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -167,28 +176,32 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
   }, []);
 
   const handlePinnedDragEnter = useCallback((chatId: string) => {
-    if (!draggedPinnedChatId || draggedPinnedChatId === chatId) return;
+    const dragged = draggedPinnedChatIdRef.current;
+    if (!dragged || dragged === chatId) return;
     setDragOverPinnedChatId(chatId);
-  }, [draggedPinnedChatId]);
+  }, []);
 
   const handlePinnedDrop = useCallback((targetChatId: string) => {
-    const sourceChatId = draggedPinnedChatId;
+    const sourceChatId = draggedPinnedChatIdRef.current;
+    draggedPinnedChatIdRef.current = null;
     setDraggedPinnedChatId(null);
     setDragOverPinnedChatId(null);
     if (!sourceChatId || sourceChatId === targetChatId) return;
 
-    const sourceIndex = orderedPinnedChatIds.indexOf(sourceChatId);
-    const targetIndex = orderedPinnedChatIds.indexOf(targetChatId);
+    const pinnedIds = orderedPinnedChatIdsRef.current;
+    const sourceIndex = pinnedIds.indexOf(sourceChatId);
+    const targetIndex = pinnedIds.indexOf(targetChatId);
     if (sourceIndex < 0 || targetIndex < 0) return;
 
-    const reordered = orderedPinnedChatIds.filter((id) => id !== sourceChatId);
+    const reordered = pinnedIds.filter((id) => id !== sourceChatId);
     const targetIndexAfterRemoval = reordered.indexOf(targetChatId);
     const insertIndex = sourceIndex < targetIndex ? targetIndexAfterRemoval + 1 : targetIndexAfterRemoval;
     reordered.splice(insertIndex, 0, sourceChatId);
     void persistPinnedOrder(reordered, sourceChatId);
-  }, [draggedPinnedChatId, orderedPinnedChatIds, persistPinnedOrder]);
+  }, [persistPinnedOrder]);
 
   const handlePinnedDragEnd = useCallback(() => {
+    draggedPinnedChatIdRef.current = null;
     setDraggedPinnedChatId(null);
     setDragOverPinnedChatId(null);
   }, []);
@@ -457,7 +470,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
     updateChatList,
   ]);
 
-  const openChat = openMenu ? chatsWithMute.find((chat) => chat.id === openMenu.chatId) ?? null : null;
+  const openChat = openMenu ? chats.find((chat) => chat.id === openMenu.chatId) ?? null : null;
   const openActions = openChat ? buildActions(openChat) : [];
 
   const runAction = async (action: ChatAction) => {
@@ -486,29 +499,27 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
   return (
     <>
       <div className="flex-1 overflow-y-auto">
-        {chatsWithMute.map((chat) => {
-          const isReorderable = orderedPinnedChatIds.length > 1 && orderedPinnedChatIds.includes(chat.id);
-          return (
+        {chats.map((chat) => (
           <ChatListItem
             key={chat.id}
             chat={chat}
             isSelected={selectedChatId === chat.id}
-            onClick={() => onChatSelect(chat.id)}
-            onContextMenuOpen={(position) => openDesktopMenu(chat.id, position)}
-            onLongPressOpen={() => openMobileSheet(chat.id)}
-            isReorderable={isReorderable}
+            isMuted={mutedSet.has(chat.id)}
+            isOtherOnline={chat.type === "private" && isUserOnline(chat.other_user, presenceNow)}
+            onClick={onChatSelect}
+            onContextMenuOpen={openDesktopMenu}
+            onLongPressOpen={openMobileSheet}
+            isReorderable={orderedPinnedChatIds.length > 1 && orderedPinnedChatIds.includes(chat.id)}
             isDragging={draggedPinnedChatId === chat.id}
             isDragOver={dragOverPinnedChatId === chat.id}
             avatarVariant={chat.other_user?.id ? avatarVariants[chat.other_user.id] : undefined}
-            onPinnedDragStart={() => handlePinnedDragStart(chat.id)}
-            onPinnedDragEnter={() => handlePinnedDragEnter(chat.id)}
+            onPinnedDragStart={handlePinnedDragStart}
+            onPinnedDragEnter={handlePinnedDragEnter}
             onPinnedDragOver={handlePinnedDragOver}
-            onPinnedDrop={() => handlePinnedDrop(chat.id)}
+            onPinnedDrop={handlePinnedDrop}
             onPinnedDragEnd={handlePinnedDragEnd}
-            presenceNow={presenceNow}
           />
-          );
-        })}
+        ))}
       </div>
 
       {openMenu?.mode === "menu" && openChat && (

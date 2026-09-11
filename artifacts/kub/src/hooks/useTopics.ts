@@ -21,7 +21,12 @@ export function useTopics(chatId: string | null, isForum: boolean) {
   const rt = useMemo(() => getRealtimeClient(), []);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(false);
-  const { selectedTopicId, setSelectedTopicId } = useAppStore();
+  // Two slices, not the store. A selector-less read subscribes the chat window
+  // that calls this hook to every change anywhere in the store, so every
+  // message, receipt and read in the chat list rendered the open conversation
+  // (D-088).
+  const selectedTopicId = useAppStore((s) => s.selectedTopicId);
+  const setSelectedTopicId = useAppStore((s) => s.setSelectedTopicId);
 
   const fetchTopics = useCallback(async () => {
     if (!chatId || !isForum) { setTopics([]); return; }
