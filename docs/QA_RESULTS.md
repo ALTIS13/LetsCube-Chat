@@ -1,5 +1,75 @@
 # QA Results
 
+## 2026-09-11 - The quick-fix wave, merged and gated: forwarding, emoji under a finger, D-063, typing and zoom
+
+Taken onto `codex/bot-platform` by cherry-pick from three agents' worktrees,
+each validated there first, all without a conflict — `MessageBubble.tsx`, which
+two of them changed, merged by itself:
+
+- agent E: `68130ef` forwarding says whether the message arrived (D-081,
+  complaint 5), `04258ee` every emoji target at least 44×44 under a finger
+  (D-082, complaint 7);
+- agent G: `64a7436` the confirmation screen opens with its three buttons on it
+  (D-063);
+- agent F: `d497c11` the composer's height lands in the frame it grows (D-085)
+  and `19aaba0` rows and bubbles stop re-rendering with the list and the store
+  (D-086), together complaint 3; `78c93d2` fixture pictures and `c1a1d2d` photo
+  zoom (D-087), complaint 1.
+
+**Gates at `c1a1d2d`**, with `KUB_QA_ALLOW_MUTATIONS=0` and the did-not-run
+guard on every Playwright run. Three dev servers, each checked for its backend
+host in the served `client.ts` before anything ran: the fixture host with the
+DEV preview route (5280), the same host with the Yandex provider and a
+placeholder site key (5281), and the deployed bundle's public configuration,
+anon role checked (5282).
+
+| gate | result |
+| --- | --- |
+| build | clean, `sw.js` build `3c16b793cdf4bd19` |
+| unit suite, after the build | 1499/1499 |
+| typecheck, both packages | clean |
+| `git diff --check origin/main HEAD` | clean |
+| `ios-standalone-safe-area`, webkit-ios-standalone and chromium-mobile-390 | 25 passed, 25 skipped by project |
+| `public-home-routing`, 1440 | 15/15 |
+| `pwa-service-worker`, Chromium and WebKit 390 | 12/12 |
+| `pwa`, Chromium and WebKit 390 | 3 passed, 1 failed on WebKit — fixed below |
+| `message-meta-spacer-line`, 360, 390, WebKit 390, 1440 | 8/8 |
+| `message-forward-feedback`, 1440 and 390 | 6/6 |
+| `emoji-touch-targets`, 1440 and WebKit 390 | 32 passed, 2 Chromium-only skips |
+| `registration-confirmation`, 1440, 1920, 360, 390, 412 | 7 passed, 8 skipped by project |
+| `letscube-brand-auth-layout`, the same five | 51 passed, 4 skipped by project |
+| `auth-yandex-captcha`, 1440 and 360, `KUB_EXPECT_YANDEX_CAPTCHA=1` | 14 passed, 4 failed — two stale tests, fixed below |
+| `composer-typing-frames`, `message-render-stability`, `media-viewer-zoom`; 1440, 390, WebKit 390 | 33/33 |
+| `chat-entry-scroll`, `chat-glass-layout`, `message-meta-placement`, `message-meta-first-paint`, `message-meta-observer-cost`; 1440 and 390 | 44/44 |
+| `visual-style-layout`, signed in, 1440 and 390 | 11 passed, 9 skipped by the spec's own conditions |
+
+The signed-in run used a copy of the Playwright configuration with screenshots,
+traces and video switched off, kept in the ignored `output/` directory, so no
+picture of a signed-in production screen was taken.
+
+**The WebKit `pwa` failure** was the one queue item 22 recorded: the page's
+boot-time update check cut off by the test going offline or navigating, logged
+by WebKit as "…/sw.js due to access control checks.". Repeated five times it
+failed twice more — 3 of 6 with two other agents' work on the machine, against
+once in ten when it was recorded. Fixed in `1ca749e` by letting that wording
+through for the worker script only: ten WebKit runs in a row 20/20, Chromium
+green, and three mutations of the test — the `/sw.js` wording passes, the same
+wording for `/manifest.json` fails and is named, the `/sw.js` wording without
+the new line fails and is named — each restored byte for byte.
+
+**The four `auth-yandex-captcha` failures** were two tests left behind by
+deliberate redesigns, unseen because the spec runs only on request: the
+invite-only notice has been one pill label since `cdcdbcd` and `7c067cb`, and
+the Yandex plate has had 136px with room around the widget since `61f56b0` and a
+light colour scheme since `cdcdbcd`. None of this wave's commits touches either.
+Fixed in `b0f5d5a` to pin what is promised: 18/18 at 1440 and 360 before and
+after three product mutations — the pill's label, the plate following the dark
+theme, the plate's 136px — each red on its own test and restored byte for byte.
+
+Not covered by this wave's runs: the specs that write (`KUB_QA_ALLOW_MUTATIONS=0`
+skips them), and anything on a device — a finger pinch on a phone, the installed
+iPhone app, and D-063 on a screen as short as an iPhone SE's.
+
 ## 2026-09-11 - Production test leftovers removed, and the QA file no longer allows writes
 
 Both on the owner's instruction, after the wave below shipped.
