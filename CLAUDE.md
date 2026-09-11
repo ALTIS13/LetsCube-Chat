@@ -348,13 +348,22 @@ VITE_SUPABASE_ANON_KEY="$(cat "$CFG/.k")" pnpm.cmd --filter @workspace/kub run d
   that reappears from turning a check into a production write. A run that has to
   write sets `1` on its own command, for a named spec. A new spec that writes
   asks `qaMutationsAllowed()` from `tests/e2e/helpers/auth.ts`.
+- A signed-in spec looks at production screens, and the repository config keeps
+  a screenshot, a trace and a video of every failure. Run signed-in specs with a
+  configuration that switches all three off: the 2026-09-11 wave used an
+  untracked `output/pw-signed-in-no-artifacts.config.ts` (`output/` is ignored)
+  that imports `../playwright.config`, resets `testDir` to `../tests/e2e` and
+  overrides `use` with `screenshot`, `trace` and `video` set to `"off"`.
 - One server per configuration, each on its own port. The bot specs and the
   configured routing matrix need the fixture; `bot-management` also needs
   `VITE_BOT_MANAGEMENT_URL=http://127.0.0.1:54322`. `registration-confirmation`,
   `letscube-brand-auth-layout` and `privacy-support-public` need
   `VITE_AUTH_CAPTCHA_SITE_KEY` (any value) with
   `VITE_AUTH_CAPTCHA_PROVIDER=yandex`; do not put the captcha key on the server
-  the signed-in specs use. `ios-standalone-safe-area.spec.ts` and
+  the signed-in specs use. `auth-yandex-captcha` needs that server too, plus
+  `KUB_EXPECT_YANDEX_CAPTCHA=1` on the Playwright command: without it the whole
+  spec skips, which is how two of its tests went stale unseen until
+  2026-09-11. `ios-standalone-safe-area.spec.ts` and
   `message-meta-spacer-line.spec.ts` need `VITE_PUBLIC_PREVIEW_FIXTURE=1` on a
   fixture server. `pwa-service-worker.spec.ts` needs no server: it builds the
   application itself.
