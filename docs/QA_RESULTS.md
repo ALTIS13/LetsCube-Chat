@@ -1,5 +1,19 @@
 # QA Results
 
+## 2026-09-11 - The rest of queue item 22: three test defects fixed, one not reproduced
+
+Taken while the owner decides on the message actions. Each defect was run
+before the change and again on the same command after it, with
+`KUB_QA_ALLOW_MUTATIONS=0`; the signed-in runs used the public production
+configuration with screenshots, traces and video off.
+
+| defect | before | fix | after |
+| --- | --- | --- | --- |
+| `resumable-media-upload.spec.ts` imported `react` by bare name | from the repository root: "Cannot find module 'react'", "No tests found", exit 1 | `3ec1d4e`: React resolved through `createRequire` at `artifacts/kub/package.json`; the resume test's stale `"max-age=31536000, immutable"` replaced by `IMMUTABLE_PATH_MAX_AGE_SECONDS` | 16/16 on chromium-desktop-1440 from the root; giving attachments the reused-path lifetime fails the resume test, and `mediaCacheControl.ts` was restored byte for byte |
+| `unified-interface-chrome.spec.ts:139` matched «Чистый голос» by substring | signed in, 1440: strict mode violation on two buttons | `7cab5dd`: exact name | 1 passed |
+| `gotoOrSkip` skipped whenever the page failed to load | `KUB_BASE_URL` at a port nothing listens on, `pwa.spec.ts` on chromium-mobile-390: 2 skipped, exit 0 | `2d33805`: throws when `KUB_BASE_URL` was given and the navigation fails | 2 failed, naming `ERR_CONNECTION_REFUSED`; without `KUB_BASE_URL`, 2 skipped as before |
+| `settings-profile-layout.spec.ts:50` compared sub-pixel `x` with `toBe` | signed in: passed at 1440, 1920 and 3840 | none — a tolerance without a failure would only loosen the test | recorded as not reproduced; the 0.40px difference measured earlier did not recur |
+
 ## 2026-09-11 - The quick-fix wave, merged and gated: forwarding, emoji under a finger, D-063, typing and zoom
 
 Taken onto `codex/bot-platform` by cherry-pick from three agents' worktrees,
