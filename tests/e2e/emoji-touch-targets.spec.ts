@@ -273,15 +273,30 @@ async function openCatalogFromActionMenu(page: Page): Promise<Locator> {
 /**
  * Menus, the bar, the column and the catalog open with a short scale up from
  * .98 (`kub-menu-in`). A box read before that finishes is 2% short — a 28px
- * cell measured 27.4 — so sizes are read once every entry animation has run.
+ * cell measured 27.4 — so sizes are read once every entrance has come to rest.
+ *
+ * Rest is read from the surfaces, not from the animations the document lists.
+ * WebKit stops listing an entrance the moment it ends while the style it
+ * reports can still be catching up: the hover column read opacity .99 for half
+ * a second, a quarter of it after its animation had ended. And on 2026-09-11 a
+ * desktop menu in WebKit never caught up at all — its bar stayed at opacity 0
+ * and .98, a surface nobody could see — so a surface that does not come to rest
+ * fails here by name, rather than as a size 2% short.
  */
 async function settleAnimations(page: Page) {
-  await page.evaluate(async () => {
-    const running = document
-      .getAnimations()
-      .filter((animation) => animation.playState === "running" && animation.effect?.getTiming().iterations !== Infinity);
-    await Promise.all(running.map((animation) => animation.finished.catch(() => undefined)));
-  });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() =>
+          [...document.querySelectorAll<HTMLElement>(".kub-menu-in")].flatMap((node) => {
+            const style = getComputedStyle(node);
+            if (style.opacity === "1" && style.transform === "none") return [];
+            return [`${node.getAttribute("aria-label") ?? node.tagName.toLowerCase()} at opacity ${style.opacity}, ${style.transform}`];
+          }),
+        ),
+      { message: "an entrance did not come to rest", timeout: 3_000 },
+    )
+    .toEqual([]);
 }
 
 function quickReactions(container: Locator): Locator {

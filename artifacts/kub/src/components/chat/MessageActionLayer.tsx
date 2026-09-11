@@ -134,6 +134,18 @@ function hiddenUntilPlaced(position: { top: number; left: number } | null | unde
   };
 }
 
+/**
+ * A desktop menu places its bar and card as one column, and each of them hides
+ * itself until then; the column itself never does. Measured in WebKit on
+ * 2026-09-11: with the visibility flipping on the column instead, the entrance
+ * animating inside it ended and left both surfaces on its first keyframe — the
+ * bar at opacity 0 and .98 — until something else restyled them. A surface that
+ * carries its own visibility, as a phone's do, comes to rest.
+ */
+function shownOncePlaced(position: { top: number; left: number } | null): CSSProperties {
+  return { visibility: position ? "visible" : "hidden" };
+}
+
 /** Arrow keys walk the items of whichever group holds the focus. */
 function walkItems(event: ReactKeyboardEvent<HTMLElement>) {
   const active = document.activeElement as HTMLElement | null;
@@ -390,7 +402,7 @@ export function MessageActionLayer({
         phone ? "p-0.5" : "gap-0.5 p-1",
         phone && "fixed z-[52]",
       )}
-      style={phone ? hiddenUntilPlaced(phonePlacement?.bar) : undefined}
+      style={phone ? hiddenUntilPlaced(phonePlacement?.bar) : shownOncePlaced(deskPosition)}
     >
       {barEmoji.map(reactionButton)}
       {expandButton}
@@ -641,7 +653,7 @@ export function MessageActionLayer({
           // bar with its gap (52 + 6 under a finger); the rest scrolls.
           : "w-64 max-h-[calc(100dvh-var(--kub-safe-top)-var(--kub-safe-bottom)-4.75rem)] overflow-x-hidden overflow-y-auto overscroll-contain rounded-xl pointer-coarse:w-[18.75rem]",
       )}
-      style={phone ? hiddenUntilPlaced(phonePlacement?.card) : undefined}
+      style={phone ? hiddenUntilPlaced(phonePlacement?.card) : shownOncePlaced(deskPosition)}
     >
       {cardContent}
     </div>
@@ -722,7 +734,7 @@ export function MessageActionLayer({
           data-message-menu="desktop"
           tabIndex={-1}
           className="fixed z-[52] flex flex-col items-start gap-1.5 outline-none"
-          style={hiddenUntilPlaced(deskPosition)}
+          style={{ top: deskPosition?.top ?? 0, left: deskPosition?.left ?? 0 }}
           onKeyDown={walkItems}
           onContextMenu={(event) => event.preventDefault()}
         >
