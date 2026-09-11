@@ -1,4 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 /** The box being measured, or null while it is not mounted. */
 type Measured<T extends HTMLElement> = {
@@ -22,11 +23,13 @@ type Measured<T extends HTMLElement> = {
  * be wrong the moment any of them appeared.
  *
  * Measured in a layout effect and again from a `ResizeObserver`, because the two
- * see different things. The layout effect catches every React-driven change
- * before the browser paints — `setState` from a layout effect is flushed
- * synchronously — so a reply preview never paints at the wrong height. The
- * observer catches what no commit describes: a textarea growing a line as the
- * reader types, a font arriving, a wrapped label reflowing.
+ * see different things. The layout effect catches every change that re-renders
+ * the caller before the browser paints — `setState` from a layout effect is
+ * flushed synchronously — so a reply preview never paints at the wrong height.
+ * The observer catches what no commit of the caller describes: a textarea
+ * growing a line as the reader types (that commit belongs to the composer, not
+ * to the component holding this hook), a font arriving, a wrapped label
+ * reflowing. Both land in the frame that shows the change; see the observer.
  *
  * `Math.ceil` on purpose. A fractional height rounded down leaves a sub-pixel
  * strip of the conversation under the chrome; rounded up it costs at most one
@@ -63,11 +66,29 @@ export function useMeasuredHeight<T extends HTMLElement>(resetKey?: unknown): Me
     measure();
     if (!node) return undefined;
 
-    let frame = window.requestAnimationFrame(measure);
+    // Committed inside the callback, not scheduled for the next frame.
+    //
+    // A `ResizeObserver` is delivered after layout and before paint, which makes
+    // its callback the last moment a size change nobody committed can still
+    // reach the frame that shows it. The callback used to hand the read to
+    // `requestAnimationFrame` instead, and the state update made from there is
+    // not flushed until a task after that frame as well — so the new height
+    // arrived two frames after the box had it. Measured on the DEV preview
+    // fixture at 390x844 and at 1440x900, the same at both: a draft that wrapped
+    // grew the composer 24px over the newest message for two painted frames,
+    // cutting its 26px of clearance to 2px, and the conversation then jumped
+    // 24px to catch up; deleting back to one line opened a 50px gap for two
+    // frames the same way. That jump is "текст прыгает, когда печатаю".
+    //
+    // `flushSync` commits the caller before this callback returns, so its layout
+    // effects — the list's padding and its bottom anchor — run before the
+    // browser paints. It cannot loop: nothing laid out from this height is an
+    // ancestor or a sibling of the box being observed, so the commit resizes
+    // nothing at this box's depth, and an unchanged height is not a state
+    // update at all.
     const observer = typeof ResizeObserver !== "undefined"
       ? new ResizeObserver(() => {
-        window.cancelAnimationFrame(frame);
-        frame = window.requestAnimationFrame(measure);
+        flushSync(measure);
       })
       : null;
 
@@ -82,7 +103,6 @@ export function useMeasuredHeight<T extends HTMLElement>(resetKey?: unknown): Me
     // under the composer.
     observer?.observe(node, { box: "border-box" });
     return () => {
-      window.cancelAnimationFrame(frame);
       observer?.disconnect();
     };
   }, [measure, node, resetKey]);
