@@ -32,6 +32,7 @@ import { isMissingRpcError, rpcAvailability } from "@/lib/rpcAvailability";
 import {
   DELETE_FOR_EVERYONE_RPC,
   deletionBatches,
+  keepsDeletedPlaceholder,
   markMessagesDeleted,
   parseDeletedIds,
   splitForPreviousDeletion,
@@ -263,17 +264,22 @@ export function useMessages(
         localClearedAt = await loadClearedAt(supabase, chatId, user.id);
         setClearedAt(localClearedAt);
       }
-      // NB: we do NOT filter out `deleted_at IS NOT NULL` here.  Soft-deleted
-      // rows are kept in the timeline so MessageBubble can render a
-      // "сообщение удалено" placeholder in the slot they used to occupy —
-      // this matches Telegram-style soft delete and prevents the timeline
-      // from "shifting" when a message is removed (own scroll position,
-      // reply anchors, date separators all stay stable).  Original content
-      // is scrubbed server-side by policy / scheduled job.
+      // A group keeps soft-deleted rows in its timeline, so MessageBubble can
+      // render «Сообщение удалено» in the slot they occupied and nothing shifts
+      // when a message is removed. A private chat draws none — delete for both
+      // leaves no trace (lib/deletedMessages.ts) — so it does not fetch them
+      // either: a page of a hundred rows that were nearly all deleted drew two
+      // messages that could not scroll, and older history was never asked for.
+      // Measured on production on 2026-09-11, 98 of a chat's latest 100 (D-108).
+      // The kind of chat is read from the store; before the list has loaded it
+      // is unknown, and the page comes as it always did.
       let query = supabase
         .from("messages")
         .select(MESSAGE_SELECT_WITH_JOINS)
         .eq("chat_id", chatId);
+      if (!keepsDeletedPlaceholder(useAppStore.getState().chats.find((item) => item.id === chatId)?.type)) {
+        query = query.is("deleted_at", null);
+      }
       // Forum chats: scope to the selected topic.  Non-forum: all messages
       // have topic_id = null, so the filter is a no-op when topicId is null.
       if (topicId !== undefined) {
@@ -430,6 +436,10 @@ export function useMessages(
         .from("messages")
         .select(MESSAGE_SELECT_WITH_JOINS)
         .eq("chat_id", activeChatId);
+      // The rule of the first page: a private chat's pages hold what it draws.
+      if (!keepsDeletedPlaceholder(useAppStore.getState().chats.find((item) => item.id === activeChatId)?.type)) {
+        query = query.is("deleted_at", null);
+      }
       if (activeTopicId !== undefined) {
         if (activeTopicId) query = query.eq("topic_id", activeTopicId);
         else query = applyGeneralTopicFilter(query, activeGeneralTopicIds);

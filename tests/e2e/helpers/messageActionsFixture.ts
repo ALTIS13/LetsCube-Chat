@@ -235,8 +235,15 @@ export async function openFixture(page: Page, options: FixtureOptions): Promise<
       const chatId = eq("chat_id");
       const id = eq("id");
       const pinned = eq("pinned");
+      const createdAt = url.searchParams.get("created_at");
+      const before = createdAt?.startsWith("lt.") ? decodeURIComponent(createdAt.slice(3)) : null;
+      const withoutDeleted = url.searchParams.get("deleted_at") === "is.null";
       let rows = options.messages.filter((row) =>
-        (!chatId || row.chat_id === chatId) && (!id || row.id === id) && (pinned === null || String(row.pinned) === pinned),
+        (!chatId || row.chat_id === chatId) &&
+        (!id || row.id === id) &&
+        (pinned === null || String(row.pinned) === pinned) &&
+        (!withoutDeleted || !row.deleted_at) &&
+        (before === null || String(row.created_at) < before),
       );
       if ((request.headers().prefer ?? "").includes("count=")) {
         return json(route, [], 200, { "access-control-expose-headers": "Content-Range", "content-range": `*/${rows.length}` });
