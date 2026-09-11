@@ -1,5 +1,42 @@
 # QA Results
 
+## 2026-09-11 - Sending asks for no quality, and a phone's volume is left to the phone (D-118, D-119)
+
+The testers' word through the owner the same evening: a volume slider where the
+phone's own keys govern, and a quality to choose on every send. Telegram asks
+neither. Fixed on `integration/message-actions` in `bce98f3`; not deployed.
+
+**What changed.** No quality selector in the composer and no remembered quality;
+«Файл», described «Без сжатия», sends the original on every device, and the phone's
+separate «Без сжатия» item is gone. Under a finger the playback bar has no volume
+slider, the sound settings keep only the microphone's, and media plays at full
+volume. A desktop keeps its slider, and its send dialog for «Фото или видео».
+
+**Verified.**
+
+- Typecheck of `@workspace/kub`: clean.
+- Unit: `send-quality-and-phone-volume` (new, 4), `media-compression` (8), and every
+  unit file that reads the changed components — `shell-glass`,
+  `bot-client-integration-contract`, `edge-vocabulary`, `control-vocabulary`,
+  `touch-target-system`, `composer-height` — 155 of 155. `shell-glass` pins
+  MessageInput's raised fills and counts seven now: the selector's panel was one.
+- `media-send-without-compression.spec.ts` on the fixture server, Chromium 1440,
+  Chromium 390 and WebKit 390: 13 passed, 14 skipped by shape, none failed.
+  `video-transcode-frontend.spec.ts`: 21 of 21.
+- Not run: `video-message`, `unified-interface-chrome` and `camera-capture`, which
+  sign in to production. Their expectations were moved to the pointer.
+- Renders of the attach menu before and after, from fictional preview data, went to
+  the owner.
+
+**A stale dev server passed a test for the wrong reason.** The replacements were
+written by a script in one burst, and Vite's watcher missed two of the eight files:
+it went on serving `MediaSendDialog.tsx` and `useIncomingMediaFiles.ts` as they had
+been. One desktop test failed on it, and the new desktop «Файл» test passed on it —
+the stale hook passed `"desktop"`, which the new function reads as "not the
+dialog". Every changed module was then requested from the server and compared with
+the disk before the run above. After a scripted edit, touch the files and check
+what the server serves before trusting a run.
+
 ## 2026-09-11 - Reactions and earned achievements closed to readers who should not have them, rehearsed on a copy of the production schema
 
 On the owner's approval that evening, D-104 and D-107 became two migrations,

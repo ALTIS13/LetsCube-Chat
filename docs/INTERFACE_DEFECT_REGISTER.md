@@ -6380,3 +6380,96 @@ iPhone chat screen against Telegram, photographed on the DEV capture route.
 bubble at its worst pixel, under the 4.5:1 floor for text; in the dark theme it is
 5.51:1. Options B and C of that assessment, which repaint own bubbles, put it at
 4.75:1 in both themes.
+
+## D-118 `[x]` A volume slider on phones, where the phone's own volume governs
+
+**Severity:** medium, for clarity. Reported by testers through the owner on
+2026-09-11.
+
+**Defect:** a volume slider is drawn wherever media plays, phones included, where
+Telegram draws none and the system mixer is how a person sets the volume. It is a
+control nobody expects there, and it makes the player busier than Telegram's.
+
+**Decision** (the owner, 2026-09-11): no volume slider where the device's own volume
+governs; Telegram's players are the reference.
+
+**Fixed** 2026-09-11 in `bce98f3` on `integration/message-actions`, not yet deployed.
+Under a finger — `(pointer: coarse)`, a phone or a tablet — nothing draws a
+playback volume any more. The playback bar's slider is hidden there, and the sound
+settings drop «Голосовые сообщения» and «Громкость прослушивания», keeping only the
+microphone's, which no system control sets. A volume lowered earlier cannot stay
+lowered with nothing on screen to raise it: under a finger the playback bar and
+voice messages play at full volume, and the device's own keys do the rest. A
+desktop keeps its slider. The bar's control also carried its tooltip and its
+accessible name as mojibake, Cyrillic read as Windows-1251; they read «Громкость»
+and «Громкость воспроизведения» again. Pinned by
+`tests/unit/send-quality-and-phone-volume.test.mts`, with `coarsePointer()` from
+`lib/pointer.ts` tested for a finger, a mouse, a page without `matchMedia` and no
+window. The signed-in `video-message.spec.ts` and `unified-interface-chrome.spec.ts`
+now expect the sliders only where the pointer is not a finger; they read
+production and were not run for this change.
+
+## D-119 `[x]` Sending a photo or a video asks for a quality, and people do not want to be asked
+
+**Severity:** medium. Reported by testers through the owner on 2026-09-11.
+
+**Surface:** the composer tray's quality selector «Экономно / Стандарт / Исходное»,
+and the five-stop slider rendered for the owner on 2026-09-11, which never shipped.
+
+**Defect:** what testers object to is not how many choices there are but that there
+is a choice at all. A photo sent from a stock app is compressed without anyone
+thinking about it, and a person who wants the original presses the function for
+it, as in Telegram.
+
+**Decision** (the owner, 2026-09-11): no quality choice when sending. Photos and
+videos go at the standard quality without a question; «без сжатия» is a separate,
+explicitly named function, as in Telegram — «Файл», marked as sending without
+compression, which D-096 makes true on a phone. The slider of 2026-09-11 is
+withdrawn.
+
+**Fixed** 2026-09-11 in `bce98f3` on `integration/message-actions`, not yet deployed.
+The tray's video quality selector is gone, and so is the quality it remembered:
+every video goes at the standard quality. The phone's separate «Без сжатия» item is
+gone too. «Файл» is the function, on every device, and says so under its name —
+«Без сжатия» is the item's accessible description, so its name stays «Файл». A
+pick from it is staged as it is, straight into the composer; on a desktop it no
+longer opens the send dialog, which would only ask again what the item answered.
+On a desktop «Фото или видео», a paste and a drop still open that dialog with
+«Сжать изображение», Telegram Desktop's own checkbox.
+
+Two rules followed from «Файл» taking any file. Only a photo or a video is refused
+as an original over 50 MB; a document meets the limit every attachment meets, in
+that check's words, where it would have been told to send "this photo"
+compressed. And a refusal names the way out on the screen in front of the person —
+after «Файл» the menu's «Фото или видео», in the dialog its box — where it used to
+follow the device, which would have sent a desktop's «Файл» to a box that never
+opened. `originalLimitMessage` takes that surface now.
+
+Verified on the fixture server: `media-send-without-compression.spec.ts` 13 of 13
+on Chromium at 1440, Chromium at 390 and WebKit at 390, 14 skipped by shape, with a
+new desktop test for «Файл» and the phone tests moved to it; the unit tests that
+read these files 155 of 155; typecheck clean. The first run failed one desktop test
+because the dev server had missed two of the files written in one burst and served
+them stale — and the new desktop test passed that run for the wrong reason — so
+every changed module was checked against the disk before the run that counts.
+Before-and-after renders of the menu, a phone in both themes and a desktop, went to
+the owner.
+
+## D-120 `[ ]` A «Папки» tab duplicates the folder tabs above the chat list
+
+**Severity:** low, for clutter. Named by the owner on 2026-09-11.
+
+**Defect:** on a phone the bottom bar carries «Папки» beside the folder tabs already
+at the top of the chat list, and the tab does nothing those do not. Telegram shows
+folders at the top only.
+
+**Decision:** remove the duplicate, inside the navigation work of item 30.
+
+## D-121 `[ ]` Sound settings are large stretched modules left from the old interface
+
+**Severity:** medium, for the look. Named by the owner on 2026-09-11.
+
+**Defect:** the notification sound settings are drawn as large, stretched panels
+where Telegram has compact grouped rows.
+
+**Decision:** rebuilt in Telegram's settings idiom inside the parity work of item 30.
