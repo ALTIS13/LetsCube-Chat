@@ -25,7 +25,19 @@ import { gotoOrSkip, loadQaCredentials, loadQaEnvValues, signInFreshOrSkip } fro
 const CHAT_MARKER = "md-sync";
 
 test.describe("two devices, one account", () => {
-  test.describe.configure({ mode: "serial" });
+  // Not serial, on purpose. Every test here needs only what `beforeAll` builds —
+  // three signed-in devices and the chat between them — and none depends on what
+  // an earlier test did: each sends under its own marker and asserts only on
+  // that. Serial mode bought nothing for that and cost a great deal: one failure
+  // turned every later test into "did not run", which Playwright prints as a bare
+  // count, so a failing read-receipt test would hide the ordering, catch-up and
+  // duplicate checks behind it. In the default mode a failure costs one test — the worker
+  // is replaced, `afterAll` soft-deletes what that worker sent, and `beforeAll`
+  // signs the devices in again for the tests that remain.
+  //
+  // One precondition is shared with the data rather than with a test: "a read on
+  // one device clears the unread count" expects the chat to start with nothing
+  // unread, which a run killed between a send and a read can leave untrue.
 
   let ctxA: BrowserContext;
   let ctxB: BrowserContext;
