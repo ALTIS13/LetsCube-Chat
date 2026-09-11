@@ -1,5 +1,29 @@
 # QA Results
 
+## 2026-09-11 - Media and storage measured on production, read-only
+
+For D-113 to D-116 and the storage assessment. One read-only transaction ending in rollback, aggregates only — no
+object names, paths, people or contents — and read-only disk totals over SSH; no environment value was read.
+
+- **Buckets.** `media`: public, no size limit of its own, any type. `chat-media`: private, 100 MiB, a
+  restricted type list, unused.
+- **What is stored.** `media` holds 741 objects, 614.5 MB; the storage volume takes 978 MB on disk. In the last
+  30 days: 143 pictures (10.7 MB, the largest 2.3 MB; 142 WebP, 1 JPEG), 9 voice files, 3 MP4 videos (12.4 MB) and
+  2 other files.
+- **Videos.** 67 stored in all. The largest is 51,215,994 bytes, under 50 MiB, against the client's 250 MB; none
+  over 50 MiB has ever been stored.
+- **Pictures by what was picked** (45 messages, 30 days). PNG made WebP 33, JPEG made WebP 5, WebP left as picked
+  1, JPEG left as picked 1, no metadata 5; no HEIC.
+- **Variants.** Image previews and thumbnails 165 ready, 3 failed as unreadable sources (the last on 2026-09-04);
+  720p copies 30 ready and 2 failed with the source missing; posters 34 ready and 2 failed with the source
+  missing. No image or video message of the last 30 days lacks its variants.
+- **Messages, 30 days.** 1,653 text, 45 image, 9 audio, 6 video, 2 file.
+- **Disk.** 77% used, 86 of 119 GB. Backups take 39 GB under `/srv/letscube/backups/automated`, against 978 MB
+  of stored media; Docker images 24.3 GB, build cache 2.8 GB.
+
+The first run stopped at a query that grouped by an expression holding `count(*)`; it rolled back, and the
+remaining queries ran in a second read-only transaction.
+
 ## 2026-09-11 - The chat screen in option C merged onto the working branch, and checked there
 
 Option C of the chat screen — capsules and colour, the owner's choice — was built for

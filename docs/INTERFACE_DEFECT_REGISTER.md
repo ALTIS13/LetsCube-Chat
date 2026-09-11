@@ -6366,6 +6366,16 @@ progress on `fix/media-send-path`; the server's size limit and bucket rules are 
 and the tester has been asked what the tile showed and at which step it stopped. Report:
 `output/audits/2026-09-11-media-reports/report.md`.
 
+**Measured** 2026-09-11 on production, read-only and in aggregate: the `media` bucket carries no size
+limit of its own and accepts any type, so the storage service's global limit decides. Of the 67 videos ever
+stored, the largest is 51,215,994 bytes, under 50 MiB (52,428,800), while the client allows 250 MB; none over
+50 MiB has ever been stored. A server cap at the stock 50 MiB is the likeliest reason a longer video from a
+phone fails, and the client reports it only as «Не удалось загрузить файл». In the last 30 days the bucket took
+3 videos, all MP4, and no QuickTime. The worker is not the bottleneck: 30 of 32 720p copies and 34 of 36 posters
+are ready, the failures are sources deleted since, and no image or video message of the last 30 days lacks its
+variants. Whether the server's limit rises to the client's 250 MB is the owner's decision; until then the send
+path is to name the real limit.
+
 ## D-114 `[ ]` A 300 KB photo takes a very long time to upload
 
 **Severity:** medium. The same report; not yet reproduced.
@@ -6382,6 +6392,12 @@ and on Playwright's WebKit. Found alongside: an iPhone most likely hands the pag
 does not compress, and Safari most likely cannot encode WebP, so a PNG can go up under a `.webp` name. Both
 are being fixed on `fix/media-send-path`; the tester has been asked about the pick order and the tile's file
 name.
+
+**Measured** 2026-09-11 on production, read-only and in aggregate: of the 45 picture messages of the last 30
+days, 33 were PNG made WebP, 5 JPEG made WebP, 1 WebP and 1 JPEG left as picked (2.3 MB), and 5 carry no
+metadata; no HEIC was picked at all in that time, so the HEIC path did not occur in production. Whether an
+iPhone encodes WebP stays open, since storage records the type the client declared. Image variants: 165 ready,
+3 failed as unreadable sources, the last on 2026-09-04.
 
 ## D-115 `[ ]` Photos sent together arrive as separate messages, not as one album
 
