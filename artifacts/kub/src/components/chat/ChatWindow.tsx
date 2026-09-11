@@ -19,6 +19,9 @@ import { useAppStore } from "@/store/app.store";
 import { createClient, getSupabasePublicUrl } from "@/lib/supabase/client";
 import { KubEmptyState, KubIcon } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
+import { showActionFeedback } from "@/lib/actionFeedback";
+import { mapPgError } from "@/lib/errors";
+import { forwardFeedback } from "@/lib/messageForward";
 import { KUB_CHAT_MESSAGE_JUMP_EVENT, requestChatMessageJump, type ChatMessageJumpDetail } from "@/lib/chatJumpEvents";
 import { isSavedChat } from "@/lib/chatDisplay";
 import { reportError } from "@/lib/monitoring";
@@ -974,8 +977,16 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           message={forwardingMessage}
           onClose={() => setForwardingMessage(null)}
           onForward={async (targetChatId) => {
-            await forwardMessage(forwardingMessage, targetChatId);
-            setForwardingMessage(null);
+            // What happens next depends on the answer. This used to close the
+            // dialog without reading it, so a refusal looked exactly like a
+            // delivery and nothing on screen said which one had happened.
+            const target = chats.find((candidate) => candidate.id === targetChatId);
+            const result = await forwardMessage(forwardingMessage, targetChatId)
+              .catch((cause: unknown) => ({ ok: false as const, error: mapPgError(cause) }));
+            showActionFeedback(forwardFeedback(result, target?.name));
+            // A refused forward leaves the dialog open: the choice is where
+            // the next attempt starts.
+            if (result.ok) setForwardingMessage(null);
           }}
         />
       )}

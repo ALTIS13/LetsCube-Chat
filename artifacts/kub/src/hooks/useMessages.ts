@@ -15,6 +15,7 @@ import {
   getMessageAckUserMessage,
   sanitizeMessageAckError,
 } from "@/lib/messageAckError";
+import type { ForwardMessageResult } from "@/lib/messageForward";
 import { MESSAGE_SELECT_WITH_JOINS } from "@/lib/messageProjection";
 import { attachKnownSender } from "@/lib/realtimeMessage";
 import { applyProfileToChats } from "@/lib/chatProfilePatch";
@@ -1154,12 +1155,17 @@ export function useMessages(
   // ── Forward ─────────────────────────────────────────────────────────────
   // Insert a copy of the message into a target chat.  We carry over content,
   // type and media_url, and link back via forwarded_from_id.
+  //
+  // It answers with what happened, not with the row or null. A refusal used to
+  // go no further than the console, and the caller closed the dialog without
+  // reading the answer, so a forward the server refused looked exactly like one
+  // it delivered.
   const forwardMessage = useCallback(async (
     src: MessageWithSender,
     targetChatId: string,
-  ) => {
+  ): Promise<ForwardMessageResult> => {
     const user = currentUserRef.current;
-    if (!user) return null;
+    if (!user) return { ok: false, error: "Войдите в аккаунт, чтобы пересылать сообщения." };
     const clientMessageId = crypto.randomUUID();
     const clientSentAt = new Date().toISOString();
     const { data, error } = await supabase
@@ -1176,10 +1182,15 @@ export function useMessages(
       })
       .select(MESSAGE_SELECT_WITH_JOINS)
       .single();
-    if (error) { console.error("Forward error:", error); return null; }
+    if (error || !data) {
+      console.error("Forward error:", error);
+      return { ok: false, error: mapPgError(error) };
+    }
     const forwarded = data as unknown as MessageWithSender;
+    // Ordering only. The message is delivered once the insert returns, so the
+    // answer to this bump must not turn a delivered forward into a failure.
     await supabase.from("chats").update({ updated_at: forwarded.created_at }).eq("id", targetChatId);
-    return data;
+    return { ok: true, error: null };
   }, [supabase]);
 
   const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
