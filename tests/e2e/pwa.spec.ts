@@ -40,7 +40,13 @@ test.describe("LETSCUBE PWA baseline", () => {
       expect.arrayContaining(["standalone", "minimal-ui"]),
     );
     await expect(page).toHaveTitle(/LETSCUBE/);
-    await expect(page.locator('link[rel="manifest"]')).toHaveCount(0);
+    // The manifest is injected for iPhone and iPad only (the second case pins
+    // that), so what this page must carry depends on the device the project
+    // emulates — and webkit-mobile-390 emulates an iPhone, where a count of 0
+    // could never pass. Read from the project, not from the page, so a broken
+    // detection in the page cannot make both sides of the comparison agree.
+    const emulatesAppleTouchDevice = /iPhone|iPad|iPod/.test(test.info().project.use.userAgent ?? "");
+    await expect(page.locator('link[rel="manifest"]')).toHaveCount(emulatesAppleTouchDevice ? 1 : 0);
     await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute(
       "href",
       "/icons/apple-touch-icon.png",
