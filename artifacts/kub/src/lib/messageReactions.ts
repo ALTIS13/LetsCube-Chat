@@ -8,16 +8,40 @@ import { selectRussianPluralForm } from "./messageMediaSections.ts";
  * here assumes there can only ever be one row: every row of the person's is
  * collected, which is what a later "up to three" rule would widen.
  *
- * The rule is enforced in the client only. The database still accepts a second
- * row from the same person, so a constraint is a separate, approved migration —
- * until then this is what every surface goes through, and two clients racing
- * each other can still leave two rows behind.
+ * The database holds the rule since 20260911142000: `set_message_reaction`
+ * makes the whole toggle in one call under a lock, and a trigger refuses a
+ * second emoji from the same person on every path. What is planned here is the
+ * picture shown before the server answers, and the three requests — look up,
+ * delete, insert — a client still makes where that function is not deployed.
  *
  * Kept free of React and Supabase so `node --test` can load it.
  */
 
 /** The quick reaction: a double tap on a phone, a click on the desktop hover button. */
 export const QUICK_REACTION = "❤️";
+
+export const SET_REACTION_RPC = "set_message_reaction";
+
+/** What `set_message_reaction` returns: every reaction on the message after the change. */
+export function parseReactionRows(data: unknown): ReactionRowLike[] | null {
+  if (!Array.isArray(data)) return null;
+  const rows: ReactionRowLike[] = [];
+  for (const entry of data) {
+    if (!entry || typeof entry !== "object") return null;
+    const row = entry as Record<string, unknown>;
+    if (
+      typeof row.id !== "string" ||
+      typeof row.message_id !== "string" ||
+      typeof row.user_id !== "string" ||
+      typeof row.emoji !== "string" ||
+      typeof row.created_at !== "string"
+    ) {
+      return null;
+    }
+    rows.push({ id: row.id, message_id: row.message_id, user_id: row.user_id, emoji: row.emoji, created_at: row.created_at });
+  }
+  return rows;
+}
 
 /** The shape this module needs from a reaction row. */
 export interface ReactionRowLike {

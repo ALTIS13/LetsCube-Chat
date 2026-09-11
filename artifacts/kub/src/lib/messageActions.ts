@@ -166,10 +166,13 @@ export function deleteDialogTitle(count: number): string {
 /**
  * The one choice the delete dialog offers, or null when there is none.
  *
- * Only messages that are all the reader's own can be removed for others: a
- * private chat names the other person, a group says «у всех». Someone else's
- * message is deleted for the reader only, and so is anything in Saved Messages,
- * where nobody else could see it.
+ * In a private chat either person may delete any message for both — the
+ * owner's decision of 2026-09-11, as in Telegram — so the choice names the other
+ * person whoever wrote the messages, as long as the server can do it
+ * (`othersForBoth`, the `delete_messages_for_everyone` function). Where it cannot
+ * yet, only the reader's own messages go for both, as before. A group offers
+ * «Удалить у всех» for the reader's own messages only. Saved Messages has
+ * nobody else to delete anything for.
  */
 export function deleteDialogOption(input: {
   count: number;
@@ -177,13 +180,16 @@ export function deleteDialogOption(input: {
   chatType: string | null | undefined;
   isSavedChat: boolean;
   otherName: string | null | undefined;
+  /** The server can delete someone else's message in a private chat for both. */
+  othersForBoth?: boolean;
 }): string | null {
-  if (input.count < 1 || !input.allOwn || input.isSavedChat) return null;
+  if (input.count < 1 || input.isSavedChat) return null;
   if (input.chatType === "private") {
+    if (!input.allOwn && !input.othersForBoth) return null;
     const name = input.otherName?.trim();
     return `Также удалить для ${name || "собеседника"}`;
   }
-  return "Удалить у всех";
+  return input.allOwn ? "Удалить у всех" : null;
 }
 
 /** «Переслать сообщение», «Переслать 2 сообщения», «Переслать 5 сообщений». */

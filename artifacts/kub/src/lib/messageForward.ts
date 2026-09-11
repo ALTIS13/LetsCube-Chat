@@ -28,6 +28,64 @@ export const FORWARD_FEEDBACK_KEY = "message-forward";
 /** Said when a failure arrives without a reason, so it still reads as one. */
 const REASON_UNKNOWN = "Попробуйте ещё раз.";
 
+export const FORWARD_RPC = "forward_message";
+
+/** What a forward reads from the message it forwards. */
+export interface ForwardSource {
+  id: string;
+  content: string | null;
+  type: string;
+  media_url: string | null;
+  media_bucket?: string | null;
+  media_path?: string | null;
+  media_metadata?: unknown;
+}
+
+export interface ForwardTarget {
+  chatId: string;
+  userId: string;
+  clientMessageId: string;
+  clientSentAt: string;
+}
+
+/**
+ * The server makes the copy from its own row of the source, with the media and
+ * the source's previews (`forward_message`, 20260911144000), so the client
+ * sends ids and nothing it could get wrong.
+ */
+export function forwardRpcArgs(source: Pick<ForwardSource, "id">, target: ForwardTarget) {
+  return {
+    p_source_message_id: source.id,
+    p_target_chat_id: target.chatId,
+    p_client_message_id: target.clientMessageId,
+    p_client_sent_at: target.clientSentAt,
+  };
+}
+
+/**
+ * The copy this client inserts where `forward_message` is not deployed. It used
+ * to carry `media_url` only, and a forwarded photo lost its previews (D-083): it
+ * now carries the bucket, the path and the whole metadata — an original's
+ * `uncompressed` flag and its preview path included — so the bubble and the
+ * viewer have what they need, and the variant worker renders the copy's
+ * previews on its next pass.
+ */
+export function forwardInsertPayload(source: ForwardSource, target: ForwardTarget) {
+  const payload = {
+    chat_id: target.chatId,
+    user_id: target.userId,
+    content: source.content,
+    type: source.type,
+    media_url: source.media_url ?? null,
+    media_bucket: source.media_bucket ?? null,
+    media_path: source.media_path ?? null,
+    forwarded_from_id: source.id,
+    client_message_id: target.clientMessageId,
+    client_sent_at: target.clientSentAt,
+  };
+  return source.media_metadata === undefined ? payload : { ...payload, media_metadata: source.media_metadata };
+}
+
 export function forwardFeedback(
   result: ForwardMessageResult,
   targetChatName: string | null | undefined,

@@ -7,10 +7,23 @@ import {
   groupReactions,
   leadingReactionEmoji,
   myReaction,
+  parseReactionRows,
   planReactionToggle,
   reactionCountLabel,
   type ReactionRowLike,
 } from "../../artifacts/kub/src/lib/messageReactions.ts";
+
+test("the reactions set_message_reaction returns are taken as they are, and anything else is refused", () => {
+  const rows = [
+    { id: "r1", message_id: "m1", user_id: "anya", emoji: "👍", created_at: "2026-09-11T09:00:00.123456+00:00" },
+    { id: "r2", message_id: "m1", user_id: "me", emoji: "❤️", created_at: "2026-09-11T09:01:00+00:00" },
+  ];
+  assert.deepEqual(parseReactionRows(rows), rows);
+  assert.deepEqual(parseReactionRows([]), []);
+  assert.equal(parseReactionRows(null), null);
+  assert.equal(parseReactionRows({ id: "r1" }), null, "a single object is not the set of rows");
+  assert.equal(parseReactionRows([{ ...rows[0], emoji: 5 }]), null);
+});
 import {
   DEFAULT_QUICK_REACTIONS,
   parseRecentReactions,

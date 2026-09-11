@@ -147,8 +147,13 @@ test("the delete dialog: one title, and one choice only where it means something
   assert.equal(deleteDialogOption(base), "Также удалить для Аня");
   assert.equal(deleteDialogOption({ ...base, otherName: "  " }), "Также удалить для собеседника");
   assert.equal(deleteDialogOption({ ...base, chatType: "group" }), "Удалить у всех");
-  // Someone else's message is deleted for the reader only.
+  // Someone else's message in a private chat goes for both where the server can
+  // do it (the owner's decision of 2026-09-11), and for the reader only where it
+  // cannot yet.
+  assert.equal(deleteDialogOption({ ...base, allOwn: false, othersForBoth: true }), "Также удалить для Аня");
   assert.equal(deleteDialogOption({ ...base, allOwn: false }), null);
+  // A group never deletes someone else's message for everyone.
+  assert.equal(deleteDialogOption({ ...base, chatType: "group", allOwn: false, othersForBoth: true }), null);
   // Saved Messages has nobody else to delete it for.
   assert.equal(deleteDialogOption({ ...base, isSavedChat: true }), null);
 });

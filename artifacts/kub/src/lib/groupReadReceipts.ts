@@ -2,7 +2,12 @@ import type { ChatMember, MessageWithSender, Profile } from "@/types/database";
 
 export interface GroupReadReceiptUser {
   userId: string;
-  readAt: string;
+  /**
+   * When they read it. From the pointer here; the exact time, or null when
+   * there is none to show, once `message_read_times` has answered
+   * (`lib/messageReadTimes.ts`).
+   */
+  readAt: string | null;
   profile?: Profile | null;
 }
 
