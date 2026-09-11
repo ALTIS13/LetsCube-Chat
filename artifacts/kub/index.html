@@ -32,6 +32,16 @@
         document.head.appendChild(manifest);
       })();
     </script>
+    <script>
+      // The installed iPhone app, and only that: `navigator.standalone` exists
+      // on iOS alone and is true only when the app was opened from the home
+      // screen. The status-bar guard in src/index.css keys on this attribute,
+      // because the status bar's glyphs belong to iOS and only the installed
+      // app draws the page underneath them.
+      if (navigator.standalone === true) {
+        document.documentElement.setAttribute("data-ios-standalone", "");
+      }
+    </script>
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

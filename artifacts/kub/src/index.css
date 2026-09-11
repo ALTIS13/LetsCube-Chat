@@ -856,6 +856,35 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* The installed iPhone app's status bar, in the light theme.
+
+   `apple-mobile-web-app-status-bar-style` is `black-translucent`, which draws
+   the status bar over the page with white glyphs whatever the page is — and,
+   with viewport-fit=cover, over whichever surface runs under it. The dark
+   theme's glass is dark enough for them. The light theme's is nearly white,
+   and the clock, the signal and the battery disappeared into the header.
+
+   The meta tag cannot follow the theme: iOS reads it once, when the app is
+   added to the home screen. So the page darkens exactly the band the glyphs
+   sit in — the top inset, in the light theme, in the installed app. 0.6 of the
+   dark ground is what white needs for 4.5:1 over the worst thing the band can
+   hold, a white field: `tests/unit/ios-status-bar-legibility.test.mjs` does
+   the arithmetic and the WebKit stand photographs the result. Wherever the
+   page is not under the status bar the band is zero pixels tall; outside the
+   installed app it does not exist, which also keeps it off Android, whose
+   status icons are dark in a light theme. */
+html.light[data-ios-standalone] body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 2147483647;
+  height: var(--kub-safe-top);
+  background-color: rgba(5, 11, 24, 0.6);
+  pointer-events: none;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }

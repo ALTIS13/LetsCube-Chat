@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import sharp from "sharp";
 
 import {
   IPHONE_14_PRO,
@@ -343,6 +344,60 @@ test.describe("installed iPhone app — WebKit, insets through the tokens", () =
         });
       }
 
+      if (orientation === "portrait") {
+        test("the status bar stays readable over the light theme", async ({ page }) => {
+          // `black-translucent` draws white glyphs over the page. The glyphs
+          // are iOS's and cannot be drawn here, so what is measured is the band
+          // they sit in, photographed: white against its lightest pixel. The
+          // conversation is left at rest, so the band holds the header's glass
+          // over light message bubbles — the ground the veil was measured for.
+          await page.addInitScript(() => {
+            try {
+              localStorage.setItem("kub-theme", "light");
+            } catch {
+              /* the theme then follows the light colour scheme the context has */
+            }
+          });
+          await openFixtureChat(page);
+          expect(await page.evaluate(() => document.documentElement.classList.contains("light"))).toBe(true);
+          expect(
+            await page.evaluate(() => document.documentElement.hasAttribute("data-ios-standalone")),
+            "the installed app was not recognised, so the veil could not apply at all",
+          ).toBe(true);
+
+          const band = await page.screenshot({ clip: { x: 0, y: 0, width: viewport.width, height: insets.top } });
+          const { data, info } = await sharp(band).raw().toBuffer({ resolveWithObject: true });
+          const channel = (value: number) => {
+            const c = value / 255;
+            return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+          };
+          let lightest = 0;
+          for (let index = 0; index < data.length; index += info.channels) {
+            const value =
+              0.2126 * channel(data[index]) + 0.7152 * channel(data[index + 1]) + 0.0722 * channel(data[index + 2]);
+            if (value > lightest) lightest = value;
+          }
+          const ratio = 1.05 / (lightest + 0.05);
+          expect(
+            ratio,
+            `white status-bar glyphs would measure ${ratio.toFixed(2)}:1 against the lightest pixel under them`,
+          ).toBeGreaterThanOrEqual(4.5);
+        });
+
+        test("the dark theme's status bar band is left as it is", async ({ page }) => {
+          await page.addInitScript(() => {
+            try {
+              localStorage.setItem("kub-theme", "dark");
+            } catch {
+              /* without storage this test cannot choose the theme */
+            }
+          });
+          await openFixtureChat(page);
+          expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(true);
+          expect(await page.evaluate(() => getComputedStyle(document.body, "::before").content)).toBe("none");
+        });
+      }
+
       if (orientation === "landscape") {
         test("the sidebar's own menu and the notification panel", async ({ page }) => {
           await openFixtureChat(page);
@@ -408,5 +463,9 @@ test.describe("installed iPhone app — Chromium, insets from env() itself", () 
     expect(geometry.rowTop, "the chat header moved on a device that has no status bar inset").toBe(0);
     expect(geometry.dockPadding, "the composer gained padding on a device with no home indicator").toBe(0);
     expect(geometry.dockBottom).toBe(geometry.viewportHeight);
+
+    // Not the installed iPhone app, so no status-bar veil, whatever the theme.
+    expect(await page.evaluate(() => document.documentElement.hasAttribute("data-ios-standalone"))).toBe(false);
+    expect(await page.evaluate(() => getComputedStyle(document.body, "::before").content)).toBe("none");
   });
 });
