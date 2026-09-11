@@ -5072,6 +5072,13 @@ selection with forwarding several and one «Удалить» (complaints 10 and 
 several, the quick reaction (👍 or ❤️), swipe to reply on a phone, and whether
 this track absorbs complaints 10 and 9.
 
+**Decided by the owner the same evening:** one reaction per person, as in
+Telegram — several, and animated ones, belong to a paid subscription planned
+for later (tracker queue 24), not to this work; ❤️ is the quick reaction, on a
+double tap and on the hover button; swipe to reply on a phone is wanted; and
+complaints 10 and 9 join this track. Next is the one set of renders for the
+whole target.
+
 ## D-072 `[x]` The service worker was never replaced, so its cache was never cleared
 
 **Severity:** high. Every browser and installed-PWA user; on iOS the dead assets
