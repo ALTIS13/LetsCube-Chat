@@ -44,6 +44,24 @@ export function loadQaEnvValues(): Map<string, string> {
   return values;
 }
 
+/**
+ * Whether this run may write to the backend it is pointed at.
+ *
+ * A dev server that can sign a QA account in carries the production public
+ * configuration — there is no other backend those accounts exist in — so a spec
+ * that sends a message, opens a ticket or changes a profile writes into
+ * production, where real people see it. Such a spec asks this first.
+ *
+ * The process environment is read before the QA file, and the file only when
+ * the variable is unset or empty, so `KUB_QA_ALLOW_MUTATIONS=0` on a command
+ * line silences a `1` kept in the file. Only the exact value "1" allows writes.
+ */
+export function qaMutationsAllowed(): boolean {
+  const value =
+    process.env.KUB_QA_ALLOW_MUTATIONS || loadQaEnvValues().get("KUB_QA_ALLOW_MUTATIONS");
+  return value === "1";
+}
+
 export function loadQaCredentials(role: QaRole | "default" = "default"): QaCredentials | null {
   const values = loadQaEnvValues();
   const keys =
