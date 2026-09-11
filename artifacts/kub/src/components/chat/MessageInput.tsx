@@ -53,6 +53,9 @@ import { EmojiCategoryPicker } from "@/components/ui/EmojiCategoryPicker";
 import { MESSAGE_EMOJI_CATEGORIES, MESSAGE_EMOJI_SEARCH_TERMS } from "@/lib/emojiCatalog";
 import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
 import { forwardDraftTitle } from "@/lib/messageActions";
+import { CAPSULE_GLASS } from "@/lib/chatChromeOptions";
+import { FOCUS_RING } from "@/lib/controlSurface";
+import { useChatChromeOptions } from "@/hooks/useChatChromeOptions";
 
 const DRAFT_PREFIX = "kub:draft:";
 const draftKey = (chatId: string) => `${DRAFT_PREFIX}${chatId}`;
@@ -164,6 +167,9 @@ export function MessageInput({
   const setEditingMessage = useAppStore((s) => s.setEditingMessage);
   const isEditing = editingMessage !== null && editingMessage.chat_id === chatId;
   const muteState = useMuteState(chatId);
+  // The DEV design options (lib/chatChromeOptions.ts): the capsule composer.
+  // Always the band in a production build.
+  const { capsules } = useChatChromeOptions();
   const preEditTextRef = useRef<string | null>(null);
   const composerSendScopeRef = useRef<ReturnType<typeof createComposerSendScope> | null>(null);
   if (!composerSendScopeRef.current) composerSendScopeRef.current = createComposerSendScope(chatId);
@@ -830,7 +836,9 @@ export function MessageInput({
     // it reports is what ChatWindow measures into --kub-composer-height and
     // the list's bottom inset, so it must not move.
     <div className="relative flex-shrink-0">
-      <KubGlassLayer />
+      {/* The capsule option (DEV only) drops the band: its round buttons and
+          its field carry their own glass, in the row below. */}
+      <KubGlassLayer className={capsules ? "hidden" : undefined} />
       <div className="relative">
       {showEmoji && (
         <div className="flex justify-end px-3 pb-2 pt-1.5">
@@ -1087,17 +1095,38 @@ export function MessageInput({
         {/* --kub-inset, for the reason spelled out on the sidebar's search
             field: the composer is translucent chrome now and it composites
             above --kub-surface-2, so the message box had stopped reading as a
-            box at all. */}
-        <div className="flex items-end gap-1 rounded-2xl px-2 py-1 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all">
+            box at all.
+
+            The capsule option (DEV only, lib/chatChromeOptions.ts) keeps these
+            four children, in this order, and draws Telegram's three pieces from
+            them: a round attach button, a field capsule holding the text and the
+            emoji button, and a round send or record button. The field's glass is
+            one layer spanning the space between the two round buttons, so
+            nothing is re-parented, the textarea keeps its ref and its sizing, and
+            the composer measures the way it always has. */}
+        <div
+          className={
+            capsules
+              ? "relative flex items-end gap-2"
+              : "flex items-end gap-1 rounded-2xl px-2 py-1 bg-[var(--kub-inset)] border border-[color:var(--kub-border-color)] focus-within:border-[color:var(--kub-cyan)] focus-within:shadow-[0_0_0_3px_color-mix(in_srgb,var(--kub-cyan)_15%,transparent)] transition-all"
+          }
+        >
+          {capsules && (
+            // 3.25rem is a round button and the gap beside it, on each side.
+            <KubGlassLayer className="left-[3.25rem] right-[3.25rem] rounded-[1.375rem] border border-[color:var(--glass-line)]" />
+          )}
           <button
             onClick={() => { setShowAttach(!showAttach); setShowEmoji(false); }}
             className={cn(
-              "flex-shrink-0 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg transition-colors hover:text-[color:var(--kub-cyan)]",
-              showAttach ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)]"
+              capsules
+                ? cn("kub-interactive relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-colors", FOCUS_RING)
+                : "flex-shrink-0 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg transition-colors hover:text-[color:var(--kub-cyan)]",
+              showAttach ? "text-[color:var(--kub-cyan)]" : capsules ? "text-[color:var(--kub-text)]" : "text-[color:var(--kub-muted)]"
             )}
             aria-label="Прикрепить"
           >
-            <KubIcon name="attach" size={20} />
+            {capsules && <KubGlassLayer className={CAPSULE_GLASS} />}
+            <KubIcon name="attach" size={capsules ? 22 : 20} className={capsules ? "relative" : undefined} />
           </button>
 
           <textarea
@@ -1112,13 +1141,18 @@ export function MessageInput({
             onBlur={() => onFocusChange?.(false)}
             placeholder="Сообщение…"
             rows={1}
-            className="flex-1 bg-transparent resize-none outline-none text-base sm:text-sm leading-6 py-2 max-h-[140px] overflow-y-auto text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]"
+            className={cn(
+              "flex-1 bg-transparent resize-none outline-none text-base sm:text-sm leading-6 py-2 max-h-[140px] overflow-y-auto text-[color:var(--kub-text)] placeholder:text-[color:var(--kub-muted)]",
+              capsules && "relative min-w-0 py-2.5 pl-4",
+            )}
           />
 
           <button
             onClick={() => { setShowEmoji(!showEmoji); setShowAttach(false); }}
             className={cn(
-              "flex-shrink-0 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg transition-colors hover:text-[color:var(--kub-cyan)]",
+              capsules
+                ? cn("kub-interactive relative flex h-11 w-10 flex-shrink-0 items-center justify-center rounded-full transition-colors", FOCUS_RING)
+                : "flex-shrink-0 min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg transition-colors hover:text-[color:var(--kub-cyan)]",
               showEmoji ? "text-[color:var(--kub-cyan)]" : "text-[color:var(--kub-muted)]"
             )}
             aria-label="Эмодзи"
@@ -1131,7 +1165,9 @@ export function MessageInput({
               onClick={handleSend}
               disabled={isAttachmentBusy}
               className={cn(
-                "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all",
+                capsules
+                  ? cn("kub-interactive relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-all", FOCUS_RING)
+                  : "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all",
                 isAttachmentBusy
                   ? "text-[color:var(--kub-muted)] opacity-60 cursor-not-allowed"
                   : "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] kub-glow-cyan hover:brightness-110"
@@ -1156,17 +1192,27 @@ export function MessageInput({
               onPointerCancel={handleRecorderPointerCancel}
               disabled={isAttachmentBusy}
               className={cn(
-                "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all select-none touch-none",
+                capsules
+                  ? cn("kub-interactive relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-all select-none touch-none", FOCUS_RING)
+                  : "flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all select-none touch-none",
                 isAttachmentBusy
                   ? "text-[color:var(--kub-muted)] opacity-60 cursor-not-allowed"
                   : recorderMode === "video"
                   ? "bg-[color-mix(in_srgb,var(--kub-pink)_18%,transparent)] text-[color:var(--kub-pink)] hover:bg-[color-mix(in_srgb,var(--kub-pink)_26%,transparent)]"
+                  : capsules
+                  ? "text-[color:var(--kub-text)]"
                   : "text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] kub-raise-hover"
               )}
               aria-label={recorderMode === "video" ? "Видеосообщение" : "Голосовое"}
               title={recorderMode === "video" ? "Видеосообщение" : "Голосовое"}
             >
-              <KubIcon name={recorderMode === "video" ? "video" : "microphone"} size={20} />
+              {/* The video mode keeps its pink wash, which a glass layer would cover. */}
+              {capsules && recorderMode !== "video" && <KubGlassLayer className={CAPSULE_GLASS} />}
+              <KubIcon
+                name={recorderMode === "video" ? "video" : "microphone"}
+                size={capsules ? 22 : 20}
+                className={capsules ? "relative" : undefined}
+              />
             </button>
           )}
         </div>

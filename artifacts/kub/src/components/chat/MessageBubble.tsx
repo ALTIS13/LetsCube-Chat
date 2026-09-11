@@ -1251,6 +1251,9 @@ export function MessageBubble({
           <div
             ref={bubbleRef}
             data-message-bubble="true"
+            // Whose it is, for the DEV design options' stylesheet, which lays a
+            // colour on the reader's own bubbles without another class here.
+            data-message-own={isMe ? "true" : "false"}
             data-message-layout-kind={textLayoutKind}
             data-message-footer-mode={footerMode}
             className={cn(

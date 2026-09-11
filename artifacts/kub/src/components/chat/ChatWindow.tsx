@@ -1059,7 +1059,11 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           // The cost paid instead is reading order: the conversation is read
           // before its header. `KubGlassLayer`'s note explains why the header
           // still keeps a plain `relative` box.
-          className="absolute inset-x-0 top-0 flex flex-col"
+          //
+          // `kub-chat-chrome-stack` is a hook for the DEV design options'
+          // stylesheet, which paints the capsule option's fade from this box;
+          // no rule exists for it unless an option is chosen.
+          className="kub-chat-chrome-stack absolute inset-x-0 top-0 flex flex-col"
           data-testid="chat-chrome-stack"
         >
           {/* While messages are selected their bar stands where the header
@@ -1136,7 +1140,10 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           // left a strip of the inset's height between the composer and the
           // keys on an iPhone; with the keyboard closed the inset is all that
           // is left, and on a device without one this is the keyboard alone.
-          className="absolute inset-x-0 bottom-0 transition-[padding-bottom] duration-150 ease-out"
+          //
+          // `kub-chat-composer-dock` is the same kind of hook as the chrome
+          // stack's, for the capsule option's fade under the composer.
+          className="kub-chat-composer-dock absolute inset-x-0 bottom-0 transition-[padding-bottom] duration-150 ease-out"
           style={{ paddingBottom: "max(var(--kub-keyboard-inset, 0px), var(--kub-safe-bottom))" }}
         >
           <MessageInput
