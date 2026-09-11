@@ -1,9 +1,13 @@
 import { expect, test } from "@playwright/test";
-import { findFirstAvailableQaRole, gotoOrSkip, loginAsRoleOrSkip } from "./helpers/auth";
+import { findFirstAvailableQaRole, gotoOrSkip, loginAsRoleOrSkip, qaMutationsAllowed } from "./helpers/auth";
 
 test.describe("KUB message composer", () => {
   test("clears text immediately after optimistic send while REST ack is pending", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "chromium-desktop-1440", "single viewport mutation regression");
+    // The held POST is continued, so this sends a real message into the first
+    // chat the account can write to — a conversation with real people — and
+    // nothing removes it afterwards.
+    test.skip(!qaMutationsAllowed(), "this sends a real message; set KUB_QA_ALLOW_MUTATIONS=1 to run it");
 
     const role = findFirstAvailableQaRole(
       ["owner", "tech_admin", "location_admin", "location_staff", "client"],
