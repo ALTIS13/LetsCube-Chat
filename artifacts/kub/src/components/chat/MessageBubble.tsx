@@ -4,6 +4,12 @@ import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, typ
 import { copyWithFeedback } from "@/lib/actionFeedback";
 import { resolveCssLength } from "@/lib/cssLength";
 import { reachableContentWidth } from "@/lib/messageMetaReach";
+import {
+  holdMeasuredPlacement,
+  metaPlacementInputsKey,
+  metaTextKey,
+  type AnchoredHold,
+} from "@/lib/messageMetaHold";
 import { NO_SAFE_AREA_INSETS, readSafeAreaInsets, type SafeAreaInsets } from "@/lib/safeArea";
 import { createPortal } from "react-dom";
 import type { MessageWithSender } from "@/types/database";
@@ -547,6 +553,9 @@ function MeasuredTextWithMeta({
   const textFlowRef = useRef<HTMLParagraphElement | null>(null);
   const textContentRef = useRef<HTMLSpanElement | null>(null);
   const footerRef = useRef<HTMLSpanElement | null>(null);
+  // D-080: the standing anchored answer — what it was measured under, and how
+  // the anchored layout set the text — or null. See `lib/messageMetaHold.ts`.
+  const anchoredHoldRef = useRef<AnchoredHold | null>(null);
   const hasMeta = meta !== null && meta !== undefined && meta !== false;
 
   const measure = useCallback(() => {
@@ -594,10 +603,12 @@ function MeasuredTextWithMeta({
     // last line ended well short of the edge still grew a row containing
     // nothing but a right-aligned timestamp. See D-008.
     //
-    // Removing it cannot oscillate. The spacer that reserves room for the meta
-    // sits outside the measured span, so adding it can only shorten the last
-    // line and therefore only increase `available` — a message that chose
-    // inline never measures its way back out of it.
+    // Removing it cannot oscillate through the text. The spacer that reserves
+    // room for the meta sits outside the measured span, so adding it can only
+    // shorten the last line and therefore only increase `available`. It can
+    // through the row: where the cap follows a row shrink-wrapped around the
+    // message, the spacer widens the row and moves the cap with it. That loop
+    // is D-080, and it is held shut below.
     const reserve = Math.ceil(footerRect.width + gap);
     // A change of a pixel or less is not applied, so sub-pixel jitter in the
     // footer never re-renders the spacer. The ref follows the state exactly,
@@ -635,8 +646,47 @@ function MeasuredTextWithMeta({
     // only ever turn inline into anchored, and it asks a question whose answer
     // is the same in both placements — see `fitsReachableWidth`.
 
-    setPlacement((previous) => (previous === next ? previous : next));
-  }, [bubbleRef, compound, hasMeta, placement, stackRef]);
+    // D-080: an anchored answer is not overturned by an inline one measured on
+    // the anchored layout, until something other than the placement changes.
+    // Where the cap follows a row shrink-wrapped around the message, the inline
+    // layout is the one on the wider row and the anchored one is on a row that
+    // shrank because the message was anchored, so left alone each answer
+    // produced the other on every commit. `lib/messageMetaHold.ts` has the
+    // measurements and what counts as a change. The inputs are read from boxes
+    // that do not move with the placement — the message row, not the bubble's
+    // own row — and only when there is a hold to set or to test, so a message
+    // that stays inline pays nothing for it. An inline layout counts only once
+    // its spacer is rendered at the width reserved above: before that its row is
+    // narrower than the inline layout's.
+    let settled: MetaPlacement = next;
+    if (next === "anchored" || anchoredHoldRef.current !== null) {
+      const bubbleRowEl = stackEl?.parentElement ?? null;
+      const messageRowEl = bubbleRowEl?.closest<HTMLElement>("[data-message-id]") ?? null;
+      const paragraph = textEl.getBoundingClientRect();
+      const spacerEl =
+        placement === "inline" ? textEl.querySelector<HTMLElement>('[data-message-footer-reserve="true"]') : null;
+      const held = holdMeasuredPlacement(
+        next,
+        {
+          placement,
+          inputs: metaPlacementInputsKey({
+            content: `${measureKey} ${content}`,
+            row: messageRowEl ? messageRowEl.getBoundingClientRect().width : 0,
+            cap: stackEl ? getComputedStyle(stackEl).maxWidth : "",
+            box: bubbleRowEl?.parentElement ? getComputedStyle(bubbleRowEl.parentElement).maxWidth : "",
+            footer: footerRect.width,
+          }),
+          text: metaTextKey({ width: paragraph.width, height: paragraph.height, lastLine: lastLine.width }),
+          spacer: spacerEl !== null && Math.round(spacerEl.getBoundingClientRect().width) === reserveInFlow,
+        },
+        anchoredHoldRef.current,
+      );
+      anchoredHoldRef.current = held.hold;
+      settled = held.placement;
+    }
+
+    setPlacement((previous) => (previous === settled ? previous : settled));
+  }, [bubbleRef, compound, content, hasMeta, measureKey, placement, stackRef]);
 
   /**
    * Back to the guess when the text CHANGES — and never on the mount itself.
