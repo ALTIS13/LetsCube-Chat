@@ -189,20 +189,28 @@ test.describe("LETSCUBE visual style and layout", () => {
 
     const messageBubble = page.locator('[data-message-bubble="true"]').last();
     test.skip((await messageBubble.count()) === 0, "QA chat has no messages for reaction picker");
-    if (viewport && "width" in viewport && viewport.width < 640) {
+    // 2026-09-11 (D-071): the hover cluster's «Реакция» became a ❤️ beside the
+    // message's time, shown only to a hovering pointer, whose column ends in
+    // «Больше реакций»; the menu's bar of reactions ends in one too.
+    if (coarsePointer || (viewport && "width" in viewport && viewport.width < 640)) {
       await messageBubble.click({ button: "right" });
+      await page.locator("[data-reaction-bar]").getByRole("button", { name: "Больше реакций" }).click();
     } else {
       await messageBubble.hover();
-      const reactionTrigger = messageBubble.getByRole("button", { name: "Реакция" });
-      await expect(reactionTrigger).toBeVisible();
-      await reactionTrigger.click();
+      const heart = messageBubble.locator("[data-message-react-button]");
+      await expect(heart).toBeVisible();
+      await heart.hover();
+      await page.locator("[data-reaction-column]").getByRole("menuitem", { name: "Больше реакций" }).click();
     }
-    await page.getByRole("button", { name: "Больше реакций" }).click();
     const reactionSearch = page.getByTestId("reaction-emoji-search");
     await expect(reactionSearch).toBeVisible();
     const reactionPickerBox = await requiredBox(page.getByTestId("reaction-emoji-picker"), "reaction emoji picker");
     expect(reactionPickerBox.width).toBeLessThanOrEqual(480);
-    expect(reactionPickerBox.height).toBeLessThanOrEqual(coarsePointer ? 320 : 300);
+    // The catalog opens with «Недавние» now, and a finger's grid shows four
+    // whole rows rather than three and a strip. Measured on the DEV preview
+    // fixture: 418 under a finger at 390 and 412, 326 under a cursor at 1440
+    // and 1920, where the bounds were 320 and 300 before.
+    expect(reactionPickerBox.height).toBeLessThanOrEqual(coarsePointer ? 424 : 332);
     await reactionSearch.fill("единорог");
     await expect(page.getByTestId("reaction-emoji-grid").getByRole("button", { name: "Выбрать 🦄" })).toBeVisible();
   });

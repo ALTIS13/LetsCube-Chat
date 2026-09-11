@@ -69,11 +69,19 @@ test.describe("bot chat integration", () => {
     await expect(deletedRow).toContainText("Удалённый бот");
     await expect(deletedRow.locator('[data-message-actor-kind="deleted_bot"]')).toBeVisible();
 
-    await activeRow.hover();
-    await activeRow.getByRole("button", { name: "Действия сообщения" }).click();
-    await expect(page.getByText("Изменить", { exact: true })).toHaveCount(0);
-    await expect(page.getByText("Удалить для всех", { exact: true })).toHaveCount(0);
-    await expect(page.getByText("Удалить у себя", { exact: true })).toBeVisible();
+    // 2026-09-11 (D-071): the hover cluster and its «Действия сообщения» are
+    // gone — the menu is a right click — and «Удалить у себя» and «Удалить для
+    // всех» became one «Удалить», whose dialog offers deleting for others only
+    // on the reader's own messages. A bot's message offers neither editing nor
+    // that choice.
+    await activeRow.locator('[data-message-bubble="true"]').click({ button: "right" });
+    const menu = page.locator("[data-action-menu]");
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "Изменить" })).toHaveCount(0);
+    await menu.getByRole("menuitem", { name: "Удалить", exact: true }).click();
+    const dialog = page.getByRole("dialog").filter({ hasText: "Удалить сообщение?" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("checkbox"), "a bot's message offered deleting it for everyone").toHaveCount(0);
   });
 
   test("keeps bots in a separate RPC-only search group and excludes phone queries", async ({ page }, testInfo) => {

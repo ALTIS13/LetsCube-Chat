@@ -16,6 +16,14 @@ import { emulateSafeAreaWithCdp, expectClearOfHardware, type Insets } from "./he
  * alone would pass as well if the whole scale had been inflated, and the dense
  * picker a cursor sees is the design, kept exactly as it was.
  *
+ * 2026-09-11, the owner's Telegram message actions (D-071): the quick
+ * reactions moved out of the menu into a bar of their own above it — ❤️, six
+ * more and «Больше реакций», as many as fit at 44px — the hover cluster and its
+ * quick picker were replaced by one ❤️ beside a hovered message's time, whose
+ * column of reactions opens under a cursor only, and the catalog gained a
+ * «Недавние» row. What a finger and a cursor are owed did not change; where the
+ * controls live did, and the assertions follow them there.
+ *
  * Runs on the DEV preview fixture: start the dev server with
  * `VITE_PUBLIC_PREVIEW_FIXTURE=1`. Every viewport and pointer is set here, so a
  * single project is enough — `chromium-desktop-1440` is the one it is run on.
@@ -79,16 +87,21 @@ for (const device of FINGERS) {
       await expect(page.getByPlaceholder("Сообщение…")).toHaveValue("😂😂");
     });
 
-    test("the action menu's quick reactions are finger-sized and fit inside the menu", async ({ page }) => {
+    test("the menu's quick reactions are finger-sized and fit inside their bar", async ({ page }) => {
       await openFixture(page);
       const menu = await openActionMenu(page);
-      const quick = quickReactions(menu);
-      await expect(quick).toHaveCount(7);
-      const menuBox = await requiredBox(menu, "action menu");
+      const bar = page.locator("[data-reaction-bar]");
+      await expect(bar).toBeVisible();
+      const quick = quickReactions(bar);
+      // ❤️, as many of the six as fit at 44px, and «Больше реакций».
+      expect(await quick.count(), "the bar holds fewer than ❤️, five more and «Больше реакций»").toBeGreaterThanOrEqual(7);
+      await expect(bar.getByRole("button", { name: "Больше реакций" })).toHaveCount(1);
+      const barBox = await requiredBox(bar, "reaction bar");
       const boxes = await boxesOf(quick);
-      expectFingerSized(boxes, "action menu quick reaction");
-      expectInside(boxes, menuBox, "action menu quick reaction");
-      expectOnScreen(menuBox, device.viewport, "action menu");
+      expectFingerSized(boxes, "menu quick reaction");
+      expectInside(boxes, barBox, "menu quick reaction");
+      expectOnScreen(barBox, device.viewport, "reaction bar");
+      expectOnScreen(await requiredBox(menu, "action menu"), device.viewport, "action menu");
     });
 
     test("the full reaction catalog is finger-sized, on screen, and reaches its last emoji", async ({ page }) => {
@@ -98,6 +111,7 @@ for (const device of FINGERS) {
       const cells = grid.getByRole("button");
 
       expectFingerSized(await boxesOf(cells), "reaction catalog emoji cell");
+      expectFingerSized(await boxesOf(page.getByTestId("reaction-emoji-recent").getByRole("button")), "reaction catalog recent emoji");
       expectFingerTall(await boxesOf(page.getByTestId("reaction-emoji-categories").getByRole("button")), "reaction catalog category");
       expectFingerTall(await boxesOf(page.locator('label:has([data-testid="reaction-emoji-search"])')), "reaction catalog search");
       await expectNoHorizontalOverflow(grid, "reaction catalog grid");
@@ -117,36 +131,13 @@ for (const device of FINGERS) {
     });
 
     if (device.viewport.width >= 640) {
-      test("the hover bar's quick reactions are finger-sized and fit inside their picker", async ({ page }) => {
+      test("a finger is not offered the hover ❤️, which only a hovering pointer can reach", async ({ page }) => {
+        // The hover cluster used to be laid out under a finger too, at 32px.
+        // Its replacement is not in the layout at all without hover.
         await openFixture(page);
-        const bubble = page.locator('[data-message-bubble="true"]').nth(2);
-        await bubble.hover();
-        const trigger = bubble.getByRole("button", { name: "Реакция" });
-        const pressedAt = await requiredBox(trigger, "reaction trigger before the press");
-        await trigger.click();
-        const picker = page.locator("[data-reaction-menu]");
-        await expect(picker).toBeVisible();
-        const quick = quickReactions(picker);
-        await expect(quick).toHaveCount(7);
-        const pickerBox = await requiredBox(picker, "quick reaction picker");
-        const boxes = await boxesOf(quick);
-        expectFingerSized(boxes, "hover quick reaction");
-        expectInside(boxes, pickerBox, "hover quick reaction");
-        expectOnScreen(pickerBox, device.viewport, "quick reaction picker");
-
-        // The taller picker has to lift further. At the pointer's lift it would
-        // sit on the button that opened it. The trigger is measured again once
-        // the picker is open, which is the geometry a person sees; the box from
-        // before the press is only there to explain a failure.
-        const triggerBox = await requiredBox(trigger, "reaction trigger");
-        const where = describeBoxes([pickerBox, triggerBox, pressedAt]);
-        if (pickerBox.y < triggerBox.y) {
-          expect(pickerBox.y + pickerBox.height, `the quick picker covers its trigger:\n${where}`)
-            .toBeLessThanOrEqual(triggerBox.y + 0.5);
-        } else {
-          expect(pickerBox.y, `the quick picker covers its trigger:\n${where}`)
-            .toBeGreaterThanOrEqual(triggerBox.y + triggerBox.height - 0.5);
-        }
+        const button = page.locator('[data-message-bubble="true"]').nth(2).locator("[data-message-react-button]");
+        await expect(button).toHaveCount(1);
+        expect(await button.evaluate((node) => getComputedStyle(node).display)).toBe("none");
       });
     }
 
@@ -164,7 +155,7 @@ for (const device of FINGERS) {
 
         await openActionMenu(page);
         await expectClearOfHardware(page, insets, `${device.name}, action menu`);
-        await page.locator("[data-action-menu]").getByRole("button", { name: "Больше реакций" }).click();
+        await page.locator("[data-reaction-bar]").getByRole("button", { name: "Больше реакций" }).click();
         await expect(page.getByTestId("reaction-emoji-grid")).toBeVisible();
         await expectClearOfHardware(page, insets, `${device.name}, reaction catalog`);
       });
@@ -187,26 +178,36 @@ test.describe("emoji under a cursor — 1440x900", () => {
     await page.getByRole("button", { name: "Эмодзи", exact: true }).click();
 
     const menu = await openActionMenu(page);
-    expectHeights(await boxesOf(quickReactions(menu)), 40, "action menu quick reaction");
+    const strip = page.locator("[data-reaction-bar]");
+    const stripReactions = await boxesOf(quickReactions(strip));
+    expect(stripReactions.length, "the strip lost ❤️, the six or «Больше реакций»").toBe(8);
+    expectHeights(stripReactions, 36, "menu quick reaction");
     expect((await requiredBox(menu, "action menu")).width, "action menu width").toBe(256);
 
-    await menu.getByRole("button", { name: "Больше реакций" }).click();
+    await strip.getByRole("button", { name: "Больше реакций" }).click();
     const catalogGrid = page.getByTestId("reaction-emoji-grid");
     await expect(catalogGrid).toBeVisible();
+    await settleAnimations(page);
     expectHeights(await boxesOf(catalogGrid.getByRole("button")), 28, "reaction catalog emoji cell");
     expect(await columnsOf(catalogGrid), "reaction catalog columns").toBe(8);
     await page.keyboard.press("Escape");
     await expect(page.locator("[data-reaction-menu]")).toHaveCount(0);
 
+    // The hover ❤️ beside a hovered message's time, and the column its hover opens.
     const bubble = page.locator('[data-message-bubble="true"]').nth(2);
     await bubble.hover();
-    await bubble.getByRole("button", { name: "Реакция" }).click();
-    const picker = page.locator("[data-reaction-menu]");
-    await expect(picker).toBeVisible();
-    const quick = await boxesOf(quickReactions(picker));
-    expectHeights(quick, 32, "hover quick reaction");
-    expect(quick.every((box) => box.width === 32), `hover quick reaction widths: ${JSON.stringify(quick)}`).toBe(true);
-    expect((await requiredBox(picker, "quick reaction picker")).width, "quick reaction picker width").toBe(284);
+    const heart = bubble.locator("[data-message-react-button]");
+    await expect(heart).toBeVisible();
+    const heartBox = await requiredBox(heart, "hover ❤️");
+    expect([heartBox.width, heartBox.height], "the hover ❤️ is the designed 28px round").toEqual([28, 28]);
+    await heart.hover();
+    const column = page.locator("[data-reaction-column]");
+    await expect(column).toBeVisible();
+    await settleAnimations(page);
+    const columnReactions = await boxesOf(quickReactions(column));
+    expect(columnReactions.length, "the column lost ❤️, the six or «Больше реакций»").toBe(8);
+    expectHeights(columnReactions, 36, "column quick reaction");
+    expect(columnReactions.every((box) => box.width === 36), `column quick reaction widths: ${JSON.stringify(columnReactions)}`).toBe(true);
   });
 });
 
@@ -251,16 +252,36 @@ async function openActionMenu(page: Page): Promise<Locator> {
   await page.locator('[data-message-bubble="true"]').nth(2).click({ button: "right" });
   const menu = page.locator("[data-action-menu]");
   await expect(menu).toBeVisible();
+  // Placed once it has been measured: wait for the frame it lands in.
+  await expect(page.locator("[data-reaction-bar]")).toBeVisible();
+  await page.waitForTimeout(250);
+  await settleAnimations(page);
   return menu;
 }
 
 async function openCatalogFromActionMenu(page: Page): Promise<Locator> {
-  const menu = await openActionMenu(page);
-  await menu.getByRole("button", { name: "Больше реакций" }).click();
+  await openActionMenu(page);
+  await page.locator("[data-reaction-bar]").getByRole("button", { name: "Больше реакций" }).click();
   const catalog = page.locator("[data-reaction-menu]");
   await expect(page.getByTestId("reaction-emoji-grid")).toBeVisible();
   await expect(page.getByTestId("reaction-emoji-grid").getByRole("button")).toHaveCount(40);
+  await page.waitForTimeout(250);
+  await settleAnimations(page);
   return catalog;
+}
+
+/**
+ * Menus, the bar, the column and the catalog open with a short scale up from
+ * .98 (`kub-menu-in`). A box read before that finishes is 2% short — a 28px
+ * cell measured 27.4 — so sizes are read once every entry animation has run.
+ */
+async function settleAnimations(page: Page) {
+  await page.evaluate(async () => {
+    const running = document
+      .getAnimations()
+      .filter((animation) => animation.playState === "running" && animation.effect?.getTiming().iterations !== Infinity);
+    await Promise.all(running.map((animation) => animation.finished.catch(() => undefined)));
+  });
 }
 
 function quickReactions(container: Locator): Locator {

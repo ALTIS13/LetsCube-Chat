@@ -2,20 +2,30 @@ import { expect, test } from "@playwright/test";
 import { findFirstAvailableQaRole, gotoOrSkip, loginAsRoleOrSkip } from "./helpers/auth";
 
 /**
- * The cluster of actions that appears beside a message on hover.
+ * What appears beside a message on hover.
  *
- * Two things went wrong with it, both reported and both measured. It was
- * anchored to the bubble's top, so where it sat relative to the message
- * changed with the message — 4px below centre on one line, 8px above on two.
- * And the message row hides its overflow, so a bubble at full width left the
- * cluster nothing: on a 1024px window it started at x=347 against a clip edge
- * of x=396, with 49px of it simply gone.
+ * It used to be a cluster of three actions, and two things went wrong with it,
+ * both reported and both measured. It was anchored to the bubble's top, so
+ * where it sat relative to the message changed with the message — 4px below
+ * centre on one line, 8px above on two. And the message row hides its
+ * overflow, so a bubble at full width left the cluster nothing: on a 1024px
+ * window it started at x=347 against a clip edge of x=396, with 49px of it
+ * simply gone.
+ *
+ * 2026-09-11, the owner's Telegram message actions (D-071): the cluster was
+ * replaced by one round ❤️ at the bubble's bottom corner, beside its time, and
+ * the reserve kept for it is only the button's width. The same two failures are
+ * what can go wrong with it, so they are what is pinned: it keeps to the
+ * bubble's bottom edge whatever the message's height, it stands beside the
+ * bubble rather than over its text or time, and no ancestor cuts it off.
+ * Measured on the DEV preview fixture at 1440, 1024 and 800 wide: 28px round,
+ * 1px above the bubble's bottom edge, 5px clear of its side, never clipped.
  */
 test.describe("LETSCUBE message hover actions", () => {
-  test("the cluster is centred on its message and never clipped", async ({ page }) => {
+  test("the hover ❤️ keeps to its message's bottom edge, stands beside it, and is never clipped", async ({ page }) => {
     test.skip(
       (page.viewportSize()?.width ?? 0) < 640,
-      "the hover cluster is not rendered on a touch layout",
+      "the hover ❤️ is not rendered on a touch layout",
     );
     const role = findFirstAvailableQaRole(["owner", "tech_admin"], { includeDefault: true });
     test.skip(!role, "QA credentials or auth state are not configured");
@@ -41,28 +51,34 @@ test.describe("LETSCUBE message hover actions", () => {
       await page.waitForTimeout(320);
 
       const report = await bubble.evaluate((node) => {
-        const cluster =
-          node.querySelector('[aria-label="Реакция"]')?.parentElement ??
-          node.querySelector('[aria-label="Ответить"]')?.parentElement;
-        if (!cluster) return null;
+        const button = node.querySelector("[data-message-react-button]");
+        // A message that cannot take a reaction yet — one still sending — has
+        // no button to measure.
+        if (!button || window.getComputedStyle(button).display === "none") return null;
         const bubbleBox = node.getBoundingClientRect();
-        const clusterBox = cluster.getBoundingClientRect();
+        const buttonBox = button.getBoundingClientRect();
 
         let clipped = false;
-        let parent = node.parentElement;
+        let parent = button.parentElement;
         while (parent && parent !== document.body) {
           const style = window.getComputedStyle(parent);
           if (style.overflowX !== "visible" || style.overflowY !== "visible") {
             const box = parent.getBoundingClientRect();
-            if (clusterBox.left < box.left - 0.5 || clusterBox.right > box.right + 0.5) clipped = true;
+            if (
+              buttonBox.left < box.left - 0.5 ||
+              buttonBox.right > box.right + 0.5 ||
+              buttonBox.top < box.top - 0.5 ||
+              buttonBox.bottom > box.bottom + 0.5
+            ) {
+              clipped = true;
+            }
           }
           parent = parent.parentElement;
         }
 
         return {
-          offset: Math.round(
-            clusterBox.top + clusterBox.height / 2 - (bubbleBox.top + bubbleBox.height / 2),
-          ),
+          bottomGap: Math.round(bubbleBox.bottom - buttonBox.bottom),
+          overlap: Math.max(0, Math.min(bubbleBox.right, buttonBox.right) - Math.max(bubbleBox.left, buttonBox.left)),
           clipped,
         };
       });
@@ -70,12 +86,13 @@ test.describe("LETSCUBE message hover actions", () => {
       if (!report) continue;
       checked += 1;
       expect(
-        Math.abs(report.offset),
-        `the cluster sits ${report.offset}px off the message's centre, so its position shifts with the message`,
+        Math.abs(report.bottomGap),
+        `the ❤️ sits ${report.bottomGap}px off the message's bottom edge, so its place moves with the message`,
       ).toBeLessThanOrEqual(2);
-      expect(report.clipped, "an ancestor is cutting the cluster off").toBe(false);
+      expect(report.overlap, "the ❤️ covers the bubble it belongs to").toBeLessThanOrEqual(0.5);
+      expect(report.clipped, "an ancestor is cutting the ❤️ off").toBe(false);
     }
 
-    expect(checked, "no hovered cluster was measured").toBeGreaterThan(0);
+    expect(checked, "no hovered ❤️ was measured").toBeGreaterThan(0);
   });
 });

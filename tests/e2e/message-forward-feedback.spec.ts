@@ -10,8 +10,17 @@ import { expect, test, type Locator, type Page, type Route } from "@playwright/t
  * delivered looked exactly alike, so nobody could tell whether to try again.
  *
  * What is pinned: a delivered forward confirms itself and names the chat; a
- * refused one says so with the server's reason and leaves the choice open; one
- * that never reaches the server is not passed off as sent.
+ * refused one says so with the server's reason and leaves the next attempt one
+ * send away; one that never reaches the server is not passed off as sent.
+ *
+ * 2026-09-11, the owner's Telegram message actions (D-071): choosing the chat
+ * no longer sends anything. The chat opens with the message waiting above its
+ * composer, a comment can be typed beside it, and the send forwards it. The
+ * feedback moved with the send, and so did where a refused forward is kept:
+ * the dialog has already closed, so the message goes back above the composer
+ * instead of the choice staying open in the dialog. That choosing sends
+ * nothing is pinned too — a forward that went out on the click would pass the
+ * rest of this file.
  *
  * The backend is a route mock on the fixture host, so the dev server has to be
  * started with `VITE_SUPABASE_URL=http://127.0.0.1:54321`. The spec refuses to
@@ -53,14 +62,14 @@ test.describe("forwarding a message says what happened", () => {
 
   test("a forward the server delivers confirms itself and names the chat", async ({ page }) => {
     const forwards = await installBackend(page, "deliver");
-    const { dialog } = await forwardFromSourceChat(page);
+    const { draft } = await forwardFromSourceChat(page, forwards);
 
     const feedback = page.getByTestId("kub-feedback-viewport");
     const confirmation = feedback.getByRole("status");
     await expect(confirmation).toContainText("Сообщение переслано");
     await expect(confirmation).toContainText(TARGET_NAME);
     await expect(feedback.getByRole("alert")).toHaveCount(0);
-    await expect(dialog).toHaveCount(0);
+    await expect(draft, "a delivered forward is still waiting above the composer").toHaveCount(0);
 
     expect(forwards).toHaveLength(1);
     expect(forwards[0]).toMatchObject({
@@ -70,9 +79,9 @@ test.describe("forwarding a message says what happened", () => {
     });
   });
 
-  test("a forward the server refuses is reported with its reason, and the choice stays open", async ({ page }) => {
+  test("a forward the server refuses is reported with its reason, and the message waits to be sent again", async ({ page }) => {
     const forwards = await installBackend(page, "refuse");
-    const { dialog, target } = await forwardFromSourceChat(page);
+    const { draft } = await forwardFromSourceChat(page, forwards);
 
     const feedback = page.getByTestId("kub-feedback-viewport");
     const alert = feedback.getByRole("alert");
@@ -80,28 +89,30 @@ test.describe("forwarding a message says what happened", () => {
     await expect(alert).toContainText("Недостаточно прав для этого действия.");
     await expect(feedback.getByRole("status")).toHaveCount(0);
 
-    // The dialog is where the next attempt starts, so it is not taken away, and
-    // the row is offered again rather than left saying it is still sending.
-    await expect(dialog).toBeVisible();
-    await expect(target).toBeEnabled();
-    await expect(dialog).not.toContainText("отправка…");
+    // Above the composer is where the next attempt starts, so the refused
+    // message goes back there rather than being dropped with the send.
+    await expect(draft).toBeVisible();
+    await expect(draft).toContainText("Переслать сообщение");
     expect(forwards).toHaveLength(1);
   });
 
   test("a forward that never reaches the server is not passed off as sent", async ({ page }) => {
-    await installBackend(page, "unreachable");
-    const { dialog } = await forwardFromSourceChat(page);
+    const forwards = await installBackend(page, "unreachable");
+    const { draft } = await forwardFromSourceChat(page, forwards);
 
     const feedback = page.getByTestId("kub-feedback-viewport");
     const alert = feedback.getByRole("alert");
     await expect(alert).toContainText("Не удалось переслать сообщение");
     await expect(alert).toContainText("Сетевой сбой");
     await expect(feedback.getByRole("status")).toHaveCount(0);
-    await expect(dialog).toBeVisible();
+    await expect(draft).toBeVisible();
   });
 });
 
-async function forwardFromSourceChat(page: Page): Promise<{ dialog: Locator; target: Locator }> {
+async function forwardFromSourceChat(
+  page: Page,
+  forwards: Array<Record<string, unknown>>,
+): Promise<{ draft: Locator }> {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   const row = page.getByTestId("chat-list-item").filter({ hasText: SOURCE_NAME });
   await expect(row).toBeVisible();
@@ -110,13 +121,22 @@ async function forwardFromSourceChat(page: Page): Promise<{ dialog: Locator; tar
   const bubble = page.locator('[data-message-bubble="true"]').filter({ hasText: MESSAGE_TEXT });
   await expect(bubble).toBeVisible();
   await bubble.click({ button: "right" });
-  await page.locator("[data-action-menu]").getByRole("button", { name: "Переслать", exact: true }).click();
+  await page.locator("[data-action-menu]").getByRole("menuitem", { name: "Переслать", exact: true }).click();
 
   const dialog = page.getByRole("dialog").filter({ hasText: "Переслать в…" });
   await expect(dialog).toBeVisible();
-  const target = dialog.getByRole("button", { name: new RegExp(TARGET_NAME) });
-  await target.click();
-  return { dialog, target };
+  await dialog.getByRole("button", { name: new RegExp(TARGET_NAME) }).click();
+
+  // Choosing the chat sends nothing: the dialog closes, and the message waits
+  // above the target chat's composer until the send.
+  await expect(dialog).toHaveCount(0);
+  const draft = page.getByTestId("composer-forward-draft");
+  await expect(draft).toContainText("Переслать сообщение");
+  await expect(draft).toContainText(MESSAGE_TEXT);
+  expect(forwards, "choosing the chat already sent the forward").toHaveLength(0);
+
+  await page.getByRole("button", { name: "Отправить", exact: true }).click();
+  return { draft };
 }
 
 async function installSession(page: Page) {
