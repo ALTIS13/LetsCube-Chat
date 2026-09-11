@@ -6376,6 +6376,13 @@ are ready, the failures are sources deleted since, and no image or video message
 variants. Whether the server's limit rises to the client's 250 MB is the owner's decision; until then the send
 path is to name the real limit.
 
+**Fixed on the branch, in part,** 2026-09-12 in the merge `584a38f` of `fix/media-send-path`, not deployed:
+an upload keeps its HTTP status and the server's stated limit, and the notice names the file and the reason, so a
+refused video says it is larger than the server accepts instead of a guessed «250 МБ»; and one failed attachment
+no longer strands the ones after it. Still open: the server's own limit, which is the owner's decision — raise it
+to the client's 250 MB or cap the client at 50 MB — and uploads while the installed app is in the background,
+which need an iPhone.
+
 ## D-114 `[ ]` A 300 KB photo takes a very long time to upload
 
 **Severity:** medium. The same report; not yet reproduced.
@@ -6398,6 +6405,15 @@ days, 33 were PNG made WebP, 5 JPEG made WebP, 1 WebP and 1 JPEG left as picked 
 metadata; no HEIC was picked at all in that time, so the HEIC path did not occur in production. Whether an
 iPhone encodes WebP stays open, since storage records the type the client declared. Image variants: 165 ready,
 3 failed as unreadable sources, the last on 2026-09-04.
+
+**Fixed on the branch** 2026-09-12 in the merge `584a38f`, not deployed. Attachments upload up to three at a
+time and are inserted strictly in pick order, so a photo no longer waits for a video picked before it; a small
+upload shows a moving bar instead of a frozen «0%»; and a send no longer waits on the chat's `updated_at`.
+On the photo path the canvas's real encoder decides: JPEG at 0.85 where WebP cannot be written, the file named
+and typed from what was written, HEIC converted where the engine decodes it, and a small JPEG that needs no
+resize sent as picked. Measured on the fixture, the first photo behind a video lands 1.5 s sooner, and a 12 MP
+camera JPEG through a Safari-style encoder goes as a 0.93–0.98 MB JPEG instead of 4.19 MB whole. Safari's
+encoder, the HEIC conversion's memory on large photos and the JPEG sizes need a real iPhone.
 
 ## D-115 `[ ]` Photos sent together arrive as separate messages, not as one album
 
@@ -6431,6 +6447,11 @@ most likely size and cropping: a tall screenshot is stored at 886×1920 and prev
 and cropped on a 3× phone, with WebP's 4:2:0 colour a smaller factor. Keeping at least 1080 px on the short side
 is in progress on `fix/media-send-path`; how a tall picture sits in its bubble is a visible change for the
 owner to choose from renders.
+
+**In part on the branch** 2026-09-12 in the merge `584a38f`: a tall picture keeps 1080 px across, so a
+1290×2796 screenshot is stored at 1080×2341 instead of 886×1920. Still open: the worker's 1280 px preview needs
+the same short-side rule; how a tall picture sits in its bubble waits on the owner's choice between four
+rendered crops; and the zoom of D-087 needs a real iPhone before it ships.
 
 ## D-117 `[x]` In the light theme the time in your own message is under the contrast floor
 

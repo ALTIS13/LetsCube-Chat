@@ -1,5 +1,20 @@
 # QA Results
 
+## 2026-09-12 - The media send path merged onto the working branch, and checked there
+
+The fixes of `fix/media-send-path` for D-113, D-114 and D-116, merged in `584a38f`; not deployed.
+
+- No conflicts. Typecheck clean; production build clean, `sw.js` build `3e31195fcc8481d5`; unit suite
+  1753 of 1753.
+- Browser checks on the fixture server, restarted after the merge and checked to serve it: 157 passed and 38 skipped (14 by media-send-without-compression's shape filters, 24 video-message tests that need production credentials), none failed or flaky, on Chromium 1440, Chromium 390 and WebKit 390.
+- The branch's own checks, in its commits: eight of its tests were shown to fail with their fix undone; one flaky
+  run was traced to the dev server's error overlay, and the spec now records page errors and fails on any it does
+  not expect.
+- Not checked on a real iPhone: Safari's WebP encoding, the HEIC conversion, the JPEG sizes, uploads while the app
+  is in the background, and whether the new error notice reads well.
+- The crop of a tall picture in its bubble was rendered four ways — today's centre crop, a taller bubble, the whole
+  picture over a blurred copy, a crop from the top — and sent to the owner; nothing changes there until he chooses.
+
 ## 2026-09-11 - Media and storage measured on production, read-only
 
 For D-113 to D-116 and the storage assessment. One read-only transaction ending in rollback, aggregates only — no
