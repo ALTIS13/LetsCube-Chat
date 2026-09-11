@@ -1,5 +1,6 @@
 import { Upload } from "tus-js-client";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
+import { describeUploadFailure, type UploadFailure, type UploadFailureReason } from "@/lib/uploadFailure";
 
 export const RESUMABLE_UPLOAD_THRESHOLD_BYTES = 6 * 1024 * 1024;
 export const RESUMABLE_UPLOAD_CHUNK_BYTES = 6 * 1024 * 1024;
@@ -14,13 +15,30 @@ export type ResumableStorageUploadErrorCode =
   | "upload_failed"
   | "upload_aborted";
 
+/**
+ * A resumable upload that did not finish.
+ *
+ * The message stays one bounded sentence, and neither the URL nor the response
+ * body is kept. What is kept is what the server's answer said about why:
+ * tus-js-client's `onError` used to be the end of that, so a 413 and a dropped
+ * connection read the same, and D-113 could not be told apart from anything
+ * else (`lib/uploadFailure.ts`).
+ */
 export class ResumableStorageUploadError extends Error {
   readonly code: ResumableStorageUploadErrorCode;
+  readonly reason: UploadFailureReason;
+  /** The HTTP status the server refused the upload with; null when no answer came. */
+  readonly status: number | null;
+  /** The limit the server stated in `Tus-Max-Size`; null when it stated none. */
+  readonly limitBytes: number | null;
 
-  constructor(code: ResumableStorageUploadErrorCode, message: string) {
+  constructor(code: ResumableStorageUploadErrorCode, message: string, failure?: UploadFailure) {
     super(message);
     this.name = "ResumableStorageUploadError";
     this.code = code;
+    this.reason = failure?.reason ?? (code === "auth_unavailable" ? "session" : "unknown");
+    this.status = failure?.status ?? null;
+    this.limitBytes = failure?.limitBytes ?? null;
   }
 }
 
@@ -123,10 +141,10 @@ export function startResumableStorageUpload(
     rejectResult = reject;
   });
 
-  const settleFailure = (code: ResumableStorageUploadErrorCode, message: string) => {
+  const settleFailure = (code: ResumableStorageUploadErrorCode, message: string, failure?: UploadFailure) => {
     if (settled) return;
     settled = true;
-    rejectResult(new ResumableStorageUploadError(code, message));
+    rejectResult(new ResumableStorageUploadError(code, message, failure));
   };
 
   const initialize = async () => {
@@ -154,8 +172,8 @@ export function startResumableStorageUpload(
           cacheControl: cacheControlFor(options.objectName),
         },
         chunkSize: RESUMABLE_UPLOAD_CHUNK_BYTES,
-        onError: () => {
-          settleFailure("upload_failed", UPLOAD_FAILED_MESSAGE);
+        onError: (error) => {
+          settleFailure("upload_failed", UPLOAD_FAILED_MESSAGE, describeUploadFailure(error));
         },
         onProgress: (bytesUploaded, bytesTotal) => {
           if (!settled) {
@@ -182,8 +200,8 @@ export function startResumableStorageUpload(
         upload.resumeFromPreviousUpload(previousUpload);
       }
       upload.start();
-    } catch {
-      settleFailure("upload_failed", UPLOAD_FAILED_MESSAGE);
+    } catch (error) {
+      settleFailure("upload_failed", UPLOAD_FAILED_MESSAGE, describeUploadFailure(error));
     }
   };
 

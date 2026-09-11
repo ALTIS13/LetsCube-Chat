@@ -1007,6 +1007,31 @@ export function useMessages(
     return { data: existing, error: result.error, timedOut: false };
   }, [fetchMessageByClientId, supabase]);
 
+  /**
+   * Moves the chat's `updated_at` up to a message that was just confirmed.
+   *
+   * Not awaited, and nothing waits for it. The send path used to await it before
+   * resolving, so each attachment of a send waited one more round trip before
+   * the next could be inserted, and a slow `chats` request held the whole send.
+   * Nothing depends on it landing first:
+   * - no trigger writes `chats.updated_at` on a message insert, and only an
+   *   owner or an admin may write it (`Chat admins update chat`), so for any
+   *   other member this request was already a no-op;
+   * - `public.chats` is not in the realtime publication (see `useChats`), so no
+   *   client hears it land;
+   * - the list is ordered by each chat's last message (`sortChatsForSidebar`),
+   *   and this client put that message in the store before this is called.
+   * `.lt` keeps two of these that land out of order from moving it back.
+   */
+  const touchChatUpdatedAt = useCallback((targetChatId: string, at: string) => {
+    void supabase
+      .from("chats")
+      .update({ updated_at: at })
+      .eq("id", targetChatId)
+      .lt("updated_at", at)
+      .then(() => undefined, () => undefined);
+  }, [supabase]);
+
   const sendLocalMessage = useCallback(async (input: SendMessageInput) => {
     const user = currentUserRef.current;
     const activeChatId = input.targetChatId ?? chatIdRef.current;
@@ -1069,7 +1094,7 @@ export function useMessages(
     if (ack.data) {
       replaceMessage(activeChatId, tempId, ack.data);
       updateChatLastMessage(activeChatId, ack.data);
-      await supabase.from("chats").update({ updated_at: ack.data.created_at }).eq("id", activeChatId);
+      touchChatUpdatedAt(activeChatId, ack.data.created_at);
       return ack.data;
     }
 
@@ -1092,7 +1117,7 @@ export function useMessages(
       if (existing) {
         replaceMessage(activeChatId, tempId, existing);
         updateChatLastMessage(activeChatId, existing);
-        await supabase.from("chats").update({ updated_at: existing.created_at }).eq("id", activeChatId);
+        touchChatUpdatedAt(activeChatId, existing.created_at);
         return existing;
       }
       const failedMessage: MessageWithSender = {
@@ -1127,7 +1152,7 @@ export function useMessages(
     replaceMessage(activeChatId, tempId, failedMessage);
     updateChatLastMessage(activeChatId, failedMessage);
     return null;
-  }, [addMessage, fetchMessageByClientId, insertMessageWithAck, replaceMessage, supabase, updateChatLastMessage]);
+  }, [addMessage, fetchMessageByClientId, insertMessageWithAck, replaceMessage, touchChatUpdatedAt, updateChatLastMessage]);
 
   const sendMessage = useCallback(async (content: string, replyToId?: string) => {
     return sendLocalMessage({

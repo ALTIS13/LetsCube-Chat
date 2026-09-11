@@ -2,8 +2,6 @@ import type { StagedAttachment, StagedAttachmentUpload } from "./stagedAttachmen
 import { createElement } from "react";
 
 const SEND_FAILED_MESSAGE = "Не удалось отправить сообщение.";
-const ATTACHMENT_SIZE_LABEL = "50 МБ";
-const VIDEO_ATTACHMENT_SIZE_LABEL = "250 МБ";
 
 export interface StagedUploadScopeToken {
   readonly chatId: string;
@@ -188,36 +186,19 @@ export function markStagedAttachmentSendFailed(
   };
 }
 
-export function getAttachmentUploadErrorMessage(
-  error: unknown,
-  kind: StagedAttachment["kind"],
-): string {
-  const status = typeof error === "object" && error
-    ? String((error as { status?: unknown; statusCode?: unknown }).status ?? (error as { statusCode?: unknown }).statusCode ?? "")
-    : "";
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  const details = `${status} ${message}`.toLowerCase();
-  if (
-    details.includes("413") ||
-    details.includes("payload") ||
-    details.includes("too large") ||
-    details.includes("file size") ||
-    details.includes("size limit") ||
-    details.includes("exceeded")
-  ) {
-    const maxLabel = kind === "video" || kind === "video_message"
-      ? VIDEO_ATTACHMENT_SIZE_LABEL
-      : ATTACHMENT_SIZE_LABEL;
-    return `Файл слишком большой для загрузки. Максимум ${maxLabel}.`;
-  }
-  if (details.includes("network") || details.includes("fetch") || details.includes("timeout")) {
-    return "Не удалось загрузить файл. Проверьте соединение и попробуйте снова.";
-  }
-  return "Не удалось загрузить файл. Попробуйте ещё раз.";
-}
-
+/**
+ * The bar under a staged attachment while it is on its way.
+ *
+ * A percentage only when there is a real one: the resumable path reports its
+ * bytes. An upload of 6 MiB or less goes as one multipart request, and fetch
+ * reports no upload progress, so its bar used to sit at «0%» until the upload
+ * was over (D-114). With `progress: null` an uploading attachment — and one
+ * waiting for a free upload — shows a bar that says it is working and claims no
+ * number: no `aria-valuenow`, no percentage.
+ */
 export function StagedAttachmentTransferProgress({ attachment }: { attachment: StagedAttachment }) {
-  const progress = attachment.status === "uploading" && typeof attachment.progress === "number"
+  const uploading = attachment.status === "uploading";
+  const progress = uploading && typeof attachment.progress === "number"
     ? Math.min(100, Math.max(0, Math.round(attachment.progress)))
     : null;
 
@@ -247,6 +228,23 @@ export function StagedAttachmentTransferProgress({ attachment }: { attachment: S
         `${progress}%`,
       ),
     )
+    : uploading
+      ? createElement(
+        "div",
+        {
+          "data-testid": "staged-attachment-upload-progress",
+          role: "progressbar",
+          className: "flex h-full items-center",
+          "aria-label": "Загрузка вложения",
+        },
+        createElement(
+          "div",
+          { className: "h-1 w-full overflow-hidden rounded-full bg-[var(--kub-surface-3)]" },
+          createElement("div", {
+            className: "h-full w-2/3 animate-pulse rounded-full bg-[var(--kub-cyan)]",
+          }),
+        ),
+      )
     : attachment.status === "sending"
       ? createElement(
         "div",

@@ -1,4 +1,8 @@
 import { expect, test } from "@playwright/test";
+// Imported statically, as `resumable-media-upload.spec.ts` imports the module
+// that uses it: in one worker a dynamic import of a module the loader already
+// compiled for a static one fails with «exports is not defined».
+import { describeUploadFailure, uploadFailureMessage } from "../../artifacts/kub/src/lib/uploadFailure";
 import { gotoOrSkip, loadQaCredentials, loginIfNeeded } from "./helpers/auth";
 
 test.use({
@@ -8,17 +12,18 @@ test.use({
 });
 
 test.describe("KUB video recorders", () => {
-  test("uses the 250 MB payload-too-large copy for video circles", async () => {
-    const { getAttachmentUploadErrorMessage } = await import(
-      "../../artifacts/kub/src/lib/stagedUploadWorkflow"
-    );
+  test("a refused video names the file and never guesses the server's limit", async () => {
+    // The 413 copy used to read «Максимум 250 МБ» — the client's own limit —
+    // whatever limit had refused the file (D-113). The limit is printed now only
+    // when the server states one; `tests/unit/upload-failure.test.mts` holds the rest.
+    const circle = uploadFailureMessage("Видео-сообщение", describeUploadFailure({ status: 413 }));
+    expect(circle.startsWith("Видео-сообщение")).toBe(true);
+    expect(circle).toContain("больше, чем принимает сервер");
+    expect(circle).not.toContain("250");
 
-    expect(getAttachmentUploadErrorMessage({ status: 413 }, "video_message")).toBe(
-      "Файл слишком большой для загрузки. Максимум 250 МБ.",
-    );
-    expect(getAttachmentUploadErrorMessage(new Error("payload too large"), "video")).toBe(
-      "Файл слишком большой для загрузки. Максимум 250 МБ.",
-    );
+    const video = uploadFailureMessage("trip.mp4", describeUploadFailure(new Error("payload too large")));
+    expect(video.startsWith("trip.mp4")).toBe(true);
+    expect(video).not.toContain("МБ");
   });
 
   test("switches the composer recorder mode with desktop context click", async ({ page }) => {

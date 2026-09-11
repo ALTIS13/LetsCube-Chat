@@ -1,5 +1,16 @@
 import { DEFAULT_MEDIA_QUALITY, getImageUploadProfile, type MediaQuality } from "./mediaQuality.ts";
 import { ORIGINAL_PREVIEW_MAX_DIMENSION, ORIGINAL_PREVIEW_QUALITY } from "./mediaCompression.ts";
+import {
+  JPEG_TYPE,
+  WEBP_TYPE,
+  compressedPhotoEncoding,
+  compressedPhotoSize,
+  encodedFileIdentity,
+  encoderWroteType,
+  isCanvasPhotoCandidate,
+  preferEncodedPhoto,
+  shouldKeepPickedJpeg,
+} from "./photoEncoding.ts";
 
 const MAX_AVATAR_UPLOAD_BYTES = 2 * 1024 * 1024;
 const MAX_AVATAR_SOURCE_BYTES = 15 * 1024 * 1024;
@@ -50,17 +61,64 @@ export async function prepareAvatarImage(file: File): Promise<File> {
   });
 }
 
+export interface PreparedChatImage {
+  /** What goes up: the encoded photo, or the picked file when encoding had nothing better to offer. */
+  file: File;
+  /** The size of `file`, from the one decode made here; null when it was not decoded. */
+  dimensions: MediaDimensions | null;
+}
+
+/**
+ * A chat photo, compressed. Every decision is in `lib/photoEncoding.ts`: the
+ * encoder the engine really has, the name and type from the bytes it really
+ * wrote, HEIC wherever it decodes, and no encode for nothing.
+ *
+ * The photo is decoded once, and that decode's size comes back with it, so
+ * staging no longer decodes it a second time to measure it.
+ */
 export async function prepareChatImageAttachment(
   file: File,
   mediaQuality: MediaQuality = DEFAULT_MEDIA_QUALITY,
-): Promise<File> {
-  if (!canOptimizeRasterImage(file)) return file;
-  const profile = getImageUploadProfile(mediaQuality);
-  return optimizeRasterImage(file, {
-    maxDimension: profile.maxDimension,
-    quality: profile.quality,
-    suffix: "image",
-  });
+): Promise<PreparedChatImage> {
+  if (!isCanvasPhotoCandidate(file.type) || typeof document === "undefined") return { file, dimensions: null };
+
+  let image: HTMLImageElement;
+  try {
+    image = await loadImage(file);
+  } catch {
+    // An engine that cannot decode it — a HEIC outside Safari — sends it as picked, as before.
+    return { file, dimensions: null };
+  }
+  const source = normalizeDimensions(image.naturalWidth, image.naturalHeight);
+  if (!source) return { file, dimensions: null };
+
+  try {
+    const profile = getImageUploadProfile(mediaQuality);
+    const target = compressedPhotoSize(source.width, source.height, profile.maxDimension);
+    const encoding = compressedPhotoEncoding({ webpEncodes: await canvasEncodesWebp(), webpQuality: profile.quality });
+    if (shouldKeepPickedJpeg({
+      type: file.type,
+      size: file.size,
+      width: source.width,
+      height: source.height,
+      resized: target.resized,
+      outputType: encoding.type,
+    })) {
+      return { file, dimensions: source };
+    }
+
+    const blob = await drawImageToBlob(image, target, encoding);
+    const identity = blob ? encodedFileIdentity(file.name, "image", blob.type) : null;
+    if (!blob || !identity || !preferEncodedPhoto({ sourceType: file.type, sourceSize: file.size, encodedSize: blob.size })) {
+      return { file, dimensions: source };
+    }
+    return {
+      file: new File([blob], identity.name, { type: identity.type, lastModified: Date.now() }),
+      dimensions: { width: target.width, height: target.height },
+    };
+  } catch {
+    return { file, dimensions: source };
+  }
 }
 
 /**
@@ -68,7 +126,9 @@ export async function prepareChatImageAttachment(
  *
  * The original itself is never touched; this is a second file uploaded beside
  * it. Null when the canvas cannot read the original, or when the preview would
- * be no lighter than the original — then the original is its own preview.
+ * be no lighter than the original — then the original is its own preview. A
+ * preview is a WebP, or a JPEG from an engine that cannot write WebP: the two
+ * addresses a reader derives (`originalPreviewPath`).
  */
 export async function prepareOriginalPreview(file: File): Promise<File | null> {
   if (!canOptimizeRasterImage(file)) return null;
@@ -77,7 +137,35 @@ export async function prepareOriginalPreview(file: File): Promise<File | null> {
     quality: ORIGINAL_PREVIEW_QUALITY,
     suffix: "preview",
   });
-  return preview === file ? null : preview;
+  if (preview === file) return null;
+  return preview.type === WEBP_TYPE || preview.type === JPEG_TYPE ? preview : null;
+}
+
+let webpEncoderProbe: Promise<boolean> | null = null;
+
+/**
+ * Whether this engine's canvas really writes WebP, asked once with a 1x1 canvas.
+ *
+ * Asked for a type it cannot write, a canvas answers with a PNG — as Safari on
+ * Apple platforms most likely does for WebP — so only the answer's own type can
+ * say yes (`encoderWroteType`).
+ */
+export function canvasEncodesWebp(): Promise<boolean> {
+  if (!webpEncoderProbe) webpEncoderProbe = probeCanvasEncoder(WEBP_TYPE);
+  return webpEncoderProbe;
+}
+
+async function probeCanvasEncoder(type: string): Promise<boolean> {
+  if (typeof document === "undefined") return false;
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const blob = await canvasToBlob(canvas, type, 0.8);
+    return encoderWroteType(blob?.type, type);
+  } catch {
+    return false;
+  }
 }
 
 export async function readMediaDimensions(file: File): Promise<MediaDimensions | null> {
@@ -176,25 +264,41 @@ async function optimizeRasterImage(
 
     const width = Math.max(1, Math.round(image.naturalWidth * scale));
     const height = Math.max(1, Math.round(image.naturalHeight * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext("2d", { alpha: true });
-    if (!context) return file;
-    context.imageSmoothingEnabled = true;
-    context.imageSmoothingQuality = "high";
-    context.drawImage(image, 0, 0, width, height);
+    const encoding = compressedPhotoEncoding({ webpEncodes: await canvasEncodesWebp(), webpQuality: options.quality });
+    const blob = await drawImageToBlob(image, { width, height }, encoding);
+    // Named and typed from what the engine wrote: PNG bytes were once labelled WebP here.
+    const identity = blob ? encodedFileIdentity(file.name, options.suffix, blob.type) : null;
+    if (!blob || !identity || blob.size >= file.size) return file;
 
-    const blob = await canvasToBlob(canvas, "image/webp", options.quality);
-    if (!blob || blob.size >= file.size) return file;
-
-    return new File([blob], optimizedFileName(file.name, options.suffix), {
-      type: "image/webp",
+    return new File([blob], identity.name, {
+      type: identity.type,
       lastModified: Date.now(),
     });
   } catch {
     return file;
   }
+}
+
+async function drawImageToBlob(
+  image: HTMLImageElement,
+  size: { width: number; height: number },
+  encoding: { type: string; quality: number },
+): Promise<Blob | null> {
+  const canvas = document.createElement("canvas");
+  canvas.width = size.width;
+  canvas.height = size.height;
+  const opaque = encoding.type === JPEG_TYPE;
+  const context = canvas.getContext("2d", { alpha: !opaque });
+  if (!context) return null;
+  // A JPEG has no transparency: what is transparent would come out black.
+  if (opaque) {
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, size.width, size.height);
+  }
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(image, 0, 0, size.width, size.height);
+  return canvasToBlob(canvas, encoding.type, encoding.quality);
 }
 
 function loadImage(file: File): Promise<HTMLImageElement> {
@@ -215,9 +319,4 @@ function loadImage(file: File): Promise<HTMLImageElement> {
 
 function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob | null> {
   return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
-}
-
-function optimizedFileName(name: string, suffix: string): string {
-  const base = name.replace(/\.[^.]+$/, "") || suffix;
-  return `${base}-${suffix}.webp`;
 }

@@ -166,10 +166,58 @@ test.describe("resumable media upload contracts", () => {
       name: "ResumableStorageUploadError",
       code: "upload_failed",
       message: "Не удалось загрузить файл. Повторите попытку.",
+      reason: "unknown",
+      status: null,
+      limitBytes: null,
     });
     expect(String(error)).not.toContain("project.supabase.co");
     expect(String(error)).not.toContain("response-body-secret");
     expect((error as { cause?: unknown }).cause).toBeUndefined();
+  });
+
+  test("keeps the status and the server's own limit from a refusal, and still nothing sensitive", async () => {
+    // D-113: `onError` used to be where the status ended, so a 413 and a dropped
+    // connection read the same on the tile.
+    const harness = createUploadHarness();
+    const handle = startResumableStorageUpload(harness.adapterOptions());
+    const refusal = Object.assign(
+      new Error(
+        "tus: unexpected response while uploading chunk, originated from request (method: PATCH, url: https://project.supabase.co/storage/v1/upload/resumable/private, response code: 413, response text: response-body-secret, request id: n/a)",
+      ),
+      {
+        originalRequest: { getMethod: () => "PATCH" },
+        originalResponse: {
+          getStatus: () => 413,
+          getHeader: (name: string) => (name === "Tus-Max-Size" ? "52428800" : undefined),
+          getBody: () => "response-body-secret",
+        },
+      },
+    );
+
+    await harness.started;
+    harness.options?.onError?.(refusal);
+    const error = await handle.result.catch((failure: unknown) => failure);
+
+    expect(error).toMatchObject({
+      name: "ResumableStorageUploadError",
+      code: "upload_failed",
+      message: "Не удалось загрузить файл. Повторите попытку.",
+      reason: "too_large",
+      status: 413,
+      limitBytes: 52_428_800,
+    });
+    expect(String(error)).not.toContain("project.supabase.co");
+    expect(JSON.stringify(error)).not.toContain("response-body-secret");
+    expect(JSON.stringify(error)).not.toContain("project.supabase.co");
+
+    const offline = createUploadHarness();
+    const offlineHandle = startResumableStorageUpload(offline.adapterOptions());
+    await offline.started;
+    offline.options?.onError?.(Object.assign(new Error("tus: failed to upload chunk"), {
+      originalRequest: { getMethod: () => "PATCH" },
+      originalResponse: null,
+    }));
+    await expect(offlineHandle.result).rejects.toMatchObject({ reason: "network", status: null, limitBytes: null });
   });
 
   test("terminates the remote partial upload when abort requests termination", async () => {
@@ -205,6 +253,25 @@ test.describe("resumable media upload contracts", () => {
     expect(uploadingMarkup).toContain("42%");
     expect(sendingMarkup).toContain('data-testid="staged-attachment-sending-progress"');
     expect(sendingMarkup).not.toContain("aria-valuenow");
+  });
+
+  test("an upload with no progress to report shows a working bar and claims no percentage", async () => {
+    // D-114: a multipart upload of 6 MiB or less reports nothing, and its bar sat
+    // at «0%» until the upload was over.
+    const { StagedAttachmentTransferProgress } = await loadStagedUploadWorkflow();
+    const markup = renderToStaticMarkup(
+      createElement(StagedAttachmentTransferProgress, { attachment: attachmentStub({ status: "uploading", progress: null }) }),
+    );
+
+    expect(markup).toContain('data-testid="staged-attachment-upload-progress"');
+    expect(markup).toContain('role="progressbar"');
+    expect(markup).not.toContain("aria-valuenow");
+    expect(markup).not.toContain("%");
+
+    const staged = renderToStaticMarkup(
+      createElement(StagedAttachmentTransferProgress, { attachment: attachmentStub({ status: "staged", progress: null }) }),
+    );
+    expect(staged).not.toContain("progressbar");
   });
 
   test("terminates registered uploads and releases only the matching handle", async () => {

@@ -36,7 +36,7 @@ import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor
 import { isRoundVideoMessageContent, isVoiceMessageContent } from "@/lib/messageMediaSections";
 import { bumpMount, bumpUnmount } from "@/lib/dev/instrumentation";
 import { DEFAULT_MEDIA_QUALITY, selectVideoPlaybackUrl } from "@/lib/mediaQuality";
-import { prepareChatImageAttachment, prepareOriginalPreview, readMediaDimensions } from "@/lib/mediaUpload";
+import { prepareChatImageAttachment, prepareOriginalPreview, readMediaDimensions, type MediaDimensions } from "@/lib/mediaUpload";
 import {
   buildAttachmentMediaMetadata,
   mediaSendShape,
@@ -72,7 +72,6 @@ import {
   createStagedUploadScope,
   clearStagedAttachmentChat,
   commitPreparedStagedAttachments,
-  getAttachmentUploadErrorMessage,
   markStagedAttachmentSendFailed,
   runScopedStagedPreparation,
   runScopedStagedSendAttempt,
@@ -80,6 +79,8 @@ import {
   transitionStagedAttachmentChat,
   type StagedUploadScopeToken,
 } from "@/lib/stagedUploadWorkflow";
+import { describeUploadFailure, uploadFailureFeedback, uploadFailureMessage } from "@/lib/uploadFailure";
+import { ATTACHMENT_UPLOAD_CONCURRENCY, nextClientSentAt, runOrderedSend } from "@/lib/attachmentSendQueue";
 import type { Json, MessageWithSender } from "@/types/database";
 import { cacheControlFor } from "@/lib/mediaCacheControl";
 
@@ -351,6 +352,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       const preparation = planAttachmentPreparation(sourceFile.type, compress);
       let file = sourceFile;
       let optimized = false;
+      let decodedDimensions: MediaDimensions | null = null;
       if (preparation === "original") {
         // Before anything reads the file: a refused original costs no decode.
         // «Файл» refuses an oversized original before staging, so on a desktop
@@ -370,7 +372,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           accepted.forEach(revokeAttachmentPreview);
           return [];
         }
-        file = prepared.value;
+        file = prepared.value.file;
+        // Measured by the decode that encoded it: the photo is not decoded again to read its size.
+        decodedDimensions = prepared.value.dimensions;
         optimized = file !== sourceFile || file.size !== sourceFile.size || file.type !== sourceFile.type;
       }
       // Whatever is uploaded as it was picked goes without the place it was
@@ -389,16 +393,19 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         errors.push(`${sourceFile.name || file.name || "Файл"}: ${error}`);
         continue;
       }
-      const preparedDimensions = await runScopedStagedPreparation(
-        uploadScope,
-        scopeToken,
-        () => readMediaDimensions(file),
-      );
-      if (preparedDimensions.status === "stale") {
-        accepted.forEach(revokeAttachmentPreview);
-        return [];
+      let dimensions = decodedDimensions;
+      if (!dimensions) {
+        const preparedDimensions = await runScopedStagedPreparation(
+          uploadScope,
+          scopeToken,
+          () => readMediaDimensions(file),
+        );
+        if (preparedDimensions.status === "stale") {
+          accepted.forEach(revokeAttachmentPreview);
+          return [];
+        }
+        dimensions = preparedDimensions.value;
       }
-      const dimensions = preparedDimensions.value;
       const uncompressed = preparation === "original";
       let previewFile: File | null = null;
       let previewSize: { width: number; height: number } | null = null;
@@ -550,7 +557,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       uploadScope.isActive(scopeToken) &&
       !cancelledAttachmentIdsRef.current.has(attachment.id)
     ) {
-      const candidate = originalPreviewPath(uploadedPath);
+      // `.preview.webp`, or `.preview.jpg` from an engine that cannot write WebP.
+      const candidate = originalPreviewPath(uploadedPath, attachment.previewFile.type);
       const { error: previewError } = await supabase.storage
         .from(CHAT_MEDIA_BUCKET)
         .upload(candidate, attachment.previewFile, {
@@ -609,98 +617,109 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       sentAny = true;
     }
 
+    // Every attachment of this send is under way from here, the ones waiting for
+    // a free upload too: they read as loading, with no number to freeze (D-114),
+    // and a second send cannot pick them up.
     for (const attachment of targets) {
-      if (
-        cancelledAttachmentIdsRef.current.has(attachment.id) ||
-        !uploadScope.isActive(scopeToken)
-      ) return sentAny;
       updateStagedAttachment(attachment.id, (current) => ({
         ...current,
         status: "uploading",
-        progress: 0,
+        progress: null,
         error: null,
       }));
+    }
 
-      let uploaded: StagedAttachmentUpload | null = attachment.uploaded;
-      if (!uploaded) {
-        try {
-          uploaded = await uploadStagedAttachment(attachment, scopeToken);
-        } catch (error) {
-          if (
-            cancelledAttachmentIdsRef.current.has(attachment.id) ||
-            !uploadScope.isActive(scopeToken)
-          ) return sentAny;
-          const uploadErrorMessage = getAttachmentUploadErrorMessage(error, attachment.kind);
-          console.warn("[attachments] upload failed.");
-          reportError(new Error("attachment_upload_failed"), {
-            category: "attachment_upload_failed",
+    const replyToId = replyTo?.id ?? null;
+    const failures: string[] = [];
+    const failureNoticeKey = `attachment-upload:${scopeToken.chatId}:${targets[0].id}`;
+    let previousSentAt: string | null = null;
+
+    // Three uploads at a time, and the messages inserted in the order the files
+    // were picked. A failure is that attachment's alone: it keeps its reason and
+    // «Повторить», and the attachments after it still go (D-113, D-114). The
+    // order and the concurrency are decided in `lib/attachmentSendQueue.ts`.
+    await runOrderedSend(targets, {
+      concurrency: ATTACHMENT_UPLOAD_CONCURRENCY,
+      isActive: () => uploadScope.isActive(scopeToken),
+      isWanted: (attachment) => !cancelledAttachmentIdsRef.current.has(attachment.id),
+      upload: (attachment) => attachment.uploaded
+        ? Promise.resolve(attachment.uploaded)
+        : uploadStagedAttachment(attachment, scopeToken),
+      onUploaded: (attachment, uploaded) => {
+        updateStagedAttachment(attachment.id, (current) => ({
+          ...current,
+          status: "sending",
+          progress: 100,
+          uploaded,
+          error: null,
+        }));
+      },
+      onUploadFailed: (attachment, error) => {
+        // Why, as the server's answer says it, and the file's name (D-113).
+        // The reason and the status say nothing about what the file holds.
+        const failure = describeUploadFailure(error);
+        const uploadErrorMessage = uploadFailureMessage(attachment.name, failure);
+        console.warn("[attachments] upload failed.", failure.reason, failure.status ?? "no answer");
+        reportError(new Error("attachment_upload_failed"), {
+          category: "attachment_upload_failed",
+          attachmentKind: attachment.kind,
+          mimeType: attachment.mimeType,
+          fileSize: attachment.file.size,
+          reason: failure.reason,
+          status: failure.status,
+          limitBytes: failure.limitBytes,
+        });
+        updateStagedAttachment(attachment.id, (current) => ({
+          ...current,
+          status: "failed",
+          progress: null,
+          error: uploadErrorMessage,
+        }));
+        failures.push(uploadErrorMessage);
+        const feedback = uploadFailureFeedback(failures);
+        if (feedback) showActionFeedback({ kind: "error", key: failureNoticeKey, ...feedback });
+      },
+      insert: async (attachment, uploaded) => {
+        // Later than the message before it, so the conversation keeps the pick
+        // order even when two inserts start within one millisecond.
+        const clientSentAt = nextClientSentAt(previousSentAt, Date.now());
+        previousSentAt = clientSentAt;
+        const content = getStagedAttachmentMessageContent(attachment, sentAny || !captionText ? null : captionText);
+        const sendResult = await runScopedStagedSendAttempt(
+          uploadScope,
+          scopeToken,
+          () => sendMediaMessage({
+            type: getStagedAttachmentMessageType(attachment),
+            content,
+            mediaBucket: uploaded.bucket,
+            mediaPath: uploaded.path,
+            mediaUrl: uploaded.publicUrl,
+            replyToId,
+            clientMessageId: attachment.clientMessageId,
+            clientSentAt,
+            mediaMetadata: getStagedAttachmentMediaMetadata(attachment, uploaded),
+          }),
+        );
+
+        if (sendResult.status === "stale") return false;
+        if (sendResult.status === "failed") {
+          reportError(new Error("staged_attachment_send_failed"), {
+            category: "attachment_send_failed",
             attachmentKind: attachment.kind,
             mimeType: attachment.mimeType,
             fileSize: attachment.file.size,
           });
-          updateStagedAttachment(attachment.id, (current) => ({
-            ...current,
-            status: "failed",
-            error: uploadErrorMessage,
-          }));
-          return sentAny;
+          updateStagedAttachment(attachment.id, (current) =>
+            markStagedAttachmentSendFailed(current, uploaded)
+          );
+          return false;
         }
-      }
 
-      if (
-        cancelledAttachmentIdsRef.current.has(attachment.id) ||
-        !uploadScope.isActive(scopeToken)
-      ) return sentAny;
-
-      updateStagedAttachment(attachment.id, (current) => ({
-        ...current,
-        progress: 100,
-        uploaded,
-      }));
-
-      if (!uploadScope.isActive(scopeToken)) return sentAny;
-
-      updateStagedAttachment(attachment.id, (current) => ({
-        ...current,
-        status: "sending",
-        progress: 100,
-        uploaded,
-        error: null,
-      }));
-
-      const content = getStagedAttachmentMessageContent(attachment, sentAny || !captionText ? null : captionText);
-      const sendResult = await runScopedStagedSendAttempt(
-        uploadScope,
-        scopeToken,
-        () => sendMediaMessage({
-          type: getStagedAttachmentMessageType(attachment),
-          content,
-          mediaBucket: uploaded.bucket,
-          mediaPath: uploaded.path,
-          mediaUrl: uploaded.publicUrl,
-          replyToId: replyTo?.id ?? null,
-          clientMessageId: attachment.clientMessageId,
-          mediaMetadata: getStagedAttachmentMediaMetadata(attachment, uploaded),
-        }),
-      );
-
-      if (sendResult.status === "stale") return sentAny;
-      if (sendResult.status === "failed") {
-        reportError(new Error("staged_attachment_send_failed"), {
-          category: "attachment_send_failed",
-          attachmentKind: attachment.kind,
-          mimeType: attachment.mimeType,
-          fileSize: attachment.file.size,
-        });
-        updateStagedAttachment(attachment.id, (current) =>
-          markStagedAttachmentSendFailed(current, uploaded)
-        );
-        return sentAny;
-      }
-
-      sentAny = true;
-      removeStagedAttachment(attachment.id);
-    }
+        sentAny = true;
+        removeStagedAttachment(attachment.id);
+        return true;
+      },
+    });
 
     if (sentAny) setReplyTo(null);
     return sentAny;
