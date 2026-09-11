@@ -309,11 +309,50 @@ Use this queue before starting the next production-hardening turn. Do not repeat
    - `tests/e2e/unified-interface-chrome.spec.ts:139`: since `f58edfe` the «Звук» row names its value, so «Чистый голос» resolves to two buttons, and the mode contract has been unchecked since 2026-09-04. Use `exact: true`, or scope to `settings-section-audio`.
    - `tests/e2e/resumable-media-upload.spec.ts:2` imports `react`, which resolves only under `artifacts/kub`, so a full run from the repository root exits 1 having executed nothing; its `:56` has been failing unseen on a stale `cacheControl` expectation.
    - `gotoOrSkip` in `tests/e2e/helpers/auth.ts` turns an unreachable dev server into skips (13 skipped and 0 passed, observed). It should fail when a base URL was given explicitly.
+   - `tests/e2e/pwa.spec.ts:122` lets Chromium's wording for a load that failed through ("Failed to load resource") but not WebKit's for the same event. When the page's boot-time update check is cut off by the test going offline or navigating away, WebKit logs "…/sw.js due to access control checks" and the test fails. Seen once in ten WebKit runs on 2026-09-11; the update check itself dates from `4d4d174`. Wait for the update check to be answered before going offline, or accept WebKit's wording for the worker script only.
 23. `[!]` Waiting on the owner. Asked 2026-09-11: soft-deleting the 28 end-to-end test messages left in two production chats (realtime-messages 14, notification-center 8, composer 6 — a guarded script is ready and records every id first); and whether `KUB_QA_ALLOW_MUTATIONS=1` stays in the QA file (every run in that wave overrode it with `0`). Still to raise: the narrow-screen layout of the registration confirmation card (D-063, with its measured budget) and the action lane at tablet width (D-071).
 
 ## Last Confirmed Deploy Baseline
 
-**Current: `4f67e45`, deployed 2026-09-06.** Verified the way every deployment
+**Current: `45971c6`, deployed 2026-09-11.** Verified by reading the running
+container's own image tag (`l64kyyu1sysev2izzjjbizhe:45971c602962…`), its healthcheck and its replica
+count, and then by fetching the live files: `index.html` carries
+`viewport-fit=cover`, the installed-app marker and `Alt-Svc: clear`; `sw.js`
+carries its `@kub-sw-build` line with the 16-character id `fe02060fc5256c77`, and a
+fresh browser loading the page ends up with exactly one cache, named by that id;
+the stylesheet declares `--kub-safe-top` and the status band's `#3d78b8`. Before
+the push, the same checks against `a30e392` found `Alt-Svc: clear` and none of the
+rest.
+
+Production QA as a guest, the public home only and nobody signed in: 9
+checks passed across Chromium at 1440, WebKit at 393, and Chromium at 390
+standing in for the installed app in the light theme (`navigator.standalone`
+answered true, the notch's inset given to `env()` by the engine): viewport-fit
+served, one cache named by the build, no band in a Safari tab, and a 59px band
+of `rgb(61, 120, 184)` in the stand-in.
+
+It carried the 2026-09-11 wave, validated as one tree
+(`docs/QA_RESULTS.md`, 2026-09-11):
+
+| area | what shipped |
+| --- | --- |
+| service worker | a new worker on every deploy, and the handoff that spares a page already on the new build (D-072); the offline page only for navigations (D-073); no backend host list (D-074) |
+| installed iPhone app | drawn edge to edge with every edge reading the insets (D-075), the composer (D-076), the support window (D-077), the sidebar menu (D-078), the message menus, and the light theme's status band in blue (D-079) |
+| chat | the inline time no longer wraps its spacer at phone widths (D-070) |
+| tests and gates | named dropped tests, the production-write gate, the Windows QA bundle check, and the worker test that raced |
+| database | the two 2026-09-11 changes were applied directly beforehand (Priority 2); their migration files ship here for the record |
+
+Two things worth knowing after this deploy. Every browser and installed app
+installs the new worker on its first launch, and that worker deletes
+`kub-app-shell-v2`, so Cache Storage shrinks once for everyone. And the
+installed iPhone app reads its `apple-mobile-web-app-*` tags only when it is
+added to the home screen, so a device check of D-075 and D-079 needs the icon
+removed and added again.
+
+**Previous: `a30e392`, running from 2026-09-07.** This section had last
+recorded `4f67e45`.
+
+**Before that: `4f67e45`, deployed 2026-09-06.** Verified the way every deployment
 in this stage was: by reading the running container's own image tag, its
 healthcheck and its replica count, and then by fetching a live asset to confirm
 the change reached a reader. A webhook firing is not evidence that anyone
