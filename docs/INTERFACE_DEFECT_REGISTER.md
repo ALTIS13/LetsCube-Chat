@@ -4128,7 +4128,8 @@ prototype, counting the buttons that end on screen at 360x800:
 | the captcha shown only once the timer ends | 0 of 3 (resend ends 23px past) |
 
 Recommended to the owner: the actions after the address, which needs no
-floating surface and keeps every paragraph. Decision pending.
+floating surface and keeps every paragraph. Decided by the owner on 2026-09-11:
+that option, with the lockup and its «Защищённый мессенджер» caption kept.
 
 ## D-064 `[x]` The only way out of a conversation is unpaintable on the engine Safari uses
 
@@ -4957,8 +4958,15 @@ before they showed at all.
 
 A fourth arrangement, a 40px lane holding only «Ещё», was dropped: at 768 it
 sends the placement into an endless loop and takes the whole interface down —
-D-080. Recommended to the owner: the actions over the top corner. Decision
-pending.
+D-080. Recommended to the owner: the actions over the top corner.
+
+**Decided further than any option, by the owner on 2026-09-11:** no hover
+actions at all, as in Telegram. Every action lives in the long-press and
+right-click menu, which already opens with a row of quick reactions, and a micro
+icon gives a quick reaction without the menu. With no cluster there is no lane
+to reserve, so the wasted line this entry describes goes with it. A concept
+render of that was sent to the owner the same day; the implementation waits for
+the conversation work in `MessageBubble.tsx` to merge.
 
 ## D-072 `[x]` The service worker was never replaced, so its cache was never cleared
 
