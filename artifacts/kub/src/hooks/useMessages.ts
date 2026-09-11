@@ -24,10 +24,8 @@ import {
   RESUME_REVALIDATE_AFTER_HIDDEN_MS,
   RESUME_REVALIDATE_MIN_INTERVAL_MS,
 } from "@/lib/resumeRevalidation";
-import {
-  actorClientMessageKey,
-  isIncomingMessage,
-} from "@/lib/messageActor";
+import { isIncomingMessage } from "@/lib/messageActor";
+import { mergeMessagesById } from "@/lib/messageMerge";
 
 const MESSAGE_PAGE_SIZE = 100;
 const SEND_ACK_TIMEOUT_MS = 12_000;
@@ -1470,51 +1468,6 @@ function withTimeout<T>(promise: PromiseLike<T>, ms: number): Promise<T | Timeou
     Promise.resolve(promise),
     new Promise<TimeoutResult>((resolve) => window.setTimeout(() => resolve({ timedOut: true }), ms)),
   ]);
-}
-
-function isLocalOnlyMessage(message: MessageWithSender): boolean {
-  return message.id.startsWith("tmp:") || Boolean(message.pending || message.checking || message.failed);
-}
-
-function chooseMergedMessage(current: MessageWithSender, next: MessageWithSender): MessageWithSender {
-  if (isLocalOnlyMessage(current) && !isLocalOnlyMessage(next)) return next;
-  if (!isLocalOnlyMessage(current) && isLocalOnlyMessage(next)) return current;
-  return next;
-}
-
-function mergeMessagesById(
-  fetched: MessageWithSender[],
-  existing: MessageWithSender[],
-): MessageWithSender[] {
-  if (!existing.length) return fetched;
-  const merged: MessageWithSender[] = [];
-  const byId = new Map<string, number>();
-  const byClientId = new Map<string, number>();
-
-  for (const message of [...fetched, ...existing]) {
-    const idIndex = byId.get(message.id);
-    const clientKey = actorClientMessageKey(message);
-    const clientIndex = clientKey ? byClientId.get(clientKey) : undefined;
-    const index = idIndex ?? clientIndex;
-    if (index === undefined) {
-      byId.set(message.id, merged.length);
-      if (clientKey) byClientId.set(clientKey, merged.length);
-      merged.push(message);
-      continue;
-    }
-    const chosen = chooseMergedMessage(merged[index], message);
-    merged[index] = chosen;
-    byId.set(chosen.id, index);
-    const chosenClientKey = actorClientMessageKey(chosen);
-    if (chosenClientKey) byClientId.set(chosenClientKey, index);
-  }
-  return merged.sort(
-    (a, b) => {
-      const byCreatedAt = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-      if (byCreatedAt !== 0) return byCreatedAt;
-      return a.id.localeCompare(b.id);
-    },
-  );
 }
 
 function sortPinnedMessages(messages: MessageWithSender[]): MessageWithSender[] {

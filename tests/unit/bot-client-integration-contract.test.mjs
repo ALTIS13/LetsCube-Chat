@@ -6,6 +6,9 @@ const read = (path) => readFileSync(path, "utf8");
 const projectionPath = "artifacts/kub/src/lib/messageProjection.ts";
 const projection = existsSync(projectionPath) ? read(projectionPath) : "";
 const messages = read("artifacts/kub/src/hooks/useMessages.ts");
+// The merge of a fetched page into the held conversation moved here (D-090);
+// its matching of a local send to its server copy is the actor-aware part.
+const messageMerge = read("artifacts/kub/src/lib/messageMerge.ts");
 const chats = read("artifacts/kub/src/hooks/useChats.ts");
 const safeOpen = read("artifacts/kub/src/lib/safeOpenChat.ts");
 const store = read("artifacts/kub/src/store/app.store.ts");
@@ -34,7 +37,8 @@ test("all message hydration paths share explicit bounded bot projections", () =>
 });
 
 test("message reconciliation, grouping, unread targeting, and human controls are actor-aware", () => {
-  assert.match(messages, /sameActorClientMessage|actorClientMessageKey/);
+  assert.match(messages, /import \{ mergeMessagesById \} from "@\/lib\/messageMerge"/);
+  assert.match(messageMerge, /sameActorClientMessage|actorClientMessageKey/);
   assert.match(store, /sameActorClientMessage/);
   assert.match(messageList, /messageActorGroupingKey/);
   assert.match(messageList, /canUseHumanMessageControls/);
