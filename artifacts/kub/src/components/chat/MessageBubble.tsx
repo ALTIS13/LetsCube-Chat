@@ -808,7 +808,11 @@ export function MessageBubble({
     top: 8,
     maxWidth: "calc(100vw - 16px)",
   });
-  const { currentUser } = useAppStore();
+  // The id, through a selector. Without one the bubble subscribed to the whole
+  // store, so a change anywhere in it re-rendered every message on screen, and
+  // no `memo` above the bubble could prevent that: a component's own
+  // subscription is not a prop.
+  const currentUserId = useAppStore((state) => state.currentUser?.id);
   const actor = resolveMessageActor(message);
   const actorName = messageActorDisplayName(actor);
   const textContent = message.content ?? "";
@@ -1050,7 +1054,7 @@ export function MessageBubble({
     (acc, r) => {
       if (!acc[r.emoji]) acc[r.emoji] = { count: 0, mine: false };
       acc[r.emoji].count++;
-      if (r.user_id === currentUser?.id) acc[r.emoji].mine = true;
+      if (r.user_id === currentUserId) acc[r.emoji].mine = true;
       return acc;
     }, {}
   );
@@ -1663,7 +1667,7 @@ export function MessageBubble({
             {message.reply_to_id && (() => {
               const replyMsg = messagesMap[message.reply_to_id] ?? message.reply_to ?? null;
               const replyName = replyMsg && !replyMsg.deleted_at
-                ? resolveMessageActor(replyMsg).kind === "user" && replyMsg.user_id === currentUser?.id
+                ? resolveMessageActor(replyMsg).kind === "user" && replyMsg.user_id === currentUserId
                   ? "Вы"
                   : messageActorDisplayName(resolveMessageActor(replyMsg))
                 : "Ответ";

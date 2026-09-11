@@ -14,12 +14,17 @@ import {
   messageActorGroupingKey,
   resolveMessageActor,
 } from "@/lib/messageActor";
-import { getMessageDeliveryState } from "@/lib/messageDelivery";
+import { getMessageDeliveryState, type MessageDeliveryState } from "@/lib/messageDelivery";
 import { getGroupReadReceiptInfo, getReceiptDisplayName, type GroupReadReceiptInfo } from "@/lib/groupReadReceipts";
 import { requestAppConfirm } from "@/lib/appDialogs";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { formatFullTime } from "@/lib/format";
-import { useAvatarVariantUrls, useMessageMediaVariantUrls } from "@/hooks/useMediaVariants";
+import {
+  useAvatarVariantUrls,
+  useMessageMediaVariantUrls,
+  type AvatarVariantUrls,
+  type MessageMediaVariantUrls,
+} from "@/hooks/useMediaVariants";
 import { advanceMessageEntrance, EMPTY_ENTRANCE_STATE, messageEntranceKey } from "@/lib/messageEntrance";
 import {
   captureVisibleMessageAnchor,
@@ -340,6 +345,118 @@ export function MessageList({
     setOpenReactionMessageId(null);
     setOpenActionMessageId(null);
   }, []);
+
+  /**
+   * What the rows are given, kept identical across renders of this list.
+   *
+   * The list renders far more often than any message changes: its padding is a
+   * prop, so a draft that wraps renders it, and so do a typing indicator, a
+   * selection and a menu opening. Each of those used to re-render every bubble
+   * on screen, because every row was handed things that are new on every render
+   * whether or not the message is: an inline arrow for each callback, a
+   * delivery state and a read-receipt summary from helpers that build a fresh
+   * object per call, and the whole message map for the one entry a reply
+   * preview reads. Measured on the DEV preview fixture, the same at 390x844 and
+   * 1440x900: seven keystrokes with one wrap and one unwrap rendered 96 bubbles —
+   * all 48, twice.
+   *
+   * So a row is given values that compare equal while its message has not
+   * changed: receipts memoised on what they are computed from, which of the
+   * optional handlers exist as booleans, and one `rowActions` object that never
+   * changes and reaches the current handlers through a ref. `MessageRow` is
+   * memoised on exactly those.
+   */
+  const handlersRef = useRef({
+    onReply, onJumpToReply, onReaction, onEdit, onDelete, onHideForMe, onTogglePin, onForward,
+    onRetrySend, onEditFailedSend, onDiscardLocalMessage, onOpenMedia,
+  });
+  // After every commit, and before any input can reach a row: an action only
+  // runs from a user's event, and none is dispatched between a render and its
+  // layout effects. The callers pass inline arrows, so this changes every time.
+  useLayoutEffect(() => {
+    handlersRef.current = {
+      onReply, onJumpToReply, onReaction, onEdit, onDelete, onHideForMe, onTogglePin, onForward,
+      onRetrySend, onEditFailedSend, onDiscardLocalMessage, onOpenMedia,
+    };
+  });
+
+  const rowActions = React.useMemo<MessageRowActions>(() => ({
+    reply: (message) => {
+      setOpenActionMessageId(null);
+      setOpenReactionMessageId(null);
+      handlersRef.current.onReply(message);
+    },
+    jumpToReply: (messageId) => handlersRef.current.onJumpToReply?.(messageId),
+    reaction: (messageId, emoji) => handlersRef.current.onReaction(messageId, emoji),
+    edit: (message) => handlersRef.current.onEdit?.(message),
+    remove: (message) => handlersRef.current.onDelete?.(message),
+    hideForMe: (message) => handlersRef.current.onHideForMe?.(message),
+    retrySend: (message) => handlersRef.current.onRetrySend?.(message),
+    editFailedSend: (message) => handlersRef.current.onEditFailedSend?.(message),
+    discardLocalMessage: (message) => handlersRef.current.onDiscardLocalMessage?.(message),
+    togglePin: (message) => handlersRef.current.onTogglePin?.(message),
+    forward: (message) => handlersRef.current.onForward?.(message),
+    openMedia: (media) => handlersRef.current.onOpenMedia?.(media),
+    startSelection: (messageId) => {
+      setBulkError(null);
+      setBulkConfirmAction(null);
+      setSelectionMode(true);
+      setSelectedIds(new Set([messageId]));
+      setOpenReactionMessageId(null);
+      setOpenActionMessageId(null);
+    },
+    toggleSelected,
+    toggleReactionMenu: (messageId) => {
+      setOpenActionMessageId(null);
+      setOpenReactionMessageId((current) => current === messageId ? null : messageId);
+    },
+    closeReactionMenu: () => setOpenReactionMessageId(null),
+    openActionMenu: (messageId) => {
+      setOpenReactionMessageId(null);
+      setOpenActionMessageId(messageId);
+    },
+    closeActionMenu: () => setOpenActionMessageId(null),
+    openGroupReadReceipts: (messageId) => setReadReceiptsMessageId(messageId),
+  }), [toggleSelected]);
+
+  const hasJumpToReply = Boolean(onJumpToReply);
+  const hasEdit = Boolean(onEdit);
+  const hasDelete = Boolean(onDelete);
+  const hasHideForMe = Boolean(onHideForMe);
+  const hasBulkHideForMe = Boolean(onBulkHideForMe);
+  const hasRetrySend = Boolean(onRetrySend);
+  const hasEditFailedSend = Boolean(onEditFailedSend);
+  const hasDiscardLocalMessage = Boolean(onDiscardLocalMessage);
+  const hasTogglePin = Boolean(onTogglePin);
+  const hasForward = Boolean(onForward);
+  const hasOpenMedia = Boolean(onOpenMedia);
+  const rowCapabilities = React.useMemo<MessageRowCapabilities>(() => ({
+    jumpToReply: hasJumpToReply,
+    edit: hasEdit,
+    remove: hasDelete,
+    hideForMe: hasHideForMe,
+    bulkHideForMe: hasBulkHideForMe,
+    retrySend: hasRetrySend,
+    editFailedSend: hasEditFailedSend,
+    discardLocalMessage: hasDiscardLocalMessage,
+    togglePin: hasTogglePin,
+    forward: hasForward,
+    openMedia: hasOpenMedia,
+  }), [
+    hasBulkHideForMe, hasDelete, hasDiscardLocalMessage, hasEdit, hasEditFailedSend, hasForward,
+    hasHideForMe, hasJumpToReply, hasOpenMedia, hasRetrySend, hasTogglePin,
+  ]);
+
+  const receiptsByMessageId = React.useMemo(() => {
+    const context = { currentUserId: userId, chatType, members: chatMembers, isSavedChat };
+    const delivery = new Map<string, MessageDeliveryState | null>();
+    const groupRead = new Map<string, GroupReadReceiptInfo | null>();
+    for (const message of sortedMessages) {
+      delivery.set(message.id, getMessageDeliveryState(message, context));
+      groupRead.set(message.id, getGroupReadReceiptInfo(message, context));
+    }
+    return { delivery, groupRead };
+  }, [chatMembers, chatType, isSavedChat, sortedMessages, userId]);
 
   const handleBulkHideForMe = useCallback(async () => {
     if (!onBulkHideForMe || selectedMessages.length === 0) return;
@@ -907,26 +1024,9 @@ export function MessageList({
           const isSameSenderAsPrev = !showDate && prev !== null && messageActorGroupingKey(prev) === actorKey;
           const isSameSenderAsNext = next !== null && messageActorGroupingKey(next) === actorKey &&
             !shouldShowDateSeparator(msg, next);
-          const isSystemMessage = msg.type === "system";
-          const canUseHumanControls = canUseHumanMessageControls(msg, userId);
-
-          const canSelect = !msg.deleted_at && !isSystemMessage;
-          const isLocalSend = msg.id.startsWith("tmp:") || Boolean(msg.pending || msg.checking || msg.failed);
-          const deliveryState = getMessageDeliveryState(msg, {
-            currentUserId: userId,
-            chatType,
-            members: chatMembers,
-            isSavedChat,
-          });
-          const groupReadInfo = getGroupReadReceiptInfo(msg, {
-            currentUserId: userId,
-            chatType,
-            members: chatMembers,
-            isSavedChat,
-          });
 
           return (
-            <div
+            <MessageRow
               // Keyed by what survives the optimistic swap, not by the row id.
               //
               // A message you send is rendered twice under two ids: first as
@@ -946,134 +1046,33 @@ export function MessageList({
               // id otherwise. The store dedupes by the same value, so two rows
               // can never hold one key.
               key={messageEntranceKey(msg)}
-              data-message-id={msg.id}
-              ref={(el) => { if (el && messageRefs) messageRefs.current[msg.id] = el; }}
-              className={cn(
-                highlightedId === msg.id &&
-                  "transition-colors duration-500 rounded-lg bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]"
-              )}
-            >
-              {showDate && (
-                <div className="flex justify-center my-3" data-message-date-separator={getMessageDayKey(msg.created_at)}>
-                  <span className="px-3 py-1 rounded-full text-xs select-none text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]">
-                    {getMessageDayLabel(msg.created_at)}
-                  </span>
-                </div>
-              )}
-              {msg.id === firstUnreadMessageId && (
-                <div className="unread-separator my-3 flex items-center justify-center" data-testid="first-unread-separator">
-                  {/* The pink tint went with the blur, and the border keeps the
-                      signal. A tinted fill under coloured words is the shape of
-                      the ops-report callout in rule 10: a backdrop moved toward
-                      the text's own colour costs contrast and says nothing the
-                      border does not already say. */}
-                  <span className="rounded-full border border-[color-mix(in_srgb,var(--kub-pink)_35%,var(--kub-border-color))] px-3 py-1 text-[12px] font-semibold uppercase tracking-wide text-[color:var(--kub-pink)]">
-                    Новые сообщения
-                  </span>
-                </div>
-              )}
-              {isSystemMessage ? (
-                <SystemMessageNotice message={msg} />
-              ) : (
-              <div className={cn("flex w-full min-w-0 items-center gap-1.5 overflow-hidden", isMe ? "justify-end" : "justify-start")}>
-                {selectionMode && canSelect && (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      toggleSelected(msg.id);
-                    }}
-                    className={cn(
-                      "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors",
-                      selectedIds.has(msg.id)
-                        ? "border-[var(--kub-cyan)] bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
-                        : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] text-[color:var(--kub-muted)]"
-                    )}
-                    aria-label={selectedIds.has(msg.id) ? "Снять выбор" : "Выбрать сообщение"}
-                  >
-                    {selectedIds.has(msg.id) && <KubIcon name="check" size={14} />}
-                  </button>
-                )}
-                <div
-                  className={cn(
-                    "min-w-0 max-w-full",
-                    selectionMode && canSelect ? "cursor-pointer rounded-xl" : "",
-                    selectionMode && canSelect && "max-w-[calc(100%-2.25rem)]"
-                  )}
-                  onClickCapture={(event) => {
-                    if (!selectionMode) return;
-                    const target = event.target as HTMLElement | null;
-                    const isInteractive = Boolean(target?.closest("button,a,input,textarea,select,video,audio,[role='slider']"));
-                    if (!canSelect) {
-                      if (isInteractive) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                      }
-                      return;
-                    }
-                    event.preventDefault();
-                    event.stopPropagation();
-                    toggleSelected(msg.id);
-                  }}
-                  aria-disabled={selectionMode && !canSelect}
-                >
-                  <MessageBubble
-                    message={msg}
-                    isEntering={enteringKeys.has(messageEntranceKey(msg))}
-                    isMe={isMe}
-                    isFirstInGroup={!isSameSenderAsPrev}
-                    isLastInGroup={!isSameSenderAsNext}
-                    onReply={isLocalSend ? () => undefined : () => {
-                      setOpenActionMessageId(null);
-                      setOpenReactionMessageId(null);
-                      onReply(msg);
-                    }}
-                    onJumpToReply={onJumpToReply}
-                    onReaction={isLocalSend ? () => undefined : (emoji) => onReaction(msg.id, emoji)}
-                    onEdit={!isLocalSend && canUseHumanControls && onEdit ? () => onEdit(msg) : undefined}
-                    onDelete={!isLocalSend && canUseHumanControls && onDelete ? () => onDelete(msg) : undefined}
-                    onHideForMe={!isLocalSend && onHideForMe ? () => onHideForMe(msg) : undefined}
-                    onRetrySend={onRetrySend && msg.failed ? () => onRetrySend(msg) : undefined}
-                    onEditFailedSend={onEditFailedSend && msg.failed ? () => onEditFailedSend(msg) : undefined}
-                    onDiscardLocalMessage={onDiscardLocalMessage && isLocalSend ? () => onDiscardLocalMessage(msg) : undefined}
-                    onStartSelection={onBulkHideForMe && canSelect ? () => {
-                      setBulkError(null);
-                      setBulkConfirmAction(null);
-                      setSelectionMode(true);
-                      setSelectedIds(new Set([msg.id]));
-                      setOpenReactionMessageId(null);
-                      setOpenActionMessageId(null);
-                    } : undefined}
-                    onTogglePin={!isLocalSend && onTogglePin ? () => onTogglePin(msg) : undefined}
-                    onForward={!isLocalSend && onForward ? () => onForward(msg) : undefined}
-                    onOpenMedia={onOpenMedia}
-                    reactionMenuOpen={openReactionMessageId === msg.id}
-                    onToggleReactionMenu={() => {
-                      setOpenActionMessageId(null);
-                      setOpenReactionMessageId((current) => current === msg.id ? null : msg.id);
-                    }}
-                    onCloseReactionMenu={() => setOpenReactionMessageId(null)}
-                    actionMenuOpen={openActionMessageId === msg.id}
-                    onOpenActionMenu={() => {
-                      setOpenReactionMessageId(null);
-                      setOpenActionMessageId(msg.id);
-                    }}
-                    onCloseActionMenu={() => setOpenActionMessageId(null)}
-                    selected={selectionMode && selectedIds.has(msg.id)}
-                    isSelectionMode={selectionMode}
-                    messagesMap={messagesMap}
-                    mediaVariant={messageMediaVariants[msg.id]}
-                    senderAvatarVariant={msg.sender?.id ? senderAvatarVariants[msg.sender.id] : undefined}
-                    deliveryState={deliveryState}
-                    groupReadInfo={groupReadInfo}
-                    onOpenGroupReadReceipts={groupReadInfo ? () => setReadReceiptsMessageId(msg.id) : undefined}
-                    isSavedChat={isSavedChat}
-                    myRole={myRole}
-                  />
-                </div>
-              </div>
-              )}
-            </div>
+              msg={msg}
+              userId={userId}
+              isMe={isMe}
+              isFirstInGroup={!isSameSenderAsPrev}
+              isLastInGroup={!isSameSenderAsNext}
+              // The label rather than a flag. "Сегодня" turns into "Вчера" at
+              // midnight with nothing about the message changing, and a memoised
+              // row only renders again when one of its props does.
+              dateLabel={showDate ? getMessageDayLabel(msg.created_at) : null}
+              isFirstUnread={msg.id === firstUnreadMessageId}
+              highlighted={highlightedId === msg.id}
+              isEntering={enteringKeys.has(messageEntranceKey(msg))}
+              selectionMode={selectionMode}
+              selected={selectionMode && selectedIds.has(msg.id)}
+              reactionMenuOpen={openReactionMessageId === msg.id}
+              actionMenuOpen={openActionMessageId === msg.id}
+              replyTarget={msg.reply_to_id ? messagesMap[msg.reply_to_id] : undefined}
+              mediaVariant={messageMediaVariants[msg.id]}
+              senderAvatarVariant={msg.sender?.id ? senderAvatarVariants[msg.sender.id] : undefined}
+              deliveryState={receiptsByMessageId.delivery.get(msg.id) ?? null}
+              groupReadInfo={receiptsByMessageId.groupRead.get(msg.id) ?? null}
+              isSavedChat={isSavedChat}
+              myRole={myRole}
+              messageRefs={messageRefs}
+              capabilities={rowCapabilities}
+              actions={rowActions}
+            />
           );
           })}
 
@@ -1112,6 +1111,268 @@ export function MessageList({
     </div>
   );
 }
+
+/** Everything a row can ask the list to do. One object for the life of the list. */
+interface MessageRowActions {
+  reply: (message: MessageWithSender) => void;
+  jumpToReply: (messageId: string) => void;
+  reaction: (messageId: string, emoji: string) => void;
+  edit: (message: MessageWithSender) => void;
+  remove: (message: MessageWithSender) => void;
+  hideForMe: (message: MessageWithSender) => void;
+  retrySend: (message: MessageWithSender) => void;
+  editFailedSend: (message: MessageWithSender) => void;
+  discardLocalMessage: (message: MessageWithSender) => void;
+  togglePin: (message: MessageWithSender) => void;
+  forward: (message: MessageWithSender) => void;
+  openMedia: (media: MediaViewerItem) => void;
+  startSelection: (messageId: string) => void;
+  toggleSelected: (messageId: string) => void;
+  toggleReactionMenu: (messageId: string) => void;
+  closeReactionMenu: () => void;
+  openActionMenu: (messageId: string) => void;
+  closeActionMenu: () => void;
+  openGroupReadReceipts: (messageId: string) => void;
+}
+
+/**
+ * Which optional handlers the list was given.
+ *
+ * Presence decides what a bubble offers — no `onEdit`, no «Изменить» — so it has
+ * to reach the row. As booleans it compares by value, where the handlers
+ * themselves are new arrows on every render of the caller.
+ */
+interface MessageRowCapabilities {
+  jumpToReply: boolean;
+  edit: boolean;
+  remove: boolean;
+  hideForMe: boolean;
+  bulkHideForMe: boolean;
+  retrySend: boolean;
+  editFailedSend: boolean;
+  discardLocalMessage: boolean;
+  togglePin: boolean;
+  forward: boolean;
+  openMedia: boolean;
+}
+
+interface MessageRowProps {
+  msg: MessageWithSender;
+  userId: string | null;
+  isMe: boolean;
+  isFirstInGroup: boolean;
+  isLastInGroup: boolean;
+  dateLabel: string | null;
+  isFirstUnread: boolean;
+  highlighted: boolean;
+  isEntering: boolean;
+  selectionMode: boolean;
+  selected: boolean;
+  reactionMenuOpen: boolean;
+  actionMenuOpen: boolean;
+  replyTarget: MessageWithSender | undefined;
+  mediaVariant: MessageMediaVariantUrls | undefined;
+  senderAvatarVariant: AvatarVariantUrls | undefined;
+  deliveryState: MessageDeliveryState | null;
+  groupReadInfo: GroupReadReceiptInfo | null;
+  isSavedChat: boolean | undefined;
+  myRole: "owner" | "admin" | "member" | null | undefined;
+  messageRefs: React.MutableRefObject<Record<string, HTMLDivElement>> | undefined;
+  capabilities: MessageRowCapabilities;
+  actions: MessageRowActions;
+}
+
+/** A local send offers no reply and no reaction. One function, so it compares equal. */
+const NOOP = () => undefined;
+
+const EMPTY_MESSAGES_MAP: Record<string, MessageWithSender> = {};
+
+/**
+ * The bubble, memoised. `MessageRow` below already skips a render that changes
+ * nothing about its message; this also skips one that changes only the row
+ * around the bubble — a date label, the jump highlight, the unread separator.
+ */
+const MemoizedMessageBubble = React.memo(MessageBubble);
+
+/**
+ * One message of the conversation, memoised on props that stay `Object.is`
+ * equal while the message and what it may do are unchanged — see `rowActions`
+ * in `MessageList` for how the list keeps them that way.
+ */
+const MessageRow = React.memo(function MessageRow({
+  msg,
+  userId,
+  isMe,
+  isFirstInGroup,
+  isLastInGroup,
+  dateLabel,
+  isFirstUnread,
+  highlighted,
+  isEntering,
+  selectionMode,
+  selected,
+  reactionMenuOpen,
+  actionMenuOpen,
+  replyTarget,
+  mediaVariant,
+  senderAvatarVariant,
+  deliveryState,
+  groupReadInfo,
+  isSavedChat,
+  myRole,
+  messageRefs,
+  capabilities,
+  actions,
+}: MessageRowProps) {
+  const isSystemMessage = msg.type === "system";
+  const canUseHumanControls = canUseHumanMessageControls(msg, userId);
+  const canSelect = !msg.deleted_at && !isSystemMessage;
+  const isLocalSend = msg.id.startsWith("tmp:") || Boolean(msg.pending || msg.checking || msg.failed);
+  const hasGroupReadInfo = groupReadInfo !== null;
+
+  // Once per message rather than once per render, so the bubble's memo sees the
+  // same functions until the message, or what it may do, changes.
+  const handlers = React.useMemo(() => ({
+    onReply: isLocalSend ? NOOP : () => actions.reply(msg),
+    onReaction: isLocalSend ? NOOP : (emoji: string) => actions.reaction(msg.id, emoji),
+    onEdit: !isLocalSend && canUseHumanControls && capabilities.edit ? () => actions.edit(msg) : undefined,
+    onDelete: !isLocalSend && canUseHumanControls && capabilities.remove ? () => actions.remove(msg) : undefined,
+    onHideForMe: !isLocalSend && capabilities.hideForMe ? () => actions.hideForMe(msg) : undefined,
+    onRetrySend: capabilities.retrySend && msg.failed ? () => actions.retrySend(msg) : undefined,
+    onEditFailedSend: capabilities.editFailedSend && msg.failed ? () => actions.editFailedSend(msg) : undefined,
+    onDiscardLocalMessage: capabilities.discardLocalMessage && isLocalSend
+      ? () => actions.discardLocalMessage(msg)
+      : undefined,
+    onStartSelection: capabilities.bulkHideForMe && canSelect ? () => actions.startSelection(msg.id) : undefined,
+    onTogglePin: !isLocalSend && capabilities.togglePin ? () => actions.togglePin(msg) : undefined,
+    onForward: !isLocalSend && capabilities.forward ? () => actions.forward(msg) : undefined,
+    onToggleReactionMenu: () => actions.toggleReactionMenu(msg.id),
+    onOpenActionMenu: () => actions.openActionMenu(msg.id),
+    onOpenGroupReadReceipts: hasGroupReadInfo ? () => actions.openGroupReadReceipts(msg.id) : undefined,
+  }), [actions, canSelect, canUseHumanControls, capabilities, hasGroupReadInfo, isLocalSend, msg]);
+
+  // The one entry a reply preview reads. The whole map is rebuilt whenever any
+  // message changes, and handing it down re-rendered every row on each arrival.
+  const replyMap = React.useMemo(
+    () => (msg.reply_to_id && replyTarget ? { [msg.reply_to_id]: replyTarget } : EMPTY_MESSAGES_MAP),
+    [msg.reply_to_id, replyTarget],
+  );
+
+  return (
+    <div
+      data-message-id={msg.id}
+      ref={(el) => { if (el && messageRefs) messageRefs.current[msg.id] = el; }}
+      className={cn(
+        highlighted &&
+          "transition-colors duration-500 rounded-lg bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]"
+      )}
+    >
+      {dateLabel !== null && (
+        <div className="flex justify-center my-3" data-message-date-separator={getMessageDayKey(msg.created_at)}>
+          <span className="px-3 py-1 rounded-full text-xs select-none text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]">
+            {dateLabel}
+          </span>
+        </div>
+      )}
+      {isFirstUnread && (
+        <div className="unread-separator my-3 flex items-center justify-center" data-testid="first-unread-separator">
+          {/* The pink tint went with the blur, and the border keeps the
+              signal. A tinted fill under coloured words is the shape of
+              the ops-report callout in rule 10: a backdrop moved toward
+              the text's own colour costs contrast and says nothing the
+              border does not already say. */}
+          <span className="rounded-full border border-[color-mix(in_srgb,var(--kub-pink)_35%,var(--kub-border-color))] px-3 py-1 text-[12px] font-semibold uppercase tracking-wide text-[color:var(--kub-pink)]">
+            Новые сообщения
+          </span>
+        </div>
+      )}
+      {isSystemMessage ? (
+        <SystemMessageNotice message={msg} />
+      ) : (
+      <div className={cn("flex w-full min-w-0 items-center gap-1.5 overflow-hidden", isMe ? "justify-end" : "justify-start")}>
+        {selectionMode && canSelect && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              actions.toggleSelected(msg.id);
+            }}
+            className={cn(
+              "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors",
+              selected
+                ? "border-[var(--kub-cyan)] bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
+                : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] text-[color:var(--kub-muted)]"
+            )}
+            aria-label={selected ? "Снять выбор" : "Выбрать сообщение"}
+          >
+            {selected && <KubIcon name="check" size={14} />}
+          </button>
+        )}
+        <div
+          className={cn(
+            "min-w-0 max-w-full",
+            selectionMode && canSelect ? "cursor-pointer rounded-xl" : "",
+            selectionMode && canSelect && "max-w-[calc(100%-2.25rem)]"
+          )}
+          onClickCapture={(event) => {
+            if (!selectionMode) return;
+            const target = event.target as HTMLElement | null;
+            const isInteractive = Boolean(target?.closest("button,a,input,textarea,select,video,audio,[role='slider']"));
+            if (!canSelect) {
+              if (isInteractive) {
+                event.preventDefault();
+                event.stopPropagation();
+              }
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            actions.toggleSelected(msg.id);
+          }}
+          aria-disabled={selectionMode && !canSelect}
+        >
+          <MemoizedMessageBubble
+            message={msg}
+            isEntering={isEntering}
+            isMe={isMe}
+            isFirstInGroup={isFirstInGroup}
+            isLastInGroup={isLastInGroup}
+            onReply={handlers.onReply}
+            onJumpToReply={capabilities.jumpToReply ? actions.jumpToReply : undefined}
+            onReaction={handlers.onReaction}
+            onEdit={handlers.onEdit}
+            onDelete={handlers.onDelete}
+            onHideForMe={handlers.onHideForMe}
+            onRetrySend={handlers.onRetrySend}
+            onEditFailedSend={handlers.onEditFailedSend}
+            onDiscardLocalMessage={handlers.onDiscardLocalMessage}
+            onStartSelection={handlers.onStartSelection}
+            onTogglePin={handlers.onTogglePin}
+            onForward={handlers.onForward}
+            onOpenMedia={capabilities.openMedia ? actions.openMedia : undefined}
+            reactionMenuOpen={reactionMenuOpen}
+            onToggleReactionMenu={handlers.onToggleReactionMenu}
+            onCloseReactionMenu={actions.closeReactionMenu}
+            actionMenuOpen={actionMenuOpen}
+            onOpenActionMenu={handlers.onOpenActionMenu}
+            onCloseActionMenu={actions.closeActionMenu}
+            selected={selected}
+            isSelectionMode={selectionMode}
+            messagesMap={replyMap}
+            mediaVariant={mediaVariant}
+            senderAvatarVariant={senderAvatarVariant}
+            deliveryState={deliveryState}
+            groupReadInfo={groupReadInfo}
+            onOpenGroupReadReceipts={handlers.onOpenGroupReadReceipts}
+            isSavedChat={isSavedChat}
+            myRole={myRole}
+          />
+        </div>
+      </div>
+      )}
+    </div>
+  );
+});
 
 function GroupReadReceiptsModal({
   info,
