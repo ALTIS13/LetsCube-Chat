@@ -51,8 +51,10 @@ test.describe("sending photos without compression", () => {
         `This spec mocks the backend at ${FIXTURE_HOST}. Start the dev server with VITE_SUPABASE_URL=${FIXTURE_HOST} and VITE_SUPABASE_ANON_KEY=playwright-public-fixture; it will not run against any other configuration.`,
       );
     }
+    // Only the network. WebKit routes a `blob:` load as well, and with the load
+    // that decodes a picked photo aborted, staging never finished on it.
     await page.route(
-      (url) => url.hostname !== "127.0.0.1" && url.hostname !== "localhost",
+      (url) => (url.protocol === "http:" || url.protocol === "https:") && url.hostname !== "127.0.0.1" && url.hostname !== "localhost",
       (route) => route.abort("blockedbyclient"),
     );
     await installSession(page);
@@ -334,12 +336,15 @@ type HandedUpload = { path: string; type: string; size: number; sha256: string }
  * The route sees the request too, but Chromium does not give an intercepted
  * request the bytes of a file-backed blob — a photo picked from disk arrives as
  * an empty part — and a pick that includes the oversized file has to be picked
- * from disk. Hashing the form's file part before it is sent is the bytes the
- * application chose to send, which is the property under test: no re-encode.
+ * from disk; WebKit gives it the bytes of no blob part at all. Hashing the
+ * form's file part before it is sent is the bytes the application chose to
+ * send, which is the property under test: no re-encode. Below the resumable
+ * threshold the bytes are kept as well, for the storage mock to store when the
+ * route received none.
  */
 async function installUploadProbe(page: Page) {
   await page.addInitScript(() => {
-    const handed: Array<{ path: string; type: string; size: number; sha256: string }> = [];
+    const handed: Array<{ path: string; type: string; size: number; sha256: string; base64: string | null }> = [];
     (window as unknown as { __letscubeUploadProbe: typeof handed }).__letscubeUploadProbe = handed;
     const send = window.fetch.bind(window);
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -351,11 +356,18 @@ async function installUploadProbe(page: Page) {
         if (file instanceof Blob) {
           const bytes = await file.arrayBuffer();
           const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+          const view = new Uint8Array(bytes);
+          const kept = view.length <= 6 * 1024 * 1024;
+          let binary = "";
+          for (let at = 0; kept && at < view.length; at += 0x8000) {
+            binary += String.fromCharCode(...view.subarray(at, at + 0x8000));
+          }
           handed.push({
             path: decodeURIComponent(new URL(url).pathname.slice(new URL(url).pathname.indexOf(marker) + marker.length)),
             type: file.type,
             size: bytes.byteLength,
             sha256: Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(""),
+            base64: kept ? btoa(binary) : null,
           });
         }
       }
@@ -365,7 +377,21 @@ async function installUploadProbe(page: Page) {
 }
 
 async function probedUploads(page: Page): Promise<HandedUpload[]> {
-  return page.evaluate(() => (window as unknown as { __letscubeUploadProbe: HandedUpload[] }).__letscubeUploadProbe.slice());
+  return page.evaluate(() =>
+    (window as unknown as { __letscubeUploadProbe: Array<HandedUpload & { base64: string | null }> }).__letscubeUploadProbe
+      .map(({ base64: _bytes, ...upload }) => upload),
+  );
+}
+
+/** The bytes the page handed to storage for `path`, when it kept them. */
+async function probedBytes(page: Page, path: string): Promise<Buffer | null> {
+  const base64 = await page.evaluate(
+    (objectPath) =>
+      (window as unknown as { __letscubeUploadProbe: Array<{ path: string; base64: string | null }> }).__letscubeUploadProbe
+        .find((upload) => upload.path === objectPath)?.base64 ?? null,
+    path,
+  );
+  return base64 === null ? null : Buffer.from(base64, "base64");
 }
 
 async function expectOriginalUpload(page: Page, backend: Backend, file: PickedFile): Promise<{ path: string }> {
@@ -496,7 +522,9 @@ async function installBackend(page: Page): Promise<Backend> {
       const objectPath = decodeURIComponent(url.pathname.slice("/storage/v1/object/media/".length));
       const file = multipartFile(request.postDataBuffer(), request.headers()["content-type"] ?? "");
       if (!file) return json(route, { statusCode: "400", error: "Bad Request", message: "no file part" }, 400);
-      backend.uploads.push({ path: objectPath, ...file });
+      // An empty part is the engine withholding a blob, not an empty file.
+      const bytes = file.bytes.length ? file.bytes : (await probedBytes(page, objectPath)) ?? file.bytes;
+      backend.uploads.push({ path: objectPath, contentType: file.contentType, bytes });
       return json(route, { Id: `object-${backend.uploads.length}`, Key: `media/${objectPath}` });
     }
     if (url.pathname === "/auth/v1/user") {

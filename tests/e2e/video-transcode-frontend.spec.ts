@@ -39,6 +39,7 @@ test("wires one batched 720p variant query through persisted quality metadata", 
   const mediaVariantsSource = readFileSync(resolve("artifacts/kub/src/hooks/useMediaVariants.ts"), "utf8");
   const refreshLifecycleSource = readFileSync(resolve("artifacts/kub/src/lib/messageVariantRefresh.ts"), "utf8");
   const chatWindowSource = readFileSync(resolve("artifacts/kub/src/components/chat/ChatWindow.tsx"), "utf8");
+  const metadataSource = readFileSync(resolve("artifacts/kub/src/lib/mediaCompression.ts"), "utf8");
   const bubbleSource = readFileSync(resolve("artifacts/kub/src/components/chat/MessageBubble.tsx"), "utf8");
   const inputSource = readFileSync(resolve("artifacts/kub/src/components/chat/MessageInput.tsx"), "utf8");
 
@@ -46,7 +47,11 @@ test("wires one batched 720p variant query through persisted quality metadata", 
   expect(mediaVariantsSource).toContain("video720pUrl");
   expect(refreshLifecycleSource).toContain("setInterval");
   expect(refreshLifecycleSource).toContain("visibilitychange");
-  expect(chatWindowSource).toContain("MEDIA_QUALITY_METADATA_KEY");
+  // The metadata an attachment is sent with is built in `lib/mediaCompression.ts`
+  // since complaint 2, and `tests/unit/media-compression.test.mts` checks what it
+  // writes; here, that the conversation still sends through it.
+  expect(chatWindowSource).toContain("buildAttachmentMediaMetadata(");
+  expect(metadataSource).toContain("[MEDIA_QUALITY_METADATA_KEY]");
   expect(chatWindowSource).not.toContain('console.warn("[attachments] upload failed:", error)');
   // What this guards is that a storage error never reaches a person as raw
   // text. A bare substring scan of the whole file stopped meaning that: the
