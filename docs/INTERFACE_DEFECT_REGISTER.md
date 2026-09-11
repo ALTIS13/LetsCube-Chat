@@ -5580,3 +5580,131 @@ and WebKit 390 — the mouse as real input, touch as synthetic pointer events,
 Ctrl+wheel on mobile WebKit as a synthetic wheel event, rule 13 with iPhone
 insets. Mutations of the focus point, the pan limit, the double tap, a passive
 wheel listener and the stage clip each fail.
+
+## D-088 `[x]` The chat list refetched and rendered whole on every message, receipt and focus
+
+**Severity:** medium. Every signed-in session, on every message in any chat.
+Testers' complaint 12, 2026-09-11.
+
+**Surface:** `artifacts/kub/src/hooks/useChats.ts` (lines 86–93, 255–309,
+343–379 and 404–435 at `8341d1d`), `store/app.store.ts`,
+`components/sidebar/ChatList.tsx` and `ChatListItem.tsx`,
+`components/chat/ChatWindow.tsx`, `hooks/useTopics.ts`, and the receipts in
+`components/chat/MessageList.tsx`.
+
+**Defect:** every `messages` INSERT or UPDATE, and every UPDATE of the user's
+own `chat_members` row, refetched the whole list — the memberships, the chats
+with their members, and the summaries RPC — and focus and visibility changes
+refetched it again. `setChats` took a changed list whole, rows were not memoised
+and were handed fresh objects, the chat window read the whole list and
+`useTopics` the whole store. Measured on the fixture backend at 1440 and 390:
+one message in another chat made two full refetches, six requests, and rendered
+all six rows twice and 28 message rows; a focus refetched the list and rendered
+every row; a peer's receipt rendered all 14 of my messages. And an HTTP error on
+the memberships read emptied the list and closed the open chat.
+
+**Fixed** in `546341d`, with the conversation's receipts in `a5ff648`, both
+from agent I's worktree. Each event is applied to its own chat in
+`lib/chatListDelta.ts`; what an event cannot settle asks the summaries RPC for
+that chat alone, and events that arrive during a fetch are replayed over its
+result. The store keeps unchanged chats as the same objects, and rows are
+memoised. Focus no longer refetches: coming back revalidates after 15 s hidden,
+after a back-forward restore and on online, and a rejoined channel revalidates
+once. After: the message makes no chat request and renders its own row twice —
+the message, then its delivery mark; a focus or a 2 s absence makes no chat
+request and renders nothing; a receipt renders one row and one message.
+
+**Hardened after review** in `ae64273`. The chat tables keep the default
+replica identity on production (read from `pg_class` on 2026-09-11), so a
+Realtime UPDATE can leave out a column Postgres stored out of line and did not
+change — a long last message's text when only its pin changes. The delta
+applied a `null` there and would have blanked that preview until the next
+revalidation; it now keeps the preview's value unless the message is being
+deleted.
+
+**Regression tests:** `tests/e2e/chat-list-event-cost.spec.ts` (`a3186a0`),
+counting requests and renders per event on a mocked Realtime socket — 13 red on
+the unfixed code, 17 passed and 1 skipped after, at 1440 and 390; unit tests
+`chat-list-delta`, `chat-list-delta-partial-update`, `structural-sharing`,
+`resume-revalidation`, `group-read-receipt-face`, `chat-list-event-wiring` and
+`chat-list-change`. Fifteen mutations on the agent's side and one on the
+hardening each turned red and were restored byte for byte.
+
+**Not verified:** real Realtime — every event in the spec is mocked, a rejoin
+and the shape of `chat_members` UPDATE rows included; the path without the RPC;
+the 15 s threshold on a phone, the installed iPhone app, Tauri and Android;
+back-forward restore; WebKit; typing indicators, mute and the notification
+centre on their own. Focus still requests notifications (`useNotifications`).
+
+## D-089 `[x]` Reopening a chat fetched its history twice and rendered it twice
+
+**Severity:** medium. Every chat switch. Testers' complaint 13, 2026-09-11.
+
+**Surface:** `artifacts/kub/src/hooks/useMessages.ts` (lines 87, 175–182, 252,
+452–473, 487–495, 527, 625–639, 677–681, 737–752 and 1235–1242 at `8341d1d`)
+and the deferred bottom pass in `components/chat/MessageList.tsx` (668–677,
+782–789).
+
+**Defect:** the history was fetched on mount and again when the channel joined;
+`cleared_at` was read twice, the pins were refetched whenever the clear mark was
+set, and visibility and online reconciled repeatedly. The hook subscribed to
+every chat's messages and returned new arrays on every render. Leaving and
+reopening a 40-message chat read `chat_members` three times, fetched the
+history twice and rendered 96 message rows. Worse, against §11: a reopened chat
+with unread messages was placed from a store that lacked them, and a deferred
+bottom pass that nothing cancelled then moved the reader from the first unread
+message to the bottom — placed at 209 ms, at the bottom at 288 ms.
+
+**Fixed** in `a5ff648`, from agent I's worktree. A chat fetched this session
+renders from the store and revalidates once, after its channel joins; a chat
+with unread messages that arrived while it was closed is fetched before
+placement; `cleared_at` is read once; a message that arrived whole is not
+refetched; and the bottom pass applies only to a reader still at the bottom.
+After: one read of each, 40 rows rendered once, and the chat with 24 unread
+messages lands on the first of them.
+
+**Regression tests:** the same spec — reopen, switch back, reopen with unread —
+and `tests/unit/chat-list-event-wiring.test.mjs`. A mount fetch, a store that
+takes the refetch whole, the unguarded bottom pass and placing an unread chat
+from the store each fail it.
+
+**Not verified:** the first opening of a chat with unread messages, search and
+notification jumps, the history-prepend anchor and fast upward scrolling are
+held by source-scan unit tests and `chat-entry-scroll`, not by this spec; a
+clear of the history on another device within about 3 s of opening can leave
+the reused `cleared_at` stale.
+
+**A database proposal, not applied:** a revalidation that fetches only what
+changed would need `messages.updated_at` kept by a trigger, touched by reactions
+too, and a `chat_messages_changed_since` function. Agent I drafted it with its
+caveats — the trigger function's owner must own `messages`, and every reaction
+would add a Realtime UPDATE on `messages`. Nothing in this entry needs it.
+
+## D-090 `[x]` A reopened chat kept the old copy of what changed while it was closed
+
+**Severity:** medium. Every chat reopened after an edit, a deletion or a
+reaction in it, and more visible since D-089 made reopening render from the
+store. Found 2026-09-11 by agent I while fixing D-089.
+
+**Surface:** `mergeMessagesById` and `chooseMergedMessage` in
+`artifacts/kub/src/hooks/useMessages.ts`, lines 1475–1518 before the fix.
+
+**Defect:** the revalidation merged the fetched page into the held messages
+with the fetched copy offered first and a chooser that returned the second copy
+it was given, so for every message both sides had, the held copy won. An edit, a
+deletion or a reaction made while the chat was closed came back in the fetch and
+was dropped; the old text stayed until a reload.
+
+**Fixed** in `e0e64c1`. The merge is `artifacts/kub/src/lib/messageMerge.ts`
+and knows which side each copy came from. Two server copies resolve to the
+fetched one unless the held copy is provably newer — deleted where the fetched
+one is not, or edited later — which is what a Realtime change that landed after
+the fetch was taken looks like. A local send that is pending, checking or failed
+gives way to its server copy and never replaces one. A reaction that lands
+between the fetch and the merge has nothing to order it by, so the fetched
+reactions stand until the next reaction event.
+
+**Regression tests:** `tests/unit/message-merge.test.mts` 9/9; restoring "the
+held copy wins" turns the edit, deletion and reaction cases red. The bot client
+contract checks that `useMessages` delegates to the module and that the module
+matches sends by actor.
