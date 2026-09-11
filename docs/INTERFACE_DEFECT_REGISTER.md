@@ -5291,7 +5291,7 @@ and black against its darkest.
 **Not verified on a device.** Which colour iOS gives the glyphs in the installed
 app — in each theme — is the first thing to look at on the iPhone.
 
-## D-080 `[ ]` The time placement can loop until React gives up, and the whole interface falls over
+## D-080 `[x]` The time placement can loop until React gives up, and the whole interface falls over
 
 **Severity:** high when it happens — every screen is replaced by «Произошла
 ошибка интерфейса». Not seen with the layout as shipped; reproduced at once by
@@ -5326,6 +5326,52 @@ that do not move with the placement, as D-070 did for the reach, or keep the
 first anchored answer for a given content and container width — and add a
 regression test that applies the 40px lane and requires the conversation to
 settle without an error.
+
+### Closed 2026-09-11 — `9d78cd1`
+
+**Measured** on the fixture's 120-message conversation at 768x1024 with a 40px
+lane: two own messages changed placement 52 times each before React gave up.
+Inline, the 92px spacer carried the bubble's row to its full 376px, the stack
+cap resolved to 336px, the text sat on one 288.8px line, and 288.8 + 83.3 + 8 >
+352 chose anchored. Anchored, the row shrank round the text to 314.8px, the cap
+followed to 274.8px, the text wrapped to a 45.4px last line, and 45.4 + 83.3 + 8
+≤ 290.8 chose inline. Before the fix 768px looped at 2rem and 2.5rem and 900px
+at 2rem, 2.5rem and 4.375rem; 640, 1024, 1280 and the shipped lane settled.
+
+**Fix:** `artifacts/kub/src/lib/messageMetaHold.ts`, applied in
+`MessageBubble.tsx`. The inline layout is the one on the wider row, so the
+anchored answer it gives stands, and an inline answer measured on the anchored
+layout it produced cannot overturn it until something other than the placement
+changes: the inputs (text and footer marks, the message row's width, the stack
+cap, the box cap, the footer's width), or the text as the anchored layout set
+it. That second condition is WebKit's: about 1.3s in it re-lays the
+conversation — four lines to five in the same 309.4px paragraph — and holding on
+the inputs alone turned the spacer-line spec red there. An inline layout whose
+spacer has not yet reached its reserved width (84px on screen against a 92px
+reserve when Inter arrived) is taken but not held.
+
+**Regression tests:** `tests/e2e/message-meta-placement-settles.spec.ts` —
+lanes of 2rem, 2.5rem, 4.375rem and 6.5rem from 640 to 1280, a different lane
+per side, a lane from first paint, a resize, a lane removed — was 6/6 red before
+and is 6/6 green after on chromium-desktop-1440 and chromium-mobile-390;
+`tests/unit/message-meta-hold.test.mts` 11/11. At the shipped lanes no message
+moved: 0 of 960 placements differ on Chromium from 360 to 1920, 0 of 600 on
+WebKit from 360 to 1024. Seventeen mutations, SHA-256 checked each time, fifteen
+red; leaving out the cap alone or the row alone stays green, because the
+fixture's resize moves both, and together they are red. Taken onto the branch
+from agent H's worktree (`b548e29`) unchanged.
+
+**Found on the way, not changed:** `getMaxContentWidth` reads
+`--kub-action-lane` with `parsePixelValue`, which accepts only `px`, and a
+custom property comes back as its declared text — `6.5rem` — so wherever the
+stack cap cannot be resolved the decision measures as if there were no lane
+while CSS reserves 104px. That is where the 352 against 336 above came from.
+D-071 removes the lane; any lane that stays must be declared in `px` or
+resolved before it is read.
+
+**Not verified:** selection mode, edits, pins and read counts on a held message;
+a sidebar toggle without a resize; replies; the new spec on WebKit with a
+non-zero lane; devices.
 
 ## D-081 `[x]` Forwarding a message said nothing, whatever the server answered
 
