@@ -59,6 +59,9 @@ export function EmojiCategoryPicker({
   const [activeCategoryId, setActiveCategoryId] = useState(initialCategory?.id ?? "");
   const [query, setQuery] = useState("");
   const activeCategory = categories.find((category) => category.id === activeCategoryId) ?? categories[0];
+  // Icons only when every category has one: a row that mixes words and icons
+  // would read as two different controls. The folder picker keeps its words.
+  const iconTabs = categories.length > 0 && categories.every((category) => Boolean(category.icon));
 
   const visibleEmojis = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("ru-RU");
@@ -139,8 +142,16 @@ export function EmojiCategoryPicker({
 
       <div
         data-testid={`${testIdPrefix}-categories`}
-        className="grid gap-1 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] p-1"
-        style={{ gridTemplateColumns: `repeat(${Math.min(categories.length, 4)}, minmax(0, 1fr))` }}
+        className={cn(
+          "gap-1 rounded-lg border border-[color:var(--kub-border-color)] bg-[var(--kub-bg)] p-1",
+          // Icons, as Telegram draws its categories: one row of equal tabs under
+          // a cursor, and under a finger 44px tabs in a row that scrolls when
+          // they do not all fit — eight of them do not at 390px. Without gaps
+          // there, the last tab that does not fit shows most of itself, which
+          // is what says the row goes on; with them it was hidden whole.
+          iconTabs ? "flex pointer-coarse:gap-0 pointer-coarse:overflow-x-auto pointer-coarse:overscroll-x-contain" : "grid",
+        )}
+        style={iconTabs ? undefined : { gridTemplateColumns: `repeat(${Math.min(categories.length, 4)}, minmax(0, 1fr))` }}
         aria-label="Категории эмодзи"
       >
         {categories.map((category) => {
@@ -156,19 +167,27 @@ export function EmojiCategoryPicker({
               disabled={disabled}
               data-state={active ? "active" : "inactive"}
               aria-pressed={active}
+              // An icon tab keeps its category's word as its name and its hint.
+              aria-label={iconTabs ? category.label : undefined}
+              title={iconTabs ? category.label : undefined}
               className={cn(
-                "min-w-0 truncate rounded-md px-1.5 font-semibold transition-colors disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
-                compact ? "min-h-7 text-[9px]" : "min-h-8 text-[12px]",
-                // The compact label was cut to 9px to fit a 28px tab. A tab a
-                // finger can hit has the room back, so it reads at the size
-                // the regular picker uses.
-                "pointer-coarse:min-h-11 pointer-coarse:text-[12px]",
+                "min-w-0 rounded-md font-semibold transition-colors disabled:bg-[var(--kub-inset)] disabled:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))] disabled:text-[color:var(--kub-muted)] disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
+                iconTabs
+                  ? cn("flex flex-1 items-center justify-center", compact ? "min-h-7" : "min-h-8", "pointer-coarse:min-h-11 pointer-coarse:min-w-11")
+                  : cn(
+                      "truncate px-1.5",
+                      compact ? "min-h-7 text-[9px]" : "min-h-8 text-[12px]",
+                      // The compact label was cut to 9px to fit a 28px tab. A
+                      // tab a finger can hit has the room back, so it reads at
+                      // the size the regular picker uses.
+                      "pointer-coarse:min-h-11 pointer-coarse:text-[12px]",
+                    ),
                 active
                   ? "bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]"
                   : "text-[color:var(--kub-muted)] hover:bg-[var(--kub-surface-2)] hover:text-[color:var(--kub-text)]",
               )}
             >
-              {category.label}
+              {iconTabs && category.icon ? <KubIcon name={category.icon} size={compact ? 16 : 18} /> : category.label}
             </button>
           );
         })}

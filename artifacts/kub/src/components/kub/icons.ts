@@ -33,13 +33,17 @@ import {
   Envelope,
   Eye,
   EyeSlash,
+  AirplaneTilt,
   FileText,
   Folder,
   FolderOpen,
   FunnelSimple,
   FolderPlus,
+  ForkKnife,
   GearSix,
+  HandWaving,
   Hash,
+  Heart,
   IdentificationBadge,
   Image as ImageIcon,
   Info,
@@ -57,6 +61,7 @@ import {
   PaperPlaneRight,
   PaperPlaneTilt,
   Paperclip,
+  PawPrint,
   Pause,
   PencilSimple,
   Phone,
@@ -73,6 +78,7 @@ import {
   ShieldSlash,
   SignOut,
   Smiley,
+  SoccerBall,
   SpeakerHigh,
   SpeakerSlash,
   SquaresFour,
@@ -97,6 +103,7 @@ import {
 export type KubIconName =
   | "activity"
   | "admin"
+  | "airplane"
   | "alert"
   | "atSign"
   | "attach"
@@ -135,9 +142,12 @@ export type KubIconName =
   | "folder"
   | "folderAdd"
   | "folderOpen"
+  | "food"
   | "forward"
+  | "gesture"
   | "group"
   | "hash"
+  | "heart"
   | "help"
   | "image"
   | "info"
@@ -157,6 +167,7 @@ export type KubIconName =
   | "notifications"
   | "notificationsOff"
   | "pause"
+  | "paw"
   | "phone"
   | "pin"
   | "pinOff"
@@ -173,6 +184,7 @@ export type KubIconName =
   | "shieldOff"
   | "smile"
   | "spinner"
+  | "sport"
   | "tasks"
   | "themeDark"
   | "themeLight"
@@ -204,6 +216,7 @@ interface IconEntry {
 export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   activity: { Icon: Pulse },
   admin: { Icon: ShieldCheck },
+  airplane: { Icon: AirplaneTilt },
   alert: { Icon: WarningCircle },
   atSign: { Icon: At },
   attach: { Icon: Paperclip },
@@ -242,9 +255,12 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   folder: { Icon: Folder },
   folderAdd: { Icon: FolderPlus },
   folderOpen: { Icon: FolderOpen },
+  food: { Icon: ForkKnife },
   forward: { Icon: PaperPlaneRight },
+  gesture: { Icon: HandWaving },
   group: { Icon: UsersThree },
   hash: { Icon: Hash },
+  heart: { Icon: Heart },
   help: { Icon: Question },
   image: { Icon: ImageIcon },
   info: { Icon: Info },
@@ -264,6 +280,7 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   notifications: { Icon: Bell },
   notificationsOff: { Icon: BellSlash },
   pause: { Icon: Pause, weight: "fill" },
+  paw: { Icon: PawPrint },
   phone: { Icon: Phone },
   pin: { Icon: PushPin, weight: "fill" },
   pinOff: { Icon: PushPinSlash },
@@ -280,6 +297,7 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   shieldOff: { Icon: ShieldSlash },
   smile: { Icon: Smiley },
   spinner: { Icon: CircleNotch },
+  sport: { Icon: SoccerBall },
   tasks: { Icon: ClipboardText },
   themeDark: { Icon: Moon },
   themeLight: { Icon: Sun },
