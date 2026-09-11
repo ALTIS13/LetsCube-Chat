@@ -133,18 +133,37 @@ test.describe("LETSCUBE motion layout stability", () => {
     await loginAsRoleOrSkip(page, role);
     await page.goto("/admin/invites", { waitUntil: "domcontentloaded" });
 
+    // The control is brought on screen BEFORE the page is measured, because
+    // acting on it scrolls it there. `click()` scrolls its target into view as
+    // part of the action, so measuring first and clicking second compared two
+    // scroll positions and blamed the confirmation for the difference. Measured
+    // at 390x844: the first copy button starts at y=927 inside the admin area's
+    // 743px scroller, the click moved that scroller 476px on Chromium and 503px
+    // on WebKit before the pointer went down, and the heading went from 733 to
+    // 257 and 230 — exactly the failure this test reported, 3 of 3 on both
+    // engines. The same click dispatched without that scroll left the heading
+    // at 733 on both engines while the confirmation appeared. At 1440 the
+    // button is already on screen, which is why it only ever failed on phones.
+    const copy = page.getByRole("button", { name: "Скопировать" }).first();
+    await copy.scrollIntoViewIfNeeded();
+
     const anchor = page.getByText("Активные и прошлые инвайты").first();
     const before = await anchor.boundingBox();
     expect(before).not.toBeNull();
 
-    await page.getByRole("button", { name: "Скопировать" }).first().click();
+    await copy.click();
     await expect(page.getByTestId("kub-feedback-viewport")).toBeVisible();
 
-    const after = await anchor.boundingBox();
-    expect(after).not.toBeNull();
-    expect(
-      Math.round(after!.y),
-      "the confirmation pushed the page down instead of floating over it",
-    ).toBe(Math.round(before!.y));
+    // Read on arrival and again once the card's entrance has played, so a push
+    // that lands a frame or two late is caught as well as one that does not.
+    for (const wait of [0, 320]) {
+      if (wait) await page.waitForTimeout(wait);
+      const after = await anchor.boundingBox();
+      expect(after).not.toBeNull();
+      expect(
+        Math.round(after!.y),
+        `the confirmation moved the page under it (${wait}ms after it appeared)`,
+      ).toBe(Math.round(before!.y));
+    }
   });
 });
