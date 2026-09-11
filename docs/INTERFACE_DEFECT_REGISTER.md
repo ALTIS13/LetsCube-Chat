@@ -5384,3 +5384,109 @@ seconds. Found 2026-09-11 while fixing D-081.
 **Defect:** at 390 a refused forward's error card, about 131px tall, sits over
 the forward sheet's preview and its chat search — exactly where the next attempt
 starts.
+
+## D-085 `[x]` A draft that wraps paints the composer over the newest message for two frames
+
+**Severity:** medium. Every conversation at every width, on each line a draft
+gains or loses. Half of testers' complaint 3, «текст прыгает, когда печатаю»,
+2026-09-11; D-086 is the other half.
+
+**Surface:** `artifacts/kub/src/hooks/useMeasuredHeight.ts`, lines 66–70 at
+`0b69e38`.
+
+**Defect:** the composer dock overlays the list, which pads itself by the dock's
+measured height. The height came from a ResizeObserver that deferred the read to
+`requestAnimationFrame`, and the state update made there was applied a task
+after that frame. Measured on the DEV preview fixture, identically at 390x844
+and 1440x900: the keystroke that wraps painted two frames with the composer 24px
+over the newest message (its clearance 26px → 2px) before the conversation
+jumped 24px; unwrapping opened a 50px gap for two frames.
+
+**Fixed** in `d497c11`: the observer commits the height inside its own callback
+with `flushSync`, after layout and before paint. After: the composer and the
+newest message move −24/−24 and +24/+24 in the same frame on Chromium 390 and
+1440 and on WebKit 390, with no "ResizeObserver loop" error, which monitoring
+would report. The draft's own text does not jump at the 140px cap: its
+`scrollTop` follows the caret in one step. `flushSync` inside a ResizeObserver
+was checked on Chromium and WebKit, not on Firefox.
+
+**Regression tests:** `tests/e2e/composer-typing-frames.spec.ts`, whose sampler
+records what each painted frame holds; `tests/unit/composer-height-same-frame.test.mjs`.
+Restoring the deferral fails both, on both engines.
+
+## D-086 `[x]` Every message re-rendered whenever the list did, and on any store change
+
+**Severity:** medium: jank that grows with the conversation, and the other half
+of complaint 3.
+
+**Surface:** the row props in `artifacts/kub/src/components/chat/MessageList.tsx`
+(lines 915–926 and 1020–1072 at `0b69e38`) and the bubble's store read,
+`artifacts/kub/src/components/chat/MessageBubble.tsx:811` at `0b69e38`.
+
+**Defect:** rows were handed values that were new on every render — inline
+callbacks, delivery and read-receipt objects rebuilt per call, the whole message
+map — and each bubble subscribed to the whole store through `useAppStore()`
+without a selector, which a `memo` above it cannot stop. A draft that wraps
+changes the list's padding, a prop, so every bubble rendered again. Seven
+keystrokes with one wrap and one unwrap rendered 96 bubbles, all 48 twice; two
+store changes that touch no message rendered 96.
+
+**Fixed** in `19aaba0`: each message is a memoised `MessageRow` around a
+memoised bubble; one `rowActions` object, created once, reaches the current
+handlers through a ref; optional handlers arrive as booleans; receipts are
+memoised; the bubble gets only its reply target and reads the store through a
+selector. Row markup, `key`, `data-message-id` and the scroll effects are
+unchanged. After: 0 bubble renders in both cases on three projects, while
+`ChatHeader` still renders on the store changes, so they do reach subscribers.
+
+**Cost:** a bubble reads the window's size while rendering, for its context
+menu's shape and height, and it now renders less often on a resize. A menu takes
+the size when it opens and the time placement has its own ResizeObserver, but a
+window resized while a menu is open keeps the old menu shape until the bubble
+next renders. The render counter relies on React 19.1 internals, and the store
+test imports `/src/store/app.store.ts` through Vite's URL, checking in the test
+that it is the application's instance.
+
+**Regression tests:** `tests/e2e/message-render-stability.spec.ts`;
+`tests/unit/message-render-stability.test.mjs`. A fresh actions object per
+render, or the store read without a selector, brings back 96. The fixture §11
+contracts — chat entry, the glass layout and four message-meta specs — pass
+48/48 at 390 and 1440. "Unread → first unread", the history-prepend anchor and
+fast upward scrolling have no fixture e2e (the fixture forces no unread and
+cannot load history); `message-history-anchoring` and `own-send-scroll` hold
+them from the source, both green.
+
+## D-087 `[x]` A photo could not be zoomed
+
+**Severity:** medium. Every photo opened in the viewer, on every platform.
+Testers' complaint 1, 2026-09-11.
+
+**Surface:** `artifacts/kub/src/components/chat/MediaViewer.tsx:124` at
+`0b69e38`. Page zoom is disabled on purpose in `artifacts/kub/index.html:15`,
+which is unchanged.
+
+**Defect:** the viewer drew a plain fitted `<img>` with no zoom, and the page
+refuses page zoom, so a photo could only be seen fitted.
+
+**Fixed** in `c1a1d2d`, with fixture support in `78c93d2` — a fixture message
+may carry a `data:image/` picture, and the capture page opens the real viewer
+from its bubble: pinch; double tap and double click, 2.5x at the point and back;
+Ctrl+wheel through a non-passive listener, which is also how a trackpad pinch
+arrives in Chromium, WebView2 and Firefox; drag to pan while zoomed. The
+arithmetic is in `artifacts/kub/src/lib/mediaZoom.ts`: 1–4x, the point under the
+finger or cursor kept, a picture that cannot leave the stage, an exact return to
+rest. Zoom resets on close and per photo; a drag at rest is not claimed; the
+stage clips only while zoomed, inside the safe-area frame of rule 13. At rest the
+viewer is pixel-identical to the previous one at 390x844 and 1440x900.
+
+**Not handled or not verified:** Safari's trackpad pinch on macOS and iPadOS
+arrives as gesture events, which are not handled. A real finger pinch on an
+iPhone or an Android phone, and `touch-action: none` in iOS Safari, are not
+verified on a device.
+
+**Regression tests:** `tests/unit/media-zoom.test.mts` (11);
+`tests/e2e/media-viewer-zoom.spec.ts`, 8 tests, 24/24 on Chromium 390 and 1440
+and WebKit 390 — the mouse as real input, touch as synthetic pointer events,
+Ctrl+wheel on mobile WebKit as a synthetic wheel event, rule 13 with iPhone
+insets. Mutations of the focus point, the pan limit, the double tap, a passive
+wheel listener and the stage clip each fail.
