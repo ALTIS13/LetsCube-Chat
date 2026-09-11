@@ -128,7 +128,9 @@ for (const file of scrims) {
  */
 test("the pinned bar takes the material as a layer, not on itself", () => {
   const source = read("components/chat/PinnedMessage.tsx");
-  assert.match(source, /<KubGlassLayer\s*\/>/, "the pinned bar lost its glass layer");
+  // A capsule since 2026-09-11, so its layer carries the capsule's rounding
+  // and rim; the host it must not frost is the same.
+  assert.match(source, /<KubGlassLayer\b[^>]*\/>/, "the pinned bar lost its glass layer");
   const bar = classString("components/chat/PinnedMessage.tsx", "relative flex-shrink-0");
   assert.doesNotMatch(bar, /\bkub-glass(-strong)?\b/, "the bar wears the filter its dropdown samples");
   assert.doesNotMatch(bar, /\bbg-\[var\(--kub-surface\)\]/, "the bar kept its opaque fill");

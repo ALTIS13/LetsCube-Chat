@@ -4,7 +4,9 @@ import { KubLogo } from "@/components/kub";
 
 export function WelcomeScreen() {
   return (
-    <div className="flex-1 h-full flex flex-col items-center justify-center gap-6 chat-bg" data-testid="welcome-screen">
+    // The chat pane with no chat in it: the same wallpaper, so it takes the
+    // chat screen's text tokens, which are the ones measured over it.
+    <div className="kub-chat-screen flex-1 h-full flex flex-col items-center justify-center gap-6 chat-bg" data-testid="welcome-screen">
       <div className="flex flex-col items-center gap-5 text-center px-8 max-w-md">
         <KubLogo size={88} withGlow />
 

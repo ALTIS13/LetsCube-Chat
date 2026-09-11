@@ -255,7 +255,9 @@ export default function PublicPreviewCapturePage() {
             </div>
           </div>
 
-          <div className="flex h-full flex-1 overflow-hidden">
+          {/* `ChatWindow`'s root carries the chat screen's tokens; this is
+              where that root stands on this page. */}
+          <div className="kub-chat-screen flex h-full flex-1 overflow-hidden">
             {/* The same three-layer conversation `ChatWindow` builds: the list
                 runs the full height of the column and the chrome frosts over
                 it. Copied rather than abstracted for the same reason the rest
@@ -288,8 +290,8 @@ export default function PublicPreviewCapturePage() {
               />
               <div
                 ref={chromeRef}
-                // The same hook class `ChatWindow` carries for the DEV design
-                // options' fade; it has no rule unless an option is chosen.
+                // The class `ChatWindow`'s chrome stack carries, which paints
+                // the scroll edge behind the capsules.
                 className="kub-chat-chrome-stack absolute inset-x-0 top-0 flex flex-col"
                 data-testid="chat-chrome-stack"
               >

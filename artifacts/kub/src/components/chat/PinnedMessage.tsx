@@ -2,11 +2,9 @@
 
 import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { formatFullTime } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import type { MessageWithSender } from "@/types/database";
 import { useEffect, useMemo, useState } from "react";
 import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor";
-import { useChatChromeOptions } from "@/hooks/useChatChromeOptions";
 
 interface PinnedMessageProps {
   messages: MessageWithSender[];
@@ -18,9 +16,6 @@ export function PinnedMessage({ messages, onJump, onUnpin }: PinnedMessageProps)
   const [dismissed, setDismissed] = useState(false);
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  // The DEV design options (lib/chatChromeOptions.ts): a capsule floating under
-  // the header instead of a band across the conversation.
-  const { capsules } = useChatChromeOptions();
 
   const visibleMessages = useMemo(
     () => messages.filter((message) => message.pinned && !message.deleted_at),
@@ -64,15 +59,13 @@ export function PinnedMessage({ messages, onJump, onUnpin }: PinnedMessageProps)
 
   return (
     <div
-      className={
-        capsules
-          ? "relative flex-shrink-0 mx-2 mt-1"
-          : "relative flex-shrink-0 border-b border-[color:var(--kub-border-color)]"
-      }
+      // A capsule floating under the header rather than a band across the
+      // conversation. The scroll edge the chrome stack paints keeps its words
+      // readable over whatever passes under it, and the rim keeps it a surface
+      // against a backdrop nobody chose (rule 11).
+      className="relative flex-shrink-0 mx-2 mt-1 md:mx-4"
     >
-      {/* A floating capsule keeps a rim against whatever passes under it
-          (rule 11); the band's edge is the sheet's. */}
-      {capsules ? <KubGlassLayer className="rounded-[1.375rem] border border-[color:var(--glass-line)]" /> : <KubGlassLayer />}
+      <KubGlassLayer className="rounded-[1.375rem] border border-[color:var(--glass-line)]" />
       <div
         role="button"
         tabIndex={0}
@@ -83,18 +76,9 @@ export function PinnedMessage({ messages, onJump, onUnpin }: PinnedMessageProps)
             jumpToMessage(selectedMessage);
           }
         }}
-        className={cn(
-          "relative flex min-w-0 cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors kub-raise-hover",
-          capsules && "rounded-[1.375rem] py-2 pl-5 pr-2",
-        )}
+        className="relative flex min-w-0 cursor-pointer items-center gap-3 rounded-[1.375rem] py-2 pl-5 pr-2 transition-colors kub-raise-hover"
       >
-        <span
-          className={
-            capsules
-              ? "absolute inset-y-2.5 left-3 w-[2px] rounded-full bg-[var(--kub-cyan)]"
-              : "absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-[var(--kub-cyan)]"
-          }
-        />
+        <span className="absolute inset-y-2.5 left-3 w-[2px] rounded-full bg-[var(--kub-cyan)]" />
         <KubIcon name="pin" size={14} className="flex-shrink-0 text-[color:var(--kub-accent-text)]" />
         <div className="min-w-0 flex-1">
           <div className="mb-0.5 flex min-w-0 items-center gap-2">

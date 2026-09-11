@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { ruleBody } from "./helpers/css.mjs";
+
 const source = readFileSync(
   new URL("../../artifacts/kub/src/components/chat/MessageBubble.tsx", import.meta.url),
   "utf8",
@@ -228,7 +230,7 @@ test("the read count is visible against the bubble it actually sits on", () => {
   //
   // So this computes the contrast instead of looking for a class. The surface
   // is not a guess: `getGroupReadReceiptInfo` returns null unless the message
-  // is the reader's own, so the chip is always on the tinted own bubble.
+  // is the reader's own, so the chip is always on the own bubble.
   const { dark, light } = themePalettes();
 
   const button = source.match(/showGroupReadIndicator && \([\s\S]*?<\/button>/);
@@ -237,20 +239,26 @@ test("the read count is visible against the bubble it actually sits on", () => {
   assert.ok(boundary, "the chip needs a border token to be distinguishable from the bubble");
 
   // Read the own-bubble recipe from the component rather than restating it, so
-  // a change to the bubble's tint is caught here instead of quietly lowering
+  // a change to the bubble's fill is caught here instead of quietly lowering
   // the contrast this test believes it is protecting.
-  const ownBubble = source.match(
-    /bg-\[color-mix\(in_srgb,var\((--kub-[a-z0-9-]+)\)_(\d+)%,var\((--kub-[a-z0-9-]+)\)\)\]/,
-  );
+  //
+  // Since the chat screen took option C on 2026-09-11 the recipe is a fill
+  // token and a class. The bubble is royal blue, and `.kub-message-own` hands
+  // everything inside it its own tokens — the chip's border among them — so
+  // the edge is resolved the way it resolves inside the bubble, not as the
+  // theme declares it.
+  const ownBubble = source.match(/"kub-message-own bg-\[var\((--kub-[a-z0-9-]+)\)\]/);
   assert.ok(ownBubble, "the own-message bubble background recipe could not be read");
+  const ownRule = ruleBody(stylesheet, ".kub-message-own");
+  const insideBubble = ownRule.match(new RegExp(`${boundary[1]}:\\s*var\\((--kub-[a-z0-9-]+)\\)`));
+  const edgeToken = insideBubble ? insideBubble[1] : boundary[1];
 
   for (const [themeName, palette] of [["dark", dark], ["light", light]]) {
-    const tint = palette.get(ownBubble[1]);
-    const base = palette.get(ownBubble[3]);
-    const edge = palette.get(boundary[1]);
-    assert.ok(tint && base && edge, `${themeName}: a token used by the chip or bubble has no hex value`);
+    const fill = palette.get(ownBubble[1]);
+    const edge = palette.get(edgeToken);
+    assert.ok(fill && edge, `${themeName}: a token used by the chip or bubble has no hex value`);
 
-    const behind = mixChannels(tint, base, Number(ownBubble[2]) / 100);
+    const behind = channels(fill);
     const ratio = contrastRatio(channels(edge), behind);
     // 3:1 is what WCAG 1.4.11 asks of the boundary of a control. Below it the
     // chip stops being an affordance and becomes decoration nobody can see.

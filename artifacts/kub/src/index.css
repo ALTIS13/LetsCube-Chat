@@ -179,6 +179,11 @@
   --kub-safe-right: env(safe-area-inset-right, 0px);
   --kub-safe-bottom: env(safe-area-inset-bottom, 0px);
   --kub-safe-left: env(safe-area-inset-left, 0px);
+
+  /* The chat screen's scroll edge: how much the conversation is frosted where
+     it passes under the capsules. Half the panel's blur — the edge's own fill
+     does most of the work, and it spans the whole width. */
+  --kub-chat-edge-blur: blur(10px);
 }
 
 .dark {
@@ -318,12 +323,74 @@
   --kub-accent-text: #7FAEE2;
   --kub-warn: #F5B50A;
   --kub-chat-bg: var(--kub-bg);
-  --kub-message-out: #0E2C44;
-  /* Incoming bubbles share the surface token, which is what the bubble tail
-     already resolved to. Without this definition every incoming bubble had no
-     background at all and showed the chat wallpaper through its border. */
-  --kub-message-in: var(--kub-surface);
+
+  /* ── The chat screen ───────────────────────────────────────────────────────
+   * Option C, «Капсулы и цвет», chosen by the owner on 2026-09-11 for every
+   * shell. docs/operations/interface-material.md, «The chat screen», records
+   * what each value costs the rules. Every value that carries text or sits
+   * under it was measured from photographed pixels (rule 7) by
+   * scripts/render-chat-chrome-frames.mjs.
+   */
+  /* The reader's own bubble: royal blue on the brand's hue, turned slightly
+     towards the magenta, and the same blue in both themes. Everything inside
+     it that reads a token reads the values below, through `.kub-message-own`.
+     White is 5.80:1 on it and the meta line at .86 white 4.75:1 — which is
+     also what lifts the light theme's own-bubble time off 4.31:1 (D-117). */
+  --kub-message-out: #3B5CCF;
+  --kub-message-out-text: #FFFFFF;
+  --kub-message-out-meta: rgba(255, 255, 255, 0.86);
+  /* A word in the danger voice inside it: a failed send. The theme's red is
+     1.93:1 on this blue; this rose is 4.85:1 and still reads as the warning
+     beside the white words. */
+  --kub-message-out-danger: #FFE4EA;
+  --kub-message-out-line: rgba(255, 255, 255, 0.34);
+  /* The wells inside it: a reply preview, a reaction chip, the read-receipt
+     chip, a voice message's disabled button. They were drawn from the surface
+     tokens, which are near-white in the light theme, where the white words
+     over them vanished. A darker step of the bubble's own blue carries white
+     at 8.0:1 in both themes. */
+  --kub-message-out-well: #2B47AE;
+  /* Incoming bubbles. The surface token composited 1.08:1 off the old flat
+     ground; this stands off the tinted one and is told apart by its shape, as
+     the own bubble is by its fill. Without any definition an incoming bubble
+     has no background at all and shows the wallpaper through it. */
+  --kub-message-in: #1E2640;
   --kub-message-meta: rgba(245, 247, 251, 0.55);
+  /* The conversation's wallpaper: LETSCUBE's own pattern — a cube, a message,
+     a task's check mark, a location pin and a key, with a smaller cube and a
+     few dots — over three pools of the brand's hues and a vertical gradient.
+     One 160px tile, stroked in one colour at .10; nothing in it crosses the
+     tile's edge, so it repeats without a seam
+     (tests/unit/chat-chrome.test.mts). `.chat-bg` paints it on the scroller
+     that already painted the chat's ground. */
+  --kub-chat-ground: #080C20;
+  --kub-chat-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160' fill='none' stroke='%23A9B4FF' stroke-opacity='0.1' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M30 16l13 7.5v15L30 46l-13-7.5v-15z M30 31l13-7.5 M30 31l-13-7.5 M30 31v15'/%3E%3Cpath d='M99 19h28a7 7 0 0 1 7 7v11a7 7 0 0 1-7 7h-15l-8 6.5V44h-5a7 7 0 0 1-7-7V26a7 7 0 0 1 7-7z M100 29h18 M100 35h11'/%3E%3Cpath d='M68 64h12a6 6 0 0 1 6 6v12a6 6 0 0 1-6 6h-12a6 6 0 0 1-6-6v-12a6 6 0 0 1 6-6z M67.5 76l4.5 4.5l9-9.5'/%3E%3Cpath d='M138 121c-7-8-11-14-11-19.5a11 11 0 0 1 22 0c0 5.5-4 11.5-11 19.5z'/%3E%3Ccircle cx='138' cy='101.5' r='3.5'/%3E%3Cg transform='rotate(-40 30 118)'%3E%3Ccircle cx='20' cy='118' r='7'/%3E%3Cpath d='M27 118h24 M44 118v6 M50 118v5'/%3E%3C/g%3E%3Cpath d='M98 124l9 5.2v10.4l-9 5.2l-9-5.2v-10.4z M98 134.4l9-5.2 M98 134.4l-9-5.2 M98 134.4v10.4'/%3E%3Ccircle cx='62' cy='140' r='1.6'/%3E%3Ccircle cx='150' cy='152' r='1.6'/%3E%3Ccircle cx='84' cy='10' r='1.6'/%3E%3Ccircle cx='117' cy='80' r='3.2'/%3E%3C/svg%3E");
+  /* The pools sit where the conversation is read, not under the chrome: a pool
+     under the scroll edge showed as a seam where the edge let go. */
+  --kub-chat-wallpaper:
+    var(--kub-chat-pattern),
+    radial-gradient(85% 55% at 0% 42%, rgba(104, 92, 230, 0.30) 0%, rgba(104, 92, 230, 0) 70%),
+    radial-gradient(70% 45% at 100% 66%, rgba(66, 127, 194, 0.22) 0%, rgba(66, 127, 194, 0) 70%),
+    radial-gradient(80% 50% at 12% 82%, rgba(237, 30, 122, 0.14) 0%, rgba(237, 30, 122, 0) 70%),
+    linear-gradient(180deg, #0C1234 0%, #080C20 52%, #0C0A24 100%);
+  /* What the scroll edges fade from: the gradient's own top and bottom, so the
+     edge meets the wallpaper without a step. */
+  --kub-chat-edge-top: #0C1234;
+  --kub-chat-edge-bottom: #0C0A24;
+  /* The chips that ride inside the conversation — the date, the unread marker,
+     a system notice, the history band. A fill and no blur (rule 6). */
+  --kub-chat-chip: rgba(255, 255, 255, 0.12);
+  --kub-chat-chip-text: #F5F7FB;
+  /* The words and the accent on the chat screen, handed to the chat pane as
+     --kub-cyan, --kub-muted and --kub-accent-text by `.kub-chat-screen`, so
+     nothing outside the pane moves. A saturated own bubble scrolls under the
+     translucent capsules, and the product's grey and accent measured 3.65:1
+     and 4.05:1 over one, #AEBEFF still 4.39:1; these clear it along the same
+     hues. */
+  --kub-chat-accent: #6D8BF2;
+  --kub-chat-accent-hover: #7F99F5;
+  --kub-chat-muted: #AFC2D7;
+  --kub-chat-accent-text: #B8C6FF;
 
   --background: 221 65.52% 5.69%;        /* #050B18 */
   --foreground: 220 42.86% 97.25%;       /* #F5F7FB */
@@ -475,7 +542,6 @@
   --tg-pinned: var(--kub-surface-2);
   --tg-context-bg: var(--kub-surface-2);
   --tg-shadow: rgba(0, 0, 0, 0.45);
-  --tg-pattern: rgba(0, 174, 239, 0.025);
 
   /* Auto-computed border tones (shadcn pattern) */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
@@ -604,9 +670,41 @@
      --kub-surface-3, under the 3:1 an indicator needs. */
   --kub-warn: #A8760A;
   --kub-chat-bg: var(--kub-bg);
-  --kub-message-out: #DCEBF7;
+  /* The chat screen: see the note in .dark. The own bubble is the same blue
+     in both themes, and so is everything inside it. */
+  --kub-message-out: #3B5CCF;
+  --kub-message-out-text: #FFFFFF;
+  --kub-message-out-meta: rgba(255, 255, 255, 0.86);
+  --kub-message-out-danger: #FFE4EA;
+  --kub-message-out-line: rgba(255, 255, 255, 0.34);
+  --kub-message-out-well: #2B47AE;
+  /* White, without an outline: 1.66:1 off the tinted ground on a phone. */
   --kub-message-in: var(--kub-surface);
   --kub-message-meta: rgba(7, 17, 31, 0.55);
+  --kub-chat-ground: #D3DEF1;
+  --kub-chat-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160' fill='none' stroke='%233D4F9E' stroke-opacity='0.11' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M30 16l13 7.5v15L30 46l-13-7.5v-15z M30 31l13-7.5 M30 31l-13-7.5 M30 31v15'/%3E%3Cpath d='M99 19h28a7 7 0 0 1 7 7v11a7 7 0 0 1-7 7h-15l-8 6.5V44h-5a7 7 0 0 1-7-7V26a7 7 0 0 1 7-7z M100 29h18 M100 35h11'/%3E%3Cpath d='M68 64h12a6 6 0 0 1 6 6v12a6 6 0 0 1-6 6h-12a6 6 0 0 1-6-6v-12a6 6 0 0 1 6-6z M67.5 76l4.5 4.5l9-9.5'/%3E%3Cpath d='M138 121c-7-8-11-14-11-19.5a11 11 0 0 1 22 0c0 5.5-4 11.5-11 19.5z'/%3E%3Ccircle cx='138' cy='101.5' r='3.5'/%3E%3Cg transform='rotate(-40 30 118)'%3E%3Ccircle cx='20' cy='118' r='7'/%3E%3Cpath d='M27 118h24 M44 118v6 M50 118v5'/%3E%3C/g%3E%3Cpath d='M98 124l9 5.2v10.4l-9 5.2l-9-5.2v-10.4z M98 134.4l9-5.2 M98 134.4l-9-5.2 M98 134.4v10.4'/%3E%3Ccircle cx='62' cy='140' r='1.6'/%3E%3Ccircle cx='150' cy='152' r='1.6'/%3E%3Ccircle cx='84' cy='10' r='1.6'/%3E%3Ccircle cx='117' cy='80' r='3.2'/%3E%3C/svg%3E");
+  --kub-chat-wallpaper:
+    var(--kub-chat-pattern),
+    radial-gradient(80% 50% at 100% 36%, rgba(66, 127, 194, 0.22) 0%, rgba(66, 127, 194, 0) 70%),
+    radial-gradient(85% 55% at 0% 82%, rgba(139, 120, 232, 0.24) 0%, rgba(139, 120, 232, 0) 70%),
+    radial-gradient(60% 40% at 90% 70%, rgba(237, 30, 122, 0.07) 0%, rgba(237, 30, 122, 0) 70%),
+    linear-gradient(180deg, #DAE5F6 0%, #D0DCF1 55%, #D8D5F0 100%);
+  --kub-chat-edge-top: #DAE5F6;
+  --kub-chat-edge-bottom: #D8D5F0;
+  --kub-chat-chip: rgba(255, 255, 255, 0.78);
+  --kub-chat-chip-text: #07111F;
+  /* Darker, for the same two reasons as the dark theme's lighter pair: the
+     grey measured 4.45:1 on the chrome over a blue bubble, and the accent
+     4.48:1 — 3.94:1 where a pattern stroke ran under a name. The grey takes
+     one more step because #475B70 still measured 4.36:1 over the worst
+     field. The accent takes two more than the option rendered: #2B45A3 held
+     a sender's name at 4.52:1 on a phone and 4.35:1 on a desktop, where the
+     names sit on the violet pool at the left and a stroke of the pattern over
+     it is the darkest ground a word here meets. */
+  --kub-chat-accent: #3B5CCF;
+  --kub-chat-accent-hover: #3350B8;
+  --kub-chat-muted: #43566B;
+  --kub-chat-accent-text: #213A94;
 
   --background: 210 57.14% 97.25%;       /* #F4F8FC */
   --foreground: 215 63.16% 7.45%;        /* #07111F */
@@ -719,7 +817,6 @@
   --tg-pinned: var(--kub-surface-2);
   --tg-context-bg: var(--kub-surface);
   --tg-shadow: rgba(7, 17, 31, 0.12);
-  --tg-pattern: rgba(0, 92, 160, 0.025);
 
   /* Auto-computed border tones */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
@@ -917,14 +1014,110 @@ html.light[data-ios-standalone] body::before {
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-  /* Telegram-style chat wallpaper pattern (dot grid) */
+  /* ── The chat screen (option C) ──────────────────────────────────────────
+     docs/operations/interface-material.md, «The chat screen», records what
+     each of these costs the rules; the values are the tokens in `.dark` and
+     `.light`. */
+
+  /* The conversation's wallpaper: LETSCUBE's pattern over the pools and the
+     gradient. Painted on the scroller, which already painted the chat's
+     ground, so nothing is added and nothing blurs (rule 6), and it is the
+     coloured ground the capsules' glass samples (rule 2). The attachment stays
+     `scroll`: the pattern holds still while the messages move over it. */
   .chat-bg {
-    background-color: var(--tg-chat-bg);
-    background-image:
-      radial-gradient(var(--tg-pattern) 1px, transparent 1px),
-      radial-gradient(var(--tg-pattern) 1px, transparent 1px);
-    background-size: 40px 40px;
-    background-position: 0 0, 20px 20px;
+    background-color: var(--kub-chat-ground);
+    background-image: var(--kub-chat-wallpaper);
+    background-size: 160px 160px, 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+    background-position: 0 0;
+    background-repeat: repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+  }
+
+  /* The chat pane's words and accent. Its root carries this, so the capsules,
+     the conversation and the composer read the values measured over the
+     tinted wallpaper and under a blue bubble passing beneath the chrome, and
+     the rest of the product keeps its own. */
+  .kub-chat-screen {
+    --kub-cyan: var(--kub-chat-accent);
+    --kub-cyan-hover: var(--kub-chat-accent-hover);
+    --kub-muted: var(--kub-chat-muted);
+    --kub-accent-text: var(--kub-chat-accent-text);
+  }
+
+  /* The reader's own bubble. Everything inside it that reads a token reads the
+     version that works on its blue: the words white and the meta line at .86
+     white, links and the reply's name white, the delivery ticks and the rails
+     white, a failed send's warning in rose, and every well — a reply preview,
+     a reaction chip, the read-receipt chip, a voice message's button — a
+     darker step of the same blue. `--kub-bg` is the blue itself, because a
+     filled accent control carries it as its foreground: the voice message's
+     play button is white with a blue glyph. `--kub-surface` is left alone: the
+     only thing inside that reads it is the hover ❤️, which sits beside the
+     bubble, over the wallpaper. */
+  .kub-message-own {
+    --kub-text: var(--kub-message-out-text);
+    --kub-muted: var(--kub-message-out-meta);
+    --kub-accent-text: var(--kub-message-out-text);
+    --kub-cyan: var(--kub-message-out-text);
+    --kub-cyan-hover: var(--kub-message-out-text);
+    --kub-danger-text: var(--kub-message-out-danger);
+    --kub-border-color: var(--kub-message-out-line);
+    --kub-surface-2: var(--kub-message-out-well);
+    --kub-surface-3: var(--kub-message-out-well);
+    --kub-inset: var(--kub-message-out-well);
+    --kub-bg: var(--kub-message-out);
+  }
+
+  /* The scroll edge. With no bar under the status bar, what keeps the clock,
+     the capsules and their words readable over passing messages is what iOS 26
+     draws under its own glass: the conversation dimmed and frosted behind the
+     whole chrome, and let go over the 24px below it. The same under the
+     composer, over the home indicator.
+
+     Dense on purpose. At 78% the capsules' text measured 2.37:1 over a white
+     photograph; a capsule is translucent, so what it can promise is only what
+     the edge behind it promises.
+
+     Pseudo-elements of the two boxes `ChatWindow` already measures, so neither
+     height moves. Each is the first thing its box paints and takes no pointer,
+     so the chrome paints over it and a tap goes through it: no stacking
+     context, tree order (rule 12), and no descendants for its filter to
+     capture (rule 3). This is the one blur the material writes outside
+     `.kub-glass`, and it is written here rather than in a component (rule 1). */
+  .kub-chat-chrome-stack::before,
+  .kub-chat-composer-dock::before {
+    content: "";
+    position: absolute;
+    right: 0;
+    left: 0;
+    pointer-events: none;
+    -webkit-backdrop-filter: var(--kub-chat-edge-blur);
+    backdrop-filter: var(--kub-chat-edge-blur);
+  }
+
+  .kub-chat-chrome-stack::before {
+    top: 0;
+    bottom: -1.5rem;
+    background-image: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--kub-chat-edge-top) 96%, transparent) 0,
+      color-mix(in srgb, var(--kub-chat-edge-top) 88%, transparent) calc(100% - 1.5rem),
+      transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 1.5rem), transparent 100%);
+    mask-image: linear-gradient(180deg, #000 0, #000 calc(100% - 1.5rem), transparent 100%);
+  }
+
+  .kub-chat-composer-dock::before {
+    top: -1.5rem;
+    bottom: 0;
+    background-image: linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--kub-chat-edge-bottom) 94%, transparent) 0,
+      color-mix(in srgb, var(--kub-chat-edge-bottom) 88%, transparent) calc(100% - 1.5rem),
+      transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(0deg, #000 0, #000 calc(100% - 1.5rem), transparent 100%);
+    mask-image: linear-gradient(0deg, #000 0, #000 calc(100% - 1.5rem), transparent 100%);
   }
 
   .context-menu {
@@ -1601,19 +1794,6 @@ textarea::placeholder, input::placeholder {
    ("Входим...", "Загрузка") and now say so in words only; motion for work in
    flight belongs to the shared-motion plan, which owns exactly that and must
    not be pre-empted with a second animation system here. */
-
-@layer components {
-  /* Make the chat-bg use the cyber grid in dark mode without losing dot pattern. */
-  .dark .chat-bg {
-    background-image:
-      radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--kub-cyan) 5%, transparent) 0%, transparent 45%),
-      radial-gradient(circle at 80% 85%, color-mix(in srgb, var(--kub-pink) 4%, transparent) 0%, transparent 45%),
-      radial-gradient(var(--tg-pattern) 1px, transparent 1px),
-      radial-gradient(var(--tg-pattern) 1px, transparent 1px);
-    background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
-    background-position: 0 0, 0 0, 0 0, 20px 20px;
-  }
-}
 
 /* ─────────────────────────── Elevate utilities ─────────────────────────── */
 @layer utilities {

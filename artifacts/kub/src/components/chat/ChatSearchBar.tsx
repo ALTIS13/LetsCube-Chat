@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { KubIcon } from "@/components/kub";
+import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { SearchFilterChips } from "@/components/search/SearchShared";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -141,7 +141,13 @@ export function ChatSearchBar({ chatId, currentTopicId, isForum = false, message
   }, [onJumpTo, results]);
 
   return (
-    <div className="flex flex-shrink-0 flex-col border-b border-[color:var(--kub-border-color)] bg-[var(--kub-surface)]">
+    // A panel floating under the header, as the pinned capsule does, rather
+    // than a band across the conversation. It carries words over content it is
+    // not part of, so it takes the covering glass, as a leaf: the filter chips
+    // inside it may open something of their own (rule 3).
+    <div className="relative mx-2 mt-1 flex flex-shrink-0 flex-col md:mx-4">
+      <KubGlassLayer strong className="rounded-[1.375rem] border border-[color:var(--glass-line)]" />
+      <div className="relative flex min-w-0 flex-col">
       <div className="flex items-center gap-2 px-3 py-2">
         <KubIcon name="search" size={14} className="text-[color:var(--kub-muted)]" />
         <input
@@ -244,6 +250,7 @@ export function ChatSearchBar({ chatId, currentTopicId, isForum = false, message
           })}
         </div>
       )}
+      </div>
     </div>
   );
 }

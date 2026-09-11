@@ -168,7 +168,7 @@ function SystemMessageNotice({ message }: { message: MessageWithSender }) {
   const text = message.content?.trim() || "Системное уведомление";
   return (
     <div className="my-2 flex w-full justify-center px-8" data-system-message={message.id}>
-      <span className="max-w-[min(82vw,32rem)] rounded-full border border-[color:var(--kub-border-color)] px-3 py-1 text-center text-[12px] leading-snug text-[color:var(--kub-muted)]">
+      <span className="max-w-[min(82vw,32rem)] rounded-full bg-[var(--kub-chat-chip)] px-3 py-1 text-center text-[12px] leading-snug text-[color:var(--kub-chat-chip-text)]">
         {text}
       </span>
     </div>
@@ -1191,7 +1191,7 @@ export function MessageList({
         <div ref={contentRef} className="[overflow-anchor:none]">
           {(loadingOlder || olderError) && (
             <div ref={historyBandRef} className="flex justify-center py-2" data-message-history-status>
-              <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--kub-border-color)] px-3 py-1 text-xs text-[color:var(--kub-muted)]">
+              <span className="inline-flex items-center gap-2 rounded-full bg-[var(--kub-chat-chip)] px-3 py-1 text-xs text-[color:var(--kub-chat-chip-text)]">
                 {loadingOlder && <KubIcon name="spinner" size={12} />}
                 {olderError ?? "Загружаем историю..."}
               </span>
@@ -1743,7 +1743,10 @@ const MessageRow = React.memo(function MessageRow({
     >
       {dateLabel !== null && (
         <div className="flex justify-center my-3" data-message-date-separator={getMessageDayKey(msg.created_at)}>
-          <span className="px-3 py-1 rounded-full text-xs select-none text-[color:var(--kub-muted)] border border-[color:var(--kub-border-color)]">
+          {/* A filled chip, and still no blur (rule 6). D-062 took the fill
+              away when the ground was one flat colour; over the patterned
+              wallpaper a word needs a ground of its own to be read at all. */}
+          <span className="px-3 py-1 rounded-full text-xs font-semibold select-none text-[color:var(--kub-chat-chip-text)] bg-[var(--kub-chat-chip)]">
             {dateLabel}
           </span>
         </div>
@@ -1754,8 +1757,12 @@ const MessageRow = React.memo(function MessageRow({
               signal. A tinted fill under coloured words is the shape of
               the ops-report callout in rule 10: a backdrop moved toward
               the text's own colour costs contrast and says nothing the
-              border does not already say. */}
-          <span className="rounded-full border border-[color-mix(in_srgb,var(--kub-pink)_35%,var(--kub-border-color))] px-3 py-1 text-[12px] font-semibold uppercase tracking-wide text-[color:var(--kub-pink)]">
+              border does not already say. The neutral chip fill every
+              in-list chip wears over the wallpaper is not that: the light
+              theme's pink works out at 4.28:1 on the wallpaper's bare ground
+              and clears 4.5:1 on the chip, and the word takes the pink made
+              for words. */}
+          <span className="rounded-full border border-[color-mix(in_srgb,var(--kub-pink)_35%,var(--kub-border-color))] bg-[var(--kub-chat-chip)] px-3 py-1 text-[12px] font-semibold uppercase tracking-wide text-[color:var(--kub-pink-text)]">
             Новые сообщения
           </span>
         </div>

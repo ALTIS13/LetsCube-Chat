@@ -70,8 +70,6 @@ const panels = [
  */
 const layered = [
   ["components/sidebar/Sidebar.tsx", "relative flex h-full w-full flex-col"],
-  ["components/chat/ChatHeader.tsx", "relative flex flex-shrink-0 flex-col"],
-  ["components/chat/MessageInput.tsx", "relative flex-shrink-0"],
   ["pages/public/PublicPreviewCapturePage.tsx", "relative h-full flex-shrink-0 flex-col border-r"],
 ];
 
@@ -83,6 +81,94 @@ function bodyAfterLayer(source) {
   );
   assert.ok(found, "no element follows <KubGlassLayer />, so nothing is painted over it");
   return found[1];
+}
+
+/**
+ * The chat screen's chrome, which is capsules rather than bands since the owner
+ * chose option C on 2026-09-11.
+ *
+ * The header and the composer were in the list above: one band of material each,
+ * as a layer behind a positioned body. Now the conversation runs under them
+ * with no band at all, and every piece of glass is a small leaf — a round
+ * button, the title, the field, the pinned message — with the control or the
+ * row it belongs to laid over it. The two things the band had to hold, each of
+ * these still has to:
+ *
+ *  - the host of the fixed overlays is never frosted — the header's menu, the
+ *    composer's camera and recorder, a dialog opened from a selection;
+ *  - whatever is laid over a leaf is positioned, so tree order paints it above
+ *    the glass without a z-index (rules 3 and 12).
+ *
+ * And each leaf keeps the rim a floating surface keeps against a backdrop nobody
+ * chose (rule 11): `CAPSULE_GLASS`, `CAPSULE_CONTROL_GLASS`, or the same
+ * `--glass-line` written out.
+ */
+const capsuleChrome = [
+  ["components/chat/ChatHeader.tsx", "relative flex flex-shrink-0 flex-col"],
+  ["components/chat/MessageInput.tsx", "relative flex-shrink-0"],
+  ["components/chat/PinnedMessage.tsx", "relative flex-shrink-0"],
+  ["components/chat/ChatSelectionBar.tsx", "relative flex flex-shrink-0 flex-col"],
+  ["components/chat/ChatSearchBar.tsx", "relative mx-2 mt-1 flex flex-shrink-0 flex-col"],
+  ["components/chat/TopicStrip.tsx", "relative mx-2 mt-1 flex-shrink-0"],
+];
+
+/**
+ * Every `<KubGlassLayer … />` in a file, with the opening tag of the element laid
+ * over it. Found structurally rather than by a class landmark, for the reason
+ * the note on `layered` gives: a mutation can delete a landmark.
+ */
+function elementsOverLayers(source) {
+  const found = [];
+  for (const match of source.matchAll(/<KubGlassLayer\b[^>]*?\/>/g)) {
+    let index = match.index + match[0].length;
+    // Past whitespace, the `}` closing a conditional layer, and a JSX comment.
+    for (;;) {
+      const skip = source.slice(index).match(/^(?:\s+|\}|\{\/\*[\s\S]*?\*\/\})/);
+      if (!skip) break;
+      index += skip[0].length;
+    }
+    assert.match(source.slice(index, index + 2), /^<[A-Za-z]/, `nothing is laid over the glass layer: ${match[0]}`);
+    // The opening tag, read to its `>` at brace depth zero: a handler inside a
+    // prop has an arrow with a `>` of its own.
+    let depth = 0;
+    let end = index;
+    for (; end < source.length; end += 1) {
+      if (source[end] === "{") depth += 1;
+      else if (source[end] === "}") depth -= 1;
+      else if (source[end] === ">" && depth === 0) break;
+    }
+    found.push({ layer: match[0], over: source.slice(index, end + 1) });
+  }
+  return found;
+}
+
+for (const [file, rootClasses] of capsuleChrome) {
+  test(`${file} wears the material as capsule leaves, with a positioned control or row over each`, () => {
+    const source = read(file);
+    const rootHit = classString(file, rootClasses);
+    assert.doesNotMatch(
+      rootHit,
+      /\bkub-glass(-strong)?\b/,
+      `${file} frosts the box its overlays live in; a fixed dialog opened from here would be laid out against it`,
+    );
+    assert.match(rootHit, /\brelative\b/, `${file}'s root is not a positioning context`);
+
+    const pairs = elementsOverLayers(source);
+    assert.ok(pairs.length > 0, `${file} does not paint the material at all`);
+    for (const { layer, over } of pairs) {
+      assert.match(
+        layer,
+        /CAPSULE_(?:CONTROL_)?GLASS|border-\[color:var\(--glass-line\)\]/,
+        `${file}: a capsule's glass lost the rim a floating surface keeps: ${layer}`,
+      );
+      assert.match(over, /\brelative\b/, `${file}: what is laid over ${layer} is not positioned, so it paints under the glass`);
+      assert.doesNotMatch(
+        over,
+        /\b-?z-\d/,
+        `${file}: what is laid over ${layer} takes a z-index, which makes it a stacking context and clamps the overlays it opens`,
+      );
+    }
+  });
 }
 
 /** Chrome that covers content it is not part of. */
@@ -153,8 +239,13 @@ const veiled = [
   ["components/kub/KubButton.tsx", 1],
   ["components/kub/KubFilterChip.tsx", 1],
   ["components/kub/KubFeedbackViewport.tsx", 1],
-  ["components/chat/ChatHeader.tsx", 5],
-  ["components/chat/MessageInput.tsx", 9],
+  // Two, down from five, and eight, down from nine, on 2026-09-11: the header's
+  // way back, its title and its «⋯», and the composer's record button, became
+  // capsules. A veil on a capsule button sits under the button's own glass
+  // layer, so the capsule steps its glass instead (`CAPSULE_CONTROL_GLASS`,
+  // held in tests/unit/chat-chrome.test.mts).
+  ["components/chat/ChatHeader.tsx", 2],
+  ["components/chat/MessageInput.tsx", 8],
   ["components/chat/ChatInfoPanel.tsx", 20],
   // Two, down from eleven on 2026-09-11: the hover cluster, the per-message
   // context menu and its reaction pickers left the bubble for
@@ -536,6 +627,14 @@ for (const file of ["components/sidebar/ChatListItem.tsx", "components/chat/Mess
  * Each landmark is on the wrapping element and the class string that follows it
  * is the chip's own, which is what makes this findable without pinning line
  * numbers.
+ *
+ * The fill came back on 2026-09-11, and the reason is the ground, not a change
+ * of mind about the blur. The chat screen took option C: the conversation is a
+ * patterned, tinted wallpaper now, and over it a word needs a ground of its own
+ * to be read at all. Every chip takes `--kub-chat-chip`, a token painted flat —
+ * still no blur, still no hand-mixed translucent fill, still not the veil. The
+ * unread separator keeps its pink-mixed border beside the fill, because that
+ * border is its signal.
  */
 const IN_LIST_CHIPS = [
   ["the system notice", "data-system-message"],
@@ -568,11 +667,12 @@ for (const [what, landmark] of IN_LIST_CHIPS) {
       /(^|\s)kub-raise(\s|$)/,
       `${what} takes the veil, which on a light ground steps down and put this text at 4.30:1`,
     );
-    // What separates it from the wallpaper instead. The unread separator's
-    // border is the same token mixed with the pink it signals in.
+    // What separates it from the wallpaper instead: the chat screen's chip
+    // fill, or a border. The unread separator keeps both, its border the same
+    // token mixed with the pink it signals in.
     assert.match(
       classes,
-      /\bborder-\[color/,
+      /\bbg-\[var\(--kub-chat-chip\)\]|\bborder-\[color/,
       `${what} has neither a fill nor a border, so nothing separates it from the conversation`,
     );
   });

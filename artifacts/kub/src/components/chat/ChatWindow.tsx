@@ -958,7 +958,11 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         // composer that their blur had to sample. Now the list runs the whole
         // height of the pane and passes under both, so what they sample is the
         // conversation — which is the only thing that reads as frosted.
-        className="relative flex h-full w-full min-w-0 overflow-hidden"
+        //
+        // `kub-chat-screen` gives everything in the pane the chat screen's
+        // text and accent tokens, which were measured over its wallpaper and
+        // under its capsules (index.css).
+        className="kub-chat-screen relative flex h-full w-full min-w-0 overflow-hidden"
         style={{
           "--kub-keyboard-inset": `${keyboardInset}px`,
           "--kub-composer-height": `${composerHeight}px`,
@@ -1060,9 +1064,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           // before its header. `KubGlassLayer`'s note explains why the header
           // still keeps a plain `relative` box.
           //
-          // `kub-chat-chrome-stack` is a hook for the DEV design options'
-          // stylesheet, which paints the capsule option's fade from this box;
-          // no rule exists for it unless an option is chosen.
+          // `kub-chat-chrome-stack` paints the scroll edge behind the chrome
+          // (index.css): the conversation dimmed and frosted under the status
+          // bar and the capsules, and let go just below them.
           className="kub-chat-chrome-stack absolute inset-x-0 top-0 flex flex-col"
           data-testid="chat-chrome-stack"
         >
@@ -1141,8 +1145,8 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
           // keys on an iPhone; with the keyboard closed the inset is all that
           // is left, and on a device without one this is the keyboard alone.
           //
-          // `kub-chat-composer-dock` is the same kind of hook as the chrome
-          // stack's, for the capsule option's fade under the composer.
+          // `kub-chat-composer-dock` paints the scroll edge under the
+          // composer's capsules, as the chrome stack does above them.
           className="kub-chat-composer-dock absolute inset-x-0 bottom-0 transition-[padding-bottom] duration-150 ease-out"
           style={{ paddingBottom: "max(var(--kub-keyboard-inset, 0px), var(--kub-safe-bottom))" }}
         >
