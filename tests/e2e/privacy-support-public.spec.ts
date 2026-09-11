@@ -83,7 +83,7 @@ test.describe("public privacy and support surfaces", () => {
     page.on("request", (request) => {
       if (request.url().includes("/functions/v1/support-gateway")) gatewayRequests += 1;
     });
-    await installFakeSmartCaptcha(page);
+    await installFakeCaptcha(page);
     await gotoOrSkip(page, "/support");
     await page.waitForTimeout(2_100);
 
@@ -139,8 +139,13 @@ test.describe("public privacy and support surfaces", () => {
     let restoreRequests = 0;
     let messageRequests = 0;
 
-    await installFakeSmartCaptcha(page);
-    await page.route("**/functions/v1/support-gateway/**", async (route) => {
+    await installFakeCaptcha(page);
+    // Every gateway request is answered here and none is continued, so this test
+    // cannot open a ticket in whatever backend the dev server points at — which,
+    // for a server that can sign QA accounts in, is production. The pattern has
+    // no trailing slash on purpose: a request to the gateway's root, or to a
+    // path this handler does not know, is still caught rather than let through.
+    await page.route("**/functions/v1/support-gateway**", async (route) => {
       const request = route.request();
       const url = new URL(request.url());
       const method = request.method();
@@ -203,16 +208,24 @@ test.describe("public privacy and support surfaces", () => {
     });
 
     await gotoOrSkip(page, "/support");
-    // `installFakeSmartCaptcha` stands in for a *rendered* SmartCaptcha widget.
-    // With no VITE_AUTH_CAPTCHA_SITE_KEY in the dev server's environment the
-    // component renders an "unavailable" plate instead, never calls
-    // `smartCaptcha.render`, and `__supportCaptchaCallback` is never installed —
-    // the test then fails several steps later on a message that says nothing
-    // about the missing variable.
+    // `installFakeCaptcha` stands in for a *rendered* widget, and this proves one
+    // was rendered before anything depends on it. Two ways it used not to be:
+    //
+    // - No VITE_AUTH_CAPTCHA_SITE_KEY: the form draws an "unavailable" plate and
+    //   renders no widget at all.
+    // - A site key but no VITE_AUTH_CAPTCHA_PROVIDER: `resolveAuthCaptchaConfig`
+    //   picks Turnstile, and the fake only answered SmartCaptcha. The page loaded
+    //   Cloudflare's real script, the callback was never installed, the
+    //   optional-chained call below did nothing, and the form refused an empty
+    //   token without sending anything — so the chat never opened, and the test
+    //   failed at `guest-support-chat` with nothing pointing at the captcha.
+    //
+    // The fake now answers both providers, so a non-empty site key is the whole
+    // requirement, and a missing widget fails here, by name.
     await expect(
-      page.getByTestId("support-captcha"),
-      "the dev server for this spec needs VITE_AUTH_CAPTCHA_SITE_KEY set (any non-empty value); without it the support form renders the unconfigured-captcha plate",
-    ).not.toContainText("не настроена");
+      page.getByTestId("fake-support-captcha"),
+      "the dev server for this spec needs VITE_AUTH_CAPTCHA_SITE_KEY set (any non-empty value); without it the support form renders the unconfigured-captcha plate instead of a widget",
+    ).toBeVisible();
     await page.getByLabel("Ваше имя").fill("  Анна   Иванова ");
     await page.getByLabel("Эл. почта для ответа").fill(" ANNA@example.test ");
     await page.getByLabel("Номер телефона").fill("+7 (999) 123-45-67");
@@ -222,12 +235,15 @@ test.describe("public privacy and support surfaces", () => {
       .getByLabel("Что произошло")
       .fill("После входа приложение не загружает историю сообщений.");
     await page.getByRole("checkbox").check();
-    await page.evaluate(() => {
+    const answered = await page.evaluate(() => {
       const runtime = window as typeof window & {
         __supportCaptchaCallback?: (token: string) => void;
       };
-      runtime.__supportCaptchaCallback?.("playwright-support-token");
+      if (!runtime.__supportCaptchaCallback) return false;
+      runtime.__supportCaptchaCallback("playwright-support-token");
+      return true;
     });
+    expect(answered, "the captcha widget was drawn but never handed over its callback").toBe(true);
     await page.waitForTimeout(2_100);
     await page.getByRole("button", { name: "Отправить и открыть чат" }).click();
 
@@ -267,37 +283,43 @@ test.describe("public privacy and support surfaces", () => {
   });
 });
 
-async function installFakeSmartCaptcha(page: import("@playwright/test").Page) {
+/**
+ * Answers for whichever captcha provider the dev server is configured with.
+ *
+ * `HumanVerificationCaptcha` loads a provider's script only when its global is
+ * missing, so defining both globals keeps either real script off the page and
+ * routes both to the same stand-in widget and the same callback.
+ */
+async function installFakeCaptcha(page: import("@playwright/test").Page) {
   await page.addInitScript(() => {
+    type RenderOptions = { callback?: (token: string) => void };
     const runtime = window as typeof window & {
       smartCaptcha?: {
-        render: (
-          container: HTMLElement,
-          options: {
-            callback: (token: string) => void;
-            theme?: "light" | "dark";
-          },
-        ) => string;
+        render: (container: HTMLElement, options: RenderOptions) => string;
         reset: () => void;
         destroy: () => void;
       };
+      turnstile?: {
+        render: (container: HTMLElement, options: RenderOptions) => string;
+        reset: () => void;
+        remove: () => void;
+      };
       __supportCaptchaCallback?: (token: string) => void;
     };
-    runtime.smartCaptcha = {
-      render(container, options) {
-        const widget = document.createElement("div");
-        widget.textContent = "Проверка SmartCaptcha";
-        widget.setAttribute("data-testid", "fake-support-captcha");
-        widget.style.height = "102px";
-        widget.style.display = "flex";
-        widget.style.alignItems = "center";
-        widget.style.padding = "16px";
-        container.appendChild(widget);
-        runtime.__supportCaptchaCallback = options.callback;
-        return "support-captcha-widget";
-      },
-      reset() {},
-      destroy() {},
+    const render = (provider: string) => (container: HTMLElement, options: RenderOptions) => {
+      const widget = document.createElement("div");
+      widget.textContent = `Проверка ${provider}`;
+      widget.setAttribute("data-testid", "fake-support-captcha");
+      widget.setAttribute("data-fake-provider", provider);
+      widget.style.height = "102px";
+      widget.style.display = "flex";
+      widget.style.alignItems = "center";
+      widget.style.padding = "16px";
+      container.appendChild(widget);
+      if (options.callback) runtime.__supportCaptchaCallback = options.callback;
+      return `support-captcha-widget-${provider}`;
     };
+    runtime.smartCaptcha = { render: render("SmartCaptcha"), reset() {}, destroy() {} };
+    runtime.turnstile = { render: render("Turnstile"), reset() {}, remove() {} };
   });
 }
