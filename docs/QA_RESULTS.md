@@ -44,9 +44,15 @@ the spec restored byte for byte:
 - `canvas.toBlob` does encode WebP in this WebKit, 26.4, so the preview itself
   was not at fault.
 
-Not run in this wave: the specs that sign in (`visual-style-layout`,
-`tasks-filters`, `roles-visibility`), which belong to the gate before
-production.
+The specs that sign in ran afterwards on `d8ec522`, at 1440 and 390, against the
+public production configuration with screenshots, traces and video off and
+`KUB_QA_ALLOW_MUTATIONS=0`: `visual-style-layout` 11 passed and 9 skipped;
+`tasks-filters` and `roles-visibility` 12 passed; `smoke` and
+`unified-interface-chrome` 9 passed and 5 skipped.
+
+D-093, in `a048415`: `tests/unit/chat-display.test.mts` could not load before the
+change and is 2/2 after; with the helper writing the form for many again both
+fail; the DEV preview reads «4 участника» at 1440 and 390.
 
 ## 2026-09-11 - WebKit: the desktop message menu ended its entrance invisible (D-091)
 

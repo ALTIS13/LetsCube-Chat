@@ -5834,13 +5834,23 @@ decodes a source whole, so a 50 MB photo is a new load on its memory; and a
 deleted message's `{stem}.preview.webp` is not in `media_variants`, so it would
 be left behind.
 
-## D-093 `[ ]` A group of two to four members reads «4 участников»
+## D-093 `[x]` A group of two to four members read «4 участников»
 
-**Severity:** low. **Surface:** `artifacts/kub/src/lib/chatDisplay.ts:76`.
+**Severity:** low. **Surface:** `artifacts/kub/src/lib/chatDisplay.ts:76`, and the
+same count in `ChatHeader.tsx:166` and `ChatInfoPanel.tsx:1230`, found while
+fixing it.
 
-**Defect:** the count is always written in the form for many.
-`selectRussianPluralForm` in `lib/messageMediaSections.ts` already answers the
+**Defect:** the count was always written in the form for many.
+`selectRussianPluralForm` in `lib/messageMediaSections.ts` already answered the
 question.
+
+**Fixed** in `a048415`: `memberCountLabel` in `lib/chatDisplay.ts` takes the form
+from the last two digits, and the chat list, the header and the info panel all
+draw through it.
+
+**Regression tests:** `tests/unit/chat-display.test.mts`, counts from 0 to 111 and
+the list subtitle; with the helper writing the form for many again, both fail. On
+the DEV preview the four-member group reads «4 участника» at 1440 and 390.
 
 ## D-094 `[x]` «Открыть оригинал» had no name on a phone
 
