@@ -49,6 +49,7 @@ import {
 import { removeLocation } from "@/lib/mediaLocation";
 import { useIncomingMediaFiles } from "@/hooks/useIncomingMediaFiles";
 import type { AttachSendRequest } from "@/lib/attachSheet";
+import { recordingMinimumMs } from "@/lib/recordingGesture";
 import {
   CHAT_MEDIA_BUCKET,
   MAX_STAGED_ATTACHMENTS,
@@ -469,34 +470,40 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     return accepted;
   }, [uploadScope]);
 
-  const stageVoiceRecording = useCallback((blob: Blob, durationMs: number, mimeType: string) => {
+  /** Returns what it staged, so a recording can be sent in the same breath (D-130). */
+  const stageVoiceRecording = useCallback((blob: Blob, durationMs: number, mimeType: string): StagedAttachment | null => {
     const error = validateStagedAttachment(new File([blob], "voice.webm", { type: mimeType || blob.type || "audio/webm" }));
     if (error) {
       showAppAlert(error, "Голосовое сообщение");
-      return;
+      return null;
     }
     const currentVoice = stagedAttachmentsRef.current.find((attachment) => attachment.kind === "voice");
     if (currentVoice) removeStagedAttachment(currentVoice.id);
     if (!currentVoice && stagedAttachmentsRef.current.length >= MAX_STAGED_ATTACHMENTS) {
       showAppAlert(`Можно подготовить не больше ${MAX_STAGED_ATTACHMENTS} вложений за раз.`, "Голосовое сообщение");
-      return;
+      return null;
     }
-    setStagedAttachments((current) => [...current, createStagedVoiceAttachment(blob, durationMs, mimeType)]);
+    const staged = createStagedVoiceAttachment(blob, durationMs, mimeType);
+    setStagedAttachments((current) => [...current, staged]);
+    return staged;
   }, [removeStagedAttachment]);
 
-  const stageVideoMessageRecording = useCallback((blob: Blob, durationMs: number, mimeType: string) => {
+  /** As above: what it staged goes straight out, rather than waiting in the tray. */
+  const stageVideoMessageRecording = useCallback((blob: Blob, durationMs: number, mimeType: string): StagedAttachment | null => {
     const error = validateStagedAttachment(new File([blob], "video-message.webm", { type: mimeType || blob.type || "video/webm" }));
     if (error) {
       showAppAlert(error, "Видео-сообщение");
-      return;
+      return null;
     }
     const currentVideoMessage = stagedAttachmentsRef.current.find((attachment) => attachment.kind === "video_message");
     if (currentVideoMessage) removeStagedAttachment(currentVideoMessage.id);
     if (!currentVideoMessage && stagedAttachmentsRef.current.length >= MAX_STAGED_ATTACHMENTS) {
       showAppAlert(`Можно подготовить не больше ${MAX_STAGED_ATTACHMENTS} вложений за раз.`, "Видео-сообщение");
-      return;
+      return null;
     }
-    setStagedAttachments((current) => [...current, createStagedVideoMessageAttachment(blob, durationMs, mimeType, DEFAULT_MEDIA_QUALITY)]);
+    const staged = createStagedVideoMessageAttachment(blob, durationMs, mimeType, DEFAULT_MEDIA_QUALITY);
+    setStagedAttachments((current) => [...current, staged]);
+    return staged;
   }, [removeStagedAttachment]);
 
   const uploadStagedAttachment = useCallback(async (
@@ -802,29 +809,37 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     setReplyFocusKey((key) => key + 1);
   }, []);
 
+  /**
+   * A released recording is sent, not parked (D-130, audit row R6).
+   *
+   * Staged and sent in one step, the way the attach sheet sends what it picked:
+   * the tray carries it only while it is on its way, and there is no second
+   * «Отправить» to go and find. A press too short to be a recording never gets
+   * here — the composer refuses it with a hint beside the button instead of the
+   * modal this used to raise (R7) — so the guard left here is silent.
+   */
   const handleSendVoice = useCallback(async (blob: Blob, durationMs: number, mimeType: string) => {
     if (!userId) {
       showAppAlert("Войдите в аккаунт, чтобы отправлять голосовые сообщения.", "Голосовое сообщение");
       return;
     }
-    if (!blob || blob.size === 0 || durationMs < 1000) {
-      showAppAlert("Запись слишком короткая или пустая.", "Голосовое сообщение");
-      return;
-    }
-    stageVoiceRecording(blob, durationMs, mimeType);
-  }, [stageVoiceRecording, userId]);
+    if (!blob || blob.size === 0 || durationMs < recordingMinimumMs("voice")) return;
+    const staged = stageVoiceRecording(blob, durationMs, mimeType);
+    if (!staged) return;
+    await sendStagedAttachments("", undefined, [staged]);
+  }, [sendStagedAttachments, stageVoiceRecording, userId]);
 
+  /** The round video goes the same way: released means sent (D-130). */
   const handleSendVideoMessage = useCallback(async (blob: Blob, durationMs: number, mimeType: string) => {
     if (!userId) {
       showAppAlert("Войдите в аккаунт, чтобы отправлять видео-сообщения.", "Видео-сообщение");
       return;
     }
-    if (!blob || blob.size === 0 || durationMs < 500) {
-      showAppAlert("Запись слишком короткая или пустая.", "Видео-сообщение");
-      return;
-    }
-    stageVideoMessageRecording(blob, durationMs, mimeType);
-  }, [stageVideoMessageRecording, userId]);
+    if (!blob || blob.size === 0 || durationMs < recordingMinimumMs("video")) return;
+    const staged = stageVideoMessageRecording(blob, durationMs, mimeType);
+    if (!staged) return;
+    await sendStagedAttachments("", undefined, [staged]);
+  }, [sendStagedAttachments, stageVideoMessageRecording, userId]);
 
   const showJumpNotice = useCallback((message: string) => {
     setPinError(message);

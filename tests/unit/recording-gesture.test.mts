@@ -160,8 +160,10 @@ test("cancelling beats a short recording, so a slip is never sent", () => {
 test("the row says what the gesture will do, and a mouse is told its own way out", () => {
   assert.equal(recordingHoldLabel("recording", "touch"), "Влево — отмена");
   assert.equal(recordingHoldLabel("recording", "mouse"), "Отпустите вне поля — отмена");
-  assert.equal(recordingHoldLabel("cancelling", "touch"), "Отпустите — запись отменится");
   assert.equal(recordingHoldLabel("locking", "touch"), "Запись закреплена");
+  // There is no «about to cancel» state to speak: crossing the threshold throws
+  // the recording away at once, so nothing ever reads this label for it.
+  assert.equal(recordingHoldLabel("cancelling", "touch"), "Влево — отмена");
 });
 
 test("a short press hints beside the button instead of raising a dialog", () => {

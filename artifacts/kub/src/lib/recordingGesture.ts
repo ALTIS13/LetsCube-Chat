@@ -174,11 +174,18 @@ export function releaseRecording(input: RecordingReleaseInput): RecordingRelease
 }
 
 /**
- * What the row says while the finger is down, in Telegram's words for each
- * state rather than a card explaining the gesture (R3).
+ * What the row says while the finger is down, in Telegram's words for the state
+ * rather than a card explaining the gesture (R3).
+ *
+ * Two states, because there is no third to describe. Crossing the cancel
+ * threshold does not wait for the release: the recording is thrown away at once,
+ * which is what Telegram does and what makes the slide read as a gesture rather
+ * than a command waiting to be confirmed. So up to the threshold the row says
+ * which way to go, and past it there is no row left to say anything. A
+ * `cancelling` verdict still reaches the release — a finger can lift in the same
+ * frame it crosses — and it is spoken by nothing.
  */
 export function recordingHoldLabel(hold: RecordingHold, pointerType: "mouse" | "touch" | "pen"): string {
-  if (hold === "cancelling") return "Отпустите — запись отменится";
   if (hold === "locking") return "Запись закреплена";
   return pointerType === "mouse" ? "Отпустите вне поля — отмена" : "Влево — отмена";
 }

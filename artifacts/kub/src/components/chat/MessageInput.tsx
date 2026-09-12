@@ -55,12 +55,27 @@ import { forwardDraftTitle } from "@/lib/messageActions";
 import { CAPSULE_CONTROL_GLASS, CAPSULE_GLASS } from "@/lib/chatChrome";
 import { FOCUS_RING } from "@/lib/controlSurface";
 import { locationMessageText, type AttachIncoming, type AttachSendRequest } from "@/lib/attachSheet";
+import { ComposerRecordingRow, type ComposerRecordingPreview } from "./ComposerRecordingRow";
+import {
+  lockProgress,
+  readRecordingHold,
+  recordingButtonLabel,
+  recordingMinimumMs,
+  releaseRecording,
+  shortPressHint,
+  slideCancelProgress,
+  slideFollowX,
+  type RecordingMode,
+  type RecordingPhase,
+} from "@/lib/recordingGesture";
+import type { VoiceRecordResult } from "@/hooks/useVoiceRecorder";
 
 const DRAFT_PREFIX = "kub:draft:";
 const draftKey = (chatId: string) => `${DRAFT_PREFIX}${chatId}`;
 const MOBILE_RECORDER_LONG_PRESS_MS = 320;
 const RECORDER_TAP_MOVE_PX = 10;
-const RECORDER_LOCK_DRAG_PX = 72;
+/** How long the hint left by a press too short to be a recording stays (D-130, R7). */
+const SHORT_PRESS_HINT_MS = 2200;
 
 /** «Аня, Максим: Привет! Макет…» — who is being forwarded, and the first of it. */
 function forwardDraftSummary(messages: MessageWithSender[]): string {
@@ -139,10 +154,15 @@ export function MessageInput({
   const [modeFeedback, setModeFeedback] = useState<string | null>(null);
   const [voiceHoldActive, setVoiceHoldActive] = useState(false);
   const [holdRecorderState, setHoldRecorderState] = useState<{
-    mode: "voice" | "video";
-    locked: boolean;
+    mode: RecordingMode;
+    phase: RecordingPhase;
   } | null>(null);
-  const [lockDragProgress, setLockDragProgress] = useState(0);
+  /** How far the finger has travelled from where it landed; the row reads it. */
+  const [holdTravel, setHoldTravel] = useState<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
+  /** A paused recording, waiting to be listened to and then sent. */
+  const [recordingPreview, setRecordingPreview] = useState<ComposerRecordingPreview | null>(null);
+  /** What a press too short to be a recording leaves beside the button (R7). */
+  const [shortHint, setShortHint] = useState<string | null>(null);
   const voiceHold = useVoiceRecorder();
   const [isComposing, setIsComposing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -157,11 +177,17 @@ export function MessageInput({
   const recorderPointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const recorderPointerDownAtRef = useRef(0);
   const recorderPointerIdRef = useRef<number | null>(null);
+  const recorderPointerTypeRef = useRef<"mouse" | "touch" | "pen">("mouse");
+  /** When the recording itself began, which is later than the press on a finger. */
+  const recordingStartedAtRef = useRef(0);
+  const shortHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The composer's own row: a mouse released outside it cancels (R4, source T21). */
+  const composerRowRef = useRef<HTMLDivElement | null>(null);
+  const recordingPreviewUrlRef = useRef<string | null>(null);
+  const pausedRecordingRef = useRef<VoiceRecordResult | null>(null);
   const hasText = text.trim().length > 0;
   const hasAttachments = attachments.length > 0;
   const hasForwardDraft = Boolean(forwardDraft && forwardDraft.length > 0);
-  const hasStagedVoice = attachments.some((item) => item.kind === "voice");
-  const hasStagedVideoMessage = attachments.some((item) => item.kind === "video_message");
   const isAttachmentBusy = attachments.some((item) => item.status === "uploading" || item.status === "sending");
   const editingMessage = useAppStore((s) => s.editingMessage);
   const setEditingMessage = useAppStore((s) => s.setEditingMessage);
@@ -191,7 +217,9 @@ export function MessageInput({
     setHoldRecorderState(null);
     setVideoAutoStart(false);
     setVideoAutoAddOnStop(false);
-    setLockDragProgress(0);
+    setHoldTravel({ dx: 0, dy: 0 });
+    setRecordingPreview(null);
+    setShortHint(null);
     return () => {
       composerSendScope.invalidate();
       voiceRecordingScopeTokenRef.current = null;
@@ -232,6 +260,22 @@ export function MessageInput({
   useEffect(() => {
     voiceHoldActiveRef.current = voiceHoldActive;
   }, [voiceHoldActive]);
+
+  /**
+   * The time the recording row shows, for both modes.
+   *
+   * Counted from when the recording itself began rather than from the press,
+   * which on a finger is a third of a second earlier, and stopped once the
+   * recording is paused — a paused one has a length, not a clock.
+   */
+  const [holdElapsedMs, setHoldElapsedMs] = useState(0);
+  useEffect(() => {
+    if (!holdRecorderState || holdRecorderState.phase === "paused") return;
+    const tick = () => setHoldElapsedMs(Math.max(0, Date.now() - recordingStartedAtRef.current));
+    tick();
+    const timer = setInterval(tick, 250);
+    return () => clearInterval(timer);
+  }, [holdRecorderState]);
 
   useEffect(() => {
     holdRecorderStateRef.current = holdRecorderState;
@@ -322,8 +366,8 @@ export function MessageInput({
     });
   }, [showRecorderModeFeedback]);
 
-  const setActiveHoldRecorder = useCallback((mode: "voice" | "video") => {
-    const next = { mode, locked: false };
+  const setActiveHoldRecorder = useCallback((mode: RecordingMode) => {
+    const next = { mode, phase: "holding" as const };
     holdRecorderStateRef.current = next;
     setHoldRecorderState(next);
   }, []);
@@ -333,23 +377,38 @@ export function MessageInput({
     setHoldRecorderState(null);
     recorderPointerStartRef.current = null;
     recorderPointerDownAtRef.current = 0;
-    setLockDragProgress(0);
+    setHoldTravel({ dx: 0, dy: 0 });
+    if (recordingPreviewUrlRef.current) URL.revokeObjectURL(recordingPreviewUrlRef.current);
+    recordingPreviewUrlRef.current = null;
+    pausedRecordingRef.current = null;
+    setRecordingPreview(null);
   }, []);
 
   const lockActiveRecording = useCallback(() => {
     const current = holdRecorderStateRef.current;
-    if (!current || current.locked) return;
-    const next = { ...current, locked: true };
+    if (!current || current.phase !== "holding") return;
+    const next = { ...current, phase: "locked" as const };
     holdRecorderStateRef.current = next;
     setHoldRecorderState(next);
-    setLockDragProgress(1);
+  }, []);
+
+  const showShortPressHint = useCallback((mode: RecordingMode) => {
+    if (shortHintTimerRef.current) clearTimeout(shortHintTimerRef.current);
+    setShortHint(shortPressHint(mode));
+    shortHintTimerRef.current = setTimeout(() => setShortHint(null), SHORT_PRESS_HINT_MS);
+  }, []);
+
+  /** Whether a point is over the composer's own row. */
+  const pointerInsideComposer = useCallback((x: number, y: number) => {
+    const box = composerRowRef.current?.getBoundingClientRect();
+    if (!box) return true;
+    return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
   }, []);
 
   const startVideoHoldRecording = useCallback(() => {
-    if (hasStagedVideoMessage) {
-      showAppAlert("Сначала отправьте или удалите текущее видеосообщение.", "Видеосообщение");
-      return;
-    }
+    // Nothing is asked and nothing is refused: a recording is sent as soon as it
+    // is released, so there is never a previous one in the way (R6, R7).
+    recordingStartedAtRef.current = Date.now();
     videoRecordingScopeTokenRef.current = composerSendScope.capture();
     videoHoldActiveRef.current = true;
     setActiveHoldRecorder("video");
@@ -359,7 +418,7 @@ export function MessageInput({
     setShowVideoMessage(true);
     setShowAttach(false);
     setShowEmoji(false);
-  }, [composerSendScope, hasStagedVideoMessage, setActiveHoldRecorder]);
+  }, [composerSendScope, setActiveHoldRecorder]);
 
   const stopVideoHoldRecording = useCallback(() => {
     if (!videoHoldActiveRef.current) return;
@@ -368,10 +427,8 @@ export function MessageInput({
   }, [clearActiveHoldRecorder]);
 
   const startVoiceHoldRecording = useCallback(async () => {
-    if (hasStagedVoice) {
-      showAppAlert("Сначала отправьте или удалите текущее голосовое сообщение.", "Голосовое сообщение");
-      return;
-    }
+    // As above: released means sent, so nothing waits to be cleared first.
+    recordingStartedAtRef.current = Date.now();
     const scopeToken = composerSendScope.capture();
     voiceRecordingScopeTokenRef.current = scopeToken;
     voiceHoldActiveRef.current = true;
@@ -389,7 +446,7 @@ export function MessageInput({
       setVoiceHoldActive(false);
       clearActiveHoldRecorder();
     }
-  }, [clearActiveHoldRecorder, composerSendScope, hasStagedVoice, setActiveHoldRecorder, voiceHold.start]);
+  }, [clearActiveHoldRecorder, composerSendScope, setActiveHoldRecorder, voiceHold.start]);
 
   const stopVoiceHoldRecording = useCallback(async () => {
     if (!voiceHoldActiveRef.current) return;
@@ -399,9 +456,10 @@ export function MessageInput({
     clearActiveHoldRecorder();
     const result = await voiceHold.stop();
     if (!scopeToken || !composerSendScope.isActive(scopeToken)) return;
-    if (!result || result.blob.size === 0 || result.durationMs < 1000) {
+    // A press too short to be a recording is answered beside the button, not by
+    // a dialog over the whole interface (R7); by here it has already been said.
+    if (!result || result.blob.size === 0 || result.durationMs < recordingMinimumMs("voice")) {
       if (!result) voiceHold.cancel();
-      showAppAlert("Запись слишком короткая или пустая.", "Голосовое сообщение");
       return;
     }
     await runComposerCompletionIfCurrent(composerSendScope, scopeToken, () => (
@@ -423,12 +481,85 @@ export function MessageInput({
     if (voiceHoldActiveRef.current) void stopVoiceHoldRecording();
   }, [stopVideoHoldRecording, stopVoiceHoldRecording]);
 
+  /**
+   * Throws the recording away (R4): the microphone is released, the clip is
+   * dropped, and nothing is staged or sent.
+   *
+   * Closing the round-video card tears its `MediaRecorder` down with `onstop`
+   * detached, so the clip it was making is never handed on.
+   */
+  const cancelRecorderHold = useCallback(() => {
+    if (videoHoldActiveRef.current) {
+      setShowVideoMessage(false);
+      resetVideoRecorderFlags();
+    }
+    if (voiceHoldActiveRef.current) {
+      voiceHold.cancel();
+      voiceRecordingScopeTokenRef.current = null;
+      voiceHoldActiveRef.current = false;
+      setVoiceHoldActive(false);
+    }
+    clearActiveHoldRecorder();
+  }, [clearActiveHoldRecorder, resetVideoRecorderFlags, voiceHold.cancel]);
+
+  /**
+   * Stops a locked recording without sending it, so it can be heard first.
+   *
+   * For a voice message that means holding the clip and showing it playable —
+   * the only preview there is, now that the tray is not one. The round video
+   * has its own card with its own preview, so there the stop still ends and
+   * sends, which is what its control has always said it does.
+   */
+  const pauseLockedRecording = useCallback(async () => {
+    const current = holdRecorderStateRef.current;
+    if (!current || current.phase !== "locked") return;
+    if (current.mode === "video") {
+      stopVideoHoldRecording();
+      return;
+    }
+    const result = await voiceHold.stop();
+    voiceHoldActiveRef.current = false;
+    setVoiceHoldActive(false);
+    if (!result || result.blob.size === 0) {
+      cancelRecorderHold();
+      return;
+    }
+    if (recordingPreviewUrlRef.current) URL.revokeObjectURL(recordingPreviewUrlRef.current);
+    const url = URL.createObjectURL(result.blob);
+    recordingPreviewUrlRef.current = url;
+    pausedRecordingRef.current = result;
+    setRecordingPreview({ url, durationMs: result.durationMs });
+    const next = { ...current, phase: "paused" as const };
+    holdRecorderStateRef.current = next;
+    setHoldRecorderState(next);
+  }, [cancelRecorderHold, stopVideoHoldRecording, voiceHold.stop]);
+
+  /** The send in the locked row: what was paused, or what is still running. */
+  const sendLockedRecording = useCallback(async () => {
+    const current = holdRecorderStateRef.current;
+    if (!current) return;
+    if (current.mode === "video") {
+      stopVideoHoldRecording();
+      return;
+    }
+    if (current.phase !== "paused") {
+      await stopVoiceHoldRecording();
+      return;
+    }
+    const recorded = pausedRecordingRef.current;
+    const scopeToken = voiceRecordingScopeTokenRef.current;
+    clearActiveHoldRecorder();
+    if (!recorded || !scopeToken) return;
+    await runComposerCompletionIfCurrent(composerSendScope, scopeToken, () => (
+      onSendVoice?.(recorded.blob, recorded.durationMs, recorded.mimeType)
+    ));
+  }, [clearActiveHoldRecorder, composerSendScope, onSendVoice, stopVideoHoldRecording, stopVoiceHoldRecording]);
+
   const stopLockedRecording = useCallback(() => {
     stopRecorderHold();
   }, [stopRecorderHold]);
 
-  const finishRecorderPointerGesture = useCallback((shouldStop: boolean) => {
-    const locked = holdRecorderStateRef.current?.locked === true;
+  const resetRecorderPointer = useCallback(() => {
     if (touchHoldTimerRef.current) clearTimeout(touchHoldTimerRef.current);
     touchHoldTimerRef.current = null;
     touchRecordingStartedRef.current = false;
@@ -437,9 +568,15 @@ export function MessageInput({
     recorderPointerStartRef.current = null;
     recorderPointerDownAtRef.current = 0;
     recorderPointerIdRef.current = null;
-    if (shouldStop && !locked) stopRecorderHold();
-    if (!locked) setLockDragProgress(0);
-  }, [stopRecorderHold]);
+    setHoldTravel({ dx: 0, dy: 0 });
+  }, []);
+
+  /** A pointerup that escaped the button: a recording still being held ends and goes. */
+  const finishRecorderPointerGesture = useCallback((shouldStop: boolean) => {
+    const phase = holdRecorderStateRef.current?.phase;
+    resetRecorderPointer();
+    if (shouldStop && phase === "holding") stopRecorderHold();
+  }, [resetRecorderPointer, stopRecorderHold]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -475,7 +612,10 @@ export function MessageInput({
     recorderPointerIdRef.current = event.pointerId;
     touchPointerMovedRef.current = false;
     touchLongPressTriggeredRef.current = false;
-    setLockDragProgress(0);
+    recorderPointerTypeRef.current =
+      event.pointerType === "touch" ? "touch" : event.pointerType === "pen" ? "pen" : "mouse";
+    setHoldTravel({ dx: 0, dy: 0 });
+    setShortHint(null);
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
     } catch {
@@ -494,23 +634,37 @@ export function MessageInput({
     startRecorderHold(recorderMode);
   }, [isAttachmentBusy, recorderMode, startRecorderHold]);
 
+  /**
+   * Both axes, where only the upward one was read before (R4).
+   *
+   * Crossing the cancel threshold throws the recording away at once rather than
+   * waiting for the release, which is what Telegram does: the slide is a gesture
+   * a person feels their way through, not a command to be confirmed.
+   */
   const handleRecorderPointerMove = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     const startPoint = recorderPointerStartRef.current;
     if (!startPoint) return;
     const dx = event.clientX - startPoint.x;
     const dy = event.clientY - startPoint.y;
-    const distance = Math.hypot(dx, dy);
-    if (event.pointerType === "touch" && distance > RECORDER_TAP_MOVE_PX) {
+    if (event.pointerType === "touch" && Math.hypot(dx, dy) > RECORDER_TAP_MOVE_PX) {
       touchPointerMovedRef.current = true;
     }
-    const draggedUp = startPoint.y - event.clientY;
-    setLockDragProgress(Math.max(0, Math.min(1, draggedUp / RECORDER_LOCK_DRAG_PX)));
     if (!voiceHoldActiveRef.current && !videoHoldActiveRef.current) return;
-    if (draggedUp >= RECORDER_LOCK_DRAG_PX) lockActiveRecording();
-  }, [lockActiveRecording]);
+    if (holdRecorderStateRef.current?.phase !== "holding") return;
+    setHoldTravel({ dx, dy });
+    const verdict = readRecordingHold({ dx, dy });
+    if (verdict === "locking") lockActiveRecording();
+    else if (verdict === "cancelling") cancelRecorderHold();
+  }, [cancelRecorderHold, lockActiveRecording]);
 
+  /**
+   * What letting go means, decided by `releaseRecording` rather than here (R6).
+   *
+   * A tap that never became a recording still switches the mode, which is the
+   * one thing a release did before that has nothing to do with recording.
+   */
   const handleRecorderPointerUp = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    const locked = holdRecorderStateRef.current?.locked === true;
+    const state = holdRecorderStateRef.current;
     if (event.pointerType === "touch") {
       if (touchHoldTimerRef.current) clearTimeout(touchHoldTimerRef.current);
       touchHoldTimerRef.current = null;
@@ -519,26 +673,48 @@ export function MessageInput({
         touchLongPressTriggeredRef.current ||
         voiceHoldActiveRef.current ||
         videoHoldActiveRef.current;
-      if (recordingGesture) {
-        finishRecorderPointerGesture(!locked);
+      if (!recordingGesture) {
+        const elapsedMs = Date.now() - recorderPointerDownAtRef.current;
+        const shouldToggleMode = elapsedMs < MOBILE_RECORDER_LONG_PRESS_MS && !touchPointerMovedRef.current;
+        resetRecorderPointer();
+        if (shouldToggleMode) toggleRecorderMode();
         return;
       }
-      const elapsedMs = Date.now() - recorderPointerDownAtRef.current;
-      const shouldToggleMode = elapsedMs < MOBILE_RECORDER_LONG_PRESS_MS && !touchPointerMovedRef.current;
-      recorderPointerStartRef.current = null;
-      recorderPointerDownAtRef.current = 0;
-      recorderPointerIdRef.current = null;
-      touchPointerMovedRef.current = false;
-      touchLongPressTriggeredRef.current = false;
-      setLockDragProgress(0);
-      if (shouldToggleMode) toggleRecorderMode();
+    }
+    const startPoint = recorderPointerStartRef.current;
+    const travel = startPoint
+      ? { dx: event.clientX - startPoint.x, dy: event.clientY - startPoint.y }
+      : { dx: 0, dy: 0 };
+    const mode = state?.mode ?? recorderMode;
+    const verdict = releaseRecording({
+      hold: readRecordingHold(travel),
+      phase: state?.phase ?? "holding",
+      durationMs: Date.now() - recordingStartedAtRef.current,
+      mode,
+      pointerInsideComposer: pointerInsideComposer(event.clientX, event.clientY),
+      pointerType: recorderPointerTypeRef.current,
+    });
+    resetRecorderPointer();
+    if (verdict === "hold" || verdict === "lock") return;
+    if (verdict === "cancel") {
+      cancelRecorderHold();
       return;
     }
-    if (!locked) stopRecorderHold();
-    recorderPointerStartRef.current = null;
-    recorderPointerDownAtRef.current = 0;
-    recorderPointerIdRef.current = null;
-  }, [finishRecorderPointerGesture, stopRecorderHold, toggleRecorderMode]);
+    if (verdict === "too-short") {
+      cancelRecorderHold();
+      showShortPressHint(mode);
+      return;
+    }
+    stopRecorderHold();
+  }, [
+    cancelRecorderHold,
+    pointerInsideComposer,
+    recorderMode,
+    resetRecorderPointer,
+    showShortPressHint,
+    stopRecorderHold,
+    toggleRecorderMode,
+  ]);
 
   const handleRecorderPointerCancel = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     const nativeActiveTouch =
@@ -560,7 +736,7 @@ export function MessageInput({
     touchPointerMovedRef.current = false;
     recorderPointerDownAtRef.current = 0;
     recorderPointerIdRef.current = null;
-    if (holdRecorderStateRef.current?.locked !== true) stopRecorderHold();
+    if (holdRecorderStateRef.current?.phase === "holding") stopRecorderHold();
   }, [stopRecorderHold]);
 
   // ── the attach sheet (D-122) ──────────────────────────────────────────────
@@ -781,6 +957,45 @@ export function MessageInput({
     );
   }
 
+  const recording = holdRecorderState !== null;
+
+  /**
+   * The round button, held in one place.
+   *
+   * It is the same element whether the row is a composer or a recording, and it
+   * keeps its key across both, because React reuses a keyed child rather than
+   * remounting it — and a remount here would drop the pointer capture the
+   * gesture is running on, which ends the recording in the middle of a slide.
+   */
+  const recorderButton = (
+    <button
+      key="composer-recorder"
+      type="button"
+      data-testid="composer-recorder-button"
+      data-recorder-mode={recorderMode}
+      onContextMenu={handleRecorderContextMenu}
+      onPointerDown={handleRecorderPointerDown}
+      onPointerMove={handleRecorderPointerMove}
+      onPointerUp={handleRecorderPointerUp}
+      onPointerCancel={handleRecorderPointerCancel}
+      disabled={isAttachmentBusy}
+      className={cn(
+        "kub-interactive group/capsule relative flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-all select-none touch-none",
+        FOCUS_RING,
+        isAttachmentBusy
+          ? "text-[color:var(--kub-muted)] opacity-60 cursor-not-allowed"
+          : recorderMode === "video"
+          ? "bg-[color-mix(in_srgb,var(--kub-pink)_18%,transparent)] text-[color:var(--kub-pink)] hover:bg-[color-mix(in_srgb,var(--kub-pink)_26%,transparent)]"
+          : "text-[color:var(--kub-text)]"
+      )}
+      aria-label={recordingButtonLabel(recorderMode)}
+      title={recordingButtonLabel(recorderMode)}
+    >
+      {/* The video mode keeps its pink wash, which a glass layer would cover. */}
+      {recorderMode !== "video" && <KubGlassLayer className={CAPSULE_CONTROL_GLASS} />}
+      <KubIcon name={recorderMode === "video" ? "video" : "microphone"} size={22} className="relative" />
+    </button>
+  );
 
   return (
     // A plain box, and never a frosted one. This subtree opens the camera and
@@ -844,7 +1059,7 @@ export function MessageInput({
         autoStart={videoAutoStart}
         autoAddOnStop={videoAutoAddOnStop}
         stopSignal={videoStopSignal}
-        locked={holdRecorderState?.mode === "video" && holdRecorderState.locked}
+        locked={holdRecorderState?.mode === "video" && holdRecorderState.phase !== "holding"}
         onLockedStop={stopLockedRecording}
         onClose={() => {
           if (!renderedVideoRecordingScopeToken || !composerSendScope.isActive(renderedVideoRecordingScopeToken)) return;
@@ -973,60 +1188,16 @@ export function MessageInput({
           </>
         )}
 
-        {(modeFeedback || holdRecorderState) && (
+        {/* The recording itself is the composer's row now, not a card above it
+            (R3); what is left here is the mode's own feedback and the hint a
+            press too short to be a recording leaves behind (R7). */}
+        {(modeFeedback || shortHint) && !holdRecorderState && (
           <div
-            data-testid={holdRecorderState ? "composer-recording-lock-indicator" : "recorder-mode-feedback"}
-            className="relative mb-2 flex items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-raised)] px-3 py-2 text-xs text-[color:var(--kub-muted)]"
+            data-testid={shortHint ? "composer-short-press-hint" : "recorder-mode-feedback"}
+            className="mb-2 flex items-center gap-2 rounded-xl border border-[color:var(--kub-border-color)] bg-[var(--kub-raised)] px-3 py-2 text-xs text-[color:var(--kub-muted)]"
           >
-            {holdRecorderState && (
-              <div
-                data-testid="composer-recording-lock-rail"
-                className="pointer-events-none absolute bottom-full right-2 mb-2 flex flex-col items-center gap-1"
-              >
-                <div
-                  className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-full border shadow-lg backdrop-blur transition",
-                    holdRecorderState.locked
-                      ? "border-[color:var(--kub-cyan)] bg-[color-mix(in_srgb,var(--kub-cyan)_24%,var(--kub-surface))] text-[color:var(--kub-cyan)]"
-                      : "border-[color:var(--kub-border-color)] bg-[var(--kub-surface)] text-[color:var(--kub-muted)]"
-                  )}
-                >
-                  <KubIcon name={holdRecorderState.locked ? "check" : "lock"} size={14} />
-                </div>
-                <div className="relative h-16 w-1.5 overflow-hidden rounded-full bg-[var(--kub-surface-3)]">
-                  <span
-                    data-testid="composer-recording-lock-progress"
-                    data-lock-progress={lockDragProgress.toFixed(2)}
-                    className="absolute bottom-0 left-0 w-full rounded-full bg-[var(--kub-cyan)] transition-[height]"
-                    style={{ height: `${Math.max(8, lockDragProgress * 100)}%` }}
-                  />
-                </div>
-              </div>
-            )}
-            <span className={cn("h-2 w-2 rounded-full", holdRecorderState ? "animate-pulse bg-[var(--kub-danger)]" : "bg-[var(--kub-cyan)]")} />
-            <span className="font-medium text-[color:var(--kub-text)]">
-              {holdRecorderState
-                ? holdRecorderState.locked
-                  ? "Запись зафиксирована"
-                  : "Проведите вверх, чтобы зафиксировать"
-                : modeFeedback}
-            </span>
-            {holdRecorderState?.mode === "voice" && (
-              <span className="ml-auto tabular-nums text-[color:var(--kub-accent-text)]">
-                {formatRecorderDuration(voiceHold.durationMs)}
-              </span>
-            )}
-            {holdRecorderState?.mode === "voice" && holdRecorderState.locked && (
-              <button
-                type="button"
-                data-testid="composer-locked-recording-stop"
-                onClick={stopLockedRecording}
-                className="ml-2 inline-flex h-8 items-center gap-1.5 rounded-lg bg-[var(--kub-danger)] px-2.5 text-[12px] font-semibold text-white transition hover:brightness-110"
-              >
-                <KubIcon name="pause" size={13} />
-                Остановить
-              </button>
-            )}
+            <KubIcon name={shortHint ? "microphone" : "info"} size={14} tone="muted" />
+            <span className="font-medium text-[color:var(--kub-text)]">{shortHint ?? modeFeedback}</span>
           </div>
         )}
 
@@ -1038,7 +1209,24 @@ export function MessageInput({
             textarea keeps its ref and its sizing, and the composer measures
             the way it always has. The field's rim takes the accent while the
             text has focus: that rim is the field's focus indicator. */}
-        <div className="group/composer relative flex items-end gap-2">
+        <div ref={composerRowRef} className="group/composer relative flex items-end gap-2">
+          {recording && holdRecorderState ? (
+            <ComposerRecordingRow
+              mode={holdRecorderState.mode}
+              phase={holdRecorderState.phase}
+              hold={readRecordingHold(holdTravel)}
+              pointerType={recorderPointerTypeRef.current}
+              durationMs={holdElapsedMs}
+              cancelProgress={slideCancelProgress(holdTravel.dx)}
+              lockFill={lockProgress(holdTravel.dy)}
+              followX={slideFollowX(holdTravel.dx)}
+              preview={recordingPreview}
+              onCancel={cancelRecorderHold}
+              onPause={pauseLockedRecording}
+              onSend={sendLockedRecording}
+            />
+          ) : (
+            <>
           {/* 3.25rem is a round button and the gap beside it, on each side. */}
           <KubGlassLayer className="left-[3.25rem] right-[3.25rem] rounded-[1.375rem] border border-[color:var(--glass-line)] group-has-[textarea:focus]/composer:border-[color:var(--kub-cyan)]" />
           <button
@@ -1081,7 +1269,14 @@ export function MessageInput({
             <KubIcon name="smile" size={20} />
           </button>
 
-          {hasText || hasAttachments || hasForwardDraft ? (
+            </>
+          )}
+
+          {recording && holdRecorderState ? (
+            // While the finger is down the button stays under it; once the
+            // recording is locked the row carries its own controls instead.
+            holdRecorderState.phase === "holding" ? recorderButton : null
+          ) : hasText || hasAttachments || hasForwardDraft ? (
             <button
               onClick={handleSend}
               disabled={isAttachmentBusy}
