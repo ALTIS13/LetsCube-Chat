@@ -32,6 +32,7 @@ import { formatReplyMessagePreview } from "@/lib/messagePreview";
 import { getVideoPlaybackFallbackUrl, selectVideoPlaybackUrl } from "@/lib/mediaQuality";
 import { groupReactions, type ReactionGroup } from "@/lib/messageReactions";
 import { isUncompressedMedia } from "@/lib/mediaCompression";
+import { mediaBubbleStyle } from "@/lib/mediaBubbleLayout";
 import { resolveOriginalPreviewUrl } from "@/hooks/useMediaVariants";
 import {
   messageActorDisplayName,
@@ -1567,8 +1568,16 @@ function MediaImage({
 }) {
   const [failed, setFailed] = useState(false);
   const [usingOriginal, setUsingOriginal] = useState(false);
-  const aspectStyle = getMediaAspectStyle(dimensions);
-  const hasReservedAspect = Boolean(aspectStyle);
+  /**
+   * The box the picture is drawn in: the aspect it reserves and how tall it may
+   * get, both from `lib/mediaBubbleLayout.ts` (D-116, the owner's option B).
+   *
+   * Inline rather than a utility class because the cap is one number at every
+   * width; written as classes it would be repeated per breakpoint, and the
+   * copies would drift the first time one of them was tuned.
+   */
+  const boxStyle = mediaBubbleStyle(dimensions);
+  const hasReservedAspect = boxStyle.aspectRatio !== undefined;
   const activeUrl = usingOriginal ? originalUrl : url;
 
   /**
@@ -1592,6 +1601,13 @@ function MediaImage({
    * alone is correct — it is only the resolution hint that is missing — and a
    * wrong descriptor is worse than no descriptor, because the browser trusts
    * it absolutely and has no way to find out otherwise.
+   *
+   * `sizes` over-states the box on purpose: 86vw is 335px where the box is
+   * `min(360px, 100vw - 7.5rem)` — 270px on a 390px phone — and over-stating is
+   * the safe direction, because the browser then reaches for the larger
+   * candidate instead of the thumb. With a tall picture's preview now 720px
+   * across rather than 591 (D-116), every viewport and pixel ratio in the
+   * project matrix lands on the preview, never on the 360px thumb.
    */
   const srcSet = !usingOriginal && thumbUrl && thumbWidth && mainWidth && thumbWidth < mainWidth
     ? `${thumbUrl} ${thumbWidth}w, ${url} ${mainWidth}w`
@@ -1626,8 +1642,8 @@ function MediaImage({
     <button
       type="button"
       onClick={onOpen}
-      className="group relative block max-h-[340px] w-[min(360px,calc(100vw-7.5rem))] max-w-full overflow-hidden rounded-xl text-left sm:max-h-[380px] sm:w-[min(420px,70vw)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
-      style={aspectStyle}
+      className="group relative block w-[min(360px,calc(100vw-7.5rem))] max-w-full overflow-hidden rounded-xl text-left sm:w-[min(420px,70vw)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]"
+      style={boxStyle}
       aria-label="Открыть фото"
     >
       <img
@@ -1639,8 +1655,9 @@ function MediaImage({
         decoding="async"
         className={cn(
           "w-full object-cover transition-transform duration-200 group-hover:scale-[1.01]",
-          hasReservedAspect ? "h-full" : "max-h-[340px] sm:max-h-[380px]"
+          hasReservedAspect ? "h-full" : undefined
         )}
+        style={hasReservedAspect ? undefined : { maxHeight: boxStyle.maxHeight }}
         onError={handleError}
       />
       {original && (
@@ -1690,7 +1707,7 @@ function MediaVideo({
   const [usingOriginal, setUsingOriginal] = useState(false);
   const mediaPlayback = useChatMediaPlayback();
   const replaceCurrentItemUrl = mediaPlayback.replaceCurrentItemUrl;
-  const aspectStyle = getMediaAspectStyle(dimensions, 16 / 9);
+  const aspectStyle = getVideoAspectStyle(dimensions, 16 / 9);
   const activeUrl = usingOriginal ? originalUrl : url;
   const activePlaybackItem = useMemo(
     () => playbackItem && { ...playbackItem, url: activeUrl },
@@ -2035,7 +2052,15 @@ function getMessageMediaDimensions(message: MessageWithSender): MediaDimensions 
   return { width, height };
 }
 
-function getMediaAspectStyle(dimensions: MediaDimensions | null, fallbackRatio?: number): CSSProperties | undefined {
+/**
+ * A video's reserved aspect — the clamp a picture used to share.
+ *
+ * A picture's rule moved to `lib/mediaBubbleLayout.ts` and got taller on the
+ * owner's choice (D-116). A video deliberately keeps 0.72 and its own 320px
+ * cap: that choice was made about pictures, and a video's box carries controls
+ * and a poster that the renders behind the choice never covered.
+ */
+function getVideoAspectStyle(dimensions: MediaDimensions | null, fallbackRatio?: number): CSSProperties | undefined {
   if (!dimensions && !fallbackRatio) return undefined;
   const rawRatio = dimensions ? dimensions.width / dimensions.height : fallbackRatio ?? 1;
   const ratio = Math.min(1.9, Math.max(0.72, rawRatio));
