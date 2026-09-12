@@ -6479,19 +6479,25 @@ directly. Previews take a short-side floor of 720 in both places that size them 
 the client and `imagePreviewSize` in the worker, which now reads the original's size once and respects EXIF
 orientation, without which the floor would land on the wrong axis.
 
-**The share visible depends on the phone's width, and the two figures differ**: a 1290x2796 screenshot shows 71%
-of its height on a 430 px phone (bubble 310x480, was 51%), 82% on a 390 px one (270x480, was 58%) and 92% on a
-360 px one. The owner approved "about 82%", which is the 390 px figure; the tester's iPhone 15 Pro Max is 430 px,
-so he will see 71% unless the 480 px cap is raised. Both numbers are written on the render sheet. A normal 4:3
-photo and a wide picture are unchanged at every width; video was deliberately left on the old 0.72 and 320,
-since the choice was about pictures.
+**The cap was 480 px first, and the share visible turned out to depend on the phone's width.** At 480 a
+1290x2796 screenshot showed 71% of its height on a 430 px phone (bubble 310x480, was 51%), 82% on a 390 px one
+(270x480, was 58%) and 92% on a 360 px one. The owner had approved "about 82%", but that was the 390 px figure
+and the tester's iPhone 15 Pro Max is 430 px, so he would have seen 71%. Shown the frames and told this, the
+owner asked for the cap to be raised, and it is 550 px as of `e6a36c4`.
 
-**Two consequences worth knowing before it ships.** The worker deploys separately from the web application, and
-it does not regenerate variants that already exist, so larger previews arrive only for new uploads and only
-after `letscube-worker` is deployed; until then the taller bubble stretches the existing 591x1280 preview a
-little harder than before. Measured cost of the larger preview, not estimated: a UI screenshot goes from 10.9 to
-13.0 KiB, an original 1290x2796 from 10.7 to 13.1 KiB, and pure noise as an upper bound 205 to 358 KiB; 4:3 and
-16:9 are byte for byte the same.
+**What 550 px gives**: 82% on the 430 px phone — the number he approved, now on the phone the tester holds — and
+60% on a desktop, up from 53%. On the narrower phones it is the 0.5 clamp that stops the box rather than the cap,
+which never reaches them, so 390 px and 360 px both settle at 92%. A normal 4:3 photograph and a wide picture ask
+for a shorter box at every width and are drawn exactly as before; video was deliberately left on the old 0.72 and
+320, since the choice was about pictures.
+
+**One consequence worth knowing before it ships.** The worker deploys separately from the web application, and it
+does not regenerate variants that already exist, so larger previews would otherwise arrive only for new uploads
+and only after `letscube-worker` is deployed; until then the taller bubble stretches the existing 591x1280
+preview harder than before. The owner asked on 2026-09-12 for the pictures already sent to be regenerated too, so
+that old and new do not differ, and that backfill is being designed. Measured cost of the larger preview, not
+estimated: a UI screenshot goes from 10.9 to 13.0 KiB, an original 1290x2796 from 10.7 to 13.1 KiB, and pure
+noise as an upper bound 205 to 358 KiB; 4:3 and 16:9 are byte for byte the same.
 
 ## D-117 `[x]` In the light theme the time in your own message is under the contrast floor
 
