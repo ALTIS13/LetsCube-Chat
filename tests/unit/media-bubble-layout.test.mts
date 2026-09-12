@@ -64,19 +64,26 @@ test("a tall screenshot is shown as the owner chose: taller box, most of the pic
   assert.equal(mediaBubbleAspectRatio(TALL_SCREENSHOT), MEDIA_BUBBLE_MIN_ASPECT);
   assert.equal(mediaBubbleAspectRatio(TALL_AS_STORED), MEDIA_BUBBLE_MIN_ASPECT);
 
-  // The owner's number is the 390px phone: 58% before, 82% after.
-  assert.equal(percent(drawn(TALL_SCREENSHOT, BOX.phone390).heightShare), 82);
+  // The owner's number is 82%, and after he saw the frames the cap was raised
+  // from 480 to 550 so that it is the 430px phone — the tester's — that gets it.
+  assert.equal(percent(drawn(TALL_SCREENSHOT, BOX.phone430).heightShare), 82);
+  assert.equal(
+    percent(drawn(TALL_SCREENSHOT, BOX.phone430, { min: 0.5, max: 1.9, cap: 480 }).heightShare),
+    71,
+    "what the 430px phone showed while the cap was 480",
+  );
   assert.equal(
     percent(drawn(TALL_SCREENSHOT, BOX.phone390, { min: 0.72, max: 1.9, cap: 340 }).heightShare),
     58,
-    "what the same screenshot showed before this change",
+    "what the same screenshot showed before any of this",
   );
 
-  // And what every other width in the matrix gets. The narrow phone is the one
-  // case the cap does not bite: 240x480 is exactly the reserved aspect.
+  // And what every other width gets. On a phone the cap no longer bites at all:
+  // twice the bubble's width is reached first, which is the 0.5 clamp, so 390
+  // and 360 land on the same share.
+  assert.equal(percent(drawn(TALL_SCREENSHOT, BOX.phone390).heightShare), 92);
   assert.equal(percent(drawn(TALL_SCREENSHOT, BOX.phone360).heightShare), 92);
-  assert.equal(percent(drawn(TALL_SCREENSHOT, BOX.phone430).heightShare), 71);
-  assert.equal(percent(drawn(TALL_SCREENSHOT, BOX.desktop).heightShare), 53);
+  assert.equal(percent(drawn(TALL_SCREENSHOT, BOX.desktop).heightShare), 60);
 
   // Tall pictures are cropped top and bottom only — never narrowed.
   for (const boxWidth of Object.values(BOX)) {
@@ -84,7 +91,15 @@ test("a tall screenshot is shown as the owner chose: taller box, most of the pic
     assert.ok(Math.abs(box.widthShare - 1) < 1e-9, `narrowed at ${boxWidth}px`);
     assert.ok(box.boxHeight <= MEDIA_BUBBLE_MAX_HEIGHT_PX, `past the cap at ${boxWidth}px`);
   }
-  assert.equal(drawn(TALL_SCREENSHOT, BOX.phone360).boxHeight, MEDIA_BUBBLE_MAX_HEIGHT_PX);
+  // The clamp, not the cap, is what stops the box on both narrow phones.
+  for (const boxWidth of [BOX.phone360, BOX.phone390]) {
+    assert.equal(drawn(TALL_SCREENSHOT, boxWidth).boxHeight, boxWidth / MEDIA_BUBBLE_MIN_ASPECT);
+    assert.ok(drawn(TALL_SCREENSHOT, boxWidth).boxHeight < MEDIA_BUBBLE_MAX_HEIGHT_PX);
+  }
+  // And the cap, not the clamp, is what stops it on the wide phone and the desktop.
+  for (const boxWidth of [BOX.phone430, BOX.desktop]) {
+    assert.equal(drawn(TALL_SCREENSHOT, boxWidth).boxHeight, MEDIA_BUBBLE_MAX_HEIGHT_PX);
+  }
 });
 
 test("an ordinary photograph is drawn exactly as it was", () => {
@@ -133,11 +148,11 @@ test("a size that cannot be divided falls back instead of reserving a strip", ()
 });
 
 test("the style the box carries", () => {
-  assert.deepEqual(mediaBubbleStyle(TALL_SCREENSHOT), { aspectRatio: "0.5000", maxHeight: "480px" });
-  assert.deepEqual(mediaBubbleStyle(PHOTO_4_3), { aspectRatio: "1.3333", maxHeight: "480px" });
-  assert.deepEqual(mediaBubbleStyle(WIDE), { aspectRatio: "1.9000", maxHeight: "480px" });
+  assert.deepEqual(mediaBubbleStyle(TALL_SCREENSHOT), { aspectRatio: "0.5000", maxHeight: "550px" });
+  assert.deepEqual(mediaBubbleStyle(PHOTO_4_3), { aspectRatio: "1.3333", maxHeight: "550px" });
+  assert.deepEqual(mediaBubbleStyle(WIDE), { aspectRatio: "1.9000", maxHeight: "550px" });
   // No aspect to reserve: the cap still travels, because without it the picture
   // has no box for `object-cover` to cover.
-  assert.deepEqual(mediaBubbleStyle(null), { maxHeight: "480px" });
-  assert.deepEqual(mediaBubbleStyle(null, 16 / 9), { aspectRatio: "1.7778", maxHeight: "480px" });
+  assert.deepEqual(mediaBubbleStyle(null), { maxHeight: "550px" });
+  assert.deepEqual(mediaBubbleStyle(null, 16 / 9), { aspectRatio: "1.7778", maxHeight: "550px" });
 });

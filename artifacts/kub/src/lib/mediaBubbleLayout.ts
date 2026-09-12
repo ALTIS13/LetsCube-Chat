@@ -8,20 +8,25 @@
  *
  * The owner chose option B on 2026-09-12: a taller bubble that shows most of a
  * tall picture, still centre-cropped rather than letterboxed over a blurred
- * fill. A picture's aspect may go down to 0.5 and the box may be 480 px tall,
- * so the same screenshot shows 82% of its height on a 390 px phone — 71% at
- * 430 px, and 92% at 360 px, where the box is not capped at all.
+ * fill. A picture's aspect may go down to 0.5 and the box may be 550 px tall.
+ *
+ * The cap was 480 px until the owner saw the frames and asked for it higher.
+ * At 480 how much showed depended on how wide the phone was: 82% at 390 px but
+ * only 71% at 430 px, and the tester's iPhone is a 430. At 550 that phone shows
+ * 82% — the number the owner approved — and the narrower phones are held by the
+ * 0.5 clamp rather than by the cap, at 92% on both 390 and 360. A desktop goes
+ * from 53% to 60%.
  *
  * The wide side is left where it was. At 1.9 the bubble is already a strip
  * 142 px tall on a phone; letting a panorama spread wider buys a thinner
  * picture rather than a fuller one, and a panorama is read in the viewer.
  *
  * What moves and what does not: an ordinary photograph is inside both clamps
- * and asks for a box shorter than 480 px at every width, so 4:3 and 3:2 are
- * drawn exactly as before. The cap bites below an aspect of about 0.56 on a
- * 390 px phone and below 0.875 on a desktop, so a portrait photograph on a
- * desktop — where the box used to stop at 380 px — now shows more of itself
- * too. That is the one number for both breakpoints doing its work.
+ * and asks for a box shorter than 550 px at every width, so 4:3 and 3:2 are
+ * drawn exactly as before. On a phone the cap no longer bites at all — twice
+ * the bubble's width is reached first, and that is the 0.5 clamp — while on a
+ * desktop it bites below an aspect of about 0.76, so a portrait photograph
+ * there shows more of itself too.
  *
  * A video keeps the old clamp; see `getVideoAspectStyle` in
  * `components/chat/MessageBubble.tsx`. The choice above was made about
@@ -36,7 +41,7 @@ export const MEDIA_BUBBLE_MIN_ASPECT = 0.5;
 /** How wide, as before this change. */
 export const MEDIA_BUBBLE_MAX_ASPECT = 1.9;
 /** Whatever the aspect asks for, the box stops here. One number, at every width. */
-export const MEDIA_BUBBLE_MAX_HEIGHT_PX = 480;
+export const MEDIA_BUBBLE_MAX_HEIGHT_PX = 550;
 
 export interface MediaBubbleDimensions {
   width: number;
