@@ -1,5 +1,76 @@
 # QA Results
 
+## 2026-09-12 - Two measurements: «Управление» does not fit, and the glass-on-glass finding is false
+
+Both were demanded by the Windows and iOS assessment as «measure, do not decide by eye». Branch
+`measure/capsule-and-glass` (`19ea0f8`), one file changed - the register, adding D-151. Gates re-run by hand
+inside that worktree rather than by borrowing its branch: unit suite 1800 of 1800, typecheck clean, and nothing
+tracked under `output/`. The evidence - scripts, JSON and frames - is on disk there, untracked as every audit is.
+
+### The capsule: «Управление» does not fit, and neither does the capsule
+
+Measured against the proposal, not against what ships: the four-tab capsule is option A on
+`design/navigation-ios`, while `BottomNav.tsx` on the working branch is still the docked six-tab bar. The
+harness reproduced option A's own photographed geometry at 430 before any number was believed, and throws if it
+cannot.
+
+- A tab's label gets `(viewport - 98) / 4 - 8` px. «Управление» is **66.22 px** at 11px semibold Inter, measured
+  from the rendered text rather than counted from characters.
+- **It first fits at 430.** At 390 it is over by 1.22, at 375 by 4.97, at 360 by 8.72, at 320 by 18.72.
+- **It neither truncates nor wraps.** One word has no break opportunity, the label declares neither `truncate` nor
+  `nowrap`, and the button does not clip - so it paints into its neighbour. At 360 the gap between «Управление»
+  and «Настройки» is 2.50 px where the font's space is 2.78: **D-061 returning verbatim**, and photographed.
+- **Keeping «Админка» does not save it.** Then «Настройки» at 59.78 px becomes the binding word and still overflows
+  at 320 and 360. The round search button with its gutters takes 90 px - a quarter of a 360 px row. 360 is our
+  narrowest tested width, so 360 is what must hold.
+
+Options as measured, at 360: as proposed, fails; **round button dropped, strip full width, ok by 7.78 px**;
+10px labels, still fails by 2.69; 9px labels, ok but below the 11px floor D-061 established on a real device;
+short admin word, still fails because «Настройки» binds, and it costs answer 21's plain Russian; search as a fifth
+tab, fails; icon-only tabs, ok at every width.
+
+**Recommended and put to the owner: drop the round search button.** It duplicates the search the list column
+already carries, and removing it leaves «Управление» unshortened with 7.78 px of slack at 360. The cost is one
+control fewer than the iOS 26 picture, which is a thing to show rather than describe, so the 360 frame went to him.
+If the button turns out to be non-negotiable, the fallback is icon-only tabs below 430 - not smaller type.
+
+### The glass on glass: claimed, measured, refuted
+
+The assessment said that on a computer we lay glass on glass - the chat header's capsules over a panel that is
+itself the material - that Apple forbids it, and that the composite had never been measured. **It is not true, and
+this supersedes that bullet.** It was recorded here as claimed rather than established, which is the only reason it
+did not become a defect on a summary of itself.
+
+- **The chat pane has no material at any width.** `MainLayout.tsx` gives it no surface, `.kub-chat-screen` declares
+  four custom properties and nothing else, and `ChatHeader.tsx` says so in its own comment. The only `kub-glass` in
+  the shell are the sidebar - the list column beside the pane - and the top bar above both.
+- **The running app agrees**: 13 frosted surfaces, identical in count and composition at 1440, 1280 and 390. Under
+  every capsule sits exactly one frosted layer, the scroll edge at 10px blur, on a phone exactly as on a desktop.
+  **The «right on a phone, wrong on a computer» distinction does not exist.**
+- Measured anyway, photographed at the worst pixel: every capsule's name, status and «⋯» passes in both themes at
+  every width. The worst figure anywhere is **7.02 against a 4.5 floor** - a 56% margin. These reproduce the
+  material document's own recorded desktop numbers, which is a second confirmation that the harness measures what
+  it claims to.
+
+**So: neither proposed fix is made.** The capsules already sit over the conversation, and the chat panel has no
+material to lose - and «the panel loses its material» is one careless reading away from stripping the sidebar,
+which does wear it. No register entry was created for the finding, because the brief conditioned one on
+confirmation and it was refuted.
+
+### What neither measurement could reach
+
+Everything is Chromium. A WebKit pass should follow and is cheap: this project's rule 12 exists because a
+WebKit-only paint-order bug survived six deploys with seven Chromium viewports green. `prefers-reduced-transparency` is
+not answered by our material at all. Whether iOS 26 adapts its own glass over our light theme is unknown. And the
+six-tab bar that actually ships could not be measured, because the DEV capture route does not mount it - those
+remain D-061's device numbers.
+
+**Two traps recorded so they are not re-found:** the pinned capsule's glass is a sibling of its row, so querying
+the button reports «no glass of its own» falsely; and two frosted surfaces at `z-index: 50` are tooltips
+overlapping no capsule. **And two environmental gate failures** in a fresh worktree, neither from any change:
+`public-product-assets.test.mjs` needs the production build to have run, and `api-server` needs
+`tsc -b lib/api-zod` for an unbuilt composite project reference.
+
 ## 2026-09-12 - The stopped recording row, corrected by the owner's own screenshot
 
 Built on `design/recording-stopped-row` (`49b5ec5`, off `bf538c4`); not merged and not deployed, because one
