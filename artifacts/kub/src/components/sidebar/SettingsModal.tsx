@@ -11,7 +11,8 @@ import { usePrivacyPreferences } from "@/hooks/usePrivacyPreferences";
 import { usePush } from "@/hooks/usePush";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { useIsAdmin, useIsManagerOrAdmin } from "@/hooks/useRole";
-import { KubButton, KubIcon, KubModal, KubSwitch, type KubIconName } from "@/components/kub";
+import { useHint } from "@/hooks/useHint";
+import { KubButton, KubHint, KubIcon, KubModal, KubSwitch, type KubIconName } from "@/components/kub";
 import { PhoneSection } from "./PhoneSection";
 import { AudioSettingsSection } from "./AudioSettingsSection";
 import { cn } from "@/lib/utils";
@@ -88,6 +89,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     setPreference: setPushPreference,
   } = usePush();
   const isStaff = useIsManagerOrAdmin();
+  // Offered wherever the «Сервис» row can be: `visibleSettingsSections`
+  // hands that section out on the same flag, so these cannot drift apart.
+  const adminHint = useHint("admin-entry", { enabled: isStaff });
   const isAdmin = useIsAdmin();
   const [, setLocation] = useLocation();
 
@@ -396,6 +400,15 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
     service: (
       <SettingsGroup title="Сервис">
+        <KubHint
+          open={adminHint.visible}
+          onDismiss={adminHint.dismiss}
+          // Upwards: «Сервис» is the last group in the modal, so anything
+          // opening downwards from it meets the footer and its two buttons.
+          side="top"
+          align="start"
+          text="Управление сообществом живёт здесь: пользователи, баны и мьюты."
+        >
         <button
           type="button"
           onClick={() => { onClose(); setLocation("/admin"); }}
@@ -405,13 +418,29 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)]",
           )}
         >
-          <KubIcon name="shield" size={16} className="text-[color:var(--kub-pink)]" />
+          {/* The mark needs a surface, not a class on the glyph. Every ring in
+              this product sits on a filled, sized, rounded box — the round play
+              button, the avatar's camera badge, the send button — and a ring
+              traced around a transparent 16px svg is invisible against a row of
+              nearly the same tone, which two sets of frames showed before this
+              was believed. The circle is exactly the grid's icon column, so it
+              marks the shield without moving anything beside it. */}
+          <span
+            className={cn(
+              "flex h-[1.125rem] w-[1.125rem] items-center justify-center rounded-full transition-[background-color,box-shadow] duration-[var(--kub-motion-fast)]",
+              adminHint.visible &&
+                "kub-glow-pink bg-[color-mix(in_srgb,var(--kub-pink)_18%,transparent)]",
+            )}
+          >
+            <KubIcon name="shield" size={16} className="text-[color:var(--kub-pink)]" />
+          </span>
           <span className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
             <span className="min-w-0 text-sm text-[color:var(--kub-text)]">Админ-панель</span>
             <span className="min-w-0 text-xs text-[color:var(--kub-muted)]">Пользователи, баны, мьюты</span>
           </span>
           <KubIcon name="chevronRight" size={14} className="shrink-0 text-[color:var(--kub-muted)]" />
         </button>
+        </KubHint>
       </SettingsGroup>
     ),
   };

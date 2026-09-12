@@ -453,6 +453,8 @@ const SCENES = {
   rest: { path: "/", openChat: false, collapsed: false, menu: false },
   /** The list scrolled past the point where a phone tucks its search row. */
   scrolled: { path: "/", openChat: false, collapsed: false, menu: false, scrolled: true },
+  /** Settings open on the phone, at the row that introduces administration. */
+  settings: { path: "/", openChat: false, collapsed: false, menu: false, settings: true },
   collapsed: { path: "/", openChat: true, collapsed: true, menu: false },
   menu: { path: "/", openChat: false, collapsed: false, menu: true },
   chat: { path: "/", openChat: true, collapsed: false, menu: false },
@@ -475,6 +477,10 @@ add("light", "phone", "rest");
 // cannot show.
 add("dark", "phone", "scrolled");
 add("light", "phone", "scrolled");
+// Settings open at the administration row, with the hint that greets a
+// person who has just been given the right.
+add("dark", "phone", "settings");
+add("light", "phone", "settings");
 add("dark", "desktop", "rest");
 add("dark", "desktop", "collapsed");
 add("dark", "desktop", "menu");
@@ -974,6 +980,25 @@ async function renderFrame(browser, frame) {
     await page.waitForTimeout(4_700);
   } else {
     await page.waitForTimeout(1_200);
+  }
+
+  if (scene.settings) {
+    // The way a person reaches it on a phone: the profile tab, which sets
+    // the mobile section and opens the settings modal over the list.
+    await page.locator('[aria-label="Профиль"]').first().click();
+    const row = page.getByText("Админ-панель", { exact: true }).first();
+    await row.waitFor({ state: "visible", timeout: 15_000 });
+    await row.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(700);
+    // What this frame exists to show. A new context means empty storage, so
+    // the hint must be in its first-run state; if it is not on screen the
+    // frame would be a picture of nothing in particular.
+    const hint = page.locator('[data-testid="kub-hint"]');
+    if ((await hint.count()) === 0) {
+      throw new Error(
+        "the administration hint is not on screen, so this frame would not show what it is for",
+      );
+    }
   }
 
   if (scene.scrolled) {

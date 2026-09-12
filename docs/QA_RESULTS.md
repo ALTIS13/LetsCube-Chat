@@ -1,5 +1,71 @@
 # QA Results
 
+## 2026-09-12 - Four tabs, folders once, Telegram's search, and a hint that found the wrong home
+
+The owner sent two fresh sets of Telegram screenshots - the new Android build and the web client - and four
+instructions: keep the web close to the desktop arrangement, remove the folders he was seeing twice, cut the bar to
+four tabs by taking search and administration out of it, and give the product Telegram's casual hints, starting
+with one that introduces administration to someone who has just been given it.
+
+**Folders twice was mechanical, and the cause was one missing gate.** `FolderRail` is `hidden … md:flex` and
+`FolderTabs` carried no width gate at all, so from `md` upward the same folders were drawn down the rail and
+across the strip. The gate went at the **mount site** rather than inside the component, because
+`PublicPreviewCapturePage` renders `FolderTabs` at desktop widths to capture the product assets, and a class inside
+the component would have changed those pictures silently.
+
+**A guard had to be inverted, and it was inverted knowingly rather than bent.** `desktop-shell.spec.ts` protected
+«the rail does not replace the horizontal strip», on the stated grounds that «Telegram ships both arrangements as a
+setting and so do we». The second half is false of this product: there is no such setting anywhere in the source,
+which is exactly why both rendered at once. The test is now two-sided - the strip must be absent on a computer and
+present on a phone - because the phone strip is the only folder surface there and a one-sided removal would have
+left that unprotected. The first phone assertion was wrong in its own right and the run caught it: the rail is
+hidden by CSS, not absent from the document.
+
+**Four tabs cost a door, and the green gates could not see it.** Removing «Поиск» removed the only control in the
+product with that accessible name, `openGlobalSearch` lost its only caller, and `GlobalSearchPalette` became
+dead code mounted for every signed-in person. Two signed-in specs navigate by a button named «Поиск» and skip
+without QA credentials, so they never ran here: typecheck, 1832 unit tests and a 60-test shell spec were all green
+over a regression. The palette turned out to be a second presentation of the same machinery - `SidebarSearchResults`
+imports the same commands, chips and profile preview and adds local chat results the palette lacks - so what was
+lost was a duplicate surface and a door, not a capability. Whether to delete the palette is the owner's call and
+was put to him.
+
+**The phone now searches the way Telegram does.** Measured from his screenshots: a full-width pill under the title
+row, about 38dp tall, which goes as the list scrolls while a magnifier takes its place - the two states mutually
+exclusive. Ours had the field inline in the one control row, so nothing could scroll away. Three things the
+implementation deliberately does not do, each for a checked reason: it does not duplicate the field (two nodes
+would both carry `sidebar-search-input` and `getByTestId` is strict); it does not move the field into the list's
+scroller (a non-empty query swaps the whole pane, so the field would unmount on the first keystroke); and it does
+not collapse the field's own box - measured with Playwright here, a row hidden by a zero-height clipping wrapper
+keeps `isVisible` true because the input keeps its 177x21 box, while a collapsed box fails the four specs that
+assert visibility. The title line then needed a spacer, found by looking at the frame rather than by reasoning:
+with the field on its own line nothing took up the slack and everything bunched against the left edge.
+
+**The hints are built and proved; their first home was wrong.** The store holds no markup, timers or DOM, so all of
+it is tested without a browser. Two promises are narrower than they sound and are written where they are made:
+«never again once read» is a promise about **this device**, because per-account means a database column with its own
+approval; and «a couple of hours of real use» is accumulated time while the hint was offered **and the page was
+visible**, because a wall clock would expire overnight while nobody was there. Fourteen tests, four mutations, all
+caught.
+
+**Three attempts at the administration mark failed, and the lesson is the host, not the styling.** First
+`kub-glow-soft` - a wide downward shadow built for a panel, invisible at 16px. Then `kub-glow-pink`, which does
+draw a 1px ring - also invisible, because every other user of these classes in this product puts them on a filled,
+sized, rounded surface and none on a bare glyph. Then a circle the width of the row's icon column, which reads
+faintly in the light theme and barely in the dark. Meanwhile the plate itself had nowhere to go: below the row it
+covered «Сохранить», above it covers «Обновления». A dense settings list has no free space around a row and an
+18px icon cell has no room for a mark - so the row is the wrong host, and the owner's own alternative («в профиле
+или на главной») is where this belongs. The mechanism moves whole; only the anchor changes.
+
+**Four instrument faults were found along the way, and all four returned a plausible answer rather than an error.**
+`grep -i "web"` over `docker ps` found no web container because Coolify names by application id. A
+`{{.Names}}` format string did not survive Git Bash quoting and returned empty. The mutation script named
+guards by test title, so renaming a test made a stale pattern read as a broken guard - it now requires the named
+test to pass and to be exactly one test before a mutation means anything, and says UNKNOWN when it cannot tell.
+And a dev-server freshness check grepped for `app.store.ts?t=` alone, answered zero, and let «the server is
+fresh» be said while seven and twelve other imports carried hot-update markers. An answer that looks like data is
+more dangerous than an empty one.
+
 ## 2026-09-12 - The batch deployed, and three empty greps that each meant «I do not know»
 
 `main` `17a1c47` to `245e4d9`: the recording chain (D-130), the desktop shell of «A с поправками», the

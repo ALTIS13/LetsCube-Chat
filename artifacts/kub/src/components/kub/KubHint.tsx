@@ -52,6 +52,11 @@ export function KubHint({
         side={side}
         align={align}
         sideOffset={8}
+        // Never wedged against an edge. Without this a hint anchored near the
+        // foot of a panel is flipped and shifted until it sits over whatever
+        // lives there — on 2026-09-12 that was the settings modal's «Сохранить»,
+        // and an explanation that covers an action is worse than no explanation.
+        collisionPadding={16}
         role="status"
         aria-live="polite"
         data-testid="kub-hint"
