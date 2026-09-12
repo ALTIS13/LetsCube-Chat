@@ -480,7 +480,32 @@ ask the tester to retry the video that failed, now that the send path names the 
 
 ## Last Confirmed Deploy Baseline
 
-**Current: `84963d1`, deployed 2026-09-12 at 21:29 MSK.** The filter row's scroll arrows, the mechanism
+**Current: `05fc53f`, deployed 2026-09-12 at 23:25 MSK.** Two casual hints — the search syntax and the
+recorder's second mode — and the register entries D-158 and the two sentences that now name their input device.
+
+Verified by reading the running container's own image tag —
+`l64kyyu1sysev2izzjjbizhe:05fc53f37cb904bc5bba673ba29e6232e30cf3a1`, the commit's full SHA — its health, and
+the rollover: the previous container on `84963d1` had gone, one replica remained, no build was still
+running, and `sw.js` answered `4a61857c0ccc72d6` on six consecutive requests.
+
+Then the bytes. The page's asset moved from `index-BDTg7n-j.js` to `index-DYQWU2QG.js`, the three
+controls are present, and both hint sentences are found along with `search-syntax`. The markers were
+calibrated **before** the push: all three were absent from the build then being served, and the previous deploy's
+`Прокрутить фильтры` was present, so the probe was shown to discriminate in both directions.
+
+**One candidate marker was thrown out by that calibration and it is worth naming.** `recorder-mode` was
+already in the served bundle — it is a substring of `data-recorder-mode`, an attribute the composer button
+has carried for months. Used as a marker it would have reported «deployed» before the push.
+
+**And a sharper name for the rollover trap than the last entry gave it.** Three rounds mid-swap fetched 144 bytes,
+and the log shows why: at 23:26:22 the **page** already named the new asset `index-DYQWU2QG.js` while the
+container answering for it was still the old one. So it is not merely «a stale filename» — during a rollover the
+page and its assets come from **different replicas** and disagree with each other. Any single fetch pair taken in
+that window is untrustworthy. The probe refused three rounds and spoke on two; five rounds, two verdicts.
+
+Rollback: fast-forward `main` back to `84963d1`.
+
+**Superseded:** `84963d1`, deployed 2026-09-12 at 21:29 MSK. The filter row's scroll arrows, the mechanism
 lifted into a shared hook, and the register entries that close D-156 and open D-157.
 
 Verified by reading the running container's own image tag —

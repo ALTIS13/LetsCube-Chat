@@ -1,5 +1,27 @@
 # QA Results
 
+## 2026-09-12 - Deployed 05fc53f: the page and its assets can come from different replicas
+
+The two casual hints shipped. Verified as the two deploys before it — image tag carrying the full SHA, health,
+rollover complete, no build in flight, `sw.js` answering one id six times, then the served bytes with
+controls.
+
+**The markers were calibrated before the push, and the calibration earned its keep.** `recorder-mode` looked
+like an obvious discriminator for a change that adds a recorder hint — and it was **already present**, because it
+is a substring of `data-recorder-mode`, an attribute that button has carried for months. Chosen as the
+marker it would have reported success before anything was pushed. The two full sentences were absent and the
+previous deploy's marker present, which is the check working in both directions.
+
+**And the rollover window has a better name now.** Three rounds fetched 144 bytes, as in the previous deploy — but
+this log shows the mechanism plainly: at 23:26:22 the page already named `index-DYQWU2QG.js`, the new
+asset, while the container answering for that asset was still the old one. The page and its assets were coming
+from **different replicas at the same moment**. «Stale filename» was too small a description; the truth is that
+during a swap a page and its assets can disagree, so no single pair of requests means anything unless it proves
+itself first.
+
+Five rounds, two verdicts, three refusals — the same shape as before, for a reason now understood rather than
+merely observed.
+
 ## 2026-09-12 - Two casual hints, and two sentences that were each true and neither of which said of what
 
 The owner asked for hints in Telegram's manner — «невзначай говорит что эта кнопка может то-то если сделать
