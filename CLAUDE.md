@@ -100,16 +100,23 @@ state before that date.
 
 Deployment baseline:
 
-- `main` and `codex/bot-platform` are both at `5fcc6dd`.
-- `letscube-web` runs image `l64kyyu1sysev2izzjjbizhe:5fcc6ddd5529…` — verified
-  by reading the running container's tag, not by trusting the webhook. It passed
-  its healthcheck and replaced the previous replica; one replica runs.
+This block described 2026-09-05 and went three deploys stale before it was
+corrected on 2026-09-12. Read the live state; the tracker's «Last Confirmed
+Deploy Baseline» is the maintained one.
+
+- `main` is at `245e4d9` (2026-09-12). The working branch is now
+  `integration/message-actions`, not `codex/bot-platform`.
+- `letscube-web` runs image
+  `l64kyyu1sysev2izzjjbizhe:245e4d9714683323c4d169932646d8b6975de5e9` — the commit's
+  full SHA, read off the running container rather than trusted from the
+  webhook. One replica; the previous one was retired during the rollover.
 - Verified live at `https://app.letscube.ru`: 200, and the served stylesheet
-  carries `--kub-raise-veil`, nineteen `backdrop-filter` declarations and the
-  moved light ground — so the change reached the reader, not only the build.
-- Gates at that commit: typecheck of both packages clean, unit suite 1304/1304,
-  production build clean, mounted routing matrix 15/15.
-- Rollback is a fast-forward of `main` back to `7b95021`.
+  carries `--kub-window-caption` and `--kub-chat-track` — the two tokens this
+  batch introduced — so the change reached the reader, not only the build.
+- Gates at that commit: typecheck clean across all four packages, unit suite
+  1832/1832, production build proved by its own output lines, mounted routing
+  matrix 15/15.
+- Rollback is a fast-forward of `main` back to `17a1c47`.
 
 Two production database repairs were applied the same day, each with a verified
 schema backup taken first and each with a self-check that raises rather than

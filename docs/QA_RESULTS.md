@@ -1,5 +1,32 @@
 # QA Results
 
+## 2026-09-12 - The batch deployed, and three empty greps that each meant «I do not know»
+
+`main` `17a1c47` to `245e4d9`: the recording chain (D-130), the desktop shell of «A с поправками», the
+pinned rows that now line up, and the measuring fix. Full evidence in the tracker under «Deploy of 2026-09-12,
+the second»; the short of it is 1832/1832 unit, 15/15 routing, four packages typechecked, a build proved by its
+own output lines, one replica carrying the commit's full SHA, and two of this batch's own tokens present in the
+stylesheet the live site serves.
+
+**The lesson of the verification is worth more than the verification.** Three times in one hour a command
+returned nothing and nothing was wrong with the system - the filter was wrong:
+
+- `grep -i "web"` over `docker ps` found no web container, because Coolify names containers by application
+  id: the web application is `l64kyyu1sysev2izzjjbizhe`, with no «web» anywhere in the name.
+- A `{{.Names}}` format string through Git Bash returned an empty result that looked like «no containers»
+  rather than «this quoting did not survive».
+- A container that vanished between two snapshots looked like a service going down, and was the build helper
+  `coolify-helper:1.0.14` being retired - proved by finding its name, `epdla8rvbtp7l0uqzrq8hjru`, in the
+  earlier snapshot rather than by calling it plausible.
+
+An empty result is «I do not know», never «all clear». Each of the three would have supported a confident
+sentence in a report, and all three sentences would have been false.
+
+**Two limits recorded rather than dressed up.** Production visual QA covers the public home only - signed-in
+production screens may not be photographed - so the surfaces this batch changes are evidenced by fixture frames,
+re-rendered in the product's own font. And the Windows shell's dragging, window buttons, tray and DPI behaviour
+remain unverified on a real Tauri window; the deployed web application is what that shell loads.
+
 ## 2026-09-12 - A merge refused, my own arithmetic corrected, and a measuring instrument caught lying
 
 **The capsule merge was aborted, deliberately, and the branch is still a prototype.** Merging

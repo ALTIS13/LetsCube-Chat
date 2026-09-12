@@ -335,6 +335,51 @@ Use this queue before starting the next production-hardening turn. Do not repeat
    - Media storage, Telegram as the reference: how Telegram keeps what people send — the copies and sizes it makes, deduplication, how long its servers keep them, and the device cache a person controls — against LETSCUBE's originals, WebP copies and media worker on self-hosted storage, ending in advice on whether storage needs a serious rework so that accumulating user media does not fill it. The owner's view: the quality should be fine, and WebP was chosen for its small size.
 30. `[~]` The iOS 26 style in every shell, the owner's direction of the night of 2026-09-11, with a screenshot of Telegram's chat list on iOS 26 as the reference: the installed iPhone app, Android, the web app and the Windows app are to share one visual language, worked through as Telegram's is. One surface at a time, the D-071 way. The chat screen first, as option C of item 28 on every shell with LETSCUBE's own pattern of cubes (in progress). Then the chat list and navigation — the capsule top row, search, folder tabs, rows and a floating tab bar with its own search button — assessed against the reference and rendered in options for the owner's choice (in progress). Then profile and settings, tasks and administration, each in its turn. D-112, the Windows window buttons over page controls, is to be solved inside the navigation work, and D-117 by option C's palette. Broadened by the owner on 2026-09-11, after testers said the app feels "Android-like" from the amount of functions and information in it: every part that a person, a location's staff or an administrator sees is to follow Telegram's way of doing it — no function that looks unclear, or unlike Telegram's for the same job — while LETSCUBE keeps its own colours, logo, thumbnails and mascot; not a copy. It starts with an audit of every surface against Telegram, split into settings and profile, work surfaces (tasks and administration), and the communication functions around the chat (in progress beside the chat screen and navigation work), then fixes in batches with renders for approval. Recorded with it: D-118, a volume slider on phones; D-119, no quality choice when sending — compressed by default, «без сжатия» as a named function, the slider of 2026-09-11 withdrawn; D-120, the duplicate «Папки» tab; D-121, sound settings in stretched modules. D-118 and D-119 were fixed the same evening in `bce98f3`, not deployed: no volume slider under a finger, and no quality asked for — «Файл», described «Без сжатия», sends the original on every device. The same night the owner asked for the attach menu itself to become Telegram's attach sheet, whose tabs work in place, in the iOS style: D-122, assessed and rendered in options first (in progress). The chat screen in option C was merged for every shell in `f1adbbe`; the owner approved its final renders the same night, seven small questions about it remain open, and nothing is deployed. The owner also wants the attach sheet's further functions — a poll, a checklist, a contact, music — as placeholder tabs for now, so that the scrolling row can be judged. The three audits of every surface against Telegram were compiled for the owner on a private page — seven causes of the "Android-like" feel, fourteen functional defects recorded as D-123 to D-150, a phase order and 22 questions with a recommended answer each — and wait on his answers. The media reports D-113 to D-116 were investigated the same night; the send path is being fixed first. On 2026-09-12 the owner chose the attach sheet's look B and its rules (D-122), the taller bubble for tall pictures (D-116), the client's 250 MB for video — which the storage service already runs, so nothing changed on the server (D-113) — and the rebuilding of the backups so that unchanged media is not copied afresh every day, the read-only measurement having found them at 39 GB against 978 MB of stored media. Done and verified the same night, and it turned up worse than the copying: the nightly run had been dying on `tar` over live mail volumes, so four September sets carry no manifest or checksums, and the encrypted offsite upload had been refused by GitHub as over its 2 GiB pack limit every day since 1 September - the last copy off the machine was 31 August, because the 2.5 GB `bot-platform-rollout` rehearsal directory was being swept into the config archive. Both fixed, the upload completed at 04:02, and media now go into a deduplicating repository: a set is 33 MB instead of 987 MB, a second snapshot of unchanged media stored 0 KiB, a restored file matched the original byte for byte, and a full archive is still written weekly so the offsite copy carries the media. The twelve rehearsal containers were checked and removed on his word the same night, with production untouched either side of it. He then lifted the deploy hold («если требуется сделай деплой без моего вмешательства»), and the batch went to production as `17a1c47`, verified on the running containers rather than from the webhook. He answered all 22 questions «по рекомендации» — 1a through 22a — and then corrected three of them from his own Telegram: administration stays in the bottom capsule on iOS and Android, it belongs in Windows' collapsible side list, and the chat list must be narrowable to avatars alone. The navigation choice between A and B is held until an assessment of Telegram Desktop on Windows and of iOS 26's Liquid Glass has revisited it, because his corrections change what is being chosen between. That assessment came back on the same night and recommends **neither A nor B but A with corrections**: option A's phone with administration kept in the capsule, and on a computer Telegram Desktop's own structure - a 72-point folder rail with the side-menu button on it, the side list as a layer holding «Управление», a chat list draggable down to a 66-point avatar strip, settings in the left column, the profile as a right column that becomes a layer when it does not fit, and in-chat search taking the list column. B's edge rail wants the same 72 points as the folder rail, so the two cannot both stand. Telegram itself removed the hamburger on Android for a bottom bar while keeping it on Desktop, which is the owner's per-platform correction exactly. Answers 4, 11, 12 and 18 move, 11 reverses D-050 and is re-opened knowingly, 21 stands except for the width of «Управление» on a tab, which is being measured, and the collapsible column and side list belong to phase 0 rather than later. The owner approved it the same night - «А с поправками принято» - so navigation is settled and the rebuild has started with the desktop shell: the 72-point folder rail, the side list as a layer holding «Управление», the chat list dragged down to a 66-point avatar strip with both its width and its collapsed state remembered, and the LETSCUBE mark in the list's top row. Settings as a column, the profile as one component and in-chat search in the list column follow inside that structure; the phone capsule waits on the measurement of «Управление» on an 11-point tab.
 
+## Deploy of 2026-09-12, the second: the recording row, the desktop shell, and the instrument that measured them
+
+`main` `17a1c47` to `245e4d9`, 32 commits, on the owner's standing permission to deploy without him.
+The push was gated mechanically rather than by eye: the command refused to run unless the range still held 32
+commits, one author, nothing dated before 2026-09-11 and a clean tree - because a check printed in the same
+command as the action it guards is not a check, which this project learned the hard way earlier the same night.
+
+**Gates, each read by content rather than by exit code:** typecheck clean across all four packages named
+individually (`scripts`, `api-server`, `mockup-sandbox`, `kub`); unit suite **1832 of 1832**, 0 failed, 0 skipped;
+mounted routing matrix **15 of 15**; production build proved by its own output lines (`sw.js build a5945fbb4749d60a`,
+`built in 12.38s`) with no source newer than the emitted `index.html`.
+
+**Verified on the server, not through the webhook:** the running container is
+`l64kyyu1sysev2izzjjbizhe:245e4d9714683323c4d169932646d8b6975de5e9` - the full SHA of the commit - one replica,
+the previous `17a1c47e8f88` retired during the rollover (both were up for about a minute, then one).
+**Reached the reader:** the live stylesheet carries `--kub-window-caption` (the top bar's removal) and
+`--kub-chat-track` (the lightened recording track) while keeping `--kub-raise-veil`; `sw.js` answered the same
+id `b6200ce4f3b7741a` on six consecutive requests, so no reader is being served two different builds.
+
+**The build id differs from the local one by design, and that was checked rather than assumed.** `b6200ce4f3b7741a`
+live against `a5945fbb4749d60a` here: `serviceWorkerBuild.ts` makes the id a SHA-256 digest of **every file the
+build emits**, and the local build emitted a bundle carrying fixture Supabase values where the server's carries
+production ones. Provenance rests on the image tag and the stylesheet markers, not on the digest.
+
+**One scare, resolved by evidence.** A container vanished from the host between two snapshots taken 35 seconds
+apart, at the same moment the old web replica went. There were **zero** exited or dead containers, so it had been
+removed rather than crashed - and the earlier snapshot names it outright: `epdla8rvbtp7l0uqzrq8hjru` was
+`ghcr.io/coollabsio/coolify-helper:1.0.14`, the build container, up about a minute, retired when the build
+finished. Every application is running: web 1, bot gateway 1, support mail 1, the two others at 5 hours and 3
+weeks - untouched by this push - and the whole Supabase set up. Disk 75% used, 29G free.
+
+**Production QA, and the limit on it stated rather than papered over.** As a guest, the public home only: 200 at
+1440 and at 390, title, all three sections, controls present, about 1050 characters of text, no page errors, and
+the live page proved to be rendering **Inter** by the width probe rather than by `document.fonts.check`. The
+messenger surfaces this batch actually changes cannot be photographed in production - signed-in production
+screens are off limits - so their evidence remains the fixture frames, re-rendered in the product's own font.
+
+**Unverified, and it should be said plainly: the Windows shell.** The top bar was deleted and its window buttons
+moved to an overlay. Dragging the window, minimise, maximise, close-to-tray and non-100% DPI were never exercised
+on a real Tauri window - `windows:tauri:qa` refuses a loopback, unconfigured bundle, which is exactly what the
+validation build produces. The Windows client loads the deployed web application, so this reaches it on next
+launch.
+
+Rollback: fast-forward `main` back to `17a1c47`.
+
 ## Deploy of 2026-09-12
 
 `main` `0b69e38` to `17a1c47`, on the owner's instruction to deploy without him. `letscube-web` and
@@ -348,7 +393,15 @@ ask the tester to retry the video that failed, now that the send path names the 
 
 ## Last Confirmed Deploy Baseline
 
-**Current: `45971c6`, deployed 2026-09-11.** Verified by reading the running
+**Current: `245e4d9`, deployed 2026-09-12.** Verified by reading the running container's own image tag
+(`l64kyyu1sysev2izzjjbizhe:245e4d9714683323c4d169932646d8b6975de5e9`, the commit's full SHA), its replica count
+after the rollover (one), and then the live files: the stylesheet declares `--kub-window-caption` and
+`--kub-chat-track`, and `sw.js` answers the id `b6200ce4f3b7741a` on six consecutive requests. Gates at that
+commit: typecheck clean across four packages, unit suite 1832 of 1832, routing matrix 15 of 15, production build
+clean. Rollback: fast-forward `main` back to `17a1c47`.
+
+**Superseded, and kept because its evidence pattern is the one to copy:** `45971c6`, deployed 2026-09-11.
+Verified by reading the running
 container's own image tag (`l64kyyu1sysev2izzjjbizhe:45971c602962…`), its healthcheck and its replica
 count, and then by fetching the live files: `index.html` carries
 `viewport-fit=cover`, the installed-app marker and `Alt-Svc: clear`; `sw.js`
