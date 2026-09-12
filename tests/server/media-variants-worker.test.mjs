@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import * as mediaVariantRules from "../../artifacts/api-server/dist/workers/mediaVariantRules.mjs";
+import { originalPreviewDimensions } from "../../artifacts/kub/src/lib/mediaCompression.ts";
 
 test("media variants worker requests image and video variants by message type", () => {
   assert.deepEqual(mediaVariantRules.getExpectedMessageVariantKinds({ type: "image" }), [
@@ -97,6 +98,57 @@ test("media variants worker scans bounded candidate pages beyond the newest page
     { from: 0, to: 119 },
     { from: 120, to: 124 },
   ]);
+});
+
+test("an image_preview keeps a tall picture's short side", () => {
+  const preview = (width, height) => mediaVariantRules.imagePreviewSize(width, height, 1280);
+  assert.deepEqual(preview(4032, 3024), { width: 1280, height: 960 }, "an ordinary photograph is unchanged");
+  assert.deepEqual(preview(1920, 1080), { width: 1280, height: 720 }, "16:9 is where the floor starts to bite");
+  // A 1290x2796 screenshot as it is stored once compressed. It was 591x1280,
+  // and the bubble draws a tall picture about 720x1440 device pixels (D-116).
+  assert.deepEqual(preview(1080, 2341), { width: 720, height: 1561 });
+  assert.deepEqual(preview(2000, 1000), { width: 1440, height: 720 });
+  assert.deepEqual(preview(1080, 20000), { width: 138, height: 2560 }, "the long side still stops");
+  assert.deepEqual(preview(800, 600), { width: 800, height: 600 }, "never enlarged");
+  assert.deepEqual(preview(0, 0), { width: 1280, height: 1280 }, "an unreadable size keeps the square box");
+});
+
+test("the worker's preview is the same size as the one a sender uploads", () => {
+  // The comment in each file points at the other; this is that promise checked
+  // rather than described. They have to agree, or a picture changes size under
+  // the reader the moment the worker's copy takes over from the sender's.
+  const sizes = [
+    [4032, 3024],
+    [3024, 4032],
+    [1290, 2796],
+    [1080, 2341],
+    [1920, 1080],
+    [2000, 1000],
+    [1080, 20000],
+    [1000, 800],
+    [5000, 3],
+  ];
+  for (const [width, height] of sizes) {
+    assert.deepEqual(
+      mediaVariantRules.imagePreviewSize(width, height, 1280),
+      originalPreviewDimensions(width, height),
+      `${width}x${height}`,
+    );
+  }
+});
+
+test("a quarter-turned photograph is sized on the axes it will be shown on", () => {
+  const oriented = mediaVariantRules.orientedImageSize;
+  assert.deepEqual(oriented({ width: 2341, height: 1080, orientation: 6 }), { width: 1080, height: 2341 });
+  assert.deepEqual(oriented({ width: 2341, height: 1080, orientation: 8 }), { width: 1080, height: 2341 });
+  assert.deepEqual(oriented({ width: 1080, height: 2341, orientation: 1 }), { width: 1080, height: 2341 });
+  assert.deepEqual(oriented({ width: 1080, height: 2341, orientation: 4 }), { width: 1080, height: 2341 }, "mirrored, not turned");
+  assert.deepEqual(oriented({ width: 1080, height: 2341 }), { width: 1080, height: 2341 });
+  assert.equal(oriented({ width: 0, height: 2341 }), null);
+  assert.equal(oriented({}), null);
+  // Why it matters: the box has a floor on the short side, so reading the axes
+  // as stored would size this portrait photograph as a landscape one.
+  assert.deepEqual(mediaVariantRules.imagePreviewSize(2341, 1080, 1280), { width: 1561, height: 720 });
 });
 
 test("media variants worker uses bounded 720p encoding defaults", () => {

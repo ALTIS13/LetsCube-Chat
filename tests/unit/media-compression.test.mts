@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   MAX_ORIGINAL_ATTACHMENT_BYTES,
   ORIGINAL_PREVIEW_MAX_DIMENSION,
+  ORIGINAL_PREVIEW_MAX_LONG_SIDE,
+  ORIGINAL_PREVIEW_MIN_SHORT_SIDE,
   buildAttachmentMediaMetadata,
   exceedsOriginalLimit,
   isCompressibleMediaType,
@@ -20,6 +22,7 @@ import {
   shouldConfirmMediaSend,
   splitByOriginalLimit,
 } from "../../artifacts/kub/src/lib/mediaCompression.ts";
+import { MEDIA_BUBBLE_MAX_HEIGHT_PX } from "../../artifacts/kub/src/lib/mediaBubbleLayout.ts";
 import { applyVideoQualityToAttachments } from "../../artifacts/kub/src/lib/mediaQuality.ts";
 
 /**
@@ -301,10 +304,28 @@ test("a preview sits beside its original and is read from nowhere else", () => {
   }
 
   assert.equal(ORIGINAL_PREVIEW_MAX_DIMENSION, 1280, "the same size as the server's image_preview");
-  assert.deepEqual(originalPreviewDimensions(4032, 3024), { width: 1280, height: 960 });
+  // The floor is the bubble's box in device pixels (D-116): a tall picture is
+  // drawn 240x480 CSS px on the narrowest phone, and a phone has three device
+  // pixels to the point. Both numbers are asserted against the bubble's own
+  // constant, so neither can be tuned on its own and leave the preview too
+  // small for the box it is drawn in.
+  assert.equal(ORIGINAL_PREVIEW_MIN_SHORT_SIDE, 240 * 3);
+  assert.equal(MEDIA_BUBBLE_MAX_HEIGHT_PX * 3, ORIGINAL_PREVIEW_MIN_SHORT_SIDE * 2);
+  assert.equal(ORIGINAL_PREVIEW_MAX_LONG_SIDE, 2560);
+
+  assert.deepEqual(originalPreviewDimensions(4032, 3024), { width: 1280, height: 960 }, "an ordinary photograph is unchanged");
   assert.deepEqual(originalPreviewDimensions(3024, 4032), { width: 960, height: 1280 });
   assert.deepEqual(originalPreviewDimensions(1000, 800), { width: 1000, height: 800 });
-  assert.deepEqual(originalPreviewDimensions(5000, 3), { width: 1280, height: 1 });
+  assert.deepEqual(originalPreviewDimensions(1920, 1080), { width: 1280, height: 720 }, "16:9 is where the floor starts to bite");
+  // A 1290x2796 screenshot, and the 1080x2341 it is stored as once compressed.
+  // Both were 591x1280 before, which the bubble drew stretched about 1.4x.
+  assert.deepEqual(originalPreviewDimensions(1290, 2796), { width: 720, height: 1561 });
+  assert.deepEqual(originalPreviewDimensions(1080, 2341), { width: 720, height: 1561 });
+  assert.deepEqual(originalPreviewDimensions(2000, 1000), { width: 1440, height: 720 });
+  assert.deepEqual(originalPreviewDimensions(1080, 20000), { width: 138, height: 2560 }, "the long side still stops");
+  // Was 1280x1. A short side of 3px can never reach the floor, so the picture
+  // keeps all of itself, up to the ceiling, instead of being halved again.
+  assert.deepEqual(originalPreviewDimensions(5000, 3), { width: 2560, height: 2 });
 
   assert.equal(shouldBuildOriginalPreview({ mimeType: "image/jpeg", width: 4032, height: 3024, size: 4_800_000 }), true);
   assert.equal(shouldBuildOriginalPreview({ mimeType: "image/png", width: 800, height: 600, size: 90_000 }), false, "small enough to be its own preview");

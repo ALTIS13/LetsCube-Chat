@@ -19,6 +19,8 @@ import {
   getAttemptableMessageVariantKinds,
   getExpectedMessageVariantKinds,
   getMessageVariantTarget,
+  imagePreviewSize,
+  orientedImageSize,
   sanitizeVariantErrorCode,
   type AvatarVariantKind,
   type MessageVariantKind,
@@ -357,6 +359,15 @@ function avatarVariantPath(
     : buildProfileAvatarVariantPath(owner.id, kind);
 }
 
+/** The source's size as `.rotate()` leaves it, or null when the header cannot be read. */
+async function readImageSize(buffer: Buffer): Promise<{ width: number; height: number } | null> {
+  try {
+    return orientedImageSize(await sharp(buffer).metadata());
+  } catch {
+    return null;
+  }
+}
+
 async function ensureMessageVariants(supabase: SupabaseClient, message: MessageCandidate): Promise<boolean> {
   const source = resolveStoragePath(message.media_bucket, message.media_path, message.media_url);
   if (!source) return false;
@@ -377,13 +388,24 @@ async function ensureMessageVariants(supabase: SupabaseClient, message: MessageC
     message.missingVariantKinds ?? getExpectedMessageVariantKinds(message),
   );
   let generated = false;
+  // Read once, for the preview's box: a tall picture keeps its short side
+  // (D-116), and only the source's own size can say what that is. A header
+  // sharp cannot read leaves this null, and every variant keeps the square box
+  // it had before.
+  const sourceSize = await readImageSize(sourceBuffer);
   for (const variant of MESSAGE_IMAGE_VARIANTS) {
     if (!missingKinds.has(variant.kind)) continue;
     const variantPath = buildMessageVariantPath(message.chat_id, message.id, variant.kind);
+    // Still `fit: "inside"` rather than an exact size. The box already carries
+    // the picture's own proportions, so the two agree — and on the day they did
+    // not, the picture would come out smaller rather than distorted.
+    const box = variant.kind === "image_preview" && sourceSize
+      ? imagePreviewSize(sourceSize.width, sourceSize.height, variant.max)
+      : { width: variant.max, height: variant.max };
     try {
       const output = await sharp(sourceBuffer)
         .rotate()
-        .resize({ width: variant.max, height: variant.max, fit: "inside", withoutEnlargement: true })
+        .resize({ width: box.width, height: box.height, fit: "inside", withoutEnlargement: true })
         .webp({ quality: variant.quality })
         .toBuffer({ resolveWithObject: true });
       await uploadVariant(supabase, variantPath, output.data, WEBP_MIME_TYPE);
