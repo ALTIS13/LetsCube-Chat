@@ -33,9 +33,15 @@ import {
  *  7. the list narrows by dragging, continuously, down to exactly 66pt;
  *  8. the width and the collapsed state survive a reload — the one thing
  *     Telegram does not do (tdesktop#6409);
- *  9. the LETSCUBE mark is in the list's top row, or the logo is nowhere;
- * 10. D-112: no page control reaches into the Windows window buttons;
- * 11. a folder on the rail chooses, and the chosen one edits.
+ *  9. the LETSCUBE mark is in the list's top row, exactly once;
+ * 10. the window begins with the rail — nothing is drawn above it;
+ * 11. D-112: no page control reaches into the Windows window buttons, with the
+ *     side list open and with a chat open;
+ * 12. a folder on the rail chooses, and the chosen one edits.
+ *
+ * Checks 9 and 10 are the owner's two complaints about the application's top
+ * bar, answered on 2026-09-12 by removing it. Both fail with that bar restored,
+ * which is what makes them the contract rather than a description.
  *
  * It needs the dev server on the fixture host and mocks everything it reads.
  */
@@ -183,9 +189,11 @@ async function installWindowsShell(page: Page) {
 /** Every visible page control whose box reaches into the window buttons' box. */
 async function controlsInWindowButtons(page: Page) {
   return page.evaluate(() => {
-    const host = document.querySelector(
-      '[data-testid="desktop-window-controls"], [data-testid="desktop-window-chrome"]',
-    );
+    // One host since 2026-09-12. `desktop-window-controls` was the group
+    // inside the application's top bar, which no longer exists; a selector
+    // list that keeps a name nothing can match reads as a fallback and is
+    // really a dead branch.
+    const host = document.querySelector('[data-testid="desktop-window-chrome"]');
     const buttons = host ? [...host.querySelectorAll("button")] : [];
     if (!host || !buttons.length) return null;
     const boxes = buttons.map((button) => button.getBoundingClientRect());
@@ -457,19 +465,64 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     expect(await listColumnWidth(page)).toBe(460);
   });
 
-  test("the LETSCUBE mark is in the list's top row", async ({ page }) => {
+  test("the LETSCUBE mark is in the list's top row, and nowhere else", async ({ page }) => {
     await boot(page);
     // Option B's one detail, taken because A drops the logo bar and a computer
     // would otherwise show the mark nowhere.
     const mark = page.getByTestId("sidebar-control-row").getByAltText("LETSCUBE");
     await expect(mark).toBeVisible();
+    // «Знак LETSCUBE появляется дважды» was one of the owner's two complaints
+    // about the bar on 2026-09-12, and removing the bar is what answered it.
+    // Counted across the whole page rather than asserted absent from the bar:
+    // a second mark drawn anywhere else is the same defect under a new name.
+    await expect(page.getByAltText("LETSCUBE")).toHaveCount(1);
+  });
+
+  test("the window begins with the folder rail, with no bar above it", async ({ page }) => {
+    test.skip(!isDesktop(page), "the rail is a computer's");
+    await boot(page);
+    // The owner's other complaint: «полоса папок начинается ниже верхнего края
+    // окна». Telegram Desktop's window begins with the rail and ours does now.
+    // The rail's own box is asked for, not the region's, because a region that
+    // reached the top edge with the rail padded down inside it would be the
+    // same picture the bar drew.
+    const shape = await page.evaluate(() => {
+      const rail = document.querySelector<HTMLElement>('[data-testid="folder-rail"]');
+      const region = document.querySelector<HTMLElement>("[data-kub-left-region]");
+      if (!rail || !region) throw new Error("no folder rail");
+      const box = rail.getBoundingClientRect();
+      return {
+        railTop: Math.round(box.top),
+        railLeft: Math.round(box.left),
+        railWidth: box.width,
+        regionTop: Math.round(region.getBoundingClientRect().top),
+        // Anything spanning the window above the rail. A bar is a wide, short
+        // box at the top; this finds one whatever it is called.
+        above: [...document.querySelectorAll("header, nav, [data-testid]")]
+          .filter((node) => {
+            const rect = node.getBoundingClientRect();
+            return rect.width > 400 && rect.height > 0 && rect.bottom <= box.top + 1;
+          })
+          .map((node) => node.getAttribute("data-testid") ?? node.tagName.toLowerCase()),
+      };
+    });
+    expect(shape).toEqual({
+      railTop: 0,
+      railLeft: 0,
+      railWidth: RAIL_WIDTH,
+      regionTop: 0,
+      above: [],
+    });
   });
 
   test("in the Windows shell no page control reaches into the window buttons", async ({ page }) => {
     test.skip(!isDesktop(page), "the Windows shell is a desktop window");
     await installWindowsShell(page);
     await boot(page);
-    await expect(page.getByTestId("desktop-window-controls")).toBeVisible();
+    // `desktop-window-chrome` since 2026-09-12: the buttons used to be drawn
+    // inside the application's top bar, and they are the overlay strip every
+    // other surface already had now that the bar is gone.
+    await expect(page.getByTestId("desktop-window-chrome")).toBeVisible();
     expect(await controlsInWindowButtons(page), "D-112: a page control is under the window buttons").toEqual([]);
 
     // The rail, the handle and the layer are new controls near the top edge, so
@@ -481,6 +534,46 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     // And it carries the installed version the bridge reports.
     await expect(page.getByTestId("side-menu-version")).toContainText("Версия 0.2.10");
     await page.keyboard.press("Escape");
+    await expect(page.getByTestId("side-menu-layer")).toHaveCount(0);
+
+    // With a chat open, which is the case the bar's removal actually put at
+    // risk: the chat header's «Ещё» capsule is at the right of its row, and
+    // that row is the top of the pane now that nothing stands above it. It
+    // clears the buttons because the pane reserves --kub-window-caption out of
+    // its own top (`pt-window-top`), not because a band holds it down.
+    await page.getByTestId("chat-list-item").first().click();
+    await expect(page.getByTestId("chat-control-row")).toBeVisible();
+    expect(
+      await controlsInWindowButtons(page),
+      "D-112: the chat header reaches into the window buttons",
+    ).toEqual([]);
+    const reserved = await page.evaluate(() => {
+      // Through a computed padding, not `getPropertyValue`: a custom property
+      // comes back as its unresolved token text — "2rem" — while every engine
+      // resolves a padding to pixels. `lib/safeArea.ts` reads the four
+      // safe-area tokens the same way and records the same reason.
+      const probe = document.createElement("div");
+      probe.setAttribute("aria-hidden", "true");
+      probe.style.cssText =
+        "position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;padding-top:var(--kub-window-caption)";
+      document.body.appendChild(probe);
+      const caption = Math.round(Number.parseFloat(getComputedStyle(probe).paddingTop) || 0);
+      probe.remove();
+      const row = document.querySelector('[data-testid="chat-control-row"]');
+      const rail = document.querySelector('[data-testid="folder-rail"]');
+      return {
+        caption,
+        rowTop: Math.round(row!.getBoundingClientRect().top),
+        railTop: Math.round(rail!.getBoundingClientRect().top),
+      };
+    });
+    // The reservation is real, and it is padding rather than a gap: the rail's
+    // sheet still starts at the window's top edge while the chat pane's first
+    // row starts below the buttons, by exactly the reservation.
+    expect(reserved.caption).toBe(32);
+    expect(reserved.rowTop).toBe(reserved.caption);
+    expect(reserved.railTop).toBe(0);
+    await page.getByRole("button", { name: "Назад" }).first().click().catch(() => undefined);
 
     // «Задачи» is D-112 as the 2026-09-12 assessment measured it, and it is
     // **not fixed here**: this stage owns the messenger's shell, and the page's

@@ -426,6 +426,9 @@ const DEVICES = {
   narrow: { viewport: { width: 1024, height: 720 }, windows: false },
   /** The Windows app, drawing its own window buttons. */
   windows: { viewport: { width: 1440, height: 900 }, windows: true },
+  /** The same, in the narrow window — where the buttons' zone is proportionally
+   *  the largest share of the top edge and the panes have least room. */
+  windowsNarrow: { viewport: { width: 1024, height: 720 }, windows: true },
 };
 
 /**
@@ -456,9 +459,29 @@ add("dark", "desktop", "menu", "regular");
 add("dark", "narrow", "rest");
 add("dark", "narrow", "collapsed");
 add("light", "narrow", "chat");
+// The Windows shell, at both widths and with the side list both closed and
+// open, plus a chat open — which is the state the top bar's removal actually
+// put at risk, because the chat header's «Ещё» is at the right of the pane's
+// first row and that row is now the top of the window (D-112).
 add("dark", "windows", "rest");
+add("dark", "windows", "chat");
 add("dark", "windows", "menu");
 add("dark", "windows", "tasks");
+add("dark", "windowsNarrow", "rest");
+add("dark", "windowsNarrow", "chat");
+add("dark", "windowsNarrow", "menu");
+
+/**
+ * Where the rail's and the side list's words are measured: the plain desktop
+ * frames only.
+ *
+ * Contrast does not change with the shell. A Windows frame differs from its
+ * desktop twin by the 2rem the window's own buttons take off the top edge, and
+ * nothing the probe photographs moves because of it — so measuring those again
+ * would add columns to a table that is already wide and no information to it.
+ */
+const measuresText = (frame) =>
+  frame.device === "desktop" && (frame.scene === "menu" || frame.scene === "rest");
 
 /** The text the rail adds, measured from photographed pixels (rule 7). */
 const TEXT_TARGETS = [
@@ -507,7 +530,7 @@ async function installRealtime(page) {
 /** The window buttons' zone, and every page control that reaches into it. */
 async function windowControlsZone(page) {
   return page.evaluate(() => {
-    const host = document.querySelector('[data-testid="desktop-window-controls"], [data-testid="desktop-window-chrome"]');
+    const host = document.querySelector('[data-testid="desktop-window-chrome"]');
     const buttons = host ? [...host.querySelectorAll("button")] : [];
     if (!buttons.length) return null;
     const boxes = buttons.map((button) => button.getBoundingClientRect());
@@ -572,8 +595,33 @@ async function readGeometry(page) {
       return rect.width > 0 && rect.height > 0 && getComputedStyle(node).visibility !== "hidden";
     };
     const rows = [...document.querySelectorAll('[data-testid="chat-list-item"]')];
+    const railNode = document.querySelector('[data-testid="folder-rail"]');
+    const railTop = railNode ? railNode.getBoundingClientRect().top : null;
     return {
-      rail: box(document.querySelector('[data-testid="folder-rail"]')),
+      rail: box(railNode),
+      // Where the rail starts relative to the window's top edge. The owner's
+      // complaint on 2026-09-12 was that it started below it; Telegram
+      // Desktop's window begins with the rail and this is the number that says
+      // whether ours does.
+      railTop: railTop === null ? null : Math.round(railTop),
+      // Anything drawn across the window above the rail — a bar, by whatever
+      // name. `[]` is the whole point of this stage.
+      aboveRail:
+        railTop === null
+          ? null
+          : [...document.querySelectorAll("header, nav, [data-testid]")]
+              .filter((node) => {
+                const rect = node.getBoundingClientRect();
+                return rect.width > 400 && rect.height > 0 && rect.bottom <= railTop + 1;
+              })
+              .map((node) => node.getAttribute("data-testid") ?? node.tagName.toLowerCase()),
+      // What the window's own frame takes out of the top edge, and what the
+      // panes therefore pad out of themselves.
+      caption: getComputedStyle(document.documentElement).getPropertyValue("--kub-window-caption").trim(),
+      // The LETSCUBE mark, wherever it is drawn. Two was the other complaint.
+      marks: [...document.querySelectorAll('img[alt="LETSCUBE"]')]
+        .filter((node) => node.getBoundingClientRect().width > 0)
+        .map((node) => (node.closest('[data-testid="sidebar-control-row"]') ? "list row" : "elsewhere")),
       railItems: document.querySelectorAll('[data-testid="folder-rail-item"]').length,
       sideMenuButtonOnRail: Boolean(
         document.querySelector('[data-testid="folder-rail"] [data-testid="side-menu-button"]'),
@@ -892,7 +940,7 @@ async function renderFrame(browser, frame) {
   const result = { id: frame.id, inter, errors, geometry: null, zone: null, text: null };
   if (frame.scene !== "tasks") result.geometry = await readGeometry(page);
   if (device.windows) result.zone = await windowControlsZone(page);
-  if (frame.scene === "menu" || frame.scene === "rest") {
+  if (measuresText(frame)) {
     result.text = [];
     for (const target of TEXT_TARGETS) result.text.push(await measureText(page, target));
   }
@@ -952,105 +1000,211 @@ function widths(frameId) {
   if (!geometry) return "";
   const parts = [];
   if (geometry.rail) parts.push(`полоса папок ${geometry.rail.width}`);
+  // Where the rail starts relative to the window's top edge, which is the
+  // owner's complaint of 2026-09-12 said as a number.
+  if (geometry.railTop !== null && geometry.railTop !== undefined) {
+    parts.push(`начинается на ${geometry.railTop} от верха`);
+  }
   if (geometry.listColumn) parts.push(`список ${geometry.listColumn.width}`);
   if (geometry.firstRow) parts.push(`строка ${geometry.firstRow.width}`);
   parts.push(`сужение ${geometry.narrowRatio}`);
+  if (geometry.caption) parts.push(`кнопки окна ${geometry.caption}`);
+  if (geometry.marks) parts.push(`знак LETSCUBE ×${geometry.marks.length}`);
   parts.push(geometry.bottomCapsule ? "нижняя панель ЕСТЬ" : "нижней панели нет");
   return parts.join(", ");
 }
 
+/**
+ * The corner with the window buttons, cropped from the frame's own measured
+ * zone rather than from a hard-coded x.
+ *
+ * The x was `1020` for every frame, which is the 1440 window's corner. The
+ * narrow window is 1024 wide, so that box fell off the right edge — and sharp
+ * would have thrown rather than shown the wrong corner, which is the better of
+ * the two failures but still not a picture of anything.
+ */
+function zoneCrop(frameId, width) {
+  const zone = readResult(frameId)?.zone?.zone;
+  if (!zone) return null;
+  const box = { left: Math.max(0, Math.round(zone.x - 290)), top: 0, width: 420, height: 104 };
+  box.width = Math.min(box.width, width - box.left);
+  return box;
+}
+
 async function makeCrops() {
   mkdirSync(CROPS_DIR, { recursive: true });
+  const zones = FRAMES.filter((frame) => DEVICES[frame.device].windows).map((frame) => [
+    `${frame.id}.png`,
+    `${frame.id}-zone.png`,
+    zoneCrop(frame.id, DEVICES[frame.device].viewport.width),
+  ]);
   for (const [source, target, box] of [
-    ["dark-windows-tasks.png", "windows-tasks-zone.png", { left: 1020, top: 0, width: 420, height: 104 }],
-    ["dark-windows-rest.png", "windows-rest-zone.png", { left: 1020, top: 0, width: 420, height: 104 }],
-    ["dark-desktop-collapsed.png", "collapsed-strip.png", { left: 0, top: 0, width: 260, height: 620 }],
-    ["light-desktop-collapsed.png", "collapsed-strip-light.png", { left: 0, top: 0, width: 260, height: 620 }],
+    ...zones,
+    // 360 rows at 2x rather than 620 at 3x. The strip is the same picture
+    // either way — five rows of avatars say what one row says — and the old
+    // crop was 1,860px tall, which is most of a sheet's whole budget for one
+    // figure that repeats itself.
+    ["dark-desktop-collapsed.png", "collapsed-strip.png", { left: 0, top: 0, width: 260, height: 360, scale: 2 }],
+    ["light-desktop-collapsed.png", "collapsed-strip-light.png", { left: 0, top: 0, width: 260, height: 360, scale: 2 }],
   ]) {
     const file = path.join(FRAMES_DIR, source);
-    if (!existsSync(file)) continue;
-    await sharp(file).extract(box).resize({ width: box.width * 3 }).toFile(path.join(CROPS_DIR, target));
+    if (!existsSync(file) || !box) continue;
+    const { scale = 3, ...extract } = box;
+    await sharp(file).extract(extract).resize({ width: extract.width * scale }).toFile(path.join(CROPS_DIR, target));
   }
 }
 
 async function buildSheets(browser) {
   await makeCrops();
-  const WIDE = 1100;
+  // 860, down from 1100, and three figures to a sheet rather than four.
+  //
+  // A 1440x900 frame at 1100 wide is 687 tall, so four of them plus captions
+  // ran a sheet to about 3,000px and the set had to be rationed to be read at
+  // all. At 860 a frame is 537, and three of them land a sheet under 2,000 —
+  // more sheets, each of which can actually be looked at.
+  const WIDE = 860;
+  // A 1024x720 frame is taller for its width than a 1440x900 one, so three of
+  // them at 860 ran to 2,318 and 2,289. At 760 each loses 70px and the sheets
+  // land at about 2,100 — the budget is what a person can actually read in one
+  // go, not a number to be met by shrinking the type.
+  const NARROW_W = 760;
+  /** Frames, with each one's own measurements printed under it. */
+  const stack = (entries, width = WIDE) =>
+    `<div class="stack">${entries
+      .map(([frameId, caption]) => figure(`frames/${frameId}.png`, caption, widths(frameId), width))
+      .join("")}</div>`;
+  /** Crops, which carry no measurements of their own. */
+  const crops = (entries, width = WIDE) =>
+    `<div class="stack">${entries
+      .map(([src, caption, note]) => figure(src, caption, note ?? "", width))
+      .join("")}</div>`;
+  /** What the window buttons' zone holds in one Windows frame, as a sentence. */
+  const zoneNote = (frameId) => {
+    const zone = readResult(frameId)?.zone;
+    if (!zone) return "";
+    return zone.intersects.length
+      ? `В зоне кнопок: ${zone.intersects.map((item) => `«${item.what}» ${Math.round(item.covered * 100)}%`).join(", ")}`
+      : "В зоне кнопок нет элементов страницы";
+  };
   const sheets = [
     {
       id: "1-desktop-dark",
       title: "Компьютер 1440×900 · тёмная тема",
-      lede: "Полоса папок слева, кнопка бокового меню сверху неё, список чатов и переписка. Настоящие компоненты, вымышленные чаты.",
+      lede:
+        "Окно начинается полосой папок — панели с надписью LETSCUBE над ней больше нет. " +
+        "Знак остаётся один, в верхней строке списка. Настоящие компоненты, вымышленные чаты.",
       width: WIDE,
-      body: `<div class="stack">${[
+      body: stack([
         ["dark-desktop-rest", "В покое"],
         ["dark-desktop-chat", "Открыт чат"],
         ["dark-desktop-collapsed", "Список сжат до аватарок"],
-        ["dark-desktop-menu", "Боковой список открыт"],
-      ].map(([frameId, caption]) => figure(`frames/${frameId}.png`, caption, widths(frameId), WIDE)).join("")}</div>`,
+      ]),
     },
     {
       id: "2-desktop-light",
       title: "Компьютер 1440×900 · светлая тема",
       lede: "То же в светлой теме.",
       width: WIDE,
-      body: `<div class="stack">${[
+      body: stack([
         ["light-desktop-rest", "В покое"],
         ["light-desktop-chat", "Открыт чат"],
         ["light-desktop-collapsed", "Список сжат до аватарок"],
-        ["light-desktop-menu", "Боковой список открыт"],
-      ].map(([frameId, caption]) => figure(`frames/${frameId}.png`, caption, widths(frameId), WIDE)).join("")}</div>`,
+      ]),
     },
     {
-      id: "3-narrow-window",
+      id: "3-side-list",
+      title: "Боковой список",
+      lede: "Слой поверх окна, а не колонка: закрытым он не стоит ни одной точки ширины. Внизу — тот же экран у человека без прав.",
+      width: WIDE,
+      body: stack([
+        ["dark-desktop-menu", "Тёмная тема"],
+        ["light-desktop-menu", "Светлая тема"],
+        ["dark-desktop-menu-regular", "Без прав: ни «Управления», ни «Задач»"],
+      ]),
+    },
+    {
+      id: "4-narrow-window",
       title: "Узкое окно 1024×720",
       lede: "Самое узкое окно, в котором стоит работать: полоса папок остаётся 72 точки, список сужается, переписка не выдавливается.",
+      width: NARROW_W,
+      body: stack(
+        [
+          ["dark-narrow-rest", "В покое, тёмная"],
+          ["dark-narrow-collapsed", "Сжат до аватарок"],
+          ["light-narrow-chat", "Открыт чат, светлая"],
+        ],
+        NARROW_W,
+      ),
+    },
+    {
+      id: "5-windows-1440",
+      title: "Приложение Windows 1440×900 · D-112",
+      lede:
+        "Жёлтая штриховка — кнопки окна, которые рисует само приложение. Красная — элемент страницы, который в них заходит. " +
+        "Полоса папок доходит до верхнего края окна, а панели обеих сторон отступают от него на высоту кнопок.",
       width: WIDE,
-      body: `<div class="stack">${[
-        ["dark-narrow-rest", "В покое, тёмная"],
-        ["dark-narrow-collapsed", "Сжат до аватарок"],
-        ["light-narrow-chat", "Открыт чат, светлая"],
-      ].map(([frameId, caption]) => figure(`frames/${frameId}.png`, caption, widths(frameId), WIDE)).join("")}</div>`,
+      body: stack([
+        ["dark-windows-rest", "В покое"],
+        ["dark-windows-chat", "Открыт чат — строка заголовка чата сразу под кнопками"],
+        ["dark-windows-menu", "Боковой список открыт"],
+      ]),
     },
     {
-      id: "4-collapsed-strip",
-      title: "Полоса из одних аватарок",
-      lede: "Увеличено втрое. У Telegram это ровно 66 точек: отступ 10 + аватарка 46 + отступ 10. У нас те же 66, но 9 + 48 + 9 — аватарка в продукте одного размера везде.",
-      width: 820,
-      body: `<div class="stack">${[
-        ["crops/collapsed-strip.png", "Тёмная тема"],
-        ["crops/collapsed-strip-light.png", "Светлая тема"],
-      ].map(([src, caption]) => figure(src, caption, "", 780)).join("")}</div>`,
+      id: "6-windows-narrow",
+      title: "Приложение Windows 1024×720 · D-112",
+      lede: "Узкое окно: доля верхнего края, занятая кнопками, здесь наибольшая.",
+      width: NARROW_W,
+      body: stack(
+        [
+          ["dark-windowsNarrow-rest", "В покое"],
+          ["dark-windowsNarrow-chat", "Открыт чат"],
+          ["dark-windowsNarrow-menu", "Боковой список открыт"],
+        ],
+        NARROW_W,
+      ),
     },
     {
-      id: "5-windows",
-      title: "Приложение Windows · D-112",
-      lede: "Жёлтая штриховка — кнопки окна. Красная — элемент страницы, который в них заходит.",
+      id: "7-windows-corner",
+      title: "Угол с кнопками окна, увеличено втрое",
+      lede: "То же место на четырёх кадрах мессенджера. Ни один элемент страницы в кнопки не заходит.",
+      width: WIDE,
+      body: crops([
+        ["crops/dark-windows-rest-zone.png", "1440, в покое", zoneNote("dark-windows-rest")],
+        ["crops/dark-windows-chat-zone.png", "1440, открыт чат", zoneNote("dark-windows-chat")],
+        ["crops/dark-windows-menu-zone.png", "1440, боковой список", zoneNote("dark-windows-menu")],
+        ["crops/dark-windowsNarrow-chat-zone.png", "1024, открыт чат", zoneNote("dark-windowsNarrow-chat")],
+      ]),
+    },
+    {
+      id: "8-tasks",
+      title: "Страница «Задачи» · D-112 не закрыт",
+      lede:
+        "Эта страница не входит в работу по оболочке. Её собственная кнопка «+ Новая» стояла под кнопками окна " +
+        "и до этой ветки, и осталась там: отступ делают панели мессенджера, а не страницы.",
       width: WIDE,
       body:
-        `<div class="stack">${[
-          ["dark-windows-rest", "Мессенджер"],
-          ["dark-windows-menu", "Боковой список открыт"],
-          ["dark-windows-tasks", "Страница «Задачи»"],
-        ].map(([frameId, caption]) => {
-          const zone = readResult(frameId)?.zone;
-          const note = zone
-            ? zone.intersects.length
-              ? `В зоне кнопок: «${zone.intersects[0].what}», перекрыто ${Math.round(zone.intersects[0].covered * 100)}%`
-              : "В зоне кнопок нет элементов страницы"
-            : "";
-          return figure(`frames/${frameId}.png`, caption, note, WIDE);
-        }).join("")}</div>` +
-        `<h2>Угол с кнопками, увеличено втрое</h2><div class="stack">${[
-          ["crops/windows-rest-zone.png", "Мессенджер"],
-          ["crops/windows-tasks-zone.png", "«Задачи»"],
-        ].map(([src, caption]) => figure(src, caption, "", WIDE)).join("")}</div>`,
+        stack([["dark-windows-tasks", "«Задачи» целиком"]]) +
+        `<h2>Тот же угол</h2>` +
+        crops([["crops/dark-windows-tasks-zone.png", "Увеличено втрое", zoneNote("dark-windows-tasks")]]),
     },
     {
-      id: "6-measurements",
+      id: "9-collapsed-strip",
+      title: "Полоса из одних аватарок",
+      lede: "Увеличено вдвое. У Telegram это ровно 66 точек: отступ 10 + аватарка 46 + отступ 10. У нас те же 66, но 9 + 48 + 9 — аватарка в продукте одного размера везде.",
+      width: 560,
+      body: crops(
+        [
+          ["crops/collapsed-strip.png", "Тёмная тема"],
+          ["crops/collapsed-strip-light.png", "Светлая тема"],
+        ],
+        520,
+      ),
+    },
+    {
+      id: "10-measurements",
       title: "Измерения",
       lede: "Ширины в точках и контраст по сфотографированным пикселям, худший пиксель / медиана, порог 4,5:1.",
-      width: 1240,
+      width: 1320,
       body: geometryTable() + contrastTable(),
     },
   ];
@@ -1073,23 +1227,34 @@ const GEOMETRY_FRAMES = FRAMES.filter((frame) => frame.scene !== "tasks").map((f
 function geometryTable() {
   const rows = GEOMETRY_FRAMES.map((frameId) => {
     const geometry = readResult(frameId)?.geometry;
-    if (!geometry) return `<tr><th>${escapeHtml(frameId)}</th><td colspan="7">—</td></tr>`;
+    if (!geometry) return `<tr><th>${escapeHtml(frameId)}</th><td colspan="9">—</td></tr>`;
     const railOk = geometry.rail && geometry.rail.width === RAIL_WIDTH;
     const stripOk = !geometry.firstRow || geometry.narrowRatio < 1 || geometry.firstRow.width === COLLAPSED_WIDTH;
+    // The rail starts at the window's top edge and nothing is drawn above it.
+    // Both halves in one cell, because either one alone is the bar back.
+    const topOk = geometry.railTop === 0 && (geometry.aboveRail ?? []).length === 0;
+    const topCell = geometry.aboveRail?.length
+      ? `${geometry.railTop} · ${escapeHtml(geometry.aboveRail.join(", "))}`
+      : `${geometry.railTop}`;
+    // Exactly one LETSCUBE mark, and it is in the list's top row.
+    const marks = geometry.marks ?? [];
+    const markOk = marks.length === 1 && marks[0] === "list row";
     return `<tr><th>${escapeHtml(frameId)}</th>` +
       `<td class="${railOk ? "pass" : "fail"}">${geometry.rail ? geometry.rail.width : "нет"}</td>` +
+      `<td class="${topOk ? "pass" : "fail"}">${topCell}</td>` +
       `<td>${geometry.listColumn ? geometry.listColumn.width : "—"}</td>` +
       `<td class="${stripOk ? "pass" : "fail"}">${geometry.firstRow ? geometry.firstRow.width : "—"}</td>` +
       `<td>${geometry.narrowRatio}</td>` +
+      `<td>${escapeHtml(geometry.caption || "0px")}</td>` +
+      `<td class="${markOk ? "pass" : "fail"}">${marks.length ? escapeHtml(marks.join(", ")) : "нет"}</td>` +
       `<td class="${geometry.bottomCapsule ? "fail" : "pass"}">${geometry.bottomCapsule ? "есть" : "нет"}</td>` +
-      `<td class="${geometry.sideMenuButtonOnRail && !geometry.sideMenuButtonInHeader ? "pass" : "fail"}">${geometry.sideMenuButtonOnRail ? "на полосе" : "нет"}</td>` +
-      `<td class="${geometry.brandInListRow ? "pass" : "fail"}">${geometry.brandInListRow ? "есть" : "нет"}</td></tr>`;
+      `<td class="${geometry.sideMenuButtonOnRail && !geometry.sideMenuButtonInHeader ? "pass" : "fail"}">${geometry.sideMenuButtonOnRail ? "на полосе" : "нет"}</td></tr>`;
   });
-  return `<h2>Геометрия</h2><table><thead><tr><th>Кадр</th><th>Полоса папок</th><th>Список</th><th>Строка</th><th>Сужение</th><th>Нижняя панель</th><th>Кнопка меню</th><th>Знак LETSCUBE</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
+  return `<h2>Геометрия</h2><table><thead><tr><th>Кадр</th><th>Полоса</th><th>Верх полосы</th><th>Список</th><th>Строка</th><th>Сужение</th><th>Кнопки окна</th><th>Знак LETSCUBE</th><th>Низ</th><th>Меню</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
 }
 
 function contrastTable() {
-  const frames = FRAMES.filter((frame) => frame.scene === "menu" || frame.scene === "rest").map((frame) => frame.id);
+  const frames = FRAMES.filter(measuresText).map((frame) => frame.id);
   const rows = TEXT_TARGETS.map((target) => {
     const cells = frames.map((frameId) => {
       const entry = readResult(frameId)?.text?.find((item) => item.id === target.id);
@@ -1105,18 +1270,24 @@ function contrastTable() {
 function measurementsMarkdown() {
   const lines = ["# The computer's shell, measured", "", "Widths in CSS pixels, contrast from photographed pixels.", ""];
   lines.push("## Geometry", "");
-  lines.push("| frame | rail | list column | first row | narrow ratio | rows in view | bottom capsule | menu button on rail | brand in list row |");
-  lines.push("|---|---|---|---|---|---|---|---|---|");
+  lines.push(
+    "| frame | rail | rail top | above the rail | list column | first row | narrow ratio | window caption | LETSCUBE marks | bottom capsule | menu button on rail |",
+  );
+  lines.push("|---|---|---|---|---|---|---|---|---|---|---|");
   for (const frameId of GEOMETRY_FRAMES) {
     const geometry = readResult(frameId)?.geometry;
     if (!geometry) {
-      lines.push(`| ${frameId} | — | — | — | — | — | — | — | — |`);
+      lines.push(`| ${frameId} |${" — |".repeat(10)}`);
       continue;
     }
+    const above = geometry.aboveRail?.length ? geometry.aboveRail.join(", ") : "nothing";
+    const marks = geometry.marks ?? [];
     lines.push(
-      `| ${frameId} | ${geometry.rail?.width ?? "none"} | ${geometry.listColumn?.width ?? "—"} | ${geometry.firstRow?.width ?? "—"} | ` +
-        `${geometry.narrowRatio} | ${geometry.rowsInView} | ${geometry.bottomCapsule ? "PRESENT" : "none"} | ` +
-        `${geometry.sideMenuButtonOnRail ? "yes" : "no"}${geometry.sideMenuButtonInHeader ? " (also in header)" : ""} | ${geometry.brandInListRow ? "yes" : "no"} |`,
+      `| ${frameId} | ${geometry.rail?.width ?? "none"} | ${geometry.railTop ?? "—"} | ${above} | ` +
+        `${geometry.listColumn?.width ?? "—"} | ${geometry.firstRow?.width ?? "—"} | ${geometry.narrowRatio} | ` +
+        `${geometry.caption || "0px"} | ${marks.length} (${marks.join(", ") || "none"}) | ` +
+        `${geometry.bottomCapsule ? "PRESENT" : "none"} | ` +
+        `${geometry.sideMenuButtonOnRail ? "yes" : "no"}${geometry.sideMenuButtonInHeader ? " (also in header)" : ""} |`,
     );
   }
   lines.push("");
@@ -1132,7 +1303,11 @@ function measurementsMarkdown() {
 
   lines.push("## Windows: page controls inside the window buttons' zone", "");
   lines.push("| frame | zone | inside it |", "|---|---|---|");
-  for (const frame of FRAMES.filter((entry) => entry.device === "windows")) {
+  // Every Windows frame, not only the 1440 one. `entry.device === "windows"`
+  // silently left the narrow window out of this table while the frames were
+  // rendered and measured — the zone is proportionally the largest share of
+  // the top edge there, so it is the row most worth reading.
+  for (const frame of FRAMES.filter((entry) => DEVICES[entry.device].windows)) {
     const zone = readResult(frame.id)?.zone;
     if (!zone) {
       lines.push(`| ${frame.id} | — | — |`);
@@ -1147,7 +1322,7 @@ function measurementsMarkdown() {
   lines.push("");
 
   lines.push("## Contrast, photographed (worst / median, threshold 4.5:1)", "");
-  const frames = FRAMES.filter((frame) => frame.scene === "menu" || frame.scene === "rest").map((frame) => frame.id);
+  const frames = FRAMES.filter(measuresText).map((frame) => frame.id);
   lines.push(`| text | ${frames.join(" | ")} |`, `|---|${frames.map(() => "---").join("|")}|`);
   for (const target of TEXT_TARGETS) {
     const cells = frames.map((frameId) => {

@@ -126,14 +126,16 @@ export function SideMenuLayer({ onClose, onOpenSettings, onOpenNewGroup, onOpenS
         tabIndex={-1}
         data-kub-menu="true"
         data-testid="side-menu-layer"
-        // `pt-safe`: on an iPad this is under the status bar, and in the Windows
-        // shell the application's own top bar is above it — the layer starts
-        // clear of both rather than under them (rule 13). It is a strip at the
-        // left, so it never reaches the window buttons at the right.
+        // The layer is pinned to the window's top edge, so its rows start clear
+        // of whatever takes that edge — the iPad's status bar, and the Windows
+        // app's own caption buttons, which the application's top bar used to
+        // stand between this and (rule 13). It is a strip at the left, so it
+        // never reaches those buttons; what it would otherwise reach is the
+        // drag region beside them.
         className="fixed inset-y-0 left-0 z-50 flex w-[19rem] max-w-[85vw] flex-col border-r border-[color:var(--kub-border-color)] outline-none"
       >
         <KubGlassLayer strong />
-        <div className="relative flex min-h-0 flex-1 flex-col pt-safe pb-safe">
+        <div className="relative flex min-h-0 flex-1 flex-col pt-window-top pb-safe">
           {currentUser && (
             <div className="flex shrink-0 items-center gap-3 border-b border-[color:var(--kub-rule)] px-4 py-4">
               <UserAvatar user={currentUser} size="md" />

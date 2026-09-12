@@ -10,7 +10,6 @@ import { BottomNav } from "./BottomNav";
 import { DesktopUpdatePill } from "@/components/desktop/DesktopUpdatePill";
 import { useDesktopUpdate } from "@/hooks/useDesktopUpdate";
 import { cn } from "@/lib/utils";
-import { AppTopBar } from "./AppTopBar";
 
 /**
  * Top-level shell. On <md, the layout is a one-pane drawer:
@@ -87,7 +86,18 @@ export function MainLayout() {
         aria-hidden={updateBlocking ? true : undefined}
         inert={updateBlocking ? true : undefined}
       >
-        <AppTopBar />
+        {/* No bar above the panes. Telegram Desktop's window begins with the
+            rail and ours does too since 2026-09-12: a band carrying the
+            LETSCUBE wordmark sat here, which both pushed the folder rail below
+            the window's top edge and drew the mark a second time beside the
+            one in the list's top row. The owner chose to remove it.
+
+            What it also carried has moved rather than gone: the window's own
+            buttons, its drag region and its double click to maximise are
+            `DesktopWindowChrome`, which every other surface already used, and
+            the 44px it held the panes clear of those buttons by is now
+            `--kub-window-caption`, padded out of each pane's own top through
+            `pt-window-top`. See `DesktopWindowChrome`. */}
         <div className="flex flex-1 overflow-hidden" data-kub-panes="">
           <div
             // The whole left region: the 72pt folder rail and the chat list

@@ -460,10 +460,12 @@ function AppRoutes() {
       {/* The support desk travels with the person instead of sending them to a
           route: a question is usually about what is on screen right now. */}
       {user && <SupportWindow />}
-      {/* The messenger draws its own title bar in AppTopBar; every other
-          surface had none at all, which left the window unmovable and
-          unclosable outside it. See D-016. */}
-      <DesktopWindowChrome suppressed={location === "/"} />
+      {/* Every surface, the messenger included, since 2026-09-12. The
+          messenger used to draw a second title bar of its own in `AppTopBar`
+          and this one was suppressed under it; removing that bar leaves one
+          window chrome for the whole product, which is what D-016 wanted in
+          the first place. */}
+      <DesktopWindowChrome />
       <Switch>
         <Route path="/login" component={LoginForm} />
         <Route path="/register" component={RegisterForm} />

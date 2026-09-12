@@ -72,11 +72,17 @@ export function FolderRail({
     //
     // `border-r` in `--kub-rule`, not the sheet edge: the rail and the list are
     // two blocks sharing the column's one sheet of glass (rule 11).
+    //
+    // `pt-window-top`: the rail's box starts at the window's top edge, as
+    // Telegram Desktop's does, and its first control starts below whatever the
+    // hardware or the window frame takes of that edge. On the Windows shell
+    // that is the 2rem the application's own buttons occupy; everywhere else
+    // it is zero and nothing moves.
     <nav
       aria-label="Папки"
       data-testid="folder-rail"
       data-kub-folder-rail=""
-      className="relative hidden h-full shrink-0 flex-col border-r border-[color:var(--kub-rule)] md:flex"
+      className="relative hidden h-full shrink-0 flex-col border-r border-[color:var(--kub-rule)] pt-window-top md:flex"
       style={{ width: `${FOLDER_RAIL_WIDTH}px` }}
     >
       {/* The side-menu button, where `FiltersMenu::_menu` puts it. */}

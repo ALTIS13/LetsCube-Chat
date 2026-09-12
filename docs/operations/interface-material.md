@@ -392,9 +392,28 @@ phone menu sat 12px from the bottom, on the home indicator.
   placed in the part of the screen the hardware leaves alone and drawn offset by
   the insets, so the clamping they already had keeps them off the notch without
   knowing there is one.
-- **Which chrome is on top depends on the width.** Below `md` the pane headers are
-  the top of the screen and carry the inset; from `md` the application's top bar
-  does, and the pane headers do not.
+- **The pane headers carry the top edge, at every width.** This used to depend on
+  the width: below `md` the pane headers were the top of the screen and from `md`
+  the application's top bar was, so each header wrote `pt-safe md:pt-0`. That bar
+  was removed on 2026-09-12 — it pushed the folder rail below the window's top
+  edge and drew the LETSCUBE mark a second time — and with nothing above them the
+  headers carry the inset at every width.
+- **A window has a second kind of unsafe edge, and it is not the hardware's.**
+  The Windows app draws its own minimise, maximise and close, because the Tauri
+  window has `decorations: false`. They are an overlay strip, not a band, so they
+  take no height from the page and the page has to keep its own controls out of
+  them — which is D-112 stated as a rule. `--kub-window-caption` is that strip's
+  height under `data-desktop-shell="windows"` and `0px` everywhere else, and
+  `pt-window-top` is the sum of it and `--kub-safe-top`: the five surfaces that
+  are the top of the window write that one utility instead of `pt-safe`.
+  It is deliberately **not** folded into `--kub-safe-top`. Those four are the
+  device's own insets, declared once from `env()` and held there by
+  `tests/unit/safe-area-insets.test.mjs`; and the light theme paints an opaque
+  band of exactly `--kub-safe-top` under the iPhone's status bar, so a Windows
+  branch in that token would put a blue bar across the Windows light theme.
+  The material still runs underneath, as the bullet above says — the padding is
+  on a box whose glass is an `absolute inset-0` layer, so the folder rail's sheet
+  reaches the window's top edge while its first button starts below the buttons.
 - **The status bar is iOS's, and so is its glyphs' colour.** `black-translucent`
   draws the status bar over the page, and over the light theme's glass the clock
   and the battery disappeared. The meta tag cannot follow the theme — iOS reads it
@@ -581,12 +600,23 @@ its status 1.12:1, and the light header's status 3.64:1.
   `#2B45A3` held a sender's name at 4.52:1 on a phone and 4.35:1 on a desktop,
   where the names sit on the violet pool at the left and a pattern stroke over it
   is the darkest ground a word meets. `#213A94` is 5.15:1 there.
-- **The Windows app.** The window's own buttons are in the application's top
-  bar, 44px across both panes, and the chat pane starts under it, so its capsules
-  are in a different row. Measured at 1360×860: the title and «⋯» are 7px below
-  the buttons with no overlap, and a click at the centre of each capsule and of
-  each window button reaches it. D-112 is about the pages whose own controls sit
-  in the buttons' row; the chat pane is not one of them.
+- **The Windows app.** The window's own buttons used to be in the application's
+  top bar, 44px across both panes, and the chat pane started under it, so its
+  capsules were in a different row. Measured at 1360×860 then: the title and «⋯»
+  were 7px below the buttons with no overlap, and a click at the centre of each
+  capsule and of each window button reached it.
+
+  That bar was removed on 2026-09-12 and the arrangement is no longer a
+  by-product of it. The buttons are `DesktopWindowChrome`, a 2rem overlay strip
+  that takes no height from the page, and each pane reserves that strip out of
+  its own top through `pt-window-top` — so the folder rail's sheet reaches the
+  window's top edge while the chat's control row starts at exactly 32.
+  Re-measured with the bridge stubbed, at 1440×900 and 1024×720, at rest, with a
+  chat open and with the side list open: the buttons' zone is 132×32 at 1308,0
+  and at 892,0, and no page control of the messenger is inside it in any of the
+  six. D-112 is still about the pages whose own controls sit in that row —
+  «Задачи» keeps its «+ Новая» 64% covered — and the chat pane is still not one
+  of them.
 
 ## Where the material is not used, on purpose
 

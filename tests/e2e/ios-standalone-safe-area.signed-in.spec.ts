@@ -161,9 +161,12 @@ test.describe("landscape", () => {
     await emulateInstalledIosApp(page, insets);
   });
 
-  test("the two panes and the top bar, at rest and at the end", async ({ page }) => {
+  test("the two panes, at rest and at the end", async ({ page }) => {
     await signIn(page);
-    await expect(page.getByTestId("app-top-bar")).toBeVisible();
+    // The application's top bar was removed on 2026-09-12. Held sideways the
+    // list's own header is the top of the window, and it is what now pads the
+    // inset the bar used to carry from `md`.
+    await expect(page.getByTestId("sidebar-control-row")).toBeVisible();
     await expectClearOfHardware(page, insets, "signed-in landscape, two panes", quietly);
     await scrollEveryListToEnd(page);
     await expectClearOfHardware(page, insets, "signed-in landscape, two panes end", quietly);

@@ -40,7 +40,9 @@ export function ChatSelectionBar({
 }) {
   return (
     <div
-      className="relative flex flex-shrink-0 flex-col pt-safe md:pt-0"
+      // The same top edge `ChatHeader` pads: this bar replaces it while
+      // messages are selected, so it has to start clear of the same things.
+      className="relative flex flex-shrink-0 flex-col pt-window-top"
       data-testid="chat-selection-bar"
       role="toolbar"
       aria-label="Выделенные сообщения"

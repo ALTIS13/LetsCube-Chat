@@ -1144,7 +1144,7 @@ export function MessageList({
         // stacking context and clamp the `fixed` overlays it hosts — the
         // read-receipts dialog, the selection bar on a phone, a bubble's
         // context menu — inside it. That is the defect `KubGlassLayer`,
-        // `AppTopBar` and `MediaViewer` each carry a note about.
+        // `MainLayout` and `MediaViewer` each carry a note about.
         //
         // The overlays below hang off this box's edges, and those edges are now
         // under the chrome. They read the insets from here rather than take

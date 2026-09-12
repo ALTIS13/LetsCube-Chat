@@ -223,7 +223,11 @@ async function reachProduction(browser: Awaited<ReturnType<typeof chromium.conne
   return page;
 }
 
-const productionShell = '[data-testid="app-top-bar"], [data-testid="sidebar-brand-strip"]';
+// `desktop-app-shell` since 2026-09-12: the application's top bar was removed
+// and `sidebar-brand-strip` was already gone, so the old pair matched nothing
+// and this helper's "wait for whichever arrives first" could only ever resolve
+// on the login form.
+const productionShell = '[data-testid="desktop-app-shell"]';
 
 async function signIn(page: Page, credentials: { email: string; password: string }) {
   const emailInput = page.locator('input[type="email"]');

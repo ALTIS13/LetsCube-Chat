@@ -158,7 +158,24 @@
 
   --tracking-normal: 0em;
   --spacing: 0.25rem;
-  --kub-app-topbar-height: 2.75rem;
+  /* What the window's own frame takes out of the top edge, the way
+     `--kub-safe-top` is what the phone's hardware takes.
+
+     Zero everywhere but the Windows app. There the Tauri window is built with
+     `decorations: false` and the application draws its own minimise, maximise
+     and close in `DesktopWindowChrome`, a 2rem strip pinned over the top right
+     — so on that shell alone the top 2rem of the window belongs to the frame
+     and not to the page. Every surface that is the top of the window reads it
+     through `pt-window-top`, which adds it to the hardware's inset.
+
+     It is NOT folded into `--kub-safe-top`. Those four are the device's own
+     insets, declared once from `env()` and held there by
+     `tests/unit/safe-area-insets.test.mjs`; and the light theme paints an
+     opaque band of exactly `--kub-safe-top` under the iPhone's status bar, so
+     a Windows branch in that token would put a blue bar across the Windows
+     light theme. Two different things that happen to share an edge. */
+  --kub-window-caption: 0px;
+
   --kub-control-row-height: 3.5rem;
 
   /* The unsafe areas: the status bar and the Dynamic Island along the top of a
@@ -211,6 +228,19 @@
 
 html[data-ios-standalone] {
   --kub-app-height: 100vh;
+}
+
+/* The Windows app, and nothing else. `applyDesktopShellAttribute()` sets this
+   at boot from the same `window.letscubeDesktop` check that decides whether
+   `DesktopWindowChrome` renders at all, so the reservation exists exactly when
+   the buttons do.
+
+   2rem is that strip's own height (`h-8` on its header). The two are one fact
+   and drift apart silently — a strip taller than the reservation puts the
+   page's controls back under the window buttons, which is D-112 — so
+   `tests/unit/window-caption.test.mjs` reads both and compares them. */
+:root[data-desktop-shell="windows"] {
+  --kub-window-caption: 2rem;
 }
 
 .dark {
@@ -1934,10 +1964,12 @@ textarea::placeholder, input::placeholder {
 @layer components {
   .desktop-update-pill {
     position: fixed;
-    /* Below the top bar, which now carries the status bar's inset in its own
-       height; on the Windows shell, with no inset, this is the 44px + 12px it
-       always was. */
-    top: calc(var(--kub-app-topbar-height) + var(--kub-safe-top) + 0.75rem);
+    /* Below whatever takes the top edge: the phone's status bar, and the
+       window's own caption buttons in the Windows app. There was an
+       application top bar above this until 2026-09-12 and the 44px of it were
+       in this sum; with the bar gone the pill sits 12px under the 32px strip
+       `DesktopWindowChrome` draws, which is the only shell it appears on. */
+    top: calc(var(--kub-safe-top) + var(--kub-window-caption) + 0.75rem);
     right: 0.75rem;
     z-index: 30;
     display: flex;
@@ -2134,6 +2166,22 @@ textarea::placeholder, input::placeholder {
    nothing they are applied to moves. */
 @utility pt-safe {
   padding-top: var(--kub-safe-top);
+}
+
+/* The top of the window, for the surfaces that are it: the phone's hardware
+   inset plus whatever the window's own frame takes (`--kub-window-caption`).
+
+   A sum rather than a `max()`, because the two are stacked rather than
+   alternative — an iPad has a status bar and no caption buttons, the Windows
+   app has caption buttons and no status bar, and on a screen with neither this
+   is exactly the `0px` the surfaces had before.
+
+   The material still runs underneath: this is padding on a box whose glass is
+   an `absolute inset-0` layer, so the sheet reaches the window's top edge and
+   only the controls start below it. That is rule 13 of
+   docs/operations/interface-material.md applied to a second kind of edge. */
+@utility pt-window-top {
+  padding-top: calc(var(--kub-safe-top) + var(--kub-window-caption));
 }
 
 @utility pb-safe {

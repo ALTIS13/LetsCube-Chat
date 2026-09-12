@@ -42,9 +42,10 @@ test.describe("LETSCUBE Windows Tauri long session", () => {
         await page.locator('input[type="password"]').fill(credentials!.password);
         await page.locator('button[type="submit"]').click();
       }
-      const productionShellChrome = page.locator(
-        '[data-testid="app-top-bar"], [data-testid="sidebar-brand-strip"]',
-      );
+      // `desktop-app-shell` since 2026-09-12: the application's top bar was
+      // removed and `sidebar-brand-strip` was already gone, so the old pair
+      // matched nothing.
+      const productionShellChrome = page.getByTestId("desktop-app-shell");
       await expect(productionShellChrome).toBeVisible({ timeout: 30_000 });
 
       const marker = `TAURI_SOAK_${Date.now()}`;

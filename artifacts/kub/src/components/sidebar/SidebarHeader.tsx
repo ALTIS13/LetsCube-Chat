@@ -101,11 +101,14 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
   ];
 
   return (
-    // Below `md` this is the top of the screen — under the status bar and the
-    // Dynamic Island of the installed iPhone app — so it pads that inset out
-    // of its own top and the column's material runs under both. From `md` the
-    // application's top bar is above it and carries the inset instead.
-    <div className="flex-shrink-0 border-b border-[color:var(--kub-border-color)] pt-safe md:pt-0">
+    // This is the top of the window at every width since 2026-09-12: the
+    // application's top bar used to be above it from `md` and carried the
+    // inset, and there is no bar now. So it pads both of them out of its own
+    // top — the status bar and the Dynamic Island of the installed iPhone app,
+    // and the Windows app's own caption buttons — and the column's material
+    // runs under all of it, because the glass is a layer on the column rather
+    // than a fill on this box.
+    <div className="flex-shrink-0 border-b border-[color:var(--kub-border-color)] pt-window-top">
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {showNewGroup && <NewGroupModal onClose={() => setShowNewGroup(false)} onRefetch={onRefetch} />}
 

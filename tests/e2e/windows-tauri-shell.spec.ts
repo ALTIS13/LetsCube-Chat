@@ -387,9 +387,10 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       await page.locator('input[type="password"]').fill(credentials.password);
       await page.locator('button[type="submit"]').click();
       await expect(page.locator('input[type="password"]')).toHaveCount(0, { timeout: 20_000 });
-      await expect(
-        page.locator('[data-testid="app-top-bar"], [data-testid="sidebar-brand-strip"]'),
-      ).toBeVisible();
+      // `desktop-app-shell`: the application's top bar was removed on
+      // 2026-09-12 and `sidebar-brand-strip` has not existed for longer than
+      // that, so the old pair matched nothing on either side.
+      await expect(page.getByTestId("desktop-app-shell")).toBeVisible();
       await expect(page.getByTestId("sidebar-search-input")).toBeVisible();
       await expect(page.getByText("Установить LETSCUBE", { exact: true })).toHaveCount(0);
 
@@ -525,8 +526,8 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       await page.locator('input[type="email"]').fill(credentials!.email);
       await page.locator('input[type="password"]').fill(credentials!.password);
       await page.locator('button[type="submit"]').click();
-      await expect(page.getByTestId("app-top-bar")).toBeVisible({ timeout: 20_000 });
-      await expect(page.getByTestId("desktop-window-controls")).toBeVisible();
+      await expect(page.getByTestId("desktop-app-shell")).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByTestId("desktop-window-chrome")).toBeVisible();
 
       const selectedChatRows = page.getByTestId("chat-list-item");
       await expect(
@@ -547,7 +548,7 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       expect(pillBox).toBeTruthy();
       expect(pillBox!.width).toBeLessThanOrEqual(240);
       expect(pillBox!.height).toBeLessThanOrEqual(56);
-      const windowControlsBox = await page.getByTestId("desktop-window-controls").boundingBox();
+      const windowControlsBox = await page.getByTestId("desktop-window-chrome").boundingBox();
       expect(windowControlsBox).toBeTruthy();
       expect(pillBox!.y).toBeGreaterThanOrEqual(windowControlsBox!.y + windowControlsBox!.height);
       await page.screenshot({ path: testInfo.outputPath("desktop-update-success.png") });
