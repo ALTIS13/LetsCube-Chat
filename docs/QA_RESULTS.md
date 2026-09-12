@@ -1,5 +1,50 @@
 # QA Results
 
+## 2026-09-12 - «Высветли»: the track, and why a contrast ratio was the wrong instrument
+
+Built on `design/recording-track-lighten` (`cde8635`, off `design/recording-stopped-row`). Gates re-run by hand
+inside that worktree: unit suite **1809 of 1809**, typecheck clean, nothing tracked under `output/`.
+
+**The measurement, on photographed composited pixels rather than token arithmetic.** In the dark theme the
+unplayed track went from `#081629` to `#353E57` on a capsule of `#0E1937`: the ratio moved 1.048 to 1.631 and the
+mean sRGB step 8 to 36. The light theme is byte-identical before and after, as are the played part, the playhead
+and the send button. The played part now reads 3.349 against the track, above the 3:1 a graphical object needs.
+
+**The finding worth more than the fix.** The light theme measures **1.046** - all but identical to the dark
+theme's broken 1.048 - and reads perfectly. A contrast ratio is simply the wrong instrument at that end of the
+scale: what carries the light theme is a step in **hue** against a near-white sheet, and the dark theme had no hue
+to spend. Had this been judged on the ratio alone, the light theme would have been declared broken too and
+"fixed" into something worse. It is why the work was done on photographed pixels and by eye.
+
+**Three decisions worth keeping, each with its reason:**
+
+- **A new token rather than `--kub-inset`.** A well is cut downwards, and on this capsule in the dark theme there
+  is nothing left to go down to. That token also serves fields across the whole product, so moving it would have
+  moved all of them; the bar reads `--kub-chat-track` instead.
+- **Opaque, not a translucent veil.** The played part is an opaque accent, so a translucent track would let the one
+  relationship that carries the control's meaning drift with whatever passes under the composer - over a white
+  field the veil reaches `rgb(163,174,184)` and the played part stops reading at 1.41. Opaque holds 3.35 everywhere.
+- **It stopped just short of the ceiling**, and said so: at 0.20 alpha the played part falls to 2.92, under the 3:1
+  floor. The usable window closes just past where it stopped, which is a thing worth knowing before anyone
+  brightens it again.
+
+Height was left at 6 px: this was a colour problem, and the previous round's two extra points could not fix it.
+
+**New guards, all mutation-proved** - four unit mutations and two render ones, each turning red on the named test:
+reverting the bar to `--kub-inset`, reverting the dark value, moving the light value, and over-lightening. The render
+script now photographs the track on every stopped frame and refuses a dark one under 1.5, a light one whose well
+stopped going down, or either theme where the played part falls under 3:1. The row's existing guards - nothing
+moved, nothing faded, the bin present, no «Отмена» - are untouched and still pass.
+
+**Unverified, and worth naming**: everything is Chromium on this workstation. How a 6 px low-chroma bar at
+`#353E57` survives an OLED iPhone panel under iOS colour management and auto-brightness is exactly the case where a
+panel's gamma can eat a step, and the same holds for an Android LCD. Treat the dark reading as verified in Chromium
+and unverified on glass.
+
+**A correction to the briefs I have been writing**: `tsc -b lib/api-zod` must be run from the **worktree root**, not
+from `artifacts/api-server` - the composite reference resolves to `<root>/lib/api-zod`. I had been handing agents the
+wrong form.
+
 ## 2026-09-12 - Three answers, three branches unblocked, and a fourth thing he spotted himself
 
 The owner answered all three open pixel questions in one line each: **«1. Высветли / 2. Лучше убрать / 3. Хорошо,
