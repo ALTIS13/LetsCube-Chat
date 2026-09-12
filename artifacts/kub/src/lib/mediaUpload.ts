@@ -1,5 +1,9 @@
 import { DEFAULT_MEDIA_QUALITY, getImageUploadProfile, type MediaQuality } from "./mediaQuality.ts";
-import { ORIGINAL_PREVIEW_MAX_DIMENSION, ORIGINAL_PREVIEW_QUALITY } from "./mediaCompression.ts";
+import {
+  ORIGINAL_PREVIEW_MAX_DIMENSION,
+  ORIGINAL_PREVIEW_QUALITY,
+  originalPreviewDimensions,
+} from "./mediaCompression.ts";
 import {
   JPEG_TYPE,
   WEBP_TYPE,
@@ -136,6 +140,11 @@ export async function prepareOriginalPreview(file: File): Promise<File | null> {
     maxDimension: ORIGINAL_PREVIEW_MAX_DIMENSION,
     quality: ORIGINAL_PREVIEW_QUALITY,
     suffix: "preview",
+    // A rule rather than a cap: a tall picture keeps its short side (D-116).
+    // `ChatWindow` writes the same numbers into the message's metadata, so both
+    // have to come from this one function — otherwise the bubble is told a size
+    // the file it draws does not have.
+    sizeFor: originalPreviewDimensions,
   });
   if (preview === file) return null;
   return preview.type === WEBP_TYPE || preview.type === JPEG_TYPE ? preview : null;
@@ -249,23 +258,39 @@ function canOptimizeRasterImage(file: File): boolean {
   return file.type === "image/jpeg" || file.type === "image/png" || file.type === "image/webp";
 }
 
+/** The long side capped, nothing else: what every output here was sized by. */
+function cappedLongSide(width: number, height: number, maxDimension: number): MediaDimensions {
+  const scale = Math.min(1, maxDimension / Math.max(width, height));
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
 async function optimizeRasterImage(
   file: File,
-  options: { maxDimension: number; quality: number; suffix: string },
+  options: {
+    maxDimension: number;
+    quality: number;
+    suffix: string;
+    /** The output's size, where the long side alone does not decide it. An avatar's does. */
+    sizeFor?: (width: number, height: number) => MediaDimensions;
+  },
 ): Promise<File> {
   if (typeof document === "undefined") return file;
 
   try {
     const image = await loadImage(file);
-    const scale = Math.min(1, options.maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
-    if (scale >= 1 && file.size <= MAX_AVATAR_UPLOAD_BYTES && options.maxDimension === AVATAR_MAX_DIMENSION) {
+    const target = options.sizeFor
+      ? options.sizeFor(image.naturalWidth, image.naturalHeight)
+      : cappedLongSide(image.naturalWidth, image.naturalHeight, options.maxDimension);
+    const unresized = target.width === image.naturalWidth && target.height === image.naturalHeight;
+    if (unresized && file.size <= MAX_AVATAR_UPLOAD_BYTES && options.maxDimension === AVATAR_MAX_DIMENSION) {
       return file;
     }
 
-    const width = Math.max(1, Math.round(image.naturalWidth * scale));
-    const height = Math.max(1, Math.round(image.naturalHeight * scale));
     const encoding = compressedPhotoEncoding({ webpEncodes: await canvasEncodesWebp(), webpQuality: options.quality });
-    const blob = await drawImageToBlob(image, { width, height }, encoding);
+    const blob = await drawImageToBlob(image, target, encoding);
     // Named and typed from what the engine wrote: PNG bytes were once labelled WebP here.
     const identity = blob ? encodedFileIdentity(file.name, options.suffix, blob.type) : null;
     if (!blob || !identity || blob.size >= file.size) return file;

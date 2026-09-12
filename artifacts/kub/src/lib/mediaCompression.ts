@@ -41,11 +41,24 @@ export const MAX_ORIGINAL_ATTACHMENT_SIZE_LABEL = "50\u00a0МБ";
 
 /**
  * The preview beside an original: the same size and quality as the server's
- * `image_preview` variant (`MESSAGE_IMAGE_VARIANTS` in
+ * `image_preview` variant (`MESSAGE_IMAGE_VARIANTS` and `imagePreviewSize` in
  * `artifacts/api-server/src/workers/mediaVariantRules.ts`), so the bubble does
  * not change when the worker's copy takes over.
  */
 export const ORIGINAL_PREVIEW_MAX_DIMENSION = 1280;
+/**
+ * What the short side keeps, when the source has it (D-116).
+ *
+ * A long-side cap on its own makes a tall picture thin: 1290x2796 came out
+ * 591x1280, and the bubble draws a tall picture about 240x480 CSS px — around
+ * 720x1440 device pixels on a 3x phone — so the reader was shown a preview
+ * stretched about 1.4x. The floor costs an ordinary photograph nothing: it
+ * bites only past 16:9, which is exactly where the long-side cap would take the
+ * short side under 720.
+ */
+export const ORIGINAL_PREVIEW_MIN_SHORT_SIDE = 720;
+/** Whatever the short side asks for, the long side stops here: a preview is not a second original. */
+export const ORIGINAL_PREVIEW_MAX_LONG_SIDE = 2560;
 export const ORIGINAL_PREVIEW_QUALITY = 0.82;
 /** What a preview is written as. An engine that cannot write WebP writes a JPEG, and the preview says so. */
 export const ORIGINAL_PREVIEW_MIME_TYPE = WEBP_TYPE;
@@ -179,13 +192,35 @@ export function shouldBuildOriginalPreview(input: {
   return longSide > ORIGINAL_PREVIEW_MAX_DIMENSION || input.size > ORIGINAL_PREVIEW_MIN_SOURCE_BYTES;
 }
 
-/** The preview's size, with the same rounding the canvas encoder uses. */
+/**
+ * The preview's size, with the same rounding the canvas encoder uses.
+ *
+ * The long side stops at `max`, as it always did — unless that would take the
+ * short side under `ORIGINAL_PREVIEW_MIN_SHORT_SIDE`. Then the short side keeps
+ * 720 px, or all of itself when the source has less, and the long side follows
+ * it up to `ORIGINAL_PREVIEW_MAX_LONG_SIDE`. A preview is never enlarged.
+ *
+ * 4032x3024 -> 1280x960, as before. 1080x2341 -> 720x1561, not 591x1280.
+ *
+ * The same arithmetic as `imagePreviewSize` in
+ * `artifacts/api-server/src/workers/mediaVariantRules.ts`, which is what the
+ * bubble ends up drawing once the worker's copy is ready. The two have to agree
+ * or the picture changes size under the reader.
+ */
 export function originalPreviewDimensions(
   width: number,
   height: number,
   max = ORIGINAL_PREVIEW_MAX_DIMENSION,
 ): { width: number; height: number } {
-  const scale = Math.min(1, max / Math.max(width, height));
+  if (!(width > 0) || !(height > 0) || !Number.isFinite(width) || !Number.isFinite(height)) {
+    return { width: Math.max(1, Math.round(width) || 1), height: Math.max(1, Math.round(height) || 1) };
+  }
+  const longSide = Math.max(width, height);
+  const shortSide = Math.min(width, height);
+  const capped = max / longSide;
+  const keepsShortSide = Math.min(1, ORIGINAL_PREVIEW_MIN_SHORT_SIDE / shortSide);
+  const ceiling = Math.max(max, ORIGINAL_PREVIEW_MAX_LONG_SIDE) / longSide;
+  const scale = Math.min(1, Math.max(capped, keepsShortSide), ceiling);
   return {
     width: Math.max(1, Math.round(width * scale)),
     height: Math.max(1, Math.round(height * scale)),

@@ -21,6 +21,74 @@ export const MESSAGE_IMAGE_VARIANTS = [
   { kind: "image_preview", max: 1280, quality: 82 },
 ] as const;
 
+/**
+ * What an `image_preview`'s short side keeps, when the source has it (D-116).
+ *
+ * A long-side cap on its own makes a tall picture thin: a 1080x2341 screenshot
+ * came out 591x1280, and the bubble draws a tall picture about 240x480 CSS px —
+ * around 720x1440 device pixels on a 3x phone — so the reader was shown a
+ * preview stretched about 1.4x. The floor bites only past 16:9, which is
+ * exactly where the cap would take the short side under 720; an ordinary
+ * photograph is unchanged.
+ */
+export const IMAGE_PREVIEW_MIN_SHORT_SIDE = 720;
+/** Whatever the short side asks for, the long side stops here: a preview is not a second original. */
+export const IMAGE_PREVIEW_MAX_LONG_SIDE = 2560;
+
+/**
+ * The box an `image_preview` is resized into, from the source's own size.
+ *
+ * The same arithmetic as `originalPreviewDimensions` in
+ * `artifacts/kub/src/lib/mediaCompression.ts`, which is the preview a sender
+ * uploads beside an original and which this variant replaces in the bubble once
+ * it is ready. The two have to agree, or the picture changes size under the
+ * reader when the worker catches up.
+ *
+ * Never enlarges: the caller resizes `fit: "inside"` with `withoutEnlargement`,
+ * and the scale here is capped at 1 as well.
+ */
+export function imagePreviewSize(
+  width: number,
+  height: number,
+  max: number,
+): { width: number; height: number } {
+  if (!(width > 0) || !(height > 0) || !Number.isFinite(width) || !Number.isFinite(height)) {
+    return { width: Math.max(1, Math.round(max) || 1), height: Math.max(1, Math.round(max) || 1) };
+  }
+  const longSide = Math.max(width, height);
+  const shortSide = Math.min(width, height);
+  const capped = max / longSide;
+  const keepsShortSide = Math.min(1, IMAGE_PREVIEW_MIN_SHORT_SIDE / shortSide);
+  const ceiling = Math.max(max, IMAGE_PREVIEW_MAX_LONG_SIDE) / longSide;
+  const scale = Math.min(1, Math.max(capped, keepsShortSide), ceiling);
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
+/**
+ * A source's size as `.rotate()` leaves it.
+ *
+ * `metadata()` reports the stored pixels and the EXIF orientation beside them,
+ * so a portrait photograph from a phone arrives here as landscape numbers with
+ * an orientation of 6. The preview box is asymmetric — a floor on the short
+ * side — so taking the axes as stored would size a tall picture as a wide one.
+ * Null when the header carries no size, and then the caller keeps the square
+ * box every variant used before.
+ */
+export function orientedImageSize(metadata: {
+  width?: number | null;
+  height?: number | null;
+  orientation?: number | null;
+}): { width: number; height: number } | null {
+  const width = metadata.width ?? 0;
+  const height = metadata.height ?? 0;
+  if (!(width > 0) || !(height > 0)) return null;
+  // 1 to 4 are the upright and mirrored cases; 5 to 8 carry a quarter turn.
+  return (metadata.orientation ?? 1) >= 5 ? { width: height, height: width } : { width, height };
+}
+
 export const VIDEO_POSTER_VARIANT = { kind: "video_poster", max: 720, quality: 78 } as const;
 export const VIDEO_720P_VARIANT = { kind: "video_720p", extension: "mp4", mimeType: "video/mp4" } as const;
 
