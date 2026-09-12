@@ -1,5 +1,44 @@
 # QA Results
 
+## 2026-09-12 - The owner answered all 22 questions, and his own screenshots corrected three of them
+
+He replied «По рекомендации», which takes every one of the 22 questions in
+`output/audits/2026-09-12-telegram-parity/synthesis/owner-summary-ru.md` at its recommended answer: 1a through 22a.
+The blocking ones are therefore settled — the chat screen's colours and contrast (1, 2, 4), the location prompt and
+map (7), how people join a group (8), settings and profile as columns on a computer (11), «Звук» as Telegram has it
+(12), one «Кому» in a task (17), what a location's administrator can do (18), support as a chat (20), the plain
+Russian words (21) and the order of work (22).
+
+**Then he corrected three of them from his own Telegram, with eight screenshots.** The corrections win over both the
+recommendations and the decisions I had listed as settled without asking:
+
+- **Administration stays in the bottom capsule** on iOS and Android — «так удобнее чем каждый раз лазить через
+  настройки». This reverses the standing decision «"Админка" уходит из нижней панели; вход в управление — строкой
+  в "Настройках"», and it narrows answer 18: the entry is the capsule, not a row in Settings.
+- **On Windows administration belongs in the collapsible side list** — Telegram Desktop's hamburger menu, which in
+  his screenshot holds «Мой профиль», «Контакты», «Звонки», «Избранное», «Настройки» and the night-mode switch.
+  That is where our «Управление» goes, opened when wanted rather than always on screen.
+- **The chat list must be narrowable to avatars alone** — «очень удобная функция и она работает почти со всем
+  интерфейсом», and he says he still orients himself by the avatars. Nothing in the 22 questions asked about this;
+  it is new, and it touches the navigation work directly.
+
+He also asked for an assessment of **Telegram Desktop on Windows for structure** and **Telegram iOS 26 with Liquid
+Glass for design**, from public references where they can be found, and offered his own Telegram to be examined.
+That offer was declined for the live application: it holds real conversations with real people, and his screenshots
+plus published references answer the same questions without reading anyone's messages.
+
+**What his screenshots show that we had not planned for**, recorded here so it is not lost: a vertical rail of
+folder tabs with unread counts down the window's left edge; Settings as a panel in the list column rather than a
+window over the chat; a person's profile as a right-hand column, not a modal; search inside a chat taking over the
+list column instead of a bar above the conversation; and «Звук и камера» built from device pickers with a live
+level meter and a camera preview, with no sliders and no processing modes — which is exactly what answer 12a asks
+of us.
+
+**The navigation choice between A «Как в Telegram» and B «Плотный список» is held back deliberately.** It was ready
+to put in front of him, and his corrections change what is being chosen between: the bottom capsule must keep
+administration, the desktop gains a collapsible side list, and the list column must narrow to avatars. Asking him
+to choose from the old pair would be asking about a design that is already superseded.
+
 ## 2026-09-12 - The preview backfill run on production, and the two things it taught
 
 With `letscube-worker` deployed and verified to carry the D-116 rule — `IMAGE_PREVIEW_MIN_SHORT_SIDE = 930` read
