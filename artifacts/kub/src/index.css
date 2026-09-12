@@ -194,6 +194,19 @@
      it passes under the capsules. Half the panel's blur — the edge's own fill
      does most of the work, and it spans the whole width. */
   --kub-chat-edge-blur: blur(10px);
+
+  /* The computer's chat list, before anyone drags it. `ChatListResizer` writes
+     both of these onto `document.documentElement` from the stored state, so
+     these are the values a first-ever visit paints with — and they have to
+     agree with `CHAT_LIST_DEFAULT_WIDTH` in `lib/desktopChatList.ts`, which
+     `tests/unit/desktop-chat-list.test.mts` holds. The same shape as the
+     bootstrap colour in rule 8: a value the script writes, declared here so the
+     first frame is not the wrong one.
+
+     `--kub-chat-list-narrow` is Telegram's `setNarrowRatio(float64)`: 0 at the
+     normal narrowest, 1 at the strip of avatars. */
+  --kub-chat-list-width: 360px;
+  --kub-chat-list-narrow: 0;
 }
 
 html[data-ios-standalone] {
@@ -2146,4 +2159,82 @@ textarea::placeholder, input::placeholder {
   padding-right: max(var(--kub-safe-gap, 0px), var(--kub-safe-right));
   padding-bottom: max(var(--kub-safe-gap, 0px), var(--kub-safe-bottom));
   padding-left: max(var(--kub-safe-gap, 0px), var(--kub-safe-left));
+}
+
+/* ── The computer's left region ────────────────────────────────────────────
+   A fixed folder rail and a chat list the person drags as narrow as a strip of
+   avatars. The numbers are Telegram Desktop's, quoted in
+   output/audits/2026-09-12-telegram-windows-ios/assessment.md and held by
+   tests/unit/desktop-chat-list.test.mts.
+
+   Two custom properties carry it, both written straight onto the document by
+   `ChatListResizer` and never held in React state: a width in the store would
+   re-render every row on every frame of a drag, and those render counts are a
+   contract (tests/e2e/chat-list-event-cost.spec.ts).
+
+     --kub-chat-list-width   the column's width
+     --kub-chat-list-narrow  Telegram's setNarrowRatio(float64): 0 at 260px,
+                             1 at the strip, interpolated between
+
+   From `md` only. A phone has one pane, the bottom capsule and the horizontal
+   folder strip, and none of that is this stage's to change. */
+@layer components {
+  /* Below `md` the left region is the whole screen. Written here rather than as
+     `w-full` in the markup, because a utility beats a class in this layer
+     (rule 10) and `w-full` silently won over the width below — measured, the
+     column stayed 1367px wide through every drag. */
+  .kub-left-region {
+    width: 100%;
+  }
+
+  /* The row's own geometry, for the same reason: `gap-3 px-3` on the element
+     outranked the interpolation and the row never narrowed. At rest, and on a
+     phone, this computes the 12px the utilities used to give it. */
+  .kub-chat-list-row {
+    gap: 0.75rem;
+    padding-inline: 0.75rem;
+  }
+
+  @media (min-width: 48rem) {
+    /* Telegram's `windowFiltersWidth` (72) plus the width the person chose.
+       This replaced the 360/380/400 breakpoint triple in `MainLayout`: the
+       width is a decision now, not a function of the window. */
+    .kub-left-region {
+      flex: none;
+      /* Plus the region's own right border. Boxes are border-box, so without
+         that 1px the sheet edge comes out of the list instead of standing
+         beside it and the strip of avatars measures 65 rather than Telegram's
+         66 — measured, on the first run of the drag. The rail's 72 already
+         contains its own hairline the same way. */
+      width: calc(72px + var(--kub-chat-list-width) + 1px);
+    }
+
+    /* At 66px a search field and a row of folder tabs have nowhere to be, and
+       the rail carries the folders anyway. Telegram swaps its field for a
+       button (`_searchForNarrowLayout`); ours lets the chrome close and keeps
+       the rail. `max-height` interpolates with the opacity so the rows take
+       the space back rather than waiting for an empty band to disappear. */
+    .kub-chat-list-column [data-kub-list-chrome] {
+      overflow: hidden;
+      opacity: calc(1 - var(--kub-chat-list-narrow, 0) * 1.6);
+      max-height: calc(20rem * (1 - var(--kub-chat-list-narrow, 0)));
+    }
+
+    /* The row narrows by a ratio and never switches mode, which is the point
+       of `setNarrowRatio` being a float: the gap closes, the padding goes from
+       12 to 9, and everything beside the avatar fades. At ratio 1 the row
+       measures 9 + 48 + 9 = 66px — Telegram's own `dialogsSmallColumnWidth()`.
+       It spends those 66 differently: 10 + 46 + 10, because its avatar is 46.
+       Ours is 48 everywhere in the product and stays 48 here, so the padding
+       is what gives way. */
+    .kub-chat-list-row {
+      overflow: hidden;
+      gap: calc(0.75rem * (1 - var(--kub-chat-list-narrow)));
+      padding-inline: calc(0.75rem - 3px * var(--kub-chat-list-narrow));
+    }
+
+    .kub-chat-list-column [data-chat-row-body] {
+      opacity: calc(1 - var(--kub-chat-list-narrow) * 1.6);
+    }
+  }
 }

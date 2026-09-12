@@ -224,6 +224,13 @@ const veiled = [
   ["components/sidebar/ChatList.tsx", 1],
   ["components/sidebar/SidebarHeader.tsx", 4],
   ["components/sidebar/FolderTabs.tsx", 1],
+  // The computer's left region, 2026-09-12. The rail hovers its menu button,
+  // its folder buttons and «+»; the side list hovers its rows. The resizer has
+  // none: it is a separator, and its grip shows itself with an opacity, not
+  // with a step of material.
+  ["components/sidebar/FolderRail.tsx", 3],
+  ["components/sidebar/SideMenuLayer.tsx", 1],
+  ["components/sidebar/ChatListResizer.tsx", 0],
   ["components/sidebar/NotificationBell.tsx", 6],
   ["components/sidebar/SettingsModal.tsx", 2],
   ["components/sidebar/FolderEditModal.tsx", 2],

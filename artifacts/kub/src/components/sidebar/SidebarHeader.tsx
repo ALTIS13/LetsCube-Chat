@@ -13,6 +13,7 @@ import { SettingsModal } from "./SettingsModal";
 import { NewGroupModal } from "./NewGroupModal";
 import { NotificationBell } from "./NotificationBell";
 import { cn } from "@/lib/utils";
+import { openSavedMessagesChat } from "@/lib/savedMessages";
 import { openSupportWindow } from "@/lib/supportWindowEvents";
 
 interface SidebarHeaderProps {
@@ -62,36 +63,12 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [menuOpen]);
 
+  // Shared with the desktop side list, which offers the same row. The body
+  // moved to `lib/savedMessages.ts` unchanged: two copies of a chat-creation
+  // path already narrowed once by an RLS lockdown is what drifts.
   const openSavedMessages = async () => {
     setMenuOpen(false);
-    if (!userId) return;
-    const { createClient } = await import("@/lib/supabase/client");
-    const supabase = createClient();
-    // After the chat-INSERT lockdown (20260504_tasks_update_and_chat_lockdown.sql)
-    // direct INSERT of `type='private'` rows is blocked — only
-    // `open_or_create_private_chat` may create them, and it refuses
-    // self-chats. So Saved Messages is now a single-member 'group',
-    // which the regular INSERT policy still permits. We accept any
-    // pre-existing "Избранное" row regardless of type so users with
-    // legacy private rows aren't locked out.
-    const { data: existing } = await supabase
-      .from("chats")
-      .select("id")
-      .eq("created_by", userId)
-      .eq("name", "Избранное")
-      .limit(1)
-      .maybeSingle();
-    if (existing) { setSelectedChatId(existing.id); return; }
-    const { data: chat, error: chatErr } = await supabase
-      .from("chats")
-      .insert({ type: "group", name: "Избранное", created_by: userId })
-      .select("id").single();
-    if (chatErr || !chat) return;
-    // The `add_chat_creator_as_owner` trigger inserts the owner row. Do not
-    // repeat it from the client: RLS correctly blocks direct membership upsert
-    // in production and that shows up as noisy 403 logs.
-    setSelectedChatId(chat.id);
-    onRefetch?.();
+    await openSavedMessagesChat({ userId, setSelectedChatId, onRefetch });
   };
 
   type MenuItem = {
@@ -139,7 +116,11 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
         <KubBrandLogo
           variant="mark"
           tone={resolvedTheme === "light" ? "dark" : "light"}
-          className="mr-0.5 h-8 w-8 shrink-0 md:hidden"
+          // At every width since 2026-09-12. On a computer the application's
+          // top bar no longer has to be the only place the mark appears, and
+          // the owner took this one detail from option B: without it the logo
+          // is nowhere on a computer once the list column is the top row.
+          className="mr-0.5 h-8 w-8 shrink-0"
           imgClassName="h-8 w-8"
           alt="LETSCUBE"
         />
@@ -152,7 +133,11 @@ export function SidebarHeader({ onNewChat, onRefetch }: SidebarHeaderProps) {
             <KubIcon name="close" size={18} />
           </button>
         ) : (
-          <div className="relative shrink-0">
+          // Below `md` only. From `md` this button is the first thing on the
+          // folder rail, where `FiltersMenu::_menu` puts it in Telegram
+          // Desktop, and it opens the side list as a layer rather than this
+          // dropdown. See `FolderRail` and `SideMenuLayer`.
+          <div className="relative shrink-0 md:hidden">
             <button
               onClick={() => setMenuOpen(!menuOpen)}
               className="kub-icon-action kub-interactive h-9 w-9 shrink-0 rounded-lg transition-colors kub-raise-hover p-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--kub-cyan)] active:bg-[image:linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil)),linear-gradient(var(--kub-sink-veil),var(--kub-sink-veil))]"

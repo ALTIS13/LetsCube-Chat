@@ -4,11 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { SidebarHeader } from "./SidebarHeader";
 import { FolderTabs } from "./FolderTabs";
+import { FolderRail } from "./FolderRail";
+import { SideMenuLayer } from "./SideMenuLayer";
 import { ChatList } from "./ChatList";
 import { NewChatModal } from "./NewChatModal";
+import { NewGroupModal } from "./NewGroupModal";
 import { FolderEditModal } from "./FolderEditModal";
 import { FolderListModal } from "./FolderListModal";
 import { SettingsModal } from "./SettingsModal";
+import { openSavedMessagesChat } from "@/lib/savedMessages";
 import { SidebarSearchResults } from "@/components/search/SidebarSearchResults";
 import { useAppStore } from "@/store/app.store";
 import { useChats } from "@/hooks/useChats";
@@ -43,6 +47,18 @@ export function Sidebar() {
   const [showNewChat, setShowNewChat] = useState(false);
   const [editingFolder, setEditingFolder] = useState<Folder | "new" | null>(null);
   const [showFolderList, setShowFolderList] = useState(false);
+  // The computer's side list, and the two surfaces it opens. They are owned
+  // here rather than in `SidebarHeader` because from `md` the button that opens
+  // them lives on the folder rail, not in the list's header.
+  const [sideMenuOpen, setSideMenuOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showNewGroup, setShowNewGroup] = useState(false);
+  const userId = useAppStore((s) => s.currentUser?.id ?? null);
+
+  const editFolder = (id: string) => {
+    const target = folders.find((f) => f.id === id);
+    if (target) setEditingFolder(target);
+  };
 
   // BottomNav (mobile) drives `mobileSection` in the store. We open the matching
   // secondary surface here and close it when the user switches back to "chats".
@@ -106,34 +122,51 @@ export function Sidebar() {
       {/* One in-flow child, sized exactly as the four used to be, so the layer
           has a sibling to sit behind and the column's own layout is unchanged.
           The dialogs stay outside it — they are `fixed` and take no space. */}
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        <SidebarHeader onNewChat={() => setShowNewChat(true)} onRefetch={refetch} />
-        {!hasSearchQuery && (
-          <FolderTabs
-            folders={tabs}
-            activeFolder={activeFolder}
-            onFolderChange={setActiveFolder}
-            onCreate={() => setEditingFolder("new")}
-            onEdit={(id) => {
-              const target = folders.find((f) => f.id === id);
-              if (target) setEditingFolder(target);
-            }}
-          />
-        )}
+      <div className="relative flex min-h-0 flex-1">
+        {/* From `md` only, and inside this column's own glass rather than
+            behind a second sheet: the rail and the list are two blocks of one
+            surface, told apart by a hairline (rule 11). */}
+        <FolderRail
+          folders={tabs}
+          activeFolder={activeFolder}
+          onFolderChange={setActiveFolder}
+          onCreate={() => setEditingFolder("new")}
+          onEdit={editFolder}
+          onOpenSideMenu={() => setSideMenuOpen(true)}
+          sideMenuOpen={sideMenuOpen}
+        />
 
-        {hasSearchQuery ? (
-          <SidebarSearchResults query={searchQuery} />
-        ) : loading ? (
-          <div className="flex-1 flex items-center justify-center">
-            <KubIcon name="spinner" size={22} className="text-[color:var(--kub-cyan)]" />
+        <div className="kub-chat-list-column relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {/* What a strip of avatars has no room for. The rules in index.css
+              fade and close this as `--kub-chat-list-narrow` goes to 1, so the
+              list keeps narrowing continuously instead of switching mode. */}
+          <div data-kub-list-chrome="" className="relative shrink-0">
+            <SidebarHeader onNewChat={() => setShowNewChat(true)} onRefetch={refetch} />
+            {!hasSearchQuery && (
+              <FolderTabs
+                folders={tabs}
+                activeFolder={activeFolder}
+                onFolderChange={setActiveFolder}
+                onCreate={() => setEditingFolder("new")}
+                onEdit={editFolder}
+              />
+            )}
           </div>
-        ) : (
-          <ChatList
-            chats={filtered}
-            selectedChatId={selectedChatId}
-            onChatSelect={setSelectedChatId}
-          />
-        )}
+
+          {hasSearchQuery ? (
+            <SidebarSearchResults query={searchQuery} />
+          ) : loading ? (
+            <div className="flex-1 flex items-center justify-center">
+              <KubIcon name="spinner" size={22} className="text-[color:var(--kub-cyan)]" />
+            </div>
+          ) : (
+            <ChatList
+              chats={filtered}
+              selectedChatId={selectedChatId}
+              onChatSelect={setSelectedChatId}
+            />
+          )}
+        </div>
       </div>
 
       {showNewChat && (
@@ -165,7 +198,31 @@ export function Sidebar() {
           canManageFolder={canManageFolder}
         />
       )}
-      {mobileSection === "profile" && <SettingsModal onClose={closeSettings} />}
+      {showNewGroup && (
+        <NewGroupModal onClose={() => setShowNewGroup(false)} onRefetch={refetch} />
+      )}
+      {(showSettings || mobileSection === "profile") && (
+        <SettingsModal
+          onClose={() => {
+            setShowSettings(false);
+            closeSettings();
+          }}
+        />
+      )}
+
+      {/* `Ui::LayerWidget`, not a column and not a dropdown: it costs no width
+          while it is closed, which is the whole of «удобно в боковом списке
+          выпадающем по надобности». */}
+      {sideMenuOpen && (
+        <SideMenuLayer
+          onClose={() => setSideMenuOpen(false)}
+          onOpenSettings={() => setShowSettings(true)}
+          onOpenNewGroup={() => setShowNewGroup(true)}
+          onOpenSaved={() => {
+            void openSavedMessagesChat({ userId, setSelectedChatId, onRefetch: refetch });
+          }}
+        />
+      )}
     </div>
   );
 }

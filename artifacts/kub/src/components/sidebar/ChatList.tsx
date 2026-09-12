@@ -498,7 +498,7 @@ export function ChatList({ chats, selectedChatId, onChatSelect }: ChatListProps)
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" data-testid="chat-list-scroller">
         {chats.map((chat) => (
           <ChatListItem
             key={chat.id}

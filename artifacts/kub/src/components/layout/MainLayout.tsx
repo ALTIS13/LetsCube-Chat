@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useAppStore } from "@/store/app.store";
 import { Sidebar } from "@/components/sidebar/Sidebar";
+import { ChatListResizer } from "@/components/sidebar/ChatListResizer";
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import { WelcomeScreen } from "@/components/chat/WelcomeScreen";
 import { BottomNav } from "./BottomNav";
@@ -87,8 +88,18 @@ export function MainLayout() {
         inert={updateBlocking ? true : undefined}
       >
         <AppTopBar />
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden" data-kub-panes="">
           <div
+            // The whole left region: the 72pt folder rail and the chat list
+            // beside it, both inside the one sheet of glass `Sidebar` paints.
+            // The resizer measures from this box's left edge, so the rail's
+            // width is already in the arithmetic.
+            //
+            // The 360/380/400 breakpoint triple that used to be here is gone.
+            // A person sets the width by dragging and it is remembered;
+            // `--kub-chat-list-width` carries it, written straight onto the
+            // document by `ChatListResizer` so a drag costs no React render.
+            data-kub-left-region=""
             className={cn(
               // No z-index here on purpose. An earlier revision gave this
               // column `z-10` so the sidebar's shadow would fall on the chat
@@ -98,13 +109,23 @@ export function MainLayout() {
               // not worth that. `Sidebar` paints its material from a positioned
               // layer, which already draws over the non-positioned pane beside
               // it.
-              "h-full flex-shrink-0 flex-col border-r border-[color:var(--kub-border-color)]",
-              "md:flex md:w-[360px] lg:w-[380px] xl:w-[400px]",
-              isMobileChatOpen ? "hidden" : "flex w-full",
+              "kub-left-region h-full flex-shrink-0 flex-col border-r border-[color:var(--kub-border-color)]",
+              "md:flex",
+              // No `w-full` here. A utility beats a class in `@layer
+              // components` (rule 10), so `w-full` silently won over
+              // `.kub-left-region`'s width and the column stayed 1367px wide
+              // through every drag — measured. The width is the class's, at
+              // both widths.
+              isMobileChatOpen ? "hidden" : "flex",
             )}
           >
             <Sidebar />
           </div>
+
+          {/* Not gated on `isMobileChatOpen`: on a computer both panes are on
+              screen with a chat open and the handle has to stay. It hides
+              itself below `md`, where there is one pane and nothing to drag. */}
+          <ChatListResizer />
 
           <div
             className={cn(

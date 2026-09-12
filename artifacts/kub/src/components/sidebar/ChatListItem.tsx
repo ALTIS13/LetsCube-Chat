@@ -178,7 +178,12 @@ export const ChatListItem = memo(function ChatListItem({
       data-unread-count={chat.unread_count ?? 0}
       data-has-messages={lastMsg ? "true" : "false"}
       className={cn(
-        "w-full flex items-center gap-3 px-3 py-2.5 transition-colors relative group",
+        // The gap and the horizontal padding are `.kub-chat-list-row`, not
+        // `gap-3 px-3`. A utility beats a class in `@layer components` (rule
+        // 10), so the utilities silently won over the narrowing interpolation
+        // and the row kept its full padding at every width of the drag. On a
+        // phone, and on a computer at rest, the class computes the same 12px.
+        "kub-chat-list-row w-full flex items-center py-2.5 transition-colors relative group",
         "kub-raise-hover",
         isSelected && "bg-[color-mix(in_srgb,var(--kub-cyan)_14%,transparent)] hover:bg-[color-mix(in_srgb,var(--kub-cyan)_18%,transparent)]",
         isDragging && "opacity-55",
@@ -220,7 +225,10 @@ export const ChatListItem = memo(function ChatListItem({
         </span>
       )}
 
-      <div className="flex-shrink-0 relative">
+      {/* The one thing the strip of avatars keeps. See `.kub-chat-list-column`
+          in index.css: as the column narrows the row's gap and padding
+          interpolate towards Telegram's 66px and everything beside this fades. */}
+      <div className="flex-shrink-0 relative" data-chat-avatar="">
         <ChatAvatar
           chat={chat}
           size="md"
@@ -241,7 +249,7 @@ export const ChatListItem = memo(function ChatListItem({
         )}
       </div>
 
-      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+      <div className="flex-1 min-w-0 flex flex-col gap-0.5" data-chat-row-body="">
         <div className="flex min-w-0 items-center justify-between gap-2">
           <div className="flex items-center gap-1 min-w-0">
             {display.isSaved ? (
