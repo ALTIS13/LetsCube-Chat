@@ -64,8 +64,13 @@ const RAIL_WIDTH = 72;
 const COLLAPSED_WIDTH = 66;
 const MIN_WIDTH = 260;
 
-/** Sixteen chats, so the list scrolls at any width under test. */
-function fixtureRows() {
+/**
+ * Sixteen chats, so the list scrolls at any width under test.
+ *
+ * `pinned` pins those chats for me, in the order given. Opt-in, so every other
+ * test in this file sees exactly the list it always saw.
+ */
+function fixtureRows(pinned: string[] = []) {
   const chats: Row[] = [];
   const memberships: Row[] = [];
   const messages: Row[] = [];
@@ -79,7 +84,12 @@ function fixtureRows() {
   ) => {
     const at = new Date(Date.UTC(2026, 8, 12, 14, 59 - index)).toISOString();
     chats.push(chat(id, type, name, at));
-    memberships.push(membership(id, ME, "owner", READ), membership(id, other, "member", at));
+    const mine = membership(id, ME, "owner", READ);
+    const pinnedIndex = pinned.indexOf(id);
+    if (pinnedIndex >= 0) {
+      Object.assign(mine, { pinned: true, pinned_at: READ, pinned_order: pinnedIndex + 1 });
+    }
+    memberships.push(mine, membership(id, other, "member", at));
     messages.push(
       message(`55555555-5555-4555-8555-${String(index + 1).padStart(12, "0")}`, id, other, text, at),
     );
@@ -93,7 +103,10 @@ function fixtureRows() {
   return { chats, memberships, messages };
 }
 
-async function boot(page: Page, { staff = true, storedShell = null as string | null } = {}) {
+async function boot(
+  page: Page,
+  { staff = true, storedShell = null as string | null, pinned = [] as string[] } = {},
+) {
   if (storedShell !== null) {
     await page.addInitScript((value) => {
       localStorage.setItem("kub-desktop-chat-list", value);
@@ -102,7 +115,7 @@ async function boot(page: Page, { staff = true, storedShell = null as string | n
   const me = { ...ME, role: staff ? "manager" : "user" };
   const fixture = await openFixture(page, {
     me,
-    ...fixtureRows(),
+    ...fixtureRows(pinned),
     rpc: (name, body) => {
       if (name === "has_permission") {
         return { body: staff && STAFF_PERMISSIONS.has(String(body.p_permission_key)) };
@@ -232,6 +245,21 @@ async function listColumnWidth(page: Page) {
 async function narrowRatio(page: Page) {
   return page.evaluate(() =>
     Number(getComputedStyle(document.documentElement).getPropertyValue("--kub-chat-list-narrow").trim() || "0"),
+  );
+}
+
+/**
+ * Where each row's avatar starts, in viewport pixels — one number per row.
+ *
+ * A pinned row that carries anything of its own before the picture shows up
+ * here as a second value, whatever that thing is called.
+ */
+async function avatarLefts(page: Page) {
+  return page.evaluate(() =>
+    [...document.querySelectorAll('[data-testid="chat-list-item"]')].map((row) => {
+      const avatar = row.querySelector("[data-chat-avatar]");
+      return avatar ? Number(avatar.getBoundingClientRect().left.toFixed(2)) : null;
+    }),
   );
 }
 
@@ -601,5 +629,108 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     await expect(page.getByTestId("chat-list-item")).toHaveAttribute("data-chat-id", CHAT_BORIS);
     await personal.click();
     await expect(page.getByRole("dialog").first()).toBeVisible();
+  });
+
+  /**
+   * 2026-09-12, the owner, looking at the rendered frames: «убери эти три
+   * полосочки которые отображают закрепление, они сдвигают аватарки, а двигать
+   * чаты должно быть можно и без них».
+   *
+   * The three stripes were a `h-8 w-4` handle standing before the avatar on
+   * pinned rows only. These three checks are the two halves of what he asked:
+   * the rows line up, and a pinned chat still moves — by pointer and without
+   * one.
+   */
+  test("a pinned row keeps its avatar on the same axis as every other row", async ({ page }) => {
+    test.skip(!isDesktop(page), "the strip and the drag are a computer's");
+    await boot(page, { pinned: [CHAT_TEAM, CHAT_BORIS] });
+
+    const rows = page.getByTestId("chat-list-item");
+    await expect(rows.nth(0)).toHaveAttribute("data-chat-id", CHAT_TEAM);
+    await expect(rows.nth(1)).toHaveAttribute("data-chat-id", CHAT_BORIS);
+
+    // The property first and the mechanism after, so that a failure prints the
+    // axes the avatars actually landed on rather than a count of the thing that
+    // used to be responsible for it.
+    const axes = (lefts: (number | null)[]) => [...new Set(lefts)];
+    const atRest = await avatarLefts(page);
+    expect(atRest).toHaveLength(CHAT_COUNT);
+    expect(axes(atRest), "pinned and unpinned rows start their avatars at different x").toHaveLength(1);
+    await expect(page.locator("[data-pinned-drag-handle]")).toHaveCount(0);
+
+    // Held at each width of the narrowing band, not only at its two ends: the
+    // handle kept its 16px while everything beside the avatar faded, so the
+    // offset it opened grew as a share of the row on the way down.
+    for (const width of [340, 300, 240, 150, 90]) {
+      await dragListTo(page, width, { release: false });
+      const lefts = await avatarLefts(page);
+      expect(axes(lefts), `the avatars sit on more than one axis at ${width}px`).toHaveLength(1);
+      await page.mouse.up();
+      await page.waitForTimeout(80);
+    }
+
+    // And in the strip of avatars, which is the picture the owner was looking at.
+    await dragListTo(page, 40);
+    expect(await listColumnWidth(page)).toBe(COLLAPSED_WIDTH);
+    expect(axes(await avatarLefts(page)), "the strip puts pinned avatars off the axis").toHaveLength(1);
+  });
+
+  test("a pinned chat reorders by dragging the row itself, and a plain click still opens it", async ({ page }) => {
+    test.skip(!isDesktop(page), "the drag is a computer's");
+    const fixture = await boot(page, { pinned: [CHAT_TEAM, CHAT_BORIS] });
+    const rows = page.getByTestId("chat-list-item");
+
+    // With the handle gone, the row is what has to say it can be moved — and
+    // say it as a description, not as its name, which is the chat's.
+    const announced = await page.evaluate(
+      ({ pinnedId, plainId }) => {
+        const read = (chatId: string) => {
+          const row = document.querySelector(`[data-testid="chat-list-item"][data-chat-id="${chatId}"]`);
+          const described = row?.getAttribute("aria-describedby") ?? null;
+          return {
+            draggable: row?.getAttribute("draggable") ?? null,
+            name: row?.textContent?.includes("Закреплённый чат") ?? null,
+            description: described ? document.getElementById(described)?.textContent?.trim() ?? null : null,
+          };
+        };
+        return { pinnedRow: read(pinnedId), plainRow: read(plainId) };
+      },
+      { pinnedId: CHAT_TEAM, plainId: "22222222-2222-4222-8222-000000000003" },
+    );
+    expect(announced.pinnedRow.draggable).toBe("true");
+    expect(announced.pinnedRow.description).toContain("Закреплённый чат");
+    expect(announced.plainRow.draggable).toBe("false");
+    expect(announced.plainRow.description).toBeNull();
+
+    // Dropped on the row below it, the order it sends is the swapped one.
+    await rows.nth(0).dragTo(rows.nth(1));
+    await expect.poll(() => fixture.rpcBodies("set_pinned_chat_order").length).toBe(1);
+    expect(fixture.rpcBodies("set_pinned_chat_order")[0]).toEqual({ p_chat_ids: [CHAT_BORIS, CHAT_TEAM] });
+    await expect(rows.nth(0)).toHaveAttribute("data-chat-id", CHAT_BORIS);
+
+    // And the click after the drag opens the chat rather than being eaten by
+    // the drag's own click suppression — the row is both now.
+    await page.locator(`[data-testid="chat-list-item"][data-chat-id="${CHAT_TEAM}"]`).click();
+    await expect(
+      page.locator('[data-message-bubble="true"]').filter({ hasText: "Макет главной готов" }),
+    ).toBeVisible();
+  });
+
+  test("a pinned chat can be moved without a pointer", async ({ page }) => {
+    test.skip(!isDesktop(page), "this menu is a computer's");
+    const fixture = await boot(page, { pinned: [CHAT_TEAM, CHAT_BORIS] });
+
+    // Dragging is a pointer's, so the row's own menu is the whole keyboard
+    // path. It opens on the Menu key from the focused row.
+    await page.getByTestId("chat-list-item").nth(0).focus();
+    await page.keyboard.press("ContextMenu");
+    const menu = page.locator('[data-chat-context-menu="desktop"]');
+    await expect(menu).toBeVisible();
+    const move = menu.getByRole("menuitem", { name: "Переместить ниже", exact: true });
+    await move.focus();
+    await page.keyboard.press("Enter");
+
+    await expect.poll(() => fixture.rpcBodies("set_pinned_chat_order").length).toBe(1);
+    expect(fixture.rpcBodies("set_pinned_chat_order")[0]).toEqual({ p_chat_ids: [CHAT_BORIS, CHAT_TEAM] });
   });
 });

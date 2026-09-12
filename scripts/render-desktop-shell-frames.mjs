@@ -637,6 +637,18 @@ async function readGeometry(page) {
       narrowRatio: Number(
         getComputedStyle(document.documentElement).getPropertyValue("--kub-chat-list-narrow").trim() || "0",
       ),
+      // Where each row's avatar starts, deduplicated. The pinned drag handle
+      // stood before the avatar and only on pinned rows, so more than one value
+      // here is the owner's complaint of 2026-09-12 said as a number: «они
+      // сдвигают аватарки».
+      avatarAxes: [
+        ...new Set(
+          rows.map((row) => {
+            const avatar = row.querySelector("[data-chat-avatar]");
+            return avatar ? Number(avatar.getBoundingClientRect().left.toFixed(2)) : null;
+          }),
+        ),
+      ],
       firstRow: box(rows[0]),
       rowsInView: rows.filter((row) => {
         const rect = row.getBoundingClientRect();
@@ -1007,6 +1019,13 @@ function widths(frameId) {
   }
   if (geometry.listColumn) parts.push(`список ${geometry.listColumn.width}`);
   if (geometry.firstRow) parts.push(`строка ${geometry.firstRow.width}`);
+  if (geometry.avatarAxes) {
+    parts.push(
+      geometry.avatarAxes.length === 1
+        ? `аватарки на одной оси (${geometry.avatarAxes[0]})`
+        : `аватарки на ${geometry.avatarAxes.length} осях: ${geometry.avatarAxes.join(", ")}`,
+    );
+  }
   parts.push(`сужение ${geometry.narrowRatio}`);
   if (geometry.caption) parts.push(`кнопки окна ${geometry.caption}`);
   if (geometry.marks) parts.push(`знак LETSCUBE ×${geometry.marks.length}`);
@@ -1227,7 +1246,7 @@ const GEOMETRY_FRAMES = FRAMES.filter((frame) => frame.scene !== "tasks").map((f
 function geometryTable() {
   const rows = GEOMETRY_FRAMES.map((frameId) => {
     const geometry = readResult(frameId)?.geometry;
-    if (!geometry) return `<tr><th>${escapeHtml(frameId)}</th><td colspan="9">—</td></tr>`;
+    if (!geometry) return `<tr><th>${escapeHtml(frameId)}</th><td colspan="10">—</td></tr>`;
     const railOk = geometry.rail && geometry.rail.width === RAIL_WIDTH;
     const stripOk = !geometry.firstRow || geometry.narrowRatio < 1 || geometry.firstRow.width === COLLAPSED_WIDTH;
     // The rail starts at the window's top edge and nothing is drawn above it.
@@ -1244,13 +1263,14 @@ function geometryTable() {
       `<td class="${topOk ? "pass" : "fail"}">${topCell}</td>` +
       `<td>${geometry.listColumn ? geometry.listColumn.width : "—"}</td>` +
       `<td class="${stripOk ? "pass" : "fail"}">${geometry.firstRow ? geometry.firstRow.width : "—"}</td>` +
+      `<td class="${(geometry.avatarAxes ?? []).length === 1 ? "pass" : "fail"}">${(geometry.avatarAxes ?? []).join(" / ") || "—"}</td>` +
       `<td>${geometry.narrowRatio}</td>` +
       `<td>${escapeHtml(geometry.caption || "0px")}</td>` +
       `<td class="${markOk ? "pass" : "fail"}">${marks.length ? escapeHtml(marks.join(", ")) : "нет"}</td>` +
       `<td class="${geometry.bottomCapsule ? "fail" : "pass"}">${geometry.bottomCapsule ? "есть" : "нет"}</td>` +
       `<td class="${geometry.sideMenuButtonOnRail && !geometry.sideMenuButtonInHeader ? "pass" : "fail"}">${geometry.sideMenuButtonOnRail ? "на полосе" : "нет"}</td></tr>`;
   });
-  return `<h2>Геометрия</h2><table><thead><tr><th>Кадр</th><th>Полоса</th><th>Верх полосы</th><th>Список</th><th>Строка</th><th>Сужение</th><th>Кнопки окна</th><th>Знак LETSCUBE</th><th>Низ</th><th>Меню</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
+  return `<h2>Геометрия</h2><table><thead><tr><th>Кадр</th><th>Полоса</th><th>Верх полосы</th><th>Список</th><th>Строка</th><th>Аватарки</th><th>Сужение</th><th>Кнопки окна</th><th>Знак LETSCUBE</th><th>Низ</th><th>Меню</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
 }
 
 function contrastTable() {
@@ -1271,20 +1291,21 @@ function measurementsMarkdown() {
   const lines = ["# The computer's shell, measured", "", "Widths in CSS pixels, contrast from photographed pixels.", ""];
   lines.push("## Geometry", "");
   lines.push(
-    "| frame | rail | rail top | above the rail | list column | first row | narrow ratio | window caption | LETSCUBE marks | bottom capsule | menu button on rail |",
+    "| frame | rail | rail top | above the rail | list column | first row | avatar axes | narrow ratio | window caption | LETSCUBE marks | bottom capsule | menu button on rail |",
   );
-  lines.push("|---|---|---|---|---|---|---|---|---|---|---|");
+  lines.push("|---|---|---|---|---|---|---|---|---|---|---|---|");
   for (const frameId of GEOMETRY_FRAMES) {
     const geometry = readResult(frameId)?.geometry;
     if (!geometry) {
-      lines.push(`| ${frameId} |${" — |".repeat(10)}`);
+      lines.push(`| ${frameId} |${" — |".repeat(11)}`);
       continue;
     }
     const above = geometry.aboveRail?.length ? geometry.aboveRail.join(", ") : "nothing";
     const marks = geometry.marks ?? [];
     lines.push(
       `| ${frameId} | ${geometry.rail?.width ?? "none"} | ${geometry.railTop ?? "—"} | ${above} | ` +
-        `${geometry.listColumn?.width ?? "—"} | ${geometry.firstRow?.width ?? "—"} | ${geometry.narrowRatio} | ` +
+        `${geometry.listColumn?.width ?? "—"} | ${geometry.firstRow?.width ?? "—"} | ` +
+        `${(geometry.avatarAxes ?? []).join(" / ") || "—"} | ${geometry.narrowRatio} | ` +
         `${geometry.caption || "0px"} | ${marks.length} (${marks.join(", ") || "none"}) | ` +
         `${geometry.bottomCapsule ? "PRESENT" : "none"} | ` +
         `${geometry.sideMenuButtonOnRail ? "yes" : "no"}${geometry.sideMenuButtonInHeader ? " (also in header)" : ""} |`,

@@ -232,7 +232,11 @@ const raised = [
 
 /** [file, how many hovers it carries]. Leftover elevation fills must be zero. */
 const veiled = [
-  ["components/sidebar/ChatListItem.tsx", 2],
+  // One since 2026-09-12. The row keeps its own hover; the second belonged to
+  // the pinned drag handle, which stood before the avatar on pinned rows only
+  // and pushed them out of line with every other row — «они сдвигают
+  // аватарки». The row is the grip now, and it is already on the veil.
+  ["components/sidebar/ChatListItem.tsx", 1],
   ["components/sidebar/ChatList.tsx", 1],
   ["components/sidebar/SidebarHeader.tsx", 4],
   ["components/sidebar/FolderTabs.tsx", 1],
