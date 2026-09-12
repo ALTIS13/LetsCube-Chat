@@ -351,10 +351,17 @@ function StoppedRecording({ preview }: { preview: ComposerRecordingPreview }) {
       {/* The bar itself, across the whole width between the two controls.
           Six points rather than four: at four it photographed as a hairline
           between the bin and the send rather than as the bar the owner's
-          screenshot shows, in both themes and on both widths. */}
+          screenshot shows, in both themes and on both widths.
+
+          The height was half the answer. The unplayed track used to be
+          --kub-inset, and in the dark theme that put #081629 on a capsule
+          photographing at #0E1937 — 1.048:1 — so the bar the extra two points
+          bought was still not visible. It reads --kub-chat-track now, which is
+          the same value in the light theme and a lightened one here; the
+          reasoning and the measurements are on the token. */}
       <span
         data-testid="composer-recording-bar"
-        className="pointer-events-none absolute inset-x-0 top-1/2 block h-1.5 -translate-y-1/2 overflow-hidden rounded-full bg-[var(--kub-inset)]"
+        className="pointer-events-none absolute inset-x-0 top-1/2 block h-1.5 -translate-y-1/2 overflow-hidden rounded-full bg-[var(--kub-chat-track)]"
         aria-hidden
       >
         <span

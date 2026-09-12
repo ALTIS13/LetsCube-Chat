@@ -291,6 +291,131 @@ async function assertFixtureServer() {
   if (!capture.ok) throw new Error(`The capture route answered ${capture.status}.`);
 }
 
+// ── the track, in photographed pixels ───────────────────────────────────────
+
+const srgb = (value) => {
+  const c = value / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+};
+const luminance = ([r, g, b]) => 0.2126 * srgb(r) + 0.7152 * srgb(g) + 0.0722 * srgb(b);
+const ratio = (a, b) => {
+  const la = luminance(a);
+  const lb = luminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+};
+const hex = ([r, g, b]) => `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+const commonest = (points) => {
+  const seen = points.filter(Boolean);
+  if (!seen.length) return null;
+  const tally = new Map();
+  for (const p of seen) tally.set(p.join(","), (tally.get(p.join(",")) ?? 0) + 1);
+  return [...tally.entries()].sort((a, b) => b[1] - a[1])[0][0].split(",").map(Number);
+};
+
+/**
+ * The unplayed track, the capsule it is cut into and the accent, read off the
+ * screen rather than off the tokens.
+ *
+ * A token value is not what a reader sees: this track is a fill on a
+ * translucent capsule whose glass samples a blurred, patterned wallpaper, and
+ * the whole reason the dark track had to be lightened is that the composite
+ * came out one and a half values from the capsule while the token looked like a
+ * well. Rule 7 of docs/operations/interface-material.md, pointed at a surface.
+ *
+ * Taken before the device chrome is drawn, so nothing painted for scale can be
+ * sampled by mistake.
+ */
+async function trackPixels(page, device) {
+  const plan = await page.evaluate(() => {
+    const box = (selector) => {
+      const el = document.querySelector(selector);
+      if (!el) return null;
+      const { left, top, right, bottom, width } = el.getBoundingClientRect();
+      return { left, top, right, bottom, width };
+    };
+    return {
+      row: box('[data-testid="composer-recording-lock-indicator"]'),
+      bar: box('[data-testid="composer-recording-bar"]'),
+      pill: box('[data-testid="composer-recording-preview-toggle"]'),
+      playhead: box('[data-testid="composer-recording-playhead"]'),
+    };
+  });
+  if (!plan.row || !plan.bar) return null;
+
+  const shot = await page.screenshot({ animations: "disabled" });
+  const { data, info } = await sharp(shot).raw().toBuffer({ resolveWithObject: true });
+  const read = (x, y) => {
+    const px = Math.round(x * device.scale);
+    const py = Math.round(y * device.scale);
+    if (px < 0 || py < 0 || px >= info.width || py >= info.height) return null;
+    const at = (py * info.width + px) * info.channels;
+    return [data[at], data[at + 1], data[at + 2]];
+  };
+
+  const barMidY = (plan.bar.top + plan.bar.bottom) / 2;
+  // Right of the play pill and right of the playhead, where the track is bare.
+  const from = Math.max(plan.pill ? plan.pill.right + 6 : plan.bar.left + 20, plan.bar.left + 20);
+  const to = plan.bar.right - 6;
+  const columns = [];
+  for (let i = 0; i <= 10; i += 1) columns.push(from + ((to - from) * i) / 10);
+
+  const track = commonest(columns.map((x) => read(x, barMidY)));
+  // The capsule's own fill at the same columns, above the bar and below it.
+  const sheet = commonest([
+    ...columns.map((x) => read(x, plan.row.top + 6)),
+    ...columns.map((x) => read(x, plan.row.bottom - 6)),
+  ]);
+  // The playhead is filled from the same token as the played part, so it is the
+  // played colour measured without having to play anything.
+  const accent = plan.playhead
+    ? commonest([read((plan.playhead.left + plan.playhead.right) / 2, (plan.playhead.top + plan.playhead.bottom) / 2)])
+    : null;
+  if (!track || !sheet) return null;
+
+  const step = Math.round((Math.abs(track[0] - sheet[0]) + Math.abs(track[1] - sheet[1]) + Math.abs(track[2] - sheet[2])) / 3);
+  return {
+    track: hex(track),
+    sheet: hex(sheet),
+    accent: accent ? hex(accent) : null,
+    trackVsSheet: Number(ratio(track, sheet).toFixed(3)),
+    accentVsTrack: accent ? Number(ratio(accent, track).toFixed(3)) : null,
+    step,
+    trackDarkerThanSheet: luminance(track) < luminance(sheet),
+  };
+}
+
+/**
+ * What the track has to be true of, on the owner's ruling of 2026-09-12: the
+ * unplayed part must read as a track, and it must not be lightened so far that
+ * it starts competing with the played part.
+ *
+ * The two floors are per theme because the themes are not each other's mirror
+ * here. The dark theme's number is the one that was just won — it stood at
+ * 1.048:1 and the bar was invisible — so a ratio floor catches a revert to
+ * --kub-inset. The light theme was already right and its step is carried by hue
+ * rather than by lightness, so a ratio floor there would fail a working sheet;
+ * what is pinned instead is the direction, that its well still goes down.
+ */
+function trackVerdict(frame, pixels) {
+  if (frame.state !== "4-paused") return [];
+  if (!pixels) return ["the track could not be photographed"];
+  const problems = [];
+  if (frame.theme === "dark") {
+    if (pixels.trackVsSheet < 1.5) {
+      problems.push(`the unplayed track is ${pixels.trackVsSheet}:1 against the capsule, which is a hairline again`);
+    }
+  } else if (!pixels.trackDarkerThanSheet) {
+    problems.push("the light theme's track is no longer a well in the capsule");
+  }
+  // Both themes: the played part has to stay tellable from the unplayed one,
+  // which is the whole meaning of a progress bar. 3:1 is the floor a graphical
+  // object has to clear to be distinguishable.
+  if (pixels.accentVsTrack !== null && pixels.accentVsTrack < 3) {
+    problems.push(`the played part is ${pixels.accentVsTrack}:1 against the track, so the bar stops reading as progress`);
+  }
+  return problems;
+}
+
 /** What the frame shows, read off the page rather than assumed. */
 async function measure(page, frame) {
   return page.evaluate(() => {
@@ -560,10 +685,16 @@ async function renderFrame(browser, frame) {
   const problems = verdict(frame, found);
   if (problems.length) throw new Error(`${frame.id}: ${problems.join("; ")}`);
 
+  // The track, photographed before the device chrome goes on, so nothing drawn
+  // for scale can be sampled as if it were part of the row.
+  const pixels = await trackPixels(page, device);
+  const trackProblems = trackVerdict(frame, pixels);
+  if (trackProblems.length) throw new Error(`${frame.id}: ${trackProblems.join("; ")}`);
+
   if (device.touch) await drawDeviceChrome(page, frame.theme, device);
   await page.screenshot({ path: framePath(frame.id), animations: "disabled" });
   await context.close();
-  return { id: frame.id, inter, errors, ...found };
+  return { id: frame.id, inter, errors, ...found, track: pixels };
 }
 
 /** The status bar, the island and the home indicator, drawn over the page for scale. */
@@ -762,6 +893,12 @@ async function main() {
               `armed=${result.cancelArmed ?? "-"} offCentre=${result.cancelOffCentrePx ?? "-"} ` +
               `rail=${result.railOffButtonPx ?? "-"}/${result.railHeight ?? "-"} ` +
               `said=${JSON.stringify(result.spoken ?? result.hint ?? "")} mic=${result.audioOpened} cam=${result.videoOpened}` +
+              `${
+                result.track
+                  ? ` track=${result.track.track} on ${result.track.sheet} ${result.track.trackVsSheet}:1 ` +
+                    `step=${result.track.step} played=${result.track.accentVsTrack}:1`
+                  : ""
+              }` +
               `${result.errors.length ? ` errors: ${JSON.stringify(result.errors)}` : ""}`,
           );
         } catch (error) {

@@ -395,6 +395,25 @@ html[data-ios-standalone] {
      a system notice, the history band. A fill and no blur (rule 6). */
   --kub-chat-chip: rgba(255, 255, 255, 0.12);
   --kub-chat-chip-text: #F5F7FB;
+  /* The unplayed part of a stopped recording's progress bar, on the composer's
+     own capsule. Deliberately not --kub-inset, which is what drew it before: a
+     well is cut downwards, and on this capsule there is nothing left to go down
+     to. Photographed, the track composited to #081629 against a capsule of
+     #0E1937 — 1.048:1, a step of eight values — which is a hairline rather than
+     a bar, and the owner looked at it and said to lighten it.
+
+     #353E57 is the measured composite of a 16% white veil on this capsule, and
+     it is written opaque rather than as that veil on purpose. The played part
+     and the playhead are an opaque accent, so a translucent track would let the
+     one relationship carrying the control's meaning drift with whatever passes
+     under the composer: over a white field the veil reaches rgb(163,174,184)
+     and the played part stops reading against it at 1.41:1. Opaque holds that
+     at 3.35:1 wherever the row is. Against the capsule the step is now 1.631:1
+     — a mean of 36 values, past the 23-27 at which rule 11 says a nested box is
+     as visible as a panel. Rule 5 allows an absolute token where the pair is
+     fixed, and it is: measured across the whole bar, the ground under this
+     capsule moves by one value, because the scroll edge holds it. */
+  --kub-chat-track: #353E57;
   /* The words and the accent on the chat screen, handed to the chat pane as
      --kub-cyan, --kub-muted and --kub-accent-text by `.kub-chat-screen`, so
      nothing outside the pane moves. A saturated own bubble scrolls under the
@@ -707,6 +726,16 @@ html[data-ios-standalone] {
   --kub-chat-edge-bottom: #D8D5F0;
   --kub-chat-chip: rgba(255, 255, 255, 0.78);
   --kub-chat-chip-text: #07111F;
+  /* The same track here, and deliberately the value --kub-inset already gave
+     it. Photographed, #EAF3FA on a capsule of #F7F6FE reads as a bar across the
+     row — the owner's judgement was that this theme is the one that works — so
+     the value is pinned to this token rather than left following one that
+     serves fields across the whole product and could move under it. The ratio
+     is 1.046:1, all but identical to the dark theme's before it was lightened,
+     which is the reminder that a ratio is the wrong instrument at this end of
+     the scale: what makes this one read is the step in hue against a near-white
+     sheet, and the dark theme had no hue to spend. */
+  --kub-chat-track: #EAF3FA;
   /* Darker, for the same two reasons as the dark theme's lighter pair: the
      grey measured 4.45:1 on the chrome over a blue bubble, and the accent
      4.48:1 — 3.94:1 where a pattern stroke ran under a name. The grey takes
