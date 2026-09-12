@@ -303,9 +303,25 @@ $env:KUB_BASE_URL = 'http://127.0.0.1:5187'
 pnpm.cmd exec playwright test tests/e2e/public-home-routing.spec.ts --project=chromium-desktop-1440 --workers=1
 node --test tests/unit/public-home-routing.test.mts tests/unit/public-routes.test.mjs tests/unit/distribution-platform.test.mts
 pnpm.cmd --filter @workspace/kub run typecheck
-cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"
+$env:PORT = '5173'; $env:BASE_PATH = '/'; pnpm.cmd --filter @workspace/kub run build
 git diff --check
 ```
+
+That build line used to read
+`cmd /c "set PORT=5173&& set BASE_PATH=/&& pnpm.cmd --filter @workspace/kub run build"`.
+From Git Bash that form is worse than useless. MSYS rewrites the `/` in
+`BASE_PATH=/` into the Git installation path, which contains spaces; the quoting
+of the whole `cmd /c` string then splits mid-argument, and the shell reports
+**exit 0 while nothing was built**. Measured on 2026-09-12: it printed
+`"ub" is not recognized as an internal or external command` and still returned
+success, after which `tests/unit/public-product-assets.test.mjs` went on failing
+on a `dist/public` that had never been rewritten — which reads like a broken
+test rather than a build that did not happen, and cost a full cycle.
+
+From Git Bash use
+`MSYS2_ENV_CONV_EXCL=BASE_PATH PORT=5173 BASE_PATH=/ pnpm.cmd --filter @workspace/kub run build`,
+and confirm the build ran by reading its `sw.js build <id>` and `built in Ns`
+lines rather than by trusting its exit code.
 
 The routing unit suite runs on the Node test runner. This repository has no
 Vitest dependency and no `artifacts/kub/src/**/*.test.ts` files; an earlier
