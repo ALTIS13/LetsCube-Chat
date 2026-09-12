@@ -1,5 +1,25 @@
 # QA Results
 
+## 2026-09-12 - Deployed 84963d1, and a probe that refused to give a verdict it could not support
+
+The filter row's arrows shipped: the mechanism lifted out of `FolderTabs` into a shared hook, the arrows
+shown only from `md` where they help and hidden on the phone where they were drawn over the pill text, and
+D-157 opened for the three things that leaves behind.
+
+Verified as the previous deploy was — image tag carrying the full SHA, health, rollover complete, no build in
+flight, `sw.js` answering one id six times, and then the served bytes with controls.
+
+**What is worth keeping is what happened during the swap.** Three consecutive polls fetched 144 bytes: the page
+had been read a moment before the rollover, so the asset name was already stale and the new container had no such
+file. One hour earlier the identical reading had convinced me a deploy was missing — the whole lesson of the
+morning, met again in the wild.
+
+This time it cost nothing, because the probe asks its controls on every round: «Выберите диалог» and
+«Конфиденциальность» exist in every build ever shipped, so their absence means the probe is reading nothing, not
+that the product has changed. It logged «probe unreliable, not a verdict» three times, kept going, and reported
+only from the two rounds that proved themselves. Five rounds, two verdicts, three refusals — and the refusals are
+the reason the two verdicts are worth anything.
+
 ## 2026-09-12 - The filter row gets its arrows, and an instrument asked the weaker question in two places
 
 D-156 closed: the scroll mechanism lifted out of `FolderTabs` into a shared hook both rows use, the arrows

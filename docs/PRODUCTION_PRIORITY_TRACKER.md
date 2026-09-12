@@ -480,7 +480,29 @@ ask the tester to retry the video that failed, now that the send path names the 
 
 ## Last Confirmed Deploy Baseline
 
-**Current: `9c58247`, deployed 2026-09-12 at 20:48 MSK.** Verified by reading the running container's own
+**Current: `84963d1`, deployed 2026-09-12 at 21:29 MSK.** The filter row's scroll arrows, the mechanism
+lifted into a shared hook, and the register entries that close D-156 and open D-157.
+
+Verified by reading the running container's own image tag —
+`l64kyyu1sysev2izzjjbizhe:84963d1f340cc7429b19498de20aa53605eaa235`, the commit's full SHA — its health, and
+the rollover: the previous container on `9c58247` had gone, one replica remained, and no build was still
+running. `sw.js` answers `e1b8b92a787c7cc9` on six consecutive requests.
+
+Then the bytes. The page's asset changed from `index-B1n3R-R-.js` to `index-BDTg7n-j.js`, and on the
+new one the three controls («Выберите диалог», «Конфиденциальность», «Поддержка») are present and the marker
+`Прокрутить фильтры` is found — the arrows' own labels, which exist only since this commit;
+`Прокрутить папки` would have been no discriminator, since the folder strip has had them all along.
+
+**The rollover window, caught by the probe itself, which is what this entry is really for.** Three consecutive
+rounds in the middle of the swap fetched **144 bytes** — the stale asset name answered by the container that had
+already moved on. An hour earlier exactly that reading made me believe a deploy had not landed. This time the
+probe checked its controls every round, found them missing, and wrote «probe unreliable, not a verdict» instead of
+reporting a verdict at all. Two rounds proved themselves and were counted; three did not and were not. That is the
+whole difference between a measurement and a guess, and it cost one extra line in the loop.
+
+Rollback: fast-forward `main` back to `9c58247`.
+
+**Superseded:** `9c58247`, deployed 2026-09-12 at 20:48 MSK. Verified by reading the running container's own
 image tag — `l64kyyu1sysev2izzjjbizhe:9c582479629ad147d89333f225710a997fd8c0bd`, the commit's full SHA —
 its health (`Up … (healthy)`), and the rollover: the previous container on `245e4d9` had gone and one
 replica remained, with no build still running. `sw.js` answers the id `533b119180156a9a` on six
