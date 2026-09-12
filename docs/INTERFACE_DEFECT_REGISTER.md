@@ -6918,7 +6918,19 @@ the field cancels, and a locked recording plays back) — against what we had:
 Only two of the six matched. The three the owner named — slide to cancel,
 release to send, and a lock with a pause and a preview — were the three missing.
 
-### Implemented on `feat/recording-gesture`, not deployed
+### Implemented on the working branch, not deployed
+
+Corrected after the fact, because the distinction matters to whoever reads this
+next: `feat/recording-gesture` is only a label on the same commit as
+`integration/message-actions`. The work was committed straight onto the shared
+working branch, not onto a side branch that could be dropped in one move, and
+two of its commits reached `origin/codex/bot-platform` in pushes made for other
+work before that was noticed. Nothing of it is in production: every one of its
+commits was checked against the deployed `17a1c47` and none is an ancestor —
+the deployed commit predates the first of them by six minutes. The deploy hold
+the original note claimed to be respecting had in fact been lifted by the owner
+earlier that night; what kept this out of production was the ordering, and the
+decision not to push `main` again while its visuals are unsettled.
 
 - `artifacts/kub/src/lib/recordingGesture.ts` holds the rules as pure functions
   that import nothing, so `tests/unit/recording-gesture.test.mts` reads them
