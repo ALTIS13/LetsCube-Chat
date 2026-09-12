@@ -480,7 +480,44 @@ ask the tester to retry the video that failed, now that the send path names the 
 
 ## Last Confirmed Deploy Baseline
 
-**Current: `540df15`, deployed 2026-09-13 at 00:55 MSK.** The settings column (D-160) and the record of
+**Current: `ca04e21`, deployed 2026-09-13.** The hint that no longer takes the tap (D-162) and the contact
+card as a third column (D-161). The push carried `1535cc4` with it, the docs record of the previous deploy.
+
+**Verified by the served bytes and by markers, not by the container's image tag.** There was no SSH reading in
+this session, and the entry below did have one — so this is a weaker verification, stated as such rather than
+dressed up. What was measured: `https://app.letscube.ru` answering 200; the page's assets moving from
+`index-CYp9DLS8.js` and `index-Du7qh2Mh.css` to `index-CzsrUfGW.js` and `index-OWWVxcqE.css`;
+bodies of 2,414,682 and 233,644 bytes, printed **so that a zero could never be an empty fetch**; and three
+controls still present in them — `--kub-window-caption`, `--kub-chat-track`, `chat-header-shell`.
+
+The stylesheet name `index-OWWVxcqE.css` is byte-for-byte the name the local production build produced,
+which is the strongest evidence available here that the same source built it. The bundle name differs, as it
+does on every build whose environment differs.
+
+Markers, all three absent at T0 immediately after the push and present after the swap:
+`popper-content-wrapper` in the stylesheet (D-162), `data-surface` and `data-kub-conversation-pane` in
+the bundle (D-161). Calibrated in **both** directions before the push, per the rule from the previous deploy.
+
+**Two things went wrong in the watching, and both are the reason to keep controls in a probe.**
+
+- A control caught three dead rounds. Polls 1 to 3 reported the marker at 0 on the **old** asset name, which
+  reads as «not deployed yet» — but `--kub-window-caption` read 0 in the same rounds, and it had read 1 in
+  the same file minutes earlier. Those three rounds measured nothing at all; the container was being replaced.
+  Without the control they would have been recorded as evidence about the old build. This is the page-and-assets
+  disagreement from the previous entry, arriving a third time, so it is settled as a property of the swap.
+- A marker was discarded rather than explained. `sw.js` read `df3284221f6e1a8e` at T0 and
+  `250cc91de1aab7d4` from the first poll onward — changing **before** the assets did and not changing when
+  they did. The extraction took the first 16-hex token in the file, which was never proved to be the build id.
+  An uncalibrated marker that happens to move is not evidence, so it is not cited above.
+
+Gates at this commit: typecheck clean across four packages; unit 1921/1921 over 205 files; production build
+clean; mounted routing matrix 15/15; `profile-column` 4 passed and 4 skipped; `hint-pointer` green at 390
+and skipping honestly on the computer; the signed-in production run of `visual-style-layout` 11 passed, 9
+skipped, 0 failed, with zero mentions of interception against six before the fix.
+
+Rollback: fast-forward `main` back to `540df15`.
+
+**Superseded:** `540df15`, deployed 2026-09-13 at 00:55 MSK. The settings column (D-160) and the record of
 the deploy before it.
 
 Verified by the running container's own image tag —
