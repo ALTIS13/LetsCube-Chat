@@ -25,3 +25,4 @@ export { KubBrandLogo } from "./KubBrandLogo";
 export { KubSwitch } from "./KubSwitch";
 export { KubIcon, type KubIconProps, type KubIconTone } from "./KubIcon";
 export { KUB_ICONS, type KubIconName } from "./icons";
+export { KubHint } from "./KubHint";
