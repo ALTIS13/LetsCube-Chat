@@ -25,6 +25,13 @@ out and verified rather than announced.
   absent from that one before the deploy and present after.
 - **Not deployed:** `letscube-bot-gateway` (`935a670`, auto-deploy off by design) and `fsk7qm5e4nm9kap9hv8chtts`.
 - **Rollback** is a fast-forward of `main` back to `0b69e38`, which is the image the previous replica ran.
+- **The nightly offsite backup then ran unattended and succeeded** — the first time since 31 August. systemd started
+  it at 05:16:24 without help, it encrypted set `20260912-040744`, split it, force-pushed `fcfbfe6` to `b733436` and
+  finished at 05:18:25 with `Result=success`. That is the proof the backup repair holds without a person: the manual
+  run earlier in the night proved the script, this proves the timer.
+- **Disk.** Today's two image builds left 8.8 GB of Docker build cache, which took the disk to 79%. Pruning the
+  cache and the dangling images — what `letscube-disk-maintenance` does weekly anyway — returned it to 73%, 32 GB
+  free, with all five applications still healthy and the site answering 200.
 - **No production screenshots were taken.** Verification is the running image tag, the replica count, the served
   bundle's name and its contents - signed-in production screens are not photographed.
 
