@@ -39,7 +39,6 @@ import { DEFAULT_MEDIA_QUALITY, selectVideoPlaybackUrl } from "@/lib/mediaQualit
 import { prepareChatImageAttachment, prepareOriginalPreview, readMediaDimensions, type MediaDimensions } from "@/lib/mediaUpload";
 import {
   buildAttachmentMediaMetadata,
-  mediaSendShape,
   originalLimitMessage,
   originalPreviewDimensions,
   originalPreviewPath,
@@ -49,7 +48,7 @@ import {
 } from "@/lib/mediaCompression";
 import { removeLocation } from "@/lib/mediaLocation";
 import { useIncomingMediaFiles } from "@/hooks/useIncomingMediaFiles";
-import { MediaSendDialog, type MediaSendChoice } from "./MediaSendDialog";
+import type { AttachSendRequest } from "@/lib/attachSheet";
 import {
   CHAT_MEDIA_BUCKET,
   MAX_STAGED_ATTACHMENTS,
@@ -332,7 +331,6 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
   ): Promise<StagedAttachment[]> => {
     if (!files.length) return [];
     const compress = options.compress !== false;
-    const shape = mediaSendShape(window.matchMedia?.bind(window));
     const scopeToken = uploadScope.capture();
     const existingCount = stagedAttachmentsRef.current.length;
     const availableSlots = Math.max(0, MAX_STAGED_ATTACHMENTS - existingCount);
@@ -355,9 +353,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
       let decodedDimensions: MediaDimensions | null = null;
       if (preparation === "original") {
         // Before anything reads the file: a refused original costs no decode.
-        // «Файл» refuses an oversized original before staging, so on a desktop
-        // one can only come from the send dialog, and is told in its words.
-        const limitError = originalLimitMessage(sourceFile, shape === "desktop" ? "dialog" : "menu");
+        // The attach sheet refuses an oversized original before staging, so what
+        // reaches here is a send that already stated its choice.
+        const limitError = originalLimitMessage(sourceFile);
         if (limitError) {
           errors.push(limitError);
           continue;
@@ -761,6 +759,7 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     (files: File[], source: IncomingFilesSource, compress: boolean) => stageFiles(files, source, { compress }),
     [stageFiles],
   );
+  // The attach sheet (D-122) is the send step for pasted and dropped photos too.
   const {
     request: mediaSendRequest,
     handleIncomingFiles,
@@ -772,13 +771,13 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
     closeMediaSendRequest();
   }, [chatId, closeMediaSendRequest]);
 
-  const sendFromMediaDialog = useCallback(async (choice: MediaSendChoice) => {
-    const source = mediaSendRequest?.source ?? "picker";
-    closeMediaSendRequest();
-    const staged = await stageFiles(choice.files, source, { compress: choice.compress });
+  // The attach sheet (D-122) sends what it picked: staged as chosen, compressed
+  // or as originals, then sent with its caption.
+  const sendMediaFromSheet = useCallback(async (request: AttachSendRequest) => {
+    const staged = await stageFiles(request.files, request.source, { compress: request.compress });
     if (!staged.length) return;
-    await sendStagedAttachments(choice.caption, undefined, staged);
-  }, [closeMediaSendRequest, mediaSendRequest?.source, sendStagedAttachments, stageFiles]);
+    await sendStagedAttachments(request.caption, undefined, staged);
+  }, [sendStagedAttachments, stageFiles]);
 
   const handleSend = useCallback((content: string) => {
     if (forwardDraft) {
@@ -1205,6 +1204,9 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
             onFocusChange={setIsComposerFocused}
             forwardDraft={forwardDraft}
             onCancelForward={() => setPendingForward(null)}
+            onSendMedia={sendMediaFromSheet}
+            incomingMedia={mediaSendRequest}
+            onIncomingMediaTaken={closeMediaSendRequest}
           />
         </div>
       </div>
@@ -1235,14 +1237,6 @@ export function ChatWindow({ chatId }: ChatWindowProps) {
         currentUserId={userId}
         onDelete={handleDeleteMessages}
       />
-      {mediaSendRequest && (
-        <MediaSendDialog
-          key={mediaSendRequest.id}
-          files={mediaSendRequest.files}
-          onCancel={closeMediaSendRequest}
-          onSend={(choice) => void sendFromMediaDialog(choice)}
-        />
-      )}
         <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
       </div>
     </ChatMediaPlaybackProvider>

@@ -406,18 +406,21 @@ test.describe("LETSCUBE Windows Tauri shell", () => {
       }
       await expect(composer, "an available chat should expose the composer").toBeVisible();
 
+      // The Windows client opens the attach sheet, as every other shell does
+      // (D-122): its tabs work in place, and voice and round video are on the
+      // composer's own recorder button.
       await page.getByRole("button", { name: "Прикрепить" }).click();
-      await expect(page.getByRole("button", { name: "Фото или видео" })).toBeVisible();
-      await expect(page.getByRole("button", { name: "Сделать фото" })).toBeVisible();
-      await expect(
-        page
-          .locator("button")
-          .filter({ hasText: /^Голосовое$/ })
-          .first(),
-      ).toBeVisible();
-      await expect(page.getByRole("button", { name: "Записать видео" })).toBeVisible();
+      const attachSheet = page.getByTestId("attach-sheet");
+      await expect(attachSheet).toBeVisible();
+      await expect(page.getByTestId("composer-attach-menu")).toHaveCount(0);
+      for (const tab of ["Галерея", "Файл", "Геопозиция"]) {
+        await expect(attachSheet.getByRole("tab", { name: tab, exact: true })).toBeVisible();
+      }
+      await expect(attachSheet.locator('[data-attach-entry="library"]')).toBeVisible();
+      await expect(page.getByTestId("composer-recorder-button")).toBeVisible();
       await expect(page.getByTestId("media-quality-selector")).toHaveCount(0);
-      await page.locator("div.fixed.inset-0.z-10").click({ position: { x: 12, y: 200 } });
+      await page.getByTestId("attach-sheet-close").click();
+      await expect(attachSheet).toHaveCount(0);
 
       await page.getByTestId("notification-bell-button").click();
       await expect(page.getByTestId("notification-panel")).toBeVisible();

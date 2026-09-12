@@ -6642,18 +6642,45 @@ iPhone app, and whether the Android app draws a real grid, are part of the asses
 contact, music — are wanted. For now they are placeholder tabs, so that the scrolling row of attach functions
 can be judged without waiting for them; each is built for real later, in its turn.
 
-**The owner's choices** (2026-09-12), from the three looks rendered on real code:
+**The owner's answers** (2026-09-12), after the three option renders on real code: the look is **B,
+«Стеклянная капсула»** — a sheet inset from every edge, its tabs a floating glass capsule that becomes the
+caption and send capsule once something is selected, and the count said in the title. Options A and C and the
+DEV switch are gone: the sheet is the composer's attach flow on every shell, with no flag in front of it. The
+placeholder tabs are «Опрос», «Список» and «Контакт», in that order; **«Музыка» is not wanted at all** and was
+removed. «Без сжатия» stays a photo marked «Оригинал», not a document, so D-096 and D-119 are unchanged. And
+the **desktop send dialog is retired**: a pick, a paste and a drop all land in the sheet's picked state, with
+its caption field, its send button and «Отправить без сжатия» under «…».
 
-- **B «Стеклянная капсула»** is the sheet. The DEV switch and the other two looks go.
-- **The map** under «Геопозиция» is a static preview rendered from OpenStreetMap on LETSCUBE's own server, so
-  nothing about a person reaches a third party. Until that service exists the neutral preview stays.
-- **On Android** a person is asked, the first time, whether to give access to all media or only to items they
-  pick — the platform's own photo-permission dialog. That is native work in the Capacitor app, recorded for its
-  own turn, and Google Play's photo and video permissions policy has to be met before it ships.
-- **«Без сжатия» stays a photo** marked «Оригинал», not a document, as D-096 and D-119 have it.
-- **The desktop send dialog goes.** A pick, a paste and a drop all land in the sheet.
-- **The placeholders** are «Опрос», then «Список», then «Контакт». «Музыка» is not wanted and its tab goes.
-- **The recording follow-ups** of D-130 come next, after the sheet.
+**The map for «Геопозиция» is to be our own server** (the owner, 2026-09-12): static previews rendered from
+OpenStreetMap data on LETSCUBE's own infrastructure, so that nothing about a person — not a coordinate, not a
+referer — reaches a third party. That service does not exist yet, so the neutral field with the coordinates
+stays and **no third-party map is called**. The seam is one component, `AttachLocationPreview` in
+`artifacts/kub/src/components/chat/attach/AttachLocationPanel.tsx`: when the renderer exists, it is given a URL
+built from the position and the field becomes an image, and nothing outside that component changes.
+
+**Android's photo permission is native work, outside this task** (the owner, 2026-09-12): on first use the
+person should be asked whether to give access to all media or only to selected items — the Android
+photo-permission dialog. That is Capacitor work in the shell, not the web gallery. No Android code was touched
+and the web gallery is as it was; recorded here so the decision is not lost.
+
+**Implemented 2026-09-12** on `feat/attach-sheet`, not deployed. The composer's attach menu, the DEV option
+module and its hook, and `MediaSendDialog` are deleted; `useIncomingMediaFiles` no longer asks about a shape,
+and `originalLimitMessage` no longer takes a surface — the refusal always comes from the sheet and names
+«Галерею» as the compressed way. Every D-119 rule stands inside it: nothing asks for a quality, the gallery
+sends compressed, «Файл» sends the picked bytes on every device and says so under its name, and an original
+over 50 MB is refused before any upload with the way out on the screen in front of the person.
+
+**One thing the menu carried and the sheet does not: recording a rectangular video.** «Записать видео» was the
+only entry to `VideoMessageRecorderModal`'s `regular` variant. Telegram's attach sheet has no such item, so the
+owner's tab list has none either. Voice and round video are on the composer's recorder button, as this defect
+says they should be, and on a phone the gallery's «Камера» still offers video through the system camera; on a
+desktop a rectangular recording has no way in until the recording work (slide to cancel, release to send)
+decides where it belongs. `video-message.spec.ts` keeps both of its cases and skips them with that reason
+rather than deleting them, so the gap is visible in a run instead of silent.
+
+**The recording follow-ups of D-130 come next**, after the sheet — the owner's order of 2026-09-12: slide to
+cancel, release to send, and a lock with a pause and a preview. The rectangular recording the menu lost, above,
+is to be decided inside that work.
 
 ## D-123 `[ ]` A location administrator holds management grants for their location but has no screen to use them
 

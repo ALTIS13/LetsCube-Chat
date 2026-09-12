@@ -66,8 +66,13 @@ test.describe("resumable media upload UI", () => {
 
     const payload = Buffer.alloc(7 * 1024 * 1024, 0x4c);
     await page.getByRole("button", { name: "Прикрепить" }).click();
+    // «Файл» is a tab of the attach sheet now, and its second row is the picker
+    // that takes any file (D-122).
+    const attachSheet = page.getByTestId("attach-sheet");
+    await expect(attachSheet).toBeVisible();
+    await attachSheet.getByRole("tab", { name: "Файл", exact: true }).click();
     const fileChooserPromise = page.waitForEvent("filechooser");
-    await page.getByRole("button", { name: "Файл", exact: true }).click();
+    await attachSheet.locator('[data-attach-entry="file"]').click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles({
       name: `qa-resumable-${Date.now()}.bin`,

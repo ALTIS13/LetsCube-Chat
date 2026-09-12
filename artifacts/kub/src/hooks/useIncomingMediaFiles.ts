@@ -1,10 +1,9 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { showAppAlert } from "@/lib/appDialogs";
+import { opensAttachSheet } from "@/lib/attachSheet";
 import {
-  mediaSendShape,
   originalLimitAlertTitle,
   originalLimitMessage,
-  shouldConfirmMediaSend,
   splitByOriginalLimit,
   type IncomingFilesSource,
 } from "@/lib/mediaCompression";
@@ -20,12 +19,17 @@ export type StageIncomingFiles = (files: File[], source: IncomingFilesSource, co
 /**
  * Where files the composer receives go next.
  *
- * A pick from «Файл» already asked for the original, on every device (D-119),
- * so it is staged at once — a photo or a video over the limit is refused here,
- * before anything reads it, and the rest of the pick goes on. Otherwise a phone
- * stages compressed without asking, and on a desktop a batch with a photo or a
- * video in it opens the send dialog first, because that is where
- * «Сжать изображение» is.
+ * The attach sheet is the send step on every shell (D-122): a photo or a video
+ * picked, pasted or dropped becomes a request, which the composer opens the
+ * sheet with. There is no desktop send dialog behind it any more, and no shape
+ * to ask about — a desktop and a phone do the same thing.
+ *
+ * A batch that states its compression has already been through that step, so it
+ * is staged as it is; that is what the sheet's own send does when the conversation
+ * hands it no sender of its own. A photo or a video over the limit is refused
+ * here, before anything reads it, and the rest of the batch goes on. Nothing
+ * asks a second time, which is also what keeps a stated send from re-opening the
+ * sheet it came from.
  *
  * `ChatWindow` and the DEV preview page both route through this, so the page the
  * renders are taken from makes exactly the decision the conversation makes.
@@ -45,13 +49,21 @@ export function useIncomingMediaFiles(stage: StageIncomingFiles) {
     options?: { compress?: boolean },
   ) => {
     if (!files.length) return;
-    const shape = mediaSendShape(typeof window === "undefined" ? null : window.matchMedia?.bind(window));
 
-    if (options?.compress === false) {
+    if (options?.compress === undefined) {
+      if (opensAttachSheet({ source, files })) {
+        setRequest({ id: nextIdRef.current++, files, source });
+        return;
+      }
+      stageRef.current(files, source, true);
+      return;
+    }
+
+    if (options.compress === false) {
       const { within, over } = splitByOriginalLimit(files);
       if (over.length) {
         showAppAlert(
-          over.map((file) => originalLimitMessage(file, "menu")).filter(Boolean).join("\n"),
+          over.map((file) => originalLimitMessage(file)).filter(Boolean).join("\n"),
           originalLimitAlertTitle(over.length),
         );
       }
@@ -59,10 +71,6 @@ export function useIncomingMediaFiles(stage: StageIncomingFiles) {
       return;
     }
 
-    if (shouldConfirmMediaSend({ shape, source, files })) {
-      setRequest({ id: nextIdRef.current++, files, source });
-      return;
-    }
     stageRef.current(files, source, true);
   }, []);
 

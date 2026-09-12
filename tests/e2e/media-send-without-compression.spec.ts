@@ -7,20 +7,25 @@ import sharp from "sharp";
  * Testers' complaint 2: «фото и видео отправляются только сжатыми».
  *
  * Approved by the owner, as in Telegram: compressed stays the default and no
- * quality is asked for (D-119). «Файл» in the attach menu sends as it is on
- * every device and says «Без сжатия»; on a desktop «Фото или видео» lists the
- * files in a send dialog with «Сжать изображение», checked by default. An
- * original goes as it is — the bytes that were picked are the bytes
- * that are stored, except that a JPEG loses the place it was taken — with a
- * light preview beside it for the conversation, and the viewer opens the
- * original. An original over 50 MB is refused before any upload starts, with a
- * message that says what to do.
+ * quality is asked for (D-119). The attach sheet is where a send is made now
+ * (D-122): «Галерея» sends compressed and asks nothing, «Файл» sends the picked
+ * bytes on every device and says so under its name, and «Отправить без сжатия»
+ * under «…» sends a gallery selection as it is. An original goes as it is — the
+ * bytes that were picked are the bytes that are stored, except that a JPEG loses
+ * the place it was taken — with a light preview beside it for the conversation,
+ * and the viewer opens the original. An original over 50 MB is refused before any
+ * upload starts, with a message that says where the compressed way is.
  *
- * What is pinned, on each shape: the choice is offered where it was approved;
- * an original's stored bytes hash to the picked file; its preview and its
- * metadata are what the bubble and the viewer read; the default still
- * compresses; and the limit stops the send. The decisions themselves are
+ * What is pinned: the choice is offered where it was approved; an original's
+ * stored bytes hash to the picked file; its preview and its metadata are what the
+ * bubble and the viewer read; the default still compresses; and the limit stops
+ * the send without stranding the rest of the pick. The decisions themselves are
  * unit-tested in `tests/unit/media-compression.test.mts`.
+ *
+ * None of these is a shape any more. The desktop send dialog was retired with
+ * D-122, so a phone and a desktop take exactly the same path through the sheet
+ * and every case here runs on every project — which is what would fail first if
+ * a desktop pick ever skipped the sheet again.
  *
  * The backend is a route mock on the fixture host — storage included, so an
  * upload is answered here and its body inspected — and the spec refuses any
@@ -63,28 +68,28 @@ test.describe("sending photos without compression", () => {
     await installUploadProbe(page);
   });
 
-  test("a phone sends the original through «Файл», which says it goes without compression", async ({ page }) => {
+  test("«Файл» sends the original, and says under its name that it goes without compression", async ({ page }) => {
     const backend = await installBackend(page);
     await openChat(page);
-    test.skip(!(await isCoarsePointer(page)), "the attach menu choice is the phone's shape");
 
-    await page.getByRole("button", { name: "Прикрепить" }).click();
-    const menu = await attachMenuLabels(page);
-    // No quality is asked for and no second gallery item offered: «Файл» is the
-    // function, as in Telegram, and it says what it does (D-119).
-    expect(menu, `the menu reads ${JSON.stringify(menu)}`).not.toContain("Без сжатия");
-    expect(menu, `the menu reads ${JSON.stringify(menu)}`).toContain("Файл Без сжатия");
+    const sheet = await openSheet(page);
+    // The menu of buttons is gone from the product, on every device: the sheet
+    // is what «Прикрепить» opens now, and no quality is asked for anywhere in it.
+    await expect(page.getByTestId("composer-attach-menu"), "the attach menu is back").toHaveCount(0);
+    await expect(page.getByTestId("media-quality-selector")).toHaveCount(0);
+
+    await sheet.getByRole("tab", { name: "Файл", exact: true }).click();
     await expect(
-      page.getByRole("button", { name: "Файл", exact: true }),
-      "the hint describes the item; it does not rename it",
-    ).toHaveAccessibleDescription("Без сжатия");
+      sheet.getByRole("button", { name: "Выбрать из Галереи" }),
+      "«Файл» no longer says it sends photos and videos without compression",
+    ).toContainText("Фото и видео без сжатия");
 
     const facade = await testPhoto("facade.png", 205);
-    await chooseFromMenu(page, "Файл", [facade]);
-    const staged = page.getByTestId("staged-attachment-item");
-    await expect(staged).toHaveCount(1);
-    await expect(staged).toContainText("без сжатия");
-    await page.getByRole("button", { name: "Отправить" }).click();
+    await pickInto(page, '[data-attach-entry="file"]', [facade]);
+    await expect(sheet.getByRole("checkbox", { name: "facade.png" })).toHaveAttribute("aria-checked", "true");
+    await expect(sheet.getByTestId("attach-more"), "«Файл» asks about compression again").toHaveCount(0);
+    expect(backend.uploads, "nothing is uploaded before the send").toHaveLength(0);
+    await sheet.getByTestId("attach-send").click();
 
     await expect.poll(() => backend.inserts.length).toBe(1);
     const original = await expectOriginalUpload(page, backend, facade);
@@ -115,16 +120,16 @@ test.describe("sending photos without compression", () => {
     await expectViewerServesOriginal(page, bubble, original.path, 2400);
   });
 
-  test("a phone's gallery choice still compresses, and says so in the metadata", async ({ page }) => {
+  test("the gallery still compresses, and says so in the metadata", async ({ page }) => {
     const backend = await installBackend(page);
     await openChat(page);
-    test.skip(!(await isCoarsePointer(page)), "the attach menu choice is the phone's shape");
 
     const facade = await testPhoto("facade.png", 30);
-    await page.getByRole("button", { name: "Прикрепить" }).click();
-    await chooseFromMenu(page, "Фото или видео", [facade]);
-    await expect(page.getByTestId("staged-attachment-item")).toHaveCount(1);
-    await page.getByRole("button", { name: "Отправить" }).click();
+    const sheet = await openSheet(page);
+    await pickInto(page, '[data-attach-entry="library"]', [facade]);
+    // Nothing between the pick and the send asks for a quality (D-119).
+    await expect(page.getByTestId("media-quality-selector")).toHaveCount(0);
+    await sheet.getByTestId("attach-send").click();
 
     await expect.poll(() => backend.inserts.length).toBe(1);
     await expectCompressedUpload(page, backend, facade);
@@ -135,57 +140,23 @@ test.describe("sending photos without compression", () => {
     expect(Object.keys(backend.inserts[0].media_metadata as object)).not.toContain("preview");
   });
 
-  test("a phone refuses an original over 50 MB before any upload, and says what to do", async ({ page }) => {
+  test("«Отправить без сжатия» under «…» sends the originals, with the caption typed beside them", async ({ page }) => {
     const backend = await installBackend(page);
     await openChat(page);
-    test.skip(!(await isCoarsePointer(page)), "the attach menu choice is the phone's shape");
-
-    const panorama = oversizedFile("panorama.jpg");
-    const facade = await testPhoto("facade.png", 120);
-    await page.getByRole("button", { name: "Прикрепить" }).click();
-    await chooseFromMenu(page, "Файл", [panorama, onDisk(facade)]);
-
-    const alert = page.getByRole("dialog").filter({ hasText: "Файл больше 50 МБ" });
-    await expect(alert).toBeVisible();
-    await expect(alert).toContainText("panorama.jpg");
-    await expect(alert).toContainText("51 МБ");
-    await expect(alert).toContainText("до 50 МБ");
-    await expect(alert).toContainText("«Фото или видео»");
-    await alert.getByRole("button", { name: "Понятно" }).click();
-
-    // The rest of the pick is not held hostage by the one file.
-    const staged = page.getByTestId("staged-attachment-item");
-    await expect(staged).toHaveCount(1);
-    await expect(staged).toContainText("facade.png");
-    expect(backend.uploads, "nothing is uploaded before the person sends").toHaveLength(0);
-  });
-
-  test("a desktop lists the photos with «Сжать изображение» checked, and unchecked sends the originals", async ({ page }) => {
-    const backend = await installBackend(page);
-    await openChat(page);
-    test.skip(await isCoarsePointer(page), "the send dialog is the desktop's shape");
-
-    await page.getByRole("button", { name: "Прикрепить" }).click();
-    const menu = await attachMenuLabels(page);
-    expect(menu, "the menu is the same on every device (D-119)").not.toContain("Без сжатия");
-    expect(menu, `the menu reads ${JSON.stringify(menu)}`).toContain("Файл Без сжатия");
 
     const north = await testPhoto("north.png", 205);
     const south = await testPhoto("south.png", 340);
-    await chooseFromMenu(page, "Фото или видео", [north, south]);
+    const sheet = await openSheet(page);
+    await pickInto(page, '[data-attach-entry="library"]', [north, south]);
+    await expect(sheet.locator("[data-attach-pick]")).toHaveCount(2);
+    await expect(sheet.getByRole("heading", { name: "Выбрано 2" })).toBeVisible();
+    await expect(sheet.getByTestId("attach-send")).toHaveAccessibleName("Отправить 2 фото");
+    await sheet.getByTestId("attach-caption").fill("Фасад, обе стороны");
+    expect(backend.uploads, "nothing is uploaded while the sheet is open").toHaveLength(0);
 
-    const dialog = sendDialog(page, "Отправить 2 фото");
-    await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText("north.png");
-    await expect(dialog).toContainText("south.png");
-    const compress = dialog.getByRole("checkbox", { name: "Сжать изображение" });
-    await expect(compress).toBeChecked();
-    expect(backend.uploads, "nothing is uploaded while the dialog is open").toHaveLength(0);
-
-    await compress.uncheck();
-    await dialog.getByPlaceholder("Подпись").fill("Фасад, обе стороны");
-    await dialog.getByRole("button", { name: "Отправить" }).click();
-    await expect(page.getByTestId("media-send-dialog"), "sending closes the dialog").toHaveCount(0);
+    await sheet.getByTestId("attach-more").click();
+    await page.getByTestId("attach-send-original").click();
+    await expect(sheet, "sending closes the sheet").toHaveCount(0);
 
     await expect.poll(() => backend.inserts.length).toBe(2);
     const first = await expectOriginalUpload(page, backend, north);
@@ -198,133 +169,49 @@ test.describe("sending photos without compression", () => {
     await expectViewerServesOriginal(page, sentPhotoBubble(page, "Фасад, обе стороны"), first.path, 2400);
   });
 
-  test("a desktop that leaves «Сжать изображение» checked sends compressed, as before", async ({ page }) => {
+  test("an original over 50 MB is refused before any upload, and the rest of the pick still goes", async ({ page }) => {
     const backend = await installBackend(page);
     await openChat(page);
-    test.skip(await isCoarsePointer(page), "the send dialog is the desktop's shape");
 
-    const north = await testPhoto("north.png", 60);
-    await page.getByRole("button", { name: "Прикрепить" }).click();
-    await chooseFromMenu(page, "Фото или видео", [north]);
-    const dialog = sendDialog(page, "Отправить фото");
-    await expect(dialog.getByRole("checkbox", { name: "Сжать изображение" })).toBeChecked();
-    await dialog.getByRole("button", { name: "Отправить" }).click();
-
-    await expect.poll(() => backend.inserts.length).toBe(1);
-    await expectCompressedUpload(page, backend, north);
-    expect(backend.inserts[0]).toMatchObject({ media_metadata: { uncompressed: false, optimized: true } });
-  });
-
-  test("a desktop flags an original over 50 MB in the dialog and sends nothing until it is resolved", async ({ page }) => {
-    const backend = await installBackend(page);
-    await openChat(page);
-    test.skip(await isCoarsePointer(page), "the send dialog is the desktop's shape");
-
-    const north = await testPhoto("north.png", 160);
     const panorama = oversizedFile("panorama.jpg");
-    await page.getByRole("button", { name: "Прикрепить" }).click();
-    await chooseFromMenu(page, "Фото или видео", [onDisk(north), panorama]);
-
-    const dialog = sendDialog(page, "Отправить 2 фото");
-    const compress = dialog.getByRole("checkbox", { name: "Сжать изображение" });
-    const send = dialog.getByRole("button", { name: "Отправить" });
-    const notice = dialog.getByTestId("media-send-limit-notice");
-    await expect(compress).toBeChecked();
-    await expect(notice).toHaveCount(0);
-    await expect(send).toBeEnabled();
-
-    await compress.uncheck();
-    await expect(notice).toContainText("panorama.jpg");
-    await expect(notice).toContainText("51 МБ");
-    await expect(notice).toContainText("«Сжать изображение»");
-    await expect(send).toBeDisabled();
-
-    // Ticking the box again is one way out…
-    await compress.check();
-    await expect(notice).toHaveCount(0);
-    await expect(send).toBeEnabled();
-
-    // …taking the file out is the other. The title counts what is left, so the
-    // dialog is found again by its new title before anything inside it is
-    // asserted — against the old title every "not there" below would pass on an
-    // empty match.
-    await compress.uncheck();
-    await expect(send).toBeDisabled();
-    await dialog.getByRole("button", { name: "Убрать panorama.jpg" }).click();
-    const remaining = sendDialog(page, "Отправить фото");
-    await expect(remaining).toBeVisible();
-    await expect(remaining.getByRole("checkbox", { name: "Сжать изображение" })).not.toBeChecked();
-    await expect(remaining).not.toContainText("panorama.jpg");
-    await expect(remaining.getByTestId("media-send-limit-notice")).toHaveCount(0);
-    await remaining.getByRole("button", { name: "Отправить" }).click();
-
-    await expect.poll(() => backend.inserts.length).toBe(1);
-    await expectOriginalUpload(page, backend, north);
-    const handed = await probedUploads(page);
-    expect(handed.filter((upload) => upload.size > LIMIT), "the oversized original was never handed to storage").toHaveLength(0);
-    expect(
-      handed.filter((upload) => !upload.path.endsWith(".preview.webp")).map((upload) => upload.size),
-      "one original went, and it is the photo",
-    ).toEqual([north.buffer.length]);
-  });
-
-  test("a desktop's «Файл» stages the originals without asking, and refuses one over 50 MB with the menu's way out", async ({ page }) => {
-    const backend = await installBackend(page);
-    await openChat(page);
-    test.skip(await isCoarsePointer(page), "a phone's «Файл» is pinned above");
-
-    // «Файл» says «Без сжатия» and means it on every device: a send dialog
-    // would only ask again what the item already answered (D-119).
-    const north = await testPhoto("north.png", 250);
-    const panorama = oversizedFile("panorama.jpg");
-    await page.getByRole("button", { name: "Прикрепить" }).click();
-    await chooseFromMenu(page, "Файл", [onDisk(north), panorama]);
+    const facade = await testPhoto("facade.png", 120);
+    const sheet = await openSheet(page);
+    await sheet.getByRole("tab", { name: "Файл", exact: true }).click();
+    await pickInto(page, '[data-attach-entry="file"]', [panorama, onDisk(facade)]);
+    await expect(sheet.locator("[data-attach-file-picks] [role='checkbox']")).toHaveCount(2);
+    await sheet.getByTestId("attach-send").click();
 
     const alert = page.getByRole("dialog").filter({ hasText: "Файл больше 50 МБ" });
     await expect(alert).toBeVisible();
     await expect(alert).toContainText("panorama.jpg");
-    await expect(alert, "the way out named is the menu on the screen, not a dialog that never opened").toContainText("«Фото или видео»");
+    await expect(alert).toContainText("51 МБ");
+    await expect(alert).toContainText("до 50 МБ");
+    // The way out named is the one on the screen in front of the person, and the
+    // dialog's box is not it — there is no dialog any more.
+    await expect(alert).toContainText("«Галереи»");
     await expect(alert).not.toContainText("«Сжать изображение»");
     await alert.getByRole("button", { name: "Понятно" }).click();
-    await expect(page.getByTestId("media-send-dialog"), "nothing asks about compression").toHaveCount(0);
 
-    const staged = page.getByTestId("staged-attachment-item");
-    await expect(staged).toHaveCount(1);
-    await expect(staged).toContainText("без сжатия");
-    expect(backend.uploads, "nothing is uploaded before the person sends").toHaveLength(0);
-    await page.getByRole("button", { name: "Отправить" }).click();
-
+    // The one file does not hold the rest of the pick hostage.
     await expect.poll(() => backend.inserts.length).toBe(1);
-    await expectOriginalUpload(page, backend, north);
-    expect(backend.inserts[0]).toMatchObject({ media_metadata: { uncompressed: true, optimized: false } });
+    await expectOriginalUpload(page, backend, facade);
+    const handed = await probedUploads(page);
+    expect(handed.filter((upload) => upload.size > LIMIT), "the oversized original was handed to storage").toHaveLength(0);
+    expect(
+      handed.filter((upload) => !upload.path.endsWith(".preview.webp")).map((upload) => upload.size),
+      "one original went, and it is the photo",
+    ).toEqual([facade.buffer.length]);
   });
 
-  test("a phone's original JPEG leaves without the place it was taken, and with nothing else changed", async ({ page }) => {
+  test("an original JPEG leaves without the place it was taken, and with nothing else changed", async ({ page }) => {
     const backend = await installBackend(page);
     await openChat(page);
-    test.skip(!(await isCoarsePointer(page)), "the attach menu choice is the phone's shape");
 
     const site = await locatedPhoto("site.jpg");
-    await page.getByRole("button", { name: "Прикрепить" }).click();
-    await chooseFromMenu(page, "Файл", [site]);
-    await expect(page.getByTestId("staged-attachment-item")).toHaveCount(1);
-    await page.getByRole("button", { name: "Отправить" }).click();
-
-    await expect.poll(() => backend.inserts.length).toBe(1);
-    await expectLocationRemoved(page, backend, site);
-  });
-
-  test("a desktop's original JPEG leaves without the place it was taken, and with nothing else changed", async ({ page }) => {
-    const backend = await installBackend(page);
-    await openChat(page);
-    test.skip(await isCoarsePointer(page), "the send dialog is the desktop's shape");
-
-    const site = await locatedPhoto("site.jpg");
-    await page.getByRole("button", { name: "Прикрепить" }).click();
-    await chooseFromMenu(page, "Фото или видео", [site]);
-    const dialog = sendDialog(page, "Отправить фото");
-    await dialog.getByRole("checkbox", { name: "Сжать изображение" }).uncheck();
-    await dialog.getByRole("button", { name: "Отправить" }).click();
+    const sheet = await openSheet(page);
+    await sheet.getByRole("tab", { name: "Файл", exact: true }).click();
+    await pickInto(page, '[data-attach-entry="file"]', [site]);
+    await sheet.getByTestId("attach-send").click();
 
     await expect.poll(() => backend.inserts.length).toBe(1);
     await expectLocationRemoved(page, backend, site);
@@ -341,25 +228,19 @@ async function openChat(page: Page) {
   await expect(page.locator('[data-message-bubble="true"]').filter({ hasText: GREETING })).toBeVisible();
 }
 
-async function isCoarsePointer(page: Page): Promise<boolean> {
-  return page.evaluate(() => window.matchMedia("(pointer: coarse)").matches);
+/** «Прикрепить» opens the sheet, on every shell and with nothing to switch on. */
+async function openSheet(page: Page): Promise<Locator> {
+  await page.getByRole("button", { name: "Прикрепить" }).click();
+  const sheet = page.getByTestId("attach-sheet");
+  await expect(sheet).toBeVisible();
+  return sheet;
 }
 
-async function attachMenuLabels(page: Page): Promise<string[]> {
-  const menu = page.getByTestId("composer-attach-menu");
-  await expect(menu).toBeVisible();
-  // A hint under an item reads as a line of its own; one space stands for any break.
-  return (await menu.getByRole("button").allInnerTexts()).map((label) => label.replace(/\s+/g, " ").trim());
-}
-
-async function chooseFromMenu(page: Page, item: string, files: Array<PickedFile | string>) {
+/** Picks into one of the sheet's entries, which is where every system picker is opened from. */
+async function pickInto(page: Page, entry: string, files: Array<PickedFile | string>) {
   const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: item, exact: true }).click();
+  await page.locator(entry).click();
   await (await chooser).setFiles(files as Parameters<Awaited<typeof chooser>["setFiles"]>[0]);
-}
-
-function sendDialog(page: Page, title: string): Locator {
-  return page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
 }
 
 function sentPhotoBubble(page: Page, caption?: string): Locator {

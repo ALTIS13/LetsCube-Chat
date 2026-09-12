@@ -7,7 +7,6 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
-  useId,
   KeyboardEvent,
   ClipboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -20,17 +19,17 @@ const MAX_COMPOSER_HEIGHT_PX = 140;
 import { cn } from "@/lib/utils";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { CameraCaptureModal } from "./CameraCaptureModal";
+import AttachSheet from "./attach/AttachSheet";
 import { VideoMessageRecorderModal } from "./VideoMessageRecorderModal";
 import { useChatMediaPlayback, VideoCircleProgressRing, type ChatMediaPlaybackItem } from "./ChatMediaPlayback";
 import { useAppStore } from "@/store/app.store";
 import { useMuteState } from "@/hooks/useMuteState";
-import { KubGlassLayer, KubIcon, type KubIconName } from "@/components/kub";
+import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { showAppAlert } from "@/lib/appDialogs";
 import { applyAudioOutputDevice } from "@/lib/audioOutput";
 import { formatReplyMessagePreview } from "@/lib/messagePreview";
 import { DEFAULT_MEDIA_QUALITY } from "@/lib/mediaQuality";
 import { isNativeApp, microphonePermissionHelp } from "@/lib/platform/capabilities";
-import { getMessengerLocationErrorMessage, getMessengerPosition } from "@/lib/platform/geolocation";
 import { useAudioSettings } from "@/hooks/useAudioSettings";
 import { useVoiceRecorder, formatVoiceDuration as formatRecorderDuration } from "@/hooks/useVoiceRecorder";
 import {
@@ -55,6 +54,7 @@ import { messageActorDisplayName, resolveMessageActor } from "@/lib/messageActor
 import { forwardDraftTitle } from "@/lib/messageActions";
 import { CAPSULE_CONTROL_GLASS, CAPSULE_GLASS } from "@/lib/chatChrome";
 import { FOCUS_RING } from "@/lib/controlSurface";
+import { locationMessageText, type AttachIncoming, type AttachSendRequest } from "@/lib/attachSheet";
 
 const DRAFT_PREFIX = "kub:draft:";
 const draftKey = (chatId: string) => `${DRAFT_PREFIX}${chatId}`;
@@ -93,6 +93,11 @@ interface MessageInputProps {
    */
   forwardDraft?: MessageWithSender[] | null;
   onCancelForward?: () => void;
+  /** The attach sheet (D-122): sends what the sheet picked, with its caption, compressed or as originals. */
+  onSendMedia?: (request: AttachSendRequest) => void | Promise<void>;
+  /** The attach sheet (D-122): photos pasted or dropped, which open the sheet as their send step. */
+  incomingMedia?: AttachIncoming | null;
+  onIncomingMediaTaken?: () => void;
 }
 
 export function MessageInput({
@@ -114,10 +119,15 @@ export function MessageInput({
   onFocusChange,
   forwardDraft = null,
   onCancelForward,
+  onSendMedia,
+  incomingMedia = null,
+  onIncomingMediaTaken,
 }: MessageInputProps) {
   const [text, setText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
+  const [sheetWebcamShot, setSheetWebcamShot] = useState<AttachIncoming | null>(null);
+  const cameraForSheetRef = useRef(false);
   const [showVoice, setShowVoice] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [showVideoMessage, setShowVideoMessage] = useState(false);
@@ -136,13 +146,6 @@ export function MessageInput({
   const voiceHold = useVoiceRecorder();
   const [isComposing, setIsComposing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const photoInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  // Which menu item opened the picker: «Файл» sends as it is, as Telegram's file
-  // picker does (D-119). Set by every item that opens a picker, so a cancelled
-  // pick cannot carry over.
-  const pickerCompressRef = useRef(true);
-  const attachHintId = useId();
   const modeFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchRecordingStartedRef = useRef(false);
@@ -282,17 +285,6 @@ export function MessageInput({
     setText(preEditTextRef.current ?? "");
     preEditTextRef.current = null;
   }, [setEditingMessage]);
-
-  const stagePickedFiles = useCallback((fileList: FileList | null) => {
-    if (!fileList?.length || !onStageFiles) return;
-    const scopeToken = delayedAttachmentScopeTokenRef.current;
-    if (!scopeToken || !composerSendScope.isActive(scopeToken)) return;
-    delayedAttachmentScopeTokenRef.current = null;
-    const compress = pickerCompressRef.current;
-    pickerCompressRef.current = true;
-    onStageFiles(Array.from(fileList), "picker", { compress });
-    setShowAttach(false);
-  }, [composerSendScope, onStageFiles]);
 
   const stageCameraFile = useCallback((file: File, scopeToken: ComposerSendToken | null) => {
     if (!onStageFiles) return;
@@ -571,24 +563,39 @@ export function MessageInput({
     if (holdRecorderStateRef.current?.locked !== true) stopRecorderHold();
   }, [stopRecorderHold]);
 
-  const handleLocation = useCallback(() => {
+  // ── the attach sheet (D-122) ──────────────────────────────────────────────
+
+  const sendFromSheet = useCallback((request: AttachSendRequest) => {
+    setShowAttach(false);
+    if (onSendMedia) {
+      void onSendMedia(request);
+      return;
+    }
+    onStageFiles?.(request.files, request.source === "drop" ? "paste" : request.source, { compress: request.compress });
+  }, [onSendMedia, onStageFiles]);
+
+  // The sheet shows the place first; this sends the message the one-tap item
+  // sent, and only from the sheet's own row.
+  const sendLocationFromSheet = useCallback((latitude: number, longitude: number) => {
     const scopeToken = composerSendScope.capture();
     setShowAttach(false);
-    void (async () => {
-      let position: Awaited<ReturnType<typeof getMessengerPosition>>;
-      try {
-        position = await getMessengerPosition();
-      } catch (error) {
-        if (!composerSendScope.isActive(scopeToken)) return;
-        showAppAlert(getMessengerLocationErrorMessage(error), "Геолокация");
-        return;
-      }
-      const { latitude, longitude } = position;
-      await runComposerCompletionIfCurrent(composerSendScope, scopeToken, () => (
-        onSend(`📍 Местоположение: https://maps.google.com/?q=${latitude},${longitude}`)
-      ));
-    })();
+    void runComposerCompletionIfCurrent(composerSendScope, scopeToken, () => onSend(locationMessageText(latitude, longitude)));
   }, [composerSendScope, onSend]);
+
+  // A desktop has no camera app behind the file input; the webcam dialog stands
+  // in, and its shot goes back into the sheet's grid.
+  const openWebcamForSheet = useCallback(() => {
+    cameraForSheetRef.current = true;
+    delayedAttachmentScopeTokenRef.current = composerSendScope.capture();
+    setShowCamera(true);
+  }, [composerSendScope]);
+
+  // Photos pasted or dropped open the sheet as their send step.
+  useEffect(() => {
+    if (!incomingMedia) return;
+    setShowEmoji(false);
+    setShowAttach(true);
+  }, [incomingMedia]);
 
   const handleSend = useCallback(async () => {
     const sendToken = composerSendScope.capture();
@@ -774,50 +781,6 @@ export function MessageInput({
     );
   }
 
-  // As in Telegram: the gallery sends compressed and asks nothing, and «Файл»
-  // sends as it is and says so under its name. Testers did not want a quality to
-  // choose — a stock camera's photo goes compressed without a thought, and the
-  // original is a function a person reaches for (D-119). On a desktop
-  // «Фото или видео» still opens the send dialog with «Сжать изображение»,
-  // Telegram Desktop's own checkbox.
-  const attachItems: Array<{ icon: KubIconName; label: string; hint?: string; tone: string; action: () => void }> = [
-    { icon: "image",   label: "Фото или видео", tone: "var(--kub-cyan)",   action: () => {
-      pickerCompressRef.current = true;
-      delayedAttachmentScopeTokenRef.current = composerSendScope.capture();
-      photoInputRef.current?.click();
-    } },
-    { icon: "file",    label: "Файл", hint: "Без сжатия", tone: "var(--kub-pink)", action: () => {
-      pickerCompressRef.current = false;
-      delayedAttachmentScopeTokenRef.current = composerSendScope.capture();
-      fileInputRef.current?.click();
-    } },
-    { icon: "camera",  label: "Сделать фото",    tone: "var(--kub-danger)", action: () => {
-      delayedAttachmentScopeTokenRef.current = composerSendScope.capture();
-      setShowCamera(true);
-      setShowAttach(false);
-      setShowEmoji(false);
-    } },
-    { icon: "voice",   label: "Голосовое",       tone: "var(--kub-cyan)",   action: () => {
-      if (hasStagedVoice) {
-        showAppAlert("Удалите текущую запись или используйте «Перезаписать».", "Голосовое сообщение");
-        return;
-      }
-      voiceRecordingScopeTokenRef.current = composerSendScope.capture();
-      setShowVoice(true);
-      setShowAttach(false);
-      setShowEmoji(false);
-    } },
-    { icon: "video",   label: "Записать видео",   tone: "var(--kub-pink)",   action: () => {
-      videoRecordingScopeTokenRef.current = composerSendScope.capture();
-      setVideoRecorderVariant("regular");
-      setVideoAutoStart(false);
-      setVideoAutoAddOnStop(false);
-      setShowVideoMessage(true);
-      setShowAttach(false);
-      setShowEmoji(false);
-    } },
-    { icon: "mapPin",  label: "Местоположение",  tone: "var(--kub-online)", action: handleLocation },
-  ];
 
   return (
     // A plain box, and never a frosted one. This subtree opens the camera and
@@ -854,20 +817,24 @@ export function MessageInput({
         </div>
       )}
 
-      <input ref={photoInputRef} type="file" accept="image/*,video/*" multiple className="hidden"
-        onChange={(e) => { stagePickedFiles(e.target.files); e.target.value = ""; }} />
-      <input ref={fileInputRef} type="file" multiple className="hidden"
-        onChange={(e) => { stagePickedFiles(e.target.files); e.target.value = ""; }} />
-
       <CameraCaptureModal
         key={`camera:${chatId}`}
         open={showCamera}
         onClose={() => {
           if (!renderedDelayedAttachmentScopeToken || !composerSendScope.isActive(renderedDelayedAttachmentScopeToken)) return;
           delayedAttachmentScopeTokenRef.current = null;
+          cameraForSheetRef.current = false;
           setShowCamera(false);
         }}
-        onAddFile={(file) => stageCameraFile(file, renderedDelayedAttachmentScopeToken)}
+        onAddFile={(file) => {
+          // A webcam shot taken from the attach sheet goes back into its grid.
+          if (cameraForSheetRef.current && showAttach) {
+            cameraForSheetRef.current = false;
+            setSheetWebcamShot({ id: Date.now(), files: [file], source: "camera" });
+            return;
+          }
+          stageCameraFile(file, renderedDelayedAttachmentScopeToken);
+        }}
       />
       <VideoMessageRecorderModal
         key={`video:${chatId}`}
@@ -906,40 +873,17 @@ export function MessageInput({
       />
 
       {showAttach && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setShowAttach(false)} />
-          <div data-testid="composer-attach-menu" className="mx-3 mb-2 rounded-2xl relative z-20 overflow-hidden bg-[var(--kub-raised)] border border-[color:var(--kub-border-color)] kub-glow-soft">
-            {attachItems.map(({ icon, label, hint, tone, action }) => (
-              <button
-                key={label}
-                onClick={action}
-                type="button"
-                // A hint describes its item without renaming it: «Файл» stays «Файл».
-                aria-label={hint ? label : undefined}
-                aria-describedby={hint ? `${attachHintId}-${icon}` : undefined}
-                className="flex items-center gap-3 w-full px-4 py-3 text-sm transition-colors kub-raise-hover text-[color:var(--kub-text)]"
-              >
-                <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{
-                    background: `color-mix(in srgb, ${tone} 18%, transparent)`,
-                    color: tone,
-                  }}
-                >
-                  <KubIcon name={icon} size={15} tone="currentColor" />
-                </div>
-                <span className="flex min-w-0 flex-col items-start text-left">
-                  <span>{label}</span>
-                  {hint && (
-                    <span id={`${attachHintId}-${icon}`} className="text-[12px] leading-4 text-[color:var(--kub-muted)]">
-                      {hint}
-                    </span>
-                  )}
-                </span>
-              </button>
-            ))}
-          </div>
-        </>
+        <AttachSheet
+          incoming={sheetWebcamShot ?? incomingMedia}
+          onIncomingTaken={() => {
+            if (sheetWebcamShot) setSheetWebcamShot(null);
+            else onIncomingMediaTaken?.();
+          }}
+          onClose={() => setShowAttach(false)}
+          onSendMedia={sendFromSheet}
+          onSendLocation={sendLocationFromSheet}
+          onOpenWebcam={openWebcamForSheet}
+        />
       )}
 
       <div className="px-3 pb-3 pt-2 md:px-4">

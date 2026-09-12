@@ -10,7 +10,7 @@ import {
   exceedsOriginalLimit,
   isCompressibleMediaType,
   isUncompressedMedia,
-  mediaSendDialogTitle,
+  mediaSendTitle,
   mediaSendShape,
   originalLimitAlertTitle,
   originalLimitMessage,
@@ -19,7 +19,6 @@ import {
   planAttachmentPreparation,
   readOriginalPreview,
   shouldBuildOriginalPreview,
-  shouldConfirmMediaSend,
   splitByOriginalLimit,
 } from "../../artifacts/kub/src/lib/mediaCompression.ts";
 import { MEDIA_BUBBLE_MAX_HEIGHT_PX } from "../../artifacts/kub/src/lib/mediaBubbleLayout.ts";
@@ -29,9 +28,9 @@ import { applyVideoQualityToAttachments } from "../../artifacts/kub/src/lib/medi
  * Testers' complaint 2: photos and videos could only be sent compressed.
  *
  * Approved by the owner: compressed stays the default, and a person can send
- * the original, as in Telegram — «Файл» in the attach menu, marked
- * «Без сжатия», and a «Сжать изображение» checkbox in a desktop's send
- * dialog; no quality is ever asked for (D-119). The original goes as
+ * the original, as in Telegram — the attach sheet's «Файл» tab, and
+ * «Отправить без сжатия» under its «…»; no quality is ever asked for
+ * (D-119, D-122). The original goes as
  * it is, up to 50 MB a file. Every decision that makes that true is here; the
  * browser half is `tests/e2e/media-send-without-compression.spec.ts`.
  */
@@ -86,49 +85,44 @@ test("a file takes the compressed path by default and the original path only whe
   assert.equal(isCompressibleMediaType(""), false);
 });
 
-test("an original over the limit says what is wrong and what to do, where it was asked for", () => {
+test("an original over the limit says what is wrong and where the compressed way is", () => {
   const photo = { name: "IMG_2041.JPG", size: 63 * MiB, type: "image/jpeg" };
 
   // Every space between a number and its unit, and inside a quoted control name,
   // is non-breaking: rendered, «до 50 | МБ» and «Фото или | видео» had split
   // across lines in the dialog and in the phone's alert.
-  // «Файл» asks for the original from the attach menu on every device (D-119),
-  // so a refusal there names the menu's way out; the dialog names its box.
-  const menu = originalLimitMessage(photo, "menu");
-  assert.ok(menu, "a 63 MB original is refused");
-  assert.match(menu, /IMG_2041\.JPG/);
-  assert.match(menu, /63\u00a0МБ/);
-  assert.match(menu, /до\u00a050\u00a0МБ/);
-  assert.match(menu, /со сжатием/);
-  assert.match(menu, /«Фото\u00a0или\u00a0видео»/, "the menu's refusal says where the compressed choice is");
-  assert.doesNotMatch(menu, /Сжать/, "a menu has no box to tick, on a desktop either");
+  // The attach sheet is the only place an original is asked for (D-122), so a
+  // refusal names the compressed way that is on the screen: «Галерея».
+  const sheet = originalLimitMessage(photo);
+  assert.ok(sheet, "a 63 MB original is refused");
+  assert.match(sheet, /IMG_2041\.JPG/);
+  assert.match(sheet, /63\u00a0МБ/);
+  assert.match(sheet, /до\u00a050\u00a0МБ/);
+  // The sheet's refusal opens with its offer, where the menu's finished on it.
+  assert.match(sheet, /[Сс]о сжатием/);
+  assert.ok(sheet.includes("«Галереи»"), "the refusal does not say where the compressed way is");
+  assert.doesNotMatch(sheet, /Сжать/, "a menu has no box to tick, on a desktop either");
 
-  const dialog = originalLimitMessage(photo, "dialog");
-  assert.ok(dialog);
-  assert.match(dialog, /IMG_2041\.JPG/);
-  assert.match(dialog, /«Сжать\u00a0изображение»/, "the dialog's refusal names the box it is looking at");
-  assert.match(dialog, /уберите/);
-
-  assert.equal(originalLimitMessage({ ...photo, size: 50 * MiB }, "menu"), null);
+  assert.equal(originalLimitMessage({ ...photo, size: 50 * MiB }), null);
 
   // Rounding must never print the limit as the size of a file over it.
-  const barelyOver = originalLimitMessage({ ...photo, size: 50 * MiB + 1 }, "menu");
+  const barelyOver = originalLimitMessage({ ...photo, size: 50 * MiB + 1 });
   assert.ok(barelyOver);
   assert.match(barelyOver, /51\u00a0МБ/);
 
-  const video = originalLimitMessage({ name: "trip.mp4", size: 120 * MiB, type: "video/mp4" }, "menu");
+  const video = originalLimitMessage({ name: "trip.mp4", size: 120 * MiB, type: "video/mp4" });
   assert.ok(video);
-  assert.match(video, /со сжатием/);
+  assert.match(video, /[Сс]о сжатием/);
   assert.match(video, /видео/);
 
   // Over the compressed limit too: compression is not offered as the way out.
-  const huge = originalLimitMessage({ name: "trip.mp4", size: 300 * MiB, type: "video/mp4" }, "dialog");
+  const huge = originalLimitMessage({ name: "trip.mp4", size: 300 * MiB, type: "video/mp4" });
   assert.ok(huge);
   assert.match(huge, /250\u00a0МБ/);
   assert.match(huge, /Сократите/);
   assert.doesNotMatch(huge, /Включите/);
 
-  for (const message of [menu, dialog, barelyOver, video, huge]) {
+  for (const message of [sheet, barelyOver, video, huge]) {
     assert.doesNotMatch(message, /\d МБ/, `a number is split from its unit: ${message}`);
     assert.doesNotMatch(message, /«[^»]* [^»]*»/, `a quoted control name can break: ${message}`);
     assert.doesNotMatch(message, / —/, `a dash can start a line: ${message}`);
@@ -335,37 +329,27 @@ test("a preview sits beside its original and is read from nowhere else", () => {
   assert.equal(shouldBuildOriginalPreview({ mimeType: "video/mp4", width: 1920, height: 1080, size: 9_000_000 }), false);
 });
 
-test("a phone stages a pick at once, and a desktop asks in the send dialog", () => {
+test("a phone and a desktop are told apart by the pointer, not the width", () => {
+  // Both now do the same thing with a pick — the attach sheet is the send step
+  // everywhere (D-122) — but the sheet itself is drawn as a sheet or as a panel.
   assert.equal(mediaSendShape((query) => ({ matches: query === "(pointer: coarse)" })), "phone");
   assert.equal(mediaSendShape(() => ({ matches: false })), "desktop");
   assert.equal(mediaSendShape(null), "desktop");
   assert.equal(mediaSendShape(undefined), "desktop");
-
-  const photo = [{ type: "image/png" }];
-  assert.equal(shouldConfirmMediaSend({ shape: "desktop", source: "picker", files: photo }), true);
-  assert.equal(shouldConfirmMediaSend({ shape: "desktop", source: "paste", files: photo }), true);
-  assert.equal(shouldConfirmMediaSend({ shape: "desktop", source: "drop", files: photo }), true);
-  assert.equal(shouldConfirmMediaSend({ shape: "desktop", source: "camera", files: photo }), false, "a shot from the camera is already confirmed");
-  assert.equal(shouldConfirmMediaSend({ shape: "phone", source: "picker", files: photo }), false);
-  assert.equal(shouldConfirmMediaSend({ shape: "desktop", source: "picker", files: [{ type: "application/pdf" }] }), false);
-  assert.equal(
-    shouldConfirmMediaSend({ shape: "desktop", source: "picker", files: [{ type: "application/pdf" }, { type: "image/jpeg" }] }),
-    true,
-  );
 });
 
-test("the send dialog's title counts what it sends", () => {
+test("the send button's title counts what it sends", () => {
   const png = { type: "image/png" };
   const mp4 = { type: "video/mp4" };
   const pdf = { type: "application/pdf" };
-  assert.equal(mediaSendDialogTitle([png]), "Отправить фото");
-  assert.equal(mediaSendDialogTitle([png, png]), "Отправить 2 фото");
-  assert.equal(mediaSendDialogTitle([mp4]), "Отправить видео");
-  assert.equal(mediaSendDialogTitle([mp4, mp4, mp4]), "Отправить 3 видео");
-  assert.equal(mediaSendDialogTitle([png, mp4]), "Отправить 2 файла");
-  assert.equal(mediaSendDialogTitle([png, mp4, pdf, png, png]), "Отправить 5 файлов");
-  assert.equal(mediaSendDialogTitle([pdf]), "Отправить файл");
-  assert.equal(mediaSendDialogTitle(Array.from({ length: 21 }, () => pdf)), "Отправить 21 файл");
+  assert.equal(mediaSendTitle([png]), "Отправить фото");
+  assert.equal(mediaSendTitle([png, png]), "Отправить 2 фото");
+  assert.equal(mediaSendTitle([mp4]), "Отправить видео");
+  assert.equal(mediaSendTitle([mp4, mp4, mp4]), "Отправить 3 видео");
+  assert.equal(mediaSendTitle([png, mp4]), "Отправить 2 файла");
+  assert.equal(mediaSendTitle([png, mp4, pdf, png, png]), "Отправить 5 файлов");
+  assert.equal(mediaSendTitle([pdf]), "Отправить файл");
+  assert.equal(mediaSendTitle(Array.from({ length: 21 }, () => pdf)), "Отправить 21 файл");
 });
 
 test("choosing a video quality does not re-compress an original", () => {

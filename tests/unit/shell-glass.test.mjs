@@ -205,8 +205,10 @@ const covers = [
 const raised = [
   // Eight since 2026-09-11: the forward bar joined the reply and edit strips,
   // on the same composer and nowhere else. Seven since 2026-09-11: the video
-  // quality selector's panel went with D-119, when sending stopped asking.
-  ["components/chat/MessageInput.tsx", "bg-[var(--kub-raised)]", 7],
+  // quality selector's panel went with D-119, when sending stopped asking. Six
+  // since 2026-09-12: the attach menu's own panel went with D-122, when the
+  // attach sheet took its place — the sheet wears glass, not a raised fill.
+  ["components/chat/MessageInput.tsx", "bg-[var(--kub-raised)]", 6],
   // The active tab pill of the bot settings panel. Radix drives it from
   // `data-[state=active]`, and `.kub-raise` is a plain class rather than a
   // Tailwind utility, so no variant can put the veil behind that attribute —
@@ -246,7 +248,9 @@ const veiled = [
   // layer, so the capsule steps its glass instead (`CAPSULE_CONTROL_GLASS`,
   // held in tests/unit/chat-chrome.test.mts).
   ["components/chat/ChatHeader.tsx", 2],
-  ["components/chat/MessageInput.tsx", 8],
+  // Seven since 2026-09-12: the attach menu's items went with D-122, and the
+  // sheet that took their place steps its own glass rather than taking the veil.
+  ["components/chat/MessageInput.tsx", 7],
   ["components/chat/ChatInfoPanel.tsx", 20],
   // Two, down from eleven on 2026-09-11: the hover cluster, the per-message
   // context menu and its reaction pickers left the bubble for

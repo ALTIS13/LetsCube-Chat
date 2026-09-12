@@ -60,19 +60,35 @@ test("sending asks for no quality: no selector, no second gallery item, no remem
   }
 });
 
-test("«Файл» sends the original and says so under its name, and the gallery stays compressed (D-119)", () => {
+test("the attach menu is gone: the sheet is the attach flow, and «Файл» still says what it does (D-119, D-122)", () => {
   const input = source("components/chat/MessageInput.tsx");
-  const file = /\{ icon: "file",[\s\S]*?\} \},/.exec(input)?.[0] ?? "";
-  const gallery = /\{ icon: "image",[\s\S]*?\} \},/.exec(input)?.[0] ?? "";
-  assert.match(file, /label: "Файл"/);
-  assert.match(file, /hint: "Без сжатия"/);
-  assert.match(file, /pickerCompressRef\.current = false;/);
-  assert.match(file, /fileInputRef\.current\?\.click\(\);/);
-  assert.match(gallery, /pickerCompressRef\.current = true;/, "the gallery goes compressed without a question");
-  // The hint is the item's description, not part of its name.
-  assert.match(input, /aria-label=\{hint \? label : undefined\}/);
-  assert.match(input, /aria-describedby=\{hint \? `\$\{attachHintId\}-\$\{icon\}` : undefined\}/);
-  assert.match(input, /id=\{`\$\{attachHintId\}-\$\{icon\}`\}/);
+  // Every part of the menu of buttons, and the switch that used to stand in
+  // front of the sheet. A production build no longer decides anything here.
+  for (const gone of [
+    "composer-attach-menu",
+    "attachItems",
+    "pickerCompressRef",
+    "attachHintId",
+    "useAttachSheetLook",
+    "import.meta.env.DEV",
+  ]) {
+    assert.equal(input.includes(gone), false, `MessageInput still carries ${gone}`);
+  }
+  assert.ok(input.includes('import AttachSheet from "./attach/AttachSheet";'), "the sheet is not the composer's attach flow");
+  assert.ok(input.includes("{showAttach && ("), "the sheet is drawn behind a condition of its own");
+
+  // «Файл» still says it sends without compression, in the sheet's own rows.
+  const sheet = source("components/chat/attach/AttachSheet.tsx");
+  assert.ok(sheet.includes("Фото и видео без сжатия"), "«Файл» no longer says it sends the originals");
+  assert.ok(sheet.includes('title: "Выбрать из Галереи"'), "«Файл» lost the source that sends the originals");
+
+  // And a pick reaches the same place whatever the pointer is: the desktop send
+  // dialog is retired, so nothing here asks about a shape any more.
+  const incoming = source("hooks/useIncomingMediaFiles.ts");
+  for (const gone of ["mediaSendShape", "shouldConfirmMediaSend", "MediaSendDialog"]) {
+    assert.equal(incoming.includes(gone), false, `a desktop pick is routed by ${gone} again`);
+  }
+  assert.ok(incoming.includes("opensAttachSheet"), "files arriving at the composer no longer open the sheet");
 });
 
 test("under a finger nothing draws a playback volume, and nothing hidden keeps it down (D-118)", () => {

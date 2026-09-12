@@ -247,8 +247,7 @@ test.describe("the send path of photos and videos", () => {
 
     const facade = await testPhoto("facade.png", 205, 2400, 1800);
     await pickFiles(page, [facade]);
-    await expect(page.getByTestId("staged-attachment-item")).toContainText("без сжатия");
-    await page.getByRole("button", { name: "Отправить" }).click();
+    await sendPickedFiles(page, 1);
     await expect.poll(() => backend.inserts.length).toBe(1);
 
     const original = backend.uploads.find((upload) => upload.name === "facade.png");
@@ -350,24 +349,30 @@ async function openChat(page: Page) {
   await expect(page.locator('[data-message-bubble="true"]').filter({ hasText: GREETING })).toBeVisible();
 }
 
-async function isCoarsePointer(page: Page): Promise<boolean> {
-  return page.evaluate(() => window.matchMedia("(pointer: coarse)").matches);
-}
-
-/** «Прикрепить» → «Фото или видео»: one place to change when the attach menu becomes a sheet. */
-async function pickPhotosOrVideos(page: Page, files: PickedFile[]) {
-  await chooseFromAttachMenu(page, "Фото или видео", files);
-}
-
-/** «Прикрепить» → «Файл»: originals, without compression, on every device (D-119). */
-async function pickFiles(page: Page, files: PickedFile[]) {
-  await chooseFromAttachMenu(page, "Файл", files);
-}
-
-async function chooseFromAttachMenu(page: Page, item: string, files: PickedFile[]) {
+/** «Прикрепить» opens the attach sheet, on every shell and with nothing to switch on (D-122). */
+async function openAttachSheet(page: Page): Promise<Locator> {
   await page.getByRole("button", { name: "Прикрепить" }).click();
+  const sheet = page.getByTestId("attach-sheet");
+  await expect(sheet).toBeVisible();
+  return sheet;
+}
+
+/** The sheet's «Галерея» → «Фото и видео»: picked into its grid, sent compressed. */
+async function pickPhotosOrVideos(page: Page, files: PickedFile[]) {
+  await openAttachSheet(page);
+  await pickInto(page, '[data-attach-entry="library"]', files);
+}
+
+/** The sheet's «Файл» tab: originals, without compression, on every device (D-119). */
+async function pickFiles(page: Page, files: PickedFile[]) {
+  const sheet = await openAttachSheet(page);
+  await sheet.getByRole("tab", { name: "Файл", exact: true }).click();
+  await pickInto(page, '[data-attach-entry="file"]', files);
+}
+
+async function pickInto(page: Page, entry: string, files: PickedFile[]) {
   const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: item, exact: true }).click();
+  await page.locator(entry).click();
   await (await chooser).setFiles(files);
 }
 
@@ -395,17 +400,25 @@ function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-/** Sends what was picked, compressed as it defaults to: a phone from the composer, a desktop from its send dialog. */
+/**
+ * Sends what the sheet holds, compressed as it defaults to. One path on every
+ * shell now: the desktop send dialog went with D-122, and a desktop presses the
+ * same button a phone does.
+ */
 async function sendPicked(page: Page, count: number) {
-  if (await isCoarsePointer(page)) {
-    await expect(page.getByTestId("staged-attachment-item")).toHaveCount(count);
-    await page.getByRole("button", { name: "Отправить" }).click();
-    return;
-  }
-  const dialog: Locator = page.getByRole("dialog").filter({ has: page.getByTestId("media-send-dialog") });
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "Отправить" }).click();
-  await expect(page.getByTestId("media-send-dialog")).toHaveCount(0);
+  const sheet = page.getByTestId("attach-sheet");
+  await expect(sheet.locator("[data-attach-pick]")).toHaveCount(count);
+  await sheet.getByTestId("attach-send").click();
+  await expect(sheet, "the sheet stayed open after its send").toHaveCount(0);
+}
+
+/** Sends what «Файл» holds: the picked bytes, with no question about compression. */
+async function sendPickedFiles(page: Page, count: number) {
+  const sheet = page.getByTestId("attach-sheet");
+  await expect(sheet.locator("[data-attach-file-picks] [role='checkbox']")).toHaveCount(count);
+  await expect(sheet.getByTestId("attach-more"), "«Файл» asked about compression").toHaveCount(0);
+  await sheet.getByTestId("attach-send").click();
+  await expect(sheet).toHaveCount(0);
 }
 
 function uploadOf(backend: Backend, insert: Record<string, unknown> | undefined): Upload | undefined {

@@ -48,6 +48,7 @@ test.describe("KUB video recorders", () => {
   });
 
   test("records a regular video from the attachment menu into rectangular staged attachments", async ({ page }) => {
+    test.skip(true, "D-122 retired the attach menu; a rectangular video has no entry until the recording task gives it one");
     const consoleErrors: string[] = [];
     page.on("console", (message) => {
       if (message.type() === "error") consoleErrors.push(message.text());
@@ -379,6 +380,7 @@ test.describe("KUB video recorders", () => {
   });
 
   test("shows a friendly state when regular video recording is unavailable", async ({ page }) => {
+    test.skip(true, "D-122 retired the attach menu; a rectangular video has no entry until the recording task gives it one");
     await page.addInitScript(() => {
       Object.defineProperty(window, "MediaRecorder", {
         configurable: true,

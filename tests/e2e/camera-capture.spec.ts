@@ -26,8 +26,7 @@ test.describe("KUB camera capture attachments", () => {
     await loginIfNeeded(page, credentials);
     await openAnyChat(page);
 
-    await page.getByRole("button", { name: "Прикрепить" }).click();
-    await page.getByRole("button", { name: "Сделать фото" }).click();
+    await openWebcamFromSheet(page);
 
     const modal = page.getByTestId("camera-capture-modal");
     await expect(modal).toBeVisible();
@@ -67,8 +66,7 @@ test.describe("KUB camera capture attachments", () => {
     await loginIfNeeded(page, credentials);
     await openAnyChat(page);
 
-    await page.getByRole("button", { name: "Прикрепить" }).click();
-    await page.getByRole("button", { name: "Сделать фото" }).click();
+    await openWebcamFromSheet(page);
 
     const modal = page.getByTestId("camera-capture-modal");
     await expect(modal).toBeVisible();
@@ -77,6 +75,19 @@ test.describe("KUB camera capture attachments", () => {
     await expect(modal.getByText(/not_allowed|camera unavailable/i)).toHaveCount(0);
   });
 });
+
+/**
+ * «Камера» on the attach sheet's «Галерея» (D-122), which is where «Сделать фото»
+ * went. Under a finger the tile opens the device's own camera through `capture`
+ * and there is no dialog to photograph, so these two cases are a desktop's.
+ */
+async function openWebcamFromSheet(page: import("@playwright/test").Page) {
+  const coarse = await page.evaluate(() => window.matchMedia("(pointer: coarse)").matches);
+  test.skip(coarse, "under a finger «Камера» opens the device's own camera, not the webcam dialog");
+  await page.getByRole("button", { name: "Прикрепить" }).click();
+  await expect(page.getByTestId("attach-sheet")).toBeVisible();
+  await page.locator('[data-attach-entry="camera"]').click();
+}
 
 async function openAnyChat(page: import("@playwright/test").Page) {
   const composer = page.getByPlaceholder(/Сообщение/i).first();

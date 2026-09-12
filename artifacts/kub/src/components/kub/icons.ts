@@ -16,6 +16,7 @@ import {
   CaretLeft,
   CaretRight,
   CaretUp,
+  ChartBarHorizontal,
   ChatCircle,
   ChatsCircle,
   ChatText,
@@ -59,6 +60,7 @@ import {
   MicrophoneSlash,
   Monitor,
   Moon,
+  MusicNotes,
   PaperPlaneRight,
   PaperPlaneTilt,
   Paperclip,
@@ -120,6 +122,7 @@ export type KubIconName =
   | "chats"
   | "check"
   | "checkCircle"
+  | "checklist"
   | "chevronDown"
   | "chevronLeft"
   | "chevronRight"
@@ -127,6 +130,7 @@ export type KubIconName =
   | "clock"
   | "close"
   | "cloud"
+  | "contact"
   | "copy"
   | "create"
   | "crown"
@@ -165,6 +169,7 @@ export type KubIconName =
   | "microphone"
   | "microphoneSlash"
   | "more"
+  | "music"
   | "muted"
   | "notifications"
   | "notificationsOff"
@@ -174,6 +179,7 @@ export type KubIconName =
   | "pin"
   | "pinOff"
   | "play"
+  | "poll"
   | "private"
   | "profile"
   | "reject"
@@ -234,6 +240,8 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   chats: { Icon: ChatsCircle },
   check: { Icon: Check },
   checkCircle: { Icon: CheckCircle },
+  // A list of tasks as a message, Telegram's «Список».
+  checklist: { Icon: ListChecks },
   chevronDown: { Icon: CaretDown },
   chevronLeft: { Icon: CaretLeft },
   chevronRight: { Icon: CaretRight },
@@ -241,6 +249,8 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   clock: { Icon: Clock },
   close: { Icon: X },
   cloud: { Icon: Cloud },
+  // A person's card sent into a chat, Telegram's «Контакт».
+  contact: { Icon: UserCircle },
   copy: { Icon: Copy },
   create: { Icon: Plus },
   crown: { Icon: Crown, weight: "fill" },
@@ -280,6 +290,7 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   microphone: { Icon: Microphone },
   microphoneSlash: { Icon: MicrophoneSlash },
   more: { Icon: DotsThreeVertical },
+  music: { Icon: MusicNotes },
   muted: { Icon: SpeakerSlash },
   notifications: { Icon: Bell },
   notificationsOff: { Icon: BellSlash },
@@ -289,6 +300,8 @@ export const KUB_ICONS: Record<KubIconName, IconEntry> = {
   pin: { Icon: PushPin, weight: "fill" },
   pinOff: { Icon: PushPinSlash },
   play: { Icon: Play, weight: "fill" },
+  // Telegram's glyph for a poll: answers as bars.
+  poll: { Icon: ChartBarHorizontal },
   private: { Icon: UserCircle },
   profile: { Icon: UserCircle },
   reject: { Icon: XCircle },

@@ -74,12 +74,6 @@ const RECODABLE_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"])
 export type MediaSendShape = "phone" | "desktop";
 export type IncomingFilesSource = "picker" | "paste" | "drop" | "camera";
 export type AttachmentPreparation = "compress" | "original" | "as-is";
-/**
- * Where a person asked for the original: «Файл» in the attach menu, on every
- * device, or a desktop's send dialog with «Сжать изображение» unticked.
- */
-export type OriginalChoiceSurface = "menu" | "dialog";
-
 function normalizedType(mimeType: string | null | undefined): string {
   return (mimeType ?? "").trim().toLowerCase();
 }
@@ -153,7 +147,6 @@ function controlName(text: string): string {
  */
 export function originalLimitMessage(
   file: { name: string; size: number; type: string },
-  surface: OriginalChoiceSurface,
 ): string | null {
   if (!exceedsOriginalLimit(file.size)) return null;
   const video = normalizedType(file.type).startsWith("video/");
@@ -162,15 +155,11 @@ export function originalLimitMessage(
   // its number: rendered, «— до | 50 МБ» had left the preposition hanging.
   const problem = `${file.name || "Файл"}\u00a0— ${formatSizeRoundedUp(file.size)}. Без сжатия можно отправить файл до\u00a0${MAX_ORIGINAL_ATTACHMENT_SIZE_LABEL}`;
   if (video && file.size > MAX_VIDEO_ATTACHMENT_BYTES) {
-    const remedy = surface === "dialog"
-      ? "Сократите видео или уберите его из списка."
-      : "Сократите видео и попробуйте снова.";
+    const remedy = "Сократите видео и попробуйте снова.";
     return `${problem}, со сжатием\u00a0— видео до\u00a0${keepTogether(MAX_VIDEO_ATTACHMENT_SIZE_LABEL)}. ${remedy}`;
   }
-  if (surface === "dialog") {
-    return `${problem}. Включите ${controlName("Сжать изображение")} или уберите ${subject} из списка.`;
-  }
-  return `${problem}. Отправьте ${subject} со сжатием: ${controlName("Прикрепить")}\u00a0→ ${controlName("Фото или видео")}.`;
+  // On the sheet the gallery's own send button is the compressed way.
+  return `${problem}. Со сжатием ${subject} можно отправить из ${controlName("Галереи")}.`;
 }
 
 export function originalLimitAlertTitle(count: number): string {
@@ -407,28 +396,10 @@ export function mediaSendShape(matchMedia: MatchMedia | null | undefined): Media
   }
 }
 
-/**
- * Whether files arriving now open the desktop send dialog instead of going
- * straight into the composer.
- *
- * A desktop asks for every batch with a photo or a video in it, however it
- * arrived — picked, pasted or dropped — because the choice lives in that
- * dialog. A camera shot was already looked at, a phone does not ask, and a pick
- * from «Файл» never comes here: it already asked for the original (D-119).
- */
-export function shouldConfirmMediaSend(input: {
-  shape: MediaSendShape;
-  source: IncomingFilesSource;
-  files: ReadonlyArray<{ type: string }>;
-}): boolean {
-  if (input.shape !== "desktop" || input.source === "camera") return false;
-  return input.files.some((file) => isCompressibleMediaType(file.type));
-}
-
 const FILE_FORMS = ["файл", "файла", "файлов"] as const;
 
-/** «Отправить 2 фото», «Отправить видео», «Отправить 3 файла». */
-export function mediaSendDialogTitle(files: ReadonlyArray<{ type: string }>): string {
+/** The send button's name on the attach sheet: «Отправить 2 фото», «Отправить видео», «Отправить 3 файла». */
+export function mediaSendTitle(files: ReadonlyArray<{ type: string }>): string {
   const count = files.length;
   const allOf = (prefix: string) => count > 0 && files.every((file) => normalizedType(file.type).startsWith(prefix));
   // «фото» and «видео» do not decline, so the count needs no agreement.

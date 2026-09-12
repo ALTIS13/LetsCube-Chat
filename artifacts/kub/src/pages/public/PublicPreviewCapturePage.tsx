@@ -7,7 +7,6 @@ import { ForwardModal } from "@/components/chat/ForwardModal";
 import { ChatListItem } from "@/components/sidebar/ChatListItem";
 import { FolderTabs } from "@/components/sidebar/FolderTabs";
 import { MediaViewer, type MediaViewerItem } from "@/components/chat/MediaViewer";
-import { MediaSendDialog } from "@/components/chat/MediaSendDialog";
 import { useIncomingMediaFiles } from "@/hooks/useIncomingMediaFiles";
 import { MessageInput } from "@/components/chat/MessageInput";
 import { MessageList } from "@/components/chat/MessageList";
@@ -63,10 +62,15 @@ import {
  */
 /**
  * The page stages nothing: there is no upload behind it. What it does share with
- * `ChatWindow` is the routing — the phone's limit check and the desktop's send
- * dialog — so the renders taken here show the decisions the conversation makes.
+ * `ChatWindow` is the routing — which files open the attach sheet, and the limit
+ * check — so the renders taken here show the decisions the conversation makes.
  */
 function stageNothing() {
+  return undefined;
+}
+
+/** The attach sheet (D-122) sends nothing from here either; a send closes it. */
+function sendNothing() {
   return undefined;
 }
 
@@ -336,6 +340,9 @@ export default function PublicPreviewCapturePage() {
                   onCancelForward={() => setPendingForward(null)}
                   draftOverride={commentDraft}
                   onStageFiles={handleIncomingFiles}
+                  onSendMedia={sendNothing}
+                  incomingMedia={mediaSendRequest}
+                  onIncomingMediaTaken={closeMediaSendRequest}
                 />
               </div>
             </div>
@@ -363,14 +370,6 @@ export default function PublicPreviewCapturePage() {
         currentUserId={currentUserId}
         onDelete={deleteLocally}
       />
-      {mediaSendRequest && (
-        <MediaSendDialog
-          key={mediaSendRequest.id}
-          files={mediaSendRequest.files}
-          onCancel={closeMediaSendRequest}
-          onSend={closeMediaSendRequest}
-        />
-      )}
       <MediaViewer media={openMedia} onClose={() => setOpenMedia(null)} />
     </div>
   );

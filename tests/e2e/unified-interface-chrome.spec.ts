@@ -56,8 +56,11 @@ test.describe("LETSCUBE unified interface chrome", () => {
     // D-119: testers did not want a quality to choose. A video goes at the
     // standard quality, and the way to an original is «Файл».
     await page.getByRole("button", { name: "Прикрепить" }).click();
+    // «Прикрепить» opens the attach sheet now, and its gallery is where a photo
+    // or a video is picked (D-122).
+    await expect(page.getByTestId("attach-sheet")).toBeVisible();
     const fileChooserPromise = page.waitForEvent("filechooser");
-    await page.getByRole("button", { name: "Фото или видео" }).click();
+    await page.locator('[data-attach-entry="library"]').click();
     const fileChooser = await fileChooserPromise;
     await fileChooser.setFiles({
       name: "quality-check.mp4",

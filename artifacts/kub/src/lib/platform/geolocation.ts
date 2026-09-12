@@ -4,6 +4,8 @@ import { isNativeAndroid, isNativeApp, locationPermissionHelp, supportsNativeGeo
 export type MessengerPosition = {
   latitude: number;
   longitude: number;
+  /** The radius the device is sure of, in metres, when it says. Shown before a location is sent. */
+  accuracy?: number;
 };
 
 export type MessengerLocationErrorCode =
@@ -65,6 +67,7 @@ async function getNativePosition(): Promise<MessengerPosition> {
     return {
       latitude: result.coords.latitude,
       longitude: result.coords.longitude,
+      accuracy: result.coords.accuracy,
     };
   } catch (error) {
     if (error instanceof MessengerLocationError) throw error;
@@ -93,6 +96,7 @@ async function getWebPosition(): Promise<MessengerPosition> {
         resolve({
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
         });
       },
       (error) => {
