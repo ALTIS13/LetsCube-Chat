@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type WheelEvent } from "react";
+import { useEffect } from "react";
 import { KubIcon } from "@/components/kub";
+import { useEdgeScroll } from "@/hooks/useEdgeScroll";
 import { cn } from "@/lib/utils";
 
 interface Folder {
@@ -21,32 +22,16 @@ interface FolderTabsProps {
 }
 
 export function FolderTabs({ folders, activeFolder, onFolderChange, onCreate, onEdit }: FolderTabsProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-
   const hidden = folders.length <= 1 && !onCreate;
 
-  useEffect(() => {
-    if (hidden) return;
-    const el = scrollRef.current;
-    if (!el) return;
-
-    const update = () => {
-      const max = el.scrollWidth - el.clientWidth;
-      setCanScrollLeft(el.scrollLeft > 1);
-      setCanScrollRight(el.scrollLeft < max - 1);
-    };
-
-    update();
-    el.addEventListener("scroll", update, { passive: true });
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => {
-      el.removeEventListener("scroll", update);
-      ro.disconnect();
-    };
-  }, [hidden, folders.length]);
+  // The scrolling half of this strip is `useEdgeScroll` since D-156, shared
+  // with the search type-filter row, which had none of it. Same listener, same
+  // observer, same step, same dependencies — it was lifted out of here
+  // unchanged rather than written a second time next door.
+  const { scrollRef, canScrollLeft, canScrollRight, handleWheel, arrowProps } = useEdgeScroll<HTMLDivElement>({
+    enabled: !hidden,
+    revision: folders.length,
+  });
 
   useEffect(() => {
     if (hidden) return;
@@ -60,34 +45,17 @@ export function FolderTabs({ folders, activeFolder, onFolderChange, onCreate, on
 
   if (hidden) return null;
 
-  const scrollByStep = (dir: 1 | -1) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollBy({ left: dir * Math.max(120, el.clientWidth * 0.6), behavior: "smooth" });
-  };
-
-  const handleWheel = (e: WheelEvent<HTMLDivElement>) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-      el.scrollLeft += e.deltaY;
-    }
-  };
-
   return (
     // Deliberately no surface of its own. The strip sits inside the sidebar's
     // glass, so a second fill here would read as an opaque band punched through
     // the panel, and a second blur would be a blur of a blur.
     <div className="relative flex items-center flex-shrink-0 min-w-0 border-b border-[color:var(--kub-border-color)]">
+      {/* The fade is the panel's own fill, not a colour picked to match it:
+          read from --glass-fill it cannot drift when the material changes. The
+          string itself lives in `useEdgeScroll`, so both rows that wear this
+          fade wear the same one. */}
       {canScrollLeft && (
-        <button
-          type="button"
-          onClick={() => scrollByStep(-1)}
-          aria-label="Прокрутить папки влево"
-          // The fade is the panel's own fill, not a colour picked to match it:
-          // read from --glass-fill it cannot drift when the material changes.
-          className="absolute left-0 top-0 bottom-0 z-10 flex items-center justify-center px-1.5 text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] transition-colors bg-gradient-to-r from-[var(--glass-fill)] from-60% to-transparent"
-        >
+        <button {...arrowProps("left", "Прокрутить папки влево")}>
           <KubIcon name="chevronLeft" size={14} />
         </button>
       )}
@@ -148,12 +116,7 @@ export function FolderTabs({ folders, activeFolder, onFolderChange, onCreate, on
       </div>
 
       {canScrollRight && (
-        <button
-          type="button"
-          onClick={() => scrollByStep(1)}
-          aria-label="Прокрутить папки вправо"
-          className="absolute right-0 top-0 bottom-0 z-10 flex items-center justify-center px-1.5 text-[color:var(--kub-muted)] hover:text-[color:var(--kub-cyan)] transition-colors bg-gradient-to-l from-[var(--glass-fill)] from-60% to-transparent"
-        >
+        <button {...arrowProps("right", "Прокрутить папки вправо")}>
           <KubIcon name="chevronRight" size={14} />
         </button>
       )}

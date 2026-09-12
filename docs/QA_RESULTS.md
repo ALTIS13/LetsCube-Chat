@@ -1,5 +1,40 @@
 # QA Results
 
+## 2026-09-12 - The filter row gets its arrows, and an instrument asked the weaker question in two places
+
+D-156 closed: the scroll mechanism lifted out of `FolderTabs` into a shared hook both rows use, the arrows
+gated to `md` and up, and the «Все» half answered by measurement — 103px of displacement against a 202px
+step, one press back to zero with «Все» fully on screen, both themes. `FolderTabs` proved unchanged by a
+before-and-after of `desktop-shell.spec.ts` that is identical in count **and** in identity.
+
+**Why the arrows are not on a phone.** With them on at 390 the chevron was drawn over the pill text — «Соо⟩» at
+rest, «⟨юди» with «Сообщения» chosen. The agent that built them saw it, did not act, and raised it; that was the
+right call, because the cure it would have reached for changes a shipped component. Looking at the crops myself
+settled it: the arrow box is ~26px, the fade has no room to reach transparency, and over a filled pill a
+translucent veil conceals nothing. A phone drags the row, as Telegram's does.
+
+**And the instrument asked the weaker question in two places.** `oneGestureBack` guarded on
+`left.count() === 0` while the file's own header promised «a row with no arrow answers `arrow: false`».
+Those agreed while an arrow was either rendered or not. They stopped agreeing the moment it became
+`hidden md:flex`: `display:none` leaves the button in the tree, so the count says one and `click()`
+waits out its full 30 seconds. Two phone frames failed exactly that way — **after** their screenshots had been
+written, which is why the pictures were fine and the exit code was not.
+
+Fixing that one exposed the other. The corrected probe printed `arrow: false` for a phone row while
+`readRowGeometry`, three hundred lines away, printed `arrows={left:true,right:true}` for the same row in
+the same run — one output contradicting itself. Both now ask whether an arrow is *offered*:
+`getClientRects().length > 0`, which is false for the absent element and for the hidden one alike.
+
+**The lesson, and it is not about this harness.** «Is it there» and «can it be used» are different questions, and
+CSS makes them come apart. Anything that hides with `display:none`, `visibility`, zero size or an
+ancestor's overflow will answer the first question yes and the second no. A probe that asks the first and reports
+on the second is not wrong once — it is wrong every time the answer matters most, which is exactly when something
+has just been hidden on purpose.
+
+**Three findings recorded rather than fixed** — D-157: the same collision in the shipped folder strip, no visible
+focus indicator on either row's arrows (and the class-based sweep that cannot see them), and no end-to-end
+coverage of the filter row at all.
+
 ## 2026-09-12 - Deployed 9c58247, and the probe that said «not deployed» was asking for a file that no longer existed
 
 Fourteen commits went to `main` — the search filters restored, the palette deleted, the capture instrument

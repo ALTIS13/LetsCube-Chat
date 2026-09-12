@@ -7882,7 +7882,7 @@ capsule top at y=780, **8px of clear ground between them**, with the row and its
 
 ---
 
-## D-156 `[ ]` The type-filter row is clipped at both ends with nothing to say so, and «Все» becomes unreachable
+## D-156 `[x]` The type-filter row is clipped at both ends with nothing to say so, and «Все» becomes unreachable
 
 **Severity:** medium. Two faults of one cause, both seen in rendered frames.
 
@@ -7900,5 +7900,58 @@ capsule top at y=780, **8px of clear ground between them**, with the row and its
 side that has somewhere to go. The right move is to lift that into a shared hook both rows use rather than to
 write a second copy of it.
 
-**Recorded rather than fixed on the spot** because it is a second round of work on a component two agents have
-already been through today, and the settled work should be committed before it moves again.
+**Fixed on 2026-09-12.** The mechanism was lifted out of `FolderTabs` into
+`artifacts/kub/src/hooks/useEdgeScroll.ts` — the scroll listener, the `ResizeObserver`, the
+`max(120, clientWidth * 0.6)` step, the vertical-to-horizontal wheel mapping, the edge thresholds and the
+arrow's two class strings — and both rows consume it. Neither keeps a copy, and that is enforced rather than
+trusted: the guard fingerprints the mechanism (listener, observer, room-left arithmetic, step floor, programmatic
+scroll) and requires all five in the hook and none in either consumer.
+
+`FolderTabs` is shipped, so «unchanged» had to be shown, not asserted: `desktop-shell.spec.ts` before and
+after the lift is **16 passed / 1 skipped** on `chromium-desktop-1440` and **3 passed / 14 skipped** on
+`chromium-mobile-390` — identical in count and in identity, so no skip stands in for a pass.
+
+**The arrows are a wide-screen affordance, and that is the second half of the fix.** With them on at 390 the
+chevron was drawn over the pill text — «Соо⟩» at rest, «⟨юди» once «Сообщения» was chosen, in both themes.
+The arrow box is about 26px, so the `from-60%` fade never reaches transparency, and `--glass-fill` is
+translucent: over a **filled** pill it conceals nothing. A phone drags the row instead, which is what Telegram
+offers there, so they are hidden below `md` — in the consumer, not in the hook, because `FolderTabs` shipped
+with its arrows at every width and curing this row by changing that one would be a second fault.
+
+**The second half of the defect — «Все» out of reach — answered by measurement rather than by pinning it.** On a
+computer the row rests at `scrollLeft 0` with «Все» fully on screen and only the right arrow lit; choosing
+«Сообщения» leaves it at **103** against a step of **202**, and one press of the left arrow returns it to **0**
+with «Все» fully on screen, in both themes. So «Все» was not pinned outside the scroller: Telegram lets its own
+folder row scroll away too, and a single gesture is a way back.
+
+**My own diagnosis was wrong on one cause and is corrected here:** nothing in the code scrolls the row. Clicking a
+partially visible button makes the **browser** scroll it into view, which is why the cure is an affordance and not
+the removal of a scroll call — suppressing it would mean fighting focus and costing keyboard users the thing that
+keeps the focused pill visible.
+
+**Regression test:** `tests/unit/edge-scroll-affordance.test.mjs`, 21 cases, every source-scan checker among
+them proved by a mutation inside the file. Two of the 21 are the width gate: the filter row must carry it on both
+arrows and the folder strip must carry it on neither, with a mutation that strips one gate and requires the
+checker to notice.
+
+---
+
+## D-157 `[ ]` Three things the arrows left behind: a collision in the shipped strip, no focus indicator, no e2e
+
+Found while closing D-156, each deliberately not acted on, and each for a reason.
+
+**1. The same chevron-over-text collision exists in `FolderTabs`.** It is the same markup — the arrow box is
+about 26px, the `from-60%` fade has no room, `--glass-fill` is translucent — and it simply reads softer
+over flat tabs than over filled pills. Not fixed here because changing a shipped component to cure another
+component's fault is a second fault. The cure is the same either way: give the fade room, or give the arrow an
+opaque backing, and prove it on both rows' pixels.
+
+**2. Neither row's arrows have a visible focus indicator.** They carry none of `kub-button`,
+`kub-icon-action` or `kub-interactive`, so `control-vocabulary`'s «everything pressable declares a
+focus indicator» sweep never reaches them: they are focusable buttons that show nothing when focused. Pre-existing
+in `FolderTabs` and preserved rather than quietly changed. Note that the guard's silence here is itself the
+finding — a sweep that selects by class cannot see a control that wears none.
+
+**3. No end-to-end spec references the type-filter row at all.** Its only automated coverage is the unit file
+above, which reads source rather than a rendered page. The row ships with its behaviour proved by rendered frames
+and measurements taken by hand; that is evidence, but it is not a guard that runs again tomorrow.

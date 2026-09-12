@@ -5,6 +5,7 @@ import { useLocation } from "wouter";
 import { KubButton, KubIcon } from "@/components/kub";
 import { UserAvatar } from "@/components/ui/ChatAvatar";
 import { useCreateChat } from "@/hooks/useCreateChat";
+import { EDGE_ARROW_CLASS, useEdgeScroll } from "@/hooks/useEdgeScroll";
 import type { GlobalSearchResult, GlobalSearchResultType } from "@/hooks/useGlobalSearch";
 import { useRoleAccess } from "@/hooks/useRole";
 import { showAppAlert } from "@/lib/appDialogs";
@@ -216,6 +217,13 @@ export function SearchEmptyState({
  * other type's result count is unknown — not zero. Rendering the zeros would
  * state, in the one place a person looks to decide where to go next, that there
  * is nothing there.
+ *
+ * The row scrolls, and since D-156 it says so. Nine pills do not fit a 360px
+ * column and `overflow-x-auto no-scrollbar` drew no bar, no fade and no arrow,
+ * so four of the nine types did not exist as far as a reader was concerned and
+ * a mouse without a horizontal wheel had nothing to grab. The mechanism is
+ * `useEdgeScroll` — `FolderTabs`' own, lifted out of it so this is the same row
+ * behaviour rather than a second implementation of it.
  */
 export function SearchTypeFilters({
   active,
@@ -229,55 +237,103 @@ export function SearchTypeFilters({
   onSelect: (type: SearchTypeFilter) => void;
   compact?: boolean;
 }) {
+  // `FolderTabs`' mechanism, not a second copy of it. `revision` is what tells
+  // the hook to measure again: the counts appear and disappear with the choice,
+  // which changes the row's content width while the row's own box keeps its
+  // size — and an observer watching that box cannot see it.
+  const { scrollRef, canScrollLeft, canScrollRight, handleWheel, arrowProps } = useEdgeScroll<HTMLDivElement>({
+    revision: `${active}:${counts ? "counts" : "bare"}`,
+  });
+
   return (
     // No surface of its own, for the reason `FolderTabs` gives: this sits
     // inside the sidebar's glass, and a second fill here would read as an
-    // opaque band punched through the panel.
-    <div
-      role="group"
-      aria-label="Фильтр по типу"
-      data-testid="search-type-filters"
-      className={cn("flex gap-1.5 overflow-x-auto no-scrollbar", compact ? "px-3 py-2" : "mt-2 pb-0.5")}
-    >
-      {SEARCH_FILTERS.map((filter) => {
-        const isActive = filter.id === active;
-        const count = counts?.[filter.id] ?? 0;
-        return (
-          <button
-            key={filter.id}
-            type="button"
-            data-testid={`search-type-filter-${filter.id}`}
-            data-active={isActive ? "true" : undefined}
-            aria-pressed={isActive}
-            onClick={() => onSelect(filter.id)}
-            className={cn(
-              // No `h-*` or `min-h-*`: `.kub-button` carries the 44px floor on
-              // a coarse pointer, and a height utility on the same element
-              // outranks it silently. Padding only.
-              "kub-button kub-interactive flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-semibold whitespace-nowrap transition-colors",
-              FOCUS_RING,
-              isActive
-                ? `bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] ${PRESS_FILLED}`
-                : `kub-raise text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)] ${PRESS_SINK_RAISED}`,
-            )}
-          >
-            <span>{filter.label}</span>
-            {count > 0 && (
-              // On the filled pill the number is the label's own ink on the
-              // measured pair; giving it a chip of its own would dilute the
-              // fill underneath it and cost contrast nobody has measured.
-              <span
-                className={cn(
-                  "flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[12px] font-bold",
-                  isActive ? "text-[color:var(--kub-bg)]" : "bg-[var(--kub-inset)] text-[color:var(--kub-muted)]",
-                )}
-              >
-                {count}
-              </span>
-            )}
-          </button>
-        );
-      })}
+    // opaque band punched through the panel. The wrapper earns its place by
+    // being the containing block for the arrows: they are pinned to its edges
+    // and overlay the row's own padding, so each fade starts at the edge of the
+    // column rather than one pill inside it.
+    <div className={cn("relative flex items-center", compact ? "px-3 py-2" : "mt-2 pb-0.5")}>
+      {canScrollLeft && (
+        <button
+          {...arrowProps("left", "Прокрутить фильтры влево")}
+          // Hidden below `md`. The row is dragged on a phone, as Telegram's own
+          // is, and there the arrow is drawn over the pill text: the box is about
+          // 26px, so the fade never reaches transparency, and `--glass-fill` is
+          // translucent — over a filled pill it hides nothing. `FolderTabs` keeps
+          // its arrows at every width because it shipped that way; the gate is
+          // here rather than in the hook so it cannot spread to it.
+          className={cn(EDGE_ARROW_CLASS.left, "hidden md:flex")}
+        >
+          <KubIcon name="chevronLeft" size={14} />
+        </button>
+      )}
+
+      {/* The scrolling element keeps the group role and the test id: it is the
+          row of pills, and what a reader and a spec are pointed at should not
+          become a positioning wrapper because one was needed. */}
+      <div
+        role="group"
+        aria-label="Фильтр по типу"
+        data-testid="search-type-filters"
+        ref={scrollRef}
+        onWheel={handleWheel}
+        className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto no-scrollbar"
+      >
+        {SEARCH_FILTERS.map((filter) => {
+          const isActive = filter.id === active;
+          const count = counts?.[filter.id] ?? 0;
+          return (
+            <button
+              key={filter.id}
+              type="button"
+              data-testid={`search-type-filter-${filter.id}`}
+              data-active={isActive ? "true" : undefined}
+              aria-pressed={isActive}
+              onClick={() => onSelect(filter.id)}
+              className={cn(
+                // No `h-*` or `min-h-*`: `.kub-button` carries the 44px floor on
+                // a coarse pointer, and a height utility on the same element
+                // outranks it silently. Padding only.
+                "kub-button kub-interactive flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-semibold whitespace-nowrap transition-colors",
+                FOCUS_RING,
+                isActive
+                  ? `bg-[var(--kub-cyan)] text-[color:var(--kub-bg)] ${PRESS_FILLED}`
+                  : `kub-raise text-[color:var(--kub-muted)] hover:text-[color:var(--kub-text)] ${PRESS_SINK_RAISED}`,
+              )}
+            >
+              <span>{filter.label}</span>
+              {count > 0 && (
+                // On the filled pill the number is the label's own ink on the
+                // measured pair; giving it a chip of its own would dilute the
+                // fill underneath it and cost contrast nobody has measured.
+                <span
+                  className={cn(
+                    "flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[12px] font-bold",
+                    isActive ? "text-[color:var(--kub-bg)]" : "bg-[var(--kub-inset)] text-[color:var(--kub-muted)]",
+                  )}
+                >
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {canScrollRight && (
+        <button
+          {...arrowProps("right", "Прокрутить фильтры вправо")}
+          // Hidden below `md`. The row is dragged on a phone, as Telegram's own
+          // is, and there the arrow is drawn over the pill text: the box is about
+          // 26px, so the fade never reaches transparency, and `--glass-fill` is
+          // translucent — over a filled pill it hides nothing. `FolderTabs` keeps
+          // its arrows at every width because it shipped that way; the gate is
+          // here rather than in the hook so it cannot spread to it.
+          className={cn(EDGE_ARROW_CLASS.right, "hidden md:flex")}
+        >
+          <KubIcon name="chevronRight" size={14} />
+        </button>
+      )}
     </div>
   );
 }
