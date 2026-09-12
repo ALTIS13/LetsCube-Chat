@@ -1,5 +1,182 @@
 # QA Results
 
+## 2026-09-12 - The filter row comes back, and a security guard that failed on the clock
+
+**Why there was a row to bring back.** The search audit earlier this day told the owner the interface offered
+«nine filter chips including «Все»». It did not: `SEARCH_FILTERS` was a nine-entry list in the source whose
+only consumer had been the deleted palette, and `setTypeFilter|onTypeChange|searchType` matched nothing in
+the whole client. Filtering by type existed only by typing `type:message` into the query. So the orphan was
+not rubbish to delete but a part that had come unplugged, and it was plugged back in.
+
+**How the two ways of choosing a type resolve.** The parser already decided it: a selected pill seeds
+`filters.type` and a `type:` token in the text overwrites it — the typed syntax wins. That is kept, and the
+reason is written into `clearTypeSyntax`: the token is the half a person can see, because it renders a
+removable chip and a pill does not. Were the pill to win, typing `type:message` would draw a chip claiming a
+filter that is not applied — a visible lie rather than a hidden one. The cost of that rule alone is a control
+that silently does nothing, so a tap strips any `type:` token first. The rule decides who wins a conflict;
+the strip makes sure a tap never creates one. The lit pill is the **effective** type, so a typed `type:chat`
+lights «Чаты» and control and text can never disagree on screen.
+
+**Two interface defects fell out of looking at the rendered frames**, and neither was visible in the source:
+D-155, the last search result lying under the floating capsule because the sidebar's *second* scroller never got
+the reservation I had given the first; and D-156, the row clipped at both ends with no scrollbar, fade or arrow,
+and «Все» scrolling out of reach the moment a filter is chosen. The first is fixed and measured — 8px of clear
+ground under the last row; the second is recorded and left for its own patch.
+
+**A correction I made wrongly and then verified wrongly.** The pill row was meant to sit flush under the search
+field, where Telegram puts it. The patch moved it above the three conditional notices — a real move, but the
+«ПОИСК» heading stands above those too, so on screen nothing changed. I then checked it by grepping and reading
+back «121: Поиск» and «142: <SearchTypeFilters», and reported the order as correct. 121 comes before 142. The
+evidence said the heading still came first and I read it as saying the opposite; a rendering agent caught it by
+measuring three y-coordinates. The remedy is now in the patch script itself — it reads the file back, compares
+the two positions and exits non-zero if the row does not precede the heading — and the measured order afterwards
+is field 51, pills 109, heading 169 on a phone and 11, 65, 111 on a computer.
+
+**And a pre-existing off-by-N, fixed at the call site.** `SearchFilterChips` was handed the untrimmed query
+while the chips' offsets were measured against `query.trim()`, so removing a chip from a query typed with a
+leading space cut the wrong characters. It now receives `parsed.raw` — the string the offsets belong to.
+
+---
+
+**A security guard that failed on the clock, and what it took to be sure.** The unit suite came back 1857/1858
+with one failure: `actor-scoped missing and unauthorized bot ids have one response`. That test asserts the
+thing that matters — a bot that does not exist and a bot the caller may not see must answer identically, or the
+difference tells an attacker which it was — and it asserts it by comparing the two whole HTTP results. An HTTP
+result carries `Date`, stamped from the wall clock. The captured diff was the whole story: `17:16:04`
+against `17:16:05`, with the status, the body, `etag`, `content-length` and every other header
+identical.
+
+Eight isolated runs all passed, so **the failure was not reproduced by repetition** — and that is stated plainly
+rather than dressed up, because in isolation the two requests are a millisecond apart and the odds of straddling
+a second are about one in a thousand. A mechanism that specific can be triggered instead of waited for, so it
+was: hold 1.1 seconds between the two requests and the pair is bound to differ.
+
+| experiment | expected | result |
+| --- | --- | --- |
+| forced straddle, guard as it was | red | 26 pass, 1 fail, diff names `Date` |
+| forced straddle, guard fixed | green | **27 of 27**, no `Date` in any diff |
+| a real leak (stop folding `42501` into `not_found`), guard fixed | red | 26 pass, **1 fail**, not the clock |
+| plain run | green | 27 of 27 |
+
+The fix excludes `Date` and nothing else, and only after asserting both responses carry one, so the exclusion
+cannot cover for a header that went missing. The third row is the one that matters: it proves the guard still
+guards. A fix that had silenced the clock by silencing the contract would have passed the second row and failed
+the third.
+
+This mattered more than an ordinary flake. A guard that reddens on the clock is the kind that gets ignored and
+then deleted, and this one is the only thing standing between the two branches being told apart.
+
+## 2026-09-12 - A published image was wrong, the product was not, and the fix was a guard on the instrument
+
+Four product images were re-captured after the interface work. One of them, the dark Android one, printed
+«Принято, добавил15:02»: the time hard against the last word. Eight other messages in the same picture were
+spaced correctly, and so were all three of its siblings.
+
+**The product was suspected first and cleared by running something, not by reasoning.** Five `message-meta-*`
+specs on `chromium-mobile-390`: **18 passed**, including the case that asserts the first-paint decision equals
+the settled one. They drive the same capture route the image comes from — but with their own 120-message fixture,
+while the image uses the nine-message demo fixture. Same route, different scene. That is the whole reason a green
+suite and a broken picture could sit beside each other, and it is worth remembering next time a gate disagrees
+with something visible.
+
+**The instrument had two faults, and the second was one I had already fixed elsewhere this morning.** The capture
+shot the page after `document.fonts.ready` and a `document.fonts.check` guard. The first does not cover the
+re-wrap that follows the font's arrival — the sibling spec measured 28 of 120 placements moving after
+`loadingdone` and waits 2.5s for stillness because of it. The second is the call that lies: it answers true for
+a family that never loaded, which is how the frame renderer came to measure Segoe UI this morning while reporting
+Inter. The same call was sitting in this script, doing the same job, untouched.
+
+**So the fix is a guard on the instrument rather than on the product.** The face is now proved by measuring a
+string twice, with Inter in the stack and struck out of it. The shot waits for the layout to hold still. And
+before the shutter the script measures every inline time against the last line of its own text and **refuses to
+write the image** if any gap is under 4px, or if it could measure no inline time at all.
+
+**Mutation-tested, because a guard seen only green is not evidence.** Raising the minimum gap to 1000px must make
+the first scene refuse and name the messages; pointing the group selector at an element that does not exist must
+make it say it measured nothing rather than finding no collisions and calling that a pass. Both mutations were
+applied by a script that restores the file in a `finally` block and then compares it byte for byte with the
+copy taken before — a mutation left behind in an instrument is worse than never having run one.
+
+**Re-captured and signed off on the pixels.** «8 inline times, all clear of their text» for each of the four
+scenes, and then the dark Android image was opened and read: the gap is there, and the three other images are
+unchanged in character. No production chat, account, number or private media appears in any of them; the content
+is the checked-in fictional fixture, looked at rather than scanned for strings.
+
+**What generalises:** a test proves the product *can* be right. It cannot prove the particular frame someone
+published *was* right. Anything that emits an artefact - an image, a bundle, a release note - needs its own
+refusal, in the tool that emits it.
+
+## 2026-09-12 - The search audited against production, and a sixth probe that lied the same way as the first five
+
+The owner approved deleting `GlobalSearchPalette` on one condition: that the search we keep is then checked
+for what he listed — by number, by nickname, by messages, and that it separates and filters them properly. Done
+against the live database, read-only, schema facts only.
+
+**By number.** `public.search_profiles_by_phone`, verified live: `security definer`, returns early when
+`auth.uid() is null`, requires `has_permission(v_actor, 'users.view')`, re-normalises the query in the
+function rather than trusting the client, matches `contact.phone = v_phone` **exactly**, and only where
+`contact.phone_verified is true`. Its `returns table` list contains no phone column at all — checked as a
+property of the live signature, not read off a migration. Its own comment says it: «never returns the phone
+value».
+
+**By nickname.** Trigram indexes on `profiles.full_name` and `profiles.username`, and the client's fallback
+queries both fields with `ilike`. So a nickname matches through the indexed RPC and again if the RPC is
+unavailable.
+
+**By message, and this is the one that had to be proved rather than assumed.** Both paths are scoped to the
+person's own chats, verified live: `global_search_v2` joins `chat_members` on `auth.uid()` and excludes rows
+in `message_hidden_for_users`; `search_chat_messages` — the in-chat search, called from `ChatSearchBar` —
+does the same through an **inner** join, so a non-member gets zero rows, and additionally binds to
+`message.chat_id = p_chat_id`.
+
+**Separation, which is done.** Seven result types, each with its own heading: Люди, Боты, Чаты, Сообщения, Задачи,
+Локации, Команды — verified at the point of use, `SearchShared.tsx:70`, not at the declaration.
+`groupSearchResults` groups by type with start indices, and the profile card shows a nickname with a copy
+action and no phone number anywhere in it.
+
+**Filtering, and here this audit was wrong.** The paragraph above originally read «Nine filter chips including
+«Все»». That sentence was false, and it was false in the way the other six faults of this day were false: I read
+`SEARCH_FILTERS` — a nine-entry list in the source — and reported it as a surface the reader can touch. It is
+not rendered anywhere. Its only consumer was the palette deleted the same day, and a search for
+`setTypeFilter|onTypeChange|searchType` across the client returns nothing at all: no control anywhere changes
+the result type.
+
+What does render is a different thing with a similar name: `SearchFilterChips`, mounted in
+`SidebarSearchResults`, which draws the chips of the **parsed query** — each one removable, each one put there
+by the reader typing `type:`, `from:` or `has:`. So filtering exists and works, but only by typed syntax,
+which nobody discovers. Against what the owner asked — «красиво это фильтровать и отделять друг от друга» — the
+separating half was true and the filtering half was not.
+
+The correction is not a note in a document: the nine-type row is being reconnected onto the sidebar search
+surface, following the pill row Telegram puts under its own search field (visible in the owner's reference
+screenshots, and the same vocabulary as our `FolderTabs`).
+
+**The lesson, which is the same one seven times today:** a declaration is not a surface. `SEARCH_SECTION_LABELS`
+and `SEARCH_FILTERS` sit twelve lines apart in one file and look identical in kind; one is consumed at line 70
+and the other by nothing. The only difference a reader can see is whether something imports it, and that is a
+question to ask of every claim about the interface, not only of suspicious ones.
+
+**Already guarded, so this is not only true today.** `tests/unit/global-search-phone-contract.test.mjs` pins the
+normaliser's accepted shapes, the permission gate, the verified-only match, the exact comparison, and — the one
+that matters most — that the returns block mentions no phone. It also pins that the hook never queries the
+contact rows directly.
+
+**A product question rather than a defect, and the owner was given it.** `normalizePhoneSearchQuery` accepts a
+number only when it starts with `+`: spaces, brackets and dashes are stripped and the rest must be complete
+E.164. So `+7 999 123-45-67` is a phone lookup and `89991234567` is a text search. The contract test
+asserts both deliberately. It is a decision, not an oversight — but it is the way numbers are habitually typed
+here, so it is the owner's to confirm.
+
+**And the sixth instrument fault of the day, which is the part worth keeping.** A probe asked production whether
+`search_chat_messages` contained the literal text `cm.user_id = auth.uid()` and answered **false** — which,
+read as data, says «the in-chat message search is not scoped to the member». It was not reported as a finding,
+because the tell was in the question: the sibling check in the same query matched a **table name**, which is
+spelling-independent, while this one matched an **expression**, whose spelling is free. Reading the live clauses
+showed the scoping is there under a different alias and the wrapped form `(select auth.uid())` — the standard
+idiom, adopted after the migration the repo keeps a copy of. The function is also genuinely reachable from the
+client, so a real gap would have been a live hole rather than a latent one; that was checked too, in case the
+answer had gone the other way.
+
 ## 2026-09-12 - The floating capsule, administration moved to the main screen, and a hole shaped like the bar that left it
 
 Two corrections came from the owner looking at rendered frames, and neither would have been caught by a gate.
@@ -98,6 +275,12 @@ over a regression. The palette turned out to be a second presentation of the sam
 imports the same commands, chips and profile preview and adds local chat results the palette lacks - so what was
 lost was a duplicate surface and a door, not a capability. Whether to delete the palette is the owner's call and
 was put to him.
+
+**Answered the same day: delete it.** Done, with both signed-in specs repointed at the header's field and green.
+The sentence above turned out to be half wrong, and the half that was wrong is the interesting one: the palette
+was not purely a duplicate. It was the only consumer of `SEARCH_FILTERS`, the nine selectable result types,
+and the only handler of Ctrl+K. The shortcut was rescued into `SidebarHeader` during the deletion; the filter
+row was not, and its absence is recorded below as a correction to the audit that follows.
 
 **The phone now searches the way Telegram does.** Measured from his screenshots: a full-width pill under the title
 row, about 38dp tall, which goes as the list scrolls while a magnifier takes its place - the two states mutually

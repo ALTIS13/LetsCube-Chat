@@ -29,6 +29,13 @@ Legend:
 Everything below is on `integration/message-actions`, pushed, and **not** on `main`. `origin/main` is still
 at `245e4d9`, the commit deployed earlier that day.
 
+**One product question from the search audit of 2026-09-12, unanswered.** A number counts as a number only when
+it starts with `+`: `normalizePhoneSearchQuery` strips spaces, brackets and dashes and then requires complete
+E.164, and `tests/unit/global-search-phone-contract.test.mjs` asserts that `89991234567` and a bare
+`9991234567` both normalise to nothing. Those queries fall through to the text search instead. Deliberate, and
+tested as such — but it is how numbers are typed here, so whether to accept a leading `8` (and with which
+country assumption) is the owner's call, not a patch to slip in.
+
 **Two decisions belong to the owner and are not to be taken for him.**
 
 1. **Where the administration hint's plate sits.** Measured at 390: the shield's foot is at 36, the header block
@@ -38,11 +45,33 @@ at `245e4d9`, the commit deployed earlier that day.
    overlays content rather than a control, which is what Telegram's own hints do. The alternative offered: render
    the plate **in flow** so it pushes the list down instead, at the cost of the list shifting as the hint comes and
    goes. Both frames were sent. Do not pick one silently.
-2. **Whether `GlobalSearchPalette` is deleted.** 283 lines, and dead since the «Поиск» tab went: nothing dispatches
-   its open event any more. It is a second presentation of machinery `SidebarSearchResults` already has —
-   the same commands, chips and profile preview, and the sidebar adds local chat results the palette lacks. Ctrl+K
-   focuses the header field, not the palette, so it had no desktop role either. Recommended for deletion, with the
-   two signed-in specs that navigate by a button named «Поиск» repointed; not done without a word.
+2. **`GlobalSearchPalette` — answered and done, and it cost something I did not predict.** The owner accepted
+   the deletion on the condition that the search we keep is then checked for searching by number, by nickname and
+   by messages, and for separating and filtering them properly. Deleted: 283 lines, plus `lib/globalSearchEvents.ts`
+   which existed only to open it. Both signed-in specs were repointed at the header's field — the one search
+   surface at every width — and both pass, `global-search.spec.ts` against the real backend.
+
+   **Ctrl+K lived inside the palette** and was the only handler for it in the product. It already preferred the
+   header's field and opened the palette only as a fallback, so the surviving half moved into `SidebarHeader`
+   with its guards intact — nothing below 768, clear the query, focus, select — and `preventDefault` now runs
+   only where the field is reachable, so elsewhere the browser keeps its own shortcut.
+
+   **And the palette was the only consumer of `SEARCH_FILTERS`**, the nine selectable result types. Deleting it
+   left the product with no way to filter by type except typing `type:message` into the query, which nobody
+   discovers. That is not a tidy-up: it is a gap against what the owner asked to verify. Delegated on 2026-09-12
+   as a reconnection of the existing list onto the sidebar search surface, following the pill row Telegram puts
+   under its search field.
+
+   Coverage lost, counted rather than glossed: one unit test (the palette's own field as a well, whose subject is
+   gone), one signed-in safe-area test (it photographed the palette sheet; it had been broken already, because the
+   «Поиск» button it clicked now appears only after the list scrolls, and it cannot be repointed — summoning the
+   results column needs a typed query and that file photographs real accounts and reveals no text on purpose), and
+   one `toBeFocused()` on mobile that is now trivial because the way in is a tap rather than an autofocus.
+
+   One claimed orphan was not one, and checking rather than trusting the list is the point: `KubModal`'s
+`mobileSheet` is live in both its values — twenty-four call sites, five passing `false` and nineteen taking
+   the default `true` — so removing it would have turned nineteen mobile sheets into centred dialogs.
+`SearchTypeFilter` is used twice inside its own file; only its `export` is surplus.
 
 **One defect found and delegated, and it turned into two — both now closed.**
 

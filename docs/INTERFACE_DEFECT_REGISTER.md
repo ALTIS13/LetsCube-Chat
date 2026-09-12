@@ -7233,9 +7233,10 @@ failing server and were not rendered.
   `artifacts/kub/src/lib/platform/capabilities.ts`: «…нужны локальный
   google-services.json, применённая migration user_push_devices и backend FCM
   credentials.» (settings-profile F2).
-- Search: `artifacts/kub/src/components/chat/ChatSearchBar.tsx:207-209`,
-  `artifacts/kub/src/components/search/SidebarSearchResults.tsx:96-106` and
-  `artifacts/kub/src/components/search/GlobalSearchPalette.tsx:213-237`: «Поиск сейчас
+- Search: `artifacts/kub/src/components/chat/ChatSearchBar.tsx:207-209` and
+  `artifacts/kub/src/components/search/SidebarSearchResults.tsx:96-106` (a third citation,
+  `GlobalSearchPalette.tsx:213-237`, carried the same two messages and was deleted with that file on
+  2026-09-12; the messages themselves are unaffected): «Поиск сейчас
   выполняется по загруженным сообщениям.», «Поиск по всей истории требует обновления базы
   данных…» (chat-functions P3, O1).
 - Tasks: `artifacts/kub/src/pages/tasks/TaskFormModal.tsx:625-629, 751-755`,
@@ -7765,11 +7766,12 @@ real defect.
 **Regression test:** `tests/e2e/ios-standalone-safe-area.spec.ts:394`, landscape, on `webkit-ios-standalone`.
 Green afterwards: `1 passed (6.8s)`.
 
-**Left open deliberately, and it needs a product decision rather than a patch:** `FolderTabs` on that page is
-not gated at `md`, so now that the rail is there the same folder is drawn twice above `md` — the very
-duplication the owner had removed from the shipped sidebar that morning. It was left because the product's own
-screenshots are captured from this page at 1280 and 1440 and the strip is part of those images: closing it changes
-published imagery. Put to the owner on 2026-09-12.
+**Closed on 2026-09-12, and the published imagery settles it.** The owner's answer to the question was «подумай
+относительно telegram исполнения», and Telegram Desktop's answer is unambiguous: the rail alone, no horizontal
+strip beside it. `FolderTabs` on this page is gated in a `md:hidden` wrapper exactly as `Sidebar` gates
+its own, so above `md` the rail is the only folder surface and below it the strip is. Verified on the
+pixels rather than on the class: `windows-messenger-light.webp` shows the rail at the left edge — avatar,
+«Все», «+ Папка» — and no strip anywhere in the column.
 
 ---
 
@@ -7806,3 +7808,97 @@ The right-hand inset costs nothing: it is zero on the edge the notch is not on.
 
 **Regression test:** the same landscape case, which now passes — `1 passed (5.5s)` — and which fails again if
 the inset is removed, because the checker measures the rows rather than the class.
+
+---
+
+## D-154 `[x]` A published product image printed a message's time against its last word
+
+**Severity:** high. Not a defect in the product but in what the product was shown as: a marketing image on the
+public home, which is the first thing a stranger sees.
+
+**Reproduction:** `artifacts/kub/public/product/android-messenger-dark.webp` as re-captured on 2026-09-12 read
+«Принято, добавил15:02» — the timestamp hard against the last letter, with no gap, while its own eight siblings in
+the same image were spaced correctly. The three other images of the same run were clean.
+
+**What it was not.** The product was suspected first and cleared by measurement, not by argument: the five
+`message-meta-*` specs were run on `chromium-mobile-390` and returned **18 passed**, among them «the
+decision is the same one the settled layout keeps» and both spacer-line cases. Those specs drive the same capture
+route, but with their own 120-message fixture; the published image uses the nine-message demo fixture. Same route,
+different scene — which is exactly why green gates and a broken picture could coexist.
+
+**Cause, in the instrument.** `scripts/capture-public-home-previews.mjs` shot the page after
+`document.fonts.ready` and a `document.fonts.check` guard. Neither covers the re-wrap: Inter arrives after
+the page reports ready and the conversation is laid out again — the sibling spec measured 28 of 120 placements
+moving after `loadingdone`, which is why it waits for the layout to hold still for 2.5s. The capture did not
+wait, so one scene in four was photographed mid-settle.
+
+**And a second fault in the same guard, of a kind already met today.** `document.fonts.check` answers true for
+a family that never loaded. It reported Inter present in the sibling frame renderer this morning with both font
+hosts blocked, while the frames were being measured in Segoe UI. So the capture could have published pixels in the
+wrong face and called the run a success.
+
+**Fix — on the instrument, not on the image.** Three changes to the capture script:
+
+1. the face is proved by measuring it, not by asking: the same string is laid out with the page's stack and again
+   with Inter struck out of the stack, and the run throws when the widths agree;
+2. the shot waits until placements and paragraph boxes have been unchanged for 2.5 seconds, and throws if the
+   conversation never settles;
+3. before the shutter, every inline time is measured against the last line of its own text, and the run **refuses
+   to write the image** if any gap is under 4px — the reserved room is the footer plus 8px, so 4 passes a close
+   call and nothing passes a collision. It also refuses a scene where no inline time could be measured at all, so
+   the check cannot pass by finding nothing.
+
+**Proof:** the re-capture reported «8 inline times, all clear of their text» for each of the four scenes and wrote
+all four; the dark Android image was then read as pixels and the gap is there. The guard itself was mutation-
+tested both ways — see the QA entry of the same date.
+
+**The general rule this leaves:** a published artefact needs its guard in the tool that publishes it. A test can
+only prove the product is capable of being right; it cannot prove that the particular frame someone shipped was.
+
+---
+
+## D-155 `[x]` The last search result sits under the floating capsule and cannot be pulled out
+
+**Severity:** medium, and mine. The capsule was introduced on 2026-09-12 and the room for it was reserved in
+`ChatList` — but the sidebar has a **second** scroller, `SidebarSearchResults`, which never got the same
+end padding. On a phone the last row of search results therefore lay under the capsule with no way to scroll it
+clear.
+
+**Reproduction:** type a query on a phone, scroll the results to the end. Found by looking at a rendered frame,
+not by reading the source; the source reads fine.
+
+**Fix:** the same reservation `ChatList` uses, inside the scroller —
+`pb-[calc(var(--kub-bottom-nav)+var(--kub-bottom-nav-gap)*2)] md:pb-3` — because shrinking the container
+instead leaves a band of ground in the shape of the old bar, which is the mistake already made once this day.
+
+**A trap worth recording.** The scroller already carried `py-3`. Two single-class utilities have equal
+specificity, so which wins is decided by the order the rules land in the generated stylesheet, not by the order
+they appear in the class string — a fix that reviews perfectly and does nothing. Measured in the built sheet
+rather than assumed: `.py-3` at byte 103492, the arbitrary `padding-bottom` at 106679, the `md` override
+at 184827. Later wins, so all three land as intended.
+
+**Regression evidence:** rendered and measured at 390 in both themes — reserve 72px, last row ending at y=772,
+capsule top at y=780, **8px of clear ground between them**, with the row and its chevron wholly above the glass.
+
+---
+
+## D-156 `[ ]` The type-filter row is clipped at both ends with nothing to say so, and «Все» becomes unreachable
+
+**Severity:** medium. Two faults of one cause, both seen in rendered frames.
+
+1. Nine pills do not fit the sidebar column — 360px on a computer, 390 on a phone. The row is
+`overflow-x-auto no-scrollbar`: no bar, no fade, no arrow. At 1440 the reader sees «Все, Люди, Боты, Чаты,
+   Со…» and the remaining four types do not exist as far as the interface is concerned. With a mouse and no
+   horizontal wheel there is nothing to grab.
+2. Choosing a pill scrolls the row to it, so after picking «Сообщения» the row reads «…юди, Боты, Чаты,
+   [Сообщения], Задачи, Л…» — and **«Все» is off-screen left**, which is to say the way back to the unfiltered
+   list disappears at exactly the moment it is first wanted.
+
+**Not a matter of inventing a solution:** `FolderTabs` already solves this in this product — a scroll ref,
+`canScrollLeft`/`canScrollRight` kept by a scroll listener and a `ResizeObserver`, a step of
+`max(120, clientWidth * 0.6)`, vertical wheel mapped to horizontal, and chevron buttons rendered only on the
+side that has somewhere to go. The right move is to lift that into a shared hook both rows use rather than to
+write a second copy of it.
+
+**Recorded rather than fixed on the spot** because it is a second round of work on a component two agents have
+already been through today, and the settled work should be committed before it moves again.
