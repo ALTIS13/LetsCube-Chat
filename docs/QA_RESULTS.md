@@ -1,5 +1,68 @@
 # QA Results
 
+## 2026-09-12 - A merge refused, my own arithmetic corrected, and a measuring instrument caught lying
+
+**The capsule merge was aborted, deliberately, and the branch is still a prototype.** Merging
+`design/navigation-capsule-full-width` into `integration/message-actions` conflicted in six files, and reading
+every conflict in full showed they are not a mechanical clash but **two incompatible architectures of the same
+surface**: HEAD carries `FolderRail` and `SideMenuLayer`, no `AppTopBar`, a menu button at `md:hidden` and a list
+that narrows to 66; the capsule branch carries `FolderPills`, `<AppTopBar />`, `bodyRef`/`chromeRef` and a
+`FLOATING ?` branch - it descends from the A/B **prototype**, the world before the owner chose. One line of intent
+(drop the round search button) would have dragged 3,295 lines of superseded scaffolding into the working branch.
+Welding two sidebars together by eye, unreviewed, is exactly what the whole night refused to do; the merge was
+aborted clean - `uncommitted: 0`, `conflicted paths: 0`, the desktop merge intact.
+
+The file census settles it plainly: `FloatingTabBar.tsx` and `navigationOptions.ts` are **absent** from the
+working branch while `BottomNav.tsx` is **present** and carries **six** tabs - «Чаты, Поиск, Папки, Профиль,
+Задачи, Админка», its own comment measuring the six labels at 314.1px at 360. So the phone capsule the owner
+approved is **not built**: it exists only as a prototype component on a superseded branch, and building it on the
+shipped bar is its own piece of work, not a merge.
+
+**My own arithmetic, corrected.** D-151 said «Настройки» at 430 «fits by 14.72»; the true figure is **15.22**, found
+by the measurement agent and left uncorrected until now. The register carries it.
+
+**And then the instrument.** `document.fonts.check` is not a check. Measured here, twice, in the same page:
+with the font hosts aborted it answers **true** to `check("16px Inter")` and to `check("600 11px Inter")` while
+`Array.from(document.fonts)` is **empty**; with the hosts open the same page carries 28 faces. Six render scripts
+used that function to report «Inter did not load». None of them could ever have printed it, and none ever did.
+
+It mattered because the product **self-hosts no face**: `--app-font-sans` is `'Inter', -apple-system,`
+`BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif` and Inter arrives only from a Google Fonts `<link>` in
+`index.html` - no `@font-face`, no `.woff2` anywhere in the repository. So a script that aborts everything off
+this machine draws and measures **Segoe UI**, which is **narrower** than the product: «Управление» 69.88 against
+75.19, «Настройки» 66.56 against 71.14, the six shipped labels 261.82 against 278.45. The error is silent, always
+in the same direction, and every «fits by X» taken that way is optimistic by up to about 5 px a label.
+
+**One script was actually affected**, `render-desktop-shell-frames.mjs`: it had no host allowance at all and
+aborted everything but loopback - and it is the script that measured D-112 and the whole desktop geometry last
+night. It now carries the same `ALLOWED_HOSTS` set the five other renderers already had, proves the face by
+**width** instead of by the lying check - the same string in the page's own stack, and in that stack with Inter
+struck out - and **throws** rather than annotating, because a frame drawn in the wrong font is not evidence.
+Proved by mutation: strike the two hosts back out and the run exits 1 with «Inter did not load».
+
+**The re-run is the part worth reading: every number held.** Eighteen frames, exit 0, no fallback reported - rail 72,
+list 360 open and 66 collapsed, narrow ratio 0 and 1, zone intersects 0 everywhere except `dark-windows-tasks`,
+and D-112 re-measured at «Новая **64%**» - the identical figure reported before. So what was broken was the
+**instrument**, not the readings. That is worth saying plainly rather than dressing up: this found a way the
+measurements could have been wrong, and then showed they were not.
+
+**The distinction to keep, because one spec had it right all along.** `tests/e2e/message-meta-first-paint.spec.ts`
+blocks those hosts **on purpose** and strips the `<link>` tags as well, to hold the page to a single face: it
+calibrates and asserts in that same face in the same run, and its comment records how WebKit's per-page stylesheet
+cache once made the spec disagree with itself - 54.5px for the same timestamp on one page and Inter on the next.
+Blocking is **legitimate for a relative measurement calibrated in the same run**; it is a **fault wherever a number
+leaves the run as a fact about the product**. The renderer wrote `measurements.md`, so it was the second kind.
+
+**What this did not touch.** D-151's own widths were taken with a `Range` over rendered glyphs with Inter
+confirmed loaded, by a different and correct method, so they stand. The five other renderers allow the hosts and
+did load Inter. The five specs that measure on the blocking fixture assert fixed sizes (256, 28, 36 - set by CSS),
+positions, contrast ratios and scroll stability, none of which the face changes.
+
+**Left open, named rather than quietly fixed:** those five renderers still carry the lying guard - their numbers are
+sound because they load the face, but their reporting cannot prove it, and the next script copied from them
+inherits the hole. And the product could **self-host Inter**, which would end this whole class of fault and remove
+a third-party request from first paint; that is the owner's call, not a QA fix.
+
 ## 2026-09-12 - The top bar removed: the rail reaches the window's edge, and one window chrome instead of two
 
 Built on `fix/desktop-rail-top-edge` (`d667438`, one commit off `feat/desktop-folder-rail`). Gates re-run by hand

@@ -9,8 +9,12 @@
  * against a backend played by route mocks on the fixture host — the pattern of
  * `tests/e2e/chat-list-event-cost.spec.ts` — so the rail, the list, the folders
  * and the role gating are the shipping components reading fictional rows.
- * Nothing on a network is reached: every request off this machine is aborted,
- * and a server that is not on the fixture configuration is refused.
+ * Nothing on a network is reached except the two font hosts, and a server
+ * that is not on the fixture configuration is refused. The exception is not
+ * a convenience: the product loads Inter from Google Fonts and self-hosts no
+ * face, so a run that blocks those hosts draws every frame in Segoe UI and
+ * measures a narrower product than the one people use — measured here on
+ * 2026-09-12, «Управление» 69.88 in the fallback against 75.19 in Inter.
  *
  * The Windows frames stub the desktop bridge the Tauri shell injects, so the
  * application draws its own window buttons, and outline the zone those buttons
@@ -65,6 +69,12 @@ const only = argValue("--only") ? new Set(argValue("--only").split(",").map((id)
 const sheetsOnly = process.argv.includes("--sheets");
 
 const BASE = process.env.KUB_BASE_URL ?? "";
+
+/**
+ * The only hosts a frame may reach. The font hosts are here because the
+ * product has no self-hosted face: block them and the frame is Segoe UI.
+ */
+const ALLOWED_HOSTS = new Set(["127.0.0.1", "localhost", "fonts.googleapis.com", "fonts.gstatic.com"]);
 const OUT = path.join(ROOT, "output", "renders", "2026-09-12-desktop-shell");
 const FRAMES_DIR = path.join(OUT, "frames");
 const CROPS_DIR = path.join(OUT, "crops");
@@ -839,10 +849,11 @@ async function renderFrame(browser, frame) {
     locale: "ru-RU",
     timezoneId: "Europe/Moscow",
   });
-  await context.route(
-    (url) => (url.protocol === "http:" || url.protocol === "https:") && url.hostname !== "127.0.0.1" && url.hostname !== "localhost",
-    (route) => route.abort("blockedbyclient"),
-  );
+  await context.route("**/*", (route) => {
+    const url = new URL(route.request().url());
+    if (url.protocol !== "http:" && url.protocol !== "https:") return route.continue();
+    return ALLOWED_HOSTS.has(url.hostname) ? route.continue() : route.abort("blockedbyclient");
+  });
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
@@ -916,7 +927,28 @@ async function renderFrame(browser, frame) {
     await page.locator('[data-testid="folder-rail-item"]').nth(FOLDERS.length).waitFor({ state: "attached", timeout: 15_000 });
   }
   await page.evaluate(() => document.fonts.ready);
-  const inter = await page.evaluate(() => document.fonts.check("16px Inter"));
+  // document.fonts.check is not usable here: with the font hosts blocked it
+  // answers true for a family that never loaded, while document.fonts is
+  // empty in the same breath. The font is proved by width instead — the same
+  // string in the page's own stack, and in that stack with Inter struck out.
+  const inter = await page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.textContent = "Управление";
+    probe.style.cssText = "position:absolute;left:-9999px;top:0;font-size:11px;font-weight:600;white-space:nowrap";
+    document.body.appendChild(probe);
+    const stack = getComputedStyle(document.body).fontFamily;
+    probe.style.fontFamily = stack;
+    const withInter = probe.getBoundingClientRect().width;
+    probe.style.fontFamily = stack.split(",").filter((name) => !name.toLowerCase().includes("inter")).join(",");
+    const withoutInter = probe.getBoundingClientRect().width;
+    probe.remove();
+    return withInter !== withoutInter;
+  });
+  if (!inter) {
+    throw new Error(
+      "Inter did not load; the frame would be measured in the fallback, which is narrower than the product",
+    );
+  }
 
   if (scene.openChat) {
     await page.locator(`[data-testid="chat-list-item"][data-chat-id="${OPEN_CHAT}"]`).click();

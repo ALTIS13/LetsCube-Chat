@@ -7661,7 +7661,7 @@ owner's two accepted answers together put «Чаты», «Задачи», «Уп
 | 360 | 57.50 | over by 8.72 | over by 2.28 | **2.50** = 0.90 of a space |
 | 375 | 61.25 | over by 4.97 | fits by 1.47 | 6.25 = 2.25 spaces |
 | 390 | 65.00 | over by 1.22 | fits by 5.22 | 10.00 = 3.60 spaces |
-| 430 | 75.00 | fits by 8.78 | fits by 14.72 | 20.00 = 7.19 spaces |
+| 430 | 75.00 | fits by 8.78 | fits by 15.22 | 20.00 = 7.19 spaces |
 
 Widths measured with a `Range` over the rendered glyphs in the product's own
 font, at 600 weight and 11px, on a dev server with Inter confirmed loaded — not
