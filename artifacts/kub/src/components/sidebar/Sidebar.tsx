@@ -142,14 +142,23 @@ export function Sidebar() {
               list keeps narrowing continuously instead of switching mode. */}
           <div data-kub-list-chrome="" className="relative shrink-0">
             <SidebarHeader onNewChat={() => setShowNewChat(true)} onRefetch={refetch} />
+            {/* Below `md` only. The folder rail above is `hidden … md:flex`,
+                so without this gate the same folders were drawn twice from
+                `md` upward — once down the rail and once across this strip,
+                which is what the owner saw on the computer on 2026-09-12.
+                The gate is here rather than on the component because
+                `PublicPreviewCapturePage` renders `FolderTabs` at desktop
+                widths to capture the product assets. */}
             {!hasSearchQuery && (
-              <FolderTabs
-                folders={tabs}
-                activeFolder={activeFolder}
-                onFolderChange={setActiveFolder}
-                onCreate={() => setEditingFolder("new")}
-                onEdit={editFolder}
-              />
+              <div className="md:hidden">
+                <FolderTabs
+                  folders={tabs}
+                  activeFolder={activeFolder}
+                  onFolderChange={setActiveFolder}
+                  onCreate={() => setEditingFolder("new")}
+                  onEdit={editFolder}
+                />
+              </div>
             )}
           </div>
 

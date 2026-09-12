@@ -71,6 +71,13 @@ test("message text is never justified", () => {
  * to 10.25px, 390 went 9.00 to 15.25, 412 went 13.28 to 18.92, and no label
  * overflows its button at any of the three. The narrowest touch target is
  * 44.0 x 48.5px, still over the 44px floor.
+ *
+ * Four labels since 2026-09-12, when the owner took search and administration
+ * out of the bar. Measured the same way, in Inter at 600/11px uppercase with
+ * the font hosts reachable: «Чаты» 32.03, «Папки» 40.50, «Профиль» 56.75 and
+ * «Задачи» 48.50 total 177.78px against the same 344px row. The size, the
+ * padding and the tracking are still pinned below, because they are the floor
+ * under the gap and the fit walks back towards the edge with every word added.
  */
 test("the bottom tab labels are sized to fit the narrowest phone", () => {
   const source = withoutComments(nav);
@@ -89,21 +96,22 @@ test("the bottom tab labels are sized to fit the narrowest phone", () => {
   assert.ok(label, "the tab label's class string could not be found");
   assert.ok(
     Number(label[1]) <= 11,
-    `the tab label is back to ${label[1]}px; the six labels then total 314.1px against a 344px row`,
+    `the tab label is back to ${label[1]}px; at that size the labels stop fitting the 344px row`,
   );
   assert.doesNotMatch(
     label[0],
     /\btracking-(wide|wider|widest)\b/,
-    "the tab label widened its tracking again, which is 10px of the row across six labels",
+    "the tab label widened its tracking again, which costs the row several pixels per label",
   );
 
-  // And the labels themselves, because a seventh tab or a longer word breaks
-  // the same fit from the other side. 34 characters is what was measured.
+  // And the labels themselves, because a fifth tab or a longer word breaks the
+  // same fit from the other side. Four is the owner's number, and 28
+  // characters is the measured 22 with room for one longer synonym.
   const labels = [...source.matchAll(/label:\s*"([^"]+)"/g)].map((match) => match[1]);
-  assert.equal(labels.length, 6, `the tab bar has ${labels.length} labels; the fit was measured for six`);
+  assert.equal(labels.length, 4, `the tab bar has ${labels.length} labels; the owner settled on four on 2026-09-12`);
   const characters = labels.reduce((total, value) => total + value.length, 0);
   assert.ok(
-    characters <= 34,
-    `the tab labels total ${characters} characters; 34 is what fits 360px with its padding intact`,
+    characters <= 28,
+    `the tab labels total ${characters} characters; four labels measured 22 and 28 is the ceiling that keeps the padding intact`,
   );
 });

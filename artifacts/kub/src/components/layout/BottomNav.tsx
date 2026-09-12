@@ -3,12 +3,10 @@
 import { useLocation } from "wouter";
 import { useAppStore } from "@/store/app.store";
 import { KubIcon, type KubIconName } from "@/components/kub";
-import { useIsManagerOrAdmin } from "@/hooks/useRole";
 import { useTaskAccessGate } from "@/hooks/useTaskAccess";
-import { openGlobalSearch } from "@/lib/globalSearchEvents";
 import { cn } from "@/lib/utils";
 
-type SectionId = "chats" | "search" | "folders" | "profile" | "tasks" | "admin";
+type SectionId = "chats" | "folders" | "profile" | "tasks";
 
 interface Tab {
   id: SectionId;
@@ -18,32 +16,24 @@ interface Tab {
 
 export function BottomNav() {
   const [location, setLocation] = useLocation();
-  const isStaff = useIsManagerOrAdmin();
   const { canAccessTasks } = useTaskAccessGate();
   const { mobileSection, setMobileSection } = useAppStore();
-  const isOnAdminRoute = location.startsWith("/admin");
   const isOnTasksRoute = location.startsWith("/tasks");
 
+  // Four, on the owner's instruction of 2026-09-12. Search left because the
+  // list header already carries a real search field at every width, and
+  // administration because it has five other entries; neither was a second
+  // destination, both were a second door to the same one.
   const tabs: Tab[] = [
     { id: "chats",   label: "Чаты",    icon: "chatBubble" },
-    { id: "search",  label: "Поиск",   icon: "search" },
     { id: "folders", label: "Папки",   icon: "folderAdd" },
     { id: "profile", label: "Профиль", icon: "user" },
     ...(canAccessTasks ? [{ id: "tasks" as const, label: "Задачи", icon: "tasks" as KubIconName }] : []),
-    ...(isStaff ? [{ id: "admin" as const, label: "Админка", icon: "shield" as KubIconName }] : []),
   ];
 
   const handleTab = (id: SectionId) => {
     if (id === "tasks") {
       setLocation("/tasks");
-      return;
-    }
-    if (id === "admin") {
-      setLocation("/admin");
-      return;
-    }
-    if (id === "search") {
-      openGlobalSearch();
       return;
     }
     setMobileSection(id);
@@ -65,11 +55,7 @@ export function BottomNav() {
     >
       {tabs.map(({ id, label, icon }) => {
         const isActive =
-          id === "admin"
-            ? isOnAdminRoute
-            : id === "tasks"
-              ? isOnTasksRoute
-              : mobileSection === id;
+          id === "tasks" ? isOnTasksRoute : mobileSection === id;
         return (
           <button
             key={id}
@@ -86,11 +72,12 @@ export function BottomNav() {
               // spilled out of their own buttons and ended up 3.2px apart, in a
               // font whose space measures 3.3px. They read as one phrase.
               //
-              // Measured at 360: the six labels total 314.1px as shipped
-              // against 344px of row, so 8px of padding per side could not be
-              // paid. At 11px without the extra tracking they total 278.5px,
-              // which leaves the padding intact — and intact padding is a floor
-              // under the gap that free space cannot take away.
+              // Four labels since 2026-09-12, and the fit is no longer tight:
+              // measured in Inter at 600/11px uppercase, «Чаты» 32.03, «Папки»
+              // 40.50, «Профиль» 56.75 and «Задачи» 48.50 total 177.78px
+              // against 344px of row. The padding and the 11px size stay
+              // anyway: they are the floor under the gap, and a longer word or
+              // a fifth tab would walk back towards the same edge.
               "relative flex flex-col items-center gap-0.5 min-w-[44px] min-h-[44px] px-1 py-1 rounded-xl transition-colors",
               isActive ? "text-[color:var(--kub-accent-text)]" : "text-[color:var(--kub-muted)]"
             )}

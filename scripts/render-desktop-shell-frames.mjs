@@ -434,6 +434,9 @@ const DEVICES = {
   desktop: { viewport: { width: 1440, height: 900 }, windows: false },
   /** A narrow window: the smallest a person is likely to work in. */
   narrow: { viewport: { width: 1024, height: 720 }, windows: false },
+  /** A phone. Below `md`, so the folder rail is hidden, the horizontal strip
+   *  is the only folder surface, and the bottom bar is on screen. */
+  phone: { viewport: { width: 390, height: 844 }, windows: false },
   /** The Windows app, drawing its own window buttons. */
   windows: { viewport: { width: 1440, height: 900 }, windows: true },
   /** The same, in the narrow window — where the buttons' zone is proportionally
@@ -457,6 +460,14 @@ const SCENES = {
 const FRAMES = [];
 const add = (theme, device, scene, role = "staff") =>
   FRAMES.push({ id: `${theme}-${device}-${scene}${role === "staff" ? "" : `-${role}`}`, theme, device, scene, role });
+
+// The phone, in both themes, for the two changes of 2026-09-12: the folders
+// are drawn once — the strip here, the rail on a computer — and the bottom
+// bar carries four tabs instead of six. The staff role is deliberate: it is
+// the role that used to be shown «Админка» as a sixth tab, so if that tab
+// ever came back this is the frame it would come back in.
+add("dark", "phone", "rest");
+add("light", "phone", "rest");
 add("dark", "desktop", "rest");
 add("dark", "desktop", "collapsed");
 add("dark", "desktop", "menu");

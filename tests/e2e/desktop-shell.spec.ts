@@ -23,7 +23,8 @@ import {
  * What each check is for:
  *
  *  1. the rail is Telegram's 72pt and carries the folders with the counts we
- *     already compute, without replacing the horizontal strip;
+ *     already compute, and on a computer it REPLACES the horizontal strip, so
+ *     the same folders are never drawn twice (owner, 2026-09-12);
  *  2. the side-menu button is on the rail, not above the chat list;
  *  3. the side list is a layer: it costs no width closed, opens over the
  *     window, and closes again;
@@ -281,7 +282,7 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     await requireFixtureServer(request);
   });
 
-  test("the folder rail is 72pt, carries the counts, and leaves the horizontal strip alone", async ({ page }) => {
+  test("the folder rail is 72pt, carries the counts, and is the only folder surface on a computer", async ({ page }) => {
     test.skip(!isDesktop(page), "the rail is a computer's");
     await boot(page);
     const rail = page.getByTestId("folder-rail");
@@ -299,10 +300,32 @@ test.describe("the computer's shell: a folder rail, a side list and a list that 
     await expect(items.nth(0).getByTestId("folder-rail-count")).toHaveText("16");
     await expect(items.nth(1).getByTestId("folder-rail-count")).toHaveText("1");
 
-    // Telegram ships both arrangements as a setting and so do we: the rail does
-    // not replace the horizontal strip above the list. Found inside the list's
-    // own chrome, because the strip's button reads «Личные 1» — the name and
-    // its count — where the rail's carries the name as its label.
+    // Inverted on 2026-09-12, knowingly. This assertion used to require the
+    // strip to be visible here, on the grounds that «Telegram ships both
+    // arrangements as a setting and so do we». We do not: there is no such
+    // setting anywhere in the source, so both arrangements rendered at once
+    // and the owner saw his folders twice. The strip is now the phone's only,
+    // gated at the mount site in `Sidebar.tsx` — not inside `FolderTabs`,
+    // which `PublicPreviewCapturePage` still renders at desktop widths.
+    //
+    // Found inside the list's own chrome, because the strip's button reads
+    // «Личные 1» — the name and its count — where the rail's carries the name
+    // as its label.
+    const strip = page.locator("[data-kub-list-chrome]").getByRole("button", { name: /Личные/ });
+    await expect(strip).toHaveCount(0);
+  });
+
+  // The other half of the same contract. Without it the change above would
+  // merely have removed a protection: the strip is the only folder surface a
+  // phone has, so something must fail when it disappears from there.
+  test("the phone keeps the horizontal strip, which is its only folder surface", async ({ page }) => {
+    test.skip(isDesktop(page), "the strip is the phone's");
+    await boot(page);
+    // Hidden, not absent: the rail's root is `hidden … md:flex`, so it stays
+    // in the markup at every width and simply is not displayed on a phone —
+    // the same distinction the side-menu test below draws for the header's
+    // own button. Asserting absence here failed against a real phone render.
+    await expect(page.getByTestId("folder-rail")).toBeHidden();
     const strip = page.locator("[data-kub-list-chrome]").getByRole("button", { name: /Личные/ });
     await expect(strip).toBeVisible();
   });
