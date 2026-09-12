@@ -7639,6 +7639,13 @@ as the default under the standing rule.
 
 **Audit rows:** chat-functions B14; top-10 item 7.
 
+**Addendum, 2026-09-13.** Ownership transfer is possible in the database and impossible from the interface. The
+trigger `enforce_chat_member_update` admits an owner promoting another member to owner
+(`20260504_chats_membership_hardening.sql:417-418`), with last-owner protection on both update and delete
+(`:438-450`, `:461-488`). But `setMemberRole` in `ChatInfoPanel.tsx:897` is typed
+`(userId, role: "admin" | "member")` — `owner` is not expressible from the UI at all. So the half of
+this entry's proposal that needs no migration is already permitted by the server and only missing a control.
+
 ## D-151 `[ ]` «Управление» does not fit the proposed bottom capsule, and «Настройки» does not fit it either below 375
 
 **Severity:** medium, and on unbuilt work. It lands in the product the moment the
@@ -8209,3 +8216,275 @@ not make an account staff; its plate covers six pixels of a row's top edge again
 of 68. The second asked only whether the two rectangles **overlapped** — but Playwright presses an element's
 centre, and a six-pixel overlap leaves that centre in the clear. A guard has to cover **the point that gets
 pressed**, not merely touch the element.
+
+---
+
+
+**How this batch was measured.** The surface was rendered on the message-actions fixture at 1440 and 390, in
+both themes, with four members holding three different roles: `output/group-info/` carries the frames. Three
+read-only inventories were taken of the panel, of members/roles/permissions, and of the photo send path. The
+reference for what a person expects here is the owner's own pack of a competing client's group screens, sent
+2026-09-13; it is treated as a design decision about mechanics, and none of its content is reproduced anywhere.
+
+**Two of my own readings in this pass were wrong, both because the fixture lied, and both are written down so
+that nothing gets 'fixed' that is not broken:**
+
+- I reported that shared media does not exist on this surface. It does — counted rows over eight kinds that
+  push into a grid (`ChatInfoPanel.tsx:1473-1498`). The fixture simply carries no media.
+- I reported the invite-policy card as permanently «Недоступно». In production it is live: `chats.invite_policy`
+  exists (`types/database.generated.ts:239`, generated against the live project). The badge appears because
+  `messageActionsFixture.ts:52` seeds `"admins_only"`, which is neither accepted value, so
+  `readChatInvitePolicy` (`ChatInfoPanel.tsx:2031-2035`) returns null. **The badge in those frames is the
+  harness, not the product.**
+
+## D-163 `[ ]` On a phone nobody can be promoted, demoted or removed: the controls are hover-only
+
+**Severity: high.** Every per-member action in a group is reachable on a computer and reachable on no phone at
+all — and the phone is where this product is used.
+
+**Surface:** `artifacts/kub/src/components/chat/ChatInfoPanel.tsx:1618` — the container holding the three
+member buttons carries `opacity-0 group-hover:opacity-100`. The buttons themselves are
+«Сделать администратором» (`:1619-1628`), «Снять администратора» (`:1629-1638`) and «Удалить из
+чата» (`:1639-1657`).
+
+**Measured, and measured twice because the first measurement was wrong.** Reading the *button* reports
+`opacity: 1` while its parent stands at 0 — which is how this was first reported as working. Measured on the
+element that actually fades, walking up from the button:
+
+- 1440, at rest: `depth 1: opacity=0` — no icons drawn.
+- 1440, pointer on the member row: `depth 1: opacity=1` — two 26x26 icons appear at the right of the row.
+- 390 with touch, at rest **and after a tap on the row**: `depth 1: opacity=0` both times.
+
+**Frames:** `output/group-info/1440-members-row-hovered.png` (icons present) and
+`output/group-info/390-members-tapped.png` (row highlighted by the tap, no icons).
+
+The controls stay focusable, so a keyboard reaches them; a finger does not. There is no long-press, no context
+menu and no overflow anywhere on a member row.
+
+**Proposed:** the actions belong to the member, not to the pointer. A press on the row opens them — which is
+also what the reference pack does, and it carries five items rather than three.
+
+**Two constraints the fix has to obey, both measured rather than reasoned, and both invisible until measured.**
+
+*1. The overlay must be portalled out of the panel, in every shape.* The product's existing row-action pair —
+`ChatDesktopContextMenu` and `ChatMobileActionSheet` in `components/sidebar/ChatList.tsx:583, :635` —
+is `position: fixed`, and the information panel carries `kub-glass-strong`, whose `backdrop-filter`
+(`index.css:984-988`) makes it the containing block for every fixed descendant. Measured by inserting a
+`fixed; inset: 0` element into the member list and comparing its rect with the same element on `document.body`:
+
+| shape | fixed inside the panel | fixed on the body | trapped |
+| --- | --- | --- | --- |
+| column, 1440 | 379x900 | 1440x900 | **yes** |
+| floating, 1000 | 378x618 | 1000x800 | **yes** |
+| docked, 390 | 390x844 | 390x844 | no |
+
+**The phone's «no» is the dangerous reading.** The culprit is present in all three — `backdrop-filter` at
+depth 0 — and on a phone the panel simply *is* the viewport, so the trap has nothing to show. A fix validated
+only on a phone would ship an action sheet confined to a 380px card on every computer. So the portal is
+unconditional, and the layer is a parameter: the panel is `z-[60]` (`lib/profileWindow.ts:74, :87`) while
+the existing menu and sheet are `z-50`, so reused unchanged they would also render *underneath* it.
+
+*2. The lifted gesture must hold no state.* `tests/e2e/chat-list-event-cost.spec.ts` pins the chat row at one
+render for an event and two where a delivery mark follows (`:101`, `:132`, `:154`, `:172`), and
+`tests/e2e/helpers/render-counter.ts:13` counts renders, with a mount counted as one. The gesture in
+`ChatListItem.tsx:109-167` is deliberately built on refs alone; lifting it into a hook that sets state would
+break a contract on the critical list rather than a cosmetic one.
+
+*What is being reused, and what is deliberately not.* `ChatAction` (`ChatList.tsx:37`) is already generic;
+`ChatActionButton` reads nothing but the action. Only `ChatActionHeader` is chat-specific, so the shared
+components take a header slot. The gesture carries three guards that would be lost in a re-derivation and are
+therefore lifted whole: it refuses a context menu within a second of a touch, refuses one on a coarse pointer,
+and suppresses the click that follows a long press (`ChatListItem.tsx:128-167`). Radix's
+`components/ui/context-menu.tsx` is **not** adopted: it has no users today, and the product's own menu carries
+safe-area clamping (`ChatList.tsx:122-142`) that swapping primitives would have to reproduce — a rewrite of a
+shipped surface rather than a fix for this entry.
+
+*Left alone on purpose:* `MessageList.tsx:1529-1584` carries a third long-press implementation. Folding it in
+would put this batch inside the conversation's own gesture handling, where the critical scroll contracts live.
+It is recorded here so that it is a known third copy rather than a forgotten one.
+
+---
+
+## D-164 `[ ]` A group has no settings screen: the pencil swaps two fields and there is no way to cancel
+
+**Severity: medium**, rising with every group setting the product gains, because there is nowhere to put one.
+
+**Surface:** `ChatInfoPanel.tsx:1182-1200` (the pencil), `:1238-1253` (what it opens),
+`:698-716` (save).
+
+**Defect:** the pencil does not open a screen, a sheet or a dialog. It sets `editing = true`, which replaces the
+summary's title and subtitle with a single-line name input and a two-row «Описание…» textarea. That is the whole
+of it. The check button saves; **there is no cancel control**, so the only way out of edit mode is to commit.
+Every other group setting lives outside it, on the «Сведения» tab, visible to people who cannot change it.
+
+**Frame:** `output/group-info/1440-edit.png`.
+
+The reference pack's equivalent screen carries fifteen rows — name, photo, description, group type, chat
+history, appearance, topics, reactions, greeting, permissions, invite links, administrators, members,
+statistics, recent actions — each with its **current value on the right**, and one destructive row at the foot.
+Ours has one such row in the entire panel (see D-165).
+
+**Proposed:** a group settings view inside the same card, entered by the pencil and left by a back arrow, the
+way the media sub-view already works here (`:1084-1092`). Not a second window.
+
+---
+
+## D-165 `[ ]` The invite card states a policy it never read, and silently takes the invite button away
+
+**Severity: medium.** It tells people something untrue about who may invite.
+
+**Surface:** `ChatInfoPanel.tsx:1358-1414`, `:2031-2035`, `:374-376`, `:388`.
+
+**Defect, three parts:**
+
+1. When the chat object carries an unrecognised `invite_policy`, the card still prints «Только
+   администраторы» — the fallback `DEFAULT_INVITE_POLICY` (`:123, :375`) — beside a «Недоступно» badge.
+   It asserts a policy it has not read.
+2. `canSendInvites` (`:388`) requires `invitePolicySupported` before honouring
+   `members_can_invite`, so an unrecognised value **silently strips ordinary members of the invite button**
+   with nothing said.
+3. The value line reads «Только администраторы» while the button for that same state reads «Администраторы»
+   (`:1364` against `:1386`).
+
+**Not a defect, and recorded so it is not 'fixed':** the «Недоступно» badge visible in this batch's frames is the
+fixture's doing — `messageActionsFixture.ts:52` seeds `"admins_only"`. In production the column
+exists and the control works.
+
+**Proposed:** say «неизвестно» rather than a default when nothing was read, and never let an unread value
+change what a member may do.
+
+---
+
+## D-166 `[ ]` Every membership change is already recorded per chat, and no chat can show it
+
+**Severity: medium**, and unusually cheap to fix.
+
+**What exists:** `.migration-backup/supabase/migrations/20260505_audit_logs.sql` — table
+`audit_logs(actor_id, action, target_kind, target_id, diff, created_at)` (`:18-26`) with triggers
+`trg_audit_chat_members_insert/update/delete` (`:273-286`) writing `chat_member_added`,
+`chat_member_role_changed` (with `from`/`to`, `:240-250`) and `chat_member_removed`,
+all with `target_kind='chat'` and `target_id = chat_id`. The Russian labels already exist in
+`pages/admin/AuditTab.tsx:26-28`.
+
+**Defect:** nothing reads it per chat. `hooks/useAuditLogs.ts:63` filters by actor, action and date — never
+by `target_id` — and the only surface is the global administration panel. A group's owner cannot see who
+removed whom from their own group.
+
+**What it would take:** a read by `target_id`, and an RLS policy. Today the policy is «admins read
+audit_logs» using `is_admin(auth.uid())` (`:44-47`), so a chat owner who is not a global
+administrator cannot read their own group's history. That policy change is a database change and needs the
+owner's approval and a backup, per section 10 of the handoff.
+
+---
+
+## D-167 `[ ]` Muting a chat is all-or-nothing and kept in the browser, while the table for it exists
+
+**Severity: medium.**
+
+**Surface:** `ChatInfoPanel.tsx:1340-1348` — one row, «Отключить уведомления» / «Включить уведомления»,
+writing a chat id into `localStorage['ng_muted']` plus a push preference (`store/app.store.ts:361-373`).
+
+**Defect:** there are no durations, no snooze and no per-chat sound settings, and the state lives in one browser
+rather than with the account — so a chat muted on a phone is unmuted on a computer.
+
+**What exists already:** `chat_notification_preferences(user_id, chat_id, push_enabled, muted_until)` is live
+(`types/database.generated.ts:190-214`). `muted_until` is exactly the column a «выключить на время»
+needs, and nothing in the chat panel writes it.
+
+**Reference:** the pack shows this as a menu on the sound tile with four items — off, off for a while, configure,
+and notifications off — rather than one binary row.
+
+---
+
+## D-168 `[ ]` A member row shows a role and nothing else, and cannot be opened
+
+**Severity: medium.**
+
+**Surface:** `ChatInfoPanel.tsx:1604-1616`, role word from `roleLabel` (`:970-971`).
+
+**Defect:** the row is a `<div>` — not pressable, with no way to reach the person. It draws an avatar, a
+crown or shield glyph, the name, and for owners and administrators a second line reading «Владелец» or
+«Администратор» in accent-coloured plain text. **An ordinary member's row carries nothing at all** — no
+username, no last seen, no join date. There is no presence dot: `showOnline` exists on the avatar
+(`components/ui/ChatAvatar.tsx:249-263`) and is not passed (`:1605`). The list has no order
+(`:395-403` has no `.order()`), no search and no sections.
+
+**On the customisable tag the reference pack shows, and what it would cost.** That tag is per person **in one
+chat**, with its own text and colour, and the holder can change their own. `chat_members` has exactly eleven
+columns (`types/database.generated.ts:133-172`) — no free text, no colour — so it needs a migration. The
+colour primitive is already here and unused: `roles.colour` is validated
+`^#[0-9a-fA-F]{6}$` (`20260904080000_roles_priority_and_colour.sql:42-49`, live at
+`database.generated.ts:1082`) and is never read as data anywhere in the client. But it belongs to a global
+role definition — one colour shared by everyone holding that role — so it cannot express one person's tag in one
+group. **Do not reach for it as if it could:** that would be the relabelling of an existing function the owner has
+ruled out.
+
+Also seeded and unassignable: chat-scope roles `chat_owner` / `chat_admin` / `chat_member` and the
+permissions `chats.invite`, `chats.manage_invites`, `chats.moderate`, `chats.manage_roles`
+(`20260514_dynamic_roles_permissions.sql:104-106, 136-140, 212-219`) — with no table assigning a chat-scope
+role to a (chat, person) pair.
+
+---
+
+## D-169 `[ ]` A channel is shown as a group, with a «Участники» tab and a group's title
+
+**Severity: low**, until channels are used in earnest.
+
+**Surface:** `ChatInfoPanel.tsx:147` — `isGroup = !isSaved && (type === "group" || type === "channel")`.
+
+**Defect:** a channel therefore renders the group panel, titled «Информация о группе» (`:223`), with the
+«Участники» tab and «Удалить групповой чат». `getChatDisplayInfo` already has a «Канал» label
+(`lib/chatDisplay.ts:70-77`) that this panel never uses. The «Топики» row is the one place that excludes
+channels (`:1415`), so the distinction is known here and applied once.
+
+---
+
+## D-170 `[ ]` There is no way to invite anyone who is not already findable by name
+
+**Severity: medium.**
+
+**Surface:** `components/chat/GroupInviteModal.tsx:70-102` — a search over usernames and names.
+
+**Defect:** `group_invites` is one row per named invitee
+(`20260509_group_invites.sql:20`). There is **no shareable link or join code for a chat anywhere in the
+product**. The invite codes that do exist (`registration_invites`, `20260622_registration_invite_codes.sql`)
+are for signing up to the product, not for joining a conversation — the link on
+`pages/admin/InvitesTab.tsx:192` is one of those and must not be mistaken for this.
+
+**Also unsurfaced:** `group_invites.expires_at` is fetched (`ChatInfoPanel.tsx:414`) and never shown;
+only the status is (`:1719`).
+
+---
+
+## D-171 `[ ]` Shared media has no dates, and the viewer shows one item with no sense of place
+
+**Severity: low to medium**, and it is the difference between browsing and hunting.
+
+**Surface:** `ChatInfoPanel.tsx:1796-1863` (the grid and lists), `components/chat/MediaViewer.tsx:45-48`.
+
+**Defect:** the media sub-view has **no date grouping, no floating month marker and no fast scroll**; paging is an
+observer sentinel doubling as a «Загрузить ещё» button (`:1882-1895`), 24 items at a time. The viewer
+takes a single item — `media: MediaViewerItem | null` — so there is no next, no previous, no index and no
+count: opening the third photo of eight hundred tells you nothing about where you are, and leaves you no way to
+move.
+
+The counts that do exist are good and are on the rows themselves («1543 фотографии»), from
+`chat_media_counts` (`:631-642`), hedged as `24+` when the function is unavailable.
+
+---
+
+## D-172 `[ ]` The invitations block explains its own implementation to the reader
+
+**Severity: low.**
+
+**Surface:** `ChatInfoPanel.tsx:1662-1680`.
+
+**Defect:** under the heading «ПРИГЛАШЕНИЯ» stands the sentence «Статусы обновляются без перезагрузки панели.»
+beside a manual «Обновить» button. The sentence is a note about how the code works, and the button contradicts
+it. Neither belongs to the person reading.
+
+**Frames:** `output/group-info/1440-members.png`, `output/group-info/light-1440-members.png`.
+
+Related and separate: `public.chats` is not in the `supabase_realtime` publication, so the panel's
+binding on that table reports SUBSCRIBED and delivers nothing (`ChatInfoPanel.tsx:483-487`). Member and
+invite bindings do work, which is why a manual refresh looks unnecessary and mostly is.
