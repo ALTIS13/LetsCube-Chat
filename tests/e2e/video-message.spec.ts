@@ -47,47 +47,12 @@ test.describe("KUB video recorders", () => {
     await expect(page.getByText("Режим: голосовое")).toBeVisible();
   });
 
-  test("records a regular video from the attachment menu into rectangular staged attachments", async ({ page }) => {
-    test.skip(true, "D-122 retired the attach menu; a rectangular video has no entry until the recording task gives it one");
-    const consoleErrors: string[] = [];
-    page.on("console", (message) => {
-      if (message.type() === "error") consoleErrors.push(message.text());
-    });
-    page.on("pageerror", (error) => {
-      consoleErrors.push(error.message);
-    });
-
-    const credentials = loadQaCredentials();
-    test.skip(!credentials, "QA credentials are not configured in env or ~/.kub-messenger-qa.env");
-
-    await gotoOrSkip(page, "/");
-    await loginIfNeeded(page, credentials);
-    await openAnyChat(page);
-
-    await page.getByRole("button", { name: "Прикрепить" }).click();
-    await page.getByRole("button", { name: "Записать видео" }).click();
-
-    const modal = page.getByTestId("regular-video-recorder-modal");
-    await expect(modal).toBeVisible();
-    await expect(modal.getByText("Камера готова")).toBeVisible();
-
-    await page.getByTestId("video-message-record-start").click();
-    await expect(modal.getByText("Идёт запись")).toBeVisible();
-    await page.waitForTimeout(1_200);
-    await page.getByTestId("video-message-record-stop").click();
-    await expect(modal.getByText("Видео готово")).toBeVisible();
-
-    await page.getByRole("button", { name: "Добавить" }).click();
-    await expect(modal).toHaveCount(0);
-    await expect(page.getByTestId("staged-attachment-tray")).toBeVisible();
-    await expect(page.getByTestId("staged-regular-video-preview")).toBeVisible();
-    await expect(page.getByTestId("staged-video-message-preview")).toHaveCount(0);
-
-    await page.getByRole("button", { name: "Убрать вложение" }).first().click();
-    await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
-    await expect(page.getByText("Произошла ошибка интерфейса")).toHaveCount(0);
-    expect(consoleErrors, `Unexpected console errors:\n${consoleErrors.join("\n")}`).toEqual([]);
-  });
+  // Two cases that drove the rectangular recorder stood here, skipped since
+  // D-122 retired «Записать видео» — the only way into it. They are gone rather
+  // than skipped: `videoRecorderVariant` is set to "round" at every call site,
+  // so there is nothing left for them to reach, and a permanently skipped test
+  // is a reminder rather than coverage. Where a rectangular recording belongs,
+  // if anywhere, is decided in D-130.
 
   test("records a round video message through the composer recorder mode", async ({ page }) => {
     const credentials = loadQaCredentials();
@@ -154,7 +119,9 @@ test.describe("KUB video recorders", () => {
       return raw ? JSON.parse(raw) as { playbackRate?: number; volume?: number } : {};
     });
     expect(playbackSettings.playbackRate).toBe(1.5);
-    if (finePointer) expect(playbackSettings.volume).toBeCloseTo(0.6, 1);
+    // `finger` is the coarse-pointer check above; the volume is only set when
+    // there is a slider, which is when the pointer is fine (D-118).
+    if (!finger) expect(playbackSettings.volume).toBeCloseTo(0.6, 1);
     await page.getByTestId("chat-media-playback-close").click();
     await expect(playbackBar).toHaveCount(0);
     await previewToggle.click();
@@ -180,19 +147,26 @@ test.describe("KUB video recorders", () => {
 
     await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
     await page.mouse.down();
-    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Проведите вверх");
+    // A mouse is told its own way out, which is Telegram Desktop's (D-130).
+    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Отпустите вне поля — отмена");
     await expect(page.getByTestId("composer-recording-lock-rail")).toBeVisible();
     await expect(page.getByTestId("composer-recording-lock-progress")).toHaveAttribute("data-lock-progress", /0\.\d+|1/);
     await page.mouse.move(box!.x + box!.width / 2, box!.y - 96, { steps: 4 });
-    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Запись зафиксирована");
+    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Запись закреплена");
     await page.mouse.up();
-    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Запись зафиксирована");
+    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Запись закреплена");
 
     await page.waitForTimeout(1_200);
+    // The stop no longer means «put it in the tray»: it ends the recording so it
+    // can be heard first, which is the only preview there is now (D-130, R5).
     await page.getByTestId("composer-locked-recording-stop").click();
-    await expect(page.getByTestId("staged-attachment-tray").getByText("Голосовое")).toBeVisible();
+    await expect(page.getByTestId("composer-recording-preview")).toBeVisible();
+    await expect(page.getByTestId("composer-recording-preview-toggle")).toBeVisible();
+    // And nothing has been staged or sent by any of it.
+    await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Убрать вложение" }).first().click();
+    await page.getByTestId("composer-recording-delete").click();
+    await expect(page.getByTestId("composer-recording-lock-indicator")).toHaveCount(0);
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
   });
 
@@ -228,7 +202,7 @@ test.describe("KUB video recorders", () => {
     await expect(modal).toHaveAttribute("data-recorder-shell", "composer-attached");
     await expect(modal).toHaveAttribute("data-facing-mode", "user");
     await page.mouse.move(box!.x + box!.width / 2, box!.y - 96, { steps: 4 });
-    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Запись зафиксирована");
+    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Запись закреплена");
     await page.mouse.up();
 
     const switchCamera = page.getByTestId("video-recorder-switch-camera");
@@ -236,12 +210,13 @@ test.describe("KUB video recorders", () => {
     await switchCamera.click();
     await expect(modal).toHaveAttribute("data-facing-mode", "environment");
     await page.waitForTimeout(1_200);
-    await page.getByTestId("composer-locked-recording-stop").click();
+    // A round video's stop ends and sends it now (D-130, R6), and this spec runs
+    // against a real account, so it must not. The lock and the camera switch are
+    // what it is here to prove; the recording is thrown away instead.
+    await page.getByTestId("composer-recording-delete").click();
 
     await expect(modal).toHaveCount(0);
-    await expect(page.getByTestId("staged-video-message-preview")).toBeVisible();
-
-    await page.getByRole("button", { name: "Убрать вложение" }).first().click();
+    await expect(page.getByTestId("composer-recording-lock-indicator")).toHaveCount(0);
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
   });
 
@@ -276,7 +251,7 @@ test.describe("KUB video recorders", () => {
       clientY: y,
     });
     await page.waitForTimeout(520);
-    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Проведите вверх");
+    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Влево — отмена");
     await recorder.dispatchEvent("pointermove", {
       pointerId: 41,
       pointerType: "touch",
@@ -286,7 +261,7 @@ test.describe("KUB video recorders", () => {
       clientX: x,
       clientY: y - 96,
     });
-    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Запись зафиксирована");
+    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Запись закреплена");
     await recorder.dispatchEvent("pointerup", {
       pointerId: 41,
       pointerType: "touch",
@@ -296,14 +271,17 @@ test.describe("KUB video recorders", () => {
       clientX: x,
       clientY: y - 96,
     });
-    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Запись зафиксирована");
+    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Запись закреплена");
 
     await page.waitForTimeout(1_200);
+    // As above: the stop ends the recording for a listen, and the delete beside
+    // it is what leaves without sending.
     await page.getByTestId("composer-locked-recording-stop").click();
-    await expect(page.getByTestId("staged-attachment-tray").getByText("Голосовое")).toBeVisible();
-
-    await page.getByRole("button", { name: "Убрать вложение" }).first().click();
+    await expect(page.getByTestId("composer-recording-preview")).toBeVisible();
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
+
+    await page.getByTestId("composer-recording-delete").click();
+    await expect(page.getByTestId("composer-recording-lock-indicator")).toHaveCount(0);
   });
 
   test("does not toggle mode on mobile long press or moved tap", async ({ page }, testInfo) => {
@@ -361,48 +339,35 @@ test.describe("KUB video recorders", () => {
       clientY: y,
     });
     await page.waitForTimeout(360);
-    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Проведите вверх");
+    await expect(page.getByTestId("composer-recording-lock-indicator")).toContainText("Влево — отмена");
     await expect(recorder).toHaveAttribute("data-recorder-mode", "voice");
     await page.waitForTimeout(1_100);
+    // Releasing sends now (D-130, R6) and this spec signs in to a real account,
+    // so the recording leaves the way a person's own slip leaves: left, past the
+    // cancel threshold, which discards it without waiting for the release.
+    await recorder.dispatchEvent("pointermove", {
+      pointerId: 52,
+      pointerType: "touch",
+      isPrimary: true,
+      button: 0,
+      buttons: 1,
+      clientX: x - 120,
+      clientY: y,
+    });
+    await expect(page.getByTestId("composer-recording-lock-indicator")).toHaveCount(0);
     await recorder.dispatchEvent("pointerup", {
       pointerId: 52,
       pointerType: "touch",
       isPrimary: true,
       button: 0,
       buttons: 0,
-      clientX: x,
+      clientX: x - 120,
       clientY: y,
     });
-    await expect(page.getByTestId("staged-attachment-tray").getByText("Голосовое")).toBeVisible();
-
-    await page.getByRole("button", { name: "Убрать вложение" }).first().click();
+    await expect(recorder).toHaveAttribute("data-recorder-mode", "voice");
     await expect(page.getByTestId("staged-attachment-item")).toHaveCount(0);
   });
 
-  test("shows a friendly state when regular video recording is unavailable", async ({ page }) => {
-    test.skip(true, "D-122 retired the attach menu; a rectangular video has no entry until the recording task gives it one");
-    await page.addInitScript(() => {
-      Object.defineProperty(window, "MediaRecorder", {
-        configurable: true,
-        value: undefined,
-      });
-    });
-
-    const credentials = loadQaCredentials();
-    test.skip(!credentials, "QA credentials are not configured in env or ~/.kub-messenger-qa.env");
-
-    await gotoOrSkip(page, "/");
-    await loginIfNeeded(page, credentials);
-    await openAnyChat(page);
-
-    await page.getByRole("button", { name: "Прикрепить" }).click();
-    await page.getByRole("button", { name: "Записать видео" }).click();
-
-    const modal = page.getByTestId("regular-video-recorder-modal");
-    await expect(modal).toBeVisible();
-    await expect(modal.getByText("Видео не поддерживается этим браузером.").first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "Начать запись" })).toBeDisabled();
-  });
 });
 
 async function openAnyChat(page: import("@playwright/test").Page) {
