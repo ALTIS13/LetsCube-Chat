@@ -239,8 +239,14 @@ const SERVED_MARKERS = [
   ["/src/components/chat/MessageInput.tsx", "readRecordingHold"],
   ["/src/components/chat/ComposerRecordingRow.tsx", "data-recording-phase"],
   ["/src/components/chat/ComposerRecordingRow.tsx", "composer-recording-cancel"],
+  // The stopped row's own controls, added with the correction of 2026-09-12: a
+  // server serving the version before it would photograph «Отмена» where the
+  // bin belongs and be reported as the version after it.
+  ["/src/components/chat/ComposerRecordingRow.tsx", "composer-recording-trash"],
+  ["/src/components/chat/ComposerRecordingRow.tsx", "composer-recording-bar"],
   ["/src/lib/recordingGesture.ts", "releaseRecording"],
   ["/src/lib/recordingGesture.ts", "overCancelButton"],
+  ["/src/lib/recordingGesture.ts", "recordingRowControls"],
 ];
 
 /**
@@ -293,10 +299,20 @@ async function measure(page, frame) {
     const hint = document.querySelector('[data-testid="composer-short-press-hint"]');
     const rail = document.querySelector('[data-testid="composer-recording-lock-progress"]');
     const cancel = document.querySelector('[data-testid="composer-recording-cancel"]');
+    // The stopped row's own four: the bin at the left edge, the bar across the
+    // width, the play control on it, and the send at the right.
+    const trash = document.querySelector('[data-testid="composer-recording-trash"]');
+    const bar = document.querySelector('[data-testid="composer-recording-bar"]');
+    const playToggle = document.querySelector('[data-testid="composer-recording-preview-toggle"]');
+    const send = document.querySelector('[data-testid="composer-recording-send"]');
     const probe = window.__recordingProbe ?? { audio: -1, video: -1 };
     const rowBox = row?.getBoundingClientRect();
     const styles = row ? getComputedStyle(row) : null;
     const cancelBox = cancel?.getBoundingClientRect();
+    const trashBox = trash?.getBoundingClientRect();
+    const barBox = bar?.getBoundingClientRect();
+    const playBox = playToggle?.getBoundingClientRect();
+    const sendBox = send?.getBoundingClientRect();
     const railBox = document
       .querySelector('[data-testid="composer-recording-lock-rail"]')
       ?.getBoundingClientRect();
@@ -328,7 +344,18 @@ async function measure(page, frame) {
       railOnScreen: Boolean(railBox),
       preview: Boolean(document.querySelector('[data-testid="composer-recording-preview"]')),
       cancelControl: Boolean(cancel),
-      sendControl: Boolean(document.querySelector('[data-testid="composer-recording-send"]')),
+      sendControl: Boolean(send),
+      // The stopped row, measured rather than described: the bin against the
+      // row's left edge, the send against its right, how much of the row the
+      // bar takes, and whether the play control is on that bar near its middle.
+      trashControl: Boolean(trash),
+      trashOffRowLeftPx: trashBox && rowBox ? Math.round(trashBox.left - rowBox.left) : null,
+      sendOffRowRightPx: sendBox && rowBox ? Math.round(rowBox.right - sendBox.right) : null,
+      barShareOfRowPct:
+        barBox && rowBox && rowBox.width > 0 ? Math.round((barBox.width / rowBox.width) * 100) : null,
+      playOffRowCentrePx: playBox && rowBox ? Math.round(centreX(playBox) - centreX(rowBox)) : null,
+      playOnBar: playBox && barBox ? playBox.left >= barBox.left && playBox.right <= barBox.right : null,
+      length: document.querySelector('[data-testid="composer-recording-length"]')?.textContent?.trim() ?? null,
       hint: hint?.textContent?.trim() ?? null,
       // Nothing may be waiting in the tray: a released recording is sent, and a
       // cancelled one is gone.
@@ -369,15 +396,26 @@ function verdict(frame, found) {
   if (found.transform && found.transform !== "none") problems.push(`the row has moved: ${found.transform}`);
   if (found.opacity !== null && Number(found.opacity) < 1) problems.push(`the row is faded to ${found.opacity}`);
 
-  // «Отмена» stands in every state, near the middle of the composer. While the
-  // finger is down the row is 52 points narrower than the composer — the record
-  // button and its gap, which stay under the thumb — so the button sits about
-  // half of that to the left; locked and paused, the row is the whole composer.
-  if (!found.cancelControl) problems.push("the row has no «Отмена»");
-  const allowedOffCentre = frame.state === "3-locked" || frame.state === "4-paused" ? 8 : 28;
-  if (found.cancelOffCentrePx === null) problems.push("«Отмена» could not be measured");
-  else if (Math.abs(found.cancelOffCentrePx) > allowedOffCentre) {
-    problems.push(`«Отмена» is ${found.cancelOffCentrePx}px off the composer's centre`);
+  // One way out per state, and which control it is belongs to the state — the
+  // correction of 2026-09-12, from the owner's screenshot of Telegram Desktop's
+  // stopped recording. «Отмена» stands while the recording is still running,
+  // near the middle of the composer; the bin stands once it has stopped, and
+  // then «Отмена» must be gone. A row carrying both, or neither, fails here.
+  if (frame.state === "4-paused") {
+    if (found.cancelControl) problems.push("the stopped row still carries «Отмена»");
+    if (!found.trashControl) problems.push("the stopped row has no bin to throw the recording away with");
+  } else {
+    if (found.trashControl) problems.push("a running recording carries a bin as well as «Отмена»");
+    if (!found.cancelControl) problems.push("the row has no «Отмена»");
+    // While the finger is down the row is 52 points narrower than the composer
+    // — the record button and its gap, which stay under the thumb — so the
+    // button sits about half of that to the left; locked, the row is the whole
+    // composer.
+    const allowedOffCentre = frame.state === "3-locked" ? 8 : 28;
+    if (found.cancelOffCentrePx === null) problems.push("«Отмена» could not be measured");
+    else if (Math.abs(found.cancelOffCentrePx) > allowedOffCentre) {
+      problems.push(`«Отмена» is ${found.cancelOffCentrePx}px off the composer's centre`);
+    }
   }
 
   if (frame.state !== "4-paused") {
@@ -409,6 +447,26 @@ function verdict(frame, found) {
   if (frame.state === "4-paused") {
     if (!found.preview) problems.push("there is nothing to listen to");
     if (!found.sendControl) problems.push("the paused row has no send");
+    // Telegram's stopped row, as four measurements rather than four adjectives:
+    // the bin at the left edge, the send at the right, the bar taking the width
+    // between them, and the play control with the length **on** that bar rather
+    // than beside it.
+    if (found.trashOffRowLeftPx === null || found.trashOffRowLeftPx > 8) {
+      problems.push(`the bin is ${found.trashOffRowLeftPx}px from the row's left edge`);
+    }
+    if (found.sendOffRowRightPx === null || found.sendOffRowRightPx > 8) {
+      problems.push(`the send is ${found.sendOffRowRightPx}px from the row's right edge`);
+    }
+    if (found.barShareOfRowPct === null || found.barShareOfRowPct < 55) {
+      problems.push(`the bar takes ${found.barShareOfRowPct}% of the row, which is not "the width"`);
+    }
+    if (found.playOnBar !== true) problems.push("the play control is not on the bar");
+    if (found.playOffRowCentrePx === null || Math.abs(found.playOffRowCentrePx) > 24) {
+      problems.push(`the play control is ${found.playOffRowCentrePx}px off the row's centre`);
+    }
+    if (!/^[0-9]+:[0-9][0-9]$/.test(found.length ?? "")) {
+      problems.push(`the length reads ${JSON.stringify(found.length)}, which is not M:SS`);
+    }
   }
   return problems;
 }
@@ -610,11 +668,13 @@ async function buildSheet({ file, title, subtitle, columns, rows, cell }) {
 
 const SHEET_NOTE =
   "Настоящие компоненты приложения на DEV-маршруте, вымышленная переписка, микрофон — тестовое устройство Chromium. " +
-  "Строка больше никуда не съезжает: «Отмена» стоит посередине, слева — точка и время, справа — отправка. " +
+  "Строка больше никуда не съезжает. Пока запись идёт: слева точка и время, посередине «Отмена», справа отправка. " +
   "Удержание записывает; запись отменяют, отпустив палец на «Отмена» (мышью — клик по ней); отпускание в любом " +
   "другом месте отправляет, а не кладёт во вложения. Сдвиг вверх за 72 точки закрепляет запись: рейка фиксации — " +
-  "капсула с замком и шевроном над кнопкой записи, теперь и на компьютере. Закреплённую запись можно остановить, " +
-  "прослушать и уже потом отправить или удалить. Время идёт с десятыми долями, как в Telegram Desktop. " +
+  "капсула с замком и шевроном над кнопкой записи, теперь и на компьютере. Закреплённую запись можно остановить — " +
+  "и остановленная строка собрана как в Telegram: слева корзина, дальше полоса на всю ширину с плеером «▶ 0:03» " +
+  "прямо на ней, справа синяя отправка, а «Отмена» в этом состоянии уже нет. " +
+  "Время идёт с десятыми долями, как в Telegram Desktop; у остановленной записи это длина, а не часы. " +
   "Слишком короткое нажатие оставляет подсказку у кнопки вместо модального окна. " +
   "Показан нижний край экрана — там, где находится строка ввода.";
 

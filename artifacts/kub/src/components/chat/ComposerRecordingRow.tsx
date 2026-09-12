@@ -4,10 +4,12 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { KubGlassLayer, KubIcon } from "@/components/kub";
 import { CAPSULE_GLASS } from "@/lib/chatChrome";
 import { FOCUS_RING, PRESS_FILLED } from "@/lib/controlSurface";
-import { formatVoiceDuration } from "@/hooks/useVoiceRecorder";
 import {
   RECORDING_CANCEL_LABEL,
+  RECORDING_DELETE_LABEL,
   formatRecordingElapsed,
+  formatRecordingLength,
+  recordingRowControls,
   recordingStateLabel,
   type RecordingMode,
   type RecordingPhase,
@@ -29,7 +31,7 @@ export interface ComposerRecordingRowProps {
   cancelArmed: boolean;
   /** The composer measures this button to decide what a release means. */
   cancelRef?: RefObject<HTMLButtonElement | null>;
-  /** A paused recording, ready to be listened to before it is sent. */
+  /** A stopped recording, ready to be listened to before it is sent. */
   preview: ComposerRecordingPreview | null;
   onCancel: () => void;
   /** Stops a locked recording so it can be heard before it goes. */
@@ -41,29 +43,28 @@ export interface ComposerRecordingRowProps {
  * The composer while something is being recorded (D-130).
  *
  * It takes the composer's row rather than standing above it in a card that
- * explains the gesture (R3), and since the owner's ruling of 2026-09-12 it is
- * laid out the way Telegram Desktop lays out the same moment: **the time at the
- * left, «Отмена» in the middle, and what sends at the right**. Three columns,
- * `1fr auto 1fr`, so the middle one is centred by the grid itself and stays
- * centred whatever the time reads.
+ * explains the gesture (R3), and it is laid out the way Telegram Desktop lays
+ * out the same moments. Nothing moves: the row used to follow the finger
+ * leftwards and fade as it went, which is what carried the timer out of the
+ * frame — `04` where `00:04` was recorded — and there is no translation left to
+ * clip it.
  *
- * Nothing moves. The row used to follow the finger leftwards and fade as it
- * went, which is what made the old slide legible and what carried the timer out
- * of the frame — `04` where `00:04` was recorded. There is no translation left
- * to clip it.
+ * **The row has two shapes, and which one it wears is whether the recording is
+ * still running.** `recordingRowControls` decides, so the answer is a rule with
+ * a test rather than a condition spread through the markup.
  *
- * Three states, and they are the gesture's own:
- *
- * - **held.** A red dot and the running time, «Отмена», and the record button
- *   still under the finger as a sibling of this row. The lock rail stands above
- *   that button as a capsule of the panel material — on the desktop too, which
- *   the owner asked for by name.
- * - **locked.** The finger is free, so the row carries a padlock beside the
- *   time, and at the right a stop that ends the recording without sending it and
- *   a send that does.
- * - **paused.** What was recorded, playable, with the same «Отмена» in the
- *   middle and a send at the right. This is the only preview there is: the tray
- *   is no longer one (R9, R10).
+ * - **Running** — held or locked. `1fr auto 1fr`: the red dot and the running
+ *   time at the left, «Отмена» centred by the grid rather than by a number, and
+ *   at the right what sends. Held, the record button is still under the finger
+ *   as a sibling of this row, so that column is empty and the lock rail stands
+ *   above the button as a capsule of the panel material.
+ * - **Stopped** — `auto 1fr auto`: the bin at the left edge, the bar across the
+ *   width with the play control and the length on it, and the blue send at the
+ *   right. **No «Отмена».** The commit before this one removed the bin on the
+ *   argument that «Отмена» had become the single way out; the owner's
+ *   screenshot of Telegram Desktop's stopped recording says the argument was
+ *   right and the conclusion was wrong. One way out per state — the word while
+ *   the recording runs, the bin once it has stopped.
  *
  * The material is the chat screen's own — one glass capsule, a `KubGlassLayer`
  * leaf with the row over it, exactly as the composer's other capsules are — so
@@ -82,7 +83,12 @@ export function ComposerRecordingRow({
   onSend,
 }: ComposerRecordingRowProps) {
   const holding = phase === "holding";
-  const paused = phase === "paused";
+  const controls = recordingRowControls(phase);
+  // The stopped shape needs something to have been recorded: without a clip it
+  // would be a bar with no length beside a send with nothing to send. Nothing
+  // produces that pairing today — the row is only paused after a clip comes
+  // back — and if anything ever does, the running shape is the safe one.
+  const stopped = controls.playback && preview !== null;
 
   return (
     <div
@@ -92,21 +98,46 @@ export function ComposerRecordingRow({
       data-recording-row={mode}
       data-recording-phase={phase}
       data-cancel-armed={cancelArmed ? "true" : "false"}
-      className="relative grid h-11 w-full grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-full pl-3 pr-1"
+      className={cn(
+        "relative grid h-11 w-full items-center gap-2 rounded-full",
+        stopped ? "grid-cols-[auto_1fr_auto] px-1" : "grid-cols-[1fr_auto_1fr] pl-3 pr-1",
+      )}
     >
       <KubGlassLayer className={CAPSULE_GLASS} />
 
-      {/* Left: what is being recorded and for how long. */}
-      <div className="relative flex min-w-0 items-center gap-2">
-        {/* The state in words, for a screen reader. The row says it with a red
-            dot, a padlock and a button; none of those is readable aloud. */}
-        <span data-testid="composer-recording-state" className="sr-only">
-          {recordingStateLabel(phase, mode)}
-        </span>
-        {paused && preview ? (
-          <PausedPreview preview={preview} />
-        ) : (
-          <>
+      {/* The state in words, for a screen reader. The row says it with a red
+          dot, a padlock, a bar and a bin; none of those is readable aloud.
+          `sr-only` is absolutely positioned, so it takes none of the three
+          columns above. */}
+      <span data-testid="composer-recording-state" className="sr-only">
+        {recordingStateLabel(phase, mode)}
+      </span>
+
+      {stopped && preview ? (
+        <>
+          {/* Left: the way out of a stopped recording. */}
+          <button
+            type="button"
+            data-testid="composer-recording-trash"
+            onClick={onCancel}
+            aria-label={RECORDING_DELETE_LABEL}
+            title={RECORDING_DELETE_LABEL}
+            className={cn(
+              "kub-interactive relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[color:var(--kub-text)]",
+              FOCUS_RING,
+            )}
+          >
+            <KubIcon name="delete" size={18} />
+          </button>
+
+          <StoppedRecording preview={preview} />
+
+          <SendRecording onSend={onSend} />
+        </>
+      ) : (
+        <>
+          {/* Left: what is being recorded and for how long. */}
+          <div className="relative flex min-w-0 items-center gap-2">
             <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-[var(--kub-danger)]" aria-hidden />
             <span
               data-testid="composer-recording-timer"
@@ -120,37 +151,33 @@ export function ComposerRecordingRow({
               // sentence used to.
               <KubIcon name="lock" size={14} className="shrink-0 text-[color:var(--kub-muted)]" aria-hidden />
             )}
-          </>
-        )}
-      </div>
+          </div>
 
-      {/* Middle: the way out, in the middle of the row, in every state. */}
-      <button
-        ref={cancelRef}
-        type="button"
-        data-testid="composer-recording-cancel"
-        onClick={onCancel}
-        aria-label="Отменить запись"
-        className={cn(
-          "kub-interactive relative flex h-9 shrink-0 items-center justify-center rounded-full px-4 text-sm font-medium transition-colors",
-          FOCUS_RING,
-          // Armed only while a finger or a mouse is resting on it mid-hold:
-          // letting go here throws the recording away, and that is worth saying
-          // before it happens rather than after.
-          cancelArmed
-            ? "text-[color:var(--kub-danger-text)]"
-            : "text-[color:var(--kub-accent-text)]",
-        )}
-      >
-        {RECORDING_CANCEL_LABEL}
-      </button>
+          {/* Middle: the way out, while the recording is still running. */}
+          <button
+            ref={cancelRef}
+            type="button"
+            data-testid="composer-recording-cancel"
+            onClick={onCancel}
+            aria-label="Отменить запись"
+            className={cn(
+              "kub-interactive relative flex h-9 shrink-0 items-center justify-center rounded-full px-4 text-sm font-medium transition-colors",
+              FOCUS_RING,
+              // Armed only while a finger or a mouse is resting on it mid-hold:
+              // letting go here throws the recording away, and that is worth saying
+              // before it happens rather than after.
+              cancelArmed
+                ? "text-[color:var(--kub-danger-text)]"
+                : "text-[color:var(--kub-accent-text)]",
+            )}
+          >
+            {RECORDING_CANCEL_LABEL}
+          </button>
 
-      {/* Right: what sends. While the finger is down the record button is a
-          sibling of this row, still under the thumb, so this column is empty. */}
-      <div className="relative flex items-center justify-end gap-1">
-        {!holding && (
-          <>
-            {!paused && (
+          {/* Right: what sends. While the finger is down the record button is a
+              sibling of this row, still under the thumb, so this column is empty. */}
+          <div className="relative flex items-center justify-end gap-1">
+            {controls.pause && (
               <button
                 type="button"
                 // The name this control has always had, kept: what reads it is
@@ -167,25 +194,32 @@ export function ComposerRecordingRow({
                 <KubIcon name="pause" size={16} />
               </button>
             )}
-            <button
-              type="button"
-              data-testid="composer-recording-send"
-              onClick={onSend}
-              aria-label="Отправить"
-              className={cn(
-                "kub-interactive relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]",
-                PRESS_FILLED,
-                FOCUS_RING,
-              )}
-            >
-              <KubIcon name="send" size={16} className="ml-0.5" />
-            </button>
-          </>
-        )}
-      </div>
+            {controls.send && <SendRecording onSend={onSend} />}
+          </div>
+        </>
+      )}
 
       {holding && <LockRail lockFill={lockFill} />}
     </div>
+  );
+}
+
+/** The blue circle at the right edge, which is the same control in both shapes. */
+function SendRecording({ onSend }: { onSend: () => void }) {
+  return (
+    <button
+      type="button"
+      data-testid="composer-recording-send"
+      onClick={onSend}
+      aria-label="Отправить"
+      className={cn(
+        "kub-interactive relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--kub-cyan)] text-[color:var(--kub-bg)]",
+        PRESS_FILLED,
+        FOCUS_RING,
+      )}
+    >
+      <KubIcon name="send" size={16} className="ml-0.5" />
+    </button>
   );
 }
 
@@ -251,39 +285,95 @@ function LockRail({ lockFill }: { lockFill: number }) {
   );
 }
 
-/** A paused recording, listened to before it is sent. */
-function PausedPreview({ preview }: { preview: ComposerRecordingPreview }) {
+/**
+ * What was recorded, on the bar, between the bin and the send.
+ *
+ * The bar takes the whole width it is given rather than sharing the row with a
+ * separate play button and a separate length at the far right, which is how
+ * this looked before the owner's screenshot: the triangle and the time are one
+ * control and they sit **on** the bar, roughly centred, with the playhead
+ * travelling underneath them.
+ *
+ * The pill has a capsule of the panel material behind it for the same reason
+ * the lock rail does — it has to be legible over a track it crosses, and rule 1
+ * says a fill comes from the material rather than from a colour written here.
+ */
+function StoppedRecording({ preview }: { preview: ComposerRecordingPreview }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [positionMs, setPositionMs] = useState(0);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    const sync = () => {
-      const seconds = Number.isFinite(audio.duration) && audio.duration > 0
-        ? audio.duration
-        : preview.durationMs / 1000;
-      setProgress(seconds > 0 ? Math.min(1, Math.max(0, audio.currentTime / seconds)) : 0);
+    // The recorder's own measurement is the length that is trusted: a WebM
+    // clip written by `MediaRecorder` frequently reports `Infinity` for its
+    // duration until it has been played through once.
+    const lengthMs = () => {
+      const seconds = audio.duration;
+      return Number.isFinite(seconds) && seconds > 0 ? seconds * 1_000 : preview.durationMs;
     };
-    const stop = () => {
+    const sync = () => setPositionMs(Math.min(lengthMs(), audio.currentTime * 1_000));
+    const started = () => setPlaying(true);
+    const paused = () => setPlaying(false);
+    const ended = () => {
       setPlaying(false);
-      setProgress(0);
+      setPositionMs(0);
     };
     audio.addEventListener("timeupdate", sync);
-    audio.addEventListener("play", () => setPlaying(true));
-    audio.addEventListener("pause", () => setPlaying(false));
-    audio.addEventListener("ended", stop);
+    audio.addEventListener("play", started);
+    audio.addEventListener("pause", paused);
+    audio.addEventListener("ended", ended);
     return () => {
       audio.pause();
+      // Every one of them, which the version this replaced did not do: it added
+      // four listeners and removed two, so `play` and `pause` were left setting
+      // state on a component that had gone.
       audio.removeEventListener("timeupdate", sync);
-      audio.removeEventListener("ended", stop);
+      audio.removeEventListener("play", started);
+      audio.removeEventListener("pause", paused);
+      audio.removeEventListener("ended", ended);
     };
   }, [preview.durationMs, preview.url]);
 
+  const lengthMs = preview.durationMs > 0 ? preview.durationMs : 0;
+  const played = lengthMs > 0 ? Math.min(1, Math.max(0, positionMs / lengthMs)) : 0;
+  const percent = Math.round(played * 100);
+
   return (
-    <div data-testid="composer-recording-preview" className="relative flex min-w-0 flex-1 items-center gap-2">
+    <div
+      data-testid="composer-recording-preview"
+      data-played={played.toFixed(2)}
+      className="relative flex h-9 min-w-0 items-center"
+    >
       <audio ref={audioRef} src={preview.url} preload="metadata" />
+
+      {/* The bar itself, across the whole width between the two controls.
+          Six points rather than four: at four it photographed as a hairline
+          between the bin and the send rather than as the bar the owner's
+          screenshot shows, in both themes and on both widths. */}
+      <span
+        data-testid="composer-recording-bar"
+        className="pointer-events-none absolute inset-x-0 top-1/2 block h-1.5 -translate-y-1/2 overflow-hidden rounded-full bg-[var(--kub-inset)]"
+        aria-hidden
+      >
+        <span
+          className="absolute inset-y-0 left-0 rounded-full bg-[var(--kub-cyan)]"
+          style={{ width: `${percent}%` }}
+        />
+      </span>
+
+      {/* The playhead, on a track inset by its own radius so it stays on the
+          bar at both ends instead of hanging off them. */}
+      <span className="pointer-events-none absolute inset-x-[5px] top-1/2 block h-0" aria-hidden>
+        <span
+          data-testid="composer-recording-playhead"
+          className="absolute top-0 block h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--kub-cyan)]"
+          style={{ left: `${percent}%` }}
+        />
+      </span>
+
+      {/* The play control and the length, together, on the bar. */}
       <button
         type="button"
         data-testid="composer-recording-preview-toggle"
@@ -295,21 +385,19 @@ function PausedPreview({ preview }: { preview: ComposerRecordingPreview }) {
         }}
         aria-label={playing ? "Пауза" : "Прослушать запись"}
         className={cn(
-          "kub-interactive flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[color:var(--kub-accent-text)]",
+          "kub-interactive absolute left-1/2 flex h-7 -translate-x-1/2 items-center gap-1.5 rounded-full pl-2.5 pr-3",
           FOCUS_RING,
         )}
       >
-        <KubIcon name={playing ? "pause" : "play"} size={15} />
-      </button>
-      <span className="relative block h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--kub-inset)]">
+        <KubGlassLayer className={CAPSULE_GLASS} />
+        <KubIcon name={playing ? "pause" : "play"} size={12} className="relative text-[color:var(--kub-accent-text)]" />
         <span
-          className="absolute inset-y-0 left-0 rounded-full bg-[var(--kub-cyan)]"
-          style={{ width: `${Math.round(progress * 100)}%` }}
-        />
-      </span>
-      <span className="shrink-0 tabular-nums text-sm text-[color:var(--kub-text)]">
-        {formatVoiceDuration(preview.durationMs)}
-      </span>
+          data-testid="composer-recording-length"
+          className="relative tabular-nums text-sm text-[color:var(--kub-text)]"
+        >
+          {formatRecordingLength(playing ? positionMs : lengthMs)}
+        </span>
+      </button>
     </div>
   );
 }
