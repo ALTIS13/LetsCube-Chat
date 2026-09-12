@@ -1,5 +1,61 @@
 # QA Results
 
+## 2026-09-12 - The top bar removed: the rail reaches the window's edge, and one window chrome instead of two
+
+Built on `fix/desktop-rail-top-edge` (`d667438`, one commit off `feat/desktop-folder-rail`). Gates re-run by hand
+inside that worktree: unit suite **1823 of 1823**, typecheck clean, `AppTopBar.tsx` genuinely deleted - 142 lines
+gone from the stat, not merely unmounted - and `--kub-window-caption` really present, 0px by default and 2rem only
+under the Windows shell. Nothing tracked under `output/`.
+
+**The bar carried four things, and each was re-homed deliberately rather than dropped.**
+
+- **The wordmark** is gone. The cube in the list's top row is the only mark now, which is the one the assessment
+  asked to keep, and the frames confirm it: one mark, not two.
+- **The window buttons, the drag region and double-click-to-maximise** moved to `DesktopWindowChrome`, which every
+  other surface already used. The product now has **one** window chrome instead of two copies of the same three
+  glyphs, and D-016's «nothing where AppTopBar is present» special case disappears with its `suppressed` prop.
+- **The top safe-area inset** moved into the pane headers, at every width rather than from `md`.
+- **The 44 px of height** that held the panes clear of the buttons was the load-bearing one, because
+  `DesktopWindowChrome` is an overlay and takes no height: without a replacement the chat header's «…» would have
+  landed under the buttons. It became `--kub-window-caption`, set at boot from the same bridge check that decides
+  whether the chrome renders at all. The rail's **sheet** reaches the window's top edge while its first **control**
+  starts below the buttons - rule 13's own logic applied to a second kind of edge, and no new glass layer.
+
+It was deliberately **not** folded into `--kub-safe-top`, and the reason is worth keeping: those are declared once
+from `env()` and guarded, and the light theme paints an opaque band of exactly that height under the iPhone status
+bar - so a Windows branch there would have put a blue bar across the Windows light theme.
+
+**The two guard tests were explained before they were touched, and one turned out not to be about this at all.**
+
+- `shell-glass.test.mjs` named the bar twice. Its `panels` row protected «this chrome surface is the material with
+  nothing competing on the same element»; that surface no longer exists, and it was **not** re-pointed at
+  `DesktopWindowChrome`, which is deliberately a transparent overlay - doing so would have demanded frosting a strip
+  across the very rail this change exposes. Its `veiled` row protected «hovers use the veil, not a fixed elevation
+  colour», and that protection **survived on its own**: `DesktopWindowChrome` was already in the table carrying the
+  identical veil on the same three buttons. Only the dead row went, with the reason left in the file.
+- **The edge-vocabulary guard was never about the bar.** It is the negative control for the checker's own
+  exemption - that a single-side line in the sheet-edge colour passes because the element carries a chrome marker,
+  not because its file is listed by hand. Without it, any failure could be «fixed» by adding a filename and the
+  perimeter ratchet would stay green while dividers crept back to an edge's weight. Kept in that form, re-anchored,
+  and proved twice by mutation.
+
+**D-112, re-measured and honest.** The window-button zone is 132x32 and holds nothing of the page at 1440 or 1024,
+with the side list closed, open, and a chat open - eighteen geometry frames, rail top 0 in every one, and the
+chat's control row starting at exactly 32 on Windows, which is the reservation rather than a gap. **`/tasks` is
+unchanged**: «+ Новая» is still 64% covered, the identical figure measured before this branch, because the
+reservation is applied by the messenger's panes and not by the pages. What is new is that the mechanism a fix needs
+now exists.
+
+**Two silent measuring faults were found and fixed on the way**, both of the kind that would have reported success
+forever: the render script's zone table filtered on `device === "windows"` and silently omitted the narrow window,
+and `render-chat-chrome-frames.mjs` still queried the deleted `desktop-window-controls`, which would have reported
+«no window controls» on every Windows frame from now on.
+
+**Unverified without a real Tauri window**: that dragging still moves the window now that the strip overlays a band
+it did not before; that minimise, maximise and close-to-tray fire from the overlay on `/` rather than from the
+deleted bar; that double-clicking still toggles maximise; and that the 32 px reservation still clears the buttons
+at non-100% DPI scaling.
+
 ## 2026-09-12 - «Высветли»: the track, and why a contrast ratio was the wrong instrument
 
 Built on `design/recording-track-lighten` (`cde8635`, off `design/recording-stopped-row`). Gates re-run by hand
